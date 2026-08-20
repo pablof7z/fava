@@ -70,6 +70,9 @@ impl EventCache for MemoryEventCache {
         for mutation in mutations {
             match mutation {
                 CacheMutation::Upsert(incoming) => {
+                    incoming.event.verify().map_err(|error| {
+                        EventCacheError::Refused(format!("invalid signed event: {error}"))
+                    })?;
                     if let Some(current) = next.events.get_mut(&incoming.event.id) {
                         if current.event != incoming.event {
                             return Err(EventCacheError::Refused(
@@ -109,6 +112,14 @@ impl EventCache for MemoryEventCache {
             .lock()
             .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
         Ok(guard.events.get(&id).cloned())
+    }
+
+    fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError> {
+        let guard = self
+            .state
+            .lock()
+            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
+        Ok(guard.events.values().cloned().collect())
     }
 
     fn len(&self) -> Result<usize, EventCacheError> {
@@ -186,5 +197,27 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(cache.len().expect("cache readable"), 0);
+    }
+
+    #[test]
+    fn invalid_signed_event_is_refused_without_mutation() {
+        let cache = MemoryEventCache::default();
+        let keys = Keys::generate();
+        let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
+        let evidence = RelayEvidence::one(
+            RelaySessionKey::new(relay, RelayAccess::public()),
+            Timestamp::from(1),
+        );
+        let mut event = EventBuilder::new(Kind::TextNote, "signed")
+            .finalize(&keys)
+            .expect("event signs");
+        event.content = "tampered after signing".to_owned();
+
+        let result = cache.commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            event, evidence,
+        ))]);
+
+        assert!(result.is_err());
+        assert!(cache.is_empty().expect("cache readable"));
     }
 }

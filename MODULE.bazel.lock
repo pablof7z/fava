@@ -487,7 +487,7 @@
           "FILE:@@//crates/fava-write-store/Cargo.toml d0b1dae7bfaf0f1b227e60ac0d44762c0eca81fd61c68eaa83572c28b73e28fd",
           "FILE:@@//crates/fava-write-store-memory/Cargo.toml c2b989b1bfabac75935146dde10155bd1865e2cc7207a03368d9eeb6ff79c902",
           "FILE:@@//crates/fava-observe/Cargo.toml 4b294942c48dbe5726d4d91a8b124e3917b0178adccfe1a9ef11307e92284204",
-          "FILE:@@//crates/fava/Cargo.toml a94542513d7c86701dc08302deced8f18d763ed03cec5fc56c2f82251a088f8f"
+          "FILE:@@//crates/fava/Cargo.toml 5b3c42bfe59f81a1816363235a32985e9a42789b9f4b915b3c821acbd82f32a5"
         ],
         "generatedRepoSpecs": {
           "crates": {

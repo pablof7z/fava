@@ -11,6 +11,24 @@
       "milestone": "M0+",
       "requirements": ["reconnaissance only"],
       "status": "reconnaissance"
+    },
+    {
+      "id": "local-source-merge",
+      "milestone": "M1",
+      "requirements": ["M1 same-event source evidence merge"],
+      "status": "enabled"
+    },
+    {
+      "id": "local-replaceable-shadow-and-cancel",
+      "milestone": "M1",
+      "requirements": ["M1 local replaceable event shadow and cancellation"],
+      "status": "enabled"
+    },
+    {
+      "id": "local-source-removal",
+      "milestone": "M1",
+      "requirements": ["M1 deletion and expiration query retraction"],
+      "status": "enabled"
     }
   ]
 }

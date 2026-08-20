@@ -211,6 +211,7 @@ dependencies = [
  "fava-event-cache",
  "fava-observe",
  "fava-query",
+ "fava-write",
  "fava-write-store",
  "thiserror",
 ]

@@ -8,12 +8,15 @@ pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority,
 };
 use fava_query::{QueryEvaluator, QuerySource};
+pub use fava_write::{EventValue, ReceiptId};
 use fava_write_store::WriteStore;
+pub use fava_write_store::{AcceptedWrite, WriteStoreError};
 use thiserror::Error;
 
 /// Built engine instance for the selected local-source assembly.
 pub struct Fava {
     observer: Observer,
+    write_store: Arc<dyn WriteStore>,
 }
 
 impl Fava {
@@ -33,13 +36,32 @@ impl Fava {
     pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError> {
         self.observer.open(query)
     }
+
+    /// Accept one finalized local event into the durable-write authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when the event is invalid or acceptance
+    /// cannot commit atomically.
+    pub fn accept_event(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
+        self.write_store.accept_materialized(event)
+    }
+
+    /// Cancel one accepted event before publication work exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when cancellation cannot commit atomically.
+    pub fn cancel_write(&self, receipt_id: ReceiptId) -> Result<bool, WriteStoreError> {
+        self.write_store.cancel(receipt_id)
+    }
 }
 
 /// Static assembly builder. No provider is silently selected.
 #[derive(Default)]
 pub struct FavaBuilder {
-    event_cache: Option<Arc<dyn QuerySource>>,
-    write_store: Option<Arc<dyn QuerySource>>,
+    event_cache: Option<Arc<dyn EventCache>>,
+    write_store: Option<Arc<dyn WriteStore>>,
     evaluator: Option<Arc<dyn QueryEvaluator>>,
 }
 
@@ -84,8 +106,11 @@ impl FavaBuilder {
         let event_cache = self.event_cache.ok_or(BuildError::MissingEventCache)?;
         let write_store = self.write_store.ok_or(BuildError::MissingWriteStore)?;
         let evaluator = self.evaluator.ok_or(BuildError::MissingQueryEvaluator)?;
+        let event_source: Arc<dyn QuerySource> = event_cache;
+        let write_source: Arc<dyn QuerySource> = write_store.clone();
         Ok(Fava {
-            observer: Observer::new(event_cache, write_store, evaluator),
+            observer: Observer::new(event_source, write_source, evaluator),
+            write_store,
         })
     }
 }

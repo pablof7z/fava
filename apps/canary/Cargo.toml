@@ -8,6 +8,13 @@ publish = false
 [workspace]
 
 [dependencies]
+fava = { path = "../../crates/fava" }
+fava-event-cache = { path = "../../crates/fava-event-cache" }
+fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
+fava-query-standard = { path = "../../crates/fava-query-standard" }
+fava-state = { path = "../../crates/fava-state" }
+fava-write = { path = "../../crates/fava-write" }
+fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 futures-util = "=0.3.34"
 hex = "=0.4.3"
 nostr = { version = "=0.45.3", default-features = false, features = ["os-rng", "std"] }

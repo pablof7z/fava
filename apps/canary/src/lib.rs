@@ -1,11 +1,13 @@
 //! Independent acceptance application and evidence lab for the Fava rewrite.
 
 mod artifacts;
+mod local;
 mod proxy;
 mod recon;
 mod relay;
 mod wire;
 
+pub use local::run_local_scenario;
 pub use recon::{ReconOptions, ReconOutcome};
 
 use std::collections::BTreeMap;
@@ -120,7 +122,14 @@ pub fn scenario_registry() -> CanaryResult<Vec<Scenario>> {
 /// Returns whether this build has an executor for the identifier.
 #[must_use]
 pub fn has_executor(id: &str) -> bool {
-    matches!(id, "lab-real-relay-smoke" | "public-relay-recon")
+    matches!(
+        id,
+        "lab-real-relay-smoke"
+            | "public-relay-recon"
+            | "local-source-merge"
+            | "local-replaceable-shadow-and-cancel"
+            | "local-source-removal"
+    )
 }
 
 /// Runs bounded read-only reconnaissance against an explicit public relay.
@@ -414,17 +423,34 @@ pub(crate) fn command_output(
 
 #[cfg(test)]
 mod tests {
-    use super::{deterministic_keys, has_executor, scenario_registry};
+    use super::{deterministic_keys, has_executor, run_local_scenario, scenario_registry};
 
     #[test]
-    fn enabled_real_relay_scenario_has_an_executor() {
+    fn every_enabled_scenario_has_an_executor() {
         let scenarios = scenario_registry().expect("registry parses");
-        let scenario = scenarios
+        for scenario in scenarios
             .iter()
-            .find(|scenario| scenario.id == "lab-real-relay-smoke")
-            .expect("enabled scenario is registered");
-        assert_eq!(scenario.status, "enabled");
-        assert!(has_executor(&scenario.id));
+            .filter(|scenario| scenario.status == "enabled")
+        {
+            assert!(
+                has_executor(&scenario.id),
+                "missing executor for {}",
+                scenario.id
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn m1_local_scenarios_pass_through_the_public_facade() {
+        for scenario in [
+            "local-source-merge",
+            "local-replaceable-shadow-and-cancel",
+            "local-source-removal",
+        ] {
+            run_local_scenario(scenario, "m1-test")
+                .await
+                .expect("local scenario passes");
+        }
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use fava_query::{
     EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator, QueryOrdering,
-    QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot, Timestamp,
+    QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
 };
 use fava_state::{EventCoordinate, RelayEvidence};
 use fava_write::EventValue;
@@ -41,7 +41,7 @@ impl QueryEvaluator for StandardQueryEvaluator {
                     entry.insert(record);
                 }
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    if record_order_key(&record) > record_order_key(entry.get()) {
+                    if record_is_newer(&record, entry.get()) {
                         entry.insert(record);
                     }
                 }
@@ -50,8 +50,14 @@ impl QueryEvaluator for StandardQueryEvaluator {
 
         let mut events: Vec<_> = by_coordinate.into_values().collect();
         events.sort_by(|left, right| match query.ordering() {
-            QueryOrdering::NewestFirst => record_order_key(right).cmp(&record_order_key(left)),
-            QueryOrdering::OldestFirst => record_order_key(left).cmp(&record_order_key(right)),
+            QueryOrdering::NewestFirst => right
+                .created_at()
+                .cmp(&left.created_at())
+                .then_with(|| left.id().cmp(&right.id())),
+            QueryOrdering::OldestFirst => left
+                .created_at()
+                .cmp(&right.created_at())
+                .then_with(|| left.id().cmp(&right.id())),
         });
         if let Some(limit) = query.result_limit() {
             events.truncate(limit.get());
@@ -129,6 +135,7 @@ fn matches_authority(authority: &ResultAuthority, record: &EventRecord) -> bool 
     }
 }
 
-fn record_order_key(record: &EventRecord) -> (Timestamp, EventId) {
-    (record.created_at(), record.id())
+fn record_is_newer(candidate: &EventRecord, current: &EventRecord) -> bool {
+    candidate.created_at() > current.created_at()
+        || (candidate.created_at() == current.created_at() && candidate.id() < current.id())
 }

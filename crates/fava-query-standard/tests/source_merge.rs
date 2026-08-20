@@ -158,3 +158,25 @@ fn asking_relays_and_trusting_only_relays_are_distinct() {
         .expect("evaluation succeeds");
     assert_eq!(now_visible.events.len(), 1);
 }
+
+#[test]
+fn replaceable_tie_selects_the_lowest_event_id() {
+    let keys = Keys::generate();
+    let left = signed_event(&keys, Kind::Metadata, 10, "left");
+    let right = signed_event(&keys, Kind::Metadata, 10, "right");
+    let expected = left.id.min(right.id);
+    let sources = [snapshot(
+        SourceKind::EventCache,
+        vec![
+            SourceEvent::Cached(CachedEvent::new(left, RelayEvidence::default())),
+            SourceEvent::Cached(CachedEvent::new(right, RelayEvidence::default())),
+        ],
+    )];
+
+    let result = StandardQueryEvaluator
+        .evaluate(&Query::events().kind(Kind::Metadata), &sources)
+        .expect("evaluation succeeds");
+
+    assert_eq!(result.events.len(), 1);
+    assert_eq!(result.events[0].id(), expected);
+}

@@ -85,3 +85,47 @@ Feature: Local event state is one coherent view
     When three accepted local events change its result
     Then the next delivered snapshot contains all three current events
     And no unbounded intermediate queue is required
+
+  # fava:id=QUERY-IDENTITY-001
+  # fava:status=built
+  # fava:evidence=rust:fava-query::equivalent_relay_construction_has_one_query_identity
+  # fava:falsifier=Preserve relay insertion order in Query equality or hashing; this scenario fails.
+  Scenario: Equivalent query construction has one identity
+    Given two queries contain the same explicit relays in different construction order
+    When their public values and hashes are compared
+    Then the queries are equal
+    And their hashes are equal
+
+  # fava:id=EVENT-STATE-001
+  # fava:status=built
+  # fava:evidence=rust:fava-state::authorized_deletion_retracts_and_prevents_resurrection
+  # fava:evidence=rust:fava-state::another_author_cannot_delete_an_event
+  # fava:evidence=rust:fava::deletion_and_expiration_update_the_same_open_query
+  # fava:falsifier=Apply deletion requests without author validation; another author can retract the event and this scenario fails.
+  @acceptance
+  Scenario: Deletion and expiration retract events from an open query
+    Given admitted signed events are visible in one open local query
+    When an authorized deletion request is admitted
+    And another event reaches its expiration timestamp
+    Then both events disappear through ordinary query state changes
+    And an unauthorized deletion request retracts nothing
+
+  # fava:id=PROVIDER-SOURCE-001
+  # fava:status=built
+  # fava:evidence=rust:fava::memory_event_cache_runs_the_source_corpus
+  # fava:evidence=rust:fava::memory_write_store_runs_the_source_corpus
+  # fava:falsifier=Stop either memory provider from emitting removals; its shared corpus run fails.
+  Scenario: Local source behavior is provider-independent
+    Given the same add and remove corpus
+    When it runs against the memory event cache and memory write store
+    Then both providers expose the same source revisions
+
+  # fava:id=EVENT-CACHE-001
+  # fava:status=built
+  # fava:evidence=rust:fava-event-cache-memory::invalid_signed_event_is_refused_without_mutation
+  # fava:falsifier=Accept an upsert without verifying its event ID and signature; the cache retains a tampered event and this scenario fails.
+  Scenario: The event cache refuses invalid signed events
+    Given a signed event body was changed after signing
+    When a provider mutation tries to retain it
+    Then the entire mutation is refused
+    And the event cache remains unchanged

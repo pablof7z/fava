@@ -14,7 +14,7 @@ use fava_write::EventValue;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{
-    Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, UnsignedEvent,
+    Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
 };
 use nostr::key::Keys;
 use tokio::time::timeout;
@@ -70,7 +70,7 @@ async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QueryS
 
 #[tokio::test(flavor = "current_thread")]
 async fn accepted_local_event_is_visible_without_cache_pollution() {
-    let (fava, cache, writes) = assembly();
+    let (fava, cache, _writes) = assembly();
     let keys = Keys::generate();
     let unsigned = unsigned_event(&keys, Kind::TextNote, 10, "local");
     let id = unsigned.id.expect("builder computes id");
@@ -80,9 +80,9 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
         .expect("query opens from local sources");
     assert!(feed.current().events.is_empty());
 
-    let accepted = writes
-        .accept_materialized(EventValue::Unsigned(unsigned))
-        .expect("write store accepts finalized local event");
+    let accepted = fava
+        .accept_event(EventValue::Unsigned(unsigned))
+        .expect("facade accepts finalized local event");
     let visible = next_snapshot(&mut feed).await;
 
     assert_eq!(visible.events.len(), 1);
@@ -97,9 +97,8 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
     assert!(cache.is_empty().expect("cache remains readable"));
 
     assert!(
-        writes
-            .cancel(accepted.receipt_id)
-            .expect("local cancellation commits")
+        fava.cancel_write(accepted.receipt_id)
+            .expect("facade cancels")
     );
     assert!(next_snapshot(&mut feed).await.events.is_empty());
     assert!(cache.is_empty().expect("cache remains unchanged"));
@@ -238,4 +237,52 @@ async fn slow_consumer_receives_exact_latest_state_with_bounded_delivery() {
     let latest = next_snapshot(&mut feed).await;
     assert_eq!(latest.events.len(), 3);
     assert_eq!(latest.events[0].created_at(), Timestamp::from(3));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn deletion_and_expiration_update_the_same_open_query() {
+    let (fava, cache, _writes) = assembly();
+    let keys = Keys::generate();
+    let deleted = signed_event(&keys, Kind::TextNote, 10, "deleted");
+    let expiring = EventBuilder::new(Kind::TextNote, "expiring")
+        .tag(Tag::expiration(Timestamp::from(30)))
+        .custom_created_at(Timestamp::from(11))
+        .finalize(&keys)
+        .expect("event signs");
+    for event in [deleted.clone(), expiring.clone()] {
+        assert!(
+            cache
+                .admit(
+                    CachedEvent::new(event, evidence("wss://relay.example", 15)),
+                    Timestamp::from(15),
+                )
+                .expect("event admission commits")
+        );
+    }
+    let mut feed = fava
+        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .await
+        .expect("query opens");
+    assert_eq!(feed.current().events.len(), 2);
+
+    let deletion = EventBuilder::new(Kind::EventDeletion, "")
+        .tag(Tag::event(deleted.id))
+        .custom_created_at(Timestamp::from(20))
+        .finalize(&keys)
+        .expect("deletion signs");
+    cache
+        .admit(
+            CachedEvent::new(deletion, evidence("wss://relay.example", 20)),
+            Timestamp::from(20),
+        )
+        .expect("deletion admission commits");
+    let after_deletion = next_snapshot(&mut feed).await;
+    assert_eq!(after_deletion.events.len(), 1);
+    assert_eq!(after_deletion.events[0].id(), expiring.id);
+
+    assert_eq!(
+        cache.expire(Timestamp::from(30)).expect("expiry commits"),
+        1
+    );
+    assert!(next_snapshot(&mut feed).await.events.is_empty());
 }

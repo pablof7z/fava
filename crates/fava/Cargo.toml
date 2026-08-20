@@ -8,6 +8,7 @@ rust-version.workspace = true
 fava-event-cache.workspace = true
 fava-observe.workspace = true
 fava-query.workspace = true
+fava-write.workspace = true
 fava-write-store.workspace = true
 thiserror.workspace = true
 

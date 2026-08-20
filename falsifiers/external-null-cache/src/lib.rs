@@ -26,6 +26,10 @@ impl EventCache for NullEventCache {
         Ok(None)
     }
 
+    fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError> {
+        Ok(Vec::new())
+    }
+
     fn len(&self) -> Result<usize, EventCacheError> {
         Ok(0)
     }

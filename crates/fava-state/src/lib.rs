@@ -205,7 +205,104 @@ pub fn coordinate_for_event(event: &Event) -> EventCoordinate {
 /// Compare two same-coordinate event candidates using Nostr winner rules.
 #[must_use]
 pub fn candidate_is_newer(candidate: &Event, current: &Event) -> bool {
-    (candidate.created_at, candidate.id) > (current.created_at, current.id)
+    candidate.created_at > current.created_at
+        || (candidate.created_at == current.created_at && candidate.id < current.id)
+}
+
+/// Decide cache mutations for one verified relay observation at an exact time.
+#[must_use]
+pub fn admission_mutations(
+    current: &[CachedEvent],
+    incoming: CachedEvent,
+    now: Timestamp,
+) -> Vec<CacheMutation> {
+    if event_is_expired(&incoming.event, now)
+        || current
+            .iter()
+            .any(|known| deletion_applies(&known.event, &incoming.event))
+    {
+        return Vec::new();
+    }
+
+    if incoming.event.kind == Kind::EventDeletion {
+        let mut mutations = vec![CacheMutation::Upsert(incoming.clone())];
+        mutations.extend(
+            current
+                .iter()
+                .filter(|known| deletion_applies(&incoming.event, &known.event))
+                .map(|known| CacheMutation::Retract(known.event.id)),
+        );
+        return mutations;
+    }
+
+    let coordinate = coordinate_for_event(&incoming.event);
+    let same_coordinate: Vec<_> = current
+        .iter()
+        .filter(|known| coordinate_for_event(&known.event) == coordinate)
+        .collect();
+    if same_coordinate
+        .iter()
+        .any(|known| known.event.id == incoming.event.id)
+    {
+        return vec![CacheMutation::Upsert(incoming)];
+    }
+    if matches!(coordinate, EventCoordinate::Replaceable { .. }) {
+        if same_coordinate
+            .iter()
+            .any(|known| !candidate_is_newer(&incoming.event, &known.event))
+        {
+            return Vec::new();
+        }
+        let mut mutations: Vec<_> = same_coordinate
+            .iter()
+            .map(|known| CacheMutation::Retract(known.event.id))
+            .collect();
+        mutations.push(CacheMutation::Upsert(incoming));
+        return mutations;
+    }
+    vec![CacheMutation::Upsert(incoming)]
+}
+
+/// Decide retractions for events expired at an exact time.
+#[must_use]
+pub fn expiration_mutations(current: &[CachedEvent], now: Timestamp) -> Vec<CacheMutation> {
+    current
+        .iter()
+        .filter(|known| event_is_expired(&known.event, now))
+        .map(|known| CacheMutation::Retract(known.event.id))
+        .collect()
+}
+
+fn event_is_expired(event: &Event, now: Timestamp) -> bool {
+    event.tags.expiration().is_some_and(|expiry| expiry <= now)
+}
+
+fn deletion_applies(deletion: &Event, target: &Event) -> bool {
+    if deletion.kind != Kind::EventDeletion
+        || target.kind == Kind::EventDeletion
+        || deletion.pubkey != target.pubkey
+    {
+        return false;
+    }
+    if deletion.tags.event_ids().any(|id| id == target.id) {
+        return true;
+    }
+    if target.created_at > deletion.created_at {
+        return false;
+    }
+    let target_coordinate = coordinate_for_event(target);
+    deletion.tags.coordinates().any(|coordinate| {
+        target_coordinate
+            == EventCoordinate::Replaceable {
+                author: coordinate.public_key,
+                kind: coordinate.kind,
+                identifier: if coordinate.identifier.is_empty() {
+                    None
+                } else {
+                    Some(coordinate.identifier)
+                },
+            }
+    })
 }
 
 #[cfg(test)]

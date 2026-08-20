@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use canary::{
-    ReconOptions, SmokeOptions, run_public_recon, run_real_relay_smoke, scenario_registry,
+    ReconOptions, SmokeOptions, run_local_scenario, run_public_recon, run_real_relay_smoke,
+    scenario_registry,
 };
 
 #[tokio::main]
@@ -31,6 +32,25 @@ async fn run() -> canary::CanaryResult<()> {
         }
         "run" => {
             let scenario = arguments.next().ok_or_else(usage)?;
+            if matches!(
+                scenario.as_str(),
+                "local-source-merge"
+                    | "local-replaceable-shadow-and-cancel"
+                    | "local-source-removal"
+            ) {
+                let mut seed = String::from("local-m1");
+                while let Some(flag) = arguments.next() {
+                    let value = arguments.next().ok_or_else(usage)?;
+                    match flag.as_str() {
+                        "--seed" => seed = value,
+                        _ => return Err(usage()),
+                    }
+                }
+                let event_count = run_local_scenario(&scenario, &seed).await?;
+                println!("passed {scenario}");
+                println!("events: {event_count}");
+                return Ok(());
+            }
             if scenario != "lab-real-relay-smoke" {
                 return Err(std::io::Error::other(format!(
                     "unknown or unimplemented scenario: {scenario}"
@@ -91,7 +111,7 @@ async fn run() -> canary::CanaryResult<()> {
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | run lab-real-relay-smoke [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }
