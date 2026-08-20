@@ -1,6 +1,6 @@
 # Local source merge vertical slice
 
-**Status:** active  
+**Status:** completed
 **Spec slice:** Architecture Part XIII, Slice 1  
 **Branch:** `rewrite/0001-local-source-merge`
 
@@ -39,3 +39,22 @@ one coherent event view.
 - Public `nmp` acceptance tests for initial local state, local visibility, cancellation, and latest-state observation.
 - Deliberate breaks named in `features/local-source-merge.feature`.
 
+Verified on 2026-08-20:
+
+- `cargo test --workspace --all-targets`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo fmt --all -- --check`
+- `cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml`
+- `cargo clippy --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets -- -D warnings`
+
+The deliberate-break pass confirmed that evidence fails when write-store
+contributions, relay-evidence merge, replaceable winner selection, or either
+explicit source-policy distinction is removed or inverted.
+
+## Architecture result
+
+- `nmp-query` is the sole merge authority.
+- Event-cache and write-store providers expose independent continuous source revisions.
+- Post-open source termination is source-scoped evidence and does not erase the other source's valid state.
+- The public query identity stores acquisition and result authority separately.
+- An outside-workspace null event cache assembles through public contracts with no private bypass.
