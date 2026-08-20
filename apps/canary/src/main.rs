@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use canary::{
-    ReconOptions, SmokeOptions, run_live_scenario, run_local_scenario, run_public_recon,
-    run_real_relay_smoke, scenario_registry,
+    ReconOptions, SmokeOptions, run_live_scenario, run_local_scenario, run_m3_live_scenario,
+    run_public_recon, run_real_relay_smoke, scenario_registry,
 };
 
 #[tokio::main]
@@ -37,6 +37,7 @@ async fn run() -> canary::CanaryResult<()> {
                 "local-source-merge"
                     | "local-replaceable-shadow-and-cancel"
                     | "local-source-removal"
+                    | "slow-consumer-latest-state"
             ) {
                 let mut seed = String::from("local-m1");
                 while let Some(flag) = arguments.next() {
@@ -49,6 +50,17 @@ async fn run() -> canary::CanaryResult<()> {
                 let event_count = run_local_scenario(&scenario, &seed).await?;
                 println!("passed {scenario}");
                 println!("events: {event_count}");
+                return Ok(());
+            }
+            if matches!(
+                scenario.as_str(),
+                "multi-relay-dedup-provenance" | "reconnect-generation"
+            ) {
+                let evidence =
+                    run_m3_live_scenario(&scenario, smoke_options(&mut arguments, "live-m3")?)
+                        .await?;
+                println!("passed {scenario}");
+                println!("evidence: {}", evidence.display());
                 return Ok(());
             }
             if matches!(

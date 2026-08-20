@@ -47,6 +47,24 @@
       "milestone": "M2",
       "requirements": ["M2 exact withdrawal and terminal observation close"],
       "status": "enabled"
+    },
+    {
+      "id": "multi-relay-dedup-provenance",
+      "milestone": "M3",
+      "requirements": ["M3 multi-relay deduplication and actual serving provenance"],
+      "status": "enabled"
+    },
+    {
+      "id": "reconnect-generation",
+      "milestone": "M3",
+      "requirements": ["M3 fresh reconnect request identity and stale-frame refusal"],
+      "status": "enabled"
+    },
+    {
+      "id": "slow-consumer-latest-state",
+      "milestone": "M3",
+      "requirements": ["M3 bounded coalesced latest-state observation"],
+      "status": "enabled"
     }
   ]
 }

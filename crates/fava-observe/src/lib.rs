@@ -14,6 +14,7 @@ pub struct Observer {
     event_cache: Arc<dyn QuerySource>,
     write_store: Arc<dyn QuerySource>,
     evaluator: Arc<dyn QueryEvaluator>,
+    coalesced: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
 impl Observer {
@@ -28,7 +29,15 @@ impl Observer {
             event_cache,
             write_store,
             evaluator,
+            coalesced: None,
         }
+    }
+
+    /// Report current-state revisions superseded at bounded watch boundaries.
+    #[must_use]
+    pub fn with_coalescing(mut self, report: Arc<dyn Fn(u64) + Send + Sync>) -> Self {
+        self.coalesced = Some(report);
+        self
     }
 
     /// Atomically open both local sources and return an immediately readable view.
@@ -57,7 +66,13 @@ impl Observer {
             }
         };
 
-        Observation::start(query, cache, writes, Arc::clone(&self.evaluator))
+        Observation::start(
+            query,
+            cache,
+            writes,
+            Arc::clone(&self.evaluator),
+            self.coalesced.clone(),
+        )
     }
 }
 
@@ -66,6 +81,8 @@ pub struct Observation {
     latest: watch::Receiver<Arc<QuerySnapshot>>,
     cancel: watch::Sender<bool>,
     additional_cancel: Vec<watch::Sender<bool>>,
+    delivered_revision: QueryRevision,
+    coalesced: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
 impl Observation {
@@ -74,6 +91,7 @@ impl Observation {
         cache: OpenedQuerySource,
         writes: OpenedQuerySource,
         evaluator: Arc<dyn QueryEvaluator>,
+        coalesced: Option<Arc<dyn Fn(u64) + Send + Sync>>,
     ) -> Result<Self, ObserveError> {
         let mut sources = vec![cache.initial, writes.initial];
         let mut cache_changes = cache.changes;
@@ -90,6 +108,7 @@ impl Observation {
         let (latest_tx, latest) = watch::channel(Arc::new(initial));
         let (cancel, mut cancel_rx) = watch::channel(false);
 
+        let task_coalesced = coalesced.clone();
         tokio::spawn(async move {
             let mut revision = 1_u64;
             let mut cache_open = true;
@@ -115,6 +134,13 @@ impl Observation {
                     continue;
                 };
                 if let Ok(snapshot) = changed {
+                    if let Some(current) = sources.iter().find(|source| source.kind == role) {
+                        report_skipped(
+                            task_coalesced.as_deref(),
+                            current.revision.0,
+                            snapshot.revision.0,
+                        );
+                    }
                     replace_source(&mut sources, snapshot);
                 } else {
                     if role == SourceKind::EventCache {
@@ -144,6 +170,8 @@ impl Observation {
             latest,
             cancel,
             additional_cancel: Vec::new(),
+            delivered_revision: QueryRevision(1),
+            coalesced,
         })
     }
 
@@ -167,7 +195,14 @@ impl Observation {
         if *self.cancel.borrow() {
             return Err(ObservationClosed);
         }
-        Ok(Arc::clone(&self.latest.borrow_and_update()))
+        let latest = Arc::clone(&self.latest.borrow_and_update());
+        report_skipped(
+            self.coalesced.as_deref(),
+            self.delivered_revision.0,
+            latest.revision.0,
+        );
+        self.delivered_revision = latest.revision;
+        Ok(latest)
     }
 
     /// Attach one owner whose exact work must stop with this observation.
@@ -181,6 +216,16 @@ impl Observation {
         for cancel in &self.additional_cancel {
             cancel.send_replace(true);
         }
+    }
+}
+
+fn report_skipped(report: Option<&(dyn Fn(u64) + Send + Sync)>, previous: u64, current: u64) {
+    let Some(report) = report else {
+        return;
+    };
+    let skipped = current.saturating_sub(previous).saturating_sub(1);
+    if skipped > 0 {
+        report(skipped);
     }
 }
 

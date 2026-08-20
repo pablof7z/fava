@@ -1,6 +1,7 @@
 //! Public-facade M1 scenarios over independently assembled memory providers.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fava::{EventValue, Fava, Query};
 use fava_event_cache::EventCache;
@@ -33,9 +34,52 @@ pub async fn run_local_scenario(id: &str, seed: &str) -> CanaryResult<usize> {
         "local-source-merge" => source_merge(&fava, &cache, &keys).await?,
         "local-replaceable-shadow-and-cancel" => replaceable_shadow(&fava, &cache, &keys).await?,
         "local-source-removal" => source_removal(&fava, &cache, &keys).await?,
+        "slow-consumer-latest-state" => slow_consumer(&fava, &keys).await?,
         _ => return Err(CanaryError::new(format!("unknown local scenario: {id}"))),
     };
     Ok(count)
+}
+
+async fn slow_consumer(fava: &Fava, keys: &Keys) -> CanaryResult<usize> {
+    let mut observation = fava
+        .observe(Query::events().cache_only())
+        .await
+        .map_err(error)?;
+    for _ in 0..128 {
+        if tokio::time::timeout(Duration::ZERO, observation.changed())
+            .await
+            .is_ok()
+        {
+            return Err(CanaryError::new(
+                "idle cancelled pull unexpectedly delivered state",
+            ));
+        }
+    }
+    for index in 0..256 {
+        let event = EventBuilder::new(Kind::TextNote, format!("burst-{index}"))
+            .custom_created_at(Timestamp::from(index + 1))
+            .finalize(keys)
+            .map_err(error)?;
+        fava.accept_event(EventValue::Signed(event))
+            .map_err(error)?;
+    }
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while observation.current().events.len() != 256 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|_| CanaryError::new("latest-state production deadline elapsed"))?;
+    let current = observation.changed().await.map_err(error)?;
+    require(
+        current.events.len() == 256,
+        "slow observer did not receive one exact latest state",
+    )?;
+    require(
+        fava.diagnostics().coalesced_query_updates > 0,
+        "coalesced current-state updates were not measured",
+    )?;
+    Ok(current.events.len())
 }
 
 async fn source_merge(fava: &Fava, cache: &MemoryEventCache, keys: &Keys) -> CanaryResult<usize> {

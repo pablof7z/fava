@@ -1,6 +1,7 @@
 //! Thin Rust facade over the selected Fava provider assembly.
 
 mod live;
+mod relay;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -29,7 +30,7 @@ pub struct Fava {
     subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
     transport: Option<Arc<dyn Transport>>,
     diagnostics: Arc<Diagnostics>,
-    next_subscription: AtomicU64,
+    next_subscription: Arc<AtomicU64>,
 }
 
 impl Fava {
@@ -152,14 +153,19 @@ impl FavaBuilder {
         let evaluator = self.evaluator.ok_or(BuildError::MissingQueryEvaluator)?;
         let event_source: Arc<dyn QuerySource> = event_cache.clone();
         let write_source: Arc<dyn QuerySource> = write_store.clone();
+        let diagnostics = Arc::new(Diagnostics::default());
+        let report = {
+            let diagnostics = Arc::clone(&diagnostics);
+            Arc::new(move |count| diagnostics.query_updates_coalesced(count))
+        };
         Ok(Fava {
-            observer: Observer::new(event_source, write_source, evaluator),
+            observer: Observer::new(event_source, write_source, evaluator).with_coalescing(report),
             event_cache,
             write_store,
             subscription_planner: self.subscription_planner,
             transport: self.transport,
-            diagnostics: Arc::new(Diagnostics::default()),
-            next_subscription: AtomicU64::new(0),
+            diagnostics,
+            next_subscription: Arc::new(AtomicU64::new(0)),
         })
     }
 }

@@ -4,6 +4,7 @@ mod artifacts;
 mod hostile;
 mod live;
 mod local;
+mod multi;
 mod proxy;
 mod recon;
 mod relay;
@@ -11,6 +12,7 @@ mod wire;
 
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
+pub use multi::run_m3_live_scenario;
 pub use recon::{ReconOptions, ReconOutcome};
 
 use std::collections::BTreeMap;
@@ -135,6 +137,9 @@ pub fn has_executor(id: &str) -> bool {
             | "explicit-read-eose"
             | "explicit-read-live-after-eose"
             | "explicit-read-cancel"
+            | "multi-relay-dedup-provenance"
+            | "reconnect-generation"
+            | "slow-consumer-latest-state"
     )
 }
 
@@ -447,11 +452,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn m1_local_scenarios_pass_through_the_public_facade() {
+    async fn local_scenarios_pass_through_the_public_facade() {
         for scenario in [
             "local-source-merge",
             "local-replaceable-shadow-and-cancel",
             "local-source-removal",
+            "slow-consumer-latest-state",
         ] {
             run_local_scenario(scenario, "m1-test")
                 .await

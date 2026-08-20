@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{WebSocketStream, accept_async, connect_async};
@@ -21,6 +21,7 @@ use crate::{CanaryError, CanaryResult};
 pub(crate) struct WireProxy {
     address: SocketAddr,
     stop: watch::Sender<bool>,
+    inject: broadcast::Sender<String>,
     task: Option<JoinHandle<CanaryResult<()>>>,
 }
 
@@ -31,6 +32,8 @@ impl WireProxy {
         let log = Arc::new(WireLog::new(path)?);
         let connection_sequence = Arc::new(AtomicU64::new(0));
         let (stop, mut stop_rx) = watch::channel(false);
+        let (inject, _) = broadcast::channel(16);
+        let task_inject = inject.clone();
         let task = tokio::spawn(async move {
             let mut connections = JoinSet::new();
             loop {
@@ -44,8 +47,15 @@ impl WireProxy {
                         let (stream, _) = accepted?;
                         let connection = connection_sequence.fetch_add(1, Ordering::Relaxed) + 1;
                         let connection_log = Arc::clone(&log);
+                        let connection_inject = task_inject.subscribe();
                         connections.spawn(async move {
-                            if let Err(error) = handle_connection(stream, upstream, connection, connection_log).await {
+                            if let Err(error) = handle_connection(
+                                stream,
+                                upstream,
+                                connection,
+                                connection_log,
+                                connection_inject,
+                            ).await {
                                 log_proxy_error(connection, &error);
                             }
                         });
@@ -62,12 +72,20 @@ impl WireProxy {
         Ok(Self {
             address,
             stop,
+            inject,
             task: Some(task),
         })
     }
 
     pub(crate) fn url(&self) -> String {
         format!("ws://{}", self.address)
+    }
+
+    pub(crate) fn inject_relay_text(&self, payload: String) -> CanaryResult<()> {
+        self.inject
+            .send(payload)
+            .map(|_| ())
+            .map_err(|_| CanaryError::new("proxy has no active client connection"))
     }
 
     pub(crate) async fn shutdown(mut self) -> CanaryResult<()> {
@@ -140,10 +158,11 @@ async fn handle_connection(
     upstream: SocketAddr,
     connection: u64,
     log: Arc<WireLog>,
+    inject: broadcast::Receiver<String>,
 ) -> CanaryResult<()> {
     let downstream = accept_async(downstream).await?;
     let (upstream, _) = connect_async(format!("ws://{upstream}")).await?;
-    bridge(downstream, upstream, connection, log).await
+    bridge(downstream, upstream, connection, log, inject).await
 }
 
 async fn bridge(
@@ -151,6 +170,7 @@ async fn bridge(
     upstream: WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>,
     connection: u64,
     log: Arc<WireLog>,
+    mut inject: broadcast::Receiver<String>,
 ) -> CanaryResult<()> {
     let (mut downstream_sink, mut downstream_stream) = downstream.split();
     let (mut upstream_sink, mut upstream_stream) = upstream.split();
@@ -171,6 +191,17 @@ async fn bridge(
                 let closes = message.is_close();
                 downstream_sink.send(message).await?;
                 if closes { break; }
+            }
+            payload = inject.recv() => {
+                match payload {
+                    Ok(payload) => {
+                        let message = Message::Text(payload.into());
+                        log.record(connection, "proxy_to_client", &message)?;
+                        downstream_sink.send(message).await?;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
             }
         }
     }

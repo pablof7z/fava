@@ -15,6 +15,8 @@ type FailureFact = (RelaySessionKey, u64, String);
 /// Bounded exact relay facts currently exposed by Fava.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DiagnosticsSnapshot {
+    /// Intermediate current-query revisions intentionally superseded by newer state.
+    pub coalesced_query_updates: u64,
     /// Most recently opened exact relay-session generations.
     pub sessions: Vec<SessionFact>,
     /// Most recently opened exact Nostr subscriptions.
@@ -39,6 +41,7 @@ pub struct Diagnostics {
 
 #[derive(Default)]
 struct State {
+    coalesced_query_updates: u64,
     sessions: VecDeque<SessionFact>,
     subscriptions: VecDeque<SubscriptionFact>,
     eose: VecDeque<SubscriptionFact>,
@@ -69,6 +72,7 @@ impl Diagnostics {
     pub fn snapshot(&self) -> DiagnosticsSnapshot {
         let state = self.lock();
         DiagnosticsSnapshot {
+            coalesced_query_updates: state.coalesced_query_updates,
             sessions: state.sessions.iter().cloned().collect(),
             subscriptions: state.subscriptions.iter().cloned().collect(),
             eose: state.eose.iter().cloned().collect(),
@@ -77,6 +81,12 @@ impl Diagnostics {
             failures: state.failures.iter().cloned().collect(),
             withdrawn: state.withdrawn.iter().cloned().collect(),
         }
+    }
+
+    /// Record current-query revisions superseded before delivery.
+    pub fn query_updates_coalesced(&self, count: u64) {
+        let mut state = self.lock();
+        state.coalesced_query_updates = state.coalesced_query_updates.saturating_add(count);
     }
 
     /// Record one opened relay-session generation.
