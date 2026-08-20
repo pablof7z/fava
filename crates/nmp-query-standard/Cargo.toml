@@ -1,0 +1,19 @@
+[package]
+name = "nmp-query-standard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nmp-query.workspace = true
+nmp-state.workspace = true
+nmp-write.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

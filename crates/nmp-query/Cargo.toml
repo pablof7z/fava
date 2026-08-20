@@ -1,0 +1,15 @@
+[package]
+name = "nmp-query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nmp-state.workspace = true
+nmp-write.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+

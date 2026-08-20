@@ -1,0 +1,498 @@
+//! Declarative event queries, local source contracts, and application snapshots.
+
+use std::collections::BTreeSet;
+use std::future::Future;
+use std::num::NonZeroUsize;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use nmp_state::{AccessContext, CachedEvent, RelayEvidence};
+use nmp_write::{EventValue, LocalWriteEvent, PublicationEvidence};
+pub use nostr::event::{EventId, Kind};
+pub use nostr::key::PublicKey;
+pub use nostr::types::{RelayUrl, Timestamp};
+use thiserror::Error;
+
+/// Declarative event-filter axes supported by the first vertical slice.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct FilterSelection {
+    /// Event ids, or all ids when absent. A present empty set matches nothing.
+    pub ids: Option<BTreeSet<EventId>>,
+    /// Authors, or all authors when absent. A present empty set matches nothing.
+    pub authors: Option<BTreeSet<PublicKey>>,
+    /// Kinds, or all kinds when absent. A present empty set matches nothing.
+    pub kinds: Option<BTreeSet<Kind>>,
+}
+
+/// Relays NMP should ask for acquisition.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum QueryAcquisition {
+    /// Use the application-selected automatic router chain.
+    Automatic,
+    /// Ask exactly this non-empty relay set and bypass automatic routing.
+    Explicit(BTreeSet<RelayUrl>),
+}
+
+/// Evidence authority required for a record to enter the result.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum ResultAuthority {
+    /// Matching events from any configured local source may appear.
+    AnyLocal,
+    /// A record requires actual relay evidence from this exact set.
+    OnlyRelays(BTreeSet<RelayUrl>),
+}
+
+/// Acquisition and result authority, kept separate in query identity.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct QuerySourcePolicy {
+    /// Where NMP asks.
+    pub acquisition: QueryAcquisition,
+    /// Which evidence may enter the result.
+    pub authority: ResultAuthority,
+}
+
+impl Default for QuerySourcePolicy {
+    fn default() -> Self {
+        Self {
+            acquisition: QueryAcquisition::Automatic,
+            authority: ResultAuthority::AnyLocal,
+        }
+    }
+}
+
+/// Whether a query may create relay demand.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum Freshness {
+    /// Use configured local sources only.
+    CacheOnly,
+    /// Keep relay demand live. This is the ordinary default.
+    #[default]
+    Live,
+}
+
+/// Deterministic application-facing ordering.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum QueryOrdering {
+    /// Newest timestamp first, then greatest event id.
+    #[default]
+    NewestFirst,
+    /// Oldest timestamp first, then least event id.
+    OldestFirst,
+}
+
+/// Inert declarative event query.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct EventQuery {
+    /// Event selection.
+    pub selection: FilterSelection,
+    /// Acquisition and provenance authority.
+    pub source: QuerySourcePolicy,
+    /// Relay authorization context.
+    pub access: AccessContext,
+    /// Whether live relay demand is permitted.
+    pub freshness: Freshness,
+    /// Deterministic result order.
+    pub ordering: QueryOrdering,
+    /// Whole-query result bound.
+    pub limit: Option<NonZeroUsize>,
+}
+
+impl Default for EventQuery {
+    fn default() -> Self {
+        Self {
+            selection: FilterSelection::default(),
+            source: QuerySourcePolicy::default(),
+            access: AccessContext::public(),
+            freshness: Freshness::Live,
+            ordering: QueryOrdering::NewestFirst,
+            limit: None,
+        }
+    }
+}
+
+impl EventQuery {
+    /// Start an unconstrained event query.
+    #[must_use]
+    pub fn events() -> Self {
+        Self::default()
+    }
+
+    /// Match one event kind.
+    #[must_use]
+    pub fn kind(mut self, kind: Kind) -> Self {
+        self.selection.kinds = Some(BTreeSet::from([kind]));
+        self
+    }
+
+    /// Match a literal author set. An empty set intentionally matches nothing.
+    #[must_use]
+    pub fn authors(mut self, authors: impl IntoIterator<Item = PublicKey>) -> Self {
+        self.selection.authors = Some(authors.into_iter().collect());
+        self
+    }
+
+    /// Match a literal event-id set. An empty set intentionally matches nothing.
+    #[must_use]
+    pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Self {
+        self.selection.ids = Some(ids.into_iter().collect());
+        self
+    }
+
+    /// Ask exactly these relays while retaining ordinary local result visibility.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set.
+    pub fn from_relays(
+        mut self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Self, QueryError> {
+        let relays = non_empty_relays(relays)?;
+        self.source = QuerySourcePolicy {
+            acquisition: QueryAcquisition::Explicit(relays),
+            authority: ResultAuthority::AnyLocal,
+        };
+        Ok(self)
+    }
+
+    /// Ask exactly these relays and require actual provenance from that set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set.
+    pub fn only_from_relays(
+        mut self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Self, QueryError> {
+        let relays = non_empty_relays(relays)?;
+        self.source = QuerySourcePolicy {
+            acquisition: QueryAcquisition::Explicit(relays.clone()),
+            authority: ResultAuthority::OnlyRelays(relays),
+        };
+        Ok(self)
+    }
+
+    /// Use local sources without creating relay demand.
+    #[must_use]
+    pub const fn cache_only(mut self) -> Self {
+        self.freshness = Freshness::CacheOnly;
+        self
+    }
+
+    /// Apply one whole-query result bound.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::ZeroLimit`] when `limit` is zero.
+    pub fn limit(mut self, limit: usize) -> Result<Self, QueryError> {
+        self.limit = Some(NonZeroUsize::new(limit).ok_or(QueryError::ZeroLimit)?);
+        Ok(self)
+    }
+
+    /// Select oldest-first ordering.
+    #[must_use]
+    pub const fn oldest_first(mut self) -> Self {
+        self.ordering = QueryOrdering::OldestFirst;
+        self
+    }
+
+    /// Validate and canonicalize the query.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`QueryError`] when the query contains inconsistent source
+    /// authority or an invalid explicit relay set.
+    pub fn canonicalize(self) -> Result<CanonicalQuery, QueryError> {
+        validate_source_policy(&self.source)?;
+        Ok(CanonicalQuery(self))
+    }
+}
+
+fn non_empty_relays(
+    relays: impl IntoIterator<Item = RelayUrl>,
+) -> Result<BTreeSet<RelayUrl>, QueryError> {
+    let relays: BTreeSet<_> = relays.into_iter().collect();
+    if relays.is_empty() {
+        Err(QueryError::EmptyExplicitRelays)
+    } else {
+        Ok(relays)
+    }
+}
+
+fn validate_source_policy(source: &QuerySourcePolicy) -> Result<(), QueryError> {
+    match (&source.acquisition, &source.authority) {
+        (QueryAcquisition::Explicit(relays), _) if relays.is_empty() => {
+            Err(QueryError::EmptyExplicitRelays)
+        }
+        (_, ResultAuthority::OnlyRelays(relays)) if relays.is_empty() => {
+            Err(QueryError::EmptyProvenanceRelays)
+        }
+        (QueryAcquisition::Explicit(asked), ResultAuthority::OnlyRelays(required))
+            if asked != required =>
+        {
+            Err(QueryError::MismatchedExplicitAuthority)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Structurally canonical query identity.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CanonicalQuery(EventQuery);
+
+impl CanonicalQuery {
+    /// Inspect the canonical query.
+    #[must_use]
+    pub const fn as_query(&self) -> &EventQuery {
+        &self.0
+    }
+}
+
+/// Query refusal before any source or relay work opens.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum QueryError {
+    /// Explicit acquisition requires at least one relay.
+    #[error("explicit relay acquisition requires a non-empty relay set")]
+    EmptyExplicitRelays,
+    /// Provenance authority requires at least one relay.
+    #[error("relay provenance authority requires a non-empty relay set")]
+    EmptyProvenanceRelays,
+    /// Ask and trust sets cannot disagree in the provenance-constrained mode.
+    #[error("explicit acquisition and provenance relay sets differ")]
+    MismatchedExplicitAuthority,
+    /// Whole-query limits must be positive.
+    #[error("query limit must be greater than zero")]
+    ZeroLimit,
+}
+
+/// Semantic role of one independently observed local source.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum SourceKind {
+    /// Signed relay-observed cache state.
+    EventCache,
+    /// Current accepted local materializations.
+    WriteStore,
+}
+
+/// Monotonic revision owned by one query source.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct SourceRevision(pub u64);
+
+/// One source contribution to the universal query merge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SourceEvent {
+    /// Signed event and relay evidence from an event cache.
+    Cached(CachedEvent),
+    /// Current local materialization and publication evidence from a write store.
+    Local(LocalWriteEvent),
+}
+
+/// Complete current answer from one local source.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceSnapshot {
+    /// Semantic source role.
+    pub kind: SourceKind,
+    /// Monotonic provider-owned revision.
+    pub revision: SourceRevision,
+    /// Current lifecycle fact for this independently owned source.
+    pub status: SourceStatus,
+    /// Complete current contributions for this opened source query.
+    pub events: Vec<SourceEvent>,
+}
+
+impl SourceSnapshot {
+    /// Empty initial snapshot for a source role.
+    #[must_use]
+    pub const fn empty(kind: SourceKind) -> Self {
+        Self {
+            kind,
+            revision: SourceRevision(0),
+            status: SourceStatus::Open,
+            events: Vec::new(),
+        }
+    }
+}
+
+/// Current lifecycle fact for one opened source.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum SourceStatus {
+    /// The provider's continuous observation remains open.
+    #[default]
+    Open,
+    /// The provider's observation terminated after a coherent prior snapshot.
+    Closed,
+}
+
+/// Future returned by a source observation.
+pub type SourceChangeFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<SourceSnapshot, QuerySourceClosed>> + Send + 'a>>;
+
+/// Continuous changes belonging to one source open.
+pub trait SourceChanges: Send {
+    /// Await the next complete source snapshot.
+    fn next_change(&mut self) -> SourceChangeFuture<'_>;
+
+    /// Release exactly the work owned by this source observation.
+    fn close(&mut self);
+}
+
+/// Initial source snapshot and its gapless later sequence.
+pub struct OpenedQuerySource {
+    /// Complete current state at the open boundary.
+    pub initial: SourceSnapshot,
+    /// Later complete revisions.
+    pub changes: Box<dyn SourceChanges>,
+}
+
+/// Neutral contract implemented by independent local source providers.
+pub trait QuerySource: Send + Sync {
+    /// Open one continuous local observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QuerySourceError`] when the provider cannot establish one
+    /// coherent initial snapshot plus later revision sequence.
+    fn open(&self, query: &CanonicalQuery) -> Result<OpenedQuerySource, QuerySourceError>;
+}
+
+/// Local source open refusal.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum QuerySourceError {
+    /// Provider is no longer able to open work.
+    #[error("query source is closed")]
+    Closed,
+    /// Provider-specific refusal retained as scoped evidence.
+    #[error("query source refused open: {0}")]
+    Refused(String),
+}
+
+/// Terminal source observation fact.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+#[error("query source observation closed")]
+pub struct QuerySourceClosed;
+
+/// Application-facing event plus exact currently known evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventRecord {
+    id: EventId,
+    /// Unsigned local or signed Nostr event.
+    pub event: EventValue,
+    /// Relays that actually served this event id.
+    pub relay_evidence: RelayEvidence,
+    /// Local accepted publication evidence, when present.
+    pub publication: Option<PublicationEvidence>,
+}
+
+impl EventRecord {
+    /// Construct a record whose event has a stable deterministic id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryEvaluationError::MissingEventId`] for a non-finalized
+    /// unsigned event body.
+    pub fn new(
+        event: EventValue,
+        relay_evidence: RelayEvidence,
+        publication: Option<PublicationEvidence>,
+    ) -> Result<Self, QueryEvaluationError> {
+        let id = event.id().ok_or(QueryEvaluationError::MissingEventId)?;
+        Ok(Self {
+            id,
+            event,
+            relay_evidence,
+            publication,
+        })
+    }
+
+    /// Stable event id.
+    #[must_use]
+    pub const fn id(&self) -> EventId {
+        self.id
+    }
+
+    /// Event timestamp.
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.event.created_at()
+    }
+}
+
+/// Source-scoped evidence attached to one query revision.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct QueryEvidence {
+    /// Latest scoped source facts included in this exact result.
+    pub sources: Vec<SourceEvidence>,
+}
+
+/// Revision and lifecycle fact for one independent local source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SourceEvidence {
+    /// Semantic source role.
+    pub kind: SourceKind,
+    /// Last coherent revision included in the result.
+    pub revision: SourceRevision,
+    /// Whether the continuous source observation remains open.
+    pub status: SourceStatus,
+}
+
+/// Monotonic revision delivered by one live observation.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct QueryRevision(pub u64);
+
+/// Complete immutable current query state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QuerySnapshot {
+    /// Observation-owned delivered revision.
+    pub revision: QueryRevision,
+    /// Deduplicated, ordered event records.
+    pub events: Arc<[EventRecord]>,
+    /// Exact source revisions used for this result.
+    pub evidence: QueryEvidence,
+}
+
+impl QuerySnapshot {
+    /// Construct an evaluated snapshot before observation revision assignment.
+    #[must_use]
+    pub fn evaluated(events: Vec<EventRecord>, sources: &[SourceSnapshot]) -> Self {
+        Self {
+            revision: QueryRevision(0),
+            events: events.into(),
+            evidence: QueryEvidence {
+                sources: sources
+                    .iter()
+                    .map(|source| SourceEvidence {
+                        kind: source.kind,
+                        revision: source.revision,
+                        status: source.status,
+                    })
+                    .collect(),
+            },
+        }
+    }
+}
+
+/// Replaceable strategy for exact local query evaluation.
+pub trait QueryEvaluator: Send + Sync {
+    /// Evaluate one canonical query over complete current source snapshots.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryEvaluationError`] when a source violates its event-value
+    /// contract or the evaluator cannot produce an exact current result.
+    fn evaluate(
+        &self,
+        query: &CanonicalQuery,
+        sources: &[SourceSnapshot],
+    ) -> Result<QuerySnapshot, QueryEvaluationError>;
+}
+
+/// Scoped local evaluation failure.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum QueryEvaluationError {
+    /// A supposedly accepted local event violated the source contract.
+    #[error("query source supplied an event without a stable id")]
+    MissingEventId,
+    /// Provider-specific evaluator refusal.
+    #[error("query evaluator refused current sources: {0}")]
+    Refused(String),
+}

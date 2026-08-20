@@ -1,0 +1,16 @@
+[package]
+name = "nmp-write-store-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nmp-query.workspace = true
+nmp-write.workspace = true
+nmp-write-store.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
+

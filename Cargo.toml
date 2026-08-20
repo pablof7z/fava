@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/nmp-state",
+    "crates/nmp-write",
+    "crates/nmp-query",
+    "crates/nmp-query-standard",
+    "crates/nmp-event-cache",
+    "crates/nmp-event-cache-memory",
+    "crates/nmp-write-store",
+    "crates/nmp-write-store-memory",
+    "crates/nmp-observe",
+    "crates/nmp",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+
+[workspace.dependencies]
+nmp-event-cache = { path = "crates/nmp-event-cache" }
+nmp-event-cache-memory = { path = "crates/nmp-event-cache-memory" }
+nmp-observe = { path = "crates/nmp-observe" }
+nmp-query = { path = "crates/nmp-query" }
+nmp-query-standard = { path = "crates/nmp-query-standard" }
+nmp-state = { path = "crates/nmp-state" }
+nmp-write = { path = "crates/nmp-write" }
+nmp-write-store = { path = "crates/nmp-write-store" }
+nmp-write-store-memory = { path = "crates/nmp-write-store-memory" }
+nostr = { version = "=0.45.3", default-features = false, features = ["std"] }
+thiserror = "=2.0.20"
+tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
