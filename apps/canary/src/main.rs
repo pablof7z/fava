@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use canary::{
-    ReconOptions, SmokeOptions, run_local_scenario, run_public_recon, run_real_relay_smoke,
-    scenario_registry,
+    ReconOptions, SmokeOptions, run_live_scenario, run_local_scenario, run_public_recon,
+    run_real_relay_smoke, scenario_registry,
 };
 
 #[tokio::main]
@@ -51,30 +51,24 @@ async fn run() -> canary::CanaryResult<()> {
                 println!("events: {event_count}");
                 return Ok(());
             }
+            if matches!(
+                scenario.as_str(),
+                "explicit-read-eose" | "explicit-read-live-after-eose" | "explicit-read-cancel"
+            ) {
+                let evidence =
+                    run_live_scenario(&scenario, smoke_options(&mut arguments, "live-m2")?).await?;
+                println!("passed {scenario}");
+                println!("evidence: {}", evidence.display());
+                return Ok(());
+            }
             if scenario != "lab-real-relay-smoke" {
                 return Err(std::io::Error::other(format!(
                     "unknown or unimplemented scenario: {scenario}"
                 ))
                 .into());
             }
-            let mut relay_binary = PathBuf::from("nostr-rs-relay");
-            let mut seed = String::from("local-smoke");
-            let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
-            while let Some(flag) = arguments.next() {
-                let value = arguments.next().ok_or_else(usage)?;
-                match flag.as_str() {
-                    "--relay-bin" => relay_binary = PathBuf::from(value),
-                    "--seed" => seed = value,
-                    "--runs-dir" => runs_directory = PathBuf::from(value),
-                    _ => return Err(usage()),
-                }
-            }
-            let outcome = run_real_relay_smoke(SmokeOptions {
-                relay_binary,
-                seed,
-                runs_directory,
-            })
-            .await?;
+            let outcome =
+                run_real_relay_smoke(smoke_options(&mut arguments, "local-smoke")?).await?;
             println!("passed lab-real-relay-smoke");
             println!("event: {}", outcome.event_id);
             println!("evidence: {}", outcome.run_directory.display());
@@ -107,6 +101,29 @@ async fn run() -> canary::CanaryResult<()> {
         }
         _ => Err(usage()),
     }
+}
+
+fn smoke_options(
+    arguments: &mut impl Iterator<Item = String>,
+    default_seed: &str,
+) -> canary::CanaryResult<SmokeOptions> {
+    let mut relay_binary = PathBuf::from("nostr-rs-relay");
+    let mut seed = default_seed.to_owned();
+    let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+    while let Some(flag) = arguments.next() {
+        let value = arguments.next().ok_or_else(usage)?;
+        match flag.as_str() {
+            "--relay-bin" => relay_binary = PathBuf::from(value),
+            "--seed" => seed = value,
+            "--runs-dir" => runs_directory = PathBuf::from(value),
+            _ => return Err(usage()),
+        }
+    }
+    Ok(SmokeOptions {
+        relay_binary,
+        seed,
+        runs_directory,
+    })
 }
 
 fn usage() -> canary::CanaryError {

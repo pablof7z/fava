@@ -1,0 +1,18 @@
+[package]
+name = "fava-transport-websocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-state.workspace = true
+fava-transport.workspace = true
+futures-util.workspace = true
+tokio = { workspace = true, features = ["net"] }
+tokio-tungstenite.workspace = true
+
+[dev-dependencies]
+fava-transport-testkit.workspace = true
+
+[lints]
+workspace = true

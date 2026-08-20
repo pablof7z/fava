@@ -29,6 +29,24 @@
       "milestone": "M1",
       "requirements": ["M1 deletion and expiration query retraction"],
       "status": "enabled"
+    },
+    {
+      "id": "explicit-read-eose",
+      "milestone": "M2",
+      "requirements": ["M2 stored events, exact relay evidence, and scoped EOSE"],
+      "status": "enabled"
+    },
+    {
+      "id": "explicit-read-live-after-eose",
+      "milestone": "M2",
+      "requirements": ["M2 live event delivery after exact EOSE"],
+      "status": "enabled"
+    },
+    {
+      "id": "explicit-read-cancel",
+      "milestone": "M2",
+      "requirements": ["M2 exact withdrawal and terminal observation close"],
+      "status": "enabled"
     }
   ]
 }

@@ -10,6 +10,14 @@ members = [
     "crates/fava-write-store",
     "crates/fava-write-store-memory",
     "crates/fava-observe",
+    "crates/fava-wire",
+    "crates/fava-subscriptions",
+    "crates/fava-subscriptions-no-grouping",
+    "crates/fava-transport",
+    "crates/fava-transport-websocket",
+    "crates/fava-transport-testkit",
+    "crates/fava-ingest",
+    "crates/fava-diagnostics",
     "crates/fava",
 ]
 
@@ -22,6 +30,14 @@ rust-version = "1.90"
 fava-event-cache = { path = "crates/fava-event-cache" }
 fava-event-cache-memory = { path = "crates/fava-event-cache-memory" }
 fava-observe = { path = "crates/fava-observe" }
+fava-wire = { path = "crates/fava-wire" }
+fava-subscriptions = { path = "crates/fava-subscriptions" }
+fava-subscriptions-no-grouping = { path = "crates/fava-subscriptions-no-grouping" }
+fava-transport = { path = "crates/fava-transport" }
+fava-transport-websocket = { path = "crates/fava-transport-websocket" }
+fava-transport-testkit = { path = "crates/fava-transport-testkit" }
+fava-ingest = { path = "crates/fava-ingest" }
+fava-diagnostics = { path = "crates/fava-diagnostics" }
 fava-query = { path = "crates/fava-query" }
 fava-query-standard = { path = "crates/fava-query-standard" }
 fava-state = { path = "crates/fava-state" }
@@ -29,8 +45,11 @@ fava-write = { path = "crates/fava-write" }
 fava-write-store = { path = "crates/fava-write-store" }
 fava-write-store-memory = { path = "crates/fava-write-store-memory" }
 nostr = { version = "=0.45.3", default-features = false, features = ["std"] }
+futures-util = "=0.3.34"
+serde_json = "=1.0.151"
 thiserror = "=2.0.20"
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
+tokio-tungstenite = { version = "=0.30.0", features = ["rustls-tls-webpki-roots"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

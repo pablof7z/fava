@@ -1,0 +1,12 @@
+[package]
+name = "fava-transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-state.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

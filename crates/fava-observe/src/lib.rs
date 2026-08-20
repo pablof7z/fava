@@ -65,6 +65,7 @@ impl Observer {
 pub struct Observation {
     latest: watch::Receiver<Arc<QuerySnapshot>>,
     cancel: watch::Sender<bool>,
+    additional_cancel: Vec<watch::Sender<bool>>,
 }
 
 impl Observation {
@@ -139,7 +140,11 @@ impl Observation {
             write_changes.close();
         });
 
-        Ok(Self { latest, cancel })
+        Ok(Self {
+            latest,
+            cancel,
+            additional_cancel: Vec::new(),
+        })
     }
 
     /// Exact current snapshot, readable immediately after open.
@@ -155,19 +160,33 @@ impl Observation {
     /// Returns [`ObservationClosed`] after explicit close, provider termination,
     /// evaluation failure, or engine teardown.
     pub async fn changed(&mut self) -> Result<Arc<QuerySnapshot>, ObservationClosed> {
+        if *self.cancel.borrow() {
+            return Err(ObservationClosed);
+        }
         self.latest.changed().await.map_err(|_| ObservationClosed)?;
+        if *self.cancel.borrow() {
+            return Err(ObservationClosed);
+        }
         Ok(Arc::clone(&self.latest.borrow_and_update()))
+    }
+
+    /// Attach one owner whose exact work must stop with this observation.
+    pub fn attach_cancellation(&mut self, cancel: watch::Sender<bool>) {
+        self.additional_cancel.push(cancel);
     }
 
     /// Close this observation. Repeated close is harmless.
     pub fn close(&self) {
         self.cancel.send_replace(true);
+        for cancel in &self.additional_cancel {
+            cancel.send_replace(true);
+        }
     }
 }
 
 impl Drop for Observation {
     fn drop(&mut self) {
-        self.cancel.send_replace(true);
+        self.close();
     }
 }
 
@@ -200,6 +219,9 @@ pub enum ObserveError {
     /// Initial local evaluation failed.
     #[error(transparent)]
     Evaluation(#[from] QueryEvaluationError),
+    /// Relay work could not establish one exact live query.
+    #[error("relay query refused: {0}")]
+    Relay(String),
 }
 
 /// Terminal observation fact.

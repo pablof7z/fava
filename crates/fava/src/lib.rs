@@ -1,13 +1,21 @@
 //! Thin Rust facade over the selected Fava provider assembly.
 
-use std::sync::Arc;
+mod live;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+
+use fava_diagnostics::Diagnostics;
+pub use fava_diagnostics::DiagnosticsSnapshot;
 use fava_event_cache::EventCache;
-use fava_observe::{Observation, ObserveError, Observer};
+use fava_observe::Observer;
+pub use fava_observe::{Observation, ObservationClosed, ObserveError};
 pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority,
 };
 use fava_query::{QueryEvaluator, QuerySource};
+use fava_subscriptions::SubscriptionPlanner;
+use fava_transport::Transport;
 pub use fava_write::{EventValue, ReceiptId};
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
@@ -16,7 +24,12 @@ use thiserror::Error;
 /// Built engine instance for the selected local-source assembly.
 pub struct Fava {
     observer: Observer,
+    event_cache: Arc<dyn EventCache>,
     write_store: Arc<dyn WriteStore>,
+    subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
+    transport: Option<Arc<dyn Transport>>,
+    diagnostics: Arc<Diagnostics>,
+    next_subscription: AtomicU64,
 }
 
 impl Fava {
@@ -32,9 +45,12 @@ impl Fava {
     ///
     /// Returns [`ObserveError`] when the declarative query is invalid or the
     /// configured local sources cannot establish one coherent initial view.
-    #[allow(clippy::unused_async)] // Preserve the specified async facade as later providers become asynchronous.
     pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError> {
-        self.observer.open(query)
+        if query.freshness() == Freshness::CacheOnly {
+            self.observer.open(query)
+        } else {
+            live::open(self, query).await
+        }
     }
 
     /// Accept one finalized local event into the durable-write authority.
@@ -55,6 +71,12 @@ impl Fava {
     pub fn cancel_write(&self, receipt_id: ReceiptId) -> Result<bool, WriteStoreError> {
         self.write_store.cancel(receipt_id)
     }
+
+    /// Return one bounded immutable snapshot of current exact diagnostic facts.
+    #[must_use]
+    pub fn diagnostics(&self) -> DiagnosticsSnapshot {
+        self.diagnostics.snapshot()
+    }
 }
 
 /// Static assembly builder. No provider is silently selected.
@@ -63,6 +85,8 @@ pub struct FavaBuilder {
     event_cache: Option<Arc<dyn EventCache>>,
     write_store: Option<Arc<dyn WriteStore>>,
     evaluator: Option<Arc<dyn QueryEvaluator>>,
+    subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
+    transport: Option<Arc<dyn Transport>>,
 }
 
 impl FavaBuilder {
@@ -96,6 +120,26 @@ impl FavaBuilder {
         self
     }
 
+    /// Select one exact subscription planner.
+    #[must_use]
+    pub fn subscription_planner<T>(mut self, planner: Arc<T>) -> Self
+    where
+        T: SubscriptionPlanner + 'static,
+    {
+        self.subscription_planner = Some(planner);
+        self
+    }
+
+    /// Select one relay transport provider.
+    #[must_use]
+    pub fn transport<T>(mut self, transport: Arc<T>) -> Self
+    where
+        T: Transport + 'static,
+    {
+        self.transport = Some(transport);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -106,11 +150,16 @@ impl FavaBuilder {
         let event_cache = self.event_cache.ok_or(BuildError::MissingEventCache)?;
         let write_store = self.write_store.ok_or(BuildError::MissingWriteStore)?;
         let evaluator = self.evaluator.ok_or(BuildError::MissingQueryEvaluator)?;
-        let event_source: Arc<dyn QuerySource> = event_cache;
+        let event_source: Arc<dyn QuerySource> = event_cache.clone();
         let write_source: Arc<dyn QuerySource> = write_store.clone();
         Ok(Fava {
             observer: Observer::new(event_source, write_source, evaluator),
+            event_cache,
             write_store,
+            subscription_planner: self.subscription_planner,
+            transport: self.transport,
+            diagnostics: Arc::new(Diagnostics::default()),
+            next_subscription: AtomicU64::new(0),
         })
     }
 }

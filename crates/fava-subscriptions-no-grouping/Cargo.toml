@@ -1,0 +1,16 @@
+[package]
+name = "fava-subscriptions-no-grouping"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-state.workspace = true
+fava-subscriptions.workspace = true
+fava-wire.workspace = true
+
+[dev-dependencies]
+nostr.workspace = true
+
+[lints]
+workspace = true

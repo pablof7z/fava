@@ -1,0 +1,11 @@
+[package]
+name = "fava-transport-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-transport.workspace = true
+
+[lints]
+workspace = true

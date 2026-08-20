@@ -1,12 +1,15 @@
 //! Independent acceptance application and evidence lab for the Fava rewrite.
 
 mod artifacts;
+mod hostile;
+mod live;
 mod local;
 mod proxy;
 mod recon;
 mod relay;
 mod wire;
 
+pub use live::run_live_scenario;
 pub use local::run_local_scenario;
 pub use recon::{ReconOptions, ReconOutcome};
 
@@ -129,6 +132,9 @@ pub fn has_executor(id: &str) -> bool {
             | "local-source-merge"
             | "local-replaceable-shadow-and-cancel"
             | "local-source-removal"
+            | "explicit-read-eose"
+            | "explicit-read-live-after-eose"
+            | "explicit-read-cancel"
     )
 }
 

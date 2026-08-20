@@ -13,6 +13,8 @@ fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
 fava-state = { path = "../../crates/fava-state" }
+fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
+fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 futures-util = "=0.3.34"

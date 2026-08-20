@@ -1,0 +1,33 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "lib",
+    crate_name = "fava_ingest",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-state:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "admission",
+    crate_name = "admission",
+    srcs = ["tests/admission.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-state:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
