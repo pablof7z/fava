@@ -26,7 +26,7 @@ one coherent event view.
 - I-2: `WriteStore` owns local materializations and publication evidence.
 - I-3: query evaluation is the only merge authority.
 - I-4: source open establishes one coherent initial snapshot plus continuous later revisions.
-- I-5: source/result authority and access context remain part of query identity.
+- I-5: source/result authority and relay access remain part of query identity.
 
 ## Exclusions
 
@@ -43,8 +43,8 @@ shared semantic corpus across both memory providers.
 
 ## Proof
 
-- Component tests for canonical source merge, replacement, evidence, and source policy.
-- Public `nmp` acceptance tests for initial local state, local visibility, cancellation, and latest-state observation.
+- Component tests for deterministic source merge, replacement, evidence, and source policy.
+- Public `fava` acceptance tests for initial local state, local visibility, cancellation, and latest-state observation.
 - Deliberate breaks named in `features/local-source-merge.feature`.
 
 Verified on 2026-08-20:
@@ -61,7 +61,7 @@ explicit source-policy distinction is removed or inverted.
 
 ## Architecture result
 
-- `nmp-query` is the sole merge authority.
+- `fava-query` is the sole merge authority.
 - Event-cache and write-store providers expose independent continuous source revisions.
 - Post-open source termination is source-scoped evidence and does not erase the other source's valid state.
 - The public query identity stores acquisition and result authority separately.

@@ -1,27 +1,27 @@
 # Partial Specification — Reactive Query Interface
 
 **Status:** Working partial specification  
-**Scope:** Rust query-expression surface, relay-source semantics, reactive observation, and capability-provided query combinators.
+**Scope:** Rust query-expression surface, relay-source semantics, reactive observation, and protocol-crate query combinators.
 
-This document captures the intended shape of NMP's query interface. Names and exact Rust signatures are illustrative. The important contract is the behavior and composition model.
+This document captures the intended shape of Fava's query interface. Names and exact Rust signatures are illustrative. The important contract is the behavior and composition model.
 
 ## 1. Core model
 
-NMP queries are declarative expressions.
+Fava queries are declarative expressions.
 
 An application describes **what events it wants** and may derive values from one query to feed another. The application does not manually execute intermediate queries, expand values, diff results, or reopen subscriptions when an input changes.
 
 The core concepts are approximately:
 
 ```rust
-EventQuery          // a declarative set of events
+Query               // a declarative set of events
 ValueSet<T>         // reactive values derived from queries or other value sets
-LiveQuery           // an opened observation of an EventQuery
+Observation         // one opened Query
 QuerySnapshot       // the current materialized result
-EventRecord         // an event plus NMP's evidence about it
+EventRecord         // an event plus Fava's evidence about it
 ```
 
-`EventQuery` and `ValueSet<T>` are inert descriptions. Relay work and observation begin only when a final query is opened.
+`Query` and `ValueSet<T>` are inert descriptions. Relay work and observation begin only when a final query is opened.
 
 `Auto` routing is the default and SHOULD require no syntax in the ordinary case.
 
@@ -76,7 +76,7 @@ A query field such as `.authors(...)` SHOULD accept both literal and reactive va
 .authors(reactive_pubkeys)
 ```
 
-When the reactive value changes, NMP updates the existing query automatically.
+When the reactive value changes, Fava updates the existing query automatically.
 
 The application MUST NOT need to:
 
@@ -91,7 +91,7 @@ An empty reactive set means **match nothing**. It never means "remove this filte
 
 ## 3. Query composition
 
-NMP SHOULD support ordinary set composition of reactive values and event selections.
+Fava SHOULD support ordinary set composition of reactive values and event selections.
 
 At minimum:
 
@@ -137,7 +137,7 @@ let query = events()
     .authors(authors);
 ```
 
-NMP uses the configured automatic router composition.
+Fava uses the configured automatic router composition.
 
 Routers may contribute relay destinations incrementally and asynchronously. The query begins using destinations already known and adds further relay work as routing knowledge arrives.
 
@@ -169,7 +169,7 @@ A matching event already available from another local source MAY still appear, i
 - an accepted local unpublished event supplied by the write store;
 - a matching event already known through another query.
 
-In other words, `.from_relays(...)` controls **where NMP asks**, not **which matching local events the application is allowed to see**.
+In other words, `.from_relays(...)` controls **where Fava asks**, not **which matching local events the application is allowed to see**.
 
 ### 4.3 Only from these relays
 
@@ -195,7 +195,7 @@ For an event already in the event cache to match this query, its provenance MUST
 
 For a newly arriving event to match, it MUST arrive from one of the specified relays.
 
-A matching event known only from another relay MUST NOT appear merely because NMP happens to have it cached.
+A matching event known only from another relay MUST NOT appear merely because Fava happens to have it cached.
 
 An unpublished local event with no qualifying relay provenance MUST NOT appear.
 
@@ -240,7 +240,7 @@ pub struct EventEvidence {
 The exact shape may grow, but the distinction is:
 
 - the Nostr event is the protocol value;
-- evidence describes what NMP actually knows about that event;
+- evidence describes what Fava actually knows about that event;
 - local publication evidence describes a local accepted publication, if any.
 
 An event coming from several sources is still one logical event record.
@@ -286,7 +286,7 @@ Opening a query returns a live latest-state observation.
 A prospective API:
 
 ```rust
-let mut feed = nmp.observe(query).await?;
+let mut feed = fava.observe(query).await?;
 ```
 
 Once `observe()` succeeds, the initial local state is immediately readable:
@@ -312,7 +312,7 @@ pub struct QuerySnapshot {
     pub evidence: QueryEvidence,
 }
 
-impl LiveQuery {
+impl Observation {
     pub fn current(&self) -> Arc<QuerySnapshot>;
 
     pub async fn changed(
@@ -327,13 +327,13 @@ The public contract is latest state, not a required queue of every intermediate 
 
 A slow application MAY skip intermediate states, but it MUST eventually receive an exact current state reflecting all accepted changes relevant to the query.
 
-NMP SHOULD expose these semantics rather than exposing a concrete runtime primitive such as Tokio's `watch::Receiver`, even if a similar mechanism is used internally.
+Fava SHOULD expose these semantics rather than exposing a concrete runtime primitive such as Tokio's `watch::Receiver`, even if a similar mechanism is used internally.
 
 ---
 
 ## 8. Example: articles by people muted by people I follow
 
-Assume capability crates expose common semantic query combinators.
+Assume protocol crates expose common typed query combinators.
 
 The application wants:
 
@@ -362,10 +362,10 @@ let articles = events()
     .newest_first()
     .limit(100);
 
-let mut feed = nmp.observe(articles).await?;
+let mut feed = fava.observe(articles).await?;
 ```
 
-With capability-provided combinators, the application SHOULD be able to write:
+With protocol-crate combinators, the application SHOULD be able to write:
 
 ```rust
 let followed =
@@ -380,10 +380,10 @@ let articles = events()
     .newest_first()
     .limit(100);
 
-let mut feed = nmp.observe(articles).await?;
+let mut feed = fava.observe(articles).await?;
 ```
 
-Or, if an article capability provides a useful wrapper:
+Or, if an article protocol crate provides a useful wrapper:
 
 ```rust
 let articles = articles::by(
@@ -392,7 +392,7 @@ let articles = articles::by(
     )
 );
 
-let mut feed = nmp.observe(articles).await?;
+let mut feed = fava.observe(articles).await?;
 ```
 
 All forms describe one dependency graph. They do not manually sequence queries.
@@ -426,7 +426,7 @@ If the current user then follows Eve:
 follows = { Alice, Bob, Eve }
 ```
 
-NMP adds only the new dependency needed for Eve.
+Fava adds only the new dependency needed for Eve.
 
 If Eve mutes Frank:
 
@@ -452,7 +452,7 @@ If the current account changes, `CurrentAccount::pubkey()` changes as a reactive
 
 ## 9. Rendering in a Rust application
 
-The UI SHOULD render immutable query snapshots rather than embed NMP query logic in rendering code.
+The UI SHOULD render immutable query snapshots rather than embed Fava query logic in rendering code.
 
 For example, with an `egui`-style application:
 
@@ -465,7 +465,7 @@ struct ArticleFeedState {
 When the feed opens:
 
 ```rust
-let mut feed = nmp.observe(articles).await?;
+let mut feed = fava.observe(articles).await?;
 
 let state = Arc::new(RwLock::new(ArticleFeedState {
     snapshot: feed.current(),
@@ -511,13 +511,13 @@ The renderer does not know:
 - whether an event came from the event cache or write store;
 - which subscriptions were shared or regrouped.
 
-Those are NMP concerns.
+Those are Fava concerns.
 
 ---
 
-## 10. Capability-provided query combinators
+## 10. Protocol-crate query combinators
 
-Capability crates SHOULD expose the semantic relationships applications commonly think in.
+Protocol crates SHOULD expose the Nostr relationships applications commonly think in.
 
 Examples:
 
@@ -528,14 +528,17 @@ nip02::follows(author)
 mutes::muted_pubkeys(authors)
     -> ValueSet<PublicKey>
 
-bookmarks::references(authors)
-    -> ValueSet<EventReference>
+bookmarks::event_ids(authors)
+    -> ValueSet<EventId>
+
+bookmarks::coordinates(authors)
+    -> ValueSet<Coordinate>
 
 bookmarks::bookmarked_events(authors)
-    -> EventQuery
+    -> Query
 
 reactions::to(events)
-    -> EventQuery
+    -> Query
 
 groups::members(group)
     -> ValueSet<PublicKey>
@@ -558,7 +561,7 @@ pub fn follows(
 
 Its value is semantic vocabulary and protocol correctness, not implementation complexity.
 
-### Composing capabilities
+### Composing protocol crates
 
 An application can naturally express:
 
@@ -578,38 +581,38 @@ let friends_of_friends =
     );
 ```
 
-Capability crates MUST NOT depend on one another merely to enable this composition.
+Protocol crates MUST NOT depend on one another merely to enable this composition.
 
 Instead:
 
 ```text
-nmp-nip02
+fava-nip02
     -> produces core ValueSet<PublicKey>
 
-nmp-bookmarks
+fava-bookmarks
     -> consumes core ValueSet<PublicKey>
 
 application
     -> composes them
 ```
 
-Both capability crates depend on the generic query/value vocabulary, not on each other.
+Both protocol crates depend on the generic query/value vocabulary, not on each other.
 
-A capability SHOULD return generic core expressions such as:
+A protocol crate SHOULD return generic core expressions such as:
 
 ```text
 ValueSet<T>
-EventQuery
+Query
 ```
 
-rather than capability-specific observation types such as:
+rather than protocol-specific observation types such as:
 
 ```text
 Nip02FollowSubscription
 BookmarkObservation
 ```
 
-The single observation lifecycle remains `nmp.observe(...)`.
+The single observation lifecycle remains `fava.observe(...)`.
 
 ---
 
@@ -618,11 +621,10 @@ The single observation lifecycle remains `nmp.observe(...)`.
 1. **Auto is the default.** Applications mention routing only when they want an explicit source constraint.
 2. **Acquisition and trust are separate.** `from_relays(...)` chooses where to ask; `only_from_relays(...)` additionally constrains which local/live events may enter the result.
 3. **Reactive values stay declarative.** Apps do not receive intermediate `Vec`s they must manage.
-4. **The final observation is latest state.** Apps render current snapshots rather than replaying NMP's internal mutation history.
-5. **Capability helpers lower to core expressions.** They never create private subscription or observation lifecycles.
-6. **Capabilities compose through core types, not dependencies on one another.**
+4. **The final observation is latest state.** Apps render current snapshots rather than replaying Fava's internal mutation history.
+5. **Protocol helpers lower to core expressions.** They never create private subscription or observation lifecycles.
+6. **Protocol crates compose through core types, not dependencies on one another.**
 7. **Local sources are hidden behind the query.** Event cache, write store, and live relay arrivals merge into one event result.
 8. **`EventRecord` is the event-domain value.** `Row` is reserved for actual database/UI implementation terminology if used at all.
 9. **Source policy is part of query meaning.** Different source/trust policies cannot be collapsed merely because their Nostr filters are identical.
 10. **Routers remain invisible to ordinary query code.** Automatic routers can add relay work asynchronously without requiring the application to reopen or mutate its query.
-

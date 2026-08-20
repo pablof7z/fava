@@ -7,7 +7,7 @@
 ## Why
 
 Every later networking, durability, and interoperability claim needs an
-independent witness. NMP must not prove its own wire effects or relay
+independent witness. Fava must not prove its own wire effects or relay
 persistence through internal state.
 
 ## Behavior
@@ -46,14 +46,14 @@ find the event and the persistence assertion must fail.
 
 ## Exit gates
 
-See M0 in `docs/spec/NMP_REWRITE_IMPLEMENTATION_PLAN.md`.
+See M0 in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
 
 ## Evidence
 
 Red:
 
 ```sh
-cargo test --manifest-path nmp-e2e-canary/Cargo.toml \
+cargo test --manifest-path apps/canary/Cargo.toml \
   tests::enabled_real_relay_scenario_has_an_executor -- --exact
 ```
 
@@ -90,7 +90,7 @@ post-restart exact query was incomplete: event=false, eose=true
 
 The mutation was removed and the live green scenario was rerun.
 
-The canary is a separate workspace under `apps/canary`, has no NMP crate
+The canary is a separate workspace under `apps/canary`, has no Fava crate
 dependency, and includes bounded read-only public-relay reconnaissance that
 requires an explicit relay URL. Public-relay reconnaissance was not run; it is
 evidence-only and not an M0 deterministic pass gate.

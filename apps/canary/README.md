@@ -1,7 +1,7 @@
-# NMP end-to-end canary
+# Fava end-to-end canary
 
 This is an ordinary downstream Rust application and independent evidence lab.
-It must not depend on NMP internal crates or use NMP diagnostics as the sole
+It must not depend on Fava internal crates or use Fava diagnostics as the sole
 witness for external effects.
 
 The first enabled scenario is `lab-real-relay-smoke`, using the pinned

@@ -1,4 +1,4 @@
-//! Independent acceptance application and evidence lab for the NMP rewrite.
+//! Independent acceptance application and evidence lab for the Fava rewrite.
 
 mod artifacts;
 mod proxy;
@@ -294,7 +294,7 @@ fn create_event(seed: &str) -> CanaryResult<Event> {
     let keys = deterministic_keys(seed)?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(
-        EventBuilder::new(Kind::TextNote, format!("NMP M0 canary {seed}"))
+        EventBuilder::new(Kind::TextNote, format!("Fava M0 canary {seed}"))
             .custom_created_at(Timestamp::from(now))
             .finalize(&keys)?,
     )
@@ -319,7 +319,7 @@ async fn reserve_port() -> CanaryResult<u16> {
 
 fn deterministic_keys(seed: &str) -> CanaryResult<Keys> {
     for counter in 0_u64..1024 {
-        let digest = Sha256::digest(format!("nmp-m0-identity\0{seed}\0{counter}"));
+        let digest = Sha256::digest(format!("fava-m0-identity\0{seed}\0{counter}"));
         if let Ok(keys) = Keys::parse(&hex::encode(digest)) {
             return Ok(keys);
         }
@@ -335,7 +335,7 @@ struct Manifest<'a> {
     scenario: &'a str,
     scenario_seed: &'a str,
     selected_profile: &'a str,
-    nmp_revision: String,
+    fava_revision: String,
     canary_revision: String,
     dirty: bool,
     relay_implementation: &'a str,
@@ -368,7 +368,7 @@ impl<'a> Manifest<'a> {
             scenario,
             scenario_seed: &options.seed,
             selected_profile: "nostr-rs-relay-0.8.12-local-process",
-            nmp_revision: revision.clone(),
+            fava_revision: revision.clone(),
             canary_revision: revision,
             dirty,
             relay_implementation: "nostr-rs-relay",

@@ -1,8 +1,8 @@
-//! Command-line entry point for the NMP end-to-end canary.
+//! Command-line entry point for the Fava end-to-end canary.
 
 use std::path::PathBuf;
 
-use nmp_e2e_canary::{
+use canary::{
     ReconOptions, SmokeOptions, run_public_recon, run_real_relay_smoke, scenario_registry,
 };
 
@@ -14,7 +14,7 @@ async fn main() {
     }
 }
 
-async fn run() -> nmp_e2e_canary::CanaryResult<()> {
+async fn run() -> canary::CanaryResult<()> {
     let mut arguments = std::env::args().skip(1);
     let Some(command) = arguments.next() else {
         return Err(usage());
@@ -89,9 +89,9 @@ async fn run() -> nmp_e2e_canary::CanaryResult<()> {
     }
 }
 
-fn usage() -> nmp_e2e_canary::CanaryError {
+fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: nmp-e2e-canary list | run lab-real-relay-smoke [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run lab-real-relay-smoke [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

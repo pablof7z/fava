@@ -1,0 +1,16 @@
+[package]
+name = "fava-write-store-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-query.workspace = true
+fava-write.workspace = true
+fava-write-store.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
+

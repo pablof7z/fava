@@ -1,14 +1,14 @@
 //! External-provider proof for the public event-cache and query-source contracts.
 
-use nmp_event_cache::{EventCache, EventCacheError};
-use nmp_query::{
-    CanonicalQuery, OpenedQuerySource, QuerySource, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceKind, SourceSnapshot,
+use fava_event_cache::{EventCache, EventCacheError};
+use fava_query::{
+    OpenedQuerySource, Query, QuerySource, QuerySourceError, SourceChangeFuture, SourceChanges,
+    SourceKind, SourceSnapshot,
 };
-use nmp_state::{CacheMutation, CachedEvent};
+use fava_state::{CacheMutation, CachedEvent};
 use nostr::event::EventId;
 
-/// Deliberately absent event cache implemented outside the NMP workspace.
+/// Deliberately absent event cache implemented outside the Fava workspace.
 pub struct NullEventCache;
 
 impl EventCache for NullEventCache {
@@ -32,7 +32,7 @@ impl EventCache for NullEventCache {
 }
 
 impl QuerySource for NullEventCache {
-    fn open(&self, _query: &CanonicalQuery) -> Result<OpenedQuerySource, QuerySourceError> {
+    fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
         Ok(OpenedQuerySource {
             initial: SourceSnapshot::empty(SourceKind::EventCache),
             changes: Box::new(NullChanges),
@@ -54,21 +54,21 @@ impl SourceChanges for NullChanges {
 mod tests {
     use std::sync::Arc;
 
-    use nmp::Nmp;
+    use fava::Fava;
 
     use super::*;
 
     #[tokio::test(flavor = "current_thread")]
     async fn external_cache_assembles_without_private_access() {
-        let engine = Nmp::builder()
+        let engine = Fava::builder()
             .event_cache(Arc::new(NullEventCache))
-            .write_store(Arc::new(nmp_write_store_memory::MemoryWriteStore::default()))
-            .query_evaluator(Arc::new(nmp_query_standard::StandardQueryEvaluator))
+            .write_store(Arc::new(fava_write_store_memory::MemoryWriteStore::default()))
+            .query_evaluator(Arc::new(fava_query_standard::StandardQueryEvaluator))
             .build()
             .expect("public contracts are sufficient for external assembly");
 
         let observation = engine
-            .observe(nmp::EventQuery::events().cache_only())
+            .observe(fava::Query::events().cache_only())
             .await
             .expect("external null cache opens through public facade");
 

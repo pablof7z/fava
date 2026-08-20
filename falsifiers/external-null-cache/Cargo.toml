@@ -1,18 +1,18 @@
 [workspace]
 
 [package]
-name = "nmp-external-null-cache-proof"
+name = "fava-external-null-cache-proof"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-nmp = { path = "../../crates/nmp" }
-nmp-event-cache = { path = "../../crates/nmp-event-cache" }
-nmp-query = { path = "../../crates/nmp-query" }
-nmp-query-standard = { path = "../../crates/nmp-query-standard" }
-nmp-state = { path = "../../crates/nmp-state" }
-nmp-write-store-memory = { path = "../../crates/nmp-write-store-memory" }
+fava = { path = "../../crates/fava" }
+fava-event-cache = { path = "../../crates/fava-event-cache" }
+fava-query = { path = "../../crates/fava-query" }
+fava-query-standard = { path = "../../crates/fava-query-standard" }
+fava-state = { path = "../../crates/fava-state" }
+fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 nostr = { version = "=0.45.3", default-features = false, features = ["std"] }
 tokio = { version = "=1.53.1", features = ["macros", "rt"] }
 

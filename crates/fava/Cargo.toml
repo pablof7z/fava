@@ -1,0 +1,24 @@
+[package]
+name = "fava"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-event-cache.workspace = true
+fava-observe.workspace = true
+fava-query.workspace = true
+fava-write-store.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+fava-event-cache-memory.workspace = true
+fava-query-standard.workspace = true
+fava-state.workspace = true
+fava-write.workspace = true
+fava-write-store-memory.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

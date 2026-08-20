@@ -1,18 +1,18 @@
-# NMP Architecture
+# Fava Architecture
 
 **Status:** proposed target architecture for the rewrite  
-**Audience:** NMP implementors, provider authors, capability authors, SDK authors, and application developers  
-**Authority:** `FULL_NMP_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` defines what NMP must do; this document defines where responsibilities, state, lifecycles, and replaceable interfaces belong. `NMP_TDD_BDD_TESTING_GUIDE.md` defines how those claims are specified and proved.
+**Audience:** Fava implementors, provider authors, protocol-crate authors, SDK authors, and application developers
+**Authority:** `FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` defines what Fava must do; this document defines where responsibilities, state, lifecycles, and replaceable interfaces belong. `FAVA_TDD_BDD_TESTING_GUIDE.md` defines how those claims are specified and proved.
 
 ## Purpose
 
-NMP is an embeddable Nostr client engine assembled from focused crates. An application chooses the implementation crates that make up its NMP build: event cache, write store, routers, subscription planner, transport, publisher, delivery policy, signers, protocol services, and optional event-kind capabilities.
+Fava is an embeddable Nostr client engine assembled from focused crates. An application chooses the implementation crates that make up its Fava build: event cache, write store, routers, subscription planner, transport, publisher, delivery policy, signers, protocol services, and event-kind protocol crates.
 
 The architecture has four goals:
 
 1. **Small, explicit ownership.** Every mutable fact, lifecycle, queue, retry loop, and external resource has one owner.
-2. **Build-time substitutability.** Different applications can select different implementation crates without forking NMP or modifying unrelated crates.
-3. **One set of primitives.** Querying, event construction, signing, publishing, routing composition, and event-state semantics each have one primitive contract. Higher-level capabilities compose those primitives.
+2. **Build-time substitutability.** Different applications can select different implementation crates without forking Fava or modifying unrelated crates.
+3. **One set of primitives.** Querying, event construction, signing, publishing, routing composition, and event-state rules each have one primitive contract. Protocol crates compose those primitives.
 4. **Behavioral integrity across compositions.** Provider choice may change policy where the contract allows it; it does not change universal Nostr validity, evidence meaning, query continuity, write identity, or lifecycle correctness.
 
 The architecture is deliberately organized around responsibility rather than crate size. A five-line routing policy is still a higher-level routing policy and belongs outside the primitive routing crate when keeping it separate is what makes it independently selectable.
@@ -23,10 +23,10 @@ The architecture is deliberately organized around responsibility rather than cra
 
 ### Static application composition
 
-Provider selection happens when the application assembles its NMP build.
+Provider selection happens when the application assembles its Fava build.
 
 ```rust
-let engine = Nmp::builder()
+let engine = Fava::builder()
     .event_cache(MyEventCache::open(cache_path)?)
     .write_store(MyWriteStore::open(write_path)?)
     .query_evaluator(StandardQueryEvaluator::new())
@@ -45,7 +45,7 @@ let engine = Nmp::builder()
 Another application may compile a different combination:
 
 ```rust
-let engine = Nmp::builder()
+let engine = Fava::builder()
     .event_cache(BoundedMemoryEventCache::new(50_000))
     .write_store(SqliteWriteStore::open("writes.sqlite")?)
     .query_evaluator(CompanyQueryEvaluator::new(...))
@@ -65,7 +65,7 @@ The exact Rust mechanism may use generics, trait objects, generated assembly cod
 
 ### One owner per semantic role
 
-NMP distinguishes semantic roles even when one physical implementation serves several of them.
+Fava distinguishes semantic roles even when one physical implementation serves several of them.
 
 - The **event cache** owns cached relay-observed event state.
 - The **write store** owns accepted local write obligations, current materializations, receipts, routes, and delivery facts.
@@ -88,11 +88,11 @@ A replaceable subsystem has:
 For example:
 
 ```text
-nmp-routing
-    ├── nmp-router-outbox
-    ├── nmp-router-hints
-    ├── nmp-router-app-relays
-    ├── nmp-router-fallback-relays
+fava-routing
+    ├── fava-router-outbox
+    ├── fava-router-hints
+    ├── fava-router-app-relays
+    ├── fava-router-fallback-relays
     └── third-party router crates
 ```
 
@@ -102,12 +102,12 @@ The standard implementation uses the same interface available to an external cra
 
 Shared types are exported by the crate that defines their meaning:
 
-- wire frames live in `nmp-wire`;
-- cached event state and relay evidence live in `nmp-state`;
-- query descriptions, `EventRecord`, snapshots, and query evidence live in `nmp-query`;
-- unsigned events, write intents, receipts, and delivery facts live in `nmp-write`;
-- route requests, contributions, plans, and route evidence live in `nmp-routing`;
-- signer requests and outcomes live in `nmp-signer`.
+- wire frames live in `fava-wire`;
+- cached event state and relay evidence live in `fava-state`;
+- query descriptions, `EventRecord`, snapshots, and query evidence live in `fava-query`;
+- unsigned events, write intents, receipts, and delivery facts live in `fava-write`;
+- route requests, contributions, plans, and route evidence live in `fava-routing`;
+- signer requests and outcomes live in `fava-signer`.
 
 A type used by several crates still has one semantic owner. Other crates depend on that owner rather than moving the type into a common bucket.
 
@@ -117,11 +117,11 @@ Primitive crates define general machinery. Higher-layer crates encode one partic
 
 Examples:
 
-- `nmp-routing` defines ordered asynchronous router composition.
-- `nmp-router-hints` defines one particular interpretation of relay hints.
-- `nmp-router-outbox` defines one particular NIP-65-based outbox/inbox algorithm.
-- `nmp-write` defines the event-construction and write-intent primitives.
-- `nmp-nip02` defines follow/unfollow semantics by composing those primitives.
+- `fava-routing` defines ordered asynchronous router composition.
+- `fava-router-hints` defines one particular interpretation of relay hints.
+- `fava-router-outbox` defines one particular NIP-65-based outbox/inbox algorithm.
+- `fava-write` defines the event-construction and write-intent primitives.
+- `fava-nip02` defines follow/unfollow semantics by composing those primitives.
 
 A higher-layer policy remains a separate crate even when its implementation is very small. This preserves independent selection and prevents the primitive contract from silently privileging one policy.
 
@@ -140,7 +140,7 @@ This is especially load-bearing for routing. A write that p-tags three recipient
 
 ### Decisions, commits, effects, and facts
 
-NMP uses a facts-before-effects flow:
+Fava uses a facts-before-effects flow:
 
 ```text
 command or observed fact
@@ -164,12 +164,14 @@ This is a mental model, not a requirement for one universal effect enum. Each ow
 
 An unsigned or signed event carries its author in the event's `pubkey` field. Signer selection uses that pubkey.
 
-Before an event exists, a semantic write carries the actor together with the semantic operation:
+Before an event exists, a replaceable-event edit carries its actor and event coordinate:
 
 ```rust
-pub struct SemanticWrite<O> {
+pub struct ReplaceableEventEdit {
     pub actor: PublicKey,
-    pub operation: O,
+    pub coordinate: EventCoordinate,
+    pub format: u32,
+    pub change: Bytes,
 }
 ```
 
@@ -188,7 +190,7 @@ The write store supplies unpublished events directly to queries, while the event
 
 `EventCache` describes coherent cache behavior. An implementation may be memory-only, bounded, persistent, or backed by a remote service. Its documented retention and restart guarantees become guarantees of the application profile that selected it.
 
-`nmp-standard` may select a persistent event cache and advertise cold restart reads. A smaller assembly may select a bounded memory cache and advertise only current-process reuse.
+`fava-standard` may select a persistent event cache and advertise cold restart reads. A smaller assembly may select a bounded memory cache and advertise only current-process reuse.
 
 The write-store profile selected by the standard product provides durable accepted-write recovery. Test and deliberately weaker profiles may use memory implementations.
 
@@ -200,36 +202,32 @@ The write-store profile selected by the standard product provides durable accept
                                 APPLICATION
                                      │
                                      ▼
-                                nmp facade
-                                     │
-                                     ▼
-                              nmp-coordinator
+                                fava facade
           ┌──────────────────────────┼──────────────────────────┐
           ▼                          ▼                          ▼
-    nmp-observe                nmp-publication              nmp-session
+    fava-observe                fava-publication              fava-session
           │                          │                          │
           │                          │                          └── signers
           │                          │
-          │                          ├── nmp-write-store
-          │                          ├── nmp-capability
-          │                          ├── nmp-routing
-          │                          ├── nmp-delivery
-          │                          ├── nmp-publisher
-          │                          └── nmp-signer
+          │                          ├── fava-write-store
+          │                          ├── fava-routing
+          │                          ├── fava-delivery
+          │                          ├── fava-publisher
+          │                          └── fava-signer
           │
-          ├── nmp-event-cache
-          ├── nmp-write-store as QuerySource
-          ├── nmp-query + selected QueryEvaluator
-          ├── nmp-routing
-          ├── nmp-subscriptions
-          └── nmp-transport
+          ├── fava-event-cache
+          ├── fava-write-store as QuerySource
+          ├── fava-query + selected QueryEvaluator
+          ├── fava-routing
+          ├── fava-subscriptions
+          └── fava-transport
 
-relay bytes ──► nmp-wire ──► nmp-ingest ──► nmp-state ──► nmp-event-cache
+relay bytes ──► fava-wire ──► fava-ingest ──► fava-state ──► fava-event-cache
                                              │
                                              └──── committed cache changes
                                                           │
                                                           ▼
-                                                      nmp-observe
+                                                      fava-observe
 ```
 
 Routing is an ordered reactive chain:
@@ -243,7 +241,7 @@ OutboxRouter ──► HintRouter ──► AppRelayRouter ──► FallbackRel
       └──── asynchronous complete route contributions ──────┘
                               │
                               ▼
-                         nmp-routing
+                         fava-routing
                               │
                               ▼
                          live RoutePlan
@@ -257,19 +255,19 @@ Explicit routes bypass this chain and produce an exact route plan directly.
 
 | Family | Crates | Purpose |
 |---|---|---|
-| Pure semantics | `nmp-wire`, `nmp-state`, `nmp-query`, `nmp-write`, `nmp-capability` | Stable values, contracts, and deterministic universal rules |
-| Storage contracts | `nmp-event-cache`, `nmp-write-store`, `nmp-fetch-cache` | One contract per semantic storage role |
-| Routing | `nmp-routing` plus router implementation crates | Ordered asynchronous relay-plan composition |
-| Relay execution | `nmp-subscriptions`, `nmp-transport`, `nmp-publisher`, `nmp-delivery` | Group demand, move bytes, perform attempts, schedule retries |
-| Identity | `nmp-signer`, signer implementation crates, `nmp-session`, `nmp-auth` | Account, signing, crypto, and access-context lifecycles |
-| Protocol services | `nmp-nip11`, `nmp-nip05` and later service crates | Non-event protocol acquisition and interpretation |
-| Capabilities | `nmp-nip02`, `nmp-nip29`, `nmp-bookmarks`, etc. | Event-kind meaning and semantic operations |
-| Universal owners | `nmp-ingest`, `nmp-observe`, `nmp-publication`, `nmp-diagnostics`, `nmp-coordinator`, `nmp-runtime` | Engine-instance lifecycles and cross-subsystem ordering |
-| Product assembly | `nmp`, `nmp-standard`, `nmp-ffi`, Swift/Kotlin packages | Public facade, default profile, and platform artifacts |
+| Pure semantics | `fava-wire`, `fava-state`, `fava-query`, `fava-write` | Stable values, contracts, and deterministic universal rules |
+| Storage contracts | `fava-event-cache`, `fava-write-store`, `fava-fetch-cache` | One contract per semantic storage role |
+| Routing | `fava-routing` plus router implementation crates | Ordered asynchronous relay-plan composition |
+| Relay execution | `fava-subscriptions`, `fava-transport`, `fava-publisher`, `fava-delivery` | Group demand, move bytes, perform attempts, schedule retries |
+| Identity | `fava-signer`, signer implementation crates, `fava-session`, `fava-auth` | Account, signing, crypto, and relay-access lifecycles |
+| Protocol services | `fava-nip11`, `fava-nip05` and later service crates | Non-event protocol acquisition and interpretation |
+| Protocol crates | `fava-nip02`, `fava-nip29`, `fava-bookmarks`, etc. | Event-kind meaning, typed queries, event construction, and replaceable-event edits |
+| Universal owners | `fava-ingest`, `fava-observe`, `fava-publication`, `fava-diagnostics`, `fava-runtime` | Engine-instance lifecycles and cross-subsystem ordering |
+| Product assembly | `fava`, `fava-standard`, `fava-ffi`, Swift/Kotlin packages | Public facade, default profile, and platform artifacts |
 
 # Part I — Pure semantic crates
 
-## `nmp-wire`
+## `fava-wire`
 
 **Responsibility:** canonical Nostr relay message encoding and decoding.
 
@@ -334,24 +332,24 @@ pub fn encoded_len(frame: &ClientFrame)
 
 ### Relationship to other crates
 
-`nmp-transport` moves bytes and owns sessions. `nmp-wire` gives those bytes protocol meaning. `nmp-ingest` determines whether a decoded relay event is attributable and valid.
+`fava-transport` moves bytes and owns sessions. `fava-wire` gives those bytes protocol meaning. `fava-ingest` determines whether a decoded relay event is attributable and valid.
 
-`nmp-wire` can therefore be used and tested independently of sockets and retry policy.
+`fava-wire` can therefore be used and tested independently of sockets and retry policy.
 
 ---
 
-## `nmp-state`
+## `fava-state`
 
 **Responsibility:** deterministic semantics for signed event state learned from relays.
 
-`nmp-state` defines the event-cache state model. It is independent of a particular cache implementation.
+`fava-state` defines the event-cache state model. It is independent of a particular cache implementation.
 
 ### Core values
 
 ```rust
 pub struct RelayObservation {
     pub relay: RelayUrl,
-    pub access: AccessContext,
+    pub access: RelayAccess,
     pub observed_at: Timestamp,
 }
 
@@ -419,16 +417,16 @@ pub fn select_replaceable_winner<'a>(
 
 ### State/cache boundary
 
-`nmp-state` decides the semantic mutation. `nmp-event-cache` commits it.
+`fava-state` decides the semantic mutation. `fava-event-cache` commits it.
 
 A typical flow is:
 
 ```text
-nmp-ingest obtains the relevant cache state slice
+fava-ingest obtains the relevant cache state slice
         ↓
-nmp-state calculates one mutation batch
+fava-state calculates one mutation batch
         ↓
-nmp-event-cache commits the batch atomically
+fava-event-cache commits the batch atomically
         ↓
 CommittedCacheChange is published
 ```
@@ -437,7 +435,7 @@ The engine instance has one serialized canonical event-state writer. This allows
 
 ---
 
-## `nmp-write`
+## `fava-write`
 
 **Responsibility:** event construction and immutable publication vocabulary.
 
@@ -475,19 +473,21 @@ impl EventBuilder {
     pub fn created_at(self, timestamp: Timestamp) -> Self;
     pub fn content(self, content: EventContent) -> Self;
     pub fn tag(self, tag: Tag) -> Self;
-    pub fn reference<T: EventReference>(self, target: &T) -> Self;
     pub fn build(self) -> Result<UnsignedEvent, EventBuildError>;
 }
 ```
 
-The reference primitive derives ordinary Nostr reference structure from the target's event and evidence. Capability crates compose this builder rather than constructing an independent signing or publishing path.
+`EventBuilder` understands generic Nostr event fields and validated tags. It
+does not interpret reply, reaction, repost, quote, follow, bookmark, group, or
+other event-kind meaning. Protocol crates calculate those tags and compose the
+builder rather than constructing another signing or publication path.
 
 ### Write vocabulary
 
 ```rust
 pub enum WritePayload {
     Event(UnsignedEvent),
-    Semantic(EncodedSemanticWrite),
+    Edit(ReplaceableEventEdit),
     Presigned(SignedEvent),
 }
 
@@ -547,17 +547,17 @@ Durable queues, signer registries, routing algorithms, retry scheduling, and tra
 
 ---
 
-## `nmp-query`
+## `fava-query`
 
 **Responsibility:** declarative query values, local-source observation contracts, result merging, ordering, and query evidence.
 
 ### Query language
 
 ```rust
-pub struct LiveQuery {
+pub struct Query {
     pub selection: Selection,
     pub routing: QueryRouting,
-    pub access: AccessContext,
+    pub access: RelayAccess,
     pub freshness: Freshness,
     pub acquisition: AcquisitionPolicy,
     pub ordering: Ordering,
@@ -579,11 +579,16 @@ pub enum Selection {
     Derived(DerivedSelection),
 }
 
-pub fn validate(query: LiveQuery)
-    -> Result<CanonicalQuery, QueryError>;
+impl Query {
+    pub fn events() -> Query;
+    pub fn from_relays(self, relays: NonEmptyVec<RelayUrl>) -> Query;
+    pub fn only_from_relays(self, relays: NonEmptyVec<RelayUrl>) -> Query;
+}
 ```
 
-`CanonicalQuery` gives structurally equivalent demand a stable semantic identity while retaining source, access, freshness, and acquisition distinctions.
+Every `Query` is valid. Construction rejects invalid inputs, and equality and
+hashing give structurally equivalent demand the same identity while retaining
+source, access, freshness, and acquisition distinctions.
 
 ### Query-source contract
 
@@ -591,7 +596,7 @@ pub fn validate(query: LiveQuery)
 pub trait QuerySource: Send + Sync {
     fn open(
         &self,
-        query: &CanonicalLocalQuery,
+        query: &Query,
     ) -> Result<OpenedQuerySource, QuerySourceError>;
 }
 
@@ -622,13 +627,13 @@ The query language and source protocol are stable; the local evaluation strategy
 pub trait QueryEvaluator: Send + Sync {
     fn evaluate(
         &self,
-        query: &CanonicalQuery,
+        query: &Query,
         sources: &[SourceSnapshot],
     ) -> Result<QuerySnapshot, QueryEvaluationError>;
 
     fn update(
         &self,
-        query: &CanonicalQuery,
+        query: &Query,
         previous: &QuerySnapshot,
         sources: &[SourceSnapshot],
         changed: &SourceChangeSet,
@@ -636,7 +641,7 @@ pub trait QueryEvaluator: Send + Sync {
 }
 ```
 
-An evaluator owns matching, derived-selection evaluation, cross-source merge, ordering, and whole-query limits. A source implementation owns efficient access to its own retained facts. `nmp-query-standard` provides the reference evaluator and semantic oracle used by source/provider conformance suites.
+An evaluator owns matching, derived-selection evaluation, cross-source merge, ordering, and whole-query limits. A source implementation owns efficient access to its own retained facts. `fava-query-standard` provides the reference evaluator and semantic oracle used by source/provider conformance suites.
 
 ### Source contributions
 
@@ -683,12 +688,12 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 
 ### Owned semantics
 
-- structural query validation and canonical identity;
+- valid-by-construction query identity;
 - literal and derived query algebra;
 - deterministic ordering and limits;
 - merging event-cache and write-store contributions;
 - deduplicating the same event id across sources;
-- selecting the visible replaceable/addressable value across sources;
+- selecting the visible replaceable-event value across sources;
 - combining relay and publication evidence;
 - source-scoped query evidence;
 - complete initial result and current-state update values.
@@ -703,72 +708,31 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 
 ---
 
-## `nmp-capability`
+## Replaceable-event edits
 
-**Responsibility:** the narrow construction-time contracts needed for protocol-owned semantic operations.
+`ReplaceableEventEdit` is a durable change to a replaceable Nostr event. It
+identifies the actor and event coordinate and carries the protocol-owned edit
+value needed to apply that change again.
 
-A capability owns the meaning of its protocol data and contributes pure query/write semantics through the narrow contracts in this crate.
+Applying an edit to the newest qualified event at its coordinate, or to the
+protocol crate's defined empty state, produces an `UnsignedEvent`. A newer
+qualified event causes the same accepted edit to be applied again under the
+same write and receipt identity.
 
-### Semantic-write contract
-
-Illustrative erased boundary:
-
-```rust
-pub struct CapabilityIdentity {
-    pub name: &'static str,
-    pub operation_format: u32,
-}
-
-pub struct EncodedSemanticWrite {
-    pub capability: CapabilityIdentity,
-    pub actor: PublicKey,
-    pub coordinate: EventCoordinate,
-    pub operation: Bytes,
-}
-
-pub trait SemanticCapability: Send + Sync {
-    fn identity(&self) -> CapabilityIdentity;
-
-    fn materialize(
-        &self,
-        write: &EncodedSemanticWrite,
-        current: Option<&EventRecord>,
-        clock: Timestamp,
-    ) -> Result<UnsignedEvent, MaterializationError>;
-
-    fn normalize(
-        &self,
-        operations: &[EncodedSemanticWrite],
-    ) -> Result<Vec<EncodedSemanticWrite>, NormalizationError>;
-}
-```
-
-Typed capability APIs hide the encoded form:
+Concrete protocol APIs produce these values:
 
 ```rust
-nmp_nip02::follow(actor, bob) -> SemanticWrite<FollowOperation>
-nmp_nip02::unfollow(actor, bob) -> SemanticWrite<FollowOperation>
+fava_nip02::follow(actor, bob) -> ReplaceableEventEdit
+fava_nip02::unfollow(actor, bob) -> ReplaceableEventEdit
 
-nmp_bookmarks::add(actor, target) -> SemanticWrite<BookmarkOperation>
-nmp_bookmarks::remove(actor, target) -> SemanticWrite<BookmarkOperation>
+fava_bookmarks::add(actor, target) -> ReplaceableEventEdit
+fava_bookmarks::remove(actor, target) -> ReplaceableEventEdit
 ```
 
-The facade or capability helper converts the typed operation to the narrow erased form when it enters the generic publication lifecycle.
-
-### Other capability contributions
-
-A capability crate may also export:
-
-- typed decoders and validators;
-- query fragments and derived projections;
-- event reference helpers;
-- content parsers;
-- pure event composers; and
-- presentation-neutral typed values.
-
-### Durable format ownership
-
-If a semantic operation is retained by `WriteStore`, its capability owns the compatibility of that operation format. The application assembly supplies the capability implementations needed to recover its accepted semantic writes.
+Each protocol crate owns the meaning and durable format of its edit values.
+The application assembly supplies the protocol crates required to recover its
+accepted edits. The write store owns durable custody, generations, receipts,
+and current materializations.
 
 
 ---
@@ -777,27 +741,27 @@ If a semantic operation is retained by `WriteStore`, its capability owns the com
 
 ## Storage-role model
 
-NMP assembles distinct storage roles:
+Fava assembles distinct storage roles:
 
 ```text
 EventCache
     cached signed events observed from relays
 
 WriteStore
-    accepted local semantic writes/events, current materializations,
+    accepted local edits/events, current materializations,
     receipts, routes, attempts, and outcomes
 
 FetchCache
     opaque cached service payloads for NIP-05, NIP-11, and similar services
 ```
 
-Each role has one provider in an engine assembly. A provider may internally use several physical databases or tiers. One physical database may expose several provider types. NMP coordinates semantic roles rather than arbitrary database instances.
+Each role has one provider in an engine assembly. A provider may internally use several physical databases or tiers. One physical database may expose several provider types. Fava coordinates semantic roles rather than arbitrary database instances.
 
-The local query system observes `EventCache` and `WriteStore` independently and merges them through `nmp-query` semantics. Additional query-source roles are introduced together with an explicit contribution type and universal merge rule, so source composition remains semantic rather than precedence-by-convention.
+The local query system observes `EventCache` and `WriteStore` independently and merges them through `fava-query` semantics. Additional query-source roles are introduced together with an explicit contribution type and universal merge rule, so source composition remains semantic rather than precedence-by-convention.
 
 ---
 
-## `nmp-event-cache`
+## `fava-event-cache`
 
 **Responsibility:** retain and query signed event state learned from relays.
 
@@ -830,8 +794,8 @@ pub trait EventCache: QuerySource + Send + Sync {
 ### Owned state
 
 - signed relay-observed events;
-- relay and access-context evidence;
-- replaceable/addressable indexes;
+- relay and relay-access evidence;
+- replaceable-event indexes;
 - deletion tombstones retained according to the implementation's guarantee;
 - expiration indexes;
 - query indexes;
@@ -843,7 +807,7 @@ pub trait EventCache: QuerySource + Send + Sync {
 Every conforming implementation provides:
 
 - coherent current-process query snapshots and change observations;
-- atomic application of one `nmp-state` mutation batch;
+- atomic application of one `fava-state` mutation batch;
 - deterministic reads matching the universal state/query semantics;
 - explicit eviction or capacity shortfall rather than silent semantic corruption;
 - source revisions sufficient for continuous query-source observation.
@@ -866,15 +830,15 @@ These are implementation and product-profile guarantees. They are not inferred f
 Proposed crates:
 
 ```text
-nmp-event-cache-memory
-nmp-event-cache-redb
+fava-event-cache-memory
+fava-event-cache-redb
 ```
 
 A later implementation may use Fjall, SQLite, LMDB, a remote event service, or another cache design while preserving the baseline contract and declaring the guarantee profiles it actually satisfies.
 
 ---
 
-## `nmp-write-store`
+## `fava-write-store`
 
 **Responsibility:** commit and recover accepted local publication obligations and expose their current event materializations as a query source.
 
@@ -931,8 +895,8 @@ pub trait WriteStore: QuerySource + Send + Sync {
 ### Owned state
 
 - write and receipt identity allocation;
-- accepted raw, semantic, and pre-signed payloads;
-- actor for semantic writes before an event exists;
+- accepted unsigned-event, replaceable-event-edit, and pre-signed-event payloads;
+- actor for replaceable-event edits before an event exists;
 - current materialization and materialization generation;
 - exact unsigned or signed event bytes;
 - signature request and completion state;
@@ -965,7 +929,7 @@ For a materialized write, one acceptance transaction commits at least:
 
 - write identity;
 - receipt identity;
-- payload or semantic operation;
+- event or replaceable-event edit;
 - current materialization generation;
 - current unsigned/signed event, when available; and
 - the query-source state needed to expose that materialization.
@@ -974,18 +938,18 @@ The resulting committed source change becomes observable before the application 
 
 ### Durability profile
 
-The standard NMP publication profile uses a durable write-store implementation whose accepted obligations and receipts survive process restart. Memory implementations support deterministic tests and explicitly volatile application profiles.
+The standard Fava publication profile uses a durable write-store implementation whose accepted obligations and receipts survive process restart. Memory implementations support deterministic tests and explicitly volatile application profiles.
 
 Proposed implementations:
 
 ```text
-nmp-write-store-memory
-nmp-write-store-redb
+fava-write-store-memory
+fava-write-store-redb
 ```
 
 ---
 
-## `nmp-fetch-cache`
+## `fava-fetch-cache`
 
 **Responsibility:** opaque cache persistence for non-event protocol services.
 
@@ -1019,8 +983,8 @@ pub trait FetchCache: Send + Sync {
 Those policies belong to service crates:
 
 ```text
-nmp-nip05 owns NIP-05 normalization, resolution, and cache policy
-nmp-nip11 owns NIP-11 acquisition, parsing, freshness, and cache policy
+fava-nip05 owns NIP-05 normalization, resolution, and cache policy
+fava-nip11 owns NIP-11 acquisition, parsing, freshness, and cache policy
 ```
 
 The storage classification is semantic:
@@ -1036,8 +1000,8 @@ The storage classification is semantic:
 Proposed implementations:
 
 ```text
-nmp-fetch-cache-memory
-nmp-fetch-cache-redb
+fava-fetch-cache-memory
+fava-fetch-cache-redb
 ```
 
 An application may supply separate cache instances to different services or share one implementation through namespaced handles.
@@ -1046,7 +1010,7 @@ An application may supply separate cache instances to different services or shar
 
 ## Query-source composition
 
-`nmp-observe` opens the event cache and write store as independent `QuerySource` instances.
+`fava-observe` opens the event cache and write store as independent `QuerySource` instances.
 
 ### Continuous source opening
 
@@ -1071,7 +1035,7 @@ A failed source open causes the whole live-query open to fail or produces an exp
 
 ### Merge authority
 
-The universal merge algorithm lives in `nmp-query`; cache and write-store providers contribute source facts to that one precedence model.
+The universal merge algorithm lives in `fava-query`; cache and write-store providers contribute source facts to that one precedence model.
 
 ### Example: optimistic event
 
@@ -1103,12 +1067,12 @@ Merged query:
     publication evidence: receipt 42
 ```
 
-### Example: semantic rematerialization
+### Example: replaceable-event rematerialization
 
 ```text
 EventCache receives newer source base v3
         ↓
-publication owner asks capability to reapply accepted operation
+publication owner applies the accepted replaceable-event edit again
         ↓
 WriteStore installs local materialization v4
         ↓
@@ -1126,18 +1090,18 @@ Persistent compatibility is local to the owner of the bytes:
 - an event-cache implementation owns its cache schema and migration policy;
 - a write-store implementation owns its write/receipt schema and migration policy;
 - a fetch-cache implementation owns its storage schema;
-- a capability owns the format of its persisted semantic operations;
+- each protocol crate owns the format of its persisted replaceable-event edits;
 - signer providers own their persisted credential/session formats.
 
 An application changing an implementation in a later release chooses the corresponding provider migration, parallel transition, or reset path as part of that application release.
 
 # Part III — Routing
 
-## `nmp-routing`
+## `fava-routing`
 
 **Responsibility:** compose an ordered set of asynchronous router contributors into one live relay plan.
 
-`nmp-routing` is the primitive routing crate. Its contents are route values, ordered asynchronous composition, attribution, revisions, settlement, and lifecycle. NIP-65, hint, app-relay, and fallback policies live in their router crates.
+`fava-routing` is the primitive routing crate. Its contents are route values, ordered asynchronous composition, attribution, revisions, settlement, and lifecycle. NIP-65, hint, app-relay, and fallback policies live in their router crates.
 
 ### Route request
 
@@ -1150,8 +1114,8 @@ pub enum RouteRequest {
 }
 
 pub struct ReadRouteRequest {
-    pub query: CanonicalQuery,
-    pub access: AccessContext,
+    pub query: Query,
+    pub access: RelayAccess,
 }
 
 pub struct WriteRouteRequest {
@@ -1192,7 +1156,7 @@ pub struct RouteContribution {
 
 pub struct RouteDestination {
     pub relay: RelayUrl,
-    pub access: AccessContext,
+    pub access: RelayAccess,
     pub targets: BTreeSet<RouteTarget>,
     pub reason: NamespacedRouteReason,
 }
@@ -1309,7 +1273,7 @@ A caller may take a one-shot snapshot or keep a preview open to observe changes 
 
 ## `RouterServices`
 
-Routers may acquire algorithm-specific inputs through narrow NMP services:
+Routers may acquire algorithm-specific inputs through narrow Fava services:
 
 ```rust
 pub struct RouterServices {
@@ -1363,7 +1327,7 @@ The router owns that state and its lifecycle. Generic routing does not interpret
 
 ---
 
-## `nmp-router-outbox`
+## `fava-router-outbox`
 
 **Responsibility:** NIP-65-based author outbox, recipient inbox, and discovery routing.
 
@@ -1394,16 +1358,16 @@ Two route sessions needing the same author may share one discovery observation w
 ### Dependencies
 
 ```text
-nmp-routing
-nmp-query
-nmp-nip65
+fava-routing
+fava-query
+fava-nip65
 ```
 
-The crate contains the outbox algorithm. `nmp-nip65` contains pure NIP-65 event vocabulary and parsing.
+The crate contains the outbox algorithm. `fava-nip65` contains pure NIP-65 event vocabulary and parsing.
 
 ---
 
-## `nmp-router-hints`
+## `fava-router-hints`
 
 **Responsibility:** contribute relays from event references, relay hints, and actual event evidence.
 
@@ -1426,7 +1390,7 @@ This is an independently selectable higher-layer policy crate regardless of impl
 
 ---
 
-## `nmp-router-app-relays`
+## `fava-router-app-relays`
 
 **Responsibility:** always contribute configured application relays to automatically routed operations.
 
@@ -1444,7 +1408,7 @@ Applications select this router when app relays are an unconditional part of the
 
 ---
 
-## `nmp-router-fallback-relays`
+## `fava-router-fallback-relays`
 
 **Responsibility:** contribute configured relays when the live upstream route plan does not provide the coverage required by the application's fallback policy.
 
@@ -1468,13 +1432,13 @@ Applications select this router when app relays are an unconditional part of the
 
 If an upstream router later supplies sufficient coverage, the fallback router emits a new snapshot retracting the fallback contribution for that target. Query routing follows the current plan. Publication preserves any delivery evidence already produced while applying the new desired plan to future work.
 
-Applications typically select either `nmp-router-app-relays` or `nmp-router-fallback-relays`. When both are selected, configured order gives their composition precise meaning.
+Applications typically select either `fava-router-app-relays` or `fava-router-fallback-relays`. When both are selected, configured order gives their composition precise meaning.
 
 ---
 
 ## Routing implementation testkit
 
-`nmp-routing` ships a conformance testkit that every router implementation can run.
+`fava-routing` ships a conformance testkit that every router implementation can run.
 
 It tests:
 
@@ -1496,7 +1460,7 @@ The routing-chain testkit additionally exercises arbitrary router order, delayed
 
 # Part IV — Relay execution contracts
 
-## `nmp-subscriptions`
+## `fava-subscriptions`
 
 **Responsibility:** map logical read demand assigned to one exact relay session into semantically equivalent wire subscriptions and attribution.
 
@@ -1540,11 +1504,11 @@ pub struct SubscriptionPlan {
 
 Routing has already selected the relay. The planner decides only how the demand for that relay is represented on the wire.
 
-The planner output does not open a socket and does not mutate observation state. `nmp-observe` owns logical demand; `nmp-transport` performs the plan.
+The planner output does not open a socket and does not mutate observation state. `fava-observe` owns logical demand; `fava-transport` performs the plan.
 
 ---
 
-## `nmp-subscriptions-standard`
+## `fava-subscriptions-standard`
 
 **Responsibility:** the standard exact subscription-grouping policy.
 
@@ -1552,7 +1516,7 @@ It may:
 
 - deduplicate identical filters;
 - combine filters that differ in one safely unionable dimension;
-- preserve separate wire subscriptions when limits, time windows, access contexts, or multiple differing dimensions make grouping non-equivalent;
+- preserve separate wire subscriptions when limits, time windows, relay access, or multiple differing dimensions make grouping non-equivalent;
 - split oversized requests into exact subsets;
 - account for NIP-11 message-size, subscription-count, subscription-id, default-limit, and result-limit constraints; and
 - report typed shortfall when exact execution does not fit.
@@ -1575,7 +1539,7 @@ A custom planner may choose one wire subscription per logical demand. Both imple
 
 ---
 
-## `nmp-transport`
+## `fava-transport`
 
 **Responsibility:** own relay sessions and correlated byte handoff.
 
@@ -1607,7 +1571,7 @@ pub trait RelaySession: Send {
 ### Owned state
 
 - DNS/TCP/TLS/WebSocket resources;
-- relay URL and access-context session key;
+- relay URL and relay-access session key;
 - connection and reconnect generation;
 - connection backoff;
 - bounded inbound and outbound byte queues;
@@ -1626,15 +1590,15 @@ pub enum HandoffOutcome {
 }
 ```
 
-This boundary is used by publishers and subscription execution. It lets higher layers distinguish bytes that never left NMP from bytes whose outcome is uncertain.
+This boundary is used by publishers and subscription execution. It lets higher layers distinguish bytes that never left Fava from bytes whose outcome is uncertain.
 
 ### Session identity
 
-Every inbound frame and handoff completion carries exact session generation and access-context identity. Reconnected sessions are new authorities.
+Every inbound frame and handoff completion carries exact session generation and relay-access identity. Reconnected sessions are new authorities.
 
 ---
 
-## `nmp-transport-websocket`
+## `fava-transport-websocket`
 
 **Responsibility:** standard WebSocket implementation of `RelayTransport`.
 
@@ -1650,11 +1614,11 @@ It owns the ordinary Nostr relay connection lifecycle:
 - transport-level replay hooks for current subscription plans; and
 - deterministic close.
 
-It uses `nmp-wire` only for optional framing diagnostics; wire semantics remain owned by `nmp-wire` and higher owners.
+It uses `fava-wire` only for optional framing diagnostics; wire semantics remain owned by `fava-wire` and higher owners.
 
 ---
 
-## `nmp-publisher`
+## `fava-publisher`
 
 **Responsibility:** perform one publication attempt for one exact signed event at one exact relay session.
 
@@ -1703,14 +1667,14 @@ A publication outcome is valid only for the exact write, materialization generat
 
 ---
 
-## `nmp-publisher-nip01`
+## `fava-publisher-nip01`
 
 **Responsibility:** standard NIP-01 `EVENT`/`OK` publication attempt.
 
 The implementation:
 
 1. obtains the exact relay session;
-2. encodes `ClientFrame::Event` with `nmp-wire`;
+2. encodes `ClientFrame::Event` with `fava-wire`;
 3. hands the bytes to transport with attempt correlation;
 4. waits for the matching `OK` or a terminal session fact;
 5. preserves the relay's response message within bounds; and
@@ -1720,7 +1684,7 @@ It performs one attempt. It does not schedule its own repeated attempts.
 
 ---
 
-## `nmp-delivery`
+## `fava-delivery`
 
 **Responsibility:** decide when current durable delivery facts authorize another publication attempt or a terminal lane decision.
 
@@ -1766,7 +1730,7 @@ The policy consumes durable facts and returns decisions. The write store remains
 
 ---
 
-## `nmp-delivery-standard`
+## `fava-delivery-standard`
 
 **Responsibility:** standard bounded, fair, evidence-based delivery policy.
 
@@ -1786,9 +1750,9 @@ The implementation is mostly deterministic policy over durable facts and the clo
 
 ---
 
-## `nmp-signer`
+## `fava-signer`
 
-**Responsibility:** exact identity-bound signing and cryptographic capability contracts.
+**Responsibility:** exact identity-bound signing and cryptographic contracts.
 
 ### Contract
 
@@ -1812,7 +1776,7 @@ pub trait Signer: Send + Sync {
 
 Signing completion returns a signed event for the exact unsigned body. The publication owner verifies exact body, id, pubkey, and signature before installation.
 
-Encryption/decryption capabilities use distinct request and outcome values even when one provider implements both.
+Encryption and decryption use distinct request and outcome values even when one provider implements both.
 
 ### Runtime lifecycle
 
@@ -1821,15 +1785,15 @@ Signer instances are attached to accounts at runtime because login, hardware ava
 ### Standard implementations
 
 ```text
-nmp-signer-local
-nmp-signer-nip46
+fava-signer-local
+fava-signer-nip46
 ```
 
 Additional applications may provide hardware, extension, enclave, or remote signer crates through the same contract.
 
-# Part V — Protocol services and capability crates
+# Part V — Protocol services and event-kind crates
 
-## `nmp-nip11`
+## `fava-nip11`
 
 **Responsibility:** define NIP-11 values, validation, freshness vocabulary, and the relay-information service contract.
 
@@ -1853,9 +1817,9 @@ pub trait RelayInformationService: Send + Sync {
 }
 ```
 
-`nmp-nip11-http` is the standard HTTP implementation. It owns HTTP acquisition, conditional requests, bounded single-flight fetches, and NIP-11-specific cache policy over an optional `FetchCache` namespace.
+`fava-nip11-http` is the standard HTTP implementation. It owns HTTP acquisition, conditional requests, bounded single-flight fetches, and NIP-11-specific cache policy over an optional `FetchCache` namespace.
 
-## `nmp-nip05`
+## `fava-nip05`
 
 **Responsibility:** define NIP-05 identifier values, validation, resolution vocabulary, and the resolver contract.
 
@@ -1878,58 +1842,55 @@ pub trait Nip05Resolver: Send + Sync {
 }
 ```
 
-`nmp-nip05-http` is the standard HTTP implementation. It owns `.well-known/nostr.json` acquisition, bounded per-identifier single flight, positive and negative cache policy, and optional persistence through a `FetchCache` namespace.
+`fava-nip05-http` is the standard HTTP implementation. It owns `.well-known/nostr.json` acquisition, bounded per-identifier single flight, positive and negative cache policy, and optional persistence through a `FetchCache` namespace.
 
 NIP-05 and NIP-11 results are service data. They remain in their owning services and fetch-cache namespaces rather than entering the event cache.
 
-## Event-kind capability crates
+## Event-kind protocol crates
 
-Each independently selectable capability owns one coherent protocol concept.
+Each independently selectable protocol crate owns one coherent Nostr concept.
 
 Examples:
 
 ```text
-nmp-nip02          follow-list decoding and follow/unfollow operations
-nmp-nip29          group-scoped values and operations
-nmp-nip65          relay-list event semantics
-nmp-bookmarks      public bookmark-list semantics
-nmp-nip18          repost semantics
-nmp-nip22          comment semantics
-nmp-nip25          reaction semantics
-nmp-content        structured content parsing
+fava-nip02          follow-list decoding and follow/unfollow operations
+fava-nip29          group-scoped values and operations
+fava-nip65          relay-list event semantics
+fava-bookmarks      public bookmark-list semantics
+fava-nip18          repost semantics
+fava-nip22          comment semantics
+fava-nip25          reaction semantics
+fava-content        structured content parsing
 ```
 
-A capability crate may expose:
+A protocol crate may expose:
 
 ```rust
 pub fn decode(record: &EventRecord)
     -> Result<TypedValue, DecodeError>;
 
 pub fn query(...)
-    -> LiveQuery;
+    -> Query;
 
 pub fn compose(...)
     -> Result<UnsignedEvent, ComposeError>;
 
-pub fn operation(...)
-    -> SemanticWrite<TypedOperation>;
-
-pub fn capability()
-    -> impl SemanticCapability;
+pub fn edit(...)
+    -> ReplaceableEventEdit;
 ```
 
-Capability operations use:
+Protocol crates use:
 
-- `nmp-query` for local and remote state acquisition;
-- `nmp-write::EventBuilder` for event construction;
-- `nmp-capability` for replayable semantic operations;
+- `fava-query` for local and remote state acquisition;
+- `fava-write::EventBuilder` for event construction;
+- `fava-write::ReplaceableEventEdit` for durable edits to replaceable events;
 - the one publication lifecycle for acceptance, signing, routing, delivery, and receipts.
 
-A new capability crate is selected by the application profile and contributes through these contracts. The facade and universal owners remain unchanged.
+A new protocol crate is selected by the application profile and contributes through these ordinary contracts. The facade and universal owners remain unchanged.
 
 # Part VI — Universal engine owners
 
-## `nmp-ingest`
+## `fava-ingest`
 
 **Responsibility:** turn untrusted relay frames into committed event-cache facts.
 
@@ -1948,25 +1909,25 @@ A new capability crate is selected by the application profile and contributes th
 3. verify event id and Schnorr signature;
 4. verify the event matches at least one attributed logical filter;
 5. construct `VerifiedRelayEvent`;
-6. ask `nmp-state` for the canonical cache decision;
+6. ask `fava-state` for the canonical cache decision;
 7. commit the decision through `EventCache`;
 8. emit `CommittedCacheChange` and per-relay evidence;
 9. emit typed rejected-input diagnostics when validation fails.
 
 ### State ownership
 
-`nmp-ingest` owns current ingress operation identity and serialized admission order. Event state belongs to `EventCache`; universal state semantics belong to `nmp-state`; relay sessions belong to transport.
+`fava-ingest` owns current ingress operation identity and serialized admission order. Event state belongs to `EventCache`; universal state semantics belong to `fava-state`; relay sessions belong to transport.
 
 ---
 
-## `nmp-observe`
+## `fava-observe`
 
 **Responsibility:** own live-query handles, dependency lifecycles, source merging, relay demand, and bounded delivery to applications.
 
 ### Owned state
 
 - observation identity and open/close lifecycle;
-- canonical query descriptor;
+- query;
 - source observations over EventCache and WriteStore;
 - derived-query dependency graph;
 - current merged `QuerySnapshot`;
@@ -1979,7 +1940,7 @@ A new capability crate is selected by the application profile and contributes th
 
 ### Open sequence
 
-1. validate the query through `nmp-query`;
+1. validate the query through `fava-query`;
 2. open continuous EventCache and WriteStore sources;
 3. establish derived dependencies;
 4. create explicit plan or open the router chain;
@@ -2014,7 +1975,7 @@ close.rs            cancellation and teardown
 
 ---
 
-## `nmp-publication`
+## `fava-publication`
 
 **Responsibility:** own each accepted write from intent through materialization, signature, live routing, delivery, receipt settlement, cancellation, and recovery.
 
@@ -2023,7 +1984,7 @@ close.rs            cancellation and teardown
 The durable state is in `WriteStore`. The publication owner owns the live orchestration and current operation generations:
 
 - accepted write identity and receipt;
-- current semantic operation or exact event;
+- current replaceable-event edit or exact event;
 - current materialization generation;
 - current unsigned or signed event;
 - current signer operation;
@@ -2038,9 +1999,9 @@ The durable state is in `WriteStore`. The publication owner owns the live orches
 
 The event already contains its pubkey. `WriteStore` commits the event and receipt. The event becomes visible through the write-store query source. Signing then targets that pubkey.
 
-#### Semantic write
+#### Replaceable-event edit
 
-The semantic write contains actor, coordinate, and typed operation. The capability materializes it against the current source state. The write store commits the operation, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted operation remains content-pending according to the selected publication profile.
+The edit contains its actor, coordinate, durable protocol-owned change, and format version. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
 
 #### Pre-signed event
 
@@ -2050,7 +2011,7 @@ The event is verified before acceptance, committed verbatim, exposed through the
 
 When a newer relevant source event arrives:
 
-1. the capability reapplies the accepted semantic operation;
+1. the owning protocol crate applies the accepted edit again;
 2. a new unsigned event and materialization generation are produced;
 3. `WriteStore` atomically replaces the current local materialization;
 4. query observations receive the write-source change;
@@ -2060,7 +2021,7 @@ When a newer relevant source event arrives:
 
 ### Signing and routing progress independently
 
-Once an unsigned event is committed, signer acquisition and route acquisition begin independently. Routing uses the unsigned event's pubkey, tags, references, and semantic context; it does not wait for a signature. Known destinations may become durable lanes while signing is still pending. Delivery begins when both the exact current signature and an eligible lane are ready.
+Once an unsigned event is committed, signer acquisition and route acquisition begin independently. Routing uses the unsigned event's pubkey, tags, references, and route-relevant protocol facts; it does not wait for a signature. Known destinations may become durable lanes while signing is still pending. Delivery begins when both the exact current signature and an eligible lane are ready.
 
 ### Routing behavior
 
@@ -2085,13 +2046,13 @@ Cancellation is decided from current materialization, signature, and handoff fac
 
 ### Recovery
 
-At engine start, the owner loads open writes, reconstructs live operation state from durable facts, reopens semantic capabilities and route sessions, resumes required signing, and schedules current lanes. Query and relay execution begin after required write-store reconciliation is complete.
+At engine start, the owner loads open writes, reconstructs current edit or event state from durable facts, restores replaceable-event edits through their selected protocol crates, reopens route sessions, resumes required signing, and schedules current lanes. Query and relay execution begin after required write-store reconciliation is complete.
 
 ### Suggested internal modules
 
 ```text
 accept.rs           write acceptance paths
-materialize.rs      semantic operation materialization
+edits.rs            replaceable-event edit application and rematerialization
 sign.rs             signer selection and exact completion validation
 route.rs            live RoutePlan binding and lane creation
 lanes.rs            current delivery-lane state
@@ -2104,7 +2065,7 @@ retention.rs        terminal receipt retention
 
 ---
 
-## `nmp-session`
+## `fava-session`
 
 **Responsibility:** own the application-visible account set and current-account input.
 
@@ -2120,22 +2081,22 @@ retention.rs        terminal receipt retention
 
 ### Write relationship
 
-A convenience API may resolve `CurrentAccount` through `nmp-session`. Before acceptance, it constructs either:
+A convenience API may resolve `CurrentAccount` through `fava-session`. Before acceptance, it constructs either:
 
 - an `UnsignedEvent` whose `pubkey` is the resolved account; or
-- a semantic write whose `actor` is the resolved account.
+- a `ReplaceableEventEdit` whose `actor` is the resolved account.
 
 Accepted write state is then self-identifying and independent of later current-account changes.
 
 ---
 
-## `nmp-auth`
+## `fava-auth`
 
-**Responsibility:** own NIP-42 challenge and authorization lifecycles for exact relay access contexts.
+**Responsibility:** own NIP-42 challenge and authorization lifecycles for exact relay access.
 
 ### Owned state
 
-- access-context identity;
+- relay-access identity;
 - current relay challenge;
 - application authentication-policy operation;
 - signer operation for the AUTH event;
@@ -2148,9 +2109,9 @@ Authentication identity is explicit in the route/session configuration. It is in
 
 ---
 
-## `nmp-diagnostics`
+## `fava-diagnostics`
 
-**Responsibility:** expose bounded, current, typed facts from NMP owners without becoming a second policy engine.
+**Responsibility:** expose bounded, current, typed facts from Fava owners without becoming a second policy engine.
 
 ### Inputs
 
@@ -2182,45 +2143,7 @@ The output is a bounded latest-state stream. Diagnostics reports facts and scope
 
 ---
 
-## `nmp-coordinator`
-
-**Responsibility:** own engine-instance lifecycle and ordering between universal owners.
-
-### Owned state
-
-- engine instance identity;
-- lifecycle: starting, running, closing, closed;
-- handles to universal owners and selected provider instances;
-- top-level command admission;
-- ordering barriers between owner operations;
-- shutdown sequence;
-- routing of committed facts and correlated completions to their owner.
-
-### Ordering examples
-
-- WriteStore commit precedes accepted response and publication effects.
-- EventCache commit precedes query-source invalidation.
-- Session account resolution precedes construction of an unsigned event or semantic write.
-- Route-plan revision is committed to WriteStore before a new durable lane attempts delivery.
-- Shutdown stops new application admission before closing observations, publications, routers, transports, and stores.
-
-### Structural character
-
-The coordinator contains no event-kind dispatch, routing policy, query evaluation, retry algorithm, socket state, or storage schema. Its domain state consists of owner handles and ordering state.
-
-Suggested module structure:
-
-```text
-lifecycle.rs        start/run/close state
-commands.rs         facade command admission
-facts.rs            committed-fact dispatch
-barriers.rs         cross-owner ordering
-shutdown.rs         deterministic teardown
-```
-
----
-
-## `nmp-runtime`
+## `fava-runtime`
 
 **Responsibility:** execute asynchronous resources and deliver correlated completions.
 
@@ -2240,7 +2163,7 @@ shutdown.rs         deterministic teardown
 
 ### Owner relationship
 
-Universal owners decide what work is authorized. The runtime performs the work and returns typed completions. It does not interpret capability meaning, choose routes, calculate query results, or update durable state directly.
+Universal owners decide what work is authorized. The runtime performs the work and returns typed completions. It does not interpret event-kind meaning, choose routes, calculate query results, or update durable state directly.
 
 ### Provider isolation
 
@@ -2248,15 +2171,28 @@ Potentially blocking or application-supplied provider calls run outside owner lo
 
 ---
 
-## `nmp`
+## `fava`
 
-**Responsibility:** provide the thin Rust application facade and engine builder.
+**Responsibility:** provide the thin Rust application facade, engine builder, lifecycle, and ordering between universal owners.
+
+The facade owns engine-instance identity, top-level command admission, startup
+and shutdown order, and handles to the selected owners and providers. It owns
+no event-kind dispatch, routing policy, query evaluation, retry algorithm,
+socket state, or storage schema.
+
+Required ordering includes:
+
+- `WriteStore` commit before an accepted response or publication effect;
+- `EventCache` commit before query-source invalidation;
+- account resolution before construction of an unsigned event or replaceable-event edit;
+- route-plan commit before a new durable lane attempts delivery; and
+- stop of new commands before observations, publications, routers, transports, and stores close.
 
 ### Public surface
 
-- engine construction from selected providers and capabilities;
+- engine construction from selected providers and protocol crates;
 - open live query;
-- publish raw, semantic, or pre-signed write;
+- publish unsigned events, replaceable-event edits, or pre-signed events;
 - route preview;
 - receipt reattachment and write inspection;
 - session/account operations;
@@ -2269,7 +2205,7 @@ Potentially blocking or application-supplied provider calls run outside owner lo
 ### Builder
 
 ```rust
-Nmp::builder()
+Fava::builder()
     .event_cache(...)
     .write_store(...)
     .fetch_cache(...)
@@ -2279,18 +2215,17 @@ Nmp::builder()
     .transport(...)
     .publisher(...)
     .delivery_policy(...)
-    .capabilities(...)
     .services(...)
     .build()
 ```
 
-`nmp` depends on contracts and universal owners. It does not depend on event-kind capability crates or standard provider crates.
+`fava` depends on contracts and universal owners. It does not depend on event-kind protocol crates or standard provider crates. Product assemblies compile concrete protocol crates and compose their ordinary query, event-building, and write values.
 
 ---
 
-## `nmp-standard`
+## `fava-standard`
 
-**Responsibility:** assemble the recommended NMP product profile.
+**Responsibility:** assemble the recommended Fava product profile.
 
 A plausible standard profile selects:
 
@@ -2298,22 +2233,22 @@ A plausible standard profile selects:
 persistent event cache
 persistent write store
 persistent or bounded fetch cache
-nmp-query-standard
-nmp-router-outbox
-nmp-router-hints
+fava-query-standard
+fava-router-outbox
+fava-router-hints
 one of app-relay or fallback-relay policy, as configured
-nmp-subscriptions-standard
-nmp-transport-websocket
-nmp-publisher-nip01
-nmp-delivery-standard
+fava-subscriptions-standard
+fava-transport-websocket
+fava-publisher-nip01
+fava-delivery-standard
 local signer support
 NIP-11 service
-commonly selected capability crates
+commonly selected protocol crates
 ```
 
 The profile documents the behavior implied by its implementations, including cache persistence, write durability, retry policy, route policy, and platform packaging.
 
-An application may use `nmp-standard` or assemble `nmp` directly.
+An application may use `fava-standard` or assemble `fava` directly.
 
 
 ---
@@ -2346,7 +2281,7 @@ let engine = Engine::builder()
     .build()?;
 ```
 
-The application may use a different provider for any named responsibility without editing NMP or unrelated providers.
+The application may use a different provider for any named responsibility without editing Fava or unrelated providers.
 
 ---
 
@@ -2361,7 +2296,7 @@ persistent FetchCache
 OutboxRouter
 HintRouter
 AppRelayRouter or FallbackRelayRouter
-`nmp-query-standard` evaluator
+`fava-query-standard` evaluator
 standard subscription planner
 WebSocket transport
 NIP-01 publisher
@@ -2431,13 +2366,13 @@ or:
 ])
 ```
 
-The routing coordinator supplies the same asynchronous composition semantics to both.
+`fava-routing` supplies the same asynchronous composition rules to both.
 
 ---
 
 ## Native Swift and Kotlin products
 
-Swift and Kotlin products compile a selected provider and capability set into their NMP native artifact.
+Swift and Kotlin products compile selected providers and protocol crates into their Fava native artifact.
 
 The artifact exposes the same public workload model:
 
@@ -2468,7 +2403,7 @@ Examples:
 - `RedbEventCache` owns compatibility of its event-cache data;
 - `RedbWriteStore` owns compatibility of accepted write and receipt data;
 - NIP-05 and NIP-11 services own interpretation of cached service entries;
-- a capability materializer owns compatibility of its persisted semantic-operation encoding.
+- each protocol crate owns compatibility of its persisted replaceable-event edit format.
 
 An application changing providers between releases explicitly chooses migration, parallel transition, reset, or continued use of the previous provider.
 
@@ -2481,9 +2416,9 @@ An application changing providers between releases explicitly chooses migration,
 ```text
 application calls open(query)
         ↓
-nmp validates and canonicalizes query
+application constructs Query
         ↓
-nmp-observe creates provisional observation identity
+fava-observe creates provisional observation identity
         ↓
 EventCache QuerySource opens initial snapshot + changes
         ↓
@@ -2491,7 +2426,7 @@ WriteStore QuerySource opens initial snapshot + changes
         ↓
 derived query dependencies open
         ↓
-nmp-routing opens configured router chain
+fava-routing opens configured router chain
         ↓
 each router contributes immediately
         ↓
@@ -2501,7 +2436,7 @@ subscription planner compiles per-relay wire plans
         ↓
 transport executes current wire deltas
         ↓
-nmp-query merges source snapshots into one QuerySnapshot
+fava-query merges source snapshots into one QuerySnapshot
         ↓
 observation owner commits open
         ↓
@@ -2569,7 +2504,7 @@ OutboxRouter explicit discovery receives Carol's kind:10002
     Carol -> relay-c
 ```
 
-The router emits a replacement contribution. `nmp-routing` produces a new route revision containing `relay-c`. `nmp-publication` commits the route revision and creates one new lane under the same receipt and current event generation.
+The router emits a replacement contribution. `fava-routing` produces a new route revision containing `relay-c`. `fava-publication` commits the route revision and creates one new lane under the same receipt and current event generation.
 
 No existing acknowledged lane is resent merely because another destination was added.
 
@@ -2580,21 +2515,21 @@ No existing acknowledged lane is resent merely because another destination was a
 ```text
 transport receives bytes
         ↓
-nmp-wire decodes RelayFrame
+fava-wire decodes RelayFrame
         ↓
-nmp-ingest verifies exact session/subscription attribution
+fava-ingest verifies exact session/subscription attribution
         ↓
 event id and signature are verified
         ↓
 event is checked against attributed logical filters
         ↓
-nmp-state calculates CacheMutation batch
+fava-state calculates CacheMutation batch
         ↓
 EventCache commits
         ↓
 CommittedCacheChange is emitted
         ↓
-nmp-observe updates affected query-source projections
+fava-observe updates affected query-source projections
         ↓
 routers observing explicit/local queries may update contributions
         ↓
@@ -2610,11 +2545,11 @@ The same committed cache fact can drive query projection, routing knowledge, and
 ## Accepting and publishing an unsigned event
 
 ```text
-application or capability constructs UnsignedEvent
+application or protocol crate constructs UnsignedEvent
         ↓
 pubkey is already part of the event
         ↓
-nmp-publication validates event and WriteIntent
+fava-publication validates event and WriteIntent
         ↓
 WriteStore atomically commits:
     WriteId
@@ -2623,7 +2558,7 @@ WriteStore atomically commits:
     signature state
     QuerySource contribution
         ↓
-write-source change is visible to nmp-observe
+write-source change is visible to fava-observe
         ↓
 application receives Accepted + ReceiptId
         ↓
@@ -2649,16 +2584,16 @@ The event cache is not part of acceptance. A later relay echo enters the cache a
 
 ---
 
-## Accepting a semantic write
+## Accepting a replaceable-event edit
 
 ```text
 application calls follow(actor=alice, target=bob)
         ↓
-nmp-nip02 creates typed SemanticWrite
+fava-nip02 creates ReplaceableEventEdit
         ↓
 publication owner reads current relevant EventRecord
         ↓
-nmp-nip02 materializes UnsignedEvent(kind:3, pubkey:alice)
+fava-nip02 materializes UnsignedEvent(kind:3, pubkey:alice)
         ↓
 WriteStore commits operation, receipt, and materialization
         ↓
@@ -2674,7 +2609,7 @@ CommittedCacheChange identifies affected coordinate
         ↓
 publication owner reloads current source record
         ↓
-capability reapplies accepted operation
+fava-nip02 applies the accepted edit again
         ↓
 WriteStore installs successor materialization generation
         ↓
@@ -2761,7 +2696,7 @@ providers open their own storage formats
         ↓
 WriteStore recovers open obligations and retained receipts
         ↓
-selected capabilities decode required semantic operations
+selected protocol crates decode required replaceable-event edits
         ↓
 publication owners reconstruct current operations/generations
         ↓
@@ -2771,7 +2706,7 @@ EventCache opens with the guarantees of its implementation
         ↓
 required source/write reconciliation completes
         ↓
-coordinator enters Running
+facade enters Running
         ↓
 application reopens desired queries
         ↓
@@ -2785,7 +2720,7 @@ A memory event cache starts empty after restart. A persistent event cache may se
 ## Shutdown
 
 ```text
-coordinator enters Closing
+facade enters Closing
         ↓
 new application work is refused
         ↓
@@ -2805,10 +2740,10 @@ stores flush/close according to provider contract
         ↓
 runtime joins owned resources
         ↓
-coordinator enters Closed
+facade enters Closed
 ```
 
-Each resource is closed by its owner. Shutdown ordering is the coordinator's responsibility.
+Each resource is closed by its owner. The facade owns shutdown ordering.
 
 ---
 
@@ -2818,33 +2753,33 @@ Each resource is closed by its owner. Shutdown ordering is the coordinator's res
 
 | Fact or lifecycle | Authoritative owner | Derived/consumer owners |
 |---|---|---|
-| Wire message grammar | `nmp-wire` | transport, publisher, ingest, test tools |
-| Event-id/signature admission | `nmp-ingest` | observations, cache, publication reconciliation |
-| Canonical event-set semantics | `nmp-state` | evaluator, cache implementations, conformance suites |
+| Wire message grammar | `fava-wire` | transport, publisher, ingest, test tools |
+| Event-id/signature admission | `fava-ingest` | observations, cache, publication reconciliation |
+| Nostr event-state rules | `fava-state` | evaluator, cache implementations, conformance suites |
 | Retained relay-observed events | selected `EventCache` | query evaluator, routers using local event reader |
-| Accepted semantic operation | selected `WriteStore` | publication owner, capability materializer |
+| Accepted replaceable-event edit | selected `WriteStore` | publication owner, owning protocol crate |
 | Current local event materialization | selected `WriteStore` | query evaluator, signer, routing, publication |
 | Receipt identity and durable receipt facts | selected `WriteStore` | publication owner, receipt observers, diagnostics |
-| Open live-query handle | `nmp-observe` | facade/SDK handle |
-| Current merged query snapshot | `nmp-observe` | application observer, diagnostics |
-| Reactive dependency node | `nmp-observe` | parent/child observations |
-| One router's inputs and contribution | that router instance | routing coordinator |
-| Merged automatic route plan | `nmp-routing` session | observe/publication owner |
+| Open live-query handle | `fava-observe` | facade/SDK handle |
+| Current merged query snapshot | `fava-observe` | application observer, diagnostics |
+| Reactive dependency node | `fava-observe` | parent/child observations |
+| One router's inputs and contribution | that router instance | `fava-routing` session |
+| Merged automatic route plan | `fava-routing` session | observe/publication owner |
 | Write route revision admitted for delivery | selected `WriteStore` | publication owner, delivery policy |
-| Logical query demand for one relay | `nmp-observe` | subscription planner |
-| Wire subscription plan | `nmp-observe` owns desired plan; planner computes it | transport executes it |
+| Logical query demand for one relay | `fava-observe` | subscription planner |
+| Wire subscription plan | `fava-observe` owns desired plan; planner computes it | transport executes it |
 | Physical relay connection generation | selected `Transport` | auth, ingest, publisher, observe |
-| NIP-42 challenge lifecycle | `nmp-auth` | query/publication owners |
-| Signer registration and availability | `nmp-session` plus signer provider | publication/auth owners |
+| NIP-42 challenge lifecycle | `fava-auth` | query/publication owners |
+| Signer registration and availability | `fava-session` plus signer provider | publication/auth owners |
 | One signing operation | publication/auth owner | runtime executes provider call |
 | One publication attempt | publication owner | publisher performs; transport hands off |
 | Delivery retry decision | selected `DeliveryPolicy` | publication owner persists/executes decision |
-| NIP-05 semantic cache policy | NIP-05 service | selected `FetchCache` stores entries |
-| NIP-11 semantic cache policy | NIP-11 service | selected `FetchCache` stores entries |
+| NIP-05 cache policy | NIP-05 service | selected `FetchCache` stores entries |
+| NIP-11 cache policy | NIP-11 service | selected `FetchCache` stores entries |
 | Generic fetched cache bytes | selected `FetchCache` | owning protocol service |
-| Current diagnostic snapshot | `nmp-diagnostics` | facade/SDK observers |
-| Execution resources and joins | `nmp-runtime` | all state owners |
-| Public engine lifecycle | `nmp` | application/SDK |
+| Current diagnostic snapshot | `fava-diagnostics` | facade/SDK observers |
+| Execution resources and joins | `fava-runtime` | all state owners |
+| Public engine lifecycle | `fava` | application/SDK |
 
 The ledger should remain a maintained architecture artifact. Adding mutable state requires naming its owner and consumers.
 
@@ -2858,7 +2793,7 @@ Examples:
 
 ### Query opening
 
-`nmp-observe` owns:
+`fava-observe` owns:
 
 ```text
 source boundary -> initial evaluation -> handle release -> later updates
@@ -2866,7 +2801,7 @@ source boundary -> initial evaluation -> handle release -> later updates
 
 ### Write acceptance
 
-`nmp-publication` owns:
+`fava-publication` owns:
 
 ```text
 write-store commit -> query-source visibility -> Accepted result -> external work
@@ -2874,7 +2809,7 @@ write-store commit -> query-source visibility -> Accepted result -> external wor
 
 ### New route destination
 
-`nmp-publication` owns:
+`fava-publication` owns:
 
 ```text
 route contribution -> write-store route revision -> delivery eligibility -> handoff
@@ -2882,7 +2817,7 @@ route contribution -> write-store route revision -> delivery eligibility -> hand
 
 ### Relay ingest
 
-`nmp-ingest` owns:
+`fava-ingest` owns:
 
 ```text
 wire attribution -> event verification -> admitted occurrence
@@ -2909,33 +2844,32 @@ semantic values + contracts
             ↑
 universal lifecycle owners
             ↑
-coordinator / runtime / facade
+runtime / facade
 ```
 
 Contract and implementation edges run one way:
 
 ```text
-nmp-event-cache   <- event-cache implementations
-nmp-write-store   <- write-store implementations
-nmp-fetch-cache   <- fetch-cache implementations
-nmp-routing       <- router implementations
-nmp-subscriptions <- subscription planners
-nmp-transport     <- transport implementations
-nmp-publisher     <- publisher implementations
-nmp-delivery      <- delivery-policy implementations
-nmp-signer        <- signer/crypto implementations
+fava-event-cache   <- event-cache implementations
+fava-write-store   <- write-store implementations
+fava-fetch-cache   <- fetch-cache implementations
+fava-routing       <- router implementations
+fava-subscriptions <- subscription planners
+fava-transport     <- transport implementations
+fava-publisher     <- publisher implementations
+fava-delivery      <- delivery-policy implementations
+fava-signer        <- signer/crypto implementations
 ```
 
 The contract crate never imports its standard implementation. Universal owners depend on contracts, not on standard providers. Product-profile crates assemble the chosen implementations.
 
-## Capability direction
+## Protocol-crate direction
 
-Capability crates depend on semantic foundation and capability contracts. They remain independent of:
+Protocol crates depend on the Nostr values and Fava primitives they compose. They remain independent of:
 
 ```text
-nmp facade
-nmp-coordinator
-nmp-runtime
+fava facade
+fava-runtime
 concrete event-cache and write-store implementations
 concrete router implementations
 concrete transport/publisher/delivery implementations
@@ -2943,7 +2877,7 @@ concrete transport/publisher/delivery implementations
 
 ## Router direction
 
-Router implementations depend on `nmp-routing` and the semantic values they understand. Algorithm-specific acquisition uses `RouterServices`; it does not import concrete transport or storage implementations.
+Router implementations depend on `fava-routing` and the semantic values they understand. Algorithm-specific acquisition uses `RouterServices`; it does not import concrete transport or storage implementations.
 
 ## Physical storage direction
 
@@ -2965,7 +2899,6 @@ A physical backend package may support several semantic provider adapters, but e
 | `Publisher` | one signed event and one session | one protocol attempt outcome | attempt protocol |
 | `DeliveryPolicy` | durable lane facts and time | attempt/wait/park/give-up decision | delivery policy |
 | `Signer` | exact unsigned event or crypto request | signed/crypto result | key custody and crypto execution |
-| `Materializer` | semantic write plus current source event | unsigned event | capability semantic transformation |
 
 ---
 
@@ -2996,12 +2929,12 @@ A boundary is healthy when an external implementation can use it without private
 
 ## Falsifier A — external-provider proof
 
-For every replaceable contract, build at least one implementation in a crate outside the NMP workspace.
+For every replaceable contract, build at least one implementation in a crate outside the Fava workspace.
 
 The external crate must:
 
 - depend only on public contracts and ordinary third-party dependencies;
-- require zero edits to `nmp`, runtime, or unrelated providers;
+- require zero edits to `fava`, runtime, or unrelated providers;
 - run through an ordinary application assembly;
 - pass the same conformance kit as the standard provider.
 
@@ -3053,9 +2986,9 @@ The test must also reverse the transition: loss of upstream coverage makes fallb
 
 Dependency tests prove:
 
-- `nmp-routing` contains no NIP-65, hint, app-relay, or fallback semantics;
-- each `nmp-router-*` crate can be omitted independently;
-- a custom hint router replaces `nmp-router-hints` without editing routing primitive code;
+- `fava-routing` contains no NIP-65, hint, app-relay, or fallback semantics;
+- each `fava-router-*` crate can be omitted independently;
+- a custom hint router replaces `fava-router-hints` without editing routing primitive code;
 - router order is determined only by assembly.
 
 Adding a new router means adding one crate and one assembly entry.
@@ -3124,28 +3057,28 @@ After restart:
 
 ---
 
-## Falsifier H — capability N+1
+## Falsifier H — protocol crate N+1
 
-Add a new event-kind capability outside the workspace.
+Add a new event-kind protocol crate outside the workspace.
 
 It must provide:
 
 - typed decode/validation;
 - one query fragment;
-- one semantic operation and antagonist;
-- one materializer;
+- one replaceable-event edit and its inverse;
+- edit application to current and empty source state;
 - optional route context.
 
 It must require zero edits to:
 
 ```text
-nmp
-nmp-runtime
-nmp-observe
-nmp-publication
-nmp-routing
-nmp-state
-nmp-query-standard
+fava
+fava-runtime
+fava-observe
+fava-publication
+fava-routing
+fava-state
+fava-query-standard
 store implementations
 transport implementations
 ```
@@ -3269,11 +3202,11 @@ The audit fails when:
 
 Compiler-level tests prove that:
 
-- `nmp-routing` cannot import `nmp-router-outbox` or any other router implementation;
-- capability crates cannot import runtime/facade internals;
+- `fava-routing` cannot import `fava-router-outbox` or any other router implementation;
+- protocol crates cannot import runtime/facade internals;
 - transport implementations cannot import write stores or routing algorithms;
-- `nmp-publication` cannot import standard delivery or publisher implementations;
-- `nmp` cannot name optional event-kind capability crates;
+- `fava-publication` cannot import standard delivery or publisher implementations;
+- `fava` cannot name event-kind protocol crates;
 - standard providers have no private bypass unavailable to external providers.
 
 ---
@@ -3282,16 +3215,16 @@ Compiler-level tests prove that:
 
 Track architectural cost for ordinary changes:
 
-- crates/files changed by adding capability N+1;
+- crates/files changed by adding protocol crate N+1;
 - crates/files changed by adding a router;
-- crates rebuilt after editing one capability;
-- adapter code needed to expose one capability in a selected native artifact;
+- crates rebuilt after editing one protocol crate;
+- adapter code needed to expose one protocol crate in a selected native artifact;
 - public contracts affected by changing a standard provider's internal algorithm.
 
 Expected results:
 
 ```text
-new capability: capability crate + assembly/artifact selection
+new protocol support: protocol crate + assembly/artifact selection
 new router: router crate + assembly
 new event cache: provider crate + assembly
 new subscription planner: provider crate + assembly
@@ -3306,14 +3239,14 @@ Broad edits falsify the claimed boundary.
 The architecture is accepted only after ordinary external applications prove:
 
 1. a live query combining persistent cached events, local unpublished events, and live relay ingress;
-2. a semantic write rematerialized over a newer relay event;
+2. a replaceable-event edit applied again over a newer relay event;
 3. a partial asynchronous route that adds a later recipient under one receipt;
 4. a custom router crate outside the workspace;
 5. a custom event-cache implementation;
 6. a custom subscription planner;
 7. process restart with durable accepted writes;
 8. NIP-05 and NIP-11 services sharing a fetch cache without semantic leakage;
-9. Swift and Kotlin products built from explicit provider/capability selections.
+9. Swift and Kotlin products built from explicit provider and protocol-crate selections.
 
 ---
 
@@ -3327,12 +3260,12 @@ Contracts should be stabilized only after a complete slice and a competing imple
 
 Build:
 
-- `nmp-state`;
-- `nmp-query`;
+- `fava-state`;
+- `fava-query`;
 - standard evaluator;
 - memory event cache;
 - memory write store;
-- `nmp-observe` local-only path.
+- `fava-observe` local-only path.
 
 Prove:
 
@@ -3347,10 +3280,10 @@ Prove:
 
 Add:
 
-- `nmp-wire`;
+- `fava-wire`;
 - subscription contract plus no-grouping planner;
 - scripted transport;
-- `nmp-ingest`;
+- `fava-ingest`;
 - explicit query routing.
 
 Prove one live query end to end before automatic routing.
@@ -3359,7 +3292,7 @@ Prove one live query end to end before automatic routing.
 
 Add:
 
-- `nmp-routing`;
+- `fava-routing`;
 - static test router;
 - delayed test router;
 - app-relay router;
@@ -3372,7 +3305,7 @@ Prove immediate partial plans, later additions, upstream fallback reaction, and 
 Add:
 
 - write-store durable implementation;
-- `nmp-publication`;
+- `fava-publication`;
 - signer contract and local signer;
 - publisher and delivery contracts;
 - scripted publisher/transport.
@@ -3383,7 +3316,7 @@ Prove acceptance, query visibility, signing, one attempt, receipt, cancellation,
 
 Add:
 
-- NIP-65 capability values;
+- NIP-65 values;
 - outbox router;
 - hints router;
 - standard subscription planner;
@@ -3393,17 +3326,17 @@ Add:
 
 Prove partial recipient routing under real router-owned explicit queries.
 
-### Slice 6 — semantic writes
+### Slice 6 — replaceable-event edits
 
-Add one capability such as NIP-02:
+Add one protocol crate such as NIP-02:
 
-- typed operation and antagonist;
-- semantic materializer;
+- typed edit and inverse;
+- edit application;
 - source-state change and rematerialization;
 - stale signer/delivery result rejection;
 - same receipt across generations.
 
-Then add a second unrelated capability to challenge the contract.
+Then add a second unrelated protocol crate to challenge the contract.
 
 ### Slice 7 — fetched services
 
@@ -3428,95 +3361,94 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-wire` | Canonical Nostr relay/client message grammar and bytes. |
-| `nmp-state` | Deterministic event-set identity, replacement, deletion, expiry, and evidence semantics. |
-| `nmp-write` | Event construction, write-intent, receipt, and publication values. |
-| `nmp-capability` | Semantic-operation and materialization contracts for optional capabilities. |
-| `nmp-query` | Live-query language, `EventRecord`, source observations, and evaluator contract. |
-| `nmp-query-standard` | Recommended evaluator and semantic oracle over merged event sources. |
+| `fava-wire` | Canonical Nostr relay/client message grammar and bytes. |
+| `fava-state` | Deterministic event-set identity, replacement, deletion, expiry, and evidence semantics. |
+| `fava-write` | Event construction, write-intent, receipt, and publication values. |
+| `fava-query` | Live-query language, `EventRecord`, source observations, and evaluator contract. |
+| `fava-query-standard` | Recommended evaluator and semantic oracle over merged event sources. |
 
 ## Local data contracts and providers
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-event-cache` | Contract for retaining and querying admitted signed relay events. |
-| `nmp-event-cache-memory` | Bounded current-process event cache. |
-| `nmp-event-cache-redb` | Persistent indexed event-cache implementation. |
-| `nmp-write-store` | Contract for accepted writes, receipts, current materializations, and recovery. |
-| `nmp-write-store-redb` | Standard durable write-store implementation. |
-| `nmp-write-store-memory` | Volatile reference/test write store. |
-| `nmp-fetch-cache` | Opaque partitioned cache contract for service-owned fetched data. |
-| `nmp-fetch-cache-memory` | Bounded memory fetched-data cache. |
-| `nmp-fetch-cache-redb` | Persistent fetched-data cache. |
+| `fava-event-cache` | Contract for retaining and querying admitted signed relay events. |
+| `fava-event-cache-memory` | Bounded current-process event cache. |
+| `fava-event-cache-redb` | Persistent indexed event-cache implementation. |
+| `fava-write-store` | Contract for accepted writes, receipts, current materializations, and recovery. |
+| `fava-write-store-redb` | Standard durable write-store implementation. |
+| `fava-write-store-memory` | Volatile reference/test write store. |
+| `fava-fetch-cache` | Opaque partitioned cache contract for service-owned fetched data. |
+| `fava-fetch-cache-memory` | Bounded memory fetched-data cache. |
+| `fava-fetch-cache-redb` | Persistent fetched-data cache. |
 
 ## Routing and relay work
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-routing` | Ordered asynchronous router composition and merged route plans. |
-| `nmp-router-outbox` | NIP-65 author-outbox and recipient-inbox routing. |
-| `nmp-router-hints` | Relay-hint and observed-reference routing. |
-| `nmp-router-app-relays` | Always contribute configured app relays for selected operations. |
-| `nmp-router-fallback-relays` | Contribute fallback relays from upstream coverage policy. |
-| `nmp-subscriptions` | Per-relay logical-demand to wire-plan contract. |
-| `nmp-subscriptions-standard` | Recommended exact grouping/coalescing planner. |
-| `nmp-transport` | Relay-session, byte-handoff, and inbound-byte contracts. |
-| `nmp-transport-websocket` | Standard WebSocket relay transport. |
+| `fava-routing` | Ordered asynchronous router composition and merged route plans. |
+| `fava-router-outbox` | NIP-65 author-outbox and recipient-inbox routing. |
+| `fava-router-hints` | Relay-hint and observed-reference routing. |
+| `fava-router-app-relays` | Always contribute configured app relays for selected operations. |
+| `fava-router-fallback-relays` | Contribute fallback relays from upstream coverage policy. |
+| `fava-subscriptions` | Per-relay logical-demand to wire-plan contract. |
+| `fava-subscriptions-standard` | Recommended exact grouping/coalescing planner. |
+| `fava-transport` | Relay-session, byte-handoff, and inbound-byte contracts. |
+| `fava-transport-websocket` | Standard WebSocket relay transport. |
 
 ## Publication and identity
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-publisher` | One publication-attempt contract. |
-| `nmp-publisher-nip01` | One NIP-01 EVENT/OK publication attempt. |
-| `nmp-delivery` | Delivery-policy decision contract over durable lane facts. |
-| `nmp-delivery-standard` | Standard bounded retry, fairness, and ambiguity policy. |
-| `nmp-signer` | Identity-keyed signing and crypto provider contracts. |
-| `nmp-signer-local` | Local in-process signer provider. |
-| `nmp-signer-nip46` | Remote NIP-46 signer provider. |
+| `fava-publisher` | One publication-attempt contract. |
+| `fava-publisher-nip01` | One NIP-01 EVENT/OK publication attempt. |
+| `fava-delivery` | Delivery-policy decision contract over durable lane facts. |
+| `fava-delivery-standard` | Standard bounded retry, fairness, and ambiguity policy. |
+| `fava-signer` | Identity-keyed signing and crypto provider contracts. |
+| `fava-signer-local` | Local in-process signer provider. |
+| `fava-signer-nip46` | Remote NIP-46 signer provider. |
 
 ## State and lifecycle owners
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-ingest` | Admission of attributed, verified relay events. |
-| `nmp-observe` | Live-query lifecycle, source merge, routing, relay demand, and bounded result delivery. |
-| `nmp-publication` | Accepted-write lifecycle across materialization, signing, routing, delivery, and receipts. |
-| `nmp-session` | Accounts, current-account input, signer registrations, and session restore. |
-| `nmp-auth` | NIP-42 challenge and authentication lifecycle. |
-| `nmp-diagnostics` | Bounded current diagnostic facts and explanations. |
-| `nmp-coordinator` | Engine lifecycle barriers and ordering between owners. |
-| `nmp-runtime` | Execution resources, provider isolation, cancellation, timers, and shutdown joins. |
-| `nmp` | Thin public facade and assembly builder. |
-| `nmp-standard` | Recommended provider assembly and its documented profile guarantees. |
+| `fava-ingest` | Admission of attributed, verified relay events. |
+| `fava-observe` | Live-query lifecycle, source merge, routing, relay demand, and bounded result delivery. |
+| `fava-publication` | Accepted-write lifecycle across materialization, signing, routing, delivery, and receipts. |
+| `fava-session` | Accounts, current-account input, signer registrations, and session restore. |
+| `fava-auth` | NIP-42 challenge and authentication lifecycle. |
+| `fava-diagnostics` | Bounded current diagnostic facts and explanations. |
+| `fava-runtime` | Execution resources, provider isolation, cancellation, timers, and shutdown joins. |
+| `fava` | Thin public facade and assembly builder. |
+| `fava-standard` | Recommended provider assembly and its documented profile guarantees. |
 
-## Services and capabilities
+## Protocol services and event-kind crates
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `nmp-nip05` | NIP-05 values, validation, and resolution semantics. |
-| `nmp-nip05-http` | HTTP NIP-05 acquisition and service-owned caching policy. |
-| `nmp-nip11` | NIP-11 values, parsing, validation, and freshness vocabulary. |
-| `nmp-nip11-http` | HTTP NIP-11 acquisition and service-owned caching policy. |
-| `nmp-nip65` | Pure NIP-65 relay-list event semantics. |
-| `nmp-nip02`, `nmp-nip29`, `nmp-bookmarks`, ... | Independent event-kind capabilities built from query, write, and materialization primitives. |
-| `nmp-content` | Pure content parsing into structured values without rendering or acquisition. |
+| `fava-nip05` | NIP-05 values, validation, and resolution semantics. |
+| `fava-nip05-http` | HTTP NIP-05 acquisition and service-owned caching policy. |
+| `fava-nip11` | NIP-11 values, parsing, validation, and freshness vocabulary. |
+| `fava-nip11-http` | HTTP NIP-11 acquisition and service-owned caching policy. |
+| `fava-nip65` | Pure NIP-65 relay-list event semantics. |
+| `fava-nip02`, `fava-nip29`, `fava-bookmarks`, ... | Independent event-kind protocol crates built from query, event-building, and write primitives. |
+| `fava-content` | Pure content parsing into structured values without rendering or acquisition. |
 
 ## Testing packages
 
 Recommended public test tooling:
 
 ```text
-nmp-testkit
-nmp-router-testkit
-nmp-event-cache-testkit
-nmp-write-store-testkit
-nmp-subscriptions-testkit
-nmp-transport-testkit
-nmp-publisher-testkit
-nmp-signer-testkit
-nmp-relay-lab
+fava-testkit
+fava-router-testkit
+fava-event-cache-testkit
+fava-write-store-testkit
+fava-subscriptions-testkit
+fava-transport-testkit
+fava-publisher-testkit
+fava-signer-testkit
 ```
+
+The relay-lab role — real third-party relay process fixtures, wire evidence, and reconstructable run artifacts — is owned by the external `apps/canary` application, not a workspace crate. The canary is the independent relay-lab; no `fava-relay-lab` crate is created.
 
 Each conformance kit is versioned with its contract and can be used by external provider crates.
 
@@ -3526,7 +3458,7 @@ Each conformance kit is versioned with its contract and can be used by external 
 
 ## One-paragraph north star
 
-NMP is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, signer, and capability responsibilities. Live queries merge relay-event cache state, accepted-write materializations, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by an external implementation and an adversarial falsifier.
+Fava is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, and signer responsibilities. Live queries merge relay-event cache state, accepted-write materializations, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Protocol crates own event-kind meaning and compose ordinary query, event-building, and write values. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by an external implementation and an adversarial falsifier.
 
 ## Test for every architectural decision
 
@@ -3539,7 +3471,7 @@ For any proposed crate, interface, or state field, answer:
 5. Can another crate implement the contract without private access?
 6. Can it fail or block without stopping unrelated work?
 7. Can its current state be reconstructed or terminated exactly?
-8. Does adding another capability or provider leave unrelated crates unchanged?
+8. Does adding another protocol crate or provider leave unrelated crates unchanged?
 9. Does the boundary remove policy from a primitive rather than merely move files?
 10. What executable scenario would prove this boundary wrong?
 

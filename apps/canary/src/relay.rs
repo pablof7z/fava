@@ -176,8 +176,8 @@ fn relay_config(port: u16) -> String {
     format!(
         r#"[info]
 relay_url = "ws://127.0.0.1:{port}/"
-name = "NMP M0 canary relay"
-description = "Disposable third-party relay for the NMP rewrite evidence lab"
+name = "Fava M0 canary relay"
+description = "Disposable third-party relay for the Fava rewrite evidence lab"
 
 [database]
 engine = "sqlite"

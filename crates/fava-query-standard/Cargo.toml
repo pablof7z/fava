@@ -1,0 +1,19 @@
+[package]
+name = "fava-query-standard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-query.workspace = true
+fava-state.workspace = true
+fava-write.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -8,7 +8,7 @@
 # falsifier: restart generation two with a fresh data directory; the post-restart query reaches EOSE without the event and the scenario fails
 # canary: lab-real-relay-smoke
 
-Feature: Relay behavior is witnessed independently of NMP
+Feature: Relay behavior is witnessed independently of Fava
 
   Rule: A real relay process proves its own persistence through public wire behavior
 

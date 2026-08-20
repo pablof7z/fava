@@ -1,0 +1,15 @@
+[package]
+name = "fava-query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-state.workspace = true
+fava-write.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+

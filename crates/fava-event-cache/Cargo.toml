@@ -1,0 +1,15 @@
+[package]
+name = "fava-event-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-query.workspace = true
+fava-state.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+

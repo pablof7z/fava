@@ -205,6 +205,107 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava"
+version = "0.1.0"
+dependencies = [
+ "fava-event-cache",
+ "fava-observe",
+ "fava-query",
+ "fava-write-store",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-event-cache"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-external-null-cache-proof"
+version = "0.1.0"
+dependencies = [
+ "fava",
+ "fava-event-cache",
+ "fava-query",
+ "fava-query-standard",
+ "fava-state",
+ "fava-write-store-memory",
+ "nostr",
+ "tokio",
+]
+
+[[package]]
+name = "fava-observe"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-query"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-query-standard"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "fava-write",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-state"
+version = "0.1.0"
+dependencies = [
+ "nostr",
+]
+
+[[package]]
+name = "fava-write"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-write-store"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-write",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-write-store-memory"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-write",
+ "fava-write-store",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -425,107 +526,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "nmp"
-version = "0.1.0"
-dependencies = [
- "nmp-event-cache",
- "nmp-observe",
- "nmp-query",
- "nmp-write-store",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-event-cache"
-version = "0.1.0"
-dependencies = [
- "nmp-query",
- "nmp-state",
- "nostr",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-external-null-cache-proof"
-version = "0.1.0"
-dependencies = [
- "nmp",
- "nmp-event-cache",
- "nmp-query",
- "nmp-query-standard",
- "nmp-state",
- "nmp-write-store-memory",
- "nostr",
- "tokio",
-]
-
-[[package]]
-name = "nmp-observe"
-version = "0.1.0"
-dependencies = [
- "nmp-query",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "nmp-query"
-version = "0.1.0"
-dependencies = [
- "nmp-state",
- "nmp-write",
- "nostr",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-query-standard"
-version = "0.1.0"
-dependencies = [
- "nmp-query",
- "nmp-state",
- "nmp-write",
- "nostr",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-state"
-version = "0.1.0"
-dependencies = [
- "nostr",
-]
-
-[[package]]
-name = "nmp-write"
-version = "0.1.0"
-dependencies = [
- "nmp-state",
- "nostr",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-write-store"
-version = "0.1.0"
-dependencies = [
- "nmp-query",
- "nmp-write",
- "thiserror",
-]
-
-[[package]]
-name = "nmp-write-store-memory"
-version = "0.1.0"
-dependencies = [
- "nmp-query",
- "nmp-write",
- "nmp-write-store",
- "thiserror",
- "tokio",
-]
 
 [[package]]
 name = "nostr"

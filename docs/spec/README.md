@@ -2,10 +2,10 @@
 
 These documents are the authoritative inputs for the clean-room rewrite:
 
-1. `FULL_NMP_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` defines required behavior.
+1. `FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` defines required behavior.
 2. `ARCHITECTURE.md` assigns responsibilities, state, lifecycles, and replaceable contracts.
-3. `NMP_TDD_BDD_TESTING_GUIDE.md` defines the required TDD, BDD, mutation, and evidence discipline.
-4. `NMP_REWRITE_IMPLEMENTATION_PLAN.md` defines delivery sequencing and milestone exit gates.
+3. `FAVA_TDD_BDD_TESTING_GUIDE.md` defines the required TDD, BDD, mutation, and evidence discipline.
+4. `FAVA_REWRITE_IMPLEMENTATION_PLAN.md` defines delivery sequencing and milestone exit gates.
 5. `partial-spec-api-semantics.md` refines the Rust reactive-query surface and relay-source semantics where it does not conflict with the complete authorities.
 
 They were imported from the documents supplied by Pablo on 2026-08-20.
