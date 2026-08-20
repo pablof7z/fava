@@ -1,0 +1,22 @@
+# First-party BUILD for the `fava-write-store-memory` crate. Third-party
+# deps come from @crates via all_crate_deps(); first-party path deps are
+# explicit.
+
+load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "lib",
+    crate_name = "fava_write_store_memory",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-query:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,40 @@
+module(name = "fava", version = "0.1.0")
+
+# rules_rust is the authoritative Rust build system. Cargo remains the
+# dependency-metadata source of truth (Cargo.toml/Cargo.lock), imported below
+# via crate_universe so Bazel and Cargo agree on exactly the same third-party
+# dependency graph and versions.
+bazel_dep(name = "rules_rust", version = "0.73.0")
+
+# Already in the graph beneath rules_rust; named directly so the module does
+# not depend on inheriting it.
+bazel_dep(name = "platforms", version = "1.1.0")
+
+# Pin the Rust toolchain to the same stable release the repo pins in
+# rust-toolchain.toml (1.90.0), so a `bazel build` produces the same compiler
+# output a `cargo build` does. Stable ships clippy and rustfmt as components;
+# pin rustfmt to the same version.
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    versions = ["1.90.0"],
+    rustfmt_version = "1.90.0",
+)
+use_repo(rust, "rust_toolchains")
+
+# Import the entire Cargo workspace's third-party dependency graph from the
+# single source of truth: the workspace Cargo.toml + Cargo.lock. This is what
+# keeps Cargo as the dependency-metadata authority while Bazel owns the build.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+    # Third-party crates carry a `target_compatible_with` naming exactly the
+    # triples they were rendered for, so a triple missing here makes every
+    # dependency `@platforms//:incompatible` at analysis time. Fava builds
+    # for the host only.
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+    ],
+)
+use_repo(crate, "crates")

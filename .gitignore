@@ -3,3 +3,18 @@
 apps/canary/runs/
 .DS_Store
 *.swp
+
+# Bazel (symlinks into the local execroot)
+bazel-*
+
+# Agent harness artifacts
+.pi/
+.codex/
+.claude/
+
+# Research scratch (prime-context/whiteboard cache)
+.planning/research/
+
+# Python
+__pycache__/
+*.pyc

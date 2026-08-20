@@ -1,0 +1,43 @@
+# First-party BUILD for the `fava` crate. Third-party deps come from
+# @crates via all_crate_deps(); first-party path deps are explicit.
+
+load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "lib",
+    crate_name = "fava",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-observe:lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-write-store:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "local_source_merge",
+    srcs = ["tests/local_source_merge.rs"],
+    crate_name = "local_source_merge",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-observe:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+        "//crates/fava-write-store-memory:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)

@@ -1,0 +1,41 @@
+# Bazel rc for Fava. The authoritative build is `bazel test //...`; Cargo
+# stays the dependency-metadata authority via crate_universe (see
+# MODULE.bazel).
+
+# rules_rust defaults to the stable channel, which matches
+# rust-toolchain.toml (1.90.0), so no channel override is needed here.
+
+# A shared disk cache so concurrent git worktrees reuse compiled artifacts
+# without cross-worktree contamination. The cache key is the action digest,
+# which is independent of the workspace path, so two worktrees building the
+# same action hit one store.
+common --disk_cache=~/.cache/bazel-fava-diskcache
+
+# Bound it. The disk cache has no size limit by default and only grows.
+# Bazel collects it down to this size once the server has been idle for
+# --experimental_disk_cache_gc_idle_delay (5m).
+common --experimental_disk_cache_gc_max_size=50G
+
+# Keep Bazel's own output symlinks out of Cargo's `target/` to avoid the two
+# build systems fighting over the same directory tree.
+build --symlink_prefix=bazel-
+test --symlink_prefix=bazel-
+
+# Color output for terminal use.
+common --color=yes
+
+# --- Lint and format ---------------------------------------------------------
+# The two workflows a developer would otherwise reach for Cargo to get. Both
+# are aspects, so they apply to every Rust target reached by the pattern:
+#   bazel build //... --config=clippy      (was: cargo clippy --workspace)
+#   bazel build //... --config=fmt-check   (was: cargo fmt --check)
+#   bazel run //:fmt                       (was: cargo fmt -- rewrites in place)
+# clippy runs on the same pinned toolchain as the build, so a lint that fires
+# here fires in the editor too.
+build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
+build:clippy --output_groups=+clippy_checks
+# Warnings are errors: a lint nobody must act on is not a lint.
+build:clippy --@rules_rust//rust/settings:clippy_flags=-Dwarnings
+
+build:fmt-check --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
+build:fmt-check --output_groups=+rustfmt_checks
