@@ -2,7 +2,7 @@
 
 **Status:** proposed normative specification for the NMP rewrite  
 **Supersedes:** `NMP_REWRITE_SPEC.md`  
-**Companion document:** `ARCHITECTURE.md` defines crate boundaries, contracts, ownership, and composition. This document defines required behavior and product goals.  
+**Companion documents:** `ARCHITECTURE.md` defines crate boundaries, contracts, ownership, and composition. `NMP_TDD_BDD_TESTING_GUIDE.md` defines how behavior is specified and proved. This document defines required behavior and product goals.
 **Audience:** implementors, provider authors, capability authors, SDK authors, application developers, and reviewers.
 
 ---
@@ -1648,4 +1648,3 @@ This specification consolidates the original requirement corpus as follows:
 | Non-requirements/open decisions | historical tombstones and owner rulings, automatic negentropy rejection, no global sync, cancellation boundary, pagination/windowing uncertainty |
 
 The consolidation intentionally removes implementation status, stale test tags, crate/file paths, current symbol names, issue sequencing, and deleted-mechanism internals from the normative body.
-

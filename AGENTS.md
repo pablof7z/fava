@@ -8,15 +8,29 @@ code or compatibility paths from the previous NMP repository.
 
 1. `docs/spec/FULL_NMP_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` owns required behavior.
 2. `docs/spec/ARCHITECTURE.md` owns responsibilities, state, lifecycles, and replaceable boundaries.
-3. `docs/spec/partial-spec-api-semantics.md` refines the Rust query-expression surface and source semantics.
+3. `docs/spec/NMP_TDD_BDD_TESTING_GUIDE.md` owns how behavior is specified and proved.
+4. `docs/spec/NMP_REWRITE_IMPLEMENTATION_PLAN.md` owns delivery sequencing and milestone exit gates.
+5. `docs/spec/partial-spec-api-semantics.md` refines the Rust query-expression surface and source semantics where it does not contradict the four complete authorities above.
 
 When names or illustrative signatures differ, preserve the behavior and
 ownership rule. Record any real contradiction in a focused local issue before
 choosing an implementation.
 
+## Communication
+
+- Be laconic with Pablo: lead with the result, verdict, or decision; use the
+  fewest words the subject permits; end with the immediate next action only
+  when one exists.
+- Do not add preambles, restate the request, append closing summaries, or offer
+  generic follow-up. Use prose unless structure is itself necessary.
+- Brevity never overrides rigor. Preserve actionable distinctions, measured
+  results, uncertainty, and verified evidence; never claim absence without a
+  search that returned empty.
+
 ## Delivery workflow
 
 - One focused local issue, branch, validation set, and commit series per slice.
+- Complete M0 before claiming M1 or later milestones complete; milestone names mean every documented exit gate has passed.
 - Write observable behavior first, then executable evidence, then production code.
 - Confirm new evidence fails before the implementation and under its named deliberate break.
 - Build vertical slices through the public `nmp` API; do not stabilize empty provider frameworks.
@@ -36,6 +50,10 @@ Every change must pass all six gates in proportion to its scope:
 
 ## Rust conventions
 
+- Code files have a 500-line soft limit and an 800-line hard limit. The limits
+  apply only to code, not documentation or other artifacts. Crossing 500 lines
+  requires a concrete cohesion reason; no code file may cross 800 lines.
+
 - Keep the primary workload model to declarative event queries and write intents.
 - Use semantic-owner crates for shared values; do not create a generic common bucket.
 - Keep acquisition scope separate from result provenance authority.
@@ -43,4 +61,3 @@ Every change must pass all six gates in proportion to its scope:
 - Make invalid use unrepresentable or refuse it before opening work.
 - Use exact operation and generation identity for every late completion.
 - No hidden runtime feature flags or silent compatibility behavior.
-

@@ -2,7 +2,7 @@
 
 **Status:** proposed target architecture for the rewrite  
 **Audience:** NMP implementors, provider authors, capability authors, SDK authors, and application developers  
-**Authority:** the behavioral specification defines what NMP must do; this document defines where responsibilities, state, lifecycles, and replaceable interfaces belong.
+**Authority:** `FULL_NMP_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` defines what NMP must do; this document defines where responsibilities, state, lifecycles, and replaceable interfaces belong. `NMP_TDD_BDD_TESTING_GUIDE.md` defines how those claims are specified and proved.
 
 ## Purpose
 
@@ -1301,7 +1301,9 @@ An exact non-empty relay list produces a `RoutePlan` directly. No router session
 
 ### Route preview
 
-Preview opens the same router chain and observes its current plan without accepting a write, signing, creating a receipt, or opening delivery lanes. A caller may keep the preview live to observe route changes or take a one-shot current snapshot.
+Preview evaluates the same ordered router chain over currently available router snapshots without accepting a write, signing, creating a receipt, opening delivery lanes, or starting new router-owned relay acquisition. Unresolved needs remain visible as unresolved.
+
+A caller may take a one-shot snapshot or keep a preview open to observe changes produced by knowledge already being maintained for other owned work. Preview never creates publication or relay-acquisition ownership merely because an application asks where an operation would currently go.
 
 ---
 
@@ -3542,4 +3544,3 @@ For any proposed crate, interface, or state field, answer:
 10. What executable scenario would prove this boundary wrong?
 
 A boundary that cannot answer these questions is not ready to stabilize.
-

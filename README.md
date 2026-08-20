@@ -7,8 +7,13 @@ declarative live queries and durable write intents. Applications assemble
 focused providers at build time while NMP preserves universal event, evidence,
 query, publication, cancellation, and lifecycle semantics.
 
-The rewrite is being built as executable vertical slices. The local-source
-merge foundation is complete in [local issue #1](docs/issues/0001-local-source-merge.md).
+The rewrite is being built as executable vertical milestones. M0's independent
+evidence foundation passes through the pinned macOS local-process profile in
+[local issue #2](docs/issues/0002-m0-evidence-foundation.md). A working M1
+local-source tracer exists in [local issue #1](docs/issues/0001-local-source-merge.md),
+but M1 remains incomplete until all supplied milestone gates pass.
+
+The ordinary downstream acceptance application lives at [apps/canary](apps/canary).
 
 ## Specifications
 

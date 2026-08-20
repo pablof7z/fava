@@ -1,6 +1,6 @@
 # Local source merge vertical slice
 
-**Status:** completed
+**Status:** implemented tracer; milestone M1 incomplete
 **Spec slice:** Architecture Part XIII, Slice 1  
 **Branch:** `rewrite/0001-local-source-merge`
 
@@ -32,6 +32,14 @@ one coherent event view.
 
 - Relay transport, wire frames, subscriptions, automatic routers, signing, durable publication, restart recovery, Swift, and Kotlin are later slices.
 - The five product decisions in the normative specification remain open.
+
+## Reconciliation with the supplied implementation plan
+
+The implementation and named evidence below remain valid for the behaviors
+they claim. The complete M1 milestone is not yet earned: M0 must pass first,
+and M1 still needs stable equivalent-query identity, deterministic
+deletion/expiry semantics, the `local-source-removal` canary, and the declared
+shared semantic corpus across both memory providers.
 
 ## Proof
 
