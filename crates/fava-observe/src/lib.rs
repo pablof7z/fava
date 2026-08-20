@@ -192,7 +192,7 @@ pub enum ObserveError {
     /// One named local source could not establish its initial boundary.
     #[error("{role:?} failed to open: {error}")]
     SourceOpen {
-        /// Semantic source role.
+        /// Query-source role.
         role: SourceKind,
         /// Scoped provider refusal.
         error: QuerySourceError,

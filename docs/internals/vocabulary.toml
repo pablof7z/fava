@@ -85,13 +85,95 @@ symbols = []
 crates = []
 
 [[term]]
-name = "EventBuilder"
+name = "ClientMessage"
 source = "nostr"
 protocol = "NIP-01"
-meaning = "A generic constructor for an unsigned event from author, kind, content, timestamp, and validated tags."
-owner = "fava-write"
+meaning = "A Nostr protocol message sent from a client to a relay."
+owner = "fava-wire"
 symbols = []
 crates = []
+spec_symbols = ["ClientMessage"]
+spec_crates = ["fava-wire"]
+
+[[term]]
+name = "RelayMessage"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "A Nostr protocol message sent from a relay to a client."
+owner = "fava-wire"
+symbols = []
+crates = []
+spec_symbols = ["RelayMessage"]
+
+[[term]]
+name = "ContactList"
+source = "nostr"
+protocol = "NIP-02"
+meaning = "A replaceable kind 3 event describing an author's contacts and relay hints."
+owner = "fava-nip02"
+symbols = []
+crates = []
+spec_crates = ["fava-nip02"]
+
+[[term]]
+name = "BookmarkList"
+source = "nostr"
+protocol = "NIP-51"
+meaning = "A replaceable event carrying an author's public or private bookmarks."
+owner = "fava-bookmarks"
+symbols = []
+crates = []
+spec_crates = ["fava-bookmarks"]
+
+[[term]]
+name = "Group"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A relay-based Nostr group and its protocol events."
+owner = "fava-nip29"
+symbols = []
+crates = []
+spec_crates = ["fava-nip29"]
+
+[[term]]
+name = "RelayList"
+source = "nostr"
+protocol = "NIP-65"
+meaning = "A replaceable kind 10002 event declaring an author's read and write relays."
+owner = "fava-nip65"
+symbols = []
+crates = []
+spec_crates = ["fava-nip65"]
+
+[[term]]
+name = "Repost"
+source = "nostr"
+protocol = "NIP-18"
+meaning = "A Nostr event reposting another Event."
+owner = "fava-nip18"
+symbols = []
+crates = []
+spec_crates = ["fava-nip18"]
+
+[[term]]
+name = "Comment"
+source = "nostr"
+protocol = "NIP-22"
+meaning = "A Nostr comment event with explicit root, parent, and scoped references."
+owner = "fava-nip22"
+symbols = []
+crates = []
+spec_crates = ["fava-nip22"]
+
+[[term]]
+name = "Reaction"
+source = "nostr"
+protocol = "NIP-25"
+meaning = "A Nostr reaction event referring to another Event."
+owner = "fava-nip25"
+symbols = []
+crates = []
+spec_crates = ["fava-nip25"]
 
 # Fava vocabulary. Each term documents why protocol vocabulary alone is not
 # enough.
@@ -105,6 +187,7 @@ nearest_nostr = "none"
 distinction = "Nostr defines protocol messages, not an application's assembled client lifecycle."
 symbols = ["fava::Fava", "fava::FavaBuilder", "fava::BuildError"]
 crates = ["fava"]
+spec_crates = ["fava-ffi", "fava-runtime", "fava-session", "fava-standard"]
 
 [[term]]
 name = "Query"
@@ -124,6 +207,7 @@ symbols = [
     "fava_query::QueryError",
 ]
 crates = ["fava-query"]
+spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
 
 [[term]]
 name = "QuerySource"
@@ -171,6 +255,7 @@ symbols = [
     "fava_query::QuerySnapshot",
 ]
 crates = []
+spec_symbols = ["QueryChange"]
 
 [[term]]
 name = "QueryEvaluator"
@@ -244,6 +329,7 @@ nearest_nostr = "Event"
 distinction = "Nostr defines events; CacheMutation carries the local atomic change an EventCache must commit."
 symbols = ["fava_state::CacheMutation"]
 crates = []
+spec_symbols = ["EventStateDecision"]
 
 [[term]]
 name = "EventCache"
@@ -258,6 +344,7 @@ symbols = [
     "fava_event_cache_memory::MemoryEventCache",
 ]
 crates = ["fava-event-cache", "fava-event-cache-memory"]
+spec_crates = ["fava-event-cache-redb", "fava-event-cache-testkit"]
 
 [[term]]
 name = "Write"
@@ -276,6 +363,8 @@ symbols = [
     "fava_write::InvalidEventValue",
 ]
 crates = ["fava-write"]
+spec_symbols = ["RelayDeliveryOutcome"]
+spec_crates = ["fava-publication"]
 
 [[term]]
 name = "WriteStore"
@@ -291,6 +380,7 @@ symbols = [
     "fava_write_store_memory::MemoryWriteStore",
 ]
 crates = ["fava-write-store", "fava-write-store-memory"]
+spec_crates = ["fava-write-store-redb", "fava-write-store-testkit"]
 
 [[term]]
 name = "WriteIntent"
@@ -301,6 +391,7 @@ nearest_nostr = "EVENT message"
 distinction = "An EVENT message contains a signed event; WriteIntent exists before and throughout Fava's local publication lifecycle."
 symbols = []
 crates = []
+spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
 
 [[term]]
 name = "ReplaceableEventEdit"
@@ -311,3 +402,245 @@ nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
 symbols = []
 crates = []
+spec_symbols = ["ReplaceableEventEdit"]
+
+[[term]]
+name = "UnsignedEvent"
+source = "fava"
+meaning = "A complete Nostr event body and id that lacks only its signature."
+owner = "fava-write"
+nearest_nostr = "Event"
+distinction = "An Event contains a valid signature; an UnsignedEvent is the exact body presented to a signer."
+symbols = []
+crates = []
+spec_symbols = ["UnsignedEvent"]
+
+[[term]]
+name = "EventBuilder"
+source = "fava"
+meaning = "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, and validated Tags."
+owner = "fava-write"
+nearest_nostr = "Event"
+distinction = "Nostr defines Event fields; EventBuilder provides checked construction without interpreting any event kind."
+symbols = []
+crates = []
+spec_symbols = ["EventBuilder"]
+
+[[term]]
+name = "RouteRequest"
+source = "fava"
+meaning = "The query or event facts for which automatic relay destinations are requested."
+owner = "fava-routing"
+nearest_nostr = "RelayUrl"
+distinction = "Nostr identifies relays but does not define client-side relay selection for query or publication work."
+symbols = []
+crates = []
+spec_symbols = ["ReadRouteRequest", "RouteRequest", "WriteRouteRequest"]
+
+[[term]]
+name = "RouteTarget"
+source = "fava"
+meaning = "One author, recipient, referenced event, coordinate, or whole request whose relay coverage is tracked."
+owner = "fava-routing"
+nearest_nostr = "PublicKey, EventId, and Coordinate"
+distinction = "Protocol identifiers name Nostr objects; RouteTarget identifies the object for which a router claims relay coverage."
+symbols = []
+crates = []
+spec_symbols = ["RouteTarget"]
+
+[[term]]
+name = "Router"
+source = "fava"
+meaning = "One independently selectable policy that contributes relay destinations for automatic routing."
+owner = "fava-routing"
+nearest_nostr = "RelayUrl"
+distinction = "Nostr defines relay endpoints but does not define a client's destination-selection policy or its lifecycle."
+symbols = []
+crates = []
+spec_symbols = ["Router", "RouterSession"]
+spec_crates = [
+    "fava-router-app-relays",
+    "fava-router-fallback-relays",
+    "fava-router-hints",
+    "fava-router-outbox",
+    "fava-router-testkit",
+    "fava-routing",
+]
+
+[[term]]
+name = "RoutePlan"
+source = "fava"
+meaning = "The merged current relay destinations, target coverage, unresolved needs, and shortfalls for one RouteRequest."
+owner = "fava-routing"
+nearest_nostr = "RelayUrl"
+distinction = "A relay URL names one endpoint; RoutePlan is Fava's current attributed result after ordered Router contributions."
+symbols = []
+crates = []
+spec_symbols = [
+    "CoverageState",
+    "PlannedRelay",
+    "RouteContribution",
+    "RouteDestination",
+    "RoutePlan",
+    "TargetCoverage",
+]
+
+[[term]]
+name = "SubscriptionPlanner"
+source = "fava"
+meaning = "The replaceable algorithm mapping Query demand for one relay session into equivalent Nostr subscriptions."
+owner = "fava-subscriptions"
+nearest_nostr = "Subscription and Filter"
+distinction = "Nostr defines subscriptions and filters; the planner groups application demand within relay limits while retaining exact attribution."
+symbols = []
+crates = []
+spec_symbols = ["RelayDemand", "SubscriptionPlan", "SubscriptionPlanner"]
+spec_crates = [
+    "fava-subscriptions",
+    "fava-subscriptions-no-grouping",
+    "fava-subscriptions-standard",
+    "fava-subscriptions-testkit",
+]
+
+[[term]]
+name = "Transport"
+source = "fava"
+meaning = "The replaceable owner of relay connections, byte handoff, reconnect generations, and correlated inbound messages."
+owner = "fava-transport"
+nearest_nostr = "client-relay connection"
+distinction = "NIP-01 defines messages over a WebSocket but not Fava's connection lifecycle, bounds, or handoff evidence."
+symbols = []
+crates = []
+spec_symbols = ["HandoffOutcome", "RelaySession", "Transport"]
+spec_crates = [
+    "fava-relay-lab",
+    "fava-transport",
+    "fava-transport-testkit",
+    "fava-transport-websocket",
+]
+
+[[term]]
+name = "Publisher"
+source = "fava"
+meaning = "The replaceable mechanism performing one publication attempt for one exact Event and relay session."
+owner = "fava-publisher"
+nearest_nostr = "EVENT and OK messages"
+distinction = "Nostr defines publication messages; Publisher owns one correlated attempt without choosing retry or destination policy."
+symbols = []
+crates = []
+spec_symbols = ["PublishAttempt", "PublishOutcome", "Publisher"]
+spec_crates = ["fava-publisher", "fava-publisher-nip01", "fava-publisher-testkit"]
+
+[[term]]
+name = "DeliveryPolicy"
+source = "fava"
+meaning = "The replaceable policy deciding whether and when current durable delivery facts authorize another publication attempt."
+owner = "fava-delivery"
+nearest_nostr = "EVENT and OK messages"
+distinction = "Nostr defines request and acknowledgement messages but not client retry scheduling, attempt ceilings, or give-up decisions."
+symbols = []
+crates = []
+spec_symbols = ["DeliveryDecision", "DeliveryFacts", "DeliveryPolicy"]
+spec_crates = ["fava-delivery", "fava-delivery-standard"]
+
+[[term]]
+name = "Signer"
+source = "fava"
+meaning = "A replaceable provider that signs an exact UnsignedEvent for its author."
+owner = "fava-signer"
+nearest_nostr = "Event signature"
+distinction = "Nostr defines signature verification; Signer defines the application-owned signing operation and availability lifecycle."
+symbols = []
+crates = []
+spec_symbols = ["Signer"]
+spec_crates = [
+    "fava-signer",
+    "fava-signer-local",
+    "fava-signer-nip46",
+    "fava-signer-testkit",
+]
+
+[[term]]
+name = "FetchCache"
+source = "fava"
+meaning = "Optional storage for opaque entries whose validity and freshness remain owned by the fetching protocol crate."
+owner = "fava-fetch-cache"
+nearest_nostr = "none"
+distinction = "Nostr event storage does not cover HTTP-fetched NIP-05 or NIP-11 data and must not determine that data's validity."
+symbols = []
+crates = []
+spec_symbols = ["FetchCache"]
+spec_crates = [
+    "fava-fetch-cache",
+    "fava-fetch-cache-memory",
+    "fava-fetch-cache-redb",
+]
+
+[[term]]
+name = "Nip05Resolver"
+source = "fava"
+meaning = "A replaceable provider that resolves and validates one NIP-05 identifier."
+owner = "fava-nip05"
+nearest_nostr = "NIP-05 identifier"
+distinction = "NIP-05 defines the identifier and verification procedure; the resolver owns bounded acquisition and result delivery."
+symbols = []
+crates = []
+spec_symbols = ["Nip05Resolver"]
+spec_crates = ["fava-nip05", "fava-nip05-http"]
+
+[[term]]
+name = "RelayInformationFetcher"
+source = "fava"
+meaning = "A replaceable provider that fetches and validates a relay's NIP-11 information document."
+owner = "fava-nip11"
+nearest_nostr = "NIP-11 relay information document"
+distinction = "NIP-11 defines the document; the fetcher owns bounded acquisition and result delivery."
+symbols = []
+crates = []
+spec_symbols = ["RelayInformationFetcher"]
+spec_crates = ["fava-nip11", "fava-nip11-http"]
+
+[[term]]
+name = "Authentication"
+source = "fava"
+meaning = "The lifecycle of accepting, refusing, or failing one NIP-42 challenge for an exact relay session."
+owner = "fava-auth"
+nearest_nostr = "NIP-42 AUTH"
+distinction = "NIP-42 defines challenge and AUTH messages; Fava owns correlation, application policy, signing, and session-scoped outcomes."
+symbols = []
+crates = []
+spec_crates = ["fava-auth"]
+
+[[term]]
+name = "RelayIngest"
+source = "fava"
+meaning = "Admission, attribution, verification, and ordered cache commit for relay-supplied Events."
+owner = "fava-ingest"
+nearest_nostr = "EVENT message"
+distinction = "An EVENT message carries an Event; RelayIngest decides whether the message belongs to current work and may enter the EventCache."
+symbols = []
+crates = []
+spec_crates = ["fava-ingest"]
+
+[[term]]
+name = "Diagnostics"
+source = "fava"
+meaning = "Bounded current facts and exact shortfall reasons reported by Fava owners."
+owner = "fava-diagnostics"
+nearest_nostr = "NOTICE and CLOSED messages"
+distinction = "Relay messages report relay facts; Diagnostics also reports scoped local source, routing, signing, storage, and resource facts."
+symbols = []
+crates = []
+spec_symbols = ["DiagnosticsSnapshot"]
+spec_crates = ["fava-diagnostics"]
+
+[[term]]
+name = "ParsedContent"
+source = "fava"
+meaning = "Structured values parsed from Nostr event content without rendering or acquisition behavior."
+owner = "fava-content"
+nearest_nostr = "Event content"
+distinction = "Nostr Events carry strings; ParsedContent exposes bounded recognized structure while retaining the original content."
+symbols = []
+crates = []
+spec_crates = ["fava-content"]

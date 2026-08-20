@@ -184,7 +184,7 @@ The facade MAY order actions between owners. Ordering MUST NOT absorb their poli
 
 Every replaceable subsystem MUST expose a public, implementation-neutral contract. Default implementations MUST use the same contract available to external crates and MUST have no privileged bypass.
 
-Provider contracts MUST use semantic values and explicit facts. They MUST NOT expose implementation-specific database handles, runtime internals, or private state from another owner.
+Provider contracts MUST use domain values and explicit facts. They MUST NOT expose implementation-specific database handles, runtime internals, or private state from another owner.
 
 **Acceptance:** each standard provider and at least one deliberately different provider pass the same conformance suite.
 
@@ -253,7 +253,7 @@ The rewrite MUST expose independent contracts for the following semantic respons
 | **Local query evaluator** | indexing/evaluation algorithm and incremental strategy | query language meaning, ordering contract, and source/evidence isolation |
 | **Router** | one read/write routing policy and its own input acquisition | explicit-route bypass, additive contribution identity, and exact route evidence |
 | **Subscription planner** | safe grouping/coalescing and admission strategy | logical query meaning and exact attribution |
-| **Transport** | relay connection implementation and session mechanics | route choice, durable retry, canonical event admission, and receipt truth |
+| **Transport** | relay connection implementation and session mechanics | route choice, durable retry, Nostr event admission, and receipt truth |
 | **Publisher** | execution of one destination-specific publication attempt | retry scheduling, route selection, and durable write ownership |
 | **Delivery policy** | attempt timing, fairness, ceiling, and ambiguity policy | exact transport/publisher facts and receipt identity |
 | **Signer/crypto provider** | key custody and cryptographic execution | event composition, routing, persistence, and publication success |
@@ -284,9 +284,9 @@ Malformed query structure, unsupported nesting, empty combined queries, zero lim
 
 **Acceptance:** malformed derived pubkeys or ids never reach relay filters or crash the engine.
 
-## QUERY-002 — Equivalent queries have stable semantic identity
+## QUERY-002 — Equivalent queries have stable identity
 
-Queries that describe the same logical selection and the same authority/freshness semantics MUST be recognized as equivalent regardless of construction order.
+Queries that describe the same selection, authority, and freshness behavior MUST be recognized as equivalent regardless of construction order.
 
 Equivalent observations MAY share local evaluation, relay connections, and wire subscriptions. Distinct source authority, relay access, freshness, or presentation-relevant evidence MUST NOT be erased merely because the event filters are equal.
 
@@ -332,7 +332,7 @@ The merge MUST:
 
 - deduplicate the same event id;
 - combine relay and local publication evidence;
-- apply canonical replacement/address semantics;
+- apply Nostr replacement and address rules;
 - prefer the current local materialization when it supersedes a cached predecessor;
 - allow the cached predecessor to become visible again when the local materialization is cancelled and still exists in another source;
 - accept admitted live relay occurrences as current query input even when the selected event cache does not retain them; and
@@ -503,7 +503,7 @@ The public windowing API and restart-resume token model remain product decisions
 
 ---
 
-# Part III — Event admission, canonical state, and caches
+# Part III — Event admission, state, and caches
 
 ## EVENT-001 — Relay input is untrusted until admitted
 
@@ -748,7 +748,7 @@ Every accepted materialized event MUST appear immediately in matching open and n
 
 Relay refusal does not delete the local event merely because delivery failed. Delivery evidence changes on the same event record.
 
-Cancellation or semantic supersession retracts/replaces the write-store contribution through the ordinary query update path.
+Cancellation or replacement by a newer current event retracts or replaces the write-store contribution through the ordinary query update path.
 
 **Acceptance:** two matching queries show the accepted event before any relay is contacted, with local publication evidence and no invented relay source.
 
@@ -765,7 +765,7 @@ Rematerialization MUST:
 - keep the same accepted operation and receipt identity;
 - invalidate stale signer and delivery work for the old event generation;
 - never expose a half-applied operation; and
-- remain bounded to the affected semantic coordinate.
+- remain bounded to the affected replaceable-event coordinate.
 
 **Acceptance:** accept an offline follow operation, later ingest a newer contact list with unrelated changes, and verify the local successor preserves both the remote changes and the accepted follow.
 
@@ -963,7 +963,7 @@ The relay echo MUST NOT create a duplicate, erase the receipt, or require rewrit
 
 Acknowledgement, rejection, authentication denial, or give-up changes publication evidence. It does not by itself remove the locally accepted event from matching queries.
 
-A local event is retracted only by cancellation where allowed, semantic supersession, valid deletion, expiration, destructive reset, or a documented local-publication retention policy.
+A local event is retracted only by cancellation where allowed, replacement by a newer current event, valid deletion, expiration, destructive reset, or a documented local-publication retention policy.
 
 **Acceptance:** an event remains in the local query after every destination rejects it, with refusal evidence attached.
 
@@ -997,7 +997,7 @@ A complete event whose NIP-40 expiration is already in the past MUST be refused 
 
 A replaceable-event edit that can produce only an already-expired event likewise cannot become an active publication obligation.
 
-**Acceptance:** submit an already-expired unsigned, pre-signed, and semantic-materialized event and verify zero write-store residue and zero provider work.
+**Acceptance:** submit an already-expired unsigned event, pre-signed event, and event produced from a replaceable-event edit; verify zero write-store residue and zero provider work.
 
 # Part V — Relay planning, transport, authentication, and protocol services
 
@@ -1053,7 +1053,7 @@ Transport owns:
 - exact write-handoff facts; and
 - connection-scoped errors.
 
-Transport MUST NOT decide query meaning, route policy, durable retry, canonical event state, or publication success beyond the facts it directly observes.
+Transport MUST NOT decide query meaning, route policy, durable retry, Nostr event state, or publication success beyond the facts it directly observes.
 
 ## RELAY-006 — Reconnect uses fresh generation identity
 
@@ -1171,9 +1171,9 @@ If a convenience publication operation requires a current account and none exist
 
 A low-level unsigned event already carries its pubkey and does not require current-account resolution.
 
-## ID-004 — Semantic identity inputs are unambiguous
+## ID-004 — Identity inputs are unambiguous
 
-Internal semantic boundaries use raw protocol identity values, not human-facing bech32 text.
+Internal boundaries use raw protocol identity values, not human-facing bech32 text.
 
 An application may decode `npub`, `nprofile`, or other presentation forms at its input boundary. Fava MUST refuse the wrong identity shape rather than silently reinterpret it where a raw pubkey is required.
 

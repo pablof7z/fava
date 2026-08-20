@@ -211,7 +211,7 @@ only_from_relays(...)
     = acquisition scope + result provenance constraint
 ```
 
-The exact source mode is part of the semantic identity of a query. Two otherwise identical queries using different source modes MUST NOT accidentally share evidence or local-result visibility in a way that changes either query's semantics.
+The exact source mode is part of query identity. Two otherwise identical queries using different source modes MUST NOT accidentally share evidence or local-result visibility in a way that changes either query's results.
 
 ---
 
@@ -224,15 +224,15 @@ Conceptually:
 ```rust
 pub struct EventRecord {
     pub event: EventValue,
-    pub evidence: EventEvidence,
+    pub relay_evidence: RelayEvidence,
     pub publication: Option<PublicationEvidence>,
 }
 ```
 
-`EventEvidence` may include facts such as:
+`RelayEvidence` records relays that actually served the event:
 
 ```rust
-pub struct EventEvidence {
+pub struct RelayEvidence {
     pub seen_on: BTreeSet<RelayUrl>,
 }
 ```
@@ -559,7 +559,7 @@ pub fn follows(
 }
 ```
 
-Its value is semantic vocabulary and protocol correctness, not implementation complexity.
+Its value is precise vocabulary and protocol correctness, not implementation complexity.
 
 ### Composing protocol crates
 

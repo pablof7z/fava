@@ -93,7 +93,7 @@ Performance work may alter representation and algorithms. It must not blur owner
 
 - an observable product workload;
 - a phase attribution;
-- a semantic oracle;
+- a behavior oracle;
 - a measured regression budget; and
 - a canary or benchmark mutation that detects a false optimization.
 
@@ -114,7 +114,7 @@ Feature files preserve durable product meaning; they are not an exhaustive test 
 
 The milestones advance six parallel workstreams.
 
-### A. Semantic core
+### A. Event, query, and write rules
 
 - `fava-wire`
 - `fava-state`
@@ -290,7 +290,7 @@ Run the relay with a fresh data directory after the kill. The persistence assert
 
 ---
 
-## M1 — Local semantic state and merged query sources
+## M1 — Local event state and merged query sources
 
 ### Goal
 
@@ -377,7 +377,7 @@ Establish the complete read path against a real relay before automatic routing o
 
 - Explicit relay lists are exact and non-empty.
 - Query opening immediately starts relay work for live freshness.
-- Wire messages are canonical NIP-01 frames.
+- Wire messages are exact NIP-01 messages.
 - Every inbound event is attributed to an accepted subscription and verified before it can affect any source or query.
 - Off-filter events are refused from the query result.
 - EOSE is recorded only from the actual relay frame and scoped to the exact request.
@@ -494,7 +494,7 @@ Introduce automatic read routing as an ordered chain of independently selectable
 - `fava-router-app-relays`
 - `fava-router-fallback-relays`
 - a delayed test router in the routing testkit
-- `RouterServices` using local query and explicit query primitives
+- ordinary local queries and explicitly routed queries used by router implementations
 - `fava-subscriptions-standard`
 - route/session diagnostics
 
@@ -757,7 +757,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 `protocol-crate-n-plus-one`
 
 - Add the second protocol crate to canary assembly.
-- Core crates and `fava` facade require zero semantic edits.
+- Core crates and the `fava` facade require no changes to their owned behavior.
 
 ### Exit gates
 
@@ -1043,7 +1043,7 @@ Ship selected, ordinary external artifacts and prove behavioral equivalence acro
 
 ### Canary relationship
 
-The Rust canary is the semantic reference application. Native capstones reproduce selected scenario scripts through their public SDK idioms; they do not call the Rust canary internally.
+The Rust canary is the reference application for behavior. Native capstones reproduce selected scenario scripts through their public SDK idioms; they do not call the Rust canary internally.
 
 Required parity subset:
 
@@ -1134,7 +1134,7 @@ Performance budgets become release gates only after representative behavior exis
 - threads/tasks/file descriptors;
 - RSS/native heap;
 - wire bytes and request count; and
-- write amplification by semantic role.
+- write amplification by storage responsibility.
 
 Do not optimize away evidence or lifecycle correctness to hit a number.
 

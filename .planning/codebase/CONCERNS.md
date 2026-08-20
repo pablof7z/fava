@@ -40,17 +40,17 @@ The checkout contains the completed M0 evidence lab and an explicitly incomplete
 
 **Bazel and Cargo are not one validation surface:**
 
-- Issue: `.bazelrc` declares `bazel test //...` authoritative, but only `crates/fava:local_source_merge` and `crates/fava-query-standard:source_merge` are Bazel test targets.
+- Issue: `.bazelrc` declares `bazel test //...` authoritative, but only `crates/fava:local_source_merge`, `crates/fava-query-standard:source_merge`, and `crates/fava-query:query_identity` are Bazel test targets.
 - Files: `.bazelrc`, `crates/*/BUILD.bazel`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`
 - Impact: A green authoritative command omits cache atomicity, observation lifecycle, coordinate semantics, canary registry, and external-provider tests.
 - Fix approach: Add Bazel unit/external-workspace targets, or define one checked-in pass command that invokes Bazel plus the canary and falsifier Cargo workspaces.
 
 **Query module is at the file-size threshold:**
 
-- Issue: The 498-line file combines syntax, policy, source lifecycle, result/evidence values, evaluator contract, and errors while M1 identity and later algebra remain absent.
+- Issue: The 500-line file combines syntax, policy, source lifecycle, result/evidence values, evaluator contract, and errors while later query algebra remains absent.
 - Files: `crates/fava-query/src/lib.rs`, `AGENTS.md`, `docs/spec/ARCHITECTURE.md`
 - Impact: Adding specified behavior in place crosses the 500-line soft limit and weakens ownership-sensitive review.
-- Fix approach: Split query value/canonicalization, source contracts, result/evidence, and evaluator contract under `crates/fava-query/src/`.
+- Fix approach: Split query construction, source contracts, result/evidence, and evaluator contract under `crates/fava-query/src/` before adding more behavior.
 
 ## Known Bugs
 
@@ -62,13 +62,13 @@ The checkout contains the completed M0 evidence lab and an explicitly incomplete
 - Workaround: Avoid equal timestamps; there is no correct workaround for received ties.
 - Fix approach: Separate presentation ordering from winner ordering, choose the lower ID on ties, and add a shared tie corpus. Protocol reference: [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md).
 
-**Access-context isolation is not enforced:**
+**Relay-access isolation is not enforced:**
 
-- Symptoms: `EventQuery.access` is in query identity, but `StandardQueryEvaluator` ignores it. `RelayEvidence::includes_any_relay` matches URL only and records expose observations from every context.
+- Symptoms: `Query` includes `RelayAccess` in its identity, but `StandardQueryEvaluator` ignores it. `RelayEvidence::includes_any_relay` matches URL only and records expose observations from every relay access.
 - Files: `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-state/src/lib.rs`
-- Trigger: Cache evidence under context A, then run `only_from_relays` for the same URL under context B; A qualifies and is exposed.
-- Workaround: Use separate cache instances per access context; the API does not enforce this.
-- Fix approach: Filter/partition by exact `RelaySessionKey`, enforce query context during authority matching, and add cross-context negative tests.
+- Trigger: Cache evidence under relay access A, then run `only_from_relays` for the same URL under relay access B; A qualifies and is exposed.
+- Workaround: Use separate cache instances per relay access; the API does not enforce this.
+- Fix approach: Filter or partition by exact `RelaySessionKey`, enforce query relay access during authority matching, and add cross-access negative tests.
 
 **Duplicate local acceptance can poison query evaluation:**
 
@@ -317,7 +317,7 @@ The checkout contains the completed M0 evidence lab and an explicitly incomplete
 
 **M2-M11 are future work, not current regressions:**
 
-- Problem: Relay ingest/transport, planning/routing, durable publication/recovery, capabilities, auth/hostile limits, persistent profiles, provider qualification, and Swift/Kotlin are absent.
+- Problem: Relay ingest/transport, planning/routing, durable publication/recovery, protocol crates, auth/hostile limits, persistent profiles, provider qualification, and Swift/Kotlin are absent.
 - Blocks: M2-M11 and release only; current docs do not claim them complete.
 - Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/spec/ARCHITECTURE.md`, `README.md`, `Cargo.toml`
 
@@ -391,7 +391,3 @@ The checkout contains the completed M0 evidence lab and an explicitly incomplete
 - Files: `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`
 - Risk: Count-bounded APIs exceed memory/latency budgets or starve work.
 - Priority: Medium
-
----
-
-*Concerns audit: 2026-08-20*

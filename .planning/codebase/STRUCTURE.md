@@ -47,7 +47,7 @@ Product structure is rooted by the main workspace members in `Cargo.toml`, with 
 
 **`crates/`:**
 - Purpose: Holds the implemented reusable Fava library slice and its neutral contracts/providers.
-- Contains: One crate per semantic owner, provider contract, implementation, lifecycle owner, or facade listed in `Cargo.toml`.
+- Contains: One crate per value owner, provider contract, implementation, lifecycle owner, or facade listed in `Cargo.toml`.
 - Key files: `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`.
 
 **`crates/fava-state/`:**
@@ -185,16 +185,16 @@ Product structure is rooted by the main workspace members in `Cargo.toml`, with 
 ## Where to Add New Code
 
 **New Vertical Feature:**
-- Primary code: Add behavior at its single semantic owner under the existing `crates/fava-*/src/` path, or add the target owner crate named by `docs/spec/ARCHITECTURE.md` only when its vertical slice begins in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
+- Primary code: Add behavior at its single owner under the existing `crates/fava-*/src/` path, or add the target owner crate named by `docs/spec/ARCHITECTURE.md` only when its vertical slice begins in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
 - Tests: Put the first executable proof beside the owner (`src/lib.rs` under `#[cfg(test)]` or `tests/*.rs`), add public composition evidence under `crates/fava/tests/` only when it proves another boundary, and update app-visible behavior under `features/` according to `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
 - Status/evidence: Record focused implementation status and deliberate-break results in a new numbered file under `docs/issues/`; keep normative meaning in the owning file under `docs/spec/`.
 
-**New Semantic Value or Rule:**
-- Implementation: Extend the semantic owner, not a generic common crate: event-state rules in `crates/fava-state/src/`, event/write/receipt values in `crates/fava-write/src/`, and query/source/result meaning in `crates/fava-query/src/`.
+**New Domain Value or Rule:**
+- Implementation: Extend the owner, not a generic common crate: event-state rules in `crates/fava-state/src/`, event/write/receipt values in `crates/fava-write/src/`, and query/source/result meaning in `crates/fava-query/src/`.
 - Tests: Add pure/property/model evidence under the same crate or its `tests/` directory, following placement guidance in `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
 
 **New Provider Boundary:**
-- Contract: Create or extend one neutral `crates/fava-<role>/` contract using semantic values from their owners, following existing patterns in `crates/fava-event-cache/` and `crates/fava-write-store/`.
+- Contract: Create or extend one neutral `crates/fava-<role>/` contract using domain values from their owners, following existing patterns in `crates/fava-event-cache/` and `crates/fava-write-store/`.
 - Implementation: Put each concrete algorithm/backend in its own `crates/fava-<role>-<implementation>/`, following `crates/fava-event-cache-memory/` and `crates/fava-write-store-memory/`.
 - Falsifier: Add a meaningfully different provider outside the main workspace under `falsifiers/<provider-proof>/`, following `falsifiers/external-null-cache/`; do not stabilize a contract from one implementation alone, per `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
 - Assembly: Add path/version aliases and a workspace member in root `Cargo.toml`; add concrete providers to `crates/fava/Cargo.toml` only when intentionally required by facade code or test-only dev dependencies.
@@ -218,7 +218,7 @@ Product structure is rooted by the main workspace members in `Cargo.toml`, with 
 - Behavior: Add/update the owning scenario under `features/` and link its exact executable evidence as prescribed by `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
 
 **Utilities:**
-- Shared semantic helpers: Keep them with the semantic owner in `crates/fava-state/src/`, `crates/fava-write/src/`, or `crates/fava-query/src/`; do not create a generic `common` bucket, per `docs/spec/ARCHITECTURE.md`.
+- Shared domain helpers: Keep them with the owner in `crates/fava-state/src/`, `crates/fava-write/src/`, or `crates/fava-query/src/`; do not create a generic `common` bucket, per `docs/spec/ARCHITECTURE.md`.
 - Canary-only helpers: Keep them within focused modules under `apps/canary/src/`, as demonstrated by `apps/canary/src/artifacts.rs` and `apps/canary/src/wire.rs`.
 
 ## Special Directories
@@ -257,7 +257,3 @@ Product structure is rooted by the main workspace members in `Cargo.toml`, with 
 - Purpose: Local agent/GSD runtime material and worktrees, not Fava product architecture.
 - Generated: Locally installed or tool-managed; product code remains under `crates/`, `apps/`, `falsifiers/`, `features/`, and `docs/`.
 - Committed: Not part of tracked product source in the current checkout; do not place Fava implementation code in `.codex/`, `.pi/`, or `.claude/`.
-
----
-
-*Structure analysis: 2026-08-20*

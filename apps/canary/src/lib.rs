@@ -108,7 +108,7 @@ struct ScenarioRegistry {
     scenarios: Vec<Scenario>,
 }
 
-/// Reads the single canonical scenario registry embedded in this build.
+/// Reads the single scenario registry embedded in this build.
 ///
 /// # Errors
 ///

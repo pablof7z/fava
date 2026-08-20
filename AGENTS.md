@@ -1,8 +1,8 @@
 # Fava rewrite repository rules
 
-This repository is a clean-room implementation of the Fava rewrite. The source
-documents under `docs/spec/` are authoritative. Do not copy implementation
-code or compatibility paths from the previous NMP repository.
+This repository is a clean-room implementation of Fava. The source documents
+under `docs/spec/` are authoritative. Do not copy outside implementation code
+or add compatibility paths.
 
 ## Authority
 
@@ -42,7 +42,7 @@ choosing an implementation.
 Every change must pass all six gates in proportion to its scope:
 
 1. **Ownership:** one authority for every mutable fact and lifecycle.
-2. **Dependency direction:** semantic values -> neutral contracts -> providers; universal owners use contracts, not standard implementations.
+2. **Dependency direction:** domain values -> neutral contracts -> providers; universal owners use contracts, not standard implementations.
 3. **Replaceability:** defaults have no private bypass and a competing implementation can use the public contract.
 4. **Failure isolation:** blocking, failure, panic, cancellation, and stale completions remain scoped and attributable.
 5. **Boundedness:** externally influenced inputs, outputs, queues, observations, and retained evidence have explicit bounds or typed refusal/shortfall.
@@ -50,7 +50,7 @@ Every change must pass all six gates in proportion to its scope:
 
 ## Architectural vocabulary
 
-- Architectural vocabulary is closed by default. `docs/internals/vocabulary.toml` is the source of truth for concepts, public Rust symbols, and crate names.
+- Architectural vocabulary is closed by default. `docs/internals/vocabulary.toml` is the source of truth for concepts, public Rust symbols, specified public Rust symbols, and crate names.
 - Prefer established Nostr vocabulary whenever it precisely names the concept. A Fava term must identify the nearest Nostr concept and the exact Fava-owned distinction.
 - A new crate, public or cross-crate nominal type, provider contract, persisted entity, configuration concept, or lifecycle owner is a vocabulary change.
 - A synonym, wrapper, alternate representation, or adjective-qualified variant of an existing noun is also a vocabulary change.
@@ -66,7 +66,7 @@ Every change must pass all six gates in proportion to its scope:
   requires a concrete cohesion reason; no code file may cross 800 lines.
 
 - Keep the primary workload model to declarative event queries and write intents.
-- Use semantic-owner crates for shared values; do not create a generic common bucket.
+- Keep shared values in the crate that owns their meaning; do not create a generic common bucket.
 - Keep acquisition scope separate from result provenance authority.
 - Never copy unpublished local events into the event cache; the write store is an independent query source.
 - Make invalid use unrepresentable or refuse it before opening work.

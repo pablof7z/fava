@@ -151,21 +151,14 @@ impl CachedEvent {
 pub enum EventCoordinate {
     /// One immutable ordinary event.
     Event(EventId),
-    /// Latest event for one author and regular replaceable kind.
+    /// Latest event for one author and replaceable coordinate.
     Replaceable {
         /// Event author.
         author: PublicKey,
         /// Replaceable event kind.
         kind: Kind,
-    },
-    /// Latest event for one author, addressable replaceable kind, and `d` identifier.
-    Addressable {
-        /// Event author.
-        author: PublicKey,
-        /// Addressable event kind.
-        kind: Kind,
-        /// First `d` tag value, or the empty identifier when absent.
-        identifier: String,
+        /// First `d` tag value for an addressable coordinate; otherwise absent.
+        identifier: Option<String>,
     },
 }
 
@@ -187,13 +180,17 @@ pub fn event_coordinate(
                     .then(|| values.get(1).cloned().unwrap_or_default())
             })
             .unwrap_or_default();
-        EventCoordinate::Addressable {
+        EventCoordinate::Replaceable {
             author,
             kind,
-            identifier,
+            identifier: Some(identifier),
         }
     } else if kind.is_replaceable() {
-        EventCoordinate::Replaceable { author, kind }
+        EventCoordinate::Replaceable {
+            author,
+            kind,
+            identifier: None,
+        }
     } else {
         EventCoordinate::Event(id)
     }
@@ -219,7 +216,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn addressable_coordinate_uses_first_identifier() {
+    fn replaceable_coordinate_includes_addressable_identifier() {
         let keys = Keys::generate();
         let event = EventBuilder::new(Kind::from_u16(30_023), "article")
             .tags([Tag::identifier("first"), Tag::identifier("second")])
@@ -228,10 +225,10 @@ mod tests {
 
         assert_eq!(
             coordinate_for_event(&event),
-            EventCoordinate::Addressable {
+            EventCoordinate::Replaceable {
                 author: keys.public_key(),
                 kind: Kind::from_u16(30_023),
-                identifier: "first".to_owned(),
+                identifier: Some("first".to_owned()),
             }
         );
     }

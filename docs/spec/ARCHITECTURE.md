@@ -55,7 +55,7 @@ let engine = Fava::builder()
         Box::new(FallbackRelayRouter::new(fallback_relays)),
     ])
     .subscription_planner(NoGroupingPlanner::new())
-    .transport(CompanyRelayTransport::new(...))
+    .transport(CompanyTransport::new(...))
     .publisher(GatewayPublisher::new(...))
     .delivery_policy(CompanyDeliveryPolicy::new(...))
     .build()?;
@@ -63,9 +63,9 @@ let engine = Fava::builder()
 
 The exact Rust mechanism may use generics, trait objects, generated assembly code, or a combination. The architectural property is that the selected set is fixed for the engine instance and built into the application artifact. Swift and Kotlin products compile one selected assembly into their native library.
 
-### One owner per semantic role
+### One owner per responsibility
 
-Fava distinguishes semantic roles even when one physical implementation serves several of them.
+Fava distinguishes responsibilities even when one physical implementation serves several of them.
 
 - The **event cache** owns cached relay-observed event state.
 - The **write store** owns accepted local write obligations, current materializations, receipts, routes, and delivery facts.
@@ -75,7 +75,7 @@ Fava distinguishes semantic roles even when one physical implementation serves s
 - The **publication owner** owns one accepted write lifecycle.
 - The **transport** owns relay sessions and byte handoff.
 
-There may be several physical databases, or one physical database exposed through several semantic provider types. There is one authority for each semantic role.
+There may be several physical databases, or one physical database exposed through several provider types. There is one authority for each responsibility.
 
 ### Contracts and implementations are separate crates
 
@@ -98,7 +98,7 @@ fava-routing
 
 The standard implementation uses the same interface available to an external crate. Universal owners depend on the contract, not on the standard implementation.
 
-### Types live with their semantic owner
+### Types live with their owner
 
 Shared types are exported by the crate that defines their meaning:
 
@@ -109,7 +109,7 @@ Shared types are exported by the crate that defines their meaning:
 - route requests, contributions, plans, and route evidence live in `fava-routing`;
 - signer requests and outcomes live in `fava-signer`.
 
-A type used by several crates still has one semantic owner. Other crates depend on that owner rather than moving the type into a common bucket.
+A type used by several crates still has one owner. Other crates depend on that owner rather than moving the type into a common bucket.
 
 ### Primitive and higher-layer crates
 
@@ -255,28 +255,28 @@ Explicit routes bypass this chain and produce an exact route plan directly.
 
 | Family | Crates | Purpose |
 |---|---|---|
-| Pure semantics | `fava-wire`, `fava-state`, `fava-query`, `fava-write` | Stable values, contracts, and deterministic universal rules |
-| Storage contracts | `fava-event-cache`, `fava-write-store`, `fava-fetch-cache` | One contract per semantic storage role |
+| Protocol and domain rules | `fava-wire`, `fava-state`, `fava-query`, `fava-write` | Stable values, contracts, and deterministic universal rules |
+| Storage contracts | `fava-event-cache`, `fava-write-store`, `fava-fetch-cache` | One contract per storage responsibility |
 | Routing | `fava-routing` plus router implementation crates | Ordered asynchronous relay-plan composition |
 | Relay execution | `fava-subscriptions`, `fava-transport`, `fava-publisher`, `fava-delivery` | Group demand, move bytes, perform attempts, schedule retries |
 | Identity | `fava-signer`, signer implementation crates, `fava-session`, `fava-auth` | Account, signing, crypto, and relay-access lifecycles |
 | Protocol services | `fava-nip11`, `fava-nip05` and later service crates | Non-event protocol acquisition and interpretation |
 | Protocol crates | `fava-nip02`, `fava-nip29`, `fava-bookmarks`, etc. | Event-kind meaning, typed queries, event construction, and replaceable-event edits |
-| Universal owners | `fava-ingest`, `fava-observe`, `fava-publication`, `fava-diagnostics`, `fava-runtime` | Engine-instance lifecycles and cross-subsystem ordering |
+| Universal owners | `fava-ingest`, `fava-observe`, `fava-publication`, `fava-diagnostics`, `fava-runtime` | Fava-instance lifecycles and cross-subsystem ordering |
 | Product assembly | `fava`, `fava-standard`, `fava-ffi`, Swift/Kotlin packages | Public facade, default profile, and platform artifacts |
 
-# Part I — Pure semantic crates
+# Part I — Protocol and domain-rule crates
 
 ## `fava-wire`
 
-**Responsibility:** canonical Nostr relay message encoding and decoding.
+**Responsibility:** Nostr relay message encoding and decoding.
 
 ### Public contract
 
 Illustrative shape:
 
 ```rust
-pub enum ClientFrame {
+pub enum ClientMessage {
     Req {
         subscription: SubscriptionId,
         filters: Vec<Filter>,
@@ -288,7 +288,7 @@ pub enum ClientFrame {
     Auth(Event),
 }
 
-pub enum RelayFrame {
+pub enum RelayMessage {
     Event {
         subscription: SubscriptionId,
         event: Event,
@@ -312,20 +312,20 @@ pub enum RelayFrame {
 }
 
 pub fn decode_relay_frame(bytes: &[u8])
-    -> Result<RelayFrame, WireError>;
+    -> Result<RelayMessage, WireError>;
 
-pub fn encode_client_frame(frame: &ClientFrame)
+pub fn encode_client_message(message: &ClientMessage)
     -> Result<Bytes, WireError>;
 
-pub fn encoded_len(frame: &ClientFrame)
+pub fn encoded_len(message: &ClientMessage)
     -> Result<usize, WireError>;
 ```
 
 ### Owned meaning
 
 - exact NIP-01 message shapes;
-- canonical client-frame serialization;
-- relay-frame parsing;
+- exact client-message serialization;
+- relay-message parsing;
 - typed malformed-frame errors;
 - exact byte length used for relay-advertised message limits;
 - bounded preservation of relay-provided message text.
@@ -380,7 +380,7 @@ pub enum CacheMutation {
     RecordTombstone(Tombstone),
 }
 
-pub struct StateDecision {
+pub struct EventStateDecision {
     pub mutations: Vec<CacheMutation>,
     pub affected: AffectedEventState,
 }
@@ -392,12 +392,12 @@ pub struct StateDecision {
 pub fn admit_observation(
     current: &StateSlice,
     event: VerifiedRelayEvent,
-) -> Result<StateDecision, StateError>;
+) -> Result<EventStateDecision, StateError>;
 
 pub fn apply_expiration(
     current: &StateSlice,
     now: Timestamp,
-) -> StateDecision;
+) -> EventStateDecision;
 
 pub fn select_replaceable_winner<'a>(
     candidates: impl IntoIterator<Item = &'a Event>,
@@ -408,7 +408,7 @@ pub fn select_replaceable_winner<'a>(
 
 - event-id deduplication;
 - relay-evidence merge;
-- ordinary, replaceable, and addressable event identity;
+- ordinary and replaceable event identity, including addressable coordinates;
 - deterministic winner selection;
 - NIP-09 deletion authorization and tombstones;
 - NIP-40 expiration consequences;
@@ -431,7 +431,7 @@ fava-event-cache commits the batch atomically
 CommittedCacheChange is published
 ```
 
-The engine instance has one serialized canonical event-state writer. This allows a pure read/decide/commit boundary without requiring cache implementations to duplicate Nostr semantics.
+The Fava instance has one serialized event-state writer. This allows a pure read/decide/commit boundary without requiring cache implementations to duplicate Nostr rules.
 
 ---
 
@@ -451,17 +451,13 @@ pub struct UnsignedEvent {
     pub content: String,
 }
 
-pub struct SignedEvent {
-    pub event: Event,
-}
-
 pub enum EventValue {
     Unsigned(UnsignedEvent),
     Signed(Event),
 }
 ```
 
-`UnsignedEvent.id` is computed from the unsigned event body. A signature converts an exact `UnsignedEvent` into a `SignedEvent` without changing its body, id, or pubkey.
+`UnsignedEvent.id` is computed from the unsigned event body. A signature converts an exact `UnsignedEvent` into an `Event` without changing its body, id, or pubkey.
 
 ### Event construction
 
@@ -488,7 +484,7 @@ builder rather than constructing another signing or publication path.
 pub enum WritePayload {
     Event(UnsignedEvent),
     Edit(ReplaceableEventEdit),
-    Presigned(SignedEvent),
+    Presigned(Event),
 }
 
 pub enum WriteRouting {
@@ -509,7 +505,7 @@ pub struct WriteId(/* opaque */);
 
 ```rust
 pub enum SignatureState {
-    NotMaterialized,
+    AwaitingEvent,
     Unsigned,
     Signing,
     Signed,
@@ -537,7 +533,7 @@ pub struct PublicationEvidence {
 
 - one event-construction primitive;
 - unsigned and signed event identity;
-- raw, semantic, and pre-signed write payloads;
+- unsigned events, replaceable-event edits, and pre-signed events;
 - automatic and explicit routing values;
 - stable write and receipt identities;
 - exact delivery-fact vocabulary;
@@ -555,12 +551,7 @@ Durable queues, signer registries, routing algorithms, retry scheduling, and tra
 
 ```rust
 pub struct Query {
-    pub selection: Selection,
-    pub routing: QueryRouting,
-    pub access: RelayAccess,
-    pub freshness: Freshness,
-    pub acquisition: AcquisitionPolicy,
-    pub ordering: Ordering,
+    /* private fields */
 }
 
 pub enum QueryRouting {
@@ -581,14 +572,24 @@ pub enum Selection {
 
 impl Query {
     pub fn events() -> Query;
-    pub fn from_relays(self, relays: NonEmptyVec<RelayUrl>) -> Query;
-    pub fn only_from_relays(self, relays: NonEmptyVec<RelayUrl>) -> Query;
+    pub fn from_relays(
+        self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Query, QueryError>;
+    pub fn only_from_relays(
+        self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Query, QueryError>;
+    pub fn union(
+        queries: impl IntoIterator<Item = Query>,
+    ) -> Result<Query, QueryError>;
 }
 ```
 
-Every `Query` is valid. Construction rejects invalid inputs, and equality and
-hashing give structurally equivalent demand the same identity while retaining
-source, access, freshness, and acquisition distinctions.
+Every `Query` is valid. Construction rejects invalid inputs. Equality and
+hashing give queries that mean the same thing the same identity, regardless of
+insignificant construction order, while retaining source, access, freshness,
+and acquisition distinctions.
 
 ### Query-source contract
 
@@ -641,7 +642,7 @@ pub trait QueryEvaluator: Send + Sync {
 }
 ```
 
-An evaluator owns matching, derived-selection evaluation, cross-source merge, ordering, and whole-query limits. A source implementation owns efficient access to its own retained facts. `fava-query-standard` provides the reference evaluator and semantic oracle used by source/provider conformance suites.
+An evaluator owns matching, derived-selection evaluation, cross-source merge, ordering, and whole-query limits. A source implementation owns efficient access to its own retained facts. `fava-query-standard` provides the reference evaluator and behavior oracle used by source/provider conformance suites.
 
 ### Source contributions
 
@@ -1185,7 +1186,6 @@ pub trait Router: Send + Sync {
         &self,
         request: RouteRequest,
         upstream: UpstreamRouteSignal,
-        services: RouterServices,
     ) -> Result<Box<dyn RouterSession>, RouterError>;
 }
 
@@ -1271,17 +1271,10 @@ A caller may take a one-shot snapshot or keep a preview open to observe changes 
 
 ---
 
-## `RouterServices`
+## Router input queries
 
-Routers may acquire algorithm-specific inputs through narrow Fava services:
-
-```rust
-pub struct RouterServices {
-    pub local_queries: LocalQueryService,
-    pub explicit_queries: ExplicitQueryService,
-    pub clock: RouterClock,
-}
-```
+Router implementations may acquire algorithm-specific inputs through ordinary
+Fava query APIs supplied when the router is constructed.
 
 ### Local query service
 
@@ -1471,12 +1464,12 @@ pub trait SubscriptionPlanner: Send + Sync {
     fn plan(
         &self,
         relay: &RelaySessionKey,
-        demand: &[LogicalSubscription],
+        demand: &[RelayDemand],
         constraints: &RelayReadConstraints,
     ) -> Result<SubscriptionPlan, SubscriptionPlanError>;
 }
 
-pub struct LogicalSubscription {
+pub struct RelayDemand {
     pub owner: ObservationId,
     pub branch: QueryBranchId,
     pub filter: Filter,
@@ -1546,7 +1539,7 @@ A custom planner may choose one wire subscription per logical demand. Both imple
 ### Contract
 
 ```rust
-pub trait RelayTransport: Send + Sync {
+pub trait Transport: Send + Sync {
     fn open_session(
         &self,
         request: OpenRelaySession,
@@ -1562,7 +1555,7 @@ pub trait RelaySession: Send {
         correlation: HandoffCorrelation,
     ) -> HandoffFuture;
 
-    fn frames(&self) -> Box<dyn RelayFrameStream>;
+    fn messages(&self) -> Box<dyn RelayMessageStream>;
 
     fn close(&self) -> CloseFuture;
 }
@@ -1600,7 +1593,7 @@ Every inbound frame and handoff completion carries exact session generation and 
 
 ## `fava-transport-websocket`
 
-**Responsibility:** standard WebSocket implementation of `RelayTransport`.
+**Responsibility:** standard WebSocket implementation of `Transport`.
 
 It owns the ordinary Nostr relay connection lifecycle:
 
@@ -1629,7 +1622,7 @@ pub trait Publisher: Send + Sync {
     fn publish(
         &self,
         attempt: PublishAttempt,
-        transport: &dyn RelayTransportAccess,
+        transport: &dyn TransportAccess,
     ) -> PublishFuture;
 }
 
@@ -1674,7 +1667,7 @@ A publication outcome is valid only for the exact write, materialization generat
 The implementation:
 
 1. obtains the exact relay session;
-2. encodes `ClientFrame::Event` with `fava-wire`;
+2. encodes `ClientMessage::Event` with `fava-wire`;
 3. hands the bytes to transport with attempt correlation;
 4. waits for the matching `OK` or a terminal session fact;
 5. preserves the relay's response message within bounds; and
@@ -1694,11 +1687,11 @@ It performs one attempt. It does not schedule its own repeated attempts.
 pub trait DeliveryPolicy: Send + Sync {
     fn decide(
         &self,
-        context: DeliveryContext<'_>,
+        facts: DeliveryFacts<'_>,
     ) -> DeliveryDecision;
 }
 
-pub struct DeliveryContext<'a> {
+pub struct DeliveryFacts<'a> {
     pub write: &'a CurrentWrite,
     pub lane: &'a DeliveryLane,
     pub route_plan: &'a RoutePlan,
@@ -1808,7 +1801,7 @@ It owns:
 Illustrative contract:
 
 ```rust
-pub trait RelayInformationService: Send + Sync {
+pub trait RelayInformationFetcher: Send + Sync {
     async fn get(
         &self,
         relay: RelayUrl,
@@ -1896,7 +1889,7 @@ A new protocol crate is selected by the application profile and contributes thro
 
 ### Inputs
 
-- decoded `RelayFrame` values;
+- decoded `RelayMessage` values;
 - exact relay-session and subscription attribution;
 - current subscription attribution plan;
 - event-cache state slices;
@@ -1909,7 +1902,7 @@ A new protocol crate is selected by the application profile and contributes thro
 3. verify event id and Schnorr signature;
 4. verify the event matches at least one attributed logical filter;
 5. construct `VerifiedRelayEvent`;
-6. ask `fava-state` for the canonical cache decision;
+6. ask `fava-state` for the cache decision;
 7. commit the decision through `EventCache`;
 8. emit `CommittedCacheChange` and per-relay evidence;
 9. emit typed rejected-input diagnostics when validation fails.
@@ -2111,7 +2104,7 @@ Authentication identity is explicit in the route/session configuration. It is in
 
 ## `fava-diagnostics`
 
-**Responsibility:** expose bounded, current, typed facts from Fava owners without becoming a second policy engine.
+**Responsibility:** expose bounded, current, typed facts from Fava owners without making policy decisions.
 
 ### Inputs
 
@@ -2167,15 +2160,15 @@ Universal owners decide what work is authorized. The runtime performs the work a
 
 ### Provider isolation
 
-Potentially blocking or application-supplied provider calls run outside owner locks and store transactions. A stalled provider has bounded influence and cannot block unrelated owner progress or engine shutdown indefinitely.
+Potentially blocking or application-supplied provider calls run outside owner locks and store transactions. A stalled provider has bounded influence and cannot block unrelated owner progress or Fava shutdown indefinitely.
 
 ---
 
 ## `fava`
 
-**Responsibility:** provide the thin Rust application facade, engine builder, lifecycle, and ordering between universal owners.
+**Responsibility:** provide the thin Rust application facade, builder, lifecycle, and ordering between universal owners.
 
-The facade owns engine-instance identity, top-level command admission, startup
+The facade owns Fava-instance identity, top-level command admission, startup
 and shutdown order, and handles to the selected owners and providers. It owns
 no event-kind dispatch, routing policy, query evaluation, retry algorithm,
 socket state, or storage schema.
@@ -2515,7 +2508,7 @@ No existing acknowledged lane is resent merely because another destination was a
 ```text
 transport receives bytes
         ↓
-fava-wire decodes RelayFrame
+fava-wire decodes RelayMessage
         ↓
 fava-ingest verifies exact session/subscription attribution
         ↓
@@ -2533,7 +2526,7 @@ fava-observe updates affected query-source projections
         ↓
 routers observing explicit/local queries may update contributions
         ↓
-publication owners may recognize relay echo or newer semantic source
+publication owners may recognize relay echo or a newer relevant source event
         ↓
 diagnostics update
 ```
@@ -2569,7 +2562,7 @@ application receives Accepted + ReceiptId
         ↓
 known destinations become lanes immediately
         ↓
-exact SignedEvent is verified and installed in WriteStore
+exact Event is verified and installed in WriteStore
         ↓
 delivery policy schedules attempts for lanes whose route and signature are ready
         ↓
@@ -2766,9 +2759,9 @@ Each resource is closed by its owner. The facade owns shutdown ordering.
 | One router's inputs and contribution | that router instance | `fava-routing` session |
 | Merged automatic route plan | `fava-routing` session | observe/publication owner |
 | Write route revision admitted for delivery | selected `WriteStore` | publication owner, delivery policy |
-| Logical query demand for one relay | `fava-observe` | subscription planner |
+| Query demand for one relay | `fava-observe` | subscription planner |
 | Wire subscription plan | `fava-observe` owns desired plan; planner computes it | transport executes it |
-| Physical relay connection generation | selected `Transport` | auth, ingest, publisher, observe |
+| Relay connection generation | selected `Transport` | auth, ingest, publisher, observe |
 | NIP-42 challenge lifecycle | `fava-auth` | query/publication owners |
 | Signer registration and availability | `fava-session` plus signer provider | publication/auth owners |
 | One signing operation | publication/auth owner | runtime executes provider call |
@@ -2834,13 +2827,13 @@ The runtime transports messages between these owners. It does not replace their 
 The target direction is:
 
 ```text
-semantic values and pure rules
+domain values and pure rules
             ↑
 neutral contracts
             ↑
 provider implementations
 
-semantic values + contracts
+domain values + contracts
             ↑
 universal lifecycle owners
             ↑
@@ -2877,9 +2870,9 @@ concrete transport/publisher/delivery implementations
 
 ## Router direction
 
-Router implementations depend on `fava-routing` and the semantic values they understand. Algorithm-specific acquisition uses `RouterServices`; it does not import concrete transport or storage implementations.
+Router implementations depend on `fava-routing` and the domain values they understand. Algorithm-specific acquisition uses ordinary local or explicitly routed queries; it does not import concrete transport or storage implementations.
 
-## Physical storage direction
+## Storage direction
 
 A physical backend package may support several semantic provider adapters, but each adapter implements one named contract. Sharing one database handle is an implementation choice rather than a merged semantic authority.
 
@@ -2906,7 +2899,7 @@ A physical backend package may support several semantic provider adapters, but e
 
 Every replaceable contract should satisfy these rules:
 
-1. **Semantic values at the boundary.** No Redb transactions, Tokio handles, WebSocket objects, or provider-private state crosses a neutral contract unless that object is the responsibility itself.
+1. **Domain values at the boundary.** No Redb transactions, Tokio handles, WebSocket objects, or provider-private state crosses a neutral contract unless that object is the responsibility itself.
 2. **One responsibility.** The contract can be described in one sentence without “and also.”
 3. **Current facts are explicit.** Providers do not read unrelated mutable globals.
 4. **Late results are attributable.** Operations carry exact owner and generation identity.
@@ -3180,7 +3173,7 @@ No provider call may run inside another owner's durable transaction or authorita
 
 For every mutable field in state-owner and provider crates, record:
 
-- semantic fact;
+- domain fact;
 - owner;
 - creation boundary;
 - mutation boundaries;
@@ -3357,15 +3350,15 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 
 # Part XIV — Concise crate inventory
 
-## Foundational semantics
+## Foundational rules
 
 | Crate | One-sentence responsibility |
 |---|---|
-| `fava-wire` | Canonical Nostr relay/client message grammar and bytes. |
+| `fava-wire` | Nostr relay/client message grammar and bytes. |
 | `fava-state` | Deterministic event-set identity, replacement, deletion, expiry, and evidence semantics. |
 | `fava-write` | Event construction, write-intent, receipt, and publication values. |
 | `fava-query` | Live-query language, `EventRecord`, source observations, and evaluator contract. |
-| `fava-query-standard` | Recommended evaluator and semantic oracle over merged event sources. |
+| `fava-query-standard` | Recommended evaluator and behavior oracle over merged event sources. |
 
 ## Local data contracts and providers
 
@@ -3438,7 +3431,6 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 Recommended public test tooling:
 
 ```text
-fava-testkit
 fava-router-testkit
 fava-event-cache-testkit
 fava-write-store-testkit

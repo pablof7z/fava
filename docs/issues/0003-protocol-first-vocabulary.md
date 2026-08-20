@@ -1,6 +1,6 @@
 # Protocol-first architectural vocabulary
 
-**Status:** in progress
+**Status:** complete
 **Scope:** repository rules, public query identity, replaceable-event edits, protocol crates, specifications, and automated vocabulary review
 
 ## Why
@@ -34,3 +34,18 @@ architectural symbol must resolve to one defined concept.
 - vocabulary-check unit fixtures and a clean repository scan;
 - repository-wide searches for vocabulary that contradicts the current model;
 - workspace tests, Clippy, formatting, and external-provider falsifier.
+
+## Evidence
+
+- Red: `crates/fava-query/tests/query_identity.rs` initially failed to compile because the public `Query` value did not exist.
+- Red: the replaceable-coordinate subset test initially failed because a replaceable coordinate did not accept an addressable identifier.
+- Red: the documentation-vocabulary fixture initially passed with an unregistered public specification symbol.
+- Green: `cargo test --workspace --all-targets`.
+- Green: `cargo clippy --workspace --all-targets -- -D warnings`.
+- Green: `cargo fmt --all -- --check`.
+- Green: `cargo test --manifest-path apps/canary/Cargo.toml` and its Clippy gate.
+- Green: `cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml` and its Clippy gate.
+- Green: `bazel test //...`, including `//crates/fava-query:query_identity`.
+- Green: `python3 tools/check_vocabulary.py`.
+- Green: `python3 -m unittest tools/tests/test_vocabulary_check.py`.
+- Audit: all code files are at or below 500 lines, and repository vocabulary matches the current model recorded here.

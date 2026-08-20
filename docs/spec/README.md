@@ -11,3 +11,7 @@ These documents are the authoritative inputs for the clean-room rewrite:
 They were imported from the documents supplied by Pablo on 2026-08-20.
 Implementation status belongs in focused issues, the canary registry, and
 feature evidence, not in these source documents.
+
+Architectural concepts, public Rust symbols, and crate names used by these
+documents are defined in `../internals/vocabulary.toml` and checked by
+`tools/check_vocabulary.py`.

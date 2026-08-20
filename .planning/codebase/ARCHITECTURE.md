@@ -12,7 +12,7 @@ The checkout implements the M0 evidence lab plus an intentionally narrow M1 loca
 │                         Downstream Rust app                          │
 │                   `crates/fava/src/lib.rs`                           │
 └──────────────────────────────┬───────────────────────────────────────┘
-                               │ Fava::observe(EventQuery)
+                               │ Fava::observe(Query)
                                ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     Local observation owner                         │
@@ -45,7 +45,7 @@ Separate evidence boundary:
     -> preserved run bundle `apps/canary/src/artifacts.rs`
 ```
 
-The implemented dependency direction is acyclic: semantic crates `crates/fava-state/` and `crates/fava-write/` feed the query vocabulary in `crates/fava-query/`; neutral contracts in `crates/fava-event-cache/` and `crates/fava-write-store/` depend on that vocabulary; implementations in `crates/fava-event-cache-memory/`, `crates/fava-write-store-memory/`, and `crates/fava-query-standard/` depend on the contracts or semantic owners; `crates/fava-observe/` owns orchestration; and `crates/fava/` is the facade. Cargo remains the dependency-metadata authority in `Cargo.toml` and `Cargo.lock`; Bazel mirrors first-party edges explicitly in targets such as `crates/fava-query/BUILD.bazel`, `crates/fava-observe/BUILD.bazel`, and `crates/fava/BUILD.bazel`, and imports the locked third-party graph through `MODULE.bazel`.
+The implemented dependency direction is acyclic: domain crates `crates/fava-state/` and `crates/fava-write/` feed the query vocabulary in `crates/fava-query/`; neutral contracts in `crates/fava-event-cache/` and `crates/fava-write-store/` depend on that vocabulary; implementations in `crates/fava-event-cache-memory/`, `crates/fava-write-store-memory/`, and `crates/fava-query-standard/` depend on the contracts or value owners; `crates/fava-observe/` owns orchestration; and `crates/fava/` is the facade. Cargo remains the dependency-metadata authority in `Cargo.toml` and `Cargo.lock`; Bazel mirrors first-party edges explicitly in targets such as `crates/fava-query/BUILD.bazel`, `crates/fava-observe/BUILD.bazel`, and `crates/fava/BUILD.bazel`, and imports the locked third-party graph through `MODULE.bazel`.
 
 ## Component Responsibilities
 
@@ -73,7 +73,7 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 **Overall:** Statically assembled, layered library with semantic-owner crates, neutral provider contracts, replaceable implementations, and lifecycle-owner orchestration (`Cargo.toml`, `docs/spec/ARCHITECTURE.md`).
 
 **Key Characteristics:**
-- Keep one semantic owner for every type and mutable lifecycle; implemented owners are visible in `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `crates/fava-observe/src/lib.rs`.
+- Keep one owner for every type and mutable lifecycle; implemented owners are visible in `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `crates/fava-observe/src/lib.rs`.
 - Keep contract crates separate from implementation crates; the current pairs are `crates/fava-event-cache/` with `crates/fava-event-cache-memory/`, and `crates/fava-write-store/` with `crates/fava-write-store-memory/`.
 - Assemble providers statically through `FavaBuilder`; do not add runtime plugin registries or hidden defaults to `crates/fava/src/lib.rs`.
 - Merge event-cache and write-store contributions only through the evaluator contract in `crates/fava-query/src/lib.rs` and the current oracle in `crates/fava-query-standard/src/lib.rs`.
@@ -88,7 +88,7 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 | Implemented M0 | Independent real-relay evidence lab, enabled `lab-real-relay-smoke`, bounded public reconnaissance, and reconstructable artifacts. | `apps/canary/src/lib.rs`, `apps/canary/scenarios.json`, `docs/issues/0002-m0-evidence-foundation.md`, `features/relay-lab.feature` |
 | Implemented tracer | Local query values, independent cache/write sources, full reevaluation, latest-state observation, memory providers, and thin observe facade. | `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs` |
 | M1 incomplete | Stable equivalent-query sharing, full deletion/expiry semantics, the named local-source-removal canary, and the complete shared provider corpus are not claimed complete. | `docs/issues/0001-local-source-merge.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
-| Specified only | Wire/ingest, routing, subscription planning, transport, publication, delivery, signing, sessions, auth, diagnostics, persistent providers, services, capabilities, runtime/coordinator, Swift, and Kotlin remain target architecture. | `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
+| Specified only | Wire/ingest, routing, subscription planning, transport, publication, delivery, signing, sessions, auth, diagnostics, persistent providers, protocol services, protocol crates, runtime, Swift, and Kotlin remain target architecture. | `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
 
 ## Layers
 
@@ -103,7 +103,7 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 - Purpose: Define stable protocol/query/write values and deterministic rules without provider resources.
 - Location: `crates/fava-state/`, `crates/fava-write/`, `crates/fava-query/`
 - Contains: Relay evidence and coordinates in `crates/fava-state/src/lib.rs`; write identity and local materializations in `crates/fava-write/src/lib.rs`; query/source/result contracts in `crates/fava-query/src/lib.rs`.
-- Depends on: `nostr` plus lower semantic owners as declared in `crates/fava-state/Cargo.toml`, `crates/fava-write/Cargo.toml`, and `crates/fava-query/Cargo.toml`.
+- Depends on: `nostr` plus lower value owners as declared in `crates/fava-state/Cargo.toml`, `crates/fava-write/Cargo.toml`, and `crates/fava-query/Cargo.toml`.
 - Used by: Contracts, providers, observation, facade, and tests under `crates/`.
 
 **Neutral Provider Contract Layer:**
@@ -179,10 +179,10 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 
 ## Key Abstractions
 
-**`EventQuery` / `CanonicalQuery`:**
-- Purpose: Carry inert selection, acquisition scope, result authority, access context, freshness, ordering, and result bounds.
+**`Query`:**
+- Purpose: Carry valid inert selection, acquisition scope, result authority, relay access, freshness, ordering, and result bounds with stable equality and hash identity.
 - Examples: `crates/fava-query/src/lib.rs`, `docs/spec/partial-spec-api-semantics.md`.
-- Pattern: Builder-like immutable description followed by typed validation/canonicalization before any source work (`crates/fava-query/src/lib.rs:205`).
+- Pattern: Private representation and fallible constructors refuse invalid inputs before any source work (`crates/fava-query/src/lib.rs:160`, `crates/fava-query/src/lib.rs:201`).
 
 **`QuerySource`:**
 - Purpose: Establish one coherent initial `SourceSnapshot` plus one continuous stream of complete later source revisions.
@@ -223,7 +223,7 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 
 **Canary CLI:**
 - Location: `apps/canary/src/main.rs`
-- Triggers: `fava-e2e-canary list`, `run lab-real-relay-smoke`, or `recon --relay ...` as documented in `apps/canary/README.md`.
+- Triggers: `canary list`, `canary run lab-real-relay-smoke`, or `canary recon --relay ...` as documented in `apps/canary/README.md`.
 - Responsibilities: Dispatch enabled/evidence-only scenarios and exit nonzero on orchestration or evidence failure (`apps/canary/src/main.rs`).
 
 **Canary Library:**
@@ -296,7 +296,3 @@ The implemented dependency direction is acyclic: semantic crates `crates/fava-st
 **Authentication:** No Fava authentication owner or NIP-42 product path is implemented; the target boundary is specified in `docs/spec/ARCHITECTURE.md`, while the current M0 relay lab explicitly disables NIP-42 in generated configuration from `apps/canary/src/relay.rs`.
 **Diagnostics:** No product diagnostics facade is implemented in `crates/`; current external evidence comes from `apps/canary/`, and future bounded diagnostics ownership is specified in `docs/spec/ARCHITECTURE.md` and sequenced by `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
 **Testing and proof:** Put durable app-visible behavior in `features/`, narrow executable evidence beside the owning crate, public Rust composition evidence in `crates/fava/tests/`, independent relay proof in `apps/canary/`, and public-contract substitution proof in `falsifiers/`, following `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
-
----
-
-*Architecture analysis: 2026-08-20*

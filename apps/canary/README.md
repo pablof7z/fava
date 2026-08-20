@@ -1,12 +1,12 @@
 # Fava end-to-end canary
 
-This is an ordinary downstream Rust application and independent evidence lab.
-It must not depend on Fava internal crates or use Fava diagnostics as the sole
-witness for external effects.
+An ordinary downstream Rust application and independent evidence lab. It must
+not depend on Fava internal crates or use Fava diagnostics as the sole witness
+for external effects.
 
 The first enabled scenario is `lab-real-relay-smoke`, using the pinned
 `nostr-rs-relay` 0.8.12 binary as a real third-party process on macOS. Install
-that prerequisite with:
+it with:
 
 ```sh
 cargo install nostr-rs-relay --version 0.8.12 --locked

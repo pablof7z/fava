@@ -46,7 +46,7 @@
 
 **Auth Provider:**
 - No external auth or identity provider is integrated in `Cargo.toml` or `apps/canary/Cargo.toml`.
-  - Implementation: Nostr public keys and access-context labels are values in `crates/fava-state/src/lib.rs`; no session, OAuth, OIDC, password, or token-exchange member exists in `Cargo.toml`.
+  - Implementation: Nostr public keys and `RelayAccess` values live in `crates/fava-state/src/lib.rs`; no session, OAuth, OIDC, password, or token-exchange member exists in `Cargo.toml`.
   - Lab identity: `apps/canary/src/lib.rs` derives disposable keys from the seed with SHA-256 and signs locally through `nostr`.
   - Relay auth: generated lab configuration sets `nip42_auth = false` in `apps/canary/src/relay.rs`; `apps/canary/src/wire.rs` implements no NIP-42 client flow.
 
@@ -64,11 +64,11 @@
 ## CI/CD & Deployment
 
 **Hosting:**
-- None - `crates/fava/Cargo.toml` is an embeddable library, and `README.md` states that the repository is local-only with no Git remote.
+- None - `crates/fava/Cargo.toml` is an embeddable library, and the repository remote does not deploy a running service.
 - The canary is a local binary in `apps/canary/Cargo.toml`; its child relay binds only to `127.0.0.1` in `apps/canary/src/relay.rs`.
 
 **CI Pipeline:**
-- None detected - no pipeline exists at `.github/workflows/`, and build/test entry points are only `Cargo.toml`, `apps/canary/Cargo.toml`, and `falsifiers/external-null-cache/Cargo.toml`.
+- `.github/workflows/architecture.yml` checks the architectural vocabulary registry and its unit tests. Build/test entry points remain local and explicit: `Cargo.toml`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`, and `bazel test //...` per `.bazelrc`.
 
 ## Environment Configuration
 
@@ -88,7 +88,3 @@
 **Outgoing:**
 - No HTTP webhooks - the only remote-capable call is an explicit WebSocket connection to a caller-supplied Nostr relay in `apps/canary/src/main.rs`, `apps/canary/src/recon.rs`, and `apps/canary/src/wire.rs`.
 - Deterministic traffic stays local: client to loopback proxy to loopback `nostr-rs-relay` in `apps/canary/src/lib.rs`, `apps/canary/src/proxy.rs`, and `apps/canary/src/relay.rs`.
-
----
-
-*Integration audit: 2026-08-20*

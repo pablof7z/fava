@@ -405,11 +405,11 @@ A trait with one implementation is not evidence of substitutability.
 
 ### 12.4 Performance change
 
-1. Preserve or create the semantic oracle first.
+1. Preserve or create the behavior oracle first.
 2. Record the representative workload and baseline.
 3. Attribute the cost before changing architecture.
 4. Optimize one owner.
-5. Run semantic, mutation, resource, and physical measurements together.
+5. Run behavior, mutation, resource, and physical measurements together.
 6. Reject an optimization that changes evidence, lifecycle, bounds, or failure truth.
 
 ## 13. Milestone discipline
@@ -487,7 +487,7 @@ Reject these:
 - sleeps used to prove ordering or liveness;
 - private-state assertions used to prove a public promise;
 - several copies of the same test at different layers;
-- a line/count/grep gate presented as semantic proof;
+- a line/count/grep gate presented as behavioral proof;
 - a conformance trait stabilized before a second implementation challenges it;
 - a canary helper that conceals an awkward or missing public Fava API; and
 - a green test that was never shown to fail when its protection was removed.

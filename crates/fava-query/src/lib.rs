@@ -478,11 +478,9 @@ impl QuerySnapshot {
 /// Replaceable strategy for exact local query evaluation.
 pub trait QueryEvaluator: Send + Sync {
     /// Evaluate one query over complete current source snapshots.
-    ///
     /// # Errors
     ///
-    /// Returns [`QueryEvaluationError`] when a source violates its event-value
-    /// contract or the evaluator cannot produce an exact current result.
+    /// Returns [`QueryEvaluationError`] for invalid source values or refusal.
     fn evaluate(
         &self,
         query: &Query,
@@ -496,7 +494,7 @@ pub enum QueryEvaluationError {
     /// A supposedly accepted local event violated the source contract.
     #[error("query source supplied an event without a stable id")]
     MissingEventId,
-    /// Provider-specific evaluator refusal.
+    /// Evaluator-specific refusal.
     #[error("query evaluator refused current sources: {0}")]
     Refused(String),
 }

@@ -1,11 +1,11 @@
 # Fava
 
-A from-scratch implementation of the Nostr Multi-Platform client engine.
+A from-scratch Nostr client engine.
 
 Fava is an embeddable library built around two long-lived workloads:
 declarative live queries and durable write intents. Applications assemble
 focused providers at build time while Fava preserves universal event, evidence,
-query, publication, cancellation, and lifecycle semantics.
+query, publication, cancellation, and lifecycle behavior.
 
 The rewrite is being built as executable vertical milestones. M0's independent
 evidence foundation passes through the pinned macOS local-process profile in
@@ -17,8 +17,10 @@ The ordinary downstream acceptance application lives at [apps/canary](apps/canar
 
 ## Specifications
 
-The authoritative inputs are vendored unchanged in [docs/spec](docs/spec/README.md).
+The authoritative inputs live in [docs/spec](docs/spec/README.md). Architectural
+concepts and public symbols are defined in
+[docs/internals/vocabulary.toml](docs/internals/vocabulary.toml).
 
 ## Repository status
 
-This repository is local-only. It intentionally has no Git remote.
+Do not push changes until Pablo explicitly authorizes publication.

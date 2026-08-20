@@ -81,7 +81,3 @@
 - The current deliverable is the downstream-assembled Rust library in `crates/fava/src/lib.rs`; no production server, container, hosting target, Swift/Kotlin package, or deployment manifest is implemented in `Cargo.toml` or `apps/canary/Cargo.toml`.
 - Concrete engine providers are current-process-only: `MemoryEventCache` in `crates/fava-event-cache-memory/src/lib.rs` and `MemoryWriteStore` in `crates/fava-write-store-memory/src/lib.rs`; persistent product providers are absent from the current members in `Cargo.toml`.
 - Public-relay access is evidence-only and requires an explicit URL in `apps/canary/src/main.rs`; deterministic acceptance uses the local child relay in `apps/canary/README.md`.
-
----
-
-*Stack analysis: 2026-08-20*

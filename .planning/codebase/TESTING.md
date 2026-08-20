@@ -45,7 +45,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - Keep readable application behavior under `features/`; Gherkin is product memory and does not require a Cucumber runner (`features/local-source-merge.feature`, `features/relay-lab.feature`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`).
 
 **Naming:**
-- Name unit and integration tests as snake_case behavioral claims: `failed_capacity_batch_is_atomic`, `same_signed_event_merges_relay_and_publication_evidence`, and `relay_echo_enriches_one_record_without_erasing_receipt` are representative (`crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs`).
+- Name unit and integration tests as snake_case behavioral claims: `failed_capacity_batch_is_atomic`, `same_signed_event_merges_relay_and_publication_evidence`, `relay_echo_enriches_one_record_without_erasing_receipt` (`crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs`).
 - Name integration-test files and feature files after the coherent behavior slice, not the crate implementation: `crates/fava/tests/local_source_merge.rs` and `features/local-source-merge.feature` cover the same public distinction at different evidence layers.
 
 **Structure:**
@@ -59,13 +59,13 @@ apps/canary/src/                            # Downstream process/wire lab
 apps/canary/scenarios.json                  # Enabled/reconnaissance registry
 ```
 
-The active examples for this layout are `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs`, `features/local-source-merge.feature`, `falsifiers/external-null-cache/src/lib.rs`, and `apps/canary/scenarios.json`.
+Active examples: `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs`, `features/local-source-merge.feature`, `falsifiers/external-null-cache/src/lib.rs`, and `apps/canary/scenarios.json`.
 
 ## Test Structure
 
 **Suite Organization:**
 
-Use small fixture helpers, arrange real causal inputs, invoke the owning public operation, and assert the observable result. This current public-facade pattern comes from `crates/fava/tests/local_source_merge.rs`:
+Use small fixture helpers, arrange real causal inputs, invoke the owning public operation, and assert the observable result. From `crates/fava/tests/local_source_merge.rs`:
 
 ```rust
 #[tokio::test(flavor = "current_thread")]
@@ -73,7 +73,7 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
     let (fava, cache, writes) = assembly();
     let unsigned = unsigned_event(&Keys::generate(), Kind::TextNote, 10, "local");
     let mut feed = fava
-        .observe(EventQuery::events().cache_only())
+        .observe(Query::events().cache_only())
         .await
         .expect("query opens from local sources");
 
@@ -103,13 +103,13 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
 
 **Patterns:**
 
-Use a narrow fake only to control the boundary under test. This source-failure pattern comes from `crates/fava-observe/src/lib.rs`:
+Use a narrow fake only to control the boundary under test. From `crates/fava-observe/src/lib.rs`:
 
 ```rust
 struct RefusingSource;
 
 impl QuerySource for RefusingSource {
-    fn open(&self, _query: &CanonicalQuery) -> Result<OpenedQuerySource, QuerySourceError> {
+    fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
         Err(QuerySourceError::Refused(
             "injected open failure".to_owned(),
         ))
@@ -135,7 +135,7 @@ impl QuerySource for RefusingSource {
 
 **Test Data:**
 
-Use local helper functions that produce valid domain inputs with explicit times and identities. This pattern comes from `crates/fava-query-standard/tests/source_merge.rs`:
+Use local helper functions that produce valid domain inputs with explicit times and identities. From `crates/fava-query-standard/tests/source_merge.rs`:
 
 ```rust
 fn signed_event(keys: &Keys, kind: Kind, created_at: u64, content: &str) -> Event {
@@ -166,9 +166,9 @@ fn snapshot(kind: SourceKind, events: Vec<SourceEvent>) -> SourceSnapshot {
 **Requirements:** No line or branch coverage percentage is enforced; `Cargo.toml`, `apps/canary/Cargo.toml`, and `falsifiers/external-null-cache/Cargo.toml` contain no coverage tool or threshold configuration.
 
 **Current executable inventory:**
-- The root workspace currently has 13 enabled tests: five public-facade tests in `crates/fava/tests/local_source_merge.rs`, three evaluator tests in `crates/fava-query-standard/tests/source_merge.rs`, three observation tests in `crates/fava-observe/src/lib.rs`, one cache atomicity test in `crates/fava-event-cache-memory/src/lib.rs`, and one coordinate test in `crates/fava-state/src/lib.rs`.
-- The canary workspace currently has five tests across `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`, `apps/canary/src/relay.rs`, and `apps/canary/src/recon.rs`.
-- The external-provider workspace currently has one assembly test in `falsifiers/external-null-cache/src/lib.rs`.
+- The root workspace has 13 enabled tests: five public-facade tests in `crates/fava/tests/local_source_merge.rs`, three evaluator tests in `crates/fava-query-standard/tests/source_merge.rs`, three observation tests in `crates/fava-observe/src/lib.rs`, one cache atomicity test in `crates/fava-event-cache-memory/src/lib.rs`, and one coordinate test in `crates/fava-state/src/lib.rs`.
+- The canary workspace has five tests across `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`, `apps/canary/src/relay.rs`, and `apps/canary/src/recon.rs`.
+- The external-provider workspace has one assembly test in `falsifiers/external-null-cache/src/lib.rs`.
 - All 19 enumerated tests, root formatting, root Clippy, canary Clippy, and falsifier Clippy passed during this 2026-08-20 analysis using the commands above (`Cargo.toml`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`).
 
 **View Coverage:**
@@ -206,7 +206,7 @@ cargo test --workspace --all-targets
 
 **Async Testing:**
 
-Bound every wait and fail with a causal message. This helper comes from `crates/fava/tests/local_source_merge.rs`:
+Bound every wait and fail with a causal message. From `crates/fava/tests/local_source_merge.rs`:
 
 ```rust
 async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QuerySnapshot> {
@@ -222,10 +222,10 @@ async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QueryS
 
 **Error Testing:**
 
-Match the typed refusal and separately assert cleanup. This current pattern comes from `crates/fava-observe/src/lib.rs`:
+Match the typed refusal and separately assert cleanup. From `crates/fava-observe/src/lib.rs`:
 
 ```rust
-let result = observer.open(EventQuery::events().cache_only());
+let result = observer.open(Query::events().cache_only());
 
 assert!(matches!(
     result,
@@ -263,7 +263,3 @@ The normative workflow is owned by `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`, wi
 - The current local-source falsifiers cover source omission, evidence merging, replacement selection, source authority, open cleanup, scoped closure, and bounded latest-state delivery (`features/local-source-merge.feature`).
 - The current M0 falsifier restarts against fresh storage and requires the post-restart exact query to reach EOSE without the event, making persistence evidence fail causally (`features/relay-lab.feature`, `docs/issues/0002-m0-evidence-foundation.md`).
 - Do not treat a green test as evidence if it stays green under the named break, if setup inserted the conclusion, or if the failure is an unrelated panic/setup error (`docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`).
-
----
-
-*Testing analysis: 2026-08-20*
