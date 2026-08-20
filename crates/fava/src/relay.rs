@@ -222,7 +222,12 @@ fn allocate_subscription(next: &AtomicU64) -> Result<SubscriptionId, String> {
 }
 
 fn validate_plan(expected: &RelaySessionKey, plan: &SubscriptionPlan) -> Result<(), String> {
-    if &plan.relay != expected || plan.attribution.is_empty() || plan.messages.is_empty() {
+    if &plan.relay != expected
+        || plan.attribution.is_empty()
+        || plan.messages.is_empty()
+        || !plan.demand.keys().eq(plan.attribution.keys())
+        || plan.demand.values().any(Vec::is_empty)
+    {
         return Err("subscription planner returned incomplete or mis-scoped work".to_owned());
     }
     for message in &plan.messages {

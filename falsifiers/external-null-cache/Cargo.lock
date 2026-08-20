@@ -213,6 +213,7 @@ dependencies = [
  "fava-ingest",
  "fava-observe",
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-subscriptions",
  "fava-transport",
@@ -294,6 +295,16 @@ dependencies = [
  "fava-write",
  "nostr",
  "thiserror",
+]
+
+[[package]]
+name = "fava-routing"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

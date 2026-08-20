@@ -2,6 +2,7 @@
 
 mod live;
 mod relay;
+mod routes;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -15,6 +16,8 @@ pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority,
 };
 use fava_query::{QueryEvaluator, QuerySource};
+pub use fava_routing::RoutePlan;
+use fava_routing::{RouteRequest, Router};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
 pub use fava_write::{EventValue, ReceiptId};
@@ -31,6 +34,7 @@ pub struct Fava {
     transport: Option<Arc<dyn Transport>>,
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
+    routers: Vec<Arc<dyn Router>>,
 }
 
 impl Fava {
@@ -78,6 +82,25 @@ impl Fava {
     pub fn diagnostics(&self) -> DiagnosticsSnapshot {
         self.diagnostics.snapshot()
     }
+
+    /// Evaluate current routing facts without opening router or relay work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ObserveError`] when a configured router refuses preview.
+    pub fn preview_routes(&self, query: &Query) -> Result<RoutePlan, ObserveError> {
+        let request = RouteRequest::Read(query.clone());
+        match query.source().acquisition() {
+            fava_query::QueryAcquisition::Explicit(relays) => {
+                RoutePlan::explicit(relays.iter().cloned(), query.access(), &request.targets())
+                    .map_err(|error| ObserveError::Relay(error.to_string()))
+            }
+            fava_query::QueryAcquisition::Automatic => {
+                fava_routing::preview(&self.routers, &request)
+                    .map_err(|error| ObserveError::Relay(error.to_string()))
+            }
+        }
+    }
 }
 
 /// Static assembly builder. No provider is silently selected.
@@ -88,6 +111,7 @@ pub struct FavaBuilder {
     evaluator: Option<Arc<dyn QueryEvaluator>>,
     subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
     transport: Option<Arc<dyn Transport>>,
+    routers: Vec<Arc<dyn Router>>,
 }
 
 impl FavaBuilder {
@@ -141,6 +165,16 @@ impl FavaBuilder {
         self
     }
 
+    /// Append one automatic router in application-selected order.
+    #[must_use]
+    pub fn router<T>(mut self, router: Arc<T>) -> Self
+    where
+        T: Router + 'static,
+    {
+        self.routers.push(router);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -166,6 +200,7 @@ impl FavaBuilder {
             transport: self.transport,
             diagnostics,
             next_subscription: Arc::new(AtomicU64::new(0)),
+            routers: self.routers,
         })
     }
 }

@@ -17,6 +17,12 @@ type FailureFact = (RelaySessionKey, u64, String);
 pub struct DiagnosticsSnapshot {
     /// Intermediate current-query revisions intentionally superseded by newer state.
     pub coalesced_query_updates: u64,
+    /// Automatic router instances opened by live queries.
+    pub router_sessions: Vec<String>,
+    /// Exact relay destinations in recent live route revisions.
+    pub routes: Vec<(u64, Vec<RelaySessionKey>)>,
+    /// Exact routing failures or limits by route revision.
+    pub route_shortfalls: Vec<(u64, String)>,
     /// Most recently opened exact relay-session generations.
     pub sessions: Vec<SessionFact>,
     /// Most recently opened exact Nostr subscriptions.
@@ -42,6 +48,9 @@ pub struct Diagnostics {
 #[derive(Default)]
 struct State {
     coalesced_query_updates: u64,
+    router_sessions: VecDeque<String>,
+    routes: VecDeque<(u64, Vec<RelaySessionKey>)>,
+    route_shortfalls: VecDeque<(u64, String)>,
     sessions: VecDeque<SessionFact>,
     subscriptions: VecDeque<SubscriptionFact>,
     eose: VecDeque<SubscriptionFact>,
@@ -73,6 +82,9 @@ impl Diagnostics {
         let state = self.lock();
         DiagnosticsSnapshot {
             coalesced_query_updates: state.coalesced_query_updates,
+            router_sessions: state.router_sessions.iter().cloned().collect(),
+            routes: state.routes.iter().cloned().collect(),
+            route_shortfalls: state.route_shortfalls.iter().cloned().collect(),
             sessions: state.sessions.iter().cloned().collect(),
             subscriptions: state.subscriptions.iter().cloned().collect(),
             eose: state.eose.iter().cloned().collect(),
@@ -87,6 +99,28 @@ impl Diagnostics {
     pub fn query_updates_coalesced(&self, count: u64) {
         let mut state = self.lock();
         state.coalesced_query_updates = state.coalesced_query_updates.saturating_add(count);
+    }
+
+    /// Record one automatic router-instance open.
+    pub fn router_opened(&self, name: String) {
+        let capacity = self.capacity.get();
+        push_bounded(&mut self.lock().router_sessions, capacity, name);
+    }
+
+    /// Record the exact destinations in one current route revision.
+    pub fn route(&self, revision: u64, relays: Vec<RelaySessionKey>) {
+        let capacity = self.capacity.get();
+        push_bounded(&mut self.lock().routes, capacity, (revision, relays));
+    }
+
+    /// Record one exact route refusal or limit.
+    pub fn route_shortfall(&self, revision: u64, message: String) {
+        let capacity = self.capacity.get();
+        push_bounded(
+            &mut self.lock().route_shortfalls,
+            capacity,
+            (revision, message),
+        );
     }
 
     /// Record one opened relay-session generation.

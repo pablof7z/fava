@@ -65,6 +65,30 @@
       "milestone": "M3",
       "requirements": ["M3 bounded coalesced latest-state observation"],
       "status": "enabled"
+    },
+    {
+      "id": "async-route-partial-read",
+      "milestone": "M4",
+      "requirements": ["M4 immediate automatic route progress and later expansion"],
+      "status": "enabled"
+    },
+    {
+      "id": "explicit-route-bypass",
+      "milestone": "M4",
+      "requirements": ["M4 exact explicit route bypasses automatic routers"],
+      "status": "enabled"
+    },
+    {
+      "id": "fallback-reacts",
+      "milestone": "M4",
+      "requirements": ["M4 fallback contribution reacts to upstream coverage"],
+      "status": "enabled"
+    },
+    {
+      "id": "subscription-grouping-equivalence",
+      "milestone": "M4",
+      "requirements": ["M4 planner grouping preserves logical query results"],
+      "status": "enabled"
     }
   ]
 }

@@ -37,6 +37,8 @@ pub struct SubscriptionPlan {
     pub messages: Vec<ClientMessage<'static>>,
     /// Accepted subscription IDs and their exact filters.
     pub attribution: BTreeMap<SubscriptionId, Filter>,
+    /// Logical subscription IDs represented by each exact wire subscription.
+    pub demand: BTreeMap<SubscriptionId, Vec<SubscriptionId>>,
 }
 
 impl SubscriptionPlan {
@@ -71,6 +73,25 @@ pub enum SubscriptionPlanError {
     /// Subscription IDs must be unique within one relay session plan.
     #[error("duplicate subscription id: {0}")]
     DuplicateSubscription(SubscriptionId),
+    /// Exact logical demand requires more subscriptions than the relay permits.
+    #[error("relay allows {maximum} subscriptions but exact demand requires {required}")]
+    TooManySubscriptions {
+        /// Exact wire subscription count required.
+        required: usize,
+        /// Declared maximum wire subscription count.
+        maximum: usize,
+    },
+    /// One exact REQ frame exceeds the relay's declared message-size limit.
+    #[error("REQ frame uses {bytes} bytes but relay allows {maximum}")]
+    FrameTooLarge {
+        /// Exact encoded frame size.
+        bytes: usize,
+        /// Declared maximum frame size.
+        maximum: usize,
+    },
+    /// Exact Nostr REQ encoding failed before handoff.
+    #[error("REQ encoding failed: {0}")]
+    Encoding(String),
 }
 
 /// Convert one public Query into one exact NIP-01 relay demand.

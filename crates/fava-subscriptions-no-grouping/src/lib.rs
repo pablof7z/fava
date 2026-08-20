@@ -20,6 +20,7 @@ impl SubscriptionPlanner for OnePerDemand {
             return Err(SubscriptionPlanError::EmptyDemand);
         }
         let mut attribution = BTreeMap::new();
+        let mut logical = BTreeMap::new();
         let mut messages = Vec::with_capacity(demand.len());
         for item in demand {
             if attribution
@@ -34,11 +35,16 @@ impl SubscriptionPlanner for OnePerDemand {
                 item.subscription_id.clone(),
                 item.filter.clone(),
             ));
+            logical.insert(
+                item.subscription_id.clone(),
+                vec![item.subscription_id.clone()],
+            );
         }
         Ok(SubscriptionPlan {
             relay: relay.clone(),
             messages,
             attribution,
+            demand: logical,
         })
     }
 }

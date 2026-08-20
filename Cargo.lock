@@ -282,6 +282,10 @@ dependencies = [
  "fava-observe",
  "fava-query",
  "fava-query-standard",
+ "fava-router-app-relays",
+ "fava-router-fallback-relays",
+ "fava-router-testkit",
+ "fava-routing",
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
@@ -369,6 +373,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-router-app-relays"
+version = "0.1.0"
+dependencies = [
+ "fava-routing",
+ "fava-state",
+ "tokio",
+]
+
+[[package]]
+name = "fava-router-fallback-relays"
+version = "0.1.0"
+dependencies = [
+ "fava-routing",
+ "fava-state",
+ "tokio",
+]
+
+[[package]]
+name = "fava-router-testkit"
+version = "0.1.0"
+dependencies = [
+ "fava-routing",
+ "tokio",
+]
+
+[[package]]
+name = "fava-routing"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "fava-state"
 version = "0.1.0"
 dependencies = [
@@ -394,6 +434,17 @@ dependencies = [
  "fava-subscriptions",
  "fava-wire",
  "nostr",
+]
+
+[[package]]
+name = "fava-subscriptions-standard"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-subscriptions",
+ "fava-wire",
+ "nostr",
+ "serde_json",
 ]
 
 [[package]]

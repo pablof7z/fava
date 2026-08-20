@@ -9,13 +9,15 @@ use super::Fava;
 use super::relay::OpenedRelay;
 
 pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, ObserveError> {
-    let relays = match query.source().acquisition() {
-        QueryAcquisition::Explicit(relays) => relays,
-        QueryAcquisition::Automatic => {
-            return Err(ObserveError::Relay(
-                "automatic routing is unavailable in this profile".to_owned(),
-            ));
-        }
+    match query.source().acquisition() {
+        QueryAcquisition::Explicit(_) => open_explicit(fava, query).await,
+        QueryAcquisition::Automatic => super::routes::open(fava, query).await,
+    }
+}
+
+async fn open_explicit(fava: &Fava, query: Query) -> Result<Observation, ObserveError> {
+    let QueryAcquisition::Explicit(relays) = query.source().acquisition() else {
+        unreachable!("caller selected explicit acquisition");
     };
     let planner = fava.subscription_planner.as_ref().ok_or_else(|| {
         ObserveError::Relay("live queries require a subscription planner".to_owned())

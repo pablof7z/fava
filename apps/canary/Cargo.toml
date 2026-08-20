@@ -12,9 +12,18 @@ fava = { path = "../../crates/fava" }
 fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
+fava-router-app-relays = { path = "../../crates/fava-router-app-relays" }
+fava-router-fallback-relays = { path = "../../crates/fava-router-fallback-relays" }
+fava-router-testkit = { path = "../../crates/fava-router-testkit" }
+fava-routing = { path = "../../crates/fava-routing" }
 fava-state = { path = "../../crates/fava-state" }
 fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
+fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
+fava-subscriptions = { path = "../../crates/fava-subscriptions" }
+fava-transport = { path = "../../crates/fava-transport" }
 fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
+fava-ingest = { path = "../../crates/fava-ingest" }
+fava-wire = { path = "../../crates/fava-wire" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 futures-util = "=0.3.34"

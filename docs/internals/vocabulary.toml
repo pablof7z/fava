@@ -433,7 +433,7 @@ meaning = "The query or event facts for which automatic relay destinations are r
 owner = "fava-routing"
 nearest_nostr = "RelayUrl"
 distinction = "Nostr identifies relays but does not define client-side relay selection for query or publication work."
-symbols = []
+symbols = ["fava_routing::RouteRequest"]
 crates = []
 spec_symbols = ["ReadRouteRequest", "RouteRequest", "WriteRouteRequest"]
 
@@ -444,7 +444,7 @@ meaning = "One author, recipient, referenced event, coordinate, or whole request
 owner = "fava-routing"
 nearest_nostr = "PublicKey, EventId, and Coordinate"
 distinction = "Protocol identifiers name Nostr objects; RouteTarget identifies the object for which a router claims relay coverage."
-symbols = []
+symbols = ["fava_routing::RouteTarget"]
 crates = []
 spec_symbols = ["RouteTarget"]
 
@@ -455,8 +455,20 @@ meaning = "One independently selectable policy that contributes relay destinatio
 owner = "fava-routing"
 nearest_nostr = "RelayUrl"
 distinction = "Nostr defines relay endpoints but does not define a client's destination-selection policy or its lifecycle."
-symbols = []
-crates = []
+symbols = [
+    "fava_routing::Router",
+    "fava_routing::RouterSession",
+    "fava_routing::RouterError",
+    "fava_router_app_relays::AppRelayRouter",
+    "fava_router_fallback_relays::FallbackRelayRouter",
+    "fava_router_testkit::DelayedRouter",
+]
+crates = [
+    "fava-routing",
+    "fava-router-app-relays",
+    "fava-router-fallback-relays",
+    "fava-router-testkit",
+]
 spec_symbols = ["Router", "RouterSession"]
 spec_crates = [
     "fava-router-app-relays",
@@ -474,7 +486,13 @@ meaning = "The merged current relay destinations, target coverage, unresolved ne
 owner = "fava-routing"
 nearest_nostr = "RelayUrl"
 distinction = "A relay URL names one endpoint; RoutePlan is Fava's current attributed result after ordered Router contributions."
-symbols = []
+symbols = [
+    "fava_routing::CoverageState",
+    "fava_routing::RouteContribution",
+    "fava_routing::RouteDestination",
+    "fava_routing::PlannedRelay",
+    "fava_routing::RoutePlan",
+]
 crates = []
 spec_symbols = [
     "CoverageState",
@@ -497,8 +515,13 @@ symbols = [
     "fava_subscriptions::SubscriptionPlan",
     "fava_subscriptions::SubscriptionPlanError",
     "fava_subscriptions::SubscriptionPlanner",
+    "fava_subscriptions_standard::StandardSubscriptionPlanner",
 ]
-crates = ["fava-subscriptions", "fava-subscriptions-no-grouping"]
+crates = [
+    "fava-subscriptions",
+    "fava-subscriptions-no-grouping",
+    "fava-subscriptions-standard",
+]
 spec_symbols = ["RelayDemand", "SubscriptionPlan", "SubscriptionPlanner"]
 spec_crates = [
     "fava-subscriptions",

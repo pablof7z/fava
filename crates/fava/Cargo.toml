@@ -10,6 +10,7 @@ fava-event-cache.workspace = true
 fava-ingest.workspace = true
 fava-observe.workspace = true
 fava-query.workspace = true
+fava-routing.workspace = true
 fava-state.workspace = true
 fava-subscriptions.workspace = true
 fava-transport.workspace = true
@@ -23,6 +24,9 @@ tokio.workspace = true
 [dev-dependencies]
 fava-event-cache-memory.workspace = true
 fava-query-standard.workspace = true
+fava-router-app-relays.workspace = true
+fava-router-fallback-relays.workspace = true
+fava-router-testkit.workspace = true
 fava-state.workspace = true
 fava-subscriptions-no-grouping.workspace = true
 fava-transport.workspace = true

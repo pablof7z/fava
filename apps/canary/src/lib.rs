@@ -1,6 +1,7 @@
 //! Independent acceptance application and evidence lab for the Fava rewrite.
 
 mod artifacts;
+mod grouping;
 mod hostile;
 mod live;
 mod local;
@@ -8,12 +9,15 @@ mod multi;
 mod proxy;
 mod recon;
 mod relay;
+mod routing;
 mod wire;
 
+pub use grouping::run_grouping_scenario;
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
 pub use multi::run_m3_live_scenario;
 pub use recon::{ReconOptions, ReconOutcome};
+pub use routing::run_routing_scenario;
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -140,6 +144,10 @@ pub fn has_executor(id: &str) -> bool {
             | "multi-relay-dedup-provenance"
             | "reconnect-generation"
             | "slow-consumer-latest-state"
+            | "async-route-partial-read"
+            | "explicit-route-bypass"
+            | "fallback-reacts"
+            | "subscription-grouping-equivalence"
     )
 }
 

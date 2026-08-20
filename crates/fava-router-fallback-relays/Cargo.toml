@@ -1,0 +1,13 @@
+[package]
+name = "fava-router-fallback-relays"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-routing.workspace = true
+fava-state.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

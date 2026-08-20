@@ -18,6 +18,11 @@ members = [
     "crates/fava-transport-testkit",
     "crates/fava-ingest",
     "crates/fava-diagnostics",
+    "crates/fava-routing",
+    "crates/fava-router-app-relays",
+    "crates/fava-router-fallback-relays",
+    "crates/fava-router-testkit",
+    "crates/fava-subscriptions-standard",
     "crates/fava",
 ]
 
@@ -38,6 +43,11 @@ fava-transport-websocket = { path = "crates/fava-transport-websocket" }
 fava-transport-testkit = { path = "crates/fava-transport-testkit" }
 fava-ingest = { path = "crates/fava-ingest" }
 fava-diagnostics = { path = "crates/fava-diagnostics" }
+fava-routing = { path = "crates/fava-routing" }
+fava-router-app-relays = { path = "crates/fava-router-app-relays" }
+fava-router-fallback-relays = { path = "crates/fava-router-fallback-relays" }
+fava-router-testkit = { path = "crates/fava-router-testkit" }
+fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
 fava-query = { path = "crates/fava-query" }
 fava-query-standard = { path = "crates/fava-query-standard" }
 fava-state = { path = "crates/fava-state" }
