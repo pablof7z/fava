@@ -1,0 +1,313 @@
+version = 1
+
+# Established Nostr vocabulary. These meanings come from the cited protocol,
+# not from Fava.
+
+[[term]]
+name = "Event"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "A signed Nostr event."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "EventId"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "The SHA-256 identifier computed from a Nostr event's serialized body."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "PublicKey"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "The public key identifying a Nostr event author."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "Kind"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "The integer declaring a Nostr event's protocol meaning and replacement behavior."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "Tag"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "One ordered array in a Nostr event's tags field."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "Filter"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "A Nostr relay filter selecting events for a subscription."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "RelayUrl"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "The URL identifying a Nostr relay endpoint."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "Subscription"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "Relay work opened by a REQ message and identified until CLOSE."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "Coordinate"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "The kind, author, and optional identifier that address a replaceable event."
+owner = "nostr"
+symbols = []
+crates = []
+
+[[term]]
+name = "EventBuilder"
+source = "nostr"
+protocol = "NIP-01"
+meaning = "A generic constructor for an unsigned event from author, kind, content, timestamp, and validated tags."
+owner = "fava-write"
+symbols = []
+crates = []
+
+# Fava vocabulary. Each term documents why protocol vocabulary alone is not
+# enough.
+
+[[term]]
+name = "Fava"
+source = "fava"
+meaning = "One assembled Fava engine instance and its public facade."
+owner = "fava"
+nearest_nostr = "none"
+distinction = "Nostr defines protocol messages, not an application's assembled client lifecycle."
+symbols = ["fava::Fava", "fava::FavaBuilder", "fava::BuildError"]
+crates = ["fava"]
+
+[[term]]
+name = "Query"
+source = "fava"
+meaning = "A valid declarative request for events with acquisition, relay access, freshness, ordering, and result rules."
+owner = "fava-query"
+nearest_nostr = "Filter"
+distinction = "A Filter is relay wire demand; a Query also governs local sources, relay acquisition, evidence authority, ordering, and bounds."
+symbols = [
+    "fava_query::FilterSelection",
+    "fava_query::QueryAcquisition",
+    "fava_query::ResultAuthority",
+    "fava_query::QuerySourcePolicy",
+    "fava_query::Freshness",
+    "fava_query::QueryOrdering",
+    "fava_query::Query",
+    "fava_query::QueryError",
+]
+crates = ["fava-query"]
+
+[[term]]
+name = "QuerySource"
+source = "fava"
+meaning = "A local owner that supplies one complete current event contribution and later replacement snapshots for a Query."
+owner = "fava-query"
+nearest_nostr = "Subscription"
+distinction = "A Nostr Subscription is relay work; a QuerySource exposes independently owned local state such as an event cache or write store."
+symbols = [
+    "fava_query::SourceKind",
+    "fava_query::SourceRevision",
+    "fava_query::SourceEvent",
+    "fava_query::SourceSnapshot",
+    "fava_query::SourceStatus",
+    "fava_query::SourceChangeFuture",
+    "fava_query::SourceChanges",
+    "fava_query::OpenedQuerySource",
+    "fava_query::QuerySource",
+    "fava_query::QuerySourceError",
+    "fava_query::QuerySourceClosed",
+]
+crates = []
+
+[[term]]
+name = "EventRecord"
+source = "fava"
+meaning = "An event together with the relay and local-publication evidence Fava currently knows about it."
+owner = "fava-query"
+nearest_nostr = "Event"
+distinction = "An Event is the protocol object; EventRecord adds local evidence without changing the event."
+symbols = ["fava_query::EventRecord"]
+crates = []
+
+[[term]]
+name = "QuerySnapshot"
+source = "fava"
+meaning = "One complete immutable answer delivered for an open Query revision."
+owner = "fava-query"
+nearest_nostr = "EVENT and EOSE messages"
+distinction = "Relay messages are source facts; a QuerySnapshot is the merged application-visible current answer."
+symbols = [
+    "fava_query::QueryEvidence",
+    "fava_query::SourceEvidence",
+    "fava_query::QueryRevision",
+    "fava_query::QuerySnapshot",
+]
+crates = []
+
+[[term]]
+name = "QueryEvaluator"
+source = "fava"
+meaning = "The replaceable algorithm that evaluates one Query over complete current QuerySource snapshots."
+owner = "fava-query"
+nearest_nostr = "Filter matching"
+distinction = "Nostr filter matching covers relay events; query evaluation also merges independent local sources and evidence."
+symbols = [
+    "fava_query::QueryEvaluator",
+    "fava_query::QueryEvaluationError",
+    "fava_query_standard::StandardQueryEvaluator",
+]
+crates = ["fava-query-standard"]
+
+[[term]]
+name = "Observation"
+source = "fava"
+meaning = "The lifecycle and application handle of one opened Query."
+owner = "fava-observe"
+nearest_nostr = "Subscription"
+distinction = "An Observation merges local and relay sources and delivers current QuerySnapshots; it is not one relay subscription."
+symbols = [
+    "fava_observe::Observer",
+    "fava_observe::Observation",
+    "fava_observe::ObserveError",
+    "fava_observe::ObservationClosed",
+]
+crates = ["fava-observe"]
+
+[[term]]
+name = "RelayAccess"
+source = "fava"
+meaning = "The stable authorization identity under which relay work occurs."
+owner = "fava-state"
+nearest_nostr = "NIP-42 authentication"
+distinction = "NIP-42 defines authentication messages; RelayAccess identifies the isolated authorization used by queries and relay sessions."
+symbols = ["fava_state::RelayAccess", "fava_state::RelaySessionKey"]
+crates = []
+
+[[term]]
+name = "RelayEvidence"
+source = "fava"
+meaning = "The exact relay sessions and admission times from which Fava received one event."
+owner = "fava-state"
+nearest_nostr = "EVENT message"
+distinction = "An EVENT message carries an event; RelayEvidence records which attributed sessions actually supplied it locally."
+symbols = [
+    "fava_state::RelayObservation",
+    "fava_state::RelayEvidence",
+    "fava_state::CachedEvent",
+]
+crates = ["fava-state"]
+
+[[term]]
+name = "EventCoordinate"
+source = "fava"
+meaning = "The identity used to choose one immutable event or the current event at a replaceable coordinate."
+owner = "fava-state"
+nearest_nostr = "EventId and Coordinate"
+distinction = "Nostr uses EventId for immutable events and Coordinate for replaceable events; query merging needs one ordered key over both."
+symbols = ["fava_state::EventCoordinate"]
+crates = []
+
+[[term]]
+name = "CacheMutation"
+source = "fava"
+meaning = "One atomic event-cache insertion, evidence merge, or retraction decided by Nostr event-state rules."
+owner = "fava-state"
+nearest_nostr = "Event"
+distinction = "Nostr defines events; CacheMutation carries the local atomic change an EventCache must commit."
+symbols = ["fava_state::CacheMutation"]
+crates = []
+
+[[term]]
+name = "EventCache"
+source = "fava"
+meaning = "Storage for signed events observed from relays and their RelayEvidence."
+owner = "fava-event-cache"
+nearest_nostr = "Event"
+distinction = "Nostr defines events but not client retention, eviction, persistence, or coherent local observation."
+symbols = [
+    "fava_event_cache::EventCache",
+    "fava_event_cache::EventCacheError",
+    "fava_event_cache_memory::MemoryEventCache",
+]
+crates = ["fava-event-cache", "fava-event-cache-memory"]
+
+[[term]]
+name = "Write"
+source = "fava"
+meaning = "An accepted local publication obligation and its current event and receipt facts."
+owner = "fava-write"
+nearest_nostr = "EVENT and OK messages"
+distinction = "Nostr defines publication messages; a Write persists local responsibility across signing, routing, delivery, cancellation, and restart."
+symbols = [
+    "fava_write::WriteId",
+    "fava_write::ReceiptId",
+    "fava_write::EventValue",
+    "fava_write::SignatureState",
+    "fava_write::PublicationEvidence",
+    "fava_write::LocalWriteEvent",
+    "fava_write::InvalidEventValue",
+]
+crates = ["fava-write"]
+
+[[term]]
+name = "WriteStore"
+source = "fava"
+meaning = "The authority for accepted local publication obligations, receipts, and current materialized events."
+owner = "fava-write-store"
+nearest_nostr = "EVENT and OK messages"
+distinction = "Relay messages do not define durable local custody or recovery of publication obligations."
+symbols = [
+    "fava_write_store::AcceptedWrite",
+    "fava_write_store::WriteStore",
+    "fava_write_store::WriteStoreError",
+    "fava_write_store_memory::MemoryWriteStore",
+]
+crates = ["fava-write-store", "fava-write-store-memory"]
+
+[[term]]
+name = "WriteIntent"
+source = "fava"
+meaning = "An application request asking Fava to accept responsibility for publishing an event or replaceable-event edit."
+owner = "fava-write"
+nearest_nostr = "EVENT message"
+distinction = "An EVENT message contains a signed event; WriteIntent exists before and throughout Fava's local publication lifecycle."
+symbols = []
+crates = []
+
+[[term]]
+name = "ReplaceableEventEdit"
+source = "fava"
+meaning = "A durable change to a replaceable event that can be applied to the newest event at its coordinate or to defined empty state."
+owner = "fava-write"
+nearest_nostr = "replaceable Event and Coordinate"
+distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
+symbols = []
+crates = []
