@@ -831,30 +831,10 @@ Copy this check across universal owners (`fava`, publication, routing, stores, q
 
 **Analog:** `docs/internals/vocabulary.toml`, `tools/check_vocabulary.py`
 
-**Approved entries** (`docs/internals/vocabulary.toml:411-442`):
-
-```toml
-[[term]]
-name = "ReplaceableEventEdit"
-owner = "fava-write"
-symbols = []
-crates = []
-spec_symbols = ["ReplaceableEventEdit"]
-
-[[term]]
-name = "ReplaceableEventMaterializer"
-owner = "fava-write"
-symbols = []
-crates = []
-spec_symbols = ["ReplaceableEventMaterializer"]
-
-[[term]]
-name = "MaterializationId"
-owner = "fava-write"
-symbols = []
-crates = []
-spec_symbols = ["MaterializationId"]
-```
+The registry already contains the three approved M7 terms, each owned by the
+write-value crate and each linked to its specification symbol. Those entries
+currently have no implementation symbol or crate claim because Plan 01 begins
+from the behavior-first RED state.
 
 When the public symbols/crates exist, populate the existing entries' `symbols`/`crates`; do not create aliases or renamed duplicate terms. Likewise move `fava-nip02` and `fava-bookmarks` from `spec_crates`-only to actual `crates` under their existing `ContactList`/`BookmarkList` entries (`vocabulary.toml:108-126`).
 
