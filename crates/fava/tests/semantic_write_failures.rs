@@ -15,9 +15,15 @@ use nostr::key::Keys;
 
 #[path = "semantic_write_failures/support.rs"]
 mod failure_support;
+#[path = "semantic_write_failures/faults.rs"]
+mod faults;
+#[path = "semantic_write_failures/source_isolation.rs"]
+mod source_isolation;
 #[path = "support/semantic_write.rs"]
 #[allow(dead_code)]
 mod support;
+#[path = "semantic_write_failures/transient_reads.rs"]
+mod transient_reads;
 
 use failure_support::{assembly, edit_intent, save_source, wait_failure, wait_public_failure};
 use support::{EDIT_FORMAT, signed_source};
