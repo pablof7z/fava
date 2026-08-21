@@ -24,11 +24,13 @@ use fava_query::{QueryEvaluator, QuerySource};
 pub use fava_routing::RoutePlan;
 use fava_routing::{RouteRequest, Router};
 use fava_signer::Signer;
+pub use fava_state::{EventCoordinate, RelayUrl};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
 pub use fava_write::{
-    EventBuilder, EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    WriteIntent, WriteRouting,
+    Event, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt, ReceiptId,
+    ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    Timestamp, UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
@@ -242,6 +244,7 @@ pub struct FavaBuilder {
     transport: Option<Arc<dyn Transport>>,
     routers: Vec<Arc<dyn Router>>,
     signers: Vec<Arc<dyn Signer>>,
+    materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
 }
@@ -331,6 +334,26 @@ impl FavaBuilder {
         self
     }
 
+    /// Select one semantic materializer for its exact replaceable kind.
+    #[must_use]
+    pub fn materializer<T>(mut self, materializer: Arc<T>) -> Self
+    where
+        T: ReplaceableEventMaterializer + 'static,
+    {
+        self.materializers.push(materializer);
+        self
+    }
+
+    /// Select already-erased semantic materializers.
+    #[must_use]
+    pub fn materializers(
+        mut self,
+        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
+    ) -> Self {
+        self.materializers.extend(materializers);
+        self
+    }
+
     /// Select one one-attempt publisher.
     #[must_use]
     pub fn publisher<T>(mut self, publisher: Arc<T>) -> Self
@@ -368,8 +391,10 @@ impl FavaBuilder {
             let diagnostics = Arc::clone(&diagnostics);
             Arc::new(move |count| diagnostics.query_updates_coalesced(count))
         };
-        let publication_selected =
-            self.publisher.is_some() || self.delivery.is_some() || !self.signers.is_empty();
+        let publication_selected = self.publisher.is_some()
+            || self.delivery.is_some()
+            || !self.signers.is_empty()
+            || !self.materializers.is_empty();
         let publication = if publication_selected {
             let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
             let delivery = self.delivery.ok_or(BuildError::MissingDeliveryPolicy)?;
@@ -379,6 +404,9 @@ impl FavaBuilder {
                 .ok_or(BuildError::MissingPublicationTransport)?;
             let publication = Publication::new(
                 write_store.clone(),
+                event_source.clone(),
+                evaluator.clone(),
+                self.materializers,
                 self.signers,
                 publisher,
                 delivery,

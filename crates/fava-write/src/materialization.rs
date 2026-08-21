@@ -1,4 +1,4 @@
-use crate::{Event, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError};
+use crate::{Event, Kind, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError};
 use serde::{Deserialize, Serialize};
 
 /// Exact identity of one immutable event materialization generation.
@@ -21,6 +21,9 @@ impl MaterializationId {
 
 /// Pure protocol-provider contract for one replaceable-event edit format.
 pub trait ReplaceableEventMaterializer: Send + Sync {
+    /// Exact non-addressable replaceable kind owned by this provider.
+    fn kind(&self) -> Kind;
+
     /// Whether this provider owns the edit's coordinate and durable format.
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool;
 

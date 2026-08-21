@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 fava-delivery.workspace = true
 fava-publisher.workspace = true
+fava-query.workspace = true
 fava-routing.workspace = true
 fava-signer.workspace = true
 fava-state.workspace = true

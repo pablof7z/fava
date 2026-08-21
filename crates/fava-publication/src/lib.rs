@@ -5,20 +5,28 @@ use std::sync::{Arc, Mutex};
 
 use fava_delivery::DeliveryPolicy;
 use fava_publisher::Publisher;
+use fava_query::{QueryEvaluator, QuerySource};
 use fava_routing::Router;
 use fava_signer::Signer;
 use fava_transport::Transport;
-use fava_write::{PublicKey, Receipt, ReceiptId, ReceiptOutcome, WriteIntent};
+use fava_write::{
+    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
+    WritePayload, WriteRouting,
+};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
 use tokio::sync::watch;
 
+mod materialization;
 mod run;
 
 /// Live owner for accepted write signing and destination delivery.
 #[derive(Clone)]
 pub struct Publication {
     store: Arc<dyn WriteStore>,
+    event_source: Arc<dyn QuerySource>,
+    evaluator: Arc<dyn QueryEvaluator>,
+    materializers: Arc<BTreeMap<Kind, Arc<dyn ReplaceableEventMaterializer>>>,
     signers: Arc<BTreeMap<PublicKey, Arc<dyn Signer>>>,
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
@@ -33,14 +41,19 @@ impl Publication {
     /// # Errors
     ///
     /// Returns [`PublicationError`] for duplicate signer public keys.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: Arc<dyn WriteStore>,
+        event_source: Arc<dyn QuerySource>,
+        evaluator: Arc<dyn QueryEvaluator>,
+        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
         signers: impl IntoIterator<Item = Arc<dyn Signer>>,
         publisher: Arc<dyn Publisher>,
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
         routers: Vec<Arc<dyn Router>>,
     ) -> Result<Self, PublicationError> {
+        let materializers = Self::index_materializers(materializers)?;
         let mut indexed = BTreeMap::new();
         for signer in signers {
             let public_key = signer.public_key();
@@ -50,6 +63,9 @@ impl Publication {
         }
         Ok(Self {
             store,
+            event_source,
+            evaluator,
+            materializers: Arc::new(materializers),
             signers: Arc::new(indexed),
             publisher,
             delivery,
@@ -67,7 +83,21 @@ impl Publication {
     /// after a failed acceptance commit.
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
-        let accepted = self.store.accept(intent)?;
+        let accepted = if matches!(intent.payload(), WritePayload::Edit(_)) {
+            let mut prepared = self.prepare_semantic(&intent, None, None)?;
+            let accepted = self.store.accept_materialized_edit(
+                intent.clone(),
+                prepared.event,
+                prepared.source.as_ref(),
+            )?;
+            if matches!(intent.routing(), WriteRouting::Automatic) {
+                let _ = self.store.apply_route(accepted.receipt_id, &prepared.route);
+            }
+            prepared.sources.close();
+            accepted
+        } else {
+            self.store.accept(intent)?
+        };
         self.start(accepted.receipt_id);
         Ok(accepted)
     }

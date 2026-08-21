@@ -9,10 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, EventValue, Fava, FavaBuilder, Kind,
-    MaterializationId, PublicKey, ReceiptOutcome, RelayUrl, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WriteIntentError,
-    WriteRouting,
+    Event, EventBuilder, EventCoordinate, EventValue, Fava, FavaBuilder, Kind, MaterializationId,
+    PublicKey, ReceiptOutcome, RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    Timestamp, UnsignedEvent, WriteIntent, WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -21,9 +20,7 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
-use fava_state::{
-    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey,
-};
+use fava_state::{CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey};
 use fava_transport::{RelaySession, Transport, TransportError};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -107,11 +104,7 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     );
     assert!(
         unsupported
-            .publish(intent(
-                keys.public_key(),
-                Kind::Custom(10_003),
-                EDIT_FORMAT,
-            ))
+            .publish(intent(keys.public_key(), Kind::Custom(10_003), EDIT_FORMAT,))
             .is_err()
     );
     assert_no_effects(
@@ -210,7 +203,10 @@ async fn first_value_receives_exact_injected_timestamp() {
     let calls = materializer.calls();
 
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].source.as_ref().map(|event| event.id), Some(source.id));
+    assert_eq!(
+        calls[0].source.as_ref().map(|event| event.id),
+        Some(source.id)
+    );
     assert_eq!(calls[0].created_at, Timestamp::max());
     assert_eq!(receipt.current.event.created_at(), Timestamp::max());
     assert_eq!(publisher.attempts()[0].event.created_at, Timestamp::max());
@@ -224,11 +220,8 @@ fn intent(actor: PublicKey, kind: Kind, format: u32) -> WriteIntent {
     };
     let edit = ReplaceableEventEdit::new(actor, coordinate, format, vec![1], vec![2])
         .expect("bounded edit");
-    WriteIntent::edit(
-        edit,
-        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
-    )
-    .expect("semantic intent validates")
+    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()])))
+        .expect("semantic intent validates")
 }
 
 fn assembly(
@@ -338,7 +331,11 @@ impl ReplaceableEventMaterializer for TestMaterializer {
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.format() == self.format && edit.coordinate().kind() == Some(self.kind)
+        edit.format() == self.format
+            && matches!(
+                edit.coordinate(),
+                EventCoordinate::Replaceable { kind, .. } if *kind == self.kind
+            )
     }
 
     fn materialize(
@@ -447,14 +444,9 @@ impl Transport for NoopTransport {
     }
 }
 
-fn signed_source(
-    keys: &Keys,
-    kind: Kind,
-    created_at: u64,
-    content: &str,
-    tags: &[&str],
-) -> Event {
-    let mut builder = NostrEventBuilder::new(kind, content).custom_created_at(Timestamp::from(created_at));
+fn signed_source(keys: &Keys, kind: Kind, created_at: u64, content: &str, tags: &[&str]) -> Event {
+    let mut builder =
+        NostrEventBuilder::new(kind, content).custom_created_at(Timestamp::from(created_at));
     for value in tags {
         builder = builder.tag(Tag::parse(["t", *value]).expect("test tag"));
     }

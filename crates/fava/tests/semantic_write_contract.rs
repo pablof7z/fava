@@ -57,6 +57,10 @@ fn edit_contract_is_bounded_and_round_trips() {
 struct ExactMaterializer;
 
 impl ReplaceableEventMaterializer for ExactMaterializer {
+    fn kind(&self) -> Kind {
+        Kind::ContactList
+    }
+
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
         edit.format() == 7
     }
