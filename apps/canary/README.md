@@ -30,3 +30,27 @@ cargo run --manifest-path apps/canary/Cargo.toml -- \
 ```
 
 Evidence is preserved under `apps/canary/runs/` and excluded from Git.
+
+The four M7 semantic-write canaries are deterministic, memory-backed public
+Fava executions. They do not start a relay or use timing sleeps:
+
+```sh
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-first-value --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-rematerialization --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-inverse --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run protocol-crate-n-plus-one --seed <unique-seed>
+```
+
+Each run writes `semantic.json`, a bounded event log, a report, and a manifest
+with artifact hashes. First-value evidence includes the stable write/receipt,
+materialization, exact route, publication attempt, public-query result, and
+cache absence. Rematerialization evidence includes the qualified source,
+current and retired materializations, preserved fields, and one publication.
+Inverse evidence includes both final events, all ten stable receipt IDs, empty
+target counts, adjacent empty operations, and exact publication count. N+1
+evidence records the independent public-only capability, raw future-kind proof,
+and absence from the product dependency graph. Any missing proof exits nonzero.
