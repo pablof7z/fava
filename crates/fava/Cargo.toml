@@ -5,12 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-auth.workspace = true
 fava-diagnostics.workspace = true
 fava-event-cache.workspace = true
 fava-ingest.workspace = true
 fava-observe.workspace = true
 fava-publication.workspace = true
 fava-publisher.workspace = true
+fava-publisher-nip01.workspace = true
 fava-query.workspace = true
 fava-routing.workspace = true
 fava-signer.workspace = true
@@ -29,6 +31,7 @@ tokio.workspace = true
 fava-event-cache-memory.workspace = true
 fava-delivery-standard.workspace = true
 fava-publisher.workspace = true
+fava-publisher-nip01.workspace = true
 fava-signer.workspace = true
 fava-signer-local.workspace = true
 fava-query-standard.workspace = true

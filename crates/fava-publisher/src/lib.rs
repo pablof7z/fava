@@ -38,8 +38,11 @@ pub enum PublishOutcome {
         /// Exact bounded relay message.
         message: String,
     },
-    /// Relay requires authentication not supplied by this attempt.
-    AuthenticationRequired,
+    /// Relay access was required and not granted for this exact attempt.
+    AuthenticationDenied {
+        /// Exact scoped authentication reason.
+        reason: String,
+    },
     /// Bytes definitely were not handed to transport.
     NotHandedOff {
         /// Exact definite failure reason.

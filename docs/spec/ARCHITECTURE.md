@@ -2100,6 +2100,38 @@ Accepted write state is then self-identifying and independent of later current-a
 
 Authentication identity is explicit in the route/session configuration. It is independent of query filters and event authorship.
 
+### Contract
+
+```rust
+pub struct RelayChallenge { /* relay session key, transport generation, challenge */ }
+
+pub enum AuthorizationDecision {
+    Authorize(PublicKey),
+    Decline(String),
+}
+
+pub trait AuthenticationPolicy: Send + Sync {
+    async fn authorize(&self, challenge: &RelayChallenge) -> AuthorizationDecision;
+}
+
+pub enum AuthenticationOutcome {
+    Accepted { identity: PublicKey, message: String },
+    Refused { message: String },
+    Declined { reason: String },
+    Failed { reason: String },
+}
+
+pub struct Authentication { /* policy, signers, bounded deadline */ }
+```
+
+The application supplies the policy and the signers it may authorize. `Authentication` correlates
+one exact challenge, the policy decision, the selected `Signer`, and the relay's `OK` into one
+session-scoped outcome. It owns no connection: the caller supplies the exact session whose
+generation carried the challenge, so an answer for a retired generation is refused by identity.
+
+A reader that also carries query traffic uses `prepare` and settles the relay `OK` in its own loop,
+so authentication never drains frames another owner is responsible for.
+
 ---
 
 ## `fava-diagnostics`

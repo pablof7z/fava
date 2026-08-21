@@ -8,6 +8,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-auth:lib",
         "//crates/fava-publisher:lib",
         "//crates/fava-transport:lib",
         "//crates/fava-wire:lib",

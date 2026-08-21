@@ -70,7 +70,8 @@ impl Publication {
                 route = next_route(&mut routes), if routes.is_some() => {
                     let Ok(contribution) = route else { routes = None; continue; };
                     route_revision = route_revision.saturating_add(1);
-                    let request = RouteRequest::Write(current.current.event.clone());
+                    let request =
+                        RouteRequest::write(current.current.event.clone(), current.access.clone());
                     self.apply_route(receipt_id, route_revision, &request, &contribution);
                 }
                 change = receipt_changes.recv() => {
@@ -95,7 +96,7 @@ impl Publication {
         let WriteRouting::Automatic = receipt.routing else {
             return None;
         };
-        let request = RouteRequest::Write(receipt.current.event.clone());
+        let request = RouteRequest::write(receipt.current.event.clone(), receipt.access.clone());
         match fava_routing::open(self.routers.as_slice(), &request) {
             Ok(routes) => {
                 let revision = receipt.route_revision.saturating_add(1);
@@ -269,9 +270,9 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
     match outcome {
         PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
         PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::GivenUp {
-            reason: "relay authentication required".to_owned(),
-        },
+        PublishOutcome::AuthenticationDenied { reason } => {
+            RelayDeliveryOutcome::AuthenticationDenied { reason }
+        }
         PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
         PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
     }

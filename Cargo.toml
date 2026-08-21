@@ -27,6 +27,7 @@ members = [
     "crates/fava-router-testkit",
     "crates/fava-subscriptions-standard",
     "crates/fava-signer",
+    "crates/fava-auth",
     "crates/fava-signer-local",
     "crates/fava-publisher",
     "crates/fava-publisher-nip01",
@@ -63,6 +64,7 @@ fava-router-hints = { path = "crates/fava-router-hints" }
 fava-router-testkit = { path = "crates/fava-router-testkit" }
 fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
 fava-signer = { path = "crates/fava-signer" }
+fava-auth = { path = "crates/fava-auth" }
 fava-signer-local = { path = "crates/fava-signer-local" }
 fava-publisher = { path = "crates/fava-publisher" }
 fava-publisher-nip01 = { path = "crates/fava-publisher-nip01" }

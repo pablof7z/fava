@@ -43,6 +43,7 @@ impl DeliveryPolicy for StandardDeliveryPolicy {
             | RelayDeliveryOutcome::Acknowledged { .. }
             | RelayDeliveryOutcome::Rejected { .. }
             | RelayDeliveryOutcome::GivenUp { .. }
+            | RelayDeliveryOutcome::AuthenticationDenied { .. }
             | RelayDeliveryOutcome::Unknown { .. }
             | RelayDeliveryOutcome::CancelledBeforeHandoff => DeliveryDecision::Settled,
         }

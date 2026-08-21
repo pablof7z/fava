@@ -275,6 +275,7 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-auth",
  "fava-delivery",
  "fava-delivery-standard",
  "fava-diagnostics",
@@ -284,6 +285,7 @@ dependencies = [
  "fava-observe",
  "fava-publication",
  "fava-publisher",
+ "fava-publisher-nip01",
  "fava-query",
  "fava-query-standard",
  "fava-router-app-relays",
@@ -301,6 +303,22 @@ dependencies = [
  "fava-write-store",
  "fava-write-store-memory",
  "fava-write-store-redb",
+ "nostr",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-auth"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
+ "fava-signer-local",
+ "fava-state",
+ "fava-transport",
+ "fava-wire",
+ "fava-write",
  "nostr",
  "serde_json",
  "thiserror",
@@ -411,6 +429,7 @@ dependencies = [
 name = "fava-publisher-nip01"
 version = "0.1.0"
 dependencies = [
+ "fava-auth",
  "fava-publisher",
  "fava-transport",
  "fava-wire",

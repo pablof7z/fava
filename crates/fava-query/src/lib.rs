@@ -186,6 +186,16 @@ impl Query {
         Ok(self)
     }
 
+    /// Select the exact relay access under which relay work executes.
+    ///
+    /// Relay access is authorization identity. It is independent of the query
+    /// filter, of event authorship, and of any current account.
+    #[must_use]
+    pub fn with_relay_access(mut self, access: RelayAccess) -> Self {
+        self.access = access;
+        self
+    }
+
     /// Use local sources without creating relay demand.
     #[must_use]
     pub const fn cache_only(mut self) -> Self {

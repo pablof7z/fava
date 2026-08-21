@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_state::{EventCoordinate, RelaySessionKey, RelayUrl, event_coordinate};
+use fava_state::{EventCoordinate, RelayAccess, RelaySessionKey, RelayUrl, event_coordinate};
 pub use nostr::event::{Event, EventId, Kind, Tag, UnsignedEvent};
 pub use nostr::key::PublicKey;
 pub use nostr::types::Timestamp;
@@ -64,6 +64,8 @@ pub enum WriteRouting {
 pub struct WriteIntent {
     payload: WritePayload,
     routing: WriteRouting,
+    #[serde(default)]
+    access: RelayAccess,
 }
 
 impl WriteIntent {
@@ -92,6 +94,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Event(event),
             routing,
+            access: RelayAccess::public(),
         })
     }
 
@@ -116,7 +119,25 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Presigned(event),
             routing,
+            access: RelayAccess::public(),
         })
+    }
+
+    /// Select the exact relay access under which destinations execute.
+    ///
+    /// Relay access is authorization identity, not authorship. Two accounts
+    /// publishing to one relay occupy two relay sessions, so denying one
+    /// cannot terminate the other.
+    #[must_use]
+    pub fn with_relay_access(mut self, access: RelayAccess) -> Self {
+        self.access = access;
+        self
+    }
+
+    /// Selected relay access.
+    #[must_use]
+    pub const fn access(&self) -> &RelayAccess {
+        &self.access
     }
 
     /// Accepted event form.
@@ -133,8 +154,8 @@ impl WriteIntent {
 
     /// Consume the intent into its exact parts.
     #[must_use]
-    pub fn into_parts(self) -> (WritePayload, WriteRouting) {
-        (self.payload, self.routing)
+    pub fn into_parts(self) -> (WritePayload, WriteRouting, RelayAccess) {
+        (self.payload, self.routing, self.access)
     }
 }
 
@@ -324,6 +345,11 @@ pub enum RelayDeliveryOutcome {
         /// Exact policy reason.
         reason: String,
     },
+    /// Relay access was required and not granted for this exact destination.
+    AuthenticationDenied {
+        /// Exact scoped authentication reason.
+        reason: String,
+    },
     /// Handoff or recovery cannot prove whether the relay received the event.
     Unknown {
         /// Exact ambiguity reason.
@@ -342,6 +368,7 @@ impl RelayDeliveryOutcome {
             Self::Acknowledged { .. }
                 | Self::Rejected { .. }
                 | Self::GivenUp { .. }
+                | Self::AuthenticationDenied { .. }
                 | Self::Unknown { .. }
                 | Self::CancelledBeforeHandoff
         )
@@ -422,6 +449,9 @@ pub struct Receipt {
     pub current: LocalWriteEvent,
     /// Selected routing mode.
     pub routing: WriteRouting,
+    /// Relay access under which every destination of this receipt executes.
+    #[serde(default)]
+    pub access: RelayAccess,
     /// Aggregate current receipt result.
     pub outcome: ReceiptOutcome,
     /// Last route revision atomically applied to this receipt.
