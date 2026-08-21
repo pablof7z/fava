@@ -15,16 +15,14 @@ use fava_write::{
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
-use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
-    validate_receipt_text,
-};
+use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use tokio::sync::{broadcast, watch};
 
+mod lifecycle;
 mod model;
 mod semantic;
 
-use model::{UnsignedEventView, destinations, settle};
+use model::destinations;
 use semantic::{WriteState, active_count, next_revision, release_semantic};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
@@ -209,169 +207,81 @@ impl WriteStore for MemoryWriteStore {
 
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
-        event
-            .verify()
-            .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
-        let mut guard = self.lock_state()?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() {
-            return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-        }
-        let EventValue::Unsigned(unsigned) = &receipt.current.event else {
-            return Err(WriteStoreError::Refused(
-                "event is already signed".to_owned(),
-            ));
-        };
-        if UnsignedEventView::from(unsigned) != UnsignedEventView::from(&event) {
-            return Err(WriteStoreError::Refused(
-                "signature does not match current unsigned event".to_owned(),
-            ));
-        }
-        receipt.current.event = EventValue::Signed(event);
-        receipt.current.publication.signature = SignatureState::Signed;
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_receipt(&guard, &current);
-        Ok(current)
+        self.install_signed_current(write_id, receipt_id, materialization_id, event_id, event)
     }
 
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        validate_receipt_text(&reason)?;
-        let mut guard = self.lock_state()?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() || !matches!(receipt.current.event, EventValue::Unsigned(_)) {
-            return Err(WriteStoreError::Refused(
-                "signer refusal is not current".to_owned(),
-            ));
-        }
-        receipt.current.publication.signature = SignatureState::Refused(reason);
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_receipt(&guard, &current);
-        Ok(current)
+        self.record_signer_refusal_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
     }
 
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut guard = self.lock_state()?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() {
-            return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-        }
-        apply_route_to_receipt(receipt, plan)?;
-        let updated = receipt.clone();
-        let terminal = updated.is_terminal();
-        guard.revision = next_revision;
-        if terminal {
-            release_semantic(&mut guard, receipt_id);
-        }
-        self.publish_receipt(&guard, &updated);
-        Ok(updated)
+        self.apply_route_current(write_id, receipt_id, materialization_id, event_id, plan)
     }
 
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut guard = self.lock_state()?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if !matches!(receipt.current.event, EventValue::Signed(_)) {
-            return Err(WriteStoreError::Refused("event is not signed".to_owned()));
-        }
-        let outcome = receipt
-            .current
-            .publication
-            .destinations
-            .get_mut(session)
-            .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
-        if !matches!(
-            outcome,
-            RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
-        ) {
-            return Err(WriteStoreError::Refused(
-                "destination is not pending".to_owned(),
-            ));
-        }
-        *outcome = RelayDeliveryOutcome::Attempting;
-        let attempts = receipt.attempts.entry(session.clone()).or_default();
-        *attempts = attempts
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_receipt(&guard, &current);
-        Ok(current)
+        self.begin_attempt_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            session,
+            attempt,
+        )
     }
 
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {
-        validate_delivery_outcome(&outcome)?;
-        if !outcome.is_terminal() && !matches!(outcome, RelayDeliveryOutcome::Retryable { .. }) {
-            return Err(WriteStoreError::Refused(
-                "recorded delivery outcome is not terminal".to_owned(),
-            ));
-        }
-        let mut guard = self.lock_state()?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let current = receipt
-            .current
-            .publication
-            .destinations
-            .get_mut(session)
-            .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
-        let may_transition = matches!(current, RelayDeliveryOutcome::Attempting)
-            || (matches!(current, RelayDeliveryOutcome::Retryable { .. })
-                && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
-        if !may_transition {
-            return Err(WriteStoreError::Refused(
-                "attempt is not current".to_owned(),
-            ));
-        }
-        *current = outcome;
-        settle(receipt);
-        let current = receipt.clone();
-        let terminal = current.is_terminal();
-        guard.revision = next_revision;
-        if terminal {
-            release_semantic(&mut guard, receipt_id);
-        }
-        self.publish_receipt(&guard, &current);
-        Ok(current)
+        self.record_outcome_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            session,
+            attempt,
+            outcome,
+        )
     }
 
     fn cancel(&self, receipt_id: ReceiptId) -> Result<Option<Receipt>, WriteStoreError> {

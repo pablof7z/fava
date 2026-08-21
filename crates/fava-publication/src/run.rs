@@ -1,18 +1,13 @@
 use std::collections::BTreeSet;
-use std::time::Duration;
 
-use fava_delivery::{DeliveryDecision, DeliveryFacts};
-use fava_publisher::{PublishAttempt, PublishOutcome};
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
 use fava_signer::{SignerAvailability, SignerError};
-use fava_state::RelaySessionKey;
-use fava_write::{EventValue, Receipt, ReceiptId, RelayDeliveryOutcome, WriteIntent, WriteRouting};
+use fava_write::{EventValue, Receipt, ReceiptId, WriteIntent, WriteRouting};
+use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
 
 use super::Publication;
 use super::materialization::SemanticState;
-
-const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl Publication {
     pub(super) fn start(&self, receipt_id: ReceiptId) {
@@ -55,7 +50,7 @@ impl Publication {
         let mut materialization_id = receipt.current.publication.materialization_id;
 
         let mut receipt_changes = self.store.receipt_changes();
-        let (lane_finished, mut finished_lanes) = mpsc::unbounded_channel();
+        let (lane_finished, mut finished_lanes) = mpsc::channel(destination_evidence_capacity());
         let mut active = BTreeSet::new();
         let mut route_revision = self
             .store
@@ -68,7 +63,7 @@ impl Publication {
             let Some(current) = self.store.receipt(receipt_id).ok().flatten() else {
                 break;
             };
-            self.start_lanes(&current, &mut active, &lane_finished);
+            self.start_lanes(&current, &mut active, &lane_finished, &cancel);
             if current.is_terminal() {
                 break;
             }
@@ -84,7 +79,7 @@ impl Publication {
                     let Ok(contribution) = route else { routes = None; continue; };
                     route_revision = route_revision.saturating_add(1);
                     let request = RouteRequest::Write(current.current.event.clone());
-                    self.apply_route(receipt_id, route_revision, &request, &contribution);
+                    self.apply_route(&current, route_revision, &request, &contribution);
                 }
                 source_open = next_semantic_source(&mut semantic), if semantic.is_some() => {
                     if source_open {
@@ -194,22 +189,41 @@ impl Publication {
                 return;
             }
         };
-        let Ok(installed) = self.store.install_materialization(
+        let installed = self.store.install_materialization(
             receipt.write_id,
             receipt.receipt_id,
             expected,
             expected_source,
             event,
             successor.as_ref(),
-        ) else {
-            return;
+        );
+        let installed = match installed {
+            Ok(installed) => installed,
+            Err(error) => {
+                let _ = self.store.record_materialization_failure(
+                    receipt.write_id,
+                    receipt.receipt_id,
+                    expected,
+                    expected_source,
+                    successor.as_ref(),
+                    error.to_string(),
+                );
+                state.failed_id = successor.as_ref().map(|event| event.id);
+                return;
+            }
         };
         if matches!(receipt.routing, WriteRouting::Automatic) {
             let Some(revision) = installed.route_revision.checked_add(1) else {
                 return;
             };
             route.revision = revision;
-            let _ = self.store.apply_route(receipt.receipt_id, &route);
+            let _ = self.store.apply_route(
+                installed.write_id,
+                installed.receipt_id,
+                installed.current.publication.materialization_id,
+                installed.current.id(),
+                &route,
+            );
         }
         state.selected_id = successor.as_ref().map(|event| event.id);
         if let Some(source) = &successor {
@@ -226,7 +240,7 @@ impl Publication {
         match fava_routing::open(self.routers.as_slice(), &request) {
             Ok(routes) => {
                 let revision = receipt.route_revision.saturating_add(1);
-                self.apply_route(receipt.receipt_id, revision, &request, &routes.current());
+                self.apply_route(receipt, revision, &request, &routes.current());
                 Some(routes)
             }
             Err(error) => {
@@ -235,7 +249,13 @@ impl Publication {
                     &request,
                     error.to_string(),
                 );
-                let _ = self.store.apply_route(receipt.receipt_id, &plan);
+                let _ = self.store.apply_route(
+                    receipt.write_id,
+                    receipt.receipt_id,
+                    receipt.current.publication.materialization_id,
+                    receipt.current.id(),
+                    &plan,
+                );
                 None
             }
         }
@@ -243,7 +263,7 @@ impl Publication {
 
     fn apply_route(
         &self,
-        receipt_id: ReceiptId,
+        receipt: &Receipt,
         revision: u64,
         request: &RouteRequest,
         contribution: &RouteContribution,
@@ -252,9 +272,21 @@ impl Publication {
             Ok(plan) => plan,
             Err(error) => RoutePlan::shortfall(revision, request, error.to_string()),
         };
-        if let Err(error) = self.store.apply_route(receipt_id, &plan) {
+        if let Err(error) = self.store.apply_route(
+            receipt.write_id,
+            receipt.receipt_id,
+            receipt.current.publication.materialization_id,
+            receipt.current.id(),
+            &plan,
+        ) {
             let shortfall = RoutePlan::shortfall(revision, request, error.to_string());
-            let _ = self.store.apply_route(receipt_id, &shortfall);
+            let _ = self.store.apply_route(
+                receipt.write_id,
+                receipt.receipt_id,
+                receipt.current.publication.materialization_id,
+                receipt.current.id(),
+                &shortfall,
+            );
         }
     }
 
@@ -269,15 +301,23 @@ impl Publication {
             return;
         }
         let publication = self.clone();
+        let write_id = receipt.write_id;
         let receipt_id = receipt.receipt_id;
+        let materialization_id = receipt.current.publication.materialization_id;
+        let event_id = receipt.current.id();
         tokio::spawn(async move {
-            let expected = unsigned.clone();
             match signer.sign_event(unsigned, cancel).await {
                 Ok(event) => {
-                    if publication.store.install_signed(receipt_id, event).is_err() {
-                        publication.record_current_signer_refusal(
+                    if publication
+                        .store
+                        .install_signed(write_id, receipt_id, materialization_id, event_id, event)
+                        .is_err()
+                    {
+                        let _ = publication.store.record_signer_refusal(
+                            write_id,
                             receipt_id,
-                            &expected,
+                            materialization_id,
+                            event_id,
                             "signer returned an event that did not match the accepted body"
                                 .to_owned(),
                         );
@@ -285,117 +325,16 @@ impl Publication {
                 }
                 Err(SignerError::Cancelled) => {}
                 Err(error) => {
-                    publication.record_current_signer_refusal(
+                    let _ = publication.store.record_signer_refusal(
+                        write_id,
                         receipt_id,
-                        &expected,
+                        materialization_id,
+                        event_id,
                         error.to_string(),
                     );
                 }
             }
         });
-    }
-
-    fn record_current_signer_refusal(
-        &self,
-        receipt_id: ReceiptId,
-        expected: &fava_write::UnsignedEvent,
-        reason: String,
-    ) {
-        let current_matches = self
-            .store
-            .receipt(receipt_id)
-            .ok()
-            .flatten()
-            .is_some_and(|receipt| {
-                matches!(receipt.current.event, EventValue::Unsigned(current) if current == *expected)
-            });
-        if current_matches {
-            let _ = self.store.record_signer_refusal(receipt_id, reason);
-        }
-    }
-
-    fn start_lanes(
-        &self,
-        receipt: &Receipt,
-        active: &mut BTreeSet<RelaySessionKey>,
-        finished: &mpsc::UnboundedSender<RelaySessionKey>,
-    ) {
-        if !matches!(receipt.current.event, EventValue::Signed(_)) {
-            return;
-        }
-        for session in &receipt.desired_destinations {
-            let Some(outcome) = receipt.destinations().get(session) else {
-                continue;
-            };
-            if !matches!(
-                outcome,
-                RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
-            ) || !active.insert(session.clone())
-            {
-                continue;
-            }
-            let publication = self.clone();
-            let session = session.clone();
-            let finished = finished.clone();
-            let receipt_id = receipt.receipt_id;
-            tokio::spawn(async move {
-                publication
-                    .run_destination(receipt_id, session.clone())
-                    .await;
-                let _ = finished.send(session);
-            });
-        }
-    }
-
-    async fn run_destination(&self, receipt_id: ReceiptId, session: RelaySessionKey) {
-        loop {
-            let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
-                return;
-            };
-            if !receipt.desires(&session) {
-                return;
-            }
-            let Some(outcome) = receipt.destinations().get(&session) else {
-                return;
-            };
-            let attempts = receipt.attempts.get(&session).copied().unwrap_or(0);
-            match self.delivery.decide(DeliveryFacts { attempts, outcome }) {
-                DeliveryDecision::Settled => return,
-                DeliveryDecision::GiveUp { reason } => {
-                    let _ = self.store.record_outcome(
-                        receipt_id,
-                        &session,
-                        RelayDeliveryOutcome::GivenUp { reason },
-                    );
-                    return;
-                }
-                DeliveryDecision::AttemptNow => self.attempt(receipt_id, &session).await,
-            }
-        }
-    }
-
-    async fn attempt(&self, receipt_id: ReceiptId, session: &RelaySessionKey) {
-        let Ok(receipt) = self.store.begin_attempt(receipt_id, session) else {
-            return;
-        };
-        let EventValue::Signed(event) = receipt.current.event.clone() else {
-            return;
-        };
-        let attempt = PublishAttempt {
-            write_id: receipt.write_id,
-            receipt_id,
-            number: receipt.attempts.get(session).copied().unwrap_or(0),
-            session: session.clone(),
-            event,
-            timeout: ATTEMPT_TIMEOUT,
-        };
-        let outcome = self
-            .publisher
-            .publish(attempt, self.transport.as_ref())
-            .await;
-        let _ = self
-            .store
-            .record_outcome(receipt_id, session, delivery_outcome(outcome));
     }
 
     fn finished(&self, receipt_id: ReceiptId) {
@@ -419,17 +358,5 @@ async fn next_semantic_source(semantic: &mut Option<SemanticState>) -> bool {
     match semantic {
         Some(semantic) => semantic.sources.next_change().await,
         None => std::future::pending().await,
-    }
-}
-
-fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
-    match outcome {
-        PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
-        PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::GivenUp {
-            reason: "relay authentication required".to_owned(),
-        },
-        PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
-        PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
     }
 }

@@ -93,6 +93,17 @@ fn retired_completion_is_attributable_and_inert() {
     );
     assert!(
         store
+            .record_signer_refusal(
+                accepted.write_id,
+                accepted.receipt_id,
+                generation_one,
+                generation_two.current.id(),
+                "retired generation with current event identity".to_owned(),
+            )
+            .is_err()
+    );
+    assert!(
+        store
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
@@ -110,6 +121,7 @@ fn retired_completion_is_attributable_and_inert() {
                 generation_one,
                 event_one,
                 &session,
+                1,
             )
             .is_err()
     );

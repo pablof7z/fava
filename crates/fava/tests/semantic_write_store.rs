@@ -406,7 +406,10 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
     );
     let settled = store
         .apply_route(
+            replacement.write_id,
             replacement.receipt_id,
+            replacement.current.publication.materialization_id,
+            replacement.current.id(),
             &RoutePlan {
                 revision: 1,
                 destinations: BTreeMap::new(),

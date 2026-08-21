@@ -68,7 +68,13 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .unwrap();
     assert!(
         store
-            .record_signer_refusal(accepted.receipt_id, "x".repeat(4_097))
+            .record_signer_refusal(
+                accepted.write_id,
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
+                "x".repeat(4_097),
+            )
             .is_err()
     );
     let wrong = EventBuilder::new(keys.public_key(), Kind::TextNote)
@@ -77,7 +83,17 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .unwrap()
         .finalize(&keys)
         .unwrap();
-    assert!(store.install_signed(accepted.receipt_id, wrong).is_err());
+    assert!(
+        store
+            .install_signed(
+                accepted.write_id,
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
+                wrong,
+            )
+            .is_err()
+    );
     let mut receipt = store.receipt(accepted.receipt_id).unwrap().unwrap();
     assert!(matches!(receipt.current.event, EventValue::Unsigned(_)));
     assert_eq!(
@@ -89,15 +105,34 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         unreachable!("receipt remains unsigned");
     };
     receipt = store
-        .install_signed(accepted.receipt_id, unsigned.finalize(&keys).unwrap())
+        .install_signed(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            unsigned.finalize(&keys).unwrap(),
+        )
         .unwrap();
     let session = receipt.destinations().keys().next().unwrap().clone();
-    store.begin_attempt(accepted.receipt_id, &session).unwrap();
+    store
+        .begin_attempt(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &session,
+            1,
+        )
+        .unwrap();
     assert!(
         store
             .record_outcome(
+                accepted.write_id,
                 accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
                 &session,
+                1,
                 RelayDeliveryOutcome::Acknowledged {
                     message: "x".repeat(4_097),
                 },
@@ -139,7 +174,15 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
     )
     .unwrap();
 
-    let error = store.apply_route(accepted.receipt_id, &plan).unwrap_err();
+    let error = store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &plan,
+        )
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         "write store refused operation: route destination fan-out exceeds bound: 257 > 256"
@@ -182,7 +225,15 @@ fn automatic_route_shortfall_bound_is_atomic() {
         },
     )
     .unwrap();
-    let before = store.apply_route(accepted.receipt_id, &first).unwrap();
+    let before = store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &first,
+        )
+        .unwrap();
     let refused = RoutePlan {
         revision: 2,
         destinations: BTreeMap::new(),
@@ -192,7 +243,17 @@ fn automatic_route_shortfall_bound_is_atomic() {
         settled: true,
     };
 
-    assert!(store.apply_route(accepted.receipt_id, &refused).is_err());
+    assert!(
+        store
+            .apply_route(
+                accepted.write_id,
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
+                &refused,
+            )
+            .is_err()
+    );
     assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(before));
 }
 
@@ -226,8 +287,25 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         },
     )
     .unwrap();
-    store.apply_route(accepted.receipt_id, &first).unwrap();
-    store.begin_attempt(accepted.receipt_id, &session).unwrap();
+    store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &first,
+        )
+        .unwrap();
+    store
+        .begin_attempt(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &session,
+            1,
+        )
+        .unwrap();
     let withdrawn = RoutePlan {
         revision: 2,
         destinations: BTreeMap::new(),
@@ -237,7 +315,15 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         settled: true,
     };
 
-    let receipt = store.apply_route(accepted.receipt_id, &withdrawn).unwrap();
+    let receipt = store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &withdrawn,
+        )
+        .unwrap();
     assert_eq!(receipt.outcome, ReceiptOutcome::Open);
     assert!(matches!(
         receipt.destinations().get(&session),
@@ -245,8 +331,12 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
     ));
     let receipt = store
         .record_outcome(
+            accepted.write_id,
             accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
             &session,
+            1,
             RelayDeliveryOutcome::Acknowledged {
                 message: "saved historical handoff".to_owned(),
             },
@@ -267,7 +357,15 @@ fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
     let accepted = store
         .accept(WriteIntent::event(event, WriteRouting::Automatic).unwrap())
         .unwrap();
-    let receipt = store.apply_route(accepted.receipt_id, &plan).unwrap();
+    let receipt = store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &plan,
+        )
+        .unwrap();
 
     assert_eq!(receipt.outcome, ReceiptOutcome::NoDestination);
     assert!(receipt.route_settled);

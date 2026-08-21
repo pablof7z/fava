@@ -3,12 +3,13 @@ use std::collections::BTreeMap;
 use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey};
 use fava_write::{
-    Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload, WriteRouting,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent,
+    WritePayload, WriteRouting,
 };
 use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
-    validate_receipt_text,
+    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
+    validate_current_materialization, validate_delivery_outcome, validate_receipt_text,
 };
 use tokio::sync::broadcast;
 
@@ -92,25 +93,31 @@ impl WriteStore for RedbWriteStore {
 
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
         event
             .verify()
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() {
-                return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-            }
-            let EventValue::Unsigned(unsigned) = &receipt.current.event else {
-                return Err(WriteStoreError::Refused(
-                    "event is already signed".to_owned(),
-                ));
-            };
-            if UnsignedEventView::from(unsigned) != UnsignedEventView::from(&event) {
-                return Err(WriteStoreError::Refused(
-                    "signature does not match current unsigned event".to_owned(),
-                ));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            match &receipt.current.event {
+                EventValue::Signed(current) if current == &event => return Ok(()),
+                EventValue::Signed(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "event is already signed differently".to_owned(),
+                    ));
+                }
+                EventValue::Unsigned(unsigned)
+                    if UnsignedEventView::from(unsigned) == UnsignedEventView::from(&event) => {}
+                EventValue::Unsigned(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "signature does not match current unsigned event".to_owned(),
+                    ));
+                }
             }
             receipt.current.event = EventValue::Signed(event);
             receipt.current.publication.signature = SignatureState::Signed;
@@ -120,15 +127,23 @@ impl WriteStore for RedbWriteStore {
 
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         validate_receipt_text(&reason)?;
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() || !matches!(receipt.current.event, EventValue::Unsigned(_)) {
-                return Err(WriteStoreError::Refused(
-                    "signer refusal is not current".to_owned(),
-                ));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            match &receipt.current.publication.signature {
+                SignatureState::Refused(current) if current == &reason => return Ok(()),
+                SignatureState::Unsigned => {}
+                SignatureState::Signed | SignatureState::Refused(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "signer refusal is not current".to_owned(),
+                    ));
+                }
             }
             receipt.current.publication.signature = SignatureState::Refused(reason);
             Ok(())
@@ -137,12 +152,22 @@ impl WriteStore for RedbWriteStore {
 
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() {
-                return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            let destinations: std::collections::BTreeSet<_> =
+                plan.destinations.keys().cloned().collect();
+            if plan.revision == receipt.route_revision
+                && destinations == receipt.desired_destinations
+                && plan.shortfalls == receipt.route_shortfalls
+                && plan.settled == receipt.route_settled
+            {
+                return Ok(());
             }
             apply_route_to_receipt(receipt, plan)
         })
@@ -150,12 +175,34 @@ impl WriteStore for RedbWriteStore {
 
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
             if !matches!(receipt.current.event, EventValue::Signed(_)) {
                 return Err(WriteStoreError::Refused("event is not signed".to_owned()));
+            }
+            let current_attempt = receipt.attempts.get(session).copied().unwrap_or(0);
+            if current_attempt == attempt
+                && matches!(
+                    receipt.current.publication.destinations.get(session),
+                    Some(RelayDeliveryOutcome::Attempting)
+                )
+            {
+                return Ok(());
+            }
+            let expected_attempt = current_attempt
+                .checked_add(1)
+                .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
+            if attempt != expected_attempt {
+                return Err(WriteStoreError::Refused(
+                    "attempt is not current".to_owned(),
+                ));
             }
             let outcome = receipt
                 .current
@@ -172,18 +219,19 @@ impl WriteStore for RedbWriteStore {
                 ));
             }
             *outcome = RelayDeliveryOutcome::Attempting;
-            let attempts = receipt.attempts.entry(session.clone()).or_default();
-            *attempts = attempts
-                .checked_add(1)
-                .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
+            receipt.attempts.insert(session.clone(), attempt);
             Ok(())
         })
     }
 
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {
         validate_delivery_outcome(&outcome)?;
@@ -193,12 +241,21 @@ impl WriteStore for RedbWriteStore {
             ));
         }
         self.update(receipt_id, |receipt| {
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            if receipt.attempts.get(session).copied() != Some(attempt) {
+                return Err(WriteStoreError::Refused(
+                    "attempt is not current".to_owned(),
+                ));
+            }
             let current = receipt
                 .current
                 .publication
                 .destinations
                 .get_mut(session)
                 .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
+            if current == &outcome {
+                return Ok(());
+            }
             let may_transition = matches!(current, RelayDeliveryOutcome::Attempting)
                 || (matches!(current, RelayDeliveryOutcome::Retryable { .. })
                     && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
@@ -307,7 +364,11 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        let original = receipt.clone();
         mutation(&mut receipt)?;
+        if receipt == original {
+            return Ok(receipt);
+        }
         let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&receipt), &removals)?;

@@ -37,19 +37,36 @@ fn boundary_child() {
                 .finalize(&keys())
                 .expect("deterministic event signs");
             store
-                .install_signed(accepted.receipt_id, signed)
+                .install_signed(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    signed,
+                )
                 .expect("child signature commits");
         }
         if matches!(boundary.as_str(), "attempt" | "outcome") {
             store
-                .begin_attempt(accepted.receipt_id, &session())
+                .begin_attempt(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    &session(),
+                    1,
+                )
                 .expect("child attempt commits");
         }
         if boundary == "outcome" {
             store
                 .record_outcome(
+                    accepted.write_id,
                     accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
                     &session(),
+                    1,
                     RelayDeliveryOutcome::Acknowledged {
                         message: "stored".to_owned(),
                     },

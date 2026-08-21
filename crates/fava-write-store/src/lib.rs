@@ -157,7 +157,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] for stale, invalid, terminal, or failed mutation.
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: fava_write::Event,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -168,7 +171,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] for stale, terminal, or failed mutation.
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -183,7 +189,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// a failed atomic mutation.
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -194,8 +203,12 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] unless the receipt and destination are current.
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError>;
 
     /// Commit one exact destination result after an authorized attempt.
@@ -205,8 +218,12 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] unless the attempt remains current.
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -328,6 +345,33 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
 #[must_use]
 pub const fn destination_evidence_capacity() -> usize {
     DESTINATION_EVIDENCE_CAPACITY
+}
+
+/// Validate exact current write, materialization, and event identity.
+///
+/// Provider mutations call this while holding their own atomic state boundary.
+///
+/// # Errors
+///
+/// Returns [`WriteStoreError`] when a delayed completion no longer names the
+/// current non-terminal materialization.
+pub fn validate_current_materialization(
+    receipt: &Receipt,
+    write_id: WriteId,
+    materialization_id: MaterializationId,
+    event_id: EventId,
+) -> Result<(), WriteStoreError> {
+    if receipt.is_terminal()
+        || receipt.write_id != write_id
+        || receipt.current.publication.materialization_id != materialization_id
+        || receipt.current.id() != event_id
+    {
+        Err(WriteStoreError::Refused(
+            "write materialization is not current".to_owned(),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// Apply one newer complete route plan to a mutable receipt.

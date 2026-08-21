@@ -17,6 +17,7 @@ use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
 use tokio::sync::watch;
 
+mod delivery;
 mod materialization;
 mod run;
 
@@ -87,7 +88,6 @@ impl Publication {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         if let WritePayload::Edit(edit) = intent.payload() {
             let edit = edit.clone();
-            self.ensure_semantic_admission()?;
             let PreparedSemantic {
                 event,
                 source,
@@ -106,7 +106,13 @@ impl Publication {
                     }
                 };
             if matches!(intent.routing(), WriteRouting::Automatic) {
-                let _ = self.store.apply_route(accepted.receipt_id, &route);
+                let _ = self.store.apply_route(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    &route,
+                );
             }
             let semantic = SemanticState::accepted(edit, source.as_ref(), sources);
             self.start_semantic(accepted.receipt_id, semantic);

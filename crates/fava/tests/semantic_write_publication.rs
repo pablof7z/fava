@@ -68,6 +68,10 @@ async fn first_value_edit_publishes_through_public_fava() {
     assert_eq!(signer.calls(), 1);
     assert_eq!(publisher.attempts().len(), 1);
     assert_eq!(publisher.attempts()[0].receipt_id, accepted.receipt_id);
+    assert_eq!(
+        publisher.attempts()[0].materialization_id,
+        accepted.current.publication.materialization_id
+    );
     assert!(cache.is_empty().expect("cache remains readable"));
     assert_eq!(store.len().expect("store remains readable"), 1);
 }
@@ -156,7 +160,11 @@ async fn materializer_selection_bounds_refuse_before_custody() {
             .is_err()
     );
     assert_no_effects(&bounded_store, &bounded_signer, &bounded_publisher, 1);
-    assert!(bounded_materializer.calls().is_empty());
+    assert_eq!(
+        bounded_materializer.calls().len(),
+        1,
+        "the store's atomic acceptance remains capacity authority"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
