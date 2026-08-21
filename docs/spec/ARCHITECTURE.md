@@ -164,14 +164,14 @@ This is a mental model, not a requirement for one universal effect enum. Each ow
 
 An unsigned or signed event carries its author in the event's `pubkey` field. Signer selection uses that pubkey.
 
-Before an event exists, a replaceable-event edit carries the replaceable kind it changes and the protocol-owned change itself. It carries no author; the author is resolved once when the write is accepted and is committed with it:
+Before an event exists, a replaceable-event edit carries the coordinate it changes apart from the author, and the protocol-owned change itself. It carries no author; the author is resolved once when the write is accepted and is committed with it. The identifier distinguishes addressable coordinates and is absent for plain replaceable kinds:
 
 ```rust
 pub struct ReplaceableEventEdit {
     pub kind: Kind,
+    pub identifier: Option<String>,
     pub format: u32,
     pub change: Bytes,
-    pub inverse: Bytes,
 }
 
 pub struct MaterializationId(u64);
@@ -729,8 +729,10 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 ## Replaceable-event edits
 
 `ReplaceableEventEdit` is a durable change to a replaceable Nostr event. It
-identifies the replaceable kind it changes and carries the protocol-owned edit
-value needed to apply that change again. It carries no author.
+identifies the coordinate it changes apart from the author — the replaceable
+kind, and the identifier when that coordinate is addressable — and carries the
+protocol-owned edit value needed to apply that change again. It carries no
+author.
 
 Applying an edit to the newest qualified event at its coordinate, or to the
 protocol crate's defined empty state, produces an `UnsignedEvent`. A newer
@@ -2011,7 +2013,7 @@ The event already contains its pubkey. `WriteStore` commits the event and receip
 
 #### Replaceable-event edit
 
-The edit contains the replaceable kind it changes, its durable protocol-owned change and inverse, and its format version; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
+The edit contains the coordinate it changes apart from the author, its durable protocol-owned change, and its format version; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
 
 #### Pre-signed event
 
