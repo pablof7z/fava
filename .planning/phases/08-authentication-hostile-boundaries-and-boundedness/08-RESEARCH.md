@@ -34,7 +34,7 @@ The authoritative requirement values are quoted verbatim below. [VERIFIED: .plan
 
 Phase 08 is materially started but not complete: `HARD-01` through `HARD-08` are **partial**, `HARD-09` and `HARD-10` are **absent**, and no HARD requirement satisfies the repository Definition of Done because every one still lacks at least one required public, mutation, process, resource, or milestone-exit proof. [VERIFIED: requirement inventory above; docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:792-859; AGENTS.md:30-38]
 
-The branch contains three behavioral commits plus two resolved-debug documentation commits above `main`: `ed6a76c`, `94e04cd`, `197c278`, `729565b`, and `aa2d901`; live `HEAD` is `aa2d90150593bbc1082327fff9949cb710c4fa09`, and the merge base with `main` is `caeee9e73f2b3919934bcb70043491d33c200daa`. [VERIFIED: git log/rev-parse/merge-base this session] Twelve tracked files remain modified with 272 insertions and 83 deletions, and `crates/fava/tests/hostile_ingress.rs` remains untracked. [VERIFIED: git status --short and git diff --stat this session] `stash@{0}` is the preserved autostash `5faecf42c0ec903507e3faeb04962f4680a9cb44`; no plan may apply, drop, rewrite, or supersede it. [VERIFIED: git stash list this session]
+The branch contains three behavioral commits plus two resolved-debug documentation commits above its merge base: `ed6a76c`, `94e04cd`, `197c278`, `729565b`, and `aa2d901`; live branch `HEAD` is planning-document commit `5bf02b1ab72c281f564b3be67579aef7ab3be0d7`, live `main` has independently advanced through planning-only work to `7081ff3daf9d6e6b7f7af27783aa24163452ff06`, and their merge base remains `caeee9e73f2b3919934bcb70043491d33c200daa`. Branch-tip `1cdb31e`/`5bf02b1` and main `f77ccce`/`ad9137e`/`7081ff3` are planning artifacts, so the behavioral source baseline is unchanged and later main work is not silently incorporated. [VERIFIED: git log/rev-parse/merge-base during reset-loop revision two] Twelve tracked source files remain modified with 272 insertions and 83 deletions, and `crates/fava/tests/hostile_ingress.rs` remains untracked; the tracked source patch SHA-256 is `e7710b21f0fb81300ae136ec31d062c5aeff2e3b08b449b96ccdf4bb5e8b19c` and the untracked hostile-test blob is `7b9270a3c255a00a8a42e5d1d90294bd662e82ae`. `stash@{0}` remains the preserved autostash `5faecf42c0ec903507e3faeb04962f4680a9cb44`; no plan may apply, drop, rewrite, or supersede it. [VERIFIED: git status/diff/hash-object/stash during revision]
 
 The first execution slice must reconcile the existing dirty WIP with committed `197c278`, because that commit's public `delivery_bounds.rs` names `RelayDeliveryOutcome::Unreachable` and `Receipt::spent`, while the corresponding definitions are present only in the current dirty tree. [VERIFIED: git show 197c278:crates/fava/tests/delivery_bounds.rs and git show 197c278:crates/fava-write/src/lib.rs this session; crates/fava-write/src/lib.rs:345-362,511-535] Planning from a clean-commit fiction would lose the live dependency that currently makes the regression pass. [VERIFIED: cargo test -p fava --test delivery_bounds this session]
 
@@ -66,7 +66,7 @@ The first execution slice must reconcile the existing dirty WIP with committed `
 
 | State | Exact inventory | Planning consequence |
 |---|---|---|
-| Branch/head | `milestone/m8-auth-hostile-limits` at `aa2d90150593bbc1082327fff9949cb710c4fa09`; `main` and merge base at `caeee9e73f2b3919934bcb70043491d33c200daa`. [VERIFIED: git branch/rev-parse/merge-base this session] | Every plan starts from this branch truth, not the old plan's concurrency model. |
+| Branch/head | `milestone/m8-auth-hostile-limits` at planning-doc `5bf02b1ab72c281f564b3be67579aef7ab3be0d7`; live `main` at planning-doc `7081ff3daf9d6e6b7f7af27783aa24163452ff06`; merge base at `caeee9e73f2b3919934bcb70043491d33c200daa`. Branch-tip `1cdb31e`/`5bf02b1` and main-tip `f77ccce`/`ad9137e`/`7081ff3` are planning artifacts only; later main work is distinct. [VERIFIED: git branch/rev-parse/log/merge-base during reset-loop revision two] | Every plan starts from this exact branch/source truth, not the removed monolith's concurrency model or unmerged main changes. |
 | Behavioral commits | `ed6a76c feat(m8): explicit generation-scoped NIP-42 relay authentication`; `94e04cd feat(m8): declared relay limits reach planning and publication`; `197c278 fix(m8): retry unreachable delivery without spending budget`. [VERIFIED: git log this session] | Do not re-plan these scripted owner/public implementations; plan only missing closure and evidence. |
 | Debug commits | `729565b resolved debug record`; `aa2d901 debug knowledge-base entry`. [VERIFIED: git log this session] | Use the resolved causal record as evidence; it is not an M8 completion verdict. |
 | Modified tracked files | `fava-delivery-standard`, `fava-publisher-nip01`, `fava-publisher`, `fava-transport-websocket` lib/conformance, memory write-store lib/lifecycle/semantic, redb semantic, neutral write-store receipt, `fava-write`, and `fava` relay. [VERIFIED: git status --short this session] | First plans must adopt these exact bytes and split by behavior without reverting or regenerating them. |
@@ -118,23 +118,23 @@ These commands passed against the combined committed-plus-dirty checkout, not a 
 
 These are planning boundaries, not implementation changes.
 
-### 08-01 — Reconcile the live delivery lifecycle WIP (`HARD-05`, `HARD-06`, `HARD-07`)
+### Slice A — Reconcile the live delivery lifecycle WIP (`HARD-05`, `HARD-06`, `HARD-07`)
 
 Own the exact dirty publisher/outcome/write-store/write/publication seams that make `197c278` self-contained. Preserve separate monotonic generation and spent attempt budget, Memory/Redb replaceability, ambiguity, and restart truth. Begin with the existing public regression plus clean-base compilation evidence; add missing Redb/memory/reopen coverage and a deliberate break that reconflates generation with spent budget. [VERIFIED: crates/fava-write/src/lib.rs:345-362,511-535; .planning/debug/resolved/m8-unreachable-delivery-retry.md:21-30]
 
-### 08-02 — Reconcile hostile ingress and inbound wire bounds (`HARD-03`, part of `HARD-08`)
+### Slice B — Reconcile hostile ingress and inbound wire bounds (`HARD-03`, part of `HARD-08`)
 
 Own the dirty WebSocket and relay terminal-state changes plus the untracked hostile test. First commit accurate behavior text and turn each missing hostile class into a causal owner/public test; then add a separate adversarial relay process and transparent proxy for oversized, stale, truncated, silent-limit, disconnect, and post-CLOSED schedules. The named falsifier must bypass admission into cache mutation and make the hostile public scenario fail. [VERIFIED: crates/fava-transport-websocket/src/lib.rs:72-86; crates/fava/tests/hostile_ingress.rs:157-250; docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:821-825,850-859]
 
-### 08-03 — Complete the OPS-004 resource ledger and provider isolation (`HARD-08`, `HARD-09`)
+### Slice C — Complete the OPS-004 resource ledger and provider isolation (`HARD-08`, `HARD-09`)
 
-Inventory every owner against the exact quoted categories: “query structure and derived values,” “router contributions and route fan-out,” “active relay sessions,” “wire subscriptions,” “frame and message sizes,” “event-cache memory where bounded,” “write-store active work and retained receipts,” “provider operations,” “observation delivery,” “diagnostics,” “fetched service entries,” and “platform bridge queues.” [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1359-1374] For each gap, assign one owner and one typed refusal/backpressure/shortfall plus an exceed-limit test. Add provider panic/block/late/malformed/cancel-ignore tests at existing contract boundaries; do not create an empty `fava-runtime` framework merely because it is named conceptually in architecture. [VERIFIED: AGENTS.md:34-36,53-60; docs/spec/ARCHITECTURE.md:2201-2225]
+Inventory every owner against the exact quoted categories: “query structure and derived values,” “router contributions and route fan-out,” “active relay sessions,” “wire subscriptions,” “frame and message sizes,” “event-cache memory where bounded,” “write-store active work and retained receipts,” “provider operations,” “observation delivery,” “diagnostics,” “fetched service entries,” and “platform bridge queues.” [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1359-1374] For each gap, assign one owner and one typed refusal/backpressure/shortfall plus an exceed-limit test. Implement the specified neutral `fava-runtime` contract with its first real provider and the FavaBuilder-before-standard selection surface; then one centralized graph slice must register every Runtime/standard/consumer Cargo and Bazel edge, update MODULE metadata, regenerate Cargo.lock once, and compile all affected crates in their pre-migration state. Only after that compile may owner tasks add and commit exact compiled behavioral RED tests and migrate source-observation polling, facade relay/transport sessions, publisher futures, signer and provider work, timers, cancellation, joins, panic isolation, and shutdown deadlines. Universal owners retain authorization and accept only exact operation/generation-correlated typed completions; repository-wide falsifiers prohibit parallel owner-local execution helpers outside runtime/provider implementation and explicitly approved harness code. [VERIFIED: AGENTS.md:40-57,68-75; docs/spec/ARCHITECTURE.md:2201-2225,2837,3476]
 
-### 08-04 — Wire authentication and relay-limit real-process evidence (`HARD-01`, `HARD-02`, `HARD-04`)
+### Slice D — Wire authentication and relay-limit real-process evidence (`HARD-01`, `HARD-02`, `HARD-04`)
 
 Register and dispatch `nip42-write-and-reconnect`, `auth-account-isolation`, and `relay-limit-shortfall`. Use a real third-party relay process for NIP-42 plus persistence/restart, integrate Khatru as the second implementation, and use a proxy/relay log as the independent witness that knowingly invalid work sent no bytes. [VERIFIED: docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:805-831,850-855; apps/canary/relays/khatru/main.go:20-93]
 
-### 08-05 — Wire delivery/provider canaries and final M8 exit (`HARD-05` through `HARD-10`)
+### Slice E — Wire delivery/provider canaries and final M8 exit (`HARD-05` through `HARD-10`)
 
 Register and dispatch `ambiguous-handoff`, `attempt-ceiling`, `provider-failure-isolation`, and `hostile-relay-ingress`. Each run must emit a bounded resource envelope and exact failure evidence, and final validation must execute all seven M8 scenarios, both relay implementations, every named deliberate break, Cargo/Bazel/vocabulary gates, and the hostile-admission falsifier. [VERIFIED: docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:821-859]
 
@@ -142,7 +142,7 @@ Register and dispatch `ambiguous-handoff`, `attempt-ceiling`, `provider-failure-
 
 ### Core
 
-Use the checked-in stack; introduce no new Rust package for this phase. [VERIFIED: Cargo.lock and current workspace inspection this session]
+Use the checked-in external dependency stack. Add only the authoritative internal `fava-runtime` contract, its first approved concrete provider, and the specified `fava-standard` assembly; register all three in Cargo/Bazel and regenerate the root lock once. [VERIFIED: docs/spec/ARCHITECTURE.md:2201-2306,2837,3476; AGENTS.md:68-75]
 
 | Library/tool | Verified version | Purpose | Why standard here |
 |---|---:|---|---|
@@ -283,7 +283,7 @@ let config = WebSocketConfig::default()
 | WebSocket size enforcement | Post-hoc string-length-only guard | Tungstenite `WebSocketConfig` plus owner admission | Library bounds allocations/frames before owner parsing; owner still supplies semantic refusal. [CITED: https://docs.rs/tungstenite/0.30.0/tungstenite/protocol/struct.WebSocketConfig.html] |
 | Retry ledger | Timer-local counters | Durable receipt generation and spent-attempt maps | Late completion, restart, ambiguity, and provider parity require one durable owner. [VERIFIED: crates/fava-write/src/lib.rs:511-535; .planning/debug/resolved/m8-unreachable-delivery-retry.md:21-30] |
 | Real-process witness | In-process fake claiming socket/process truth | Existing canary supervisor/evidence model, real relays, child adversary, transparent proxy | Diagnostics cannot prove their own external-effect claim. [VERIFIED: docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md:340-350] |
-| New generic runtime framework | Empty provider abstraction | Existing owner/provider contracts carrying the first required implementation | Repository rules reject empty frameworks while requiring contract/implementation separation when real behavior forces it. [VERIFIED: AGENTS.md:34-36,75-75] |
+| Provider execution isolation | Parallel owner-local spawn/timeout/panic/join helpers or an empty abstraction | The specified neutral `fava-runtime` contract plus its first approved concrete implementation; owners carry only authorization and typed correlated completions | Architecture assigns execution resources, provider isolation, cancellation, timers, and shutdown joins to `fava-runtime`; AGENTS requires the real contract/implementation split and forbids a private bypass. [VERIFIED: docs/spec/ARCHITECTURE.md:2201-2225,2837,3476; AGENTS.md:75-75] |
 
 ## Common Pitfalls
 
@@ -330,22 +330,18 @@ let config = WebSocketConfig::default()
 
 All implementation-status claims in this research were checked against live source, history, status, tests, or authoritative documents. No `[ASSUMED]` claim is used to lock a planning decision.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Which exact numeric values should own the missing session-pool, diagnostic, provider, shutdown, and artifact bounds?**
-   - What we know: OPS-004 requires explicit refusal/backpressure/shortfall for every category. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1359-1376]
-   - What's unclear: the stale plan's `256` session and `256` diagnostic values were not found in live implementation or authoritative specification. [VERIFIED: 08-PLAN.md:95-105; repository-wide rg inspection this session]
-   - Recommendation: make the OPS-004 ledger the first task in 08-03; retain existing values only where source and tests already own them, otherwise justify and approve the owner-local value before implementation.
+1. **Which exact numeric values own the missing session-pool, diagnostic, provider, shutdown, and artifact bounds? — RESOLVED**
+   - Decision: keep every existing source-owned bound unchanged; `Diagnostics::default()` remains 256 facts per category and the checked-in process-output cap remains 1,048,576 bytes. Close the missing rows with owner-private reversible constants: 256 active relay sessions per Fava instance; 64 in-flight runtime provider operations and 64 command/completion slots per runtime instance; a 5-second provider-operation deadline and 5-second shutdown-join deadline; 1,048,576 bytes per canary evidence stream and 8,388,608 bytes per complete run. Exceeding any row returns an existing typed refusal/shortfall or a scoped runtime outcome; no silent truncation counts. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1359-1376; crates/fava-diagnostics/src/lib.rs:76-85; apps/canary/src/semantic_process.rs:13,241-258]
+   - Approval path: these are private owner/profile policy values, not vocabulary or persisted schema. The owning tests and OPS-004 ledger approve them through causal boundary/max+1 evidence; no human architecture checkpoint is required. Any executor that needs a new public/cross-crate noun or configuration surface must stop for the separate runtime architecture checkpoint rather than widening this decision.
 
-2. **Does the already-added public authentication vocabulary have Pablo's required architecture approval record?**
-   - What we know: repository rules require separate approval for new public/cross-crate concepts, and the stale issue itself noted the requirement. [VERIFIED: AGENTS.md:51-60; docs/issues/0010-authentication-hostile-limits-and-boundedness.md inspected this session]
-   - What's unclear: no focused approval artifact was identified during this research. [VERIFIED: repository-wide issue/planning inspection this session]
-   - Recommendation: planner inserts a human approval checkpoint before claiming HARD-01/02 complete; do not redesign the committed behavior unless the checkpoint finds a contradiction.
+2. **Does the already-added public authentication vocabulary require a new approval record? — RESOLVED**
+   - Decision: no new approval is required for `AuthorizationDecision` or `RelayChallenge`. Both are exact specified public contracts in authoritative `ARCHITECTURE.md` and are registered as `spec_symbols` under the existing Authentication vocabulary; commits ed6a76c/94e04cd implement specified vocabulary rather than proposing a feature-owned synonym. The canary plan verifies the registry and implementation but contains no ratification/correction branch. [VERIFIED: docs/spec/ARCHITECTURE.md:2116-2163; docs/internals/vocabulary.toml:722-759; AGENTS.md authority order]
+   - Boundary: any symbol or crate not already specified/registered remains a vocabulary change and requires its own blocking architecture decision before dependent implementation.
 
-3. **Which installed relay will be the NIP-42-plus-persistence witness?**
-   - What we know: the exit gate requires at least one real third-party relay, and the checked-in Khatru fixture supports optional auth but uses an in-memory slice store. [VERIFIED: docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:850-855; apps/canary/relays/khatru/main.go:34-64]
-   - What's unclear: the existing canary config currently starts `nostr-rs-relay` without the M8 NIP-42 scenario wiring. [VERIFIED: current canary source/config inspection this session]
-   - Recommendation: use persistent `nostr-rs-relay` for the NIP-42/restart witness and Khatru for the second core subset/NIP-11 limits, provided the NIP-42 configuration is proven by the canary rather than assumed.
+3. **Which installed relay is the NIP-42-plus-persistence witness? — RESOLVED**
+   - Decision: `nostr-rs-relay` 0.8.12 is the primary NIP-42 plus persistent-restart witness, using its generated isolated SQLite directory and `authorization.nip42_auth = true`; the canary must observe the challenge/AUTH/write/restart sequence and durable database/log/public receipt evidence. Khatru remains the second implementation for core read/publish and real NIP-11 limits only; its in-memory store is never cited as persistence evidence. [VERIFIED: apps/canary/README.md:8-12; apps/canary/src/relay.rs:74,149-193,222-223; apps/canary/relays/khatru/main.go:27-64; docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md:850-855]
 
 ## Environment Availability
 

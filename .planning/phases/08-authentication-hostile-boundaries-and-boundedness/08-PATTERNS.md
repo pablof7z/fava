@@ -2,7 +2,7 @@
 
 **Mapped:** 2026-08-21  
 **Scope:** Remaining work only  
-**Source-state anchor:** `1cdb31e4f431b9f0c3df758ec9c7c7ea2c20f748`  
+**Planning-head anchor:** `5bf02b1ab72c281f564b3be67579aef7ab3be0d7`
 **Cohesive file groups:** 7  
 **Strong or partial analogs:** 6 / 7
 
@@ -13,7 +13,7 @@ The source state is mixed and must stay intact until its focused owning plan ado
 - Twelve tracked source files are modified with 272 insertions and 83 deletions.
 - `crates/fava/tests/hostile_ingress.rs` is untracked live WIP, not a file to recreate.
 - `stash@{0}` remains `5faecf42c0ec903507e3faeb04962f4680a9cb44` (`autostash`). Never apply, drop, rewrite, or supersede it.
-- The source diff is unchanged from the research inventory; current `HEAD` is later only because `1cdb31e` committed the Phase 08 research and validation documents.
+- The behavioral source baseline and dirty patch are unchanged; `1cdb31e` and current branch `5bf02b1` are planning-document commits only. Live `main` has independently advanced through planning commits `f77ccce`/`ad9137e`/`7081ff3` to `7081ff3daf9d6e6b7f7af27783aa24163452ff06`, while the merge base remains `caeee9e73f2b3919934bcb70043491d33c200daa`; later main work is not incorporated here. The tracked source patch hash remains `e7710b21f0fb81300ae136ecb31d062c5aeff2e3b08b449b96ccdf4bb5e8b19c` and the untracked hostile-test blob remains `7b9270a3c255a00a8a42e5d1d90294bd662e82ae`.
 - Committed authentication (`ed6a76c`), NIP-11/limit planning (`94e04cd`), and the focused unreachable retry fix (`197c278`) are inputs. Do not plan them as new owner implementations.
 
 Status labels below mean:
@@ -51,7 +51,7 @@ Status labels below mean:
 | `crates/fava/BUILD.bazel` | committed, modify | build config | batch graph | adjacent `rust_test` declarations in the same file | exact |
 | `.planning/phases/08-authentication-hostile-boundaries-and-boundedness/08-RESOURCE-LEDGER.md` | absent, inferred filename | config/evidence ledger | batch inventory | no complete analog | none |
 | `crates/fava-diagnostics/src/lib.rs` and `tests/relay_facts.rs` | committed, likely modify after ledger | service/model + test | retained event facts | existing `Diagnostics::bounded` | exact role, incomplete behavior |
-| Existing owner-local bounds plus `crates/fava/tests/write_bounds.rs` and `observation_bounds.rs` | committed, extend by ledger row | tests/owner services | CRUD, pub-sub, fan-out | current exceed-limit tests | exact pattern |
+| Existing owner bounds plus `crates/fava/tests/write_bounds.rs` and `observation_bounds.rs` | committed, extend by ledger row | tests/owner services | CRUD, pub-sub, fan-out | current exceed-limit tests | exact pattern |
 | `crates/fava/tests/provider_failure_isolation.rs` | absent, inferred filename | public integration/conformance test | request-response + event-driven | `crates/fava/tests/semantic_write_failures.rs` and `fava-publication/src/materialization.rs` | partial |
 | Existing provider call sites selected by the ledger | absent as one boundary | controller/service | request-response + cancellation | `fava-publication/src/materialization.rs` | panic-only partial |
 | `apps/canary/src/m8.rs` | absent, recommended private module | scenario controller | process/event-driven/request-response | `apps/canary/src/semantic_writes.rs` | exact dispatch pattern |
@@ -63,7 +63,7 @@ Status labels below mean:
 | `features/relay-authentication.feature`, `features/relay-limits.feature`, and remaining HARD behavior feature text | committed/partly absent | BDD config | batch mapping | `features/semantic-writes.feature` | role match |
 | `tools/tests/test_m8_feature_mapping.py` | absent, inferred filename | config-validation test | batch/subprocess | `tools/tests/test_semantic_write_feature.py` | exact role |
 
-The inferred private filenames are planning conveniences, not new architectural vocabulary. A planner may split them differently to remain below the 500-line soft limit, but must retain the responsibilities and existing-owner direction. Do not create a `fava-runtime`, generic common crate, or new public provider contract from this map.
+The inferred private filenames are planning conveniences, not new architectural vocabulary. A planner may split them differently to remain below the 500-line soft limit, but must retain the responsibilities and existing-owner direction. The specified `fava-runtime` neutral contract and first concrete provider are required architecture, not an inferred convenience; do not create a generic common crate or a competing public provider contract.
 
 ## Pattern Assignments
 
@@ -352,7 +352,7 @@ This does not yet satisfy the envelope: it samples RSS only once, recursively ha
 
 ### Provider failure isolation (`HARD-09`)
 
-**Current state:** absent as a complete runtime behavior. Keep tests and implementation at existing provider owners; do not introduce an empty runtime framework.
+**Current state:** absent as a complete runtime behavior. Implement the specified `fava-runtime` contract with its first real provider and FavaBuilder selection before standard assembly. Centralize all Runtime/standard/consumer Cargo+Bazel+MODULE edges and the single Cargo.lock regeneration, compile every affected crate in pre-migration state, and only then move each architecture-assigned execution resource behind Runtime with an exact committed compiled RED. Universal owners retain authorization and consume exact correlated typed completions.
 
 **Closest partial analog:** `crates/fava-publication/src/materialization.rs`  
 **Public failure corpus analog:** `crates/fava/tests/semantic_write_failures.rs` and `semantic_write_failures/reservation.rs`
@@ -400,7 +400,7 @@ Apply the same unrelated-progress assertion to query, relay, write, and shutdown
 4. unrelated public work completes before the stalled provider is released;
 5. shutdown joins, detaches with explicit evidence, or refuses within its declared bound.
 
-Use `tokio::time::timeout` only as the outer ceiling; barriers/channels establish order. Any new public/cross-crate nominal boundary requires the separate vocabulary approval process.
+Use runtime-owned deadlines for production work. Direct `tokio::time::timeout` is limited to the concrete runtime provider and explicitly approved test/process harness ceilings; barriers/channels establish causal order. Any public/cross-crate nominal boundary beyond the specified runtime vocabulary requires the separate approval process.
 
 ---
 
@@ -544,7 +544,7 @@ Neutral contracts own shared meaning; Memory and Redb must run the same lifecycl
 
 ### Vocabulary and file size
 
-No new Rust package is needed. Any new public/cross-crate nominal value, provider contract, persisted entity, or lifecycle owner requires a separate approved architecture change and vocabulary checks. Prefer private canary/test modules. Do not grow `crates/fava/src/relay.rs` further with harness code; it is already above the 500-line soft limit.
+The specified `fava-runtime`, its first concrete provider, and `fava-standard` assembly packages are required and must be registered in Cargo and Bazel by the single pre-migration graph owner. Any additional public/cross-crate nominal value, provider contract, persisted entity, or lifecycle owner requires a separate approved architecture change and vocabulary checks. Prefer cohesive private modules: the current `crates/fava-write/src/lib.rs`, `crates/fava-write-store-memory/src/semantic.rs`, and `crates/fava/src/relay.rs` soft-limit crossings are extracted below 500; every other modified code file is exhaustively checked and may remain at/above 500 only with one exact path-specific cohesion reason, while 800 is absolute.
 
 ## Already Completed — Do Not Re-plan
 
