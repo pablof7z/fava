@@ -3,10 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Fava, Query};
+use fava::{Fava, Query, SingleLetterTag};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_query::SingleLetterTag;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
