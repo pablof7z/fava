@@ -49,3 +49,38 @@ rebuilding whole events.
   metadata; arbitrary/future raw kinds remain usable.
 - The full proportional validation set passes and the focused issue records the
   deliberate-break evidence.
+
+## Deliberate-break evidence
+
+### Current-materialization identity
+
+`DELIBERATE_BREAK_M7_STALE_COMPLETION` removed only the sole
+`receipt.current.publication.materialization_id != materialization_id`
+predicate from `fava-write-store::validate_current_materialization`.
+
+- Original SHA-256: `50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af`.
+- Baseline discovery named exactly
+  `interleavings::retired_completion_is_attributable_and_inert` and
+  `first_value_edit_publishes_through_public_fava`; the complete publication
+  target passed 12/12.
+- While broken, the first-value tracer still passed. The exact retired test
+  compiled and failed at `interleavings.rs:94`: generation-one
+  `record_signer_refusal` paired with the successor event identity returned
+  success instead of refusing. This is current-state mutation by a retired
+  materialization, not a compile or unrelated failure.
+- A scoped source edit restored the predicate. SHA-256 returned to the original
+  value, the source diff was empty, and the complete publication target passed
+  12/12.
+
+Commands:
+
+```text
+cargo test -p fava --test semantic_write_publication -- --list
+cargo test -p fava --test semantic_write_publication
+cargo test -p fava --test semantic_write_publication first_value_edit_publishes_through_public_fava -- --exact
+cargo test -p fava --test semantic_write_publication interleavings::retired_completion_is_attributable_and_inert -- --exact
+shasum -a 256 crates/fava-write-store/src/lib.rs
+git diff --exit-code -- crates/fava-write-store/src/lib.rs
+```
+
+DELIBERATE_BREAK_M7_STALE_COMPLETION: PASS original=50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af restored=50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af baseline=12/12 restored_target=12/12
