@@ -22,6 +22,15 @@ pub(super) struct OwnedOutput {
     pub(super) process_group_clean: bool,
 }
 
+struct RunObservation {
+    status: Option<ExitStatus>,
+    owner_reaped: bool,
+    captured: Option<(Vec<u8>, Vec<u8>)>,
+    readers_joined: bool,
+    exceeded_bound: bool,
+    primary_error: Option<CanaryError>,
+}
+
 pub(super) async fn run_owned(
     mut command: Command,
     deadline: Duration,
@@ -43,49 +52,127 @@ pub(super) async fn run_owned(
         .stderr
         .take()
         .ok_or_else(|| CanaryError::new("owned child stderr was not captured"))?;
-    let mut stdout_reader = tokio::spawn(read_bounded(stdout));
-    let mut stderr_reader = tokio::spawn(read_bounded(stderr));
+    let mut readers = tokio::spawn(async move {
+        let (stdout, stderr) = tokio::join!(read_bounded(stdout), read_bounded(stderr));
+        Ok((stdout?, stderr?))
+    });
 
     let absolute_deadline = Instant::now() + deadline;
-    let owner = tokio::time::timeout_at(absolute_deadline, child.wait()).await;
-    let (status, owner_reaped) = match owner {
-        Ok(status) => (Some(status?), true),
-        Err(_) => (None, false),
-    };
-    if let Some(status) = status
-        && let Some((stdout, stderr)) =
-            collect_readers(absolute_deadline, &mut stdout_reader, &mut stderr_reader).await?
-    {
-        let cleanup_deadline = Instant::now() + CLEANUP_CAPACITY;
-        clean_process_group(pid, cleanup_deadline).await?;
-        return Ok(OwnedOutput {
-            status,
-            stdout,
-            stderr,
-            owner_reaped,
-            process_group_clean: true,
-        });
-    }
+    let mut observation = observe_run(&mut child, &mut readers, absolute_deadline).await;
 
     let cleanup_deadline = Instant::now() + CLEANUP_CAPACITY;
-    clean_process_group(pid, cleanup_deadline).await?;
-    if !owner_reaped {
-        tokio::time::timeout_at(cleanup_deadline, child.wait())
-            .await
-            .map_err(|_| CanaryError::new(format!("timed out reaping process owner {pid}")))??;
+    let mut cleanup_failures = Vec::new();
+    let process_group_clean = match clean_process_group(pid, cleanup_deadline).await {
+        Ok(()) => true,
+        Err(error) => {
+            cleanup_failures.push(error.to_string());
+            false
+        }
+    };
+    if !observation.owner_reaped {
+        match tokio::time::timeout_at(cleanup_deadline, child.wait()).await {
+            Ok(Ok(owner_status)) => {
+                observation.status.get_or_insert(owner_status);
+                observation.owner_reaped = true;
+            }
+            Ok(Err(error)) => cleanup_failures.push(error.to_string()),
+            Err(_) => cleanup_failures.push(format!("timed out reaping process owner {pid}")),
+        }
     }
-    let captured =
-        collect_readers(cleanup_deadline, &mut stdout_reader, &mut stderr_reader).await?;
-    if captured.is_none() {
-        stdout_reader.abort();
-        stderr_reader.abort();
+
+    if !observation.readers_joined {
+        match collect_readers(cleanup_deadline, &mut readers).await {
+            Ok(Some(output)) => {
+                observation.captured = Some(output);
+                observation.readers_joined = true;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                observation.readers_joined = true;
+                if observation.primary_error.is_none() && !observation.exceeded_bound {
+                    observation.primary_error = Some(error);
+                }
+            }
+        }
     }
-    let (stdout, stderr) = captured.unwrap_or_default();
-    Err(CanaryError::new(format!(
-        "external proof exceeded bound; process group {pid} killed and owner reaped; stdout: {}; stderr: {}",
-        String::from_utf8_lossy(&stdout),
-        String::from_utf8_lossy(&stderr),
-    )))
+    if !observation.readers_joined
+        && let Err(error) = abort_and_join_readers(cleanup_deadline, &mut readers).await
+    {
+        cleanup_failures.push(error.to_string());
+    }
+
+    let (stdout, stderr) = observation.captured.unwrap_or_default();
+    if observation.exceeded_bound && observation.primary_error.is_none() {
+        let cleanup_evidence = if process_group_clean && observation.owner_reaped {
+            format!("; process group {pid} killed and owner reaped")
+        } else {
+            String::new()
+        };
+        observation.primary_error = Some(CanaryError::new(format!(
+            "external proof exceeded bound{cleanup_evidence}; stdout: {}; stderr: {}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr),
+        )));
+    }
+    if let Some(primary) = observation.primary_error {
+        if cleanup_failures.is_empty() {
+            return Err(primary);
+        }
+        return Err(CanaryError::new(format!(
+            "{primary}; cleanup also failed: {}",
+            cleanup_failures.join("; ")
+        )));
+    }
+    if !cleanup_failures.is_empty() {
+        return Err(CanaryError::new(cleanup_failures.join("; ")));
+    }
+    Ok(OwnedOutput {
+        status: observation
+            .status
+            .ok_or_else(|| CanaryError::new("process owner status was not observed"))?,
+        stdout,
+        stderr,
+        owner_reaped: observation.owner_reaped,
+        process_group_clean,
+    })
+}
+
+async fn observe_run(
+    child: &mut tokio::process::Child,
+    readers: &mut JoinHandle<CanaryResult<(Vec<u8>, Vec<u8>)>>,
+    deadline: Instant,
+) -> RunObservation {
+    let owner = tokio::time::timeout_at(deadline, child.wait()).await;
+    let mut observation = RunObservation {
+        status: None,
+        owner_reaped: false,
+        captured: None,
+        readers_joined: false,
+        exceeded_bound: false,
+        primary_error: None,
+    };
+    match owner {
+        Ok(Ok(status)) => {
+            observation.status = Some(status);
+            observation.owner_reaped = true;
+        }
+        Ok(Err(error)) => observation.primary_error = Some(error.into()),
+        Err(_) => observation.exceeded_bound = true,
+    }
+    match collect_readers(deadline, readers).await {
+        Ok(Some(output)) => {
+            observation.captured = Some(output);
+            observation.readers_joined = true;
+        }
+        Ok(None) => observation.exceeded_bound = true,
+        Err(error) => {
+            observation.readers_joined = true;
+            if observation.primary_error.is_none() && !observation.exceeded_bound {
+                observation.primary_error = Some(error);
+            }
+        }
+    }
+    observation
 }
 
 async fn clean_process_group(pid: u32, deadline: Instant) -> CanaryResult<()> {
@@ -171,24 +258,30 @@ async fn read_bounded(mut reader: impl AsyncRead + Unpin) -> CanaryResult<Vec<u8
     Ok(bytes)
 }
 
-async fn join_reader(reader: &mut JoinHandle<CanaryResult<Vec<u8>>>) -> CanaryResult<Vec<u8>> {
-    (&mut *reader)
-        .await
-        .map_err(|error| CanaryError::new(format!("output reader failed: {error}")))?
-}
-
 async fn collect_readers(
     deadline: Instant,
-    stdout: &mut JoinHandle<CanaryResult<Vec<u8>>>,
-    stderr: &mut JoinHandle<CanaryResult<Vec<u8>>>,
+    readers: &mut JoinHandle<CanaryResult<(Vec<u8>, Vec<u8>)>>,
 ) -> CanaryResult<Option<(Vec<u8>, Vec<u8>)>> {
-    match tokio::time::timeout_at(deadline, async {
-        tokio::try_join!(join_reader(stdout), join_reader(stderr))
-    })
-    .await
-    {
-        Ok(output) => output.map(Some),
+    match tokio::time::timeout_at(deadline, &mut *readers).await {
+        Ok(output) => output
+            .map_err(|error| CanaryError::new(format!("output readers failed: {error}")))?
+            .map(Some),
         Err(_) => Ok(None),
+    }
+}
+
+async fn abort_and_join_readers(
+    deadline: Instant,
+    readers: &mut JoinHandle<CanaryResult<(Vec<u8>, Vec<u8>)>>,
+) -> CanaryResult<()> {
+    readers.abort();
+    match tokio::time::timeout_at(deadline, &mut *readers).await {
+        Ok(Err(error)) if error.is_cancelled() => Ok(()),
+        Ok(Err(error)) => Err(CanaryError::new(format!(
+            "failed joining aborted output readers: {error}"
+        ))),
+        Ok(Ok(_)) => Ok(()),
+        Err(_) => Err(CanaryError::new("timed out joining output readers")),
     }
 }
 
@@ -274,7 +367,10 @@ mod tests {
         let mut command = Command::new("/bin/sh");
         command.args([
             "-c",
-            "sleep 30 </dev/null >/dev/null 2>/dev/null & printf '%s' \"$!\" > \"$1\"; /usr/bin/head -c 1048577 /dev/zero",
+            concat!(
+                "sleep 30 </dev/null >/dev/null 2>/dev/null & ",
+                "printf '%s' \"$!\" > \"$1\"; /usr/bin/head -c 1048577 /dev/zero"
+            ),
             "fava-output-bound",
             pid_file.to_str().expect("temporary path is UTF-8"),
         ]);
