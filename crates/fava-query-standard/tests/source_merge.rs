@@ -298,6 +298,63 @@ fn replaceable_tie_selects_the_lowest_event_id() {
 }
 
 #[test]
+fn equal_timestamp_ordering_and_limit_follow_event_id_contract() {
+    let keys = Keys::generate();
+    let left = signed_event(&keys, Kind::TextNote, 10, "left");
+    let right = signed_event(&keys, Kind::TextNote, 10, "right");
+    let least = left.id.min(right.id);
+    let greatest = left.id.max(right.id);
+    let sources = [snapshot(
+        SourceKind::EventCache,
+        vec![
+            SourceEvent::Cached(CachedEvent::new(left, RelayEvidence::default())),
+            SourceEvent::Cached(CachedEvent::new(right, RelayEvidence::default())),
+        ],
+    )];
+
+    let newest = StandardQueryEvaluator
+        .evaluate(&Query::events(), &sources)
+        .expect("newest-first evaluation succeeds");
+    let oldest = StandardQueryEvaluator
+        .evaluate(&Query::events().oldest_first(), &sources)
+        .expect("oldest-first evaluation succeeds");
+    let newest_limited = StandardQueryEvaluator
+        .evaluate(
+            &Query::events().limit(1).expect("positive result limit"),
+            &sources,
+        )
+        .expect("limited newest-first evaluation succeeds");
+    let oldest_limited = StandardQueryEvaluator
+        .evaluate(
+            &Query::events()
+                .oldest_first()
+                .limit(1)
+                .expect("positive result limit"),
+            &sources,
+        )
+        .expect("limited oldest-first evaluation succeeds");
+
+    assert_eq!(
+        newest
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect::<Vec<_>>(),
+        vec![greatest, least]
+    );
+    assert_eq!(
+        oldest
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect::<Vec<_>>(),
+        vec![least, greatest]
+    );
+    assert_eq!(newest_limited.events[0].id(), greatest);
+    assert_eq!(oldest_limited.events[0].id(), least);
+}
+
+#[test]
 // Keep the signed/unsigned exact-cell matrix together so one query and one
 // source-evidence assertion cover the same semantic counterexamples.
 #[allow(clippy::too_many_lines)]

@@ -56,7 +56,7 @@ impl QueryEvaluator for StandardQueryEvaluator {
             QueryOrdering::NewestFirst => right
                 .created_at()
                 .cmp(&left.created_at())
-                .then_with(|| left.id().cmp(&right.id())),
+                .then_with(|| right.id().cmp(&left.id())),
             QueryOrdering::OldestFirst => left
                 .created_at()
                 .cmp(&right.created_at())
