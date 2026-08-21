@@ -23,6 +23,7 @@ rust_test(
     name = "semantic_write_store",
     srcs = [
         "tests/semantic_write_store.rs",
+        "tests/semantic_write_store/admission.rs",
         "tests/semantic_write_store/recovery.rs",
     ],
     crate_name = "semantic_write_store",

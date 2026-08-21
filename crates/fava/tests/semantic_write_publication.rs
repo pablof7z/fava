@@ -19,6 +19,8 @@ use nostr::key::Keys;
 mod author;
 #[path = "semantic_write_publication/interleavings.rs"]
 mod interleavings;
+#[path = "semantic_write_publication/route_revision.rs"]
+mod route_revision;
 #[path = "semantic_write_publication/shared_capacity.rs"]
 mod shared_capacity;
 #[path = "support/semantic_write.rs"]

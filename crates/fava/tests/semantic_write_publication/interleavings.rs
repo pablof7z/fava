@@ -274,3 +274,89 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
     assert!(refusal.is_err());
     assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
 }
+
+#[test]
+fn active_reservation_excludes_unreserved_memory_admission() {
+    let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
+    let semantic_keys = Keys::generate();
+    let raw_keys = Keys::generate();
+    let reservation = store.reserve_active().expect("semantic slot reserves");
+    let raw = fava::WriteIntent::event(
+        EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
+            .created_at(Timestamp::from(1))
+            .content("unreserved")
+            .build()
+            .unwrap(),
+        WriteRouting::Automatic,
+    )
+    .unwrap();
+
+    assert!(
+        store.accept(raw).is_err(),
+        "unreserved raw custody must not steal a held semantic slot"
+    );
+    let accepted = store
+        .accept_reserved_materialized_edit(
+            reservation,
+            intent(semantic_keys.public_key(), Kind::ContactList),
+            materialization(&semantic_keys, 1, "reserved"),
+            None,
+        )
+        .expect("the held reservation commits without a second capacity refusal");
+    assert_eq!(
+        store
+            .receipt(accepted.receipt_id)
+            .unwrap()
+            .unwrap()
+            .write_id,
+        accepted.write_id
+    );
+}
+
+#[test]
+fn equal_timestamp_lower_id_is_memory_store_successor() {
+    let keys = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let left = materialization(&keys, 10, "left").finalize(&keys).unwrap();
+    let right = materialization(&keys, 10, "right").finalize(&keys).unwrap();
+    let (higher_id, lower_id) = if left.id > right.id {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    let accepted = store
+        .accept_materialized_edit(
+            intent(keys.public_key(), Kind::ContactList),
+            materialization(&keys, 11, "higher-id generation"),
+            Some(&higher_id),
+        )
+        .unwrap();
+
+    let installed = store
+        .install_materialization(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(higher_id.id),
+            materialization(&keys, 12, "lower-id generation"),
+            Some(&lower_id),
+        )
+        .expect("equal-time lower event id is authoritative");
+    assert_eq!(
+        installed.current.publication.materialization_source,
+        Some(lower_id.id)
+    );
+    assert!(
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                MaterializationId::from_u64(2),
+                Some(lower_id.id),
+                materialization(&keys, 13, "higher-id retry"),
+                Some(&higher_id),
+            )
+            .is_err(),
+        "equal-time higher event id cannot displace the winner"
+    );
+}

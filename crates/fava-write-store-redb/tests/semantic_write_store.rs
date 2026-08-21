@@ -20,6 +20,8 @@ use redb::{Database, Durability, TableDefinition};
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 
+#[path = "semantic_write_store/admission.rs"]
+mod admission;
 #[path = "semantic_write_store/recovery.rs"]
 mod recovery;
 
