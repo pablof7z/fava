@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 nostr.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["os-rng"] }

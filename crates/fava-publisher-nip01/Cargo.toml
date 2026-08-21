@@ -1,0 +1,14 @@
+[package]
+name = "fava-publisher-nip01"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-publisher.workspace = true
+fava-transport.workspace = true
+fava-wire.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

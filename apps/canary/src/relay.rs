@@ -26,10 +26,28 @@ pub(crate) struct RelaySupervisor {
 
 impl RelaySupervisor {
     pub(crate) fn prepare(binary: &Path, relay_dir: &Path, port: u16) -> CanaryResult<Self> {
+        Self::prepare_with_whitelist(binary, relay_dir, port, None)
+    }
+
+    pub(crate) fn prepare_rejecting(
+        binary: &Path,
+        relay_dir: &Path,
+        port: u16,
+        permitted_pubkey: &str,
+    ) -> CanaryResult<Self> {
+        Self::prepare_with_whitelist(binary, relay_dir, port, Some(permitted_pubkey))
+    }
+
+    fn prepare_with_whitelist(
+        binary: &Path,
+        relay_dir: &Path,
+        port: u16,
+        permitted_pubkey: Option<&str>,
+    ) -> CanaryResult<Self> {
         let config = relay_dir.join("config.toml");
         let data = relay_dir.join("data");
         fs::create_dir_all(&data)?;
-        fs::write(&config, relay_config(port))?;
+        fs::write(&config, relay_config(port, permitted_pubkey))?;
         Ok(Self {
             binary: binary.to_owned(),
             config,
@@ -172,7 +190,10 @@ async fn wait_ready(child: &mut Child, address: SocketAddr) -> CanaryResult<()> 
     }
 }
 
-fn relay_config(port: u16) -> String {
+fn relay_config(port: u16, permitted_pubkey: Option<&str>) -> String {
+    let whitelist = permitted_pubkey.map_or_else(String::new, |pubkey| {
+        format!("pubkey_whitelist = [\"{pubkey}\"]\n")
+    });
     format!(
         r#"[info]
 relay_url = "ws://127.0.0.1:{port}/"
@@ -200,6 +221,7 @@ event_persist_buffer = 1024
 
 [authorization]
 nip42_auth = false
+{whitelist}
 "#
     )
 }
@@ -210,9 +232,15 @@ mod tests {
 
     #[test]
     fn relay_config_is_loopback_persistent_and_port_scoped() {
-        let config = relay_config(12345);
+        let config = relay_config(12345, None);
         assert!(config.contains("address = \"127.0.0.1\""));
         assert!(config.contains("port = 12345"));
         assert!(config.contains("in_memory = false"));
+    }
+
+    #[test]
+    fn rejecting_relay_config_whitelists_only_the_control_key() {
+        let config = relay_config(12345, Some("control-public-key"));
+        assert!(config.contains("pubkey_whitelist = [\"control-public-key\"]"));
     }
 }

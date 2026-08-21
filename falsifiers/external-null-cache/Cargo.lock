@@ -208,12 +208,16 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-delivery",
  "fava-diagnostics",
  "fava-event-cache",
  "fava-ingest",
  "fava-observe",
+ "fava-publication",
+ "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-signer",
  "fava-state",
  "fava-subscriptions",
  "fava-transport",
@@ -223,6 +227,13 @@ dependencies = [
  "nostr",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "fava-delivery"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
 ]
 
 [[package]]
@@ -277,6 +288,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-publication"
+version = "0.1.0"
+dependencies = [
+ "fava-delivery",
+ "fava-publisher",
+ "fava-signer",
+ "fava-state",
+ "fava-transport",
+ "fava-write",
+ "fava-write-store",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-publisher"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-transport",
+ "fava-write",
+]
+
+[[package]]
 name = "fava-query"
 version = "0.1.0"
 dependencies = [
@@ -308,10 +343,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-signer"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "fava-state"
 version = "0.1.0"
 dependencies = [
  "nostr",
+ "serde",
 ]
 
 [[package]]
@@ -347,6 +392,8 @@ version = "0.1.0"
 dependencies = [
  "fava-state",
  "nostr",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -355,8 +402,10 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-state",
  "fava-write",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -364,6 +413,7 @@ name = "fava-write-store-memory"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-state",
  "fava-write",
  "fava-write-store",
  "thiserror",

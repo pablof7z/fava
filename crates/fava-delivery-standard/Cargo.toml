@@ -1,0 +1,12 @@
+[package]
+name = "fava-delivery-standard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-delivery.workspace = true
+fava-write.workspace = true
+
+[lints]
+workspace = true

@@ -275,17 +275,23 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-delivery",
+ "fava-delivery-standard",
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-ingest",
  "fava-observe",
+ "fava-publication",
+ "fava-publisher",
  "fava-query",
  "fava-query-standard",
  "fava-router-app-relays",
  "fava-router-fallback-relays",
  "fava-router-testkit",
  "fava-routing",
+ "fava-signer",
+ "fava-signer-local",
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
@@ -294,10 +300,26 @@ dependencies = [
  "fava-write",
  "fava-write-store",
  "fava-write-store-memory",
+ "fava-write-store-redb",
  "nostr",
  "serde_json",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "fava-delivery"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
+]
+
+[[package]]
+name = "fava-delivery-standard"
+version = "0.1.0"
+dependencies = [
+ "fava-delivery",
+ "fava-write",
 ]
 
 [[package]]
@@ -347,6 +369,40 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-publication"
+version = "0.1.0"
+dependencies = [
+ "fava-delivery",
+ "fava-publisher",
+ "fava-signer",
+ "fava-state",
+ "fava-transport",
+ "fava-write",
+ "fava-write-store",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-publisher"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-transport",
+ "fava-write",
+]
+
+[[package]]
+name = "fava-publisher-nip01"
+version = "0.1.0"
+dependencies = [
+ "fava-publisher",
+ "fava-transport",
+ "fava-wire",
  "tokio",
 ]
 
@@ -409,10 +465,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-signer"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-signer-local"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
+ "fava-write",
+ "nostr",
+ "tokio",
+]
+
+[[package]]
 name = "fava-state"
 version = "0.1.0"
 dependencies = [
  "nostr",
+ "serde",
 ]
 
 [[package]]
@@ -488,6 +564,8 @@ version = "0.1.0"
 dependencies = [
  "fava-state",
  "nostr",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -496,8 +574,10 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-state",
  "fava-write",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -505,9 +585,24 @@ name = "fava-write-store-memory"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-state",
  "fava-write",
  "fava-write-store",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-write-store-redb"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "fava-write",
+ "fava-write-store",
+ "nostr",
+ "redb",
+ "serde_json",
  "tokio",
 ]
 
@@ -973,6 +1068,15 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "redb"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de6c3b63e007e90ce536ec2ae4690826136a20ec8dbbbb400daef1bb999d2e36"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "ring"

@@ -23,6 +23,14 @@ members = [
     "crates/fava-router-fallback-relays",
     "crates/fava-router-testkit",
     "crates/fava-subscriptions-standard",
+    "crates/fava-signer",
+    "crates/fava-signer-local",
+    "crates/fava-publisher",
+    "crates/fava-publisher-nip01",
+    "crates/fava-delivery",
+    "crates/fava-delivery-standard",
+    "crates/fava-publication",
+    "crates/fava-write-store-redb",
     "crates/fava",
 ]
 
@@ -48,6 +56,14 @@ fava-router-app-relays = { path = "crates/fava-router-app-relays" }
 fava-router-fallback-relays = { path = "crates/fava-router-fallback-relays" }
 fava-router-testkit = { path = "crates/fava-router-testkit" }
 fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
+fava-signer = { path = "crates/fava-signer" }
+fava-signer-local = { path = "crates/fava-signer-local" }
+fava-publisher = { path = "crates/fava-publisher" }
+fava-publisher-nip01 = { path = "crates/fava-publisher-nip01" }
+fava-delivery = { path = "crates/fava-delivery" }
+fava-delivery-standard = { path = "crates/fava-delivery-standard" }
+fava-publication = { path = "crates/fava-publication" }
+fava-write-store-redb = { path = "crates/fava-write-store-redb" }
 fava-query = { path = "crates/fava-query" }
 fava-query-standard = { path = "crates/fava-query-standard" }
 fava-state = { path = "crates/fava-state" }
@@ -57,6 +73,8 @@ fava-write-store-memory = { path = "crates/fava-write-store-memory" }
 nostr = { version = "=0.45.3", default-features = false, features = ["std"] }
 futures-util = "=0.3.34"
 serde_json = "=1.0.151"
+serde = { version = "=1.0.229", features = ["derive"] }
+redb = "=4.2.0"
 thiserror = "=2.0.20"
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "=0.30.0", features = ["rustls-tls-webpki-roots"] }

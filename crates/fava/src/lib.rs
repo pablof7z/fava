@@ -7,23 +7,32 @@ mod routes;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
+use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::DiagnosticsSnapshot;
 use fava_event_cache::EventCache;
 use fava_observe::Observer;
 pub use fava_observe::{Observation, ObservationClosed, ObserveError};
+use fava_publication::Publication;
+pub use fava_publication::PublicationError;
+use fava_publisher::Publisher;
 pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority,
 };
 use fava_query::{QueryEvaluator, QuerySource};
 pub use fava_routing::RoutePlan;
 use fava_routing::{RouteRequest, Router};
+use fava_signer::Signer;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
-pub use fava_write::{EventValue, ReceiptId};
+pub use fava_write::{
+    EventBuilder, EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    WriteIntent, WriteRouting,
+};
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
 use thiserror::Error;
+use tokio::sync::broadcast;
 
 /// Built engine instance for the selected local-source assembly.
 pub struct Fava {
@@ -35,6 +44,7 @@ pub struct Fava {
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
     routers: Vec<Arc<dyn Router>>,
+    publication: Option<Publication>,
 }
 
 impl Fava {
@@ -74,7 +84,92 @@ impl Fava {
     ///
     /// Returns [`WriteStoreError`] when cancellation cannot commit atomically.
     pub fn cancel_write(&self, receipt_id: ReceiptId) -> Result<bool, WriteStoreError> {
-        self.write_store.cancel(receipt_id)
+        self.write_store
+            .cancel(receipt_id)
+            .map(|receipt| receipt.is_some())
+    }
+
+    /// Durably accept and begin one checked publication intent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when this assembly cannot accept or start it.
+    pub fn publish(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
+        self.publication
+            .as_ref()
+            .ok_or(PublicationError::NotConfigured)?
+            .accept(intent)
+    }
+
+    /// Read current exact receipt facts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when publication is absent or storage fails.
+    pub fn receipt(&self, receipt_id: ReceiptId) -> Result<Option<Receipt>, PublicationError> {
+        self.publication
+            .as_ref()
+            .ok_or(PublicationError::NotConfigured)?
+            .receipt(receipt_id)
+    }
+
+    /// Subscribe to committed receipt changes without current-state coalescing.
+    ///
+    /// Each item pairs its receipt id with the committed current receipt, or
+    /// `None` after removal. A slow reader receives an explicit broadcast lag
+    /// error rather than silent loss.
+    #[must_use]
+    pub fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
+        self.write_store.receipt_changes()
+    }
+
+    /// Inspect every currently open publication obligation in receipt order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when durable current state cannot be read.
+    pub fn open_receipts(&self) -> Result<Vec<Receipt>, WriteStoreError> {
+        self.write_store.recover_open()
+    }
+
+    /// Cancel while every selected destination is definitely pre-handoff.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when cancellation is unavailable or ineligible.
+    pub fn cancel_publication(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<Option<Receipt>, PublicationError> {
+        self.publication
+            .as_ref()
+            .ok_or(PublicationError::NotConfigured)?
+            .cancel(receipt_id)
+    }
+
+    /// Remove one retained terminal receipt independently of cancellation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] for active work or storage failure.
+    pub fn remove_receipt(&self, receipt_id: ReceiptId) -> Result<bool, PublicationError> {
+        self.publication
+            .as_ref()
+            .ok_or(PublicationError::NotConfigured)?
+            .remove_receipt(receipt_id)
+    }
+
+    /// Await one exact terminal receipt result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] for absent publication or failed receipt access.
+    pub async fn wait_terminal(&self, receipt_id: ReceiptId) -> Result<Receipt, PublicationError> {
+        self.publication
+            .as_ref()
+            .ok_or(PublicationError::NotConfigured)?
+            .wait_terminal(receipt_id)
+            .await
     }
 
     /// Return one bounded immutable snapshot of current exact diagnostic facts.
@@ -112,6 +207,9 @@ pub struct FavaBuilder {
     subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
     transport: Option<Arc<dyn Transport>>,
     routers: Vec<Arc<dyn Router>>,
+    signers: Vec<Arc<dyn Signer>>,
+    publisher: Option<Arc<dyn Publisher>>,
+    delivery: Option<Arc<dyn DeliveryPolicy>>,
 }
 
 impl FavaBuilder {
@@ -175,6 +273,36 @@ impl FavaBuilder {
         self
     }
 
+    /// Register one signer for its exact public key.
+    #[must_use]
+    pub fn signer<T>(mut self, signer: Arc<T>) -> Self
+    where
+        T: Signer + 'static,
+    {
+        self.signers.push(signer);
+        self
+    }
+
+    /// Select one one-attempt publisher.
+    #[must_use]
+    pub fn publisher<T>(mut self, publisher: Arc<T>) -> Self
+    where
+        T: Publisher + 'static,
+    {
+        self.publisher = Some(publisher);
+        self
+    }
+
+    /// Select one delivery-decision policy.
+    #[must_use]
+    pub fn delivery_policy<T>(mut self, delivery: Arc<T>) -> Self
+    where
+        T: DeliveryPolicy + 'static,
+    {
+        self.delivery = Some(delivery);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -192,6 +320,30 @@ impl FavaBuilder {
             let diagnostics = Arc::clone(&diagnostics);
             Arc::new(move |count| diagnostics.query_updates_coalesced(count))
         };
+        let publication_selected =
+            self.publisher.is_some() || self.delivery.is_some() || !self.signers.is_empty();
+        let publication = if publication_selected {
+            let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
+            let delivery = self.delivery.ok_or(BuildError::MissingDeliveryPolicy)?;
+            let transport = self
+                .transport
+                .clone()
+                .ok_or(BuildError::MissingPublicationTransport)?;
+            let publication = Publication::new(
+                write_store.clone(),
+                self.signers,
+                publisher,
+                delivery,
+                transport,
+            )
+            .map_err(|error| BuildError::Publication(error.to_string()))?;
+            publication
+                .recover()
+                .map_err(|error| BuildError::Publication(error.to_string()))?;
+            Some(publication)
+        } else {
+            None
+        };
         Ok(Fava {
             observer: Observer::new(event_source, write_source, evaluator).with_coalescing(report),
             event_cache,
@@ -201,6 +353,7 @@ impl FavaBuilder {
             diagnostics,
             next_subscription: Arc::new(AtomicU64::new(0)),
             routers: self.routers,
+            publication,
         })
     }
 }
@@ -217,4 +370,16 @@ pub enum BuildError {
     /// No local query evaluator was selected.
     #[error("Fava assembly requires one query evaluator")]
     MissingQueryEvaluator,
+    /// Publication selected without a publisher.
+    #[error("Fava publication assembly requires one publisher")]
+    MissingPublisher,
+    /// Publication selected without a delivery policy.
+    #[error("Fava publication assembly requires one delivery policy")]
+    MissingDeliveryPolicy,
+    /// Publication selected without a transport.
+    #[error("Fava publication assembly requires one transport")]
+    MissingPublicationTransport,
+    /// Publication providers or durable recovery were invalid.
+    #[error("Fava publication assembly failed: {0}")]
+    Publication(String),
 }

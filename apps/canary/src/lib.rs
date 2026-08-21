@@ -7,6 +7,9 @@ mod live;
 mod local;
 mod multi;
 mod proxy;
+mod publication;
+mod publication_child;
+mod publication_support;
 mod recon;
 mod relay;
 mod routing;
@@ -16,6 +19,8 @@ pub use grouping::run_grouping_scenario;
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
 pub use multi::run_m3_live_scenario;
+pub use publication::run_publication_scenario;
+pub use publication_child::run_crash_child;
 pub use recon::{ReconOptions, ReconOutcome};
 pub use routing::run_routing_scenario;
 
@@ -148,6 +153,10 @@ pub fn has_executor(id: &str) -> bool {
             | "explicit-route-bypass"
             | "fallback-reacts"
             | "subscription-grouping-equivalence"
+            | "explicit-publish-optimistic"
+            | "mixed-relay-outcomes"
+            | "cancel-pre-handoff"
+            | "crash-after-acceptance"
     )
 }
 

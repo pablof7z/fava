@@ -1,5 +1,7 @@
 //! Component evidence for deterministic local source merge semantics.
 
+use std::collections::BTreeMap;
+
 use fava_query::{
     Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
 };
@@ -47,6 +49,7 @@ fn publication() -> PublicationEvidence {
         receipt_id: ReceiptId::from_u64(7),
         write_id: WriteId::from_u64(11),
         signature: SignatureState::Signed,
+        destinations: BTreeMap::new(),
     }
 }
 

@@ -1,0 +1,69 @@
+use std::collections::BTreeMap;
+
+use fava_state::{RelayAccess, RelaySessionKey};
+use fava_write::{Event, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
+
+pub(super) fn destinations(
+    routing: &WriteRouting,
+) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
+    match routing {
+        WriteRouting::Automatic => BTreeMap::new(),
+        WriteRouting::Explicit(relays) => relays
+            .iter()
+            .cloned()
+            .map(|relay| {
+                (
+                    RelaySessionKey::new(relay, RelayAccess::public()),
+                    RelayDeliveryOutcome::Pending,
+                )
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn settle(receipt: &mut Receipt) {
+    if !receipt.destinations().is_empty()
+        && receipt
+            .destinations()
+            .values()
+            .all(RelayDeliveryOutcome::is_terminal)
+    {
+        receipt.outcome = ReceiptOutcome::Complete;
+    }
+}
+
+#[derive(Eq, PartialEq)]
+pub(super) struct UnsignedEventView<'a> {
+    id: Option<fava_write::EventId>,
+    pubkey: fava_write::PublicKey,
+    created_at: fava_write::Timestamp,
+    kind: fava_write::Kind,
+    tags: &'a [fava_write::Tag],
+    content: &'a str,
+}
+
+impl<'a> From<&'a fava_write::UnsignedEvent> for UnsignedEventView<'a> {
+    fn from(event: &'a fava_write::UnsignedEvent) -> Self {
+        Self {
+            id: event.id,
+            pubkey: event.pubkey,
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags.as_slice(),
+            content: &event.content,
+        }
+    }
+}
+
+impl<'a> From<&'a Event> for UnsignedEventView<'a> {
+    fn from(event: &'a Event) -> Self {
+        Self {
+            id: Some(event.id),
+            pubkey: event.pubkey,
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags.as_slice(),
+            content: &event.content,
+        }
+    }
+}

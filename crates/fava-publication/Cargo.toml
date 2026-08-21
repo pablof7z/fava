@@ -1,0 +1,19 @@
+[package]
+name = "fava-publication"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-delivery.workspace = true
+fava-publisher.workspace = true
+fava-signer.workspace = true
+fava-state.workspace = true
+fava-transport.workspace = true
+fava-write.workspace = true
+fava-write-store.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

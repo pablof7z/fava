@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use canary::{
     ReconOptions, SmokeOptions, run_grouping_scenario, run_live_scenario, run_local_scenario,
-    run_m3_live_scenario, run_public_recon, run_real_relay_smoke, run_routing_scenario,
-    scenario_registry,
+    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
+    run_routing_scenario, scenario_registry,
 };
 
 #[tokio::main]
@@ -57,6 +57,7 @@ async fn run() -> canary::CanaryResult<()> {
             println!("evidence: {}", outcome.run_directory.display());
             Ok(())
         }
+        "crash-child" => canary::run_crash_child(arguments.collect()).await,
         _ => Err(usage()),
     }
 }
@@ -92,6 +93,13 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         }
         "subscription-grouping-equivalence" => {
             run_grouping_scenario(smoke_options(&mut arguments, "grouping-m4")?).await?
+        }
+        "explicit-publish-optimistic"
+        | "mixed-relay-outcomes"
+        | "cancel-pre-handoff"
+        | "crash-after-acceptance" => {
+            run_publication_scenario(&scenario, smoke_options(&mut arguments, "publish-m5")?)
+                .await?
         }
         "explicit-read-eose" | "explicit-read-live-after-eose" | "explicit-read-cancel" => {
             run_live_scenario(&scenario, smoke_options(&mut arguments, "live-m2")?).await?

@@ -11,12 +11,16 @@ publish = false
 fava = { path = "../../crates/fava" }
 fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
+fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
+fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
 fava-router-app-relays = { path = "../../crates/fava-router-app-relays" }
 fava-router-fallback-relays = { path = "../../crates/fava-router-fallback-relays" }
 fava-router-testkit = { path = "../../crates/fava-router-testkit" }
 fava-routing = { path = "../../crates/fava-routing" }
 fava-state = { path = "../../crates/fava-state" }
+fava-signer = { path = "../../crates/fava-signer" }
+fava-signer-local = { path = "../../crates/fava-signer-local" }
 fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
 fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
 fava-subscriptions = { path = "../../crates/fava-subscriptions" }
@@ -26,6 +30,8 @@ fava-ingest = { path = "../../crates/fava-ingest" }
 fava-wire = { path = "../../crates/fava-wire" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
+fava-write-store-redb = { path = "../../crates/fava-write-store-redb" }
+fava-write-store = { path = "../../crates/fava-write-store" }
 futures-util = "=0.3.34"
 hex = "=0.4.3"
 nostr = { version = "=0.45.3", default-features = false, features = ["os-rng", "std"] }

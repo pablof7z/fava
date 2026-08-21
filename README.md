@@ -7,6 +7,10 @@ write intents. Its current query path merges local sources, verifies live relay
 events, tracks exact provenance, reconnects with fresh request identity, and
 reacts to an ordered automatic router chain. Applications select independent
 cache, query, routing, subscription-planning, and transport providers.
+Its write path durably accepts unsigned or verified signed events for exact
+relay sets, exposes optimistic local state, records exact per-relay receipts,
+supports pre-handoff cancellation, and resumes accepted work after process
+death.
 
 The ordinary downstream acceptance application lives at [apps/canary](apps/canary).
 

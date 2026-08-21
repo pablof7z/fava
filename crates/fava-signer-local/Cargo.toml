@@ -1,0 +1,14 @@
+[package]
+name = "fava-signer-local"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-signer.workspace = true
+fava-write.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

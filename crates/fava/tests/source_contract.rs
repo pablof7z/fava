@@ -111,7 +111,7 @@ fn memory_write_store_runs_the_source_corpus() {
                 .receipt_id
         },
         |receipt_id| {
-            assert!(writes.cancel(receipt_id).expect("event cancels"));
+            assert!(writes.cancel(receipt_id).expect("event cancels").is_some());
         },
     ));
 }

@@ -361,8 +361,13 @@ symbols = [
     "fava_write::PublicationEvidence",
     "fava_write::LocalWriteEvent",
     "fava_write::InvalidEventValue",
+    "fava_write::Receipt",
+    "fava_write::ReceiptOutcome",
+    "fava_write::RelayDeliveryOutcome",
+    "fava_publication::Publication",
+    "fava_publication::PublicationError",
 ]
-crates = ["fava-write"]
+crates = ["fava-write", "fava-publication"]
 spec_symbols = ["RelayDeliveryOutcome"]
 spec_crates = ["fava-publication"]
 
@@ -378,8 +383,13 @@ symbols = [
     "fava_write_store::WriteStore",
     "fava_write_store::WriteStoreError",
     "fava_write_store_memory::MemoryWriteStore",
+    "fava_write_store_redb::RedbWriteStore",
 ]
-crates = ["fava-write-store", "fava-write-store-memory"]
+crates = [
+    "fava-write-store",
+    "fava-write-store-memory",
+    "fava-write-store-redb",
+]
 spec_crates = ["fava-write-store-redb", "fava-write-store-testkit"]
 
 [[term]]
@@ -389,7 +399,12 @@ meaning = "An application request asking Fava to accept responsibility for publi
 owner = "fava-write"
 nearest_nostr = "EVENT message"
 distinction = "An EVENT message contains a signed event; WriteIntent exists before and throughout Fava's local publication lifecycle."
-symbols = []
+symbols = [
+    "fava_write::WriteIntent",
+    "fava_write::WriteIntentError",
+    "fava_write::WritePayload",
+    "fava_write::WriteRouting",
+]
 crates = []
 spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
 
@@ -400,7 +415,7 @@ meaning = "A durable change to a replaceable event that can be applied to the ne
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
-symbols = []
+symbols = ["fava_write::EventBuilder", "fava_write::EventBuildError"]
 crates = []
 spec_symbols = ["ReplaceableEventEdit"]
 
@@ -411,8 +426,13 @@ meaning = "A complete Nostr event body and id that lacks only its signature."
 owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "An Event contains a valid signature; an UnsignedEvent is the exact body presented to a signer."
-symbols = []
-crates = []
+symbols = [
+    "fava_publisher::PublishAttempt",
+    "fava_publisher::PublishOutcome",
+    "fava_publisher::Publisher",
+    "fava_publisher_nip01::Nip01Publisher",
+]
+crates = ["fava-publisher", "fava-publisher-nip01"]
 spec_symbols = ["UnsignedEvent"]
 
 [[term]]
@@ -422,8 +442,13 @@ meaning = "A generic constructor for an UnsignedEvent from author, kind, content
 owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "Nostr defines Event fields; EventBuilder provides checked construction without interpreting any event kind."
-symbols = []
-crates = []
+symbols = [
+    "fava_delivery::DeliveryDecision",
+    "fava_delivery::DeliveryFacts",
+    "fava_delivery::DeliveryPolicy",
+    "fava_delivery_standard::StandardDeliveryPolicy",
+]
+crates = ["fava-delivery", "fava-delivery-standard"]
 spec_symbols = ["EventBuilder"]
 
 [[term]]
@@ -564,8 +589,13 @@ meaning = "The replaceable mechanism performing one publication attempt for one 
 owner = "fava-publisher"
 nearest_nostr = "EVENT and OK messages"
 distinction = "Nostr defines publication messages; Publisher owns one correlated attempt without choosing retry or destination policy."
-symbols = []
-crates = []
+symbols = [
+    "fava_signer::Signer",
+    "fava_signer::SignerAvailability",
+    "fava_signer::SignerError",
+    "fava_signer_local::LocalSigner",
+]
+crates = ["fava-signer", "fava-signer-local"]
 spec_symbols = ["PublishAttempt", "PublishOutcome", "Publisher"]
 spec_crates = ["fava-publisher", "fava-publisher-nip01", "fava-publisher-testkit"]
 

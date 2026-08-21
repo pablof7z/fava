@@ -2,12 +2,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 pub use nostr::event::{Event, EventId, Kind, Tag};
 pub use nostr::key::PublicKey;
 pub use nostr::types::{RelayUrl, Timestamp};
 
 /// The application-selected authorization identity for relay work.
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RelayAccess(String);
 
 impl RelayAccess {
@@ -31,7 +33,7 @@ impl RelayAccess {
 }
 
 /// Exact relay and access authority for an observation.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RelaySessionKey {
     /// Relay that served the event.
     pub relay: RelayUrl,
