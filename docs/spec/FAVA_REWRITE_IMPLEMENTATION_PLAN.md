@@ -187,6 +187,7 @@ The milestones advance six parallel workstreams.
 | M5 | Durable explicit-route publication | Accepted writes appear locally, sign, publish to real relays, return exact receipts, cancel pre-handoff, and survive process death. |
 | M6 | Automatic routing and partial delivery | Outbox, hints, app-relay, and fallback routers compose; partial recipient routes deliver now and expand under one receipt. |
 | M7 | Replaceable-event edits and protocol-crate composition | Follow/unfollow rematerializes over newer source state; protocol crate N+1 changes only its crate and assembly. |
+| M7.1.1 | `fava-simple-groups` multi-relay NIP-29 capability | One public app combines relay-local forks without losing per-host truth and publishes arbitrary kinds through the exact selected host set. |
 | M8 | Authentication, hostile relays, limits, and boundedness | NIP-42, malformed/off-filter input, silence, CLOSED, limits, ambiguous handoff, give-up, and resource bounds are exact. |
 | M9 | Cache/service profiles and restart guarantees | Persistent and ephemeral event-cache profiles, durable write recovery, NIP-05, and NIP-11 cache semantics are truthful. |
 | M10 | Provider substitution and profile qualification | External providers replace each major seam without core edits and pass the same application corpus. |
@@ -215,6 +216,7 @@ M3 ---------+------> M8
             M11
 
 M7 depends on M1, M5, and enough of M6 to obtain source state and route writes.
+M7.1.1 depends on M3, M5 through M7, and the completed literal tag-value query slice; it completes before M8.
 ```
 
 The graph is a sequencing aid, not permission to maintain parallel half-built architectures. A milestone may begin preparatory pure-value work earlier, but its product claim does not exist until its canary gate passes.
@@ -716,7 +718,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 ### Crates/slices
 
 - `fava-nip02`
-- a second unrelated protocol crate, recommended: bookmarks or a NIP-29 edit
+- `fava-bookmarks` as the second unrelated protocol crate
 - replaceable-event-edit storage in write store
 - materialization/rematerialization lifecycle in publication
 - replaceable-event-edit conformance corpus
@@ -768,6 +770,115 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 ### Falsifier
 
 Have the protocol crate call a signer or publisher directly. A dependency-negative compile test must fail.
+
+---
+
+## M7.1.1 — `fava-simple-groups` multi-relay NIP-29 capability
+
+### Goal
+
+As a Fava application developer, I can use the README-shaped
+`fava-simple-groups` capability to read, project, discover, and publish NIP-29
+groups across one or several host relays without losing relay-local authority
+or creating a second query/publication lifecycle.
+
+### Crates/slices
+
+- `fava-simple-groups`
+- `Group`, `GroupRecords`, and bounded pure `GroupSnapshot` projection
+- typed NIP-29 record and kind-10009 row parsing
+- ordinary query combinators over literal tag-value filters
+- reactive discovery combinators over generic `ValueSet`
+- kind-10009 replaceable-edit materializer
+- README-driven public conformance corpus
+- controlled two-relay canary flow
+
+### Required behavior
+
+- `Group::on(hosts, id)` accepts one opaque id and an explicit non-empty,
+  bounded host set; one host and several hosts use the same value and methods.
+- Content queries add the exact `h` value and ask every selected host through an
+  ordinary `Query`, retaining accepted local write visibility.
+- Record queries select kinds 39000 through 39005 with the exact `d` value and
+  require actual evidence from the selected host set.
+- The same event served by several hosts appears once with every actual relay
+  contribution.
+- Each host retains independent record authority. Typed projections expose
+  per-host state, member/admin attribution, and disagreement; metadata is never
+  field-merged across hosts and no host wins silently.
+- The application chooses a fork by using a single-host `Group`; the capability
+  does not declare a canonical host or migration.
+- Publication is kind-blind and routes to the exact complete selected host set,
+  bypassing automatic routers.
+- Unsigned author-bearing drafts receive exactly one matching `h` tag.
+  Pre-signed events are unchanged and are refused unless their existing group
+  context is exact.
+- Group management operations create ordinary NIP-29 events. Saved-group and
+  saved-relay list changes use one `ReplaceableEventEdit` materializer through
+  the ordinary durable write lifecycle.
+- Discovery helpers return ordinary `Query` or `ValueSet` expressions and make
+  no global completeness, existence, negative-membership, or canonical-fork
+  claim.
+- Every NIP-29 relay record and saved row has a typed bounded parser so the
+  application need not decode raw tags.
+- The crate owns no observation, store, signer, routing session, publisher,
+  delivery, retry, receipt, runtime, or transport lifecycle.
+
+### Canary scenarios
+
+`simple-group-one-host`
+
+- Construct one group from a string relay URL and opaque id.
+- Observe kind-9 content and typed metadata/members through public Fava.
+- Publish an arbitrary custom kind through the exact host and inspect the
+  ordinary receipt.
+
+`simple-group-multi-host-fork`
+
+- Run two controlled real relays with the same group id and divergent metadata,
+  admins, and content.
+- Open one multi-host group feed; duplicate one event across both relays.
+- Observe one event record with both serving-relay contributions, unique events
+  from each host, and explicit typed record disagreement.
+- Publish through the multi-host group and prove one exact handoff per selected
+  host under one receipt.
+- Construct a single-host group and prove the application can choose one side
+  without hidden canonicalization.
+
+`simple-group-discovery`
+
+- Parse several saved-group and relay-in-use rows from one kind-10009 event.
+- Compose saved-by/admin/member discovery through ordinary query/value
+  expressions as inputs change.
+- Preserve saving authors, relay identity, partial-list caveats, and bounds.
+
+`simple-group-presigned-context`
+
+- Accept a valid pre-signed custom event with the exact `h` tag and explicit
+  group route.
+- Refuse missing, duplicate, or contradictory group context before custody and
+  emit zero EVENT frames.
+
+### Exit gates
+
+- The crate README remains the public API North Star and every executable
+  example is covered by a compile test or explicitly marked prospective until
+  its owning plan lands.
+- `fava-simple-groups` depends only on neutral query/state/write contracts;
+  universal owners and the facade contain no NIP-29 kind or group-id switch.
+- Host sets, ids, tags, decoded rows, projections, discovery values, and
+  evidence artifacts are bounded with typed refusal/shortfall.
+- Pure parsers/construction, public facade, cancellation/close, deliberate
+  breaks, and controlled two-relay wire evidence all pass.
+- Adding or removing the selected capability changes only its crate and
+  application/artifact assembly metadata.
+
+### Falsifier
+
+Collapse two hosts with the same id into one authority, drop one host's
+conflicting record, or route publication to only one selected host. The
+multi-host canary must fail on exact result, provenance, disagreement, and wire
+handoff assertions while unrelated query/publication controls remain green.
 
 ---
 
@@ -1027,6 +1138,7 @@ Ship selected, ordinary external artifacts and prove behavioral equivalence acro
 - Android AAR
 - iOS XCFramework or selected package form
 - profile and protocol-crate selection tooling
+- selected `fava-simple-groups` Rust capability and native value/lifecycle projection
 - SDK parity inventory
 - shared cross-language scenario corpus
 
@@ -1040,6 +1152,7 @@ Ship selected, ordinary external artifacts and prove behavioral equivalence acro
 - iOS suspension/resume behavior is proven on a physical device for any profile that claims transparency.
 - Resource use returns to baseline after repeated lifecycle cycles.
 - Public operation inventory is structural, not heuristic word matching.
+- Native products selected with `fava-simple-groups` preserve multi-host Group construction, per-host record disagreement, kind-blind exact-host publication, and ordinary query/write lifecycles.
 
 ### Canary relationship
 
@@ -1049,6 +1162,7 @@ Required parity subset:
 
 - explicit read + EOSE;
 - multi-relay dedup/provenance;
+- `fava-simple-groups` multi-host fork projection and exact-host publication;
 - optimistic local write visibility;
 - receipt mixed outcomes;
 - query cancellation race;
@@ -1173,7 +1287,7 @@ The canary should be a small social client with enough ordinary product behavior
 - follows feed;
 - note/reply/reaction;
 - bookmarks or a second replaceable-event-edit protocol crate;
-- one NIP-29 room/group flow;
+- one `fava-simple-groups` multi-relay room/group flow with visible per-host disagreement;
 - route preview;
 - outbox/receipt inspection;
 - NIP-05 resolution;

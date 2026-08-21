@@ -107,6 +107,21 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 - [x] **CAP-08**: Adding capability N+1 changes only its crate and selected assembly/artifact metadata, with zero universal-core behavior changes.
 - [x] **CAP-09**: Raw arbitrary and future Nostr event kinds remain usable without adding universal-core switches over event-kind meaning.
 
+### Multi-Relay Simple Groups
+
+- [ ] **GROUP-01**: `fava-simple-groups::Group` represents one opaque NIP-29 group id over an application-selected non-empty bounded host-relay set, with one-host and multi-host use sharing one public value.
+- [ ] **GROUP-02**: Group content helpers return ordinary queries with the exact `h` value and explicit acquisition from every selected host while preserving accepted local write visibility.
+- [ ] **GROUP-03**: Group-record helpers return ordinary queries for kinds 39000–39005 with the exact `d` value and require actual evidence from the selected host set.
+- [ ] **GROUP-04**: A duplicate event served by several hosts appears once with every actual serving-relay contribution, while unique events from each host remain visible.
+- [ ] **GROUP-05**: Typed group projections retain independent per-host record authority, expose exact disagreement and member/admin attribution, and never field-merge metadata or silently select a host.
+- [ ] **GROUP-06**: Applications choose one fork through a single-host `Group`; the capability makes no canonical-host, migration, existence, completeness, or negative-membership claim.
+- [ ] **GROUP-07**: Group publication is kind-blind, adds or validates exactly one group context, and uses one exact explicit write route over the complete selected host set.
+- [ ] **GROUP-08**: Pre-signed group events remain byte-for-byte unchanged and are refused before custody when their existing group context is missing, duplicate, or contradictory.
+- [ ] **GROUP-09**: NIP-29 records, pins, saved groups, and saved relays have typed bounded parsers/projections so applications do not decode raw protocol tags.
+- [ ] **GROUP-10**: Saved/admin/member discovery returns ordinary `Query` or `ValueSet` expressions; kind-10009 saved-list changes use the ordinary semantic-edit lifecycle.
+- [ ] **GROUP-11**: `fava-simple-groups` owns no observation, store, signer, router session, publisher, delivery, retry, receipt, runtime, or transport lifecycle, and universal owners contain no NIP-29 behavior switch.
+- [ ] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
+
 ### Authentication, Hostility, and Bounds
 
 - [ ] **HARD-01**: Relay NIP-42 authentication is explicit, generation-scoped, and separate from event authorship and query filter identity.
@@ -278,6 +293,18 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | CAP-07 | Phase 7 | Complete |
 | CAP-08 | Phase 7 | Complete |
 | CAP-09 | Phase 7 | Complete |
+| GROUP-01 | Phase 07.1.1 | Pending |
+| GROUP-02 | Phase 07.1.1 | Pending |
+| GROUP-03 | Phase 07.1.1 | Pending |
+| GROUP-04 | Phase 07.1.1 | Pending |
+| GROUP-05 | Phase 07.1.1 | Pending |
+| GROUP-06 | Phase 07.1.1 | Pending |
+| GROUP-07 | Phase 07.1.1 | Pending |
+| GROUP-08 | Phase 07.1.1 | Pending |
+| GROUP-09 | Phase 07.1.1 | Pending |
+| GROUP-10 | Phase 07.1.1 | Pending |
+| GROUP-11 | Phase 07.1.1 | Pending |
+| GROUP-12 | Phase 07.1.1 | Pending |
 | HARD-01 | Phase 8 | Pending |
 | HARD-02 | Phase 8 | Pending |
 | HARD-03 | Phase 8 | Pending |
@@ -315,8 +342,8 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | NATIVE-08 | Phase 11 | Pending |
 
 **Coverage:**
-- v1 requirements: 110 total
-- Mapped to phases: 110 ✓
+- v1 requirements: 122 total
+- Mapped to phases: 122 ✓
 - Unmapped: 0
 - Duplicate mappings: 0
 

@@ -614,6 +614,52 @@ BookmarkObservation
 
 The single observation lifecycle remains `fava.observe(...)`.
 
+### Multi-relay simple groups
+
+`fava-simple-groups` applies the same rule to NIP-29. A `Group` is an inert
+query/write description over one group id and a non-empty host-relay set:
+
+```rust
+let photos = Group::on(
+    ["wss://bob.relay.example", "wss://alice.relay.example"],
+    "photos",
+)?;
+
+let feed = photos.events(Query::events().kind(Kind::from(9)).limit(50)?)?;
+let records = photos.records(GroupRecords::metadata())?;
+```
+
+`feed` lowers to the ordinary exact `h` tag-value axis plus
+`from_relays(hosts)`. This keeps explicit acquisition and optimistic local write
+visibility. `records` lowers to kinds 39000 through 39005, the exact `d`
+tag-value axis, and `only_from_relays(hosts)` because relay-authored group state
+is authoritative per host.
+
+Several hosts do not become one protocol authority. The final content snapshot
+deduplicates identical event ids and retains exact serving-relay evidence. A
+pure `GroupSnapshot` projection exposes each host's records and explicit
+`metadata_differ`, member/admin attribution, and `at(host)` views. It never
+opens another observation or chooses the winning fork.
+
+Discovery helpers return ordinary core expressions:
+
+```text
+SimpleGroups::saved_groups(authors)          -> Query
+SimpleGroups::saved_relays(authors)          -> Query
+SimpleGroups::groups_where_admin(subjects)   -> Query
+SimpleGroups::groups_where_member(subjects)  -> Query
+SimpleGroups::groups_saved_by(group)         -> ValueSet<PublicKey>
+```
+
+Typed projections turn matching records and kind-10009 rows into protocol
+values. Reactive discovery composes through `ValueSet`; the application does
+not expand, diff, or reopen intermediate queries itself.
+
+Group publication similarly returns an ordinary write value with an exact
+explicit route over the selected hosts. The protocol helper supplies or
+validates the group tag but does not create a protocol-specific publication or
+receipt lifecycle.
+
 ---
 
 ## 11. Design rules

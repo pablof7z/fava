@@ -1901,6 +1901,92 @@ Protocol crates use:
 
 A new protocol crate is selected by the application profile and contributes through these ordinary contracts. The facade and universal owners remain unchanged.
 
+### `fava-simple-groups`
+
+**Responsibility:** provide the app-facing NIP-29 group capability described by
+`crates/fava-simple-groups/README.md` using only ordinary query and write
+values.
+
+`Group` is a pure value containing one opaque group id and an application-
+selected, non-empty, bounded set of host relays. One host is the ordinary case.
+Several hosts are a required app aggregation for forked groups: the same id at
+two relays remains two independently authoritative relay groups, while the
+application may render their content as one deduplicated feed and inspect their
+record disagreement explicitly.
+
+`Group` owns no socket, observation, store, signer, routing session, delivery,
+retry, or receipt lifecycle. Its operations lower to universal primitives:
+
+```rust
+Group::on(hosts, id) -> Result<Group, GroupError>
+group.events(selection) -> Result<Query, GroupError>
+group.records(which) -> Result<Query, GroupError>
+group.project(snapshot) -> GroupSnapshot
+group.publish(draft) -> Result<WriteIntent, GroupError>
+```
+
+The approved public nominal vocabulary is:
+
+```rust
+pub struct Group { /* private host set + id */ }
+pub struct SimpleGroups;
+pub struct GroupSnapshot { /* private bounded projection */ }
+pub enum GroupRecords { /* metadata/admin/member/role/participant/pin set */ }
+pub struct GroupMetadata { /* typed kind-39000 value */ }
+pub struct GroupAdmins { /* typed kind-39001 value */ }
+pub struct GroupMembers { /* typed kind-39002 value */ }
+pub struct GroupRoles { /* typed kind-39003 value */ }
+pub struct GroupParticipants { /* typed kind-39004 value */ }
+pub struct GroupPins { /* typed kind-39005 value */ }
+pub enum PinnedItem { /* ordered event/address target */ }
+pub struct SavedGroup { /* typed kind-10009 group row */ }
+pub struct SavedRelay { /* typed kind-10009 relay row */ }
+pub enum GroupError { /* typed construction/parsing/bounds refusal */ }
+```
+
+The signatures are illustrative; the observable contract is fixed:
+
+- content queries add exactly one `h = group-id` constraint and use
+  `from_relays(hosts)`, preserving accepted local-write visibility while asking
+  exactly the selected hosts;
+- relay-authored record queries select kinds 39000 through 39005, add exactly
+  one `d = group-id` constraint, and use `only_from_relays(hosts)`;
+- the same event id appears once across hosts with every actual relay evidence
+  contribution;
+- `GroupSnapshot` is a pure projection with typed merged views, per-host views,
+  and per-record disagreement; it never field-merges conflicting metadata or
+  chooses a canonical host;
+- member and admin collections retain per-entry host attribution, and absence
+  never proves non-membership or non-administration;
+- application code chooses one fork by constructing a single-host `Group`, not
+  through hidden capability policy.
+
+`SimpleGroups` builds ordinary discovery queries for saved groups, saved relays,
+and groups where subjects are listed as administrators or members. Reactive
+discovery such as `groups_saved_by` composes through the generic `ValueSet`
+query vocabulary rather than opening a private observation. `SavedGroup` and
+`SavedRelay` are typed projections of kind-10009 rows; the record parsers expose
+`GroupMetadata`, `GroupAdmins`, `GroupMembers`, `GroupRoles`,
+`GroupParticipants`, `GroupPins`, and ordered `PinnedItem` values without
+requiring applications to interpret raw tags.
+
+Publication is kind-blind. An unsigned author-bearing draft receives exactly
+one matching `h` group tag and `WriteRouting::Explicit(hosts)`. A pre-signed
+event is never mutated: the helper verifies its existing exact group tag and
+adds only the explicit route. Group management commands remain ordinary
+NIP-29 events. Kind-10009 saved-list changes use
+`ReplaceableEventEdit` and the application-selected materializer through the
+one publication lifecycle.
+
+The host set shares the universal explicit-relay fan-out bound. Group ids,
+constructed tags, decoded records, projections, and discovery results have
+explicit structural/count bounds or typed refusal/shortfall. No helper silently
+truncates a host, record, row, or conflict.
+
+The crate depends on `fava-query`, `fava-state`, and `fava-write`. Universal
+owners and the `fava` facade do not depend on `fava-simple-groups`, contain a
+NIP-29 kind switch, or bypass its public values.
+
 # Part VI — Universal engine owners
 
 ## `fava-ingest`

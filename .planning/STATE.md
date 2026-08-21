@@ -83,7 +83,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - M0 remains a completed prerequisite baseline outside the active roadmap.
 - M1-M6 were completed before GSD phase artifacts existed; their focused issue records, commits, current validation, and phase verification reports are the completion provenance.
 - No retrospective PLAN.md or SUMMARY.md files were invented during reconciliation.
-- Active phases correspond exactly and sequentially to authoritative M1 through M11.
+- Major phases correspond to M1 through M11; focused inserted phases may repair or add approved public capabilities before the next major milestone.
 - Every phase uses MVP mode; milestone names require every authoritative exit gate and mapped requirement Definition of Done item to pass.
 - Windowing/resume tokens, outage backfill, partial-handoff cancellation, full attempt-history retention, and the recommended persistent event-cache profile remain explicitly unpromised pending their owning phase evidence.
 - [Phase 06.1]: Use nostr::filter::SingleLetterTag directly with no Fava wrapper or compatibility alias.
@@ -94,6 +94,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 06.1]: Ignore a crate-like vocabulary candidate only when the same line identifies that exact token as a /tmp evidence path.
 - [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic rematerialization time. — Raw events are complete caller-authored values, while semantic edits must be rematerializable against changing sources without a hidden clock override.
 - [Phase 07]: `ReplaceableEventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
+- [Phase 07.1.1]: The NIP-29 capability is `fava-simple-groups`; its README is the public North Star and multi-relay `Group` aggregation is required, not provisional.
+- [Phase 07.1.1]: One group id may be aggregated over a non-empty host set while each relay's records remain independently authoritative; reads/writes reuse ordinary Fava lifecycles.
 
 ### Pending Todos
 

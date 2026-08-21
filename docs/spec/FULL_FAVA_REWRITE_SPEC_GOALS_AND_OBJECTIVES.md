@@ -1256,11 +1256,32 @@ When constructing a pointer-like relationship to an event or address, the owning
 
 Reply, reaction, repost, quote, and comment crates each own their exact protocol tagging. Non-pointer semantics such as list entries or deletion targets are not forced through pointer tagging.
 
-## PROTO-006 — NIP-29 group publication is kind-blind
+## PROTO-006 — `fava-simple-groups` preserves multi-relay group truth
 
-A selected NIP-29 crate adds the group context and exact route required by the group without restricting the carried event to a fixed set of event kinds.
+`fava-simple-groups` MUST expose a pure `Group` value over one opaque NIP-29
+group id and an application-selected non-empty, bounded set of host relays.
+One host is the ordinary case; several hosts are a required application
+aggregation for independently authoritative relay-local forks.
 
-Custom event kinds can use the same group publication path.
+Group content reads MUST add the exact `h` constraint and ask the complete host
+set through an ordinary `Query`. Relay-authored group-record reads MUST add the
+exact `d` constraint, retain actual per-host relay evidence, and expose record
+disagreement rather than field-merging it or silently selecting a winner. The
+same event id served by several selected hosts appears once with every actual
+serving-relay contribution.
+
+Group publication MUST add the exact group context and
+`WriteRouting::Explicit` route for the complete selected host set without
+restricting the carried event to a fixed set of event kinds. Custom event kinds
+MUST use the same path. A pre-signed event is verified unchanged and MUST
+already carry the exact group context; adding routing cannot rewrite its tags.
+
+The capability MUST return ordinary `Query`, event, `WriteIntent`, or
+`ReplaceableEventEdit` values and MUST NOT own a socket, observation, signer,
+store, delivery, retry, or receipt lifecycle. It MUST provide typed bounded
+parsing/projection for NIP-29 records and saved rows so ordinary applications do
+not decode raw tags. Discovery remains declarative and makes no relay-global
+completeness, existence, membership-absence, or canonical-fork claim.
 
 ## PROTO-007 — NIP-25 reaction construction refuses ambiguous content
 

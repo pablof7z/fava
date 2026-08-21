@@ -23,7 +23,7 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 
 ### Active
 
-- [ ] Deliver replaceable-event edits and independent protocol crates without expanding the universal workload model beyond live queries and write intents
+- [ ] Deliver `fava-simple-groups` from its README North Star: one NIP-29 group over one or several host relays, exact per-host truth, ordinary queries/write intents, typed discovery/projection, and kind-blind exact-host publication
 - [ ] Qualify authentication, hostile-relay behavior, typed limits, overload, ambiguous handoff, give-up, and resource boundedness with attributable failures
 - [ ] Deliver truthful persistent and ephemeral cache/service profiles, restart guarantees, NIP-05 and NIP-11 services, and durable write recovery
 - [ ] Prove provider substitution across every major seam using public contracts, external implementations, shared conformance corpora, and no private bypasses
@@ -43,7 +43,7 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 
 - The Fava documents under `docs/spec/` are authoritative.
 - Authority order is: behavioral goals and objectives, architecture, TDD/BDD testing guide, implementation plan, then the partial Rust query-semantics refinement where it does not conflict with the complete authorities.
-- The current checkout implements completed M0-M6 product slices. M7-M11 remain specified target work; Phase 7 semantic writes and capability composition is next.
+- The current checkout implements completed M0-M7 product slices plus the literal tag-value query remediation. Phase 07.1 is active; Phase 07.1.1 then delivers `fava-simple-groups` before M8-M11.
 - The implementation uses focused Rust owner, contract, provider, lifecycle-owner, and facade crates. The canary and external provider falsifiers are separate workspaces so they can act as independent witnesses.
 - Behavior features preserve app-visible meaning. Executable owner tests drive implementation. Canary and native capstones prove additional public behavior only when they exercise real boundaries.
 - The five later product decisions left open by the normative specification—windowing, partial-handoff cancellation, outage backfill, full delivery history, and the recommended persistent event-cache profile—remain decisions for their owning milestones rather than initialization guesses.
@@ -73,6 +73,7 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 | Select providers through static application composition | Replaceability is explicit and testable without runtime plugin machinery or hidden defaults | — Pending |
 | Use live queries and write intents as the two long-lived workload concepts | Keeps cancellation, recovery, routing, observation, and diagnostics coherent | — Pending |
 | Treat M0-M6 as complete and M7 as the next milestone | Focused issue records, milestone commits, preserved canary bundles, current validation, and retroactive phase verification support the completed claims | Accepted |
+| Name the NIP-29 capability `fava-simple-groups` and make multi-relay `Group` aggregation required | The user-authored README defines the app-facing product: one id over an explicit host set, per-relay authority preserved, fork disagreement visible, and exact-host kind-blind publication | Accepted |
 
 ## Evolution
 

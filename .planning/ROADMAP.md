@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through eleven vertical phases corresponding exactly to authoritative milestones M1 through M11. M1-M7 are complete; M8 is next. Each phase delivers one public-facade capability, retains its milestone's complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
+Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7 and the tag-value query slice are complete; Phase 07.1 is active and the approved `fava-simple-groups` Phase 07.1.1 follows before M8. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -23,6 +23,8 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 5: Durable Explicit-Route Publication** - Complete M5's durable write, local visibility, exact explicit delivery, receipt, cancellation, and recovery spine.
 - [x] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
 - [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
+- [ ] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work.
+- [ ] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
 - [ ] **Phase 10: Provider Substitution Qualification** - Complete M10's public-contract substitution matrix and architecture falsifiers.
@@ -186,22 +188,28 @@ Plans:
 
 - [ ] TBD (run /gsd-plan-phase 07.1 to break down)
 
-### Phase 07.1.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability defined by its README North Star (INSERTED)
+### Phase 07.1.1: Multi-Relay Simple Groups (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** As a Fava application developer, I can use the README-shaped `fava-simple-groups` capability to read, project, discover, and publish one NIP-29 group across one or several host relays without losing relay-local authority or creating a second query/publication lifecycle.
+**Mode:** mvp
+**Requirements:** GROUP-01, GROUP-02, GROUP-03, GROUP-04, GROUP-05, GROUP-06, GROUP-07, GROUP-08, GROUP-09, GROUP-10, GROUP-11, GROUP-12
 **Depends on:** Phase 07.1
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
 
-Plans:
+  1. An application constructs one `Group` from a non-empty host set and opaque id; the same public helpers produce ordinary exact-`h` content queries, exact-`d` record queries, and kind-blind exact-host write intents for one or several hosts.
+  2. A controlled two-relay fork appears as one event-id-deduplicated feed with exact serving-relay evidence while typed projections retain each host's independent records, expose disagreement, and never choose or field-merge a winner.
+  3. Typed record/saved-row parsing and ordinary `Query`/`ValueSet` discovery cover metadata, admins, members, roles, participants, pins, saved groups, and saved relays without raw-tag work or global completeness claims.
+  4. The crate README's public flow passes pure, facade, cancellation/close, bounds, deliberate-break, and two-relay wire evidence while the crate owns no engine lifecycle and universal owners contain no NIP-29 switch.
 
-- [ ] TBD (run /gsd-plan-phase 07.1.1 to break down)
+**Plans:** TBD
+
+- [ ] Run GSD phase planning after Phase 07.1 inputs settle.
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
 **Goal:** Applications receive exact, isolated outcomes under relay authentication, malformed or hostile input, overload, provider failure, retry, ambiguity, and shutdown pressure.
 **Mode:** mvp
-**Depends on:** Phase 7
+**Depends on:** Phase 07.1.1
 **Requirements:** HARD-01, HARD-02, HARD-03, HARD-04, HARD-05, HARD-06, HARD-07, HARD-08, HARD-09, HARD-10
 **Success Criteria** (what must be TRUE):
 
@@ -260,7 +268,7 @@ Plans:
 
 ## Progress
 
-**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
+**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 07.1 → Phase 07.1.1 (`fava-simple-groups`) → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -272,6 +280,8 @@ Plans:
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
+| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 0/TBD | In progress | - |
+| 07.1.1. Multi-Relay Simple Groups | 0/TBD | Ready to plan after 07.1 | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |
