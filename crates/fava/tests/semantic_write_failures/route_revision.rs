@@ -70,14 +70,14 @@ async fn route_commit_result_survives_transient_receipt_read_failure() {
     let queued_store = Arc::clone(&store);
     let queued_first = first.clone();
     let queued_second = second.clone();
-    let queue_second = tokio::spawn(async move {
+    let enqueue = tokio::spawn(async move {
         while queued_store.route_commits() <= baseline_commits {
             tokio::task::yield_now().await;
         }
         queued_router.send(contribution(&[queued_first, queued_second]));
     });
     router.send(contribution(std::slice::from_ref(&first)));
-    queue_second.await.unwrap();
+    enqueue.await.unwrap();
     tokio::time::sleep(Duration::from_millis(150)).await;
 
     let second_session = RelaySessionKey::new(second, RelayAccess::public());

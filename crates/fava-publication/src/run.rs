@@ -317,14 +317,18 @@ impl Publication {
                     &request,
                     error.to_string(),
                 );
-                let _ = self.store.apply_route(
+                let committed = self.store.apply_route(
                     receipt.write_id,
                     receipt.receipt_id,
                     receipt.current.publication.materialization_id,
                     receipt.current.id(),
                     &plan,
                 );
-                (None, self.committed_route_revision(receipt))
+                let revision = committed.map_or_else(
+                    |_| self.committed_route_revision(receipt),
+                    |current| current.route_revision,
+                );
+                (None, revision)
             }
         }
     }
@@ -358,23 +362,30 @@ impl Publication {
             Ok(plan) => plan,
             Err(error) => RoutePlan::shortfall(revision, request, error.to_string()),
         };
-        if let Err(error) = self.store.apply_route(
+        match self.store.apply_route(
             receipt.write_id,
             receipt.receipt_id,
             receipt.current.publication.materialization_id,
             receipt.current.id(),
             &plan,
         ) {
-            let shortfall = RoutePlan::shortfall(revision, request, error.to_string());
-            let _ = self.store.apply_route(
-                receipt.write_id,
-                receipt.receipt_id,
-                receipt.current.publication.materialization_id,
-                receipt.current.id(),
-                &shortfall,
-            );
+            Ok(committed) => committed.route_revision,
+            Err(error) => {
+                let shortfall = RoutePlan::shortfall(revision, request, error.to_string());
+                self.store
+                    .apply_route(
+                        receipt.write_id,
+                        receipt.receipt_id,
+                        receipt.current.publication.materialization_id,
+                        receipt.current.id(),
+                        &shortfall,
+                    )
+                    .map_or_else(
+                        |_| self.committed_route_revision(receipt),
+                        |committed| committed.route_revision,
+                    )
+            }
         }
-        self.committed_route_revision(receipt)
     }
 
     fn apply_route_change(
@@ -388,15 +399,15 @@ impl Publication {
     }
 
     fn committed_route_revision(&self, receipt: &Receipt) -> u64 {
-        self.store
-            .receipt(receipt.receipt_id)
-            .ok()
-            .flatten()
-            .filter(|current| {
-                current.current.publication.materialization_id
-                    == receipt.current.publication.materialization_id
-            })
-            .map_or(receipt.route_revision, |current| current.route_revision)
+        match self.store.receipt(receipt.receipt_id) {
+            Ok(Some(current))
+                if current.current.publication.materialization_id
+                    == receipt.current.publication.materialization_id =>
+            {
+                current.route_revision
+            }
+            Ok(Some(_) | None) | Err(_) => receipt.route_revision,
+        }
     }
 
     fn start_signing(&self, receipt: &Receipt, cancel: watch::Receiver<bool>) {
