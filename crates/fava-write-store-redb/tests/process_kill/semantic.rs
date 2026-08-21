@@ -383,7 +383,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
 
     fn materialize(
         &self,
-        edit: &ReplaceableEventEdit,
+        _edit: &ReplaceableEventEdit,
         author: fava::PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
