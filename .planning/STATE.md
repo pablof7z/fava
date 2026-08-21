@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
-status: Ready to execute
-stopped_at: Phase 07.1 planned and independently verified; run $gsd-execute-phase 07.1
-last_updated: "2026-08-21T23:22:04.747Z"
+status: executing
+stopped_at: Completed 07.1-01-PLAN.md
+last_updated: "2026-08-21T23:38:27.285Z"
 last_activity: 2026-08-22
-last_activity_desc: Phase 07.1 planned in 12 plans across 9 waves; plan verification passed
-state_head: 6db7222b3f8f6ad660519937567ec32c56153776
+last_activity_desc: Plan 07.1-01 completed; synchronous publication door delivered
+state_head: 756fc20b0b0dbe7354e76b5334faeda6e0b06722
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 12
-  percent: 50
+  completed_plans: 13
+  percent: 54
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — READY TO EXECUTE
-Plan: —
+Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
+Plan: 2 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Phase 07.1 plan verification passed
+Last activity: 2026-08-22 — Plan 07.1-01 completed; synchronous publication door delivered
 
-Progress: [██████░░░░] 57%
+Progress: [█████░░░░░] 54%
 
 Phase progress is 8/14. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
 all authored plans and their review and verification gates.
@@ -41,9 +41,9 @@ all authored plans and their review and verification gates.
 
 **Velocity:**
 
-- Total plans completed: 12
-- Average duration: 37 minutes
-- Total execution time: 7 hours 29 minutes
+- Total plans completed: 13
+- Average duration: 35 minutes
+- Total execution time: 7 hours 35 minutes
 
 **By Phase:**
 
@@ -51,11 +51,12 @@ all authored plans and their review and verification gates.
 |-------|-------|-------|----------|
 | Phase 07 | 9 | 407 min | 45 min |
 | Phase 06.1 | 3 | 42 min | 14 min |
+| Phase 07.1 | 1 | 6 min | 6 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 134 min, 38 min, 15 min, 9 min, 18 min
-- Trend: Phase 06.1 remediation slices completed well below the Phase 7 capstone duration
+- Last 5 plans: 38 min, 15 min, 9 min, 18 min, 6 min
+- Trend: Phase 07.1 began below the Phase 06.1 remediation average
 
 **Per-Plan Metrics:**
 
@@ -73,6 +74,7 @@ all authored plans and their review and verification gates.
 | Phase 06.1 P01 | 15min | 3 tasks | 7 files |
 | Phase 06.1 P02 | 9min | 2 tasks | 8 files |
 | Phase 06.1 P03 | 18min | 2 tasks | 9 files |
+| Phase 07.1 P01 | 6min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -96,6 +98,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07]: `ReplaceableEventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
 - [Phase 07.1.1]: The NIP-29 capability is `fava-simple-groups`; its README is the public North Star and multi-relay `Group` aggregation is required, not provisional.
 - [Phase 07.1.1]: One group id may be aggregated over a non-empty host set while each relay's records remain independently authoritative; reads/writes reuse ordinary Fava lifecycles.
+- [Phase 07.1]: Unscoped publish(edit) compiles but refuses MissingAuthor before custody until by(author) supplies the frozen author; a sole registered signer is never selected implicitly.
+- [Phase 07.1]: Facade Write holds stable identities and reads current receipt facts through Publication; neutral owners retain custody and receipt authority.
 
 ### Pending Todos
 
@@ -123,6 +127,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T20:45:19.179Z
-Stopped at: Phase 07.1 inserted after Phase 7; run $gsd-spec-phase 07.1
+Last session: 2026-08-21T23:38:27.207Z
+Stopped at: Completed 07.1-01-PLAN.md
 Resume file: None
