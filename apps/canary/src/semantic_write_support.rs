@@ -268,3 +268,57 @@ pub(super) fn finish(
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use fava::{EventBuilder, Kind, Timestamp};
+    use fava_signer::{Signer, SignerError};
+    use nostr::key::Keys;
+    use tokio::sync::watch;
+
+    use super::GateSigner;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn signer_request_queue_refuses_work_beyond_its_exact_bound() {
+        let keys = Keys::generate();
+        let (signer, requests) = GateSigner::new(keys.public_key());
+        let signer = Arc::new(signer);
+        let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+            .created_at(Timestamp::from(1))
+            .build()
+            .unwrap();
+        let first_signer = Arc::clone(&signer);
+        let first_event = event.clone();
+        let first = tokio::spawn(async move {
+            first_signer
+                .sign_event(first_event, watch::channel(false).1)
+                .await
+        });
+        let second_signer = Arc::clone(&signer);
+        let second_event = event.clone();
+        let second = tokio::spawn(async move {
+            second_signer
+                .sign_event(second_event, watch::channel(false).1)
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while requests.len() != 2 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("two requests fill the exact queue bound");
+        let refusal = tokio::time::timeout(
+            Duration::from_millis(25),
+            signer.sign_event(event, watch::channel(false).1),
+        )
+        .await
+        .expect("overflow refuses without waiting");
+        assert!(matches!(refusal, Err(SignerError::Unavailable(_))));
+        first.abort();
+        second.abort();
+    }
+}
