@@ -1,7 +1,7 @@
 # Delivery identity and budget are separate public facts
 
-**Status:** in progress  
-**Requirements:** `HARD-05`, `HARD-06`, `HARD-07`  
+**Status:** resolved
+**Requirements:** `HARD-05`, `HARD-06`, `HARD-07`
 **Authority:** `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`,
 `docs/spec/ARCHITECTURE.md`, and
 `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`
@@ -64,3 +64,21 @@ definitions.
   restoration reproduces exact checksums.
 - Cargo and Bazel execute the same public target; strict Clippy, vocabulary,
   line, whitespace, and stash-identity gates pass.
+
+## RED, GREEN, and deliberate break
+
+The graph RED failed with status 7 because
+`//crates/fava:delivery_bounds` was not declared. After the public assertions
+were committed and the exact Cargo test was registered as a Bazel `rust_test`,
+both build systems passed all four cases.
+
+The named break changed only two lines of
+`crates/fava-publication/src/delivery.rs`: it reused `Receipt::spent` as the
+prior operation generation and made the `WaitFor` timer return without the
+store-revalidated attempt. The exact public test then failed with status 101 at
+`WaitFor must authorize a delayed store-revalidated generation`. Applying the
+inverse patch restored the file to SHA-256
+`905191384191619e3d518e52b5ca61fabe2996f1c9a960e05f2ebf67538c0f37`,
+and the same exact test passed.
+
+DELIBERATE_BREAK_M8_DELIVERY_IDENTITY_BUDGET: PASS public test killed the type-correct WaitFor and generation-budget regression; restoration matched the pre-break checksum
