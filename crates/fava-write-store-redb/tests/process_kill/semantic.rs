@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, Fava, FavaBuilder, Kind, MaterializationId,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent,
-    WriteIntentError, WriteRouting,
+    Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WriteIntentError,
+    WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -33,7 +33,6 @@ use super::{relay, session, unique_root, wait_for};
 const SEMANTIC_BOUNDARY: &str = "FAVA_REDB_SEMANTIC_BOUNDARY";
 const SEMANTIC_PATH: &str = "FAVA_REDB_SEMANTIC_PATH";
 const SEMANTIC_MARKER: &str = "FAVA_REDB_SEMANTIC_MARKER";
-const EDIT_FORMAT: u32 = 7;
 
 #[test]
 fn semantic_boundary_child() {
@@ -45,7 +44,8 @@ fn semantic_boundary_child() {
     let store = RedbWriteStore::open(path).expect("semantic child store opens");
     let base = signed_source(10, "base");
     let intent = if boundary == "terminal" {
-        WriteIntent::edit(edit(), WriteRouting::Automatic).expect("automatic semantic intent")
+        WriteIntent::edit_as(edit(), keys().public_key(), WriteRouting::Automatic)
+            .expect("automatic semantic intent")
     } else {
         edit_intent()
     };
@@ -131,6 +131,10 @@ fn semantic_first_generation_survives_sigkill() {
         MaterializationId::from_u64(1)
     );
     assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
+    assert_eq!(
+        store.recover_materialized_edits().unwrap()[0].2,
+        keys().public_key()
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -315,24 +319,16 @@ fn receipt_one(store: &RedbWriteStore) -> Receipt {
 }
 
 fn edit() -> ReplaceableEventEdit {
-    let actor = keys().public_key();
-    ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind: Kind::ContactList,
-            identifier: None,
-        },
-        EDIT_FORMAT,
-        vec![1],
-        vec![2],
-    )
-    .expect("semantic edit")
+    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("semantic edit")
 }
 
 fn edit_intent() -> WriteIntent {
-    WriteIntent::edit(edit(), WriteRouting::Explicit(BTreeSet::from([relay()])))
-        .expect("semantic intent")
+    WriteIntent::edit_as(
+        edit(),
+        keys().public_key(),
+        WriteRouting::Explicit(BTreeSet::from([relay()])),
+    )
+    .expect("semantic intent")
 }
 
 fn materialization(created_at: u64, body: &str) -> UnsignedEvent {
@@ -382,17 +378,18 @@ impl ReplaceableEventMaterializer for TestMaterializer {
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        self.kind == Kind::ContactList && edit.format() == EDIT_FORMAT
+        self.kind == edit.kind()
     }
 
     fn materialize(
         &self,
         edit: &ReplaceableEventEdit,
+        author: fava::PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        EventBuilder::new(edit.actor(), Kind::ContactList)
+        EventBuilder::new(author, Kind::ContactList)
             .created_at(created_at)
             .content(source.map_or("edit", |event| event.content.as_str()))
             .build()

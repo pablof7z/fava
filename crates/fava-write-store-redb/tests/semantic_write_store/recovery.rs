@@ -24,7 +24,8 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
     let store = RedbWriteStore::open(path).unwrap();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
         Some(&base),
     );
@@ -82,13 +83,15 @@ fn terminal_eviction_retains_terminalizing_receipt_across_reopen() {
     let second_keys = Keys::generate();
     let first = accept(
         &store,
-        edit(first_keys.public_key()),
+        edit(),
+        first_keys.public_key(),
         materialization(first_keys.public_key(), 10, "first"),
         None,
     );
     let second = accept(
         &store,
-        edit(second_keys.public_key()),
+        edit(),
+        second_keys.public_key(),
         materialization(second_keys.public_key(), 10, "second"),
         None,
     );
@@ -128,7 +131,8 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
     for actor in [Keys::generate().public_key(), Keys::generate().public_key()] {
         accept(
             &active,
-            edit(actor),
+            edit(),
+            actor,
             materialization(actor, 10, "active"),
             None,
         );
@@ -167,7 +171,8 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
     for actor in [Keys::generate().public_key(), Keys::generate().public_key()] {
         let accepted = accept(
             &terminal,
-            edit(actor),
+            edit(),
+            actor,
             materialization(actor, 10, "terminal"),
             None,
         );
@@ -261,7 +266,8 @@ fn schema_v1_reconstruction_refuses_every_malformed_invariant() {
     let store = RedbWriteStore::open(&failed_path).unwrap();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );
@@ -332,7 +338,8 @@ fn schema_v1_accepts_attributed_empty_source_failure() {
     let store = RedbWriteStore::open(&path).unwrap();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );
@@ -359,7 +366,8 @@ fn schema_v1_accepts_attributed_empty_source_failure() {
             .as_deref()
             .is_some_and(|reason| reason.contains("source empty state failed"))
     );
-    assert_eq!(recovered[0].3, None);
+    assert_eq!(recovered[0].2, keys.public_key());
+    assert_eq!(recovered[0].4, None);
 }
 
 fn settle_no_destination(store: &RedbWriteStore, accepted: &fava_write_store::AcceptedWrite) {
@@ -396,7 +404,8 @@ fn valid_path(label: &str) -> std::path::PathBuf {
     let store = RedbWriteStore::open(&path).unwrap();
     accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         None,
     );
@@ -411,7 +420,8 @@ fn valid_source_path(label: &str) -> std::path::PathBuf {
     let store = RedbWriteStore::open(&path).unwrap();
     accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );

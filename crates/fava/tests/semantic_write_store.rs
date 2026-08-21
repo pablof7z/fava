@@ -4,7 +4,6 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
 use fava_routing::RoutePlan;
-use fava_state::EventCoordinate;
 use fava_write::{
     Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
     WriteIntent, WriteRouting,
@@ -16,19 +15,8 @@ use nostr::key::Keys;
 #[path = "semantic_write_store/current_guard.rs"]
 mod current_guard;
 
-fn edit(actor: fava_write::PublicKey) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind: Kind::ContactList,
-            identifier: None,
-        },
-        7,
-        vec![1],
-        vec![0],
-    )
-    .expect("bounded edit")
+fn edit() -> ReplaceableEventEdit {
+    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }
 
 fn materialization(actor: fava_write::PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
@@ -46,12 +34,13 @@ fn source(keys: &Keys, created_at: u64, content: &str) -> Event {
 fn accept(
     store: &MemoryWriteStore,
     edit: ReplaceableEventEdit,
+    author: fava_write::PublicKey,
     event: UnsignedEvent,
     source: Option<&Event>,
 ) -> fava_write_store::AcceptedWrite {
     store
         .accept_materialized_edit(
-            WriteIntent::edit(edit, WriteRouting::Automatic).expect("valid edit intent"),
+            WriteIntent::edit_as(edit, author, WriteRouting::Automatic).expect("valid edit intent"),
             event,
             source,
         )
@@ -64,7 +53,8 @@ fn memory_first_edit_has_no_prior() {
     let store = MemoryWriteStore::default();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 10, "first"),
         None,
     );
@@ -102,7 +92,7 @@ fn memory_simultaneous_coordinate_admission_has_one_owner() {
         threads.push(std::thread::spawn(move || {
             barrier.wait();
             store.accept_materialized_edit(
-                WriteIntent::edit(edit(actor), WriteRouting::Automatic).unwrap(),
+                WriteIntent::edit_as(edit(), actor, WriteRouting::Automatic).unwrap(),
                 materialization(actor, 10, "one effect"),
                 None,
             )
@@ -123,13 +113,72 @@ fn memory_simultaneous_coordinate_admission_has_one_owner() {
 }
 
 #[test]
+fn memory_same_authorless_edit_has_independent_author_custody() {
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let store = MemoryWriteStore::default();
+
+    let alice_write = accept(
+        &store,
+        edit(),
+        alice.public_key(),
+        materialization(alice.public_key(), 10, "alice"),
+        None,
+    );
+    let bob_write = accept(
+        &store,
+        edit(),
+        bob.public_key(),
+        materialization(bob.public_key(), 10, "bob"),
+        None,
+    );
+
+    assert_ne!(alice_write.receipt_id, bob_write.receipt_id);
+    let recovered = store.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 2);
+    assert_eq!(recovered[0].2, alice.public_key());
+    assert_eq!(recovered[1].2, bob.public_key());
+}
+
+#[test]
+fn memory_refuses_materialization_or_source_outside_accepted_author() {
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let alice_intent =
+        || WriteIntent::edit_as(edit(), alice.public_key(), WriteRouting::Automatic).unwrap();
+
+    assert!(
+        store
+            .accept_materialized_edit(
+                alice_intent(),
+                materialization(bob.public_key(), 10, "wrong current author"),
+                None,
+            )
+            .is_err()
+    );
+    let bob_source = source(&bob, 9, "wrong source author");
+    assert!(
+        store
+            .accept_materialized_edit(
+                alice_intent(),
+                materialization(alice.public_key(), 10, "alice"),
+                Some(&bob_source),
+            )
+            .is_err()
+    );
+    assert_eq!(store.len().unwrap(), 0);
+}
+
+#[test]
 fn memory_generation_swap_is_compare_and_set() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
     let base = source(&keys, 10, "base");
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
         Some(&base),
     );
@@ -192,7 +241,8 @@ fn memory_unqualified_source_is_inert() {
     let selected = source(&keys, 20, "selected");
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 21, "current"),
         Some(&selected),
     );
@@ -259,7 +309,8 @@ fn memory_failure_preserves_current_and_is_attributed() {
     let base = source(&keys, 10, "base");
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );
@@ -294,7 +345,8 @@ fn memory_failure_preserves_current_and_is_attributed() {
     assert!(changes.try_recv().is_err());
 
     let recovered = store.recover_materialized_edits().unwrap();
-    assert_eq!(recovered[0].3, Some(failed_source.id));
+    assert_eq!(recovered[0].2, keys.public_key());
+    assert_eq!(recovered[0].4, Some(failed_source.id));
 }
 
 #[test]
@@ -304,7 +356,8 @@ fn memory_successful_retry_clears_failure_atomically() {
     let base = source(&keys, 10, "base");
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );
@@ -347,7 +400,7 @@ fn memory_successful_retry_clears_failure_atomically() {
             .as_deref()
             .is_some_and(|failure| failure.contains("first attempt failed"))
     );
-    assert_eq!(store.recover_materialized_edits().unwrap()[0].3, None);
+    assert_eq!(store.recover_materialized_edits().unwrap()[0].4, None);
     assert_eq!(changes.try_recv().unwrap().1, Some(successor.clone()));
 
     let repeated = store
@@ -373,13 +426,15 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
     let store = MemoryWriteStore::default();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 10, "live"),
         None,
     );
     let recovered = store.recover_materialized_edits().unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0.receipt_id, accepted.receipt_id);
+    assert_eq!(recovered[0].2, keys.public_key());
 
     let cancelled = store.cancel(accepted.receipt_id).unwrap().unwrap();
     assert!(cancelled.is_terminal());
@@ -399,7 +454,8 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
 
     let replacement = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 20, "new owner"),
         None,
     );
@@ -431,7 +487,8 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
     let first_keys = Keys::generate();
     accept(
         &bounded,
-        edit(first_keys.public_key()),
+        edit(),
+        first_keys.public_key(),
         materialization(first_keys.public_key(), 1, "capacity owner"),
         None,
     );
@@ -439,7 +496,8 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
     assert!(
         bounded
             .accept_materialized_edit(
-                WriteIntent::edit(edit(second_keys.public_key()), WriteRouting::Automatic).unwrap(),
+                WriteIntent::edit_as(edit(), second_keys.public_key(), WriteRouting::Automatic,)
+                    .unwrap(),
                 materialization(second_keys.public_key(), 1, "refused"),
                 None,
             )
@@ -451,7 +509,8 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
     let keys = Keys::generate();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 1, "generation zero"),
         None,
     );

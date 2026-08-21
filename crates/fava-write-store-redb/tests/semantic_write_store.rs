@@ -7,7 +7,6 @@ use std::sync::{Arc, Barrier};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fava_routing::RoutePlan;
-use fava_state::EventCoordinate;
 use fava_write::{
     Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
     WriteIntent, WriteRouting,
@@ -24,19 +23,8 @@ const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 #[path = "semantic_write_store/recovery.rs"]
 mod recovery;
 
-fn edit(actor: fava_write::PublicKey) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind: Kind::ContactList,
-            identifier: None,
-        },
-        7,
-        vec![1],
-        vec![0],
-    )
-    .expect("bounded edit")
+fn edit() -> ReplaceableEventEdit {
+    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }
 
 fn materialization(actor: fava_write::PublicKey, created_at: u64, body: &str) -> UnsignedEvent {
@@ -56,12 +44,13 @@ fn source(keys: &Keys, created_at: u64, body: &str) -> Event {
 fn accept(
     store: &RedbWriteStore,
     edit: ReplaceableEventEdit,
+    author: fava_write::PublicKey,
     event: UnsignedEvent,
     source: Option<&Event>,
 ) -> fava_write_store::AcceptedWrite {
     store
         .accept_materialized_edit(
-            WriteIntent::edit(edit, WriteRouting::Automatic).expect("valid edit intent"),
+            WriteIntent::edit_as(edit, author, WriteRouting::Automatic).expect("valid edit intent"),
             event,
             source,
         )
@@ -83,7 +72,7 @@ fn redb_coordinate_admission_is_single_owner() {
         threads.push(std::thread::spawn(move || {
             barrier.wait();
             store.accept_materialized_edit(
-                WriteIntent::edit(edit(actor), WriteRouting::Automatic).unwrap(),
+                WriteIntent::edit_as(edit(), actor, WriteRouting::Automatic).unwrap(),
                 materialization(actor, 10, "one owner"),
                 None,
             )
@@ -104,7 +93,70 @@ fn redb_coordinate_admission_is_single_owner() {
     let recovered = reopened.recover_materialized_edits().unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0.receipt_id, first.receipt_id);
-    assert_eq!(recovered[0].1, edit(actor));
+    assert_eq!(recovered[0].1, edit());
+    assert_eq!(recovered[0].2, actor);
+}
+
+#[test]
+fn redb_same_authorless_edit_has_independent_author_custody_after_reopen() {
+    let path = unique_path("author-scoped-coordinate");
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let store = RedbWriteStore::open(&path).expect("redb opens");
+
+    let alice_write = accept(
+        &store,
+        edit(),
+        alice.public_key(),
+        materialization(alice.public_key(), 10, "alice"),
+        None,
+    );
+    let bob_write = accept(
+        &store,
+        edit(),
+        bob.public_key(),
+        materialization(bob.public_key(), 10, "bob"),
+        None,
+    );
+    assert_ne!(alice_write.receipt_id, bob_write.receipt_id);
+    drop(store);
+
+    let reopened = RedbWriteStore::open(path).expect("redb reopens");
+    let recovered = reopened.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 2);
+    assert_eq!(recovered[0].2, alice.public_key());
+    assert_eq!(recovered[1].2, bob.public_key());
+}
+
+#[test]
+fn redb_refuses_materialization_or_source_outside_accepted_author() {
+    let path = unique_path("author-mismatch");
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let store = RedbWriteStore::open(path).expect("redb opens");
+    let alice_intent =
+        || WriteIntent::edit_as(edit(), alice.public_key(), WriteRouting::Automatic).unwrap();
+
+    assert!(
+        store
+            .accept_materialized_edit(
+                alice_intent(),
+                materialization(bob.public_key(), 10, "wrong current author"),
+                None,
+            )
+            .is_err()
+    );
+    let bob_source = source(&bob, 9, "wrong source author");
+    assert!(
+        store
+            .accept_materialized_edit(
+                alice_intent(),
+                materialization(alice.public_key(), 10, "alice"),
+                Some(&bob_source),
+            )
+            .is_err()
+    );
+    assert_eq!(store.len().unwrap(), 0);
 }
 
 #[test]
@@ -116,7 +168,8 @@ fn redb_generation_and_failure_state_match_memory() {
     let store = RedbWriteStore::open(&path).unwrap();
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
         Some(&base),
     );
@@ -136,8 +189,9 @@ fn redb_generation_and_failure_state_match_memory() {
     let reopened = RedbWriteStore::open(&path).expect("redb reopens");
     let recovered = reopened.recover_materialized_edits().unwrap();
     assert_eq!(recovered[0].0, failed);
-    assert_eq!(recovered[0].2, Some((base.id, base.created_at)));
-    assert_eq!(recovered[0].3, Some(failed_source.id));
+    assert_eq!(recovered[0].2, keys.public_key());
+    assert_eq!(recovered[0].3, Some((base.id, base.created_at)));
+    assert_eq!(recovered[0].4, Some(failed_source.id));
     let successor = reopened
         .install_materialization(
             accepted.write_id,
@@ -165,7 +219,7 @@ fn redb_generation_and_failure_state_match_memory() {
             .as_deref()
             .is_some_and(|reason| reason.ends_with("failed") && reason.len() <= 4_096)
     );
-    assert_eq!(reopened.recover_materialized_edits().unwrap()[0].3, None);
+    assert_eq!(reopened.recover_materialized_edits().unwrap()[0].4, None);
 }
 
 #[test]
@@ -183,7 +237,8 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
     assert_eq!(store.active_capacity(), 1);
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 1, "generation zero"),
         None,
     );
@@ -191,7 +246,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
     assert!(
         store
             .accept_materialized_edit(
-                WriteIntent::edit(edit(other.public_key()), WriteRouting::Automatic).unwrap(),
+                WriteIntent::edit_as(edit(), other.public_key(), WriteRouting::Automatic).unwrap(),
                 materialization(other.public_key(), 1, "overflow"),
                 None,
             )
@@ -262,7 +317,8 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
     assert!(cancelled.is_terminal());
     let replacement = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 10, "replacement owner"),
         None,
     );
