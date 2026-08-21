@@ -145,7 +145,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] 07-06-PLAN.md
 - [x] 07-07-PLAN.md
 - [x] 07-08-PLAN.md
-- [ ] 07-09-PLAN.md
+- [x] 07-09-PLAN.md
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
@@ -220,7 +220,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 | 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
-| 7. Semantic Writes and Capability Composition | 8/9 | In Progress|  |
+| 7. Semantic Writes and Capability Composition | 9/9 | In Progress|  |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |
