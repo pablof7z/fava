@@ -25,6 +25,8 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::artifacts::RunArtifacts;
 use crate::{CanaryError, CanaryResult, SmokeOptions, command_output, repository_root};
 
+const SIGN_REQUEST_CAPACITY: usize = 2;
+
 #[derive(Default)]
 pub(super) struct RecordingPublisher {
     attempts: Mutex<Vec<PublishAttempt>>,
@@ -87,12 +89,12 @@ impl PendingSign {
 
 pub(super) struct GateSigner {
     public_key: PublicKey,
-    requests: mpsc::UnboundedSender<PendingSign>,
+    requests: mpsc::Sender<PendingSign>,
 }
 
 impl GateSigner {
-    pub(super) fn new(public_key: PublicKey) -> (Self, mpsc::UnboundedReceiver<PendingSign>) {
-        let (requests, receiver) = mpsc::unbounded_channel();
+    pub(super) fn new(public_key: PublicKey) -> (Self, mpsc::Receiver<PendingSign>) {
+        let (requests, receiver) = mpsc::channel(SIGN_REQUEST_CAPACITY);
         (
             Self {
                 public_key,
@@ -120,8 +122,10 @@ impl Signer for GateSigner {
         Box::pin(async move {
             let (response, completion) = oneshot::channel();
             self.requests
-                .send(PendingSign { event, response })
-                .map_err(|_| SignerError::Unavailable("request channel closed".to_owned()))?;
+                .try_send(PendingSign { event, response })
+                .map_err(|error| {
+                    SignerError::Unavailable(format!("signing request refused: {error}"))
+                })?;
             completion
                 .await
                 .map_err(|_| SignerError::Unavailable("completion channel closed".to_owned()))?
@@ -165,7 +169,7 @@ pub(super) fn relay_evidence() -> RelayEvidence {
 }
 
 pub(super) async fn next_sign(
-    requests: &mut mpsc::UnboundedReceiver<PendingSign>,
+    requests: &mut mpsc::Receiver<PendingSign>,
 ) -> CanaryResult<PendingSign> {
     tokio::time::timeout(Duration::from_secs(5), requests.recv())
         .await
