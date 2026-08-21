@@ -448,3 +448,8 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     )
     .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn capabilities_share_public_source_removal_and_processed_stale_success() {
+    panic!("RED: public source-removal and processed stale-success proof not implemented");
+}
