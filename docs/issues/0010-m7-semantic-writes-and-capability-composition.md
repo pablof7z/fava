@@ -106,6 +106,55 @@ into `crates/fava-nip02/src/lib.rs`.
 
 DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY: PASS original=deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2 restored=deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2 diagnostic=E0432 restored_target=7+1
 
+### Exact raw event construction and bounds
+
+Review exposed two fail-open gaps before implementation:
+
+- Two well-formed `fava:rust=` comments before one feature scenario silently
+  replaced the first pending destination with the second.
+- The existing public `EventBuilder` could set raw fields one at a time, but
+  did not accept all exact raw parts or ordered tags in bulk.
+
+RED commit `e80f6f0` records both causal failures. The duplicate fixture was
+accepted as one scenario with the second mapping. The Rust and independent
+public-`fava` consumers failed specifically because `from_parts` and `tags`
+did not exist.
+
+The existing builder now exposes this exact construction door:
+
+```rust
+EventBuilder::from_parts(
+    author: PublicKey,
+    kind: Kind,
+    created_at: Timestamp,
+    tags: Vec<Tag>,
+    content: String,
+)
+```
+
+Its `tags` method accepts ordered `Tag` iterators. `new` delegates to
+`from_parts`, `tag` delegates to `tags`, and only `build` validates the common
+state. There is no second owner, event-parts value, wrapper, or protocol-kind
+switch. Rustdoc proves the exact public method set is
+`build,content,created_at,from_parts,new,tag,tags`.
+
+The external consumer constructs kind 50001 at `created_at = 42` with the
+three arbitrary tags `["something something"]`, `["x-a","poop"]`, and
+`["x-future","kept","verbatim"]`. It asserts exact field order and event ID
+in accepted unsigned state, query visibility, signed terminal evidence, and
+published transport evidence. The canary repeats the same proof through the
+public facade and records equal accepted, signed, and published IDs.
+
+`DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` changed only `MAX_TAGS` from 2000
+to 2001. The exact hostile-bound test compiled and failed because 2001 tags
+were accepted instead of returning `TooManyTags { actual: 2001, maximum:
+2000 }`. A scoped edit restored SHA-256
+`abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9` and
+the exact test passed. The same test proves both raw-parts and bulk-tag paths
+share that refusal and proves oversized serialized events still refuse.
+
+DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND: PASS original=abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9 restored=abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9 broken=2001-tags-accepted restored_target=2/2
+
 ### Canary roster authority
 
 The detailed M7 section requires four canaries, including
