@@ -47,21 +47,9 @@ impl Publication {
         mut cancel: watch::Receiver<bool>,
         mut semantic: Option<SemanticState>,
     ) {
-        let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
-            if let Some(semantic) = &mut semantic {
-                semantic.close();
-            }
-            self.finished(receipt_id);
+        let Some((receipt, mut routes)) = self.initialize(receipt_id, &mut semantic) else {
             return;
         };
-        let mut routes = self.open_routes(&receipt);
-        if matches!(receipt.routing, WriteRouting::Automatic) && routes.is_none() {
-            if let Some(semantic) = &mut semantic {
-                semantic.close();
-            }
-            self.finished(receipt_id);
-            return;
-        }
         let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
         self.start_signing(&receipt, signing_cancel_rx);
         let mut materialization_id = receipt.current.publication.materialization_id;
@@ -143,6 +131,38 @@ impl Publication {
             semantic.close();
         }
         self.finished(receipt_id);
+    }
+
+    fn initialize(
+        &self,
+        receipt_id: ReceiptId,
+        semantic: &mut Option<SemanticState>,
+    ) -> Option<(Receipt, Option<Box<dyn RouterSession>>)> {
+        let Some(mut receipt) = self.store.receipt(receipt_id).ok().flatten() else {
+            if let Some(semantic) = semantic {
+                semantic.close();
+            }
+            self.finished(receipt_id);
+            return None;
+        };
+        if let Some(state) = semantic {
+            self.rematerialize(&receipt, state);
+            let Some(current) = self.store.receipt(receipt_id).ok().flatten() else {
+                state.close();
+                self.finished(receipt_id);
+                return None;
+            };
+            receipt = current;
+        }
+        let routes = self.open_routes(&receipt);
+        if matches!(receipt.routing, WriteRouting::Automatic)
+            && routes.is_none()
+            && semantic.is_none()
+        {
+            self.finished(receipt_id);
+            return None;
+        }
+        Some((receipt, routes))
     }
 
     fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
