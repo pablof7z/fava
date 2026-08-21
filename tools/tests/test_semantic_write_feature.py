@@ -179,6 +179,20 @@ class SemanticWriteFeatureMappingTests(unittest.TestCase):
             _, malformed, _ = parse_feature(text)
             self.assertEqual(len(malformed), 1)
 
+    def test_duplicate_pending_mapping_comments_refuse(self):
+        duplicate = (
+            "  # fava:rust=fava/semantic_write_contract#first_value_receives_no_prior_and_exact_timestamp\n"
+            "  # fava:rust=fava/semantic_write_store#memory_first_edit_has_no_prior\n"
+            "  Scenario: ambiguous mapping\n"
+            "    Given one scenario\n"
+            "    When two mappings precede it\n"
+            "    Then parsing refuses\n"
+        )
+        scenarios, malformed, trailing = parse_feature(duplicate)
+        self.assertEqual(scenarios, [])
+        self.assertEqual(len(malformed), 2)
+        self.assertIsNone(trailing)
+
     def test_target_and_list_validation_fail_closed(self):
         target = {"name": "semantic", "kind": ["test"]}
         self.assertEqual(

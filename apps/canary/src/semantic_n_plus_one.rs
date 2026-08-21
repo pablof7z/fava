@@ -223,10 +223,19 @@ async fn raw_future_attempt(seed: &str) -> CanaryResult<Value> {
         selected_materializers(),
         Arc::clone(&publisher),
     )?;
-    let event = fava::EventBuilder::new(keys.public_key(), Kind::Custom(50_001))
-        .created_at(Timestamp::from(42))
-        .content("opaque future content")
-        .tag(Tag::parse(["x", "future"]).map_err(error)?)
+    let tags = vec![
+        Tag::parse(["something something"]).map_err(error)?,
+        Tag::parse(["x-a", "poop"]).map_err(error)?,
+        Tag::parse(["x", "future"]).map_err(error)?,
+    ];
+    let event = fava::EventBuilder::from_parts(
+        keys.public_key(),
+        Kind::Custom(50_001),
+        Timestamp::from(42),
+        Vec::new(),
+        "opaque future content".to_owned(),
+    )
+        .tags(tags.clone())
         .build()
         .map_err(error)?;
     let expected = event
@@ -248,7 +257,8 @@ async fn raw_future_attempt(seed: &str) -> CanaryResult<Value> {
         || attempt.event != exact_event
         || exact_event.created_at != Timestamp::from(42)
         || exact_event.content != "opaque future content"
-        || exact_event.tags != event.tags
+        || exact_event.tags.as_slice() != tags.as_slice()
+        || event.tags.as_slice() != tags.as_slice()
     {
         return Err(CanaryError::new(
             "raw future event fields changed across publication lifecycle",
