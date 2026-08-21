@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 current_phase: 06.1
 current_phase_name: Literal Tag-Value Query Semantics Remediation
 status: executing
-stopped_at: Completed 06.1-01-PLAN.md
-last_updated: "2026-08-21T18:46:43.727Z"
+stopped_at: Completed 06.1-03-PLAN.md
+last_updated: "2026-08-21T19:20:43.460Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 06.1 execution started
-state_head: 22dc7fece03a023fae80130cc2cf58237a2d3518
+state_head: bf37401c447a7e232573120303dccc93ff17df1b
 progress:
   total_phases: 12
   completed_phases: 6
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-08-21 — Phase 06.1 execution started
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 Phase progress is 6/12. GSD plan metrics remain 0/0 because Phases 1-6 were
 executed before GSD and no retrospective plans or summaries were created.
@@ -61,6 +61,7 @@ executed before GSD and no retrospective plans or summaries were created.
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 06.1 P01 | 15min | 3 tasks | 7 files |
+| Phase 06.1 P03 | 18min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 06.1]: Use nostr::filter::SingleLetterTag directly with no Fava wrapper or compatibility alias.
 - [Phase 06.1]: Canonical literal tag axes union exact values per case-sensitive key and preserve present-empty match-nothing semantics.
 - [Phase 06.1]: Evaluate exact tag cells locally without delegating Fava query meaning to the upstream whole-filter matcher.
+- [Phase 06.1]: Attempt all 300 no-grouping subscriptions concurrently; batch at 32 only after the controlled relay's exact capacity refusal.
+- [Phase 06.1]: Compare exact serving RelaySessionKey values per logical result; observation timestamps remain execution-local facts.
+- [Phase 06.1]: Ignore a crate-like vocabulary candidate only when the same line identifies that exact token as a /tmp evidence path.
 
 ### Pending Todos
 
@@ -103,6 +107,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T18:46:43.717Z
-Stopped at: Completed 06.1-01-PLAN.md
+Last session: 2026-08-21T19:20:43.449Z
+Stopped at: Completed 06.1-03-PLAN.md
 Resume file: None

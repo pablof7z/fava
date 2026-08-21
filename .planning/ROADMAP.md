@@ -128,7 +128,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Mode:** mvp
 **Requirements:** LOCAL-09, ROUTE-10
 **Depends on:** Phase 6
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans executed
 
 **Success Criteria** (what must be TRUE):
 
@@ -144,11 +144,11 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06.1-02-PLAN.md — Preserve exact tag axes on NIP-01 wire demand and safely group one compatible axis with full attribution.
+- [x] 06.1-02-PLAN.md — Preserve exact tag axes on NIP-01 wire demand and safely group one compatible axis with full attribution.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06.1-03-PLAN.md — Prove 300-query controlled-relay equivalence, causal case-fold mutation detection, and full validation.
+- [x] 06.1-03-PLAN.md — Prove 300-query controlled-relay equivalence, causal case-fold mutation detection, and full validation.
 
 ### Phase 7: Semantic Writes and Capability Composition
 
@@ -238,7 +238,7 @@ Plans:
 | 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
-| 06.1. Literal Tag-Value Query Semantics Remediation | 1/3 | In Progress|  |
+| 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | In Progress|  |
 | 7. Semantic Writes and Capability Composition | 0/TBD | Not started | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
