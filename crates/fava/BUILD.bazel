@@ -135,7 +135,10 @@ rust_test(
 
 rust_test(
     name = "semantic_write_publication",
-    srcs = ["tests/semantic_write_publication.rs"],
+    srcs = [
+        "tests/semantic_write_publication.rs",
+        "tests/support/semantic_write.rs",
+    ],
     crate_name = "semantic_write_publication",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),

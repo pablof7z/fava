@@ -1,34 +1,24 @@
 //! Public-facade evidence for semantic materialization and publication.
 
-use std::collections::BTreeSet;
-use std::future::Future;
 use std::num::NonZeroUsize;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, EventValue, Fava, FavaBuilder, Kind, MaterializationId,
-    PublicKey, ReceiptOutcome, RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Timestamp, UnsignedEvent, WriteIntent, WriteIntentError, WriteRouting,
+    EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome,
+    ReplaceableEventMaterializer, Timestamp,
 };
-use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
-use fava_query_standard::StandardQueryEvaluator;
-use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_signer_local::LocalSigner;
-use fava_state::{CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_state::{CacheMutation, CachedEvent};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
-use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
 use nostr::key::Keys;
-use tokio::sync::watch;
 
-const EDIT_FORMAT: u32 = 7;
+#[path = "support/semantic_write.rs"]
+mod support;
+
+use support::*;
 
 #[tokio::test(flavor = "current_thread")]
 async fn first_value_edit_publishes_through_public_fava() {
@@ -212,254 +202,263 @@ async fn first_value_receives_exact_injected_timestamp() {
     assert_eq!(publisher.attempts()[0].event.created_at, Timestamp::max());
 }
 
-fn intent(actor: PublicKey, kind: Kind, format: u32) -> WriteIntent {
-    let coordinate = EventCoordinate::Replaceable {
-        author: actor,
-        kind,
-        identifier: None,
-    };
-    let edit = ReplaceableEventEdit::new(actor, coordinate, format, vec![1], vec![2])
-        .expect("bounded edit");
-    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()])))
-        .expect("semantic intent validates")
-}
-
-fn assembly(
-    store: Arc<MemoryWriteStore>,
-    keys: Keys,
-    materializers: Vec<Arc<TestMaterializer>>,
-) -> (
-    Fava,
-    Arc<MemoryEventCache>,
-    Arc<MemoryWriteStore>,
-    Arc<CountingSigner>,
-    Arc<RecordingPublisher>,
-) {
-    assembly_with_cache(
-        Arc::new(MemoryEventCache::default()),
-        store,
-        keys,
-        materializers,
-    )
-}
-
-fn assembly_with_cache(
-    cache: Arc<MemoryEventCache>,
-    store: Arc<MemoryWriteStore>,
-    keys: Keys,
-    materializers: Vec<Arc<TestMaterializer>>,
-) -> (
-    Fava,
-    Arc<MemoryEventCache>,
-    Arc<MemoryWriteStore>,
-    Arc<CountingSigner>,
-    Arc<RecordingPublisher>,
-) {
-    let signer = Arc::new(CountingSigner::new(keys));
-    let publisher = Arc::new(RecordingPublisher::default());
-    let erased = materializers
-        .into_iter()
-        .map(|materializer| materializer as Arc<dyn ReplaceableEventMaterializer>);
+#[tokio::test(flavor = "current_thread")]
+async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
+    let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let first = signed_source(
+        &keys,
+        Kind::ContactList,
+        u64::MAX - 3,
+        "first source",
+        &["first"],
+    );
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            first.clone(),
+            relay_evidence(),
+        ))])
+        .expect("first source enters cache");
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
-        Arc::clone(&publisher),
+        Arc::new(RecordingPublisher::default()),
     )
-    .materializers(erased)
+    .materializer(Arc::clone(&materializer))
     .build()
     .expect("semantic publication assembly");
-    (fava, cache, store, signer, publisher)
+
+    let accepted = fava
+        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .expect("edit accepts");
+    wait_for_signer(&signer, 1).await;
+    let newer = signed_source(
+        &keys,
+        Kind::ContactList,
+        u64::MAX - 1,
+        "newer source",
+        &["unrelated"],
+    );
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            newer.clone(),
+            relay_evidence(),
+        ))])
+        .expect("newer source enters cache");
+
+    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    wait_for_signer(&signer, 2).await;
+    let EventValue::Unsigned(current) = receipt.current.event else {
+        panic!("blocked signer keeps current materialization unsigned");
+    };
+    assert_eq!(current.content, "newer source|edit");
+    assert_eq!(current.tags.as_slice(), newer.tags.as_slice());
+    assert_eq!(current.created_at, Timestamp::max());
+    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(
+        materializer.calls()[1]
+            .source
+            .as_ref()
+            .map(|event| event.id),
+        Some(newer.id)
+    );
 }
 
-fn publication_builder(
-    cache: Arc<MemoryEventCache>,
-    store: Arc<MemoryWriteStore>,
-    signer: Arc<CountingSigner>,
-    publisher: Arc<RecordingPublisher>,
-) -> FavaBuilder {
-    Fava::builder()
-        .event_cache(cache)
-        .write_store(store)
-        .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .transport(Arc::new(NoopTransport))
-        .signer(signer)
-        .publisher(publisher)
-        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
+#[tokio::test(flavor = "current_thread")]
+async fn own_local_materialization_does_not_create_a_second_generation() {
+    let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let fava = publication_builder(
+        cache,
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("semantic publication assembly");
+
+    let accepted = fava
+        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .expect("edit accepts");
+    wait_for_signer(&signer, 1).await;
+    assert_no_receipt_change(&store).await;
+
+    let receipt = fava
+        .receipt(accepted.receipt_id)
+        .expect("receipt read")
+        .expect("receipt exists");
+    assert_eq!(
+        receipt.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    assert_eq!(materializer.calls().len(), 1);
+    assert_eq!(signer.calls(), 1);
 }
 
-fn assert_no_effects(
-    store: &MemoryWriteStore,
-    signer: &CountingSigner,
-    publisher: &RecordingPublisher,
-    expected_store_len: usize,
-) {
-    assert_eq!(store.len().expect("store readable"), expected_store_len);
+#[tokio::test(flavor = "current_thread")]
+async fn equal_older_unqualified_and_duplicate_sources_are_inert() {
+    let keys = Keys::generate();
+    let other = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let left = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "left", &[]);
+    let right = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "right", &[]);
+    let (base, equal) = if left.id > right.id {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            base.clone(),
+            relay_evidence(),
+        ))])
+        .expect("base source enters cache");
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let fava = publication_builder(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("semantic publication assembly");
+    let accepted = fava
+        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .expect("edit accepts");
+    wait_for_signer(&signer, 1).await;
+
+    let older = signed_source(&keys, Kind::ContactList, u64::MAX - 3, "older", &[]);
+    let wrong_actor = signed_source(&other, Kind::ContactList, u64::MAX - 1, "wrong actor", &[]);
+    let wrong_kind = signed_source(&keys, Kind::TextNote, u64::MAX - 1, "wrong kind", &[]);
+    cache
+        .commit(vec![
+            CacheMutation::Upsert(CachedEvent::new(equal, relay_evidence())),
+            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
+            CacheMutation::Upsert(CachedEvent::new(wrong_actor, relay_evidence())),
+            CacheMutation::Upsert(CachedEvent::new(wrong_kind, relay_evidence())),
+            CacheMutation::Upsert(CachedEvent::new(base, relay_evidence())),
+        ])
+        .expect("inert source facts enter cache");
+    assert_no_receipt_change(&store).await;
+
+    let receipt = fava
+        .receipt(accepted.receipt_id)
+        .expect("receipt read")
+        .expect("receipt exists");
+    assert_eq!(
+        receipt.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    assert_eq!(materializer.calls().len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn source_removal_selects_next_or_empty_once() {
+    let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let older = signed_source(&keys, Kind::ContactList, u64::MAX - 4, "older", &[]);
+    let current = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "current", &[]);
+    cache
+        .commit(vec![
+            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
+            CacheMutation::Upsert(CachedEvent::new(current.clone(), relay_evidence())),
+        ])
+        .expect("source history enters cache");
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let fava = publication_builder(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("semantic publication assembly");
+    let accepted = fava
+        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .expect("edit accepts");
+    wait_for_signer(&signer, 1).await;
+
+    cache
+        .commit(vec![CacheMutation::Retract(current.id)])
+        .expect("current source retracts");
+    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    wait_for_signer(&signer, 2).await;
+    assert!(receipt.current.publication.materialization_source.is_none());
+    assert!(materializer.calls()[1].source.is_none());
+
+    cache
+        .commit(vec![CacheMutation::Retract(current.id)])
+        .expect("duplicate removal is accepted");
+    assert_no_receipt_change(&store).await;
+    assert_eq!(materializer.calls().len(), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn semantic_preview_matches_initial_route_with_zero_effects() {
+    let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let source = signed_source(
+        &keys,
+        Kind::ContactList,
+        u64::MAX - 2,
+        "preview source",
+        &[],
+    );
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            source,
+            relay_evidence(),
+        ))])
+        .expect("preview source enters cache");
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let router = Arc::new(CountingRouter::new(relay_url()));
+    let fava = publication_builder(
+        cache,
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::clone(&publisher),
+    )
+    .router(Arc::clone(&router))
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("semantic publication assembly");
+    let intent = automatic_intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT);
+
+    let preview = fava
+        .preview_write_routes(&intent)
+        .expect("semantic preview");
+    assert_eq!(store.len().expect("store readable"), 0);
     assert_eq!(signer.calls(), 0);
     assert!(publisher.attempts().is_empty());
-}
+    assert_eq!(router.previews(), 1);
+    assert_eq!(router.opens(), 0);
 
-#[derive(Clone)]
-struct MaterializerCall {
-    source: Option<Event>,
-    created_at: Timestamp,
-}
-
-struct TestMaterializer {
-    kind: Kind,
-    format: u32,
-    calls: Mutex<Vec<MaterializerCall>>,
-}
-
-impl TestMaterializer {
-    fn new(kind: Kind, format: u32) -> Self {
-        Self {
-            kind,
-            format,
-            calls: Mutex::new(Vec::new()),
-        }
-    }
-
-    fn calls(&self) -> Vec<MaterializerCall> {
-        self.calls.lock().unwrap().clone()
-    }
-}
-
-impl ReplaceableEventMaterializer for TestMaterializer {
-    fn kind(&self) -> Kind {
-        self.kind
-    }
-
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.format() == self.format
-            && matches!(
-                edit.coordinate(),
-                EventCoordinate::Replaceable { kind, .. } if *kind == self.kind
-            )
-    }
-
-    fn materialize(
-        &self,
-        edit: &ReplaceableEventEdit,
-        source: Option<&Event>,
-        created_at: Timestamp,
-    ) -> Result<UnsignedEvent, WriteIntentError> {
-        self.calls.lock().unwrap().push(MaterializerCall {
-            source: source.cloned(),
-            created_at,
-        });
-        let mut builder = EventBuilder::new(edit.actor(), self.kind)
-            .created_at(created_at)
-            .content(match source {
-                Some(source) => format!("{}|edit", source.content),
-                None => "edit".to_owned(),
-            });
-        if let Some(source) = source {
-            for tag in source.tags.iter().cloned() {
-                builder = builder.tag(tag);
-            }
-        }
-        builder
-            .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
-    }
-}
-
-struct CountingSigner {
-    inner: LocalSigner,
-    calls: AtomicU64,
-}
-
-impl CountingSigner {
-    fn new(keys: Keys) -> Self {
-        Self {
-            inner: LocalSigner::new(keys),
-            calls: AtomicU64::new(0),
-        }
-    }
-
-    fn calls(&self) -> u64 {
-        self.calls.load(Ordering::SeqCst)
-    }
-}
-
-impl Signer for CountingSigner {
-    fn public_key(&self) -> PublicKey {
-        self.inner.public_key()
-    }
-
-    fn availability(&self) -> SignerAvailability {
-        self.inner.availability()
-    }
-
-    fn sign_event(
-        &self,
-        event: UnsignedEvent,
-        cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        self.inner.sign_event(event, cancel)
-    }
-}
-
-#[derive(Default)]
-struct RecordingPublisher {
-    attempts: Mutex<Vec<PublishAttempt>>,
-}
-
-impl RecordingPublisher {
-    fn attempts(&self) -> Vec<PublishAttempt> {
-        self.attempts.lock().unwrap().clone()
-    }
-}
-
-impl Publisher for RecordingPublisher {
-    fn publish<'a>(
-        &'a self,
-        attempt: PublishAttempt,
-        _transport: &'a dyn Transport,
-    ) -> Pin<Box<dyn Future<Output = PublishOutcome> + Send + 'a>> {
-        self.attempts.lock().unwrap().push(attempt);
-        Box::pin(async {
-            PublishOutcome::Acknowledged {
-                message: "stored".to_owned(),
-            }
-        })
-    }
-}
-
-struct NoopTransport;
-
-impl Transport for NoopTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
-        Box::pin(async {
-            Err(TransportError::ConnectionRefused(
-                "not used by recording publisher".to_owned(),
-            ))
-        })
-    }
-}
-
-fn signed_source(keys: &Keys, kind: Kind, created_at: u64, content: &str, tags: &[&str]) -> Event {
-    let mut builder =
-        NostrEventBuilder::new(kind, content).custom_created_at(Timestamp::from(created_at));
-    for value in tags {
-        builder = builder.tag(Tag::parse(["t", *value]).expect("test tag"));
-    }
-    builder.finalize(keys).expect("source signs")
-}
-
-fn relay_evidence() -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(relay_url(), RelayAccess::public()),
-        Timestamp::from(1),
-    )
-}
-
-fn relay_url() -> RelayUrl {
-    RelayUrl::parse("wss://semantic.example").expect("relay url")
+    let accepted = fava.publish(intent).expect("same edit accepts");
+    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 1).await;
+    assert_eq!(
+        receipt.desired_destinations,
+        preview.destinations.keys().cloned().collect()
+    );
+    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(
+        materializer.calls()[0].created_at,
+        materializer.calls()[1].created_at
+    );
 }
