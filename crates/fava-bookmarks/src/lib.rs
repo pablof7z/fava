@@ -42,7 +42,7 @@ use bounds::MAX_TAGS;
 /// # Errors
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
-/// private versioned codec.
+/// private change encoding.
 pub fn bookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
     edit(Target::Event(target), Operation::Add)
 }
@@ -52,7 +52,7 @@ pub fn bookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteInte
 /// # Errors
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
-/// private versioned codec.
+/// private change encoding.
 pub fn unbookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
     edit(Target::Event(target), Operation::Remove)
 }
