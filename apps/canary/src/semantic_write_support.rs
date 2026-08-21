@@ -3,11 +3,12 @@
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventValue, Fava, Observation, PublicKey, Receipt, ReceiptId, RelayUrl,
+    Event, EventValue, Fava, Kind, Observation, PublicKey, Receipt, ReceiptId, RelayUrl,
     ReplaceableEventEdit, ReplaceableEventMaterializer, UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
@@ -17,15 +18,19 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey, Timestamp};
 use fava_transport::{RelaySession, Transport, TransportError};
-use fava_write_store_memory::MemoryWriteStore;
+use nostr::event::UnsignedEvent as NostrUnsignedEvent;
+use nostr::key::Keys;
+use secp256k1::Secp256k1;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 use crate::artifacts::RunArtifacts;
+use crate::semantic_write_store::{CompletionAck, CompletionStore};
 use crate::{CanaryError, CanaryResult, SmokeOptions, command_output, repository_root};
 
 const SIGN_REQUEST_CAPACITY: usize = 2;
+const FIXED_TIMESTAMP_START: u64 = 1_000;
 
 #[derive(Default)]
 pub(super) struct RecordingPublisher {
@@ -133,28 +138,98 @@ impl Signer for GateSigner {
     }
 }
 
+pub(super) struct DeterministicSigner {
+    keys: Keys,
+}
+
+impl DeterministicSigner {
+    pub(super) const fn new(keys: Keys) -> Self {
+        Self { keys }
+    }
+}
+
+impl Signer for DeterministicSigner {
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Available
+    }
+
+    fn public_key(&self) -> PublicKey {
+        self.keys.public_key()
+    }
+
+    fn sign_event(
+        &self,
+        event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        Box::pin(async move { deterministic_finalize(event, &self.keys) })
+    }
+}
+
+struct FixedTimestampMaterializer {
+    inner: Arc<dyn ReplaceableEventMaterializer>,
+    next: AtomicU64,
+}
+
+impl FixedTimestampMaterializer {
+    fn new(inner: Arc<dyn ReplaceableEventMaterializer>) -> Self {
+        Self {
+            inner,
+            next: AtomicU64::new(FIXED_TIMESTAMP_START),
+        }
+    }
+}
+
+impl ReplaceableEventMaterializer for FixedTimestampMaterializer {
+    fn kind(&self) -> Kind {
+        self.inner.kind()
+    }
+
+    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+        self.inner.supports(edit)
+    }
+
+    fn materialize(
+        &self,
+        edit: &ReplaceableEventEdit,
+        source: Option<&Event>,
+        _created_at: Timestamp,
+    ) -> Result<UnsignedEvent, fava::WriteIntentError> {
+        let timestamp = self.next.fetch_add(1, Ordering::SeqCst);
+        self.inner
+            .materialize(edit, source, Timestamp::from(timestamp))
+    }
+}
+
 pub(super) fn assembly(
     cache: Arc<MemoryEventCache>,
     signer: Arc<dyn Signer>,
     materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
     publisher: Arc<RecordingPublisher>,
-) -> CanaryResult<Fava> {
+) -> CanaryResult<(Fava, broadcast::Receiver<CompletionAck>)> {
+    let (store, completions) = CompletionStore::new();
     let mut builder = Fava::builder()
         .event_cache(cache)
-        .write_store(Arc::new(MemoryWriteStore::default()))
+        .write_store(store)
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
         .signers([signer])
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()));
     for materializer in materializers {
-        builder = builder.materializers([materializer]);
+        let fixed: Arc<dyn ReplaceableEventMaterializer> =
+            Arc::new(FixedTimestampMaterializer::new(materializer));
+        builder = builder.materializers([fixed]);
     }
-    builder.build().map_err(error)
+    Ok((builder.build().map_err(error)?, completions))
 }
 
 pub(super) fn explicit(edit: ReplaceableEventEdit) -> CanaryResult<WriteIntent> {
     WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).map_err(error)
+}
+
+pub(super) fn explicit_event(event: UnsignedEvent) -> CanaryResult<WriteIntent> {
+    WriteIntent::event(event, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).map_err(error)
 }
 
 fn relay_url() -> RelayUrl {
@@ -175,6 +250,37 @@ pub(super) async fn next_sign(
         .await
         .map_err(|_| CanaryError::new("timed out awaiting materialization signing"))?
         .ok_or_else(|| CanaryError::new("signing request channel closed"))
+}
+
+pub(super) async fn wait_completion(
+    completions: &mut broadcast::Receiver<CompletionAck>,
+    materialization_id: u64,
+) -> CanaryResult<CompletionAck> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match completions.recv().await {
+                Ok(completion)
+                    if completion.materialization_id
+                        == fava::MaterializationId::from_u64(materialization_id) =>
+                {
+                    return Ok(completion);
+                }
+                Ok(_) => {}
+                Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                    return Err(CanaryError::new(format!(
+                        "completion acknowledgement lagged by {skipped}"
+                    )));
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    return Err(CanaryError::new(
+                        "completion acknowledgement channel closed",
+                    ));
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|_| CanaryError::new("timed out awaiting completion acknowledgement"))?
 }
 
 pub(super) async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId) -> CanaryResult<Receipt> {
@@ -225,6 +331,55 @@ pub(super) fn published_event(receipt: &Receipt) -> CanaryResult<Event> {
             Err(CanaryError::new("terminal receipt retained unsigned event"))
         }
     }
+}
+
+pub(super) fn deterministic_finalize(
+    mut event: NostrUnsignedEvent,
+    keys: &Keys,
+) -> Result<Event, SignerError> {
+    if event.pubkey != keys.public_key() {
+        return Err(SignerError::InvalidOutput(
+            "unsigned event author does not match signer".to_owned(),
+        ));
+    }
+    let id = event.id.unwrap_or_else(|| event.compute_id());
+    event.id = Some(id);
+    let signature = keys.sign_schnorr_with_aux_rand(&Secp256k1::new(), id.as_bytes(), &[0; 32]);
+    event
+        .add_signature(signature)
+        .map_err(|error| SignerError::InvalidOutput(error.to_string()))
+}
+
+pub(super) fn attempt_evidence(
+    accepted: &fava_write_store::AcceptedWrite,
+    receipt: &Receipt,
+    attempt: &PublishAttempt,
+) -> CanaryResult<Value> {
+    let exact_session = receipt.desired_destinations.len() == 1
+        && receipt.desired_destinations.contains(&attempt.session)
+        && receipt.attempts.get(&attempt.session) == Some(&attempt.number);
+    if attempt.write_id != accepted.write_id
+        || attempt.receipt_id != accepted.receipt_id
+        || receipt.write_id != accepted.write_id
+        || receipt.receipt_id != accepted.receipt_id
+        || attempt.materialization_id != receipt.current.publication.materialization_id
+        || attempt.event.id != receipt.current.id()
+        || attempt.number != 1
+        || !exact_session
+    {
+        return Err(CanaryError::new(
+            "publisher attempt correlation diverged from exact receipt state",
+        ));
+    }
+    Ok(json!({
+        "write_id": attempt.write_id.as_u64(),
+        "receipt_id": attempt.receipt_id.as_u64(),
+        "materialization_id": attempt.materialization_id.as_u64(),
+        "event_id": attempt.event.id.to_hex(),
+        "receipt_event_id": receipt.current.id().to_hex(),
+        "session": attempt.session.relay.to_string(),
+        "attempt": attempt.number,
+    }))
 }
 
 pub(super) fn target_count(event: &Event, marker: &str, value: &str) -> usize {

@@ -1,26 +1,26 @@
 //! Deterministic public-Fava semantic-write canaries.
 
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::Arc;
-use std::time::Duration;
 
 use fava::{EventValue, Kind, MaterializationId, Query, ReplaceableEventMaterializer, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_signer::Signer;
-use fava_signer_local::LocalSigner;
 use fava_state::CachedEvent;
 use fava_write::EventId;
 use nostr::event::{EventBuilder, FinalizeEvent, Tag};
 use serde_json::{Value, json};
 
 use crate::artifacts::RunArtifacts;
+use crate::semantic_failure::write_failure_bundle;
+use crate::semantic_n_plus_one;
 use crate::semantic_write_support::{
-    GateSigner, RecordingPublisher, assembly, explicit, finish, next_sign, published_event,
-    relay_evidence, target_count, wait_query_event, wait_terminal,
+    DeterministicSigner, GateSigner, RecordingPublisher, assembly, attempt_evidence,
+    deterministic_finalize, explicit, finish, next_sign, published_event, relay_evidence,
+    target_count, wait_completion, wait_query_event, wait_terminal,
 };
-use crate::{CanaryError, CanaryResult, SmokeOptions, deterministic_keys, repository_root};
+use crate::{CanaryError, CanaryResult, SmokeOptions, deterministic_keys};
 
 pub(crate) fn has_executor(id: &str) -> bool {
     matches!(
@@ -49,14 +49,24 @@ pub async fn run_semantic_write_scenario(id: &str, options: SmokeOptions) -> Can
             "seed_sha256": crate::semantic_write_support::seed_hash(&options.seed),
         }),
     )?;
-    let details = match id {
-        "replaceable-edit-first-value" => first_value(&options.seed).await?,
-        "replaceable-edit-rematerialization" => rematerialization(&options.seed).await?,
-        "replaceable-edit-inverse" => inverse(&options.seed).await?,
-        "protocol-crate-n-plus-one" => n_plus_one().await?,
+    let outcome = match id {
+        "replaceable-edit-first-value" => first_value(&options.seed).await,
+        "replaceable-edit-rematerialization" => rematerialization(&options.seed).await,
+        "replaceable-edit-inverse" => inverse(&options.seed).await,
+        "protocol-crate-n-plus-one" => semantic_n_plus_one::execute(&options.seed).await,
         _ => unreachable!("executor checked above"),
     };
-    finish(artifacts, id, &options, &details)
+    match outcome {
+        Ok(details) => finish(artifacts, id, &options, &details),
+        Err(failure) => {
+            let message = failure.to_string();
+            let root = write_failure_bundle(artifacts, id, &options, &message)?;
+            Err(CanaryError::new(format!(
+                "{message}; durable evidence: {}",
+                root.display()
+            )))
+        }
+    }
 }
 
 async fn first_value(seed: &str) -> CanaryResult<Value> {
@@ -64,8 +74,8 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
     let target = deterministic_keys(&format!("{seed}-target"))?.public_key();
     let cache = Arc::new(MemoryEventCache::default());
     let publisher = Arc::new(RecordingPublisher::default());
-    let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(keys.clone()));
-    let fava = assembly(
+    let signer: Arc<dyn Signer> = Arc::new(DeterministicSigner::new(keys.clone()));
+    let (fava, _completions) = assembly(
         Arc::clone(&cache),
         signer,
         selected_materializers(),
@@ -85,10 +95,15 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
     let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
     wait_query_event(&mut query, receipt.current.id()).await?;
     let attempts = publisher.attempts();
+    let attempt = attempts
+        .first()
+        .ok_or_else(|| CanaryError::new("first-value publication attempt missing"))?;
+    let attempt = attempt_evidence(&accepted, &receipt, attempt)?;
+    let event = published_event(&receipt)?;
     if attempts.len() != 1
         || receipt.current.publication.materialization_source.is_some()
         || receipt.current.publication.materialization_id != MaterializationId::from_u64(1)
-        || target_count(&published_event(&receipt)?, "p", &target.to_hex()) != 1
+        || target_count(&event, "p", &target.to_hex()) != 1
     {
         return Err(CanaryError::new("first-value lifecycle facts diverged"));
     }
@@ -102,6 +117,8 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
         "publisher_attempts": attempts.len(),
         "query_events": query.current().events.len(),
         "cache_events": cache.len().map_err(error)?,
+        "attempt": attempt,
+        "event_bytes": serde_json::to_string(&event).map_err(error)?,
     }))
 }
 
@@ -109,21 +126,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     let keys = deterministic_keys(&format!("{seed}-actor"))?;
     let bob = deterministic_keys(&format!("{seed}-bob"))?.public_key();
     let carol = deterministic_keys(&format!("{seed}-carol"))?.public_key();
-    let source_one = EventBuilder::new(Kind::ContactList, "opaque")
-        .tags(vec![
-            Tag::parse(["p", &bob.to_hex()]).map_err(error)?,
-            Tag::parse(["x", "unrelated", "bytes"]).map_err(error)?,
-        ])
-        .custom_created_at(Timestamp::from(10))
-        .finalize(&keys)?;
-    let source_two = EventBuilder::new(Kind::ContactList, "opaque")
-        .tags(vec![
-            Tag::parse(["p", &bob.to_hex()]).map_err(error)?,
-            Tag::parse(["p", &carol.to_hex()]).map_err(error)?,
-            Tag::parse(["x", "unrelated", "bytes"]).map_err(error)?,
-        ])
-        .custom_created_at(Timestamp::from(20))
-        .finalize(&keys)?;
+    let source_one = contact_source(&keys, &[bob], 10)?;
+    let source_two = contact_source(&keys, &[bob, carol], 20)?;
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .admit(
@@ -134,7 +138,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     let (gate, mut requests) = GateSigner::new(keys.public_key());
     let signer: Arc<dyn Signer> = Arc::new(gate);
     let publisher = Arc::new(RecordingPublisher::default());
-    let fava = assembly(
+    let (fava, mut completions) = assembly(
         Arc::clone(&cache),
         signer,
         selected_materializers(),
@@ -153,21 +157,24 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         )
         .map_err(error)?;
     let current = next_sign(&mut requests).await?;
-    let first_event = first.event.clone().finalize(&keys).map_err(error)?;
+    let first_event = deterministic_finalize(first.event.clone(), &keys).map_err(error)?;
+    let first_id = first_event.id;
     first.complete(first_event)?;
-    let after_retired = fava
-        .receipt(accepted.receipt_id)
-        .map_err(error)?
-        .ok_or_else(|| CanaryError::new("receipt disappeared after retired completion"))?;
-    if after_retired.current.publication.materialization_id != MaterializationId::from_u64(2)
-        || !publisher.attempts().is_empty()
-    {
-        return Err(CanaryError::new("retired completion mutated receipt state"));
-    }
-    let current_event = current.event.clone().finalize(&keys).map_err(error)?;
+    let retired = wait_completion(&mut completions, 1).await?;
+    require_completion(&retired, &accepted, 1, first_id, false, "retired")?;
+    require_retired_inert(&fava, accepted.receipt_id, &publisher)?;
+    let current_event = deterministic_finalize(current.event.clone(), &keys).map_err(error)?;
+    let current_id = current_event.id;
     current.complete(current_event)?;
+    let installed = wait_completion(&mut completions, 2).await?;
+    require_completion(&installed, &accepted, 2, current_id, true, "current")?;
     let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
     let event = published_event(&receipt)?;
+    let attempts = publisher.attempts();
+    let attempt = attempts
+        .first()
+        .ok_or_else(|| CanaryError::new("rematerialization publication attempt missing"))?;
+    let attempt = attempt_evidence(&accepted, &receipt, attempt)?;
     let preserved = target_count(&event, "p", &bob.to_hex()) == 1
         && target_count(&event, "p", &carol.to_hex()) == 1
         && event
@@ -177,7 +184,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     if receipt.current.publication.materialization_id != MaterializationId::from_u64(2)
         || receipt.current.publication.materialization_source != Some(source_two.id)
         || receipt.current.publication.retired_materializations.len() != 1
-        || publisher.attempts().len() != 1
+        || attempts.len() != 1
         || !preserved
     {
         return Err(CanaryError::new(
@@ -192,9 +199,68 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         "current_materialization_id": 2,
         "source_id": source_two.id.to_hex(),
         "retired_materializations": receipt.current.publication.retired_materializations.len(),
-        "publisher_attempts": publisher.attempts().len(),
+        "publisher_attempts": attempts.len(),
         "preserved_bob_carol_unrelated": preserved,
+        "retired_completion_processed": true,
+        "retired_stale_effects": 0,
+        "attempt": attempt,
+        "event_bytes": serde_json::to_string(&event).map_err(error)?,
     }))
+}
+
+fn contact_source(
+    keys: &nostr::key::Keys,
+    participants: &[fava::PublicKey],
+    created_at: u64,
+) -> CanaryResult<fava::Event> {
+    let mut tags = participants
+        .iter()
+        .map(|participant| Tag::parse(["p", &participant.to_hex()]).map_err(error))
+        .collect::<CanaryResult<Vec<_>>>()?;
+    tags.push(Tag::parse(["x", "unrelated", "bytes"]).map_err(error)?);
+    EventBuilder::new(Kind::ContactList, "opaque")
+        .tags(tags)
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize(keys)
+        .map_err(error)
+}
+
+fn require_retired_inert(
+    fava: &fava::Fava,
+    receipt_id: fava::ReceiptId,
+    publisher: &RecordingPublisher,
+) -> CanaryResult<()> {
+    let receipt = fava
+        .receipt(receipt_id)
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("receipt disappeared after retired completion"))?;
+    if receipt.current.publication.materialization_id != MaterializationId::from_u64(2)
+        || !publisher.attempts().is_empty()
+    {
+        return Err(CanaryError::new("retired completion mutated receipt state"));
+    }
+    Ok(())
+}
+
+fn require_completion(
+    completion: &crate::semantic_write_store::CompletionAck,
+    accepted: &fava_write_store::AcceptedWrite,
+    materialization_id: u64,
+    event_id: EventId,
+    installed: bool,
+    label: &str,
+) -> CanaryResult<()> {
+    if completion.write_id != accepted.write_id
+        || completion.receipt_id != accepted.receipt_id
+        || completion.materialization_id != MaterializationId::from_u64(materialization_id)
+        || completion.event_id != event_id
+        || completion.installed != installed
+    {
+        return Err(CanaryError::new(format!(
+            "{label} completion acknowledgement diverged"
+        )));
+    }
+    Ok(())
 }
 
 async fn inverse(seed: &str) -> CanaryResult<Value> {
@@ -205,8 +271,8 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
     let bookmark_b = EventId::from_byte_array([42; 32]);
     let cache = Arc::new(MemoryEventCache::default());
     let publisher = Arc::new(RecordingPublisher::default());
-    let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(keys.clone()));
-    let fava = assembly(
+    let signer: Arc<dyn Signer> = Arc::new(DeterministicSigner::new(keys.clone()));
+    let (fava, _completions) = assembly(
         Arc::clone(&cache),
         signer,
         selected_materializers(),
@@ -226,12 +292,19 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
         fava_bookmarks::unbookmark_event(actor, bookmark_a),
     ];
     let mut receipts = Vec::with_capacity(edits.len());
+    let mut attempts = Vec::with_capacity(edits.len());
     for edit in edits {
         let accepted = fava
             .publish(explicit(edit.map_err(error)?)?)
             .map_err(error)?;
         let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
         let event = published_event(&receipt)?;
+        let publication_attempt = publisher
+            .attempts()
+            .last()
+            .cloned()
+            .ok_or_else(|| CanaryError::new("inverse publication attempt missing"))?;
+        attempts.push(attempt_evidence(&accepted, &receipt, &publication_attempt)?);
         cache
             .admit(
                 CachedEvent::new(event, relay_evidence()),
@@ -260,6 +333,7 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
         "operations": 10,
         "empty_and_adjacent": true,
         "publisher_attempts": publisher.attempts().len(),
+        "attempts": attempts,
     }))
 }
 
@@ -283,52 +357,6 @@ async fn current_event(
             "final public query returned unsigned state",
         )),
     }
-}
-
-async fn n_plus_one() -> CanaryResult<Value> {
-    let root = repository_root()?;
-    let manifest = root.join("falsifiers/external-semantic-capability/Cargo.toml");
-    for test in [
-        "external_capability_composes_through_public_fava",
-        "raw_future_event_kind_publishes_unchanged",
-    ] {
-        let mut command = tokio::process::Command::from(Command::new("cargo"));
-        command
-            .args([
-                "test",
-                "--manifest-path",
-                manifest.to_string_lossy().as_ref(),
-                "--test",
-                "public_capability",
-                test,
-                "--",
-                "--exact",
-            ])
-            .current_dir(&root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let status = tokio::time::timeout(Duration::from_secs(60), command.status())
-            .await
-            .map_err(|_| CanaryError::new(format!("external proof exceeded bound: {test}")))??;
-        if !status.success() {
-            return Err(CanaryError::new(format!("external proof failed: {test}")));
-        }
-    }
-    let root_manifest = std::fs::read_to_string(root.join("Cargo.toml"))?;
-    let product_dependency = root_manifest.contains("external-semantic-capability");
-    if product_dependency {
-        return Err(CanaryError::new(
-            "external capability entered the product graph",
-        ));
-    }
-    Ok(json!({
-        "external_manifest": "falsifiers/external-semantic-capability/Cargo.toml",
-        "external_capability": true,
-        "raw_future_kind": true,
-        "future_kind": 50_001,
-        "product_dependency": product_dependency,
-    }))
 }
 
 fn selected_materializers() -> Vec<Arc<dyn ReplaceableEventMaterializer>> {
