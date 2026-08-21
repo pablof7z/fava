@@ -130,6 +130,9 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
     }))
 }
 
+// Keeping the held generation-one lane and exact generation-two transitions in
+// one ordered body makes the causal barrier reviewable rather than implicit.
+#[allow(clippy::too_many_lines)]
 async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     let keys = deterministic_keys(&format!("{seed}-actor"))?;
     let bob = deterministic_keys(&format!("{seed}-bob"))?.public_key();
