@@ -240,7 +240,7 @@ impl Publication {
         &self,
         edit: &ReplaceableEventEdit,
     ) -> Result<Arc<dyn ReplaceableEventMaterializer>, PublicationError> {
-        let kind = edit_kind(edit)?;
+        let kind = edit_kind(edit);
         let materializer = self.materializers.get(&kind).ok_or_else(|| {
             PublicationError::Routing(format!(
                 "no selected materializer for kind {}",
@@ -261,7 +261,7 @@ impl Publication {
         edit: &ReplaceableEventEdit,
         author: PublicKey,
     ) -> Result<OpenedSemanticSources, PublicationError> {
-        let query = exact_query(edit, author)?;
+        let query = exact_query(edit, author);
         let cache = self
             .event_source
             .open(&query)
@@ -312,7 +312,7 @@ impl Publication {
         }
         let snapshot = self
             .evaluator
-            .evaluate(&exact_query(edit, author)?, &qualified)
+            .evaluate(&exact_query(edit, author), &qualified)
             .map_err(|error| PublicationError::Routing(error.to_string()))?;
         Ok(snapshot
             .events
@@ -388,15 +388,15 @@ fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventI
     })
 }
 
-pub(super) fn edit_kind(edit: &ReplaceableEventEdit) -> Result<Kind, PublicationError> {
-    Ok(edit.kind())
+pub(super) const fn edit_kind(edit: &ReplaceableEventEdit) -> Kind {
+    edit.kind()
 }
 
-fn exact_query(edit: &ReplaceableEventEdit, author: PublicKey) -> Result<Query, PublicationError> {
-    Ok(Query::events()
+fn exact_query(edit: &ReplaceableEventEdit, author: PublicKey) -> Query {
+    Query::events()
         .authors([author])
-        .kind(edit_kind(edit)?)
-        .cache_only())
+        .kind(edit_kind(edit))
+        .cache_only()
 }
 
 fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
