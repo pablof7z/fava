@@ -199,17 +199,127 @@ These remain explicitly unpromised unless resolved in their owning milestones:
 
 ## Traceability
 
-Roadmap creation maps every v1 requirement to exactly one phase.
+Every v1 requirement maps to exactly one active phase. M0 remains a completed prerequisite baseline outside the active roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| Pending roadmap generation | — | Pending |
+| LOCAL-01 | Phase 1 | Pending |
+| LOCAL-02 | Phase 1 | Pending |
+| LOCAL-03 | Phase 1 | Pending |
+| LOCAL-04 | Phase 1 | Pending |
+| LOCAL-05 | Phase 1 | Pending |
+| LOCAL-06 | Phase 1 | Pending |
+| LOCAL-07 | Phase 1 | Pending |
+| LOCAL-08 | Phase 1 | Pending |
+| LOCAL-09 | Phase 1 | Pending |
+| LOCAL-10 | Phase 1 | Pending |
+| LOCAL-11 | Phase 1 | Pending |
+| LOCAL-12 | Phase 1 | Pending |
+| READ-01 | Phase 2 | Pending |
+| READ-02 | Phase 2 | Pending |
+| READ-03 | Phase 2 | Pending |
+| READ-04 | Phase 2 | Pending |
+| READ-05 | Phase 2 | Pending |
+| READ-06 | Phase 2 | Pending |
+| READ-07 | Phase 2 | Pending |
+| READ-08 | Phase 2 | Pending |
+| READ-09 | Phase 2 | Pending |
+| READ-10 | Phase 2 | Pending |
+| READ-11 | Phase 3 | Pending |
+| READ-12 | Phase 3 | Pending |
+| READ-13 | Phase 3 | Pending |
+| READ-14 | Phase 3 | Pending |
+| READ-15 | Phase 3 | Pending |
+| READ-16 | Phase 3 | Pending |
+| READ-17 | Phase 3 | Pending |
+| READ-18 | Phase 3 | Pending |
+| READ-19 | Phase 3 | Pending |
+| READ-20 | Phase 3 | Pending |
+| ROUTE-01 | Phase 4 | Pending |
+| ROUTE-02 | Phase 4 | Pending |
+| ROUTE-03 | Phase 4 | Pending |
+| ROUTE-04 | Phase 4 | Pending |
+| ROUTE-05 | Phase 4 | Pending |
+| ROUTE-06 | Phase 4 | Pending |
+| ROUTE-07 | Phase 4 | Pending |
+| ROUTE-08 | Phase 4 | Pending |
+| ROUTE-09 | Phase 4 | Pending |
+| ROUTE-10 | Phase 4 | Pending |
+| ROUTE-11 | Phase 4 | Pending |
+| WRITE-01 | Phase 5 | Pending |
+| WRITE-02 | Phase 5 | Pending |
+| WRITE-03 | Phase 5 | Pending |
+| WRITE-04 | Phase 5 | Pending |
+| WRITE-05 | Phase 5 | Pending |
+| WRITE-06 | Phase 5 | Pending |
+| WRITE-07 | Phase 5 | Pending |
+| WRITE-08 | Phase 5 | Pending |
+| WRITE-09 | Phase 5 | Pending |
+| WRITE-10 | Phase 5 | Pending |
+| WRITE-11 | Phase 5 | Pending |
+| WRITE-12 | Phase 6 | Pending |
+| WRITE-13 | Phase 6 | Pending |
+| WRITE-14 | Phase 6 | Pending |
+| WRITE-15 | Phase 6 | Pending |
+| WRITE-16 | Phase 6 | Pending |
+| WRITE-17 | Phase 6 | Pending |
+| WRITE-18 | Phase 6 | Pending |
+| WRITE-19 | Phase 6 | Pending |
+| WRITE-20 | Phase 6 | Pending |
+| WRITE-21 | Phase 6 | Pending |
+| WRITE-22 | Phase 6 | Pending |
+| WRITE-23 | Phase 6 | Pending |
+| CAP-01 | Phase 7 | Pending |
+| CAP-02 | Phase 7 | Pending |
+| CAP-03 | Phase 7 | Pending |
+| CAP-04 | Phase 7 | Pending |
+| CAP-05 | Phase 7 | Pending |
+| CAP-06 | Phase 7 | Pending |
+| CAP-07 | Phase 7 | Pending |
+| CAP-08 | Phase 7 | Pending |
+| CAP-09 | Phase 7 | Pending |
+| HARD-01 | Phase 8 | Pending |
+| HARD-02 | Phase 8 | Pending |
+| HARD-03 | Phase 8 | Pending |
+| HARD-04 | Phase 8 | Pending |
+| HARD-05 | Phase 8 | Pending |
+| HARD-06 | Phase 8 | Pending |
+| HARD-07 | Phase 8 | Pending |
+| HARD-08 | Phase 8 | Pending |
+| HARD-09 | Phase 8 | Pending |
+| HARD-10 | Phase 8 | Pending |
+| PROF-01 | Phase 9 | Pending |
+| PROF-02 | Phase 9 | Pending |
+| PROF-03 | Phase 9 | Pending |
+| PROF-04 | Phase 9 | Pending |
+| PROF-05 | Phase 9 | Pending |
+| PROF-06 | Phase 9 | Pending |
+| PROF-07 | Phase 9 | Pending |
+| PROF-08 | Phase 9 | Pending |
+| PROF-09 | Phase 9 | Pending |
+| SUB-01 | Phase 10 | Pending |
+| SUB-02 | Phase 10 | Pending |
+| SUB-03 | Phase 10 | Pending |
+| SUB-04 | Phase 10 | Pending |
+| SUB-05 | Phase 10 | Pending |
+| SUB-06 | Phase 10 | Pending |
+| SUB-07 | Phase 10 | Pending |
+| SUB-08 | Phase 10 | Pending |
+| NATIVE-01 | Phase 11 | Pending |
+| NATIVE-02 | Phase 11 | Pending |
+| NATIVE-03 | Phase 11 | Pending |
+| NATIVE-04 | Phase 11 | Pending |
+| NATIVE-05 | Phase 11 | Pending |
+| NATIVE-06 | Phase 11 | Pending |
+| NATIVE-07 | Phase 11 | Pending |
+| NATIVE-08 | Phase 11 | Pending |
 
 **Coverage:**
 - v1 requirements: 110 total
-- Mapped to phases: 0
-- Unmapped: 110 ⚠️
+- Mapped to phases: 110 ✓
+- Unmapped: 0
+- Duplicate mappings: 0
 
 ---
 *Requirements defined: 2026-08-21*
-*Last updated: 2026-08-21 after initial definition*
+*Last updated: 2026-08-21 after roadmap generation*
