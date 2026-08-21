@@ -1,13 +1,16 @@
 //! Public contract evidence for volatile semantic-write custody.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
+use fava_routing::RoutePlan;
 use fava_state::EventCoordinate;
 use fava_write::{
     Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
     WriteIntent, WriteRouting,
 };
-use fava_write_store::WriteStore;
+use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
@@ -254,4 +257,260 @@ fn memory_unqualified_source_is_inert() {
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
     ));
     assert_ne!(before, unchanged);
+}
+
+#[test]
+fn memory_failure_preserves_current_and_is_attributed() {
+    let keys = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let base = source(&keys, 10, "base");
+    let accepted = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 11, "current"),
+        Some(&base),
+    );
+    let failed_source = source(&keys, 20, "failed source");
+    let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    let failed = store
+        .record_materialization_failure(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(base.id),
+            Some(&failed_source),
+            "provider refused the opaque edit".to_owned(),
+        )
+        .expect("post-accept failure is durable evidence");
+
+    assert_eq!(failed.write_id, before.write_id);
+    assert_eq!(failed.receipt_id, before.receipt_id);
+    assert_eq!(failed.current.event, before.current.event);
+    assert_eq!(
+        failed.current.publication.materialization_id,
+        before.current.publication.materialization_id
+    );
+    assert_eq!(
+        failed.current.publication.materialization_source,
+        before.current.publication.materialization_source
+    );
+    assert_eq!(
+        failed.current.publication.destinations,
+        before.current.publication.destinations
+    );
+    assert_eq!(failed.attempts, before.attempts);
+    let failure = failed
+        .current
+        .publication
+        .materialization_failure
+        .as_deref()
+        .expect("failure is visible");
+    assert!(failure.contains(&failed_source.id.to_string()));
+    assert!(failure.contains("provider refused"));
+    assert!(failure.len() <= 4_096);
+
+    let recovered = store.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].2, Some(base.id));
+    assert_eq!(recovered[0].3, Some(failed_source.id));
+}
+
+#[test]
+fn memory_successful_retry_clears_failure_atomically() {
+    let keys = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let base = source(&keys, 10, "base");
+    let accepted = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 11, "current"),
+        Some(&base),
+    );
+    let retry_source = source(&keys, 20, "retry source");
+    store
+        .record_materialization_failure(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(base.id),
+            Some(&retry_source),
+            "first attempt failed".to_owned(),
+        )
+        .unwrap();
+    let mut changes = store.receipt_changes();
+    let successor_event = materialization(keys.public_key(), 21, "retry succeeded");
+    let successor = store
+        .install_materialization(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(base.id),
+            successor_event.clone(),
+            Some(&retry_source),
+        )
+        .expect("retry installs atomically");
+
+    assert_eq!(
+        successor.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(
+        successor.current.publication.materialization_source,
+        Some(retry_source.id)
+    );
+    assert_eq!(successor.current.publication.materialization_failure, None);
+    assert!(
+        successor.current.publication.retired_materializations[0]
+            .3
+            .as_deref()
+            .is_some_and(|failure| failure.contains("first attempt failed"))
+    );
+    assert_eq!(store.recover_materialized_edits().unwrap()[0].3, None);
+    assert_eq!(changes.try_recv().unwrap().1, Some(successor.clone()));
+
+    let repeated = store
+        .install_materialization(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(base.id),
+            successor_event,
+            Some(&retry_source),
+        )
+        .expect("repeated success is idempotent");
+    assert_eq!(repeated, successor);
+    assert!(matches!(
+        changes.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+}
+
+#[test]
+fn memory_live_edit_recovers_once_and_terminal_is_inert() {
+    let keys = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let accepted = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 10, "live"),
+        None,
+    );
+    let recovered = store.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].0.receipt_id, accepted.receipt_id);
+
+    let cancelled = store.cancel(accepted.receipt_id).unwrap().unwrap();
+    assert!(cancelled.is_terminal());
+    assert!(store.recover_materialized_edits().unwrap().is_empty());
+    assert!(
+        store
+            .record_materialization_failure(
+                accepted.write_id,
+                accepted.receipt_id,
+                MaterializationId::from_u64(1),
+                None,
+                None,
+                "late completion".to_owned(),
+            )
+            .is_err()
+    );
+
+    let replacement = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 20, "new owner"),
+        None,
+    );
+    let settled = store
+        .apply_route(
+            replacement.receipt_id,
+            &RoutePlan {
+                revision: 1,
+                destinations: BTreeMap::new(),
+                coverage: BTreeMap::new(),
+                unresolved: BTreeSet::new(),
+                shortfalls: Vec::new(),
+                settled: true,
+            },
+        )
+        .expect("empty route settles terminally");
+    assert!(settled.is_terminal());
+    assert!(store.recover_materialized_edits().unwrap().is_empty());
+}
+
+#[test]
+fn memory_evidence_exhaustion_has_no_partial_effect() {
+    assert_eq!(destination_evidence_capacity(), 256);
+    let bounded = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
+    assert_eq!(bounded.active_capacity(), 1);
+    let first_keys = Keys::generate();
+    accept(
+        &bounded,
+        edit(first_keys.public_key()),
+        materialization(first_keys.public_key(), 1, "capacity owner"),
+        None,
+    );
+    let second_keys = Keys::generate();
+    assert!(
+        bounded
+            .accept_materialized_edit(
+                WriteIntent::edit(edit(second_keys.public_key()), WriteRouting::Automatic).unwrap(),
+                materialization(second_keys.public_key(), 1, "refused"),
+                None,
+            )
+            .is_err()
+    );
+    assert_eq!(bounded.recover_materialized_edits().unwrap().len(), 1);
+
+    let store = MemoryWriteStore::default();
+    let keys = Keys::generate();
+    let accepted = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 1, "generation zero"),
+        None,
+    );
+    let mut expected = MaterializationId::from_u64(1);
+    let mut expected_source = None;
+    for generation in 0..destination_evidence_capacity() {
+        let source_time = 2 + (generation as u64 * 2);
+        let next_source = source(&keys, source_time, &format!("source {generation}"));
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                expected,
+                expected_source,
+                materialization(
+                    keys.public_key(),
+                    source_time + 1,
+                    &format!("generation {generation}"),
+                ),
+                Some(&next_source),
+            )
+            .unwrap();
+        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected_source = Some(next_source.id);
+    }
+
+    let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    let mut changes = store.receipt_changes();
+    let overflow_source = source(&keys, 1_000, "overflow source");
+    assert!(
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                expected,
+                expected_source,
+                materialization(keys.public_key(), 1_001, "overflow generation"),
+                Some(&overflow_source),
+            )
+            .is_err()
+    );
+    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(before));
+    assert!(matches!(
+        changes.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
 }
