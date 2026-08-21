@@ -214,6 +214,7 @@ impl WriteStore for FaultingWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
+            fava::PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
