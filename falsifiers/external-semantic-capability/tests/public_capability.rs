@@ -268,13 +268,21 @@ async fn raw_future_event_kind_publishes_unchanged() {
     let actor = keys.public_key();
     let harness = harness(keys);
     let future_kind = Kind::Custom(50_001);
-    let unknown = Tag::parse(["x-future", "kept", "verbatim"]).expect("future tag");
-    let event = EventBuilder::new(actor, future_kind)
-        .created_at(Timestamp::from(42))
-        .tag(unknown.clone())
-        .content("opaque future content")
-        .build()
-        .expect("raw future event builds");
+    let unknown = vec![
+        Tag::parse(["something something"]).expect("future flag tag"),
+        Tag::parse(["x-a", "poop"]).expect("future value tag"),
+        Tag::parse(["x-future", "kept", "verbatim"]).expect("future tag"),
+    ];
+    let event = EventBuilder::from_parts(
+        actor,
+        future_kind,
+        Timestamp::from(42),
+        Vec::new(),
+        "opaque future content".to_owned(),
+    )
+    .tags(unknown.clone())
+    .build()
+    .expect("raw future event builds");
     let expected_id = event.id.expect("builder assigned id");
     let mut observation = open_observation(
         &harness.fava,
@@ -284,18 +292,21 @@ async fn raw_future_event_kind_publishes_unchanged() {
     .await;
     let accepted = harness
         .fava
-        .publish(raw_intent(event, &harness.relay))
+        .publish(raw_intent(event.clone(), &harness.relay))
         .expect("raw future event accepts without matching materializer");
+    assert_eq!(accepted.current.event, EventValue::Unsigned(event.clone()));
     let record = wait_first_record(&mut observation, "raw future query visibility").await;
     assert_eq!(record.id(), expected_id);
     assert_eq!(record.event.kind(), future_kind);
-    assert_eq!(record.event.tags(), std::slice::from_ref(&unknown));
+    assert_eq!(record.event.created_at(), Timestamp::from(42));
+    assert_eq!(record.event.tags(), unknown.as_slice());
     assert_eq!(content(&record.event), "opaque future content");
 
     let published = harness.transport.published(0).await;
     assert_eq!(published.id, expected_id);
     assert_eq!(published.kind, future_kind);
-    assert_eq!(published.tags.as_slice(), &[unknown]);
+    assert_eq!(published.created_at, Timestamp::from(42));
+    assert_eq!(published.tags.as_slice(), unknown.as_slice());
     assert_eq!(published.content, "opaque future content");
     let id = harness.transport.acknowledge(0);
     harness.transport.wait_closed(id).await;
@@ -307,6 +318,7 @@ async fn raw_future_event_kind_publishes_unchanged() {
     .await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(signed(&terminal), &published);
+    assert_eq!(signed(&terminal).tags.as_slice(), unknown.as_slice());
     observation.close();
 }
 
