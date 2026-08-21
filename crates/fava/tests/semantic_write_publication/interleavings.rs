@@ -13,7 +13,7 @@ use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 
-use super::support::{EDIT_FORMAT, intent, relay_url};
+use super::support::{intent, relay_url};
 
 fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::UnsignedEvent {
     EventBuilder::new(keys.public_key(), Kind::ContactList)
@@ -26,7 +26,7 @@ fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::Unsigne
 fn accepted(store: &MemoryWriteStore, keys: &Keys) -> fava_write_store::AcceptedWrite {
     store
         .accept_materialized_edit(
-            intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT),
+            intent(keys.public_key(), Kind::ContactList),
             materialization(keys, 1, "generation one"),
             None,
         )
@@ -256,16 +256,17 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
     let second = Keys::generate();
     accepted(&store, &first);
     let refusal = store.accept_materialized_edit(
-        fava::WriteIntent::edit(
-            match intent(second.public_key(), Kind::ContactList, EDIT_FORMAT)
-                .into_parts()
-                .0
-            {
-                fava::WritePayload::Edit(edit) => edit,
-                _ => unreachable!(),
-            },
-            WriteRouting::Explicit(BTreeSet::from([relay_url()])),
-        )
+        match intent(second.public_key(), Kind::ContactList)
+            .into_parts()
+            .0
+        {
+            fava::WritePayload::Edit { edit, author } => fava::WriteIntent::edit_as(
+                edit,
+                author,
+                WriteRouting::Explicit(BTreeSet::from([relay_url()])),
+            ),
+            _ => unreachable!(),
+        }
         .unwrap(),
         materialization(&second, 1, "refused"),
         None,
