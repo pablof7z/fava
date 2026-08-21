@@ -217,12 +217,12 @@ fn tag_targets(tag: &Tag, target: PublicKey) -> bool {
 }
 
 fn build(
-    actor: PublicKey,
+    author: PublicKey,
     content: &str,
     tags: Vec<Tag>,
     created_at: Timestamp,
 ) -> Result<UnsignedEvent, WriteIntentError> {
-    let mut builder = EventBuilder::new(actor, Kind::ContactList)
+    let mut builder = EventBuilder::new(author, Kind::ContactList)
         .created_at(created_at)
         .content(content);
     for tag in tags {

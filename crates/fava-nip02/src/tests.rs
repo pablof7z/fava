@@ -185,6 +185,13 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
         materialize(actor.public_key(), &malformed, None, 1),
         Err(WriteIntentError::Encoding(_))
     ));
+    let addressable = ReplaceableEventEdit::new(
+        Kind::from_u16(30_023),
+        Some("article".to_owned()),
+        edit.change().to_vec(),
+    )
+    .expect("neutral addressable edit");
+    assert!(!materializer().supports(&addressable));
     let mut legacy_versioned = vec![1, 1];
     legacy_versioned.extend_from_slice(target.as_bytes());
     let legacy = ReplaceableEventEdit::new(Kind::ContactList, None, legacy_versioned)

@@ -414,6 +414,13 @@ fn assert_codec_and_target_refusals(actor: &Keys, event_id: EventId, edit: &Repl
         materialize(actor.public_key(), &malformed, None, 1),
         Err(WriteIntentError::Encoding(_))
     ));
+    let addressable = ReplaceableEventEdit::new(
+        Kind::from_u16(30_023),
+        Some("article".to_owned()),
+        edit.change().to_vec(),
+    )
+    .expect("neutral addressable edit");
+    assert!(!materializer().supports(&addressable));
     let mut legacy_versioned = vec![1];
     legacy_versioned.extend_from_slice(edit.change());
     let legacy = ReplaceableEventEdit::new(Kind::from_u16(BOOKMARK_KIND), None, legacy_versioned)

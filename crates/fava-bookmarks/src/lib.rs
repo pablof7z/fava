@@ -402,12 +402,12 @@ fn coordinate_text(coordinate: &EventCoordinate) -> String {
 }
 
 fn build(
-    actor: PublicKey,
+    author: PublicKey,
     content: &str,
     tags: Vec<Tag>,
     created_at: Timestamp,
 ) -> Result<UnsignedEvent, WriteIntentError> {
-    let mut builder = EventBuilder::new(actor, bookmark_kind())
+    let mut builder = EventBuilder::new(author, bookmark_kind())
         .created_at(created_at)
         .content(content);
     for tag in tags {
