@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use fava_delivery::{DeliveryDecision, DeliveryFacts};
@@ -17,8 +17,18 @@ impl Publication {
     pub(super) fn start_lanes(
         &self,
         receipt: &Receipt,
-        active: &mut BTreeSet<RelaySessionKey>,
-        finished: &mpsc::Sender<RelaySessionKey>,
+        active: &mut BTreeMap<
+            RelaySessionKey,
+            (WriteId, ReceiptId, MaterializationId, EventId, u64),
+        >,
+        finished: &mpsc::Sender<(
+            RelaySessionKey,
+            WriteId,
+            ReceiptId,
+            MaterializationId,
+            EventId,
+            u64,
+        )>,
         cancel: &watch::Receiver<bool>,
     ) {
         if !matches!(receipt.current.event, EventValue::Signed(_)) {
@@ -31,7 +41,7 @@ impl Publication {
             if !matches!(
                 outcome,
                 RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
-            ) || !active.insert(session.clone())
+            ) || active.contains_key(session)
             {
                 continue;
             }
@@ -43,6 +53,17 @@ impl Publication {
             let receipt_id = receipt.receipt_id;
             let materialization_id = receipt.current.publication.materialization_id;
             let event_id = receipt.current.id();
+            let route_revision = receipt.route_revision;
+            active.insert(
+                session.clone(),
+                (
+                    write_id,
+                    receipt_id,
+                    materialization_id,
+                    event_id,
+                    route_revision,
+                ),
+            );
             tokio::spawn(async move {
                 publication
                     .run_destination(
@@ -54,7 +75,14 @@ impl Publication {
                     )
                     .await;
                 tokio::select! {
-                    result = finished.send(session) => { let _ = result; }
+                    result = finished.send((
+                        session,
+                        write_id,
+                        receipt_id,
+                        materialization_id,
+                        event_id,
+                        route_revision,
+                    )) => { let _ = result; }
                     changed = cancel.changed() => { let _ = changed; }
                 }
             });

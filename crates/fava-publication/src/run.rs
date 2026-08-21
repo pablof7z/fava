@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
 use fava_signer::{SignerAvailability, SignerError};
@@ -51,7 +51,7 @@ impl Publication {
 
         let mut receipt_changes = self.store.receipt_changes();
         let (lane_finished, mut finished_lanes) = mpsc::channel(destination_evidence_capacity());
-        let mut active = BTreeSet::new();
+        let mut active = BTreeMap::new();
         let mut route_revision = self
             .store
             .receipt(receipt_id)
@@ -113,8 +113,17 @@ impl Publication {
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Some(session) = finished_lanes.recv() => {
-                    active.remove(&session);
+                Some((session, write_id, completed_receipt, completed_materialization, completed_event, completed_route)) = finished_lanes.recv() => {
+                    let completed = (
+                        write_id,
+                        completed_receipt,
+                        completed_materialization,
+                        completed_event,
+                        completed_route,
+                    );
+                    if active.get(&session) == Some(&completed) {
+                        active.remove(&session);
+                    }
                 }
             }
         }
