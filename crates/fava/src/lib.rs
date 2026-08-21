@@ -36,7 +36,7 @@ pub use fava_write::{
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
-pub use publication::{PublishError, Write};
+pub use publication::{PublishAs, PublishError, PublishTo, Write};
 use thiserror::Error;
 use tokio::sync::broadcast;
 
@@ -107,6 +107,25 @@ impl Fava {
         P: publication::PublishPayload,
     {
         publication::publish(self.publication.as_ref(), payload)
+    }
+
+    /// Narrow one edit publication to this exact author.
+    #[must_use]
+    pub fn by(&self, author: PublicKey) -> PublishAs<'_> {
+        publication::by(self, author)
+    }
+
+    /// Narrow one publication to an exact bounded relay sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublishError`] when the normalized route is empty or exceeds
+    /// the explicit publication bound.
+    pub fn to(
+        &self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<PublishTo<'_>, PublishError> {
+        publication::to(self, relays)
     }
 
     /// Read current exact receipt facts.

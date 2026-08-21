@@ -415,6 +415,34 @@ crates = [
 spec_crates = ["fava-write-store-redb", "fava-write-store-testkit"]
 
 [[term]]
+name = "PublishAs"
+source = "fava"
+meaning = "An inert borrowed application scope that selects the exact author for one replaceable-event edit publication."
+owner = "fava facade"
+nearest_nostr = "Event pubkey and signature"
+distinction = "Nostr events carry an author after construction; PublishAs exists before an edit payload is named, accepts only ReplaceableEventEdit, and owns no signing or publication lifecycle."
+counterexample = "Dropping fava.by(author) creates no write, receipt, provider call, or relay work; an accepted Write always has durable custody."
+lifecycle = "Fava::by creates the borrowed handle; PublishAs::publish or PublishAs::to consumes it, otherwise it is dropped without effects; it is never stored or serialized."
+forcing_requirement = "WRITE-003 forbids a parallel author field from contradicting event identity, so unsigned and presigned events must be excluded from signer scope by the Rust type surface."
+falsifier = "The PublishAs compile-fail doctests must fail if signer-scoped publication accepts UnsignedEvent or Event."
+symbols = ["fava::PublishAs"]
+crates = []
+
+[[term]]
+name = "PublishTo"
+source = "fava"
+meaning = "An inert borrowed application scope that validates and selects an exact ordered explicit relay route before one publication payload is named."
+owner = "fava facade"
+nearest_nostr = "Relay URL"
+distinction = "WriteRouting is the durable routing fact of an accepted intent; PublishTo is a pre-payload narrowing that owns no custody, receipt, route acquisition, or transport work."
+counterexample = "Dropping fava.to([relay]) leaves the write store and every provider untouched; accepting through the handle creates a Write whose receipt retains the selected route."
+lifecycle = "Fava::to validates and creates the borrowed handle; PublishTo::publish or PublishTo::by consumes it, otherwise it is dropped without effects; it is never stored or serialized."
+forcing_requirement = "WRITE-011 requires ordinary automatic routing plus an exact explicit mode without placing routing syntax on every publish call or introducing an options bag."
+falsifier = "The publication_scopes_are_inert_before_valid_payload test must observe zero custody and provider effects when a PublishTo is dropped or its relay input is invalid."
+symbols = ["fava::PublishTo"]
+crates = []
+
+[[term]]
 name = "WriteIntent"
 source = "fava"
 meaning = "An application request asking Fava to accept responsibility for publishing an event or replaceable-event edit."

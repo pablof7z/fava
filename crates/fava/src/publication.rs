@@ -1,11 +1,13 @@
 //! Application-facing synchronous publication vocabulary.
 
+use std::collections::BTreeSet;
 use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
+use fava_state::RelayUrl;
 use fava_write::{
-    Event, Receipt, ReceiptId, ReplaceableEventEdit, UnsignedEvent, WriteId, WriteIntent,
-    WriteIntentError, WriteRouting,
+    Event, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, UnsignedEvent, WriteId,
+    WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use thiserror::Error;
 
@@ -52,6 +54,98 @@ impl fmt::Debug for Write {
     }
 }
 
+/// An inert, edit-only signer scope for one publication expression.
+///
+/// Signer scope cannot publish an unsigned event because that event already
+/// carries its author:
+///
+/// ```compile_fail
+/// fn unsigned_is_not_an_edit(
+///     fava: &fava::Fava,
+///     author: fava::PublicKey,
+///     event: fava::UnsignedEvent,
+/// ) {
+///     let _ = fava.by(author).publish(event);
+/// }
+/// ```
+///
+/// A pre-signed event has already used its signer and is likewise excluded:
+///
+/// ```compile_fail
+/// fn signed_event_already_has_a_signer(
+///     fava: &fava::Fava,
+///     author: fava::PublicKey,
+///     event: fava::Event,
+/// ) {
+///     let _ = fava.by(author).publish(event);
+/// }
+/// ```
+#[must_use = "a signer scope is inert until publish is called"]
+pub struct PublishAs<'a> {
+    fava: &'a crate::Fava,
+    author: PublicKey,
+    routing: WriteRouting,
+}
+
+impl PublishAs<'_> {
+    /// Narrow this edit publication to an exact bounded relay sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublishError`] when the normalized route is empty or exceeds
+    /// the explicit publication bound.
+    pub fn to(mut self, relays: impl IntoIterator<Item = RelayUrl>) -> Result<Self, PublishError> {
+        self.routing = explicit_routing(relays)?;
+        Ok(self)
+    }
+
+    /// Durably accept one edit with this exact author and routing scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublishError`] when the edit or publication is refused.
+    pub fn publish(self, edit: ReplaceableEventEdit) -> Result<Write, PublishError> {
+        publish_scoped(
+            self.fava.publication.as_ref(),
+            edit,
+            Some(self.author),
+            self.routing,
+        )
+    }
+}
+
+/// An inert explicit-relay scope for one publication expression.
+#[must_use = "a relay scope is inert until publish is called"]
+pub struct PublishTo<'a> {
+    fava: &'a crate::Fava,
+    routing: WriteRouting,
+}
+
+impl<'a> PublishTo<'a> {
+    /// Add an exact edit author while preserving this explicit route.
+    #[must_use]
+    pub fn by(self, author: PublicKey) -> PublishAs<'a> {
+        PublishAs {
+            fava: self.fava,
+            author,
+            routing: self.routing,
+        }
+    }
+
+    /// Durably accept one checked payload through this explicit route.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublishError`] when the payload or publication is refused.
+    #[allow(private_bounds)]
+    pub fn publish<P>(self, payload: P) -> Result<Write, PublishError>
+    where
+        P: PublishPayload,
+    {
+        publish_scoped(self.fava.publication.as_ref(), payload, None, self.routing)
+    }
+}
+
 /// Refusal at the application publication door.
 #[derive(Debug, Error)]
 pub enum PublishError {
@@ -69,44 +163,66 @@ pub enum PublishError {
 pub(crate) trait PublishPayload {
     fn into_intent(
         self,
-        author: Option<fava_write::PublicKey>,
+        author: Option<PublicKey>,
+        routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError>;
 }
 
 impl PublishPayload for UnsignedEvent {
     fn into_intent(
         self,
-        _author: Option<fava_write::PublicKey>,
+        _author: Option<PublicKey>,
+        routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
-        Ok(WriteIntent::event(self, WriteRouting::Automatic)?)
+        Ok(WriteIntent::event(self, routing)?)
     }
 }
 
 impl PublishPayload for Event {
     fn into_intent(
         self,
-        _author: Option<fava_write::PublicKey>,
+        _author: Option<PublicKey>,
+        routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
-        Ok(WriteIntent::presigned(self, WriteRouting::Automatic)?)
+        Ok(WriteIntent::presigned(self, routing)?)
     }
 }
 
 impl PublishPayload for ReplaceableEventEdit {
     fn into_intent(
         self,
-        author: Option<fava_write::PublicKey>,
+        author: Option<PublicKey>,
+        routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
         let author = author.ok_or(PublishError::MissingAuthor)?;
-        Ok(WriteIntent::edit_as(self, author, WriteRouting::Automatic)?)
+        Ok(WriteIntent::edit_as(self, author, routing)?)
     }
 }
 
 impl PublishPayload for WriteIntent {
     fn into_intent(
         self,
-        _author: Option<fava_write::PublicKey>,
+        author: Option<PublicKey>,
+        routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
-        Ok(self)
+        let (payload, existing_routing) = self.into_parts();
+        let routing = if matches!(routing, WriteRouting::Automatic) {
+            existing_routing
+        } else {
+            routing
+        };
+        match payload {
+            WritePayload::Event(event) => Ok(WriteIntent::event(event, routing)?),
+            WritePayload::Presigned(event) => Ok(WriteIntent::presigned(event, routing)?),
+            WritePayload::Edit {
+                edit,
+                author: frozen_author,
+            } => Ok(WriteIntent::edit_as(
+                edit,
+                author.unwrap_or(frozen_author),
+                routing,
+            )?),
+        }
     }
 }
 
@@ -117,7 +233,54 @@ pub(crate) fn publish<P>(
 where
     P: PublishPayload,
 {
-    let intent = payload.into_intent(None)?;
+    publish_scoped(publication, payload, None, WriteRouting::Automatic)
+}
+
+pub(crate) fn by(fava: &crate::Fava, author: PublicKey) -> PublishAs<'_> {
+    PublishAs {
+        fava,
+        author,
+        routing: WriteRouting::Automatic,
+    }
+}
+
+pub(crate) fn to(
+    fava: &crate::Fava,
+    relays: impl IntoIterator<Item = RelayUrl>,
+) -> Result<PublishTo<'_>, PublishError> {
+    Ok(PublishTo {
+        fava,
+        routing: explicit_routing(relays)?,
+    })
+}
+
+fn explicit_routing(
+    relays: impl IntoIterator<Item = RelayUrl>,
+) -> Result<WriteRouting, PublishError> {
+    let relays = relays.into_iter().collect::<BTreeSet<_>>();
+    if relays.is_empty() {
+        return Err(WriteIntentError::EmptyExplicitRelays.into());
+    }
+    if relays.len() > 256 {
+        return Err(WriteIntentError::TooManyExplicitRelays {
+            actual: relays.len(),
+            maximum: 256,
+        }
+        .into());
+    }
+    Ok(WriteRouting::Explicit(relays))
+}
+
+fn publish_scoped<P>(
+    publication: Option<&Publication>,
+    payload: P,
+    author: Option<PublicKey>,
+    routing: WriteRouting,
+) -> Result<Write, PublishError>
+where
+    P: PublishPayload,
+{
+    let intent = payload.into_intent(author, routing)?;
     let publication = publication.ok_or(PublicationError::NotConfigured)?;
     let accepted = publication.accept(intent)?;
     Ok(Write {
