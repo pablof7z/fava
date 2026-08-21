@@ -1,9 +1,10 @@
 //! Component evidence for deterministic local source merge semantics.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use fava_query::{
-    Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
+    Query, QueryEvaluator, SingleLetterTag, SourceEvent, SourceKind, SourceRevision,
+    SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
@@ -11,7 +12,7 @@ use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, SignatureState, WriteId,
 };
 use nostr::event::{
-    Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, UnsignedEvent,
+    Event, EventBuilder, EventId, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
 };
 use nostr::key::Keys;
 
@@ -28,6 +29,51 @@ fn unsigned_event(keys: &Keys, kind: Kind, created_at: u64, content: &str) -> Un
         .finalize_unsigned(keys.public_key());
     event.ensure_id();
     event
+}
+
+fn signed_event_with_tags(keys: &Keys, created_at: u64, content: &str, tags: Vec<Tag>) -> Event {
+    EventBuilder::new(Kind::TextNote, content)
+        .tags(tags)
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize(keys)
+        .expect("test event signs")
+}
+
+fn unsigned_event_with_tags(
+    keys: &Keys,
+    created_at: u64,
+    content: &str,
+    tags: Vec<Tag>,
+) -> UnsignedEvent {
+    let mut event = EventBuilder::new(Kind::TextNote, content)
+        .tags(tags)
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize_unsigned(keys.public_key());
+    event.ensure_id();
+    event
+}
+
+fn literal_tag(key: char, value: &str, later_cells: &[&str]) -> Tag {
+    let mut cells = vec![key.to_string(), value.to_owned()];
+    cells.extend(later_cells.iter().map(|cell| (*cell).to_owned()));
+    Tag::parse(cells).expect("valid literal tag")
+}
+
+fn local_unsigned(event: UnsignedEvent) -> SourceEvent {
+    SourceEvent::Local(
+        LocalWriteEvent::new(
+            EventValue::Unsigned(event),
+            PublicationEvidence {
+                signature: SignatureState::Unsigned,
+                ..publication()
+            },
+        )
+        .expect("unsigned event is finalized"),
+    )
+}
+
+fn result_ids(snapshot: &fava_query::QuerySnapshot) -> BTreeSet<EventId> {
+    snapshot.events.iter().map(|record| record.id()).collect()
 }
 
 fn relay_evidence(urls: &[&str]) -> RelayEvidence {
@@ -182,4 +228,210 @@ fn replaceable_tie_selects_the_lowest_event_id() {
 
     assert_eq!(result.events.len(), 1);
     assert_eq!(result.events[0].id(), expected);
+}
+
+#[test]
+fn literal_tag_selection_matches_exact_signed_and_unsigned_cells() {
+    let keys = Keys::generate();
+    let signed = signed_event_with_tags(
+        &keys,
+        10,
+        "signed exact",
+        vec![
+            literal_tag('e', "café", &["ignored"]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let unsigned = unsigned_event_with_tags(
+        &keys,
+        11,
+        "unsigned exact",
+        vec![
+            literal_tag('e', "東京", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let unsigned_id = unsigned.id.expect("builder computes id");
+    let opposite_key = signed_event_with_tags(
+        &keys,
+        12,
+        "opposite key",
+        vec![
+            literal_tag('E', "café", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let wrong_value_case = unsigned_event_with_tags(
+        &keys,
+        13,
+        "wrong value case",
+        vec![
+            literal_tag('e', "CAFÉ", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let later_cell_only = unsigned_event_with_tags(
+        &keys,
+        14,
+        "later cell decoy",
+        vec![
+            literal_tag('e', "wrong", &["café"]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let missing_conjunct =
+        signed_event_with_tags(&keys, 15, "missing P", vec![literal_tag('e', "café", &[])]);
+    let all_ids = [
+        signed.id,
+        unsigned_id,
+        opposite_key.id,
+        wrong_value_case.id.expect("builder computes id"),
+        later_cell_only.id.expect("builder computes id"),
+        missing_conjunct.id,
+    ];
+    let sources = [
+        snapshot(
+            SourceKind::EventCache,
+            vec![
+                SourceEvent::Cached(CachedEvent::new(
+                    signed.clone(),
+                    relay_evidence(&["wss://relay.example"]),
+                )),
+                SourceEvent::Cached(CachedEvent::new(
+                    opposite_key,
+                    relay_evidence(&["wss://relay.example"]),
+                )),
+                SourceEvent::Cached(CachedEvent::new(
+                    missing_conjunct,
+                    relay_evidence(&["wss://relay.example"]),
+                )),
+            ],
+        ),
+        snapshot(
+            SourceKind::WriteStore,
+            vec![
+                local_unsigned(unsigned),
+                local_unsigned(wrong_value_case),
+                local_unsigned(later_cell_only),
+            ],
+        ),
+    ];
+    let query = Query::events()
+        .ids(all_ids)
+        .authors([keys.public_key()])
+        .kind(Kind::TextNote)
+        .tag_values(
+            SingleLetterTag::from_char('e').expect("tag key"),
+            ["café", "東京"],
+        )
+        .tag_values(
+            SingleLetterTag::from_char('P').expect("tag key"),
+            ["CaseSensitive"],
+        );
+
+    let result = StandardQueryEvaluator
+        .evaluate(&query, &sources)
+        .expect("evaluation succeeds");
+
+    assert_eq!(
+        result_ids(&result),
+        BTreeSet::from([signed.id, unsigned_id])
+    );
+    assert_eq!(result.evidence.sources.len(), 2);
+    assert_eq!(result.evidence.sources[0].kind, SourceKind::EventCache);
+    assert_eq!(result.evidence.sources[1].kind, SourceKind::WriteStore);
+}
+
+#[test]
+fn all_ascii_letter_keys_select_only_the_exact_case() {
+    let keys = Keys::generate();
+
+    for (index, character) in ('a'..='z').chain('A'..='Z').enumerate() {
+        let opposite = if character.is_ascii_lowercase() {
+            character.to_ascii_uppercase()
+        } else {
+            character.to_ascii_lowercase()
+        };
+        let signed_key = if character.is_ascii_lowercase() {
+            character
+        } else {
+            opposite
+        };
+        let unsigned_key = if character.is_ascii_uppercase() {
+            character
+        } else {
+            opposite
+        };
+        let signed = signed_event_with_tags(
+            &keys,
+            index as u64 * 2 + 20,
+            "signed key case",
+            vec![literal_tag(signed_key, "exact", &[])],
+        );
+        let unsigned = unsigned_event_with_tags(
+            &keys,
+            index as u64 * 2 + 21,
+            "unsigned key case",
+            vec![literal_tag(unsigned_key, "exact", &[])],
+        );
+        let unsigned_id = unsigned.id.expect("builder computes id");
+        let expected = if character.is_ascii_lowercase() {
+            signed.id
+        } else {
+            unsigned_id
+        };
+        let sources = [
+            snapshot(
+                SourceKind::EventCache,
+                vec![SourceEvent::Cached(CachedEvent::new(
+                    signed,
+                    relay_evidence(&["wss://relay.example"]),
+                ))],
+            ),
+            snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
+        ];
+        let query = Query::events().tag_values(
+            SingleLetterTag::from_char(character).expect("ASCII tag key"),
+            ["exact"],
+        );
+
+        let result = StandardQueryEvaluator
+            .evaluate(&query, &sources)
+            .expect("evaluation succeeds");
+
+        assert_eq!(
+            result_ids(&result),
+            BTreeSet::from([expected]),
+            "tag key {character} must not match {opposite}"
+        );
+    }
+}
+
+#[test]
+fn present_empty_literal_tag_axis_matches_nothing() {
+    let keys = Keys::generate();
+    let signed = signed_event_with_tags(&keys, 10, "signed", vec![literal_tag('e', "exact", &[])]);
+    let unsigned =
+        unsigned_event_with_tags(&keys, 11, "unsigned", vec![literal_tag('e', "exact", &[])]);
+    let sources = [
+        snapshot(
+            SourceKind::EventCache,
+            vec![SourceEvent::Cached(CachedEvent::new(
+                signed,
+                relay_evidence(&["wss://relay.example"]),
+            ))],
+        ),
+        snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
+    ];
+    let query = Query::events().tag_values(
+        SingleLetterTag::from_char('e').expect("tag key"),
+        std::iter::empty::<String>(),
+    );
+
+    let result = StandardQueryEvaluator
+        .evaluate(&query, &sources)
+        .expect("evaluation succeeds");
+
+    assert!(result.events.is_empty());
+    assert_eq!(result.evidence.sources.len(), 2);
 }
