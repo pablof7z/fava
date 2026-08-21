@@ -172,9 +172,26 @@ pub struct ReplaceableEventEdit {
     pub identifier: Option<String>,
     pub change: Bytes,
 }
+
+pub struct MaterializationId(u64);
+
+pub trait ReplaceableEventMaterializer: Send + Sync {
+    // The protocol-owned implementation validates and applies its durable edit
+    // format to qualified source state or its defined empty state.
+}
 ```
 
 Materialization creates an unsigned event whose `pubkey` is the accepted write's resolved author. Current-account convenience APIs resolve the account before the write enters the accepted write lifecycle.
+
+`MaterializationId` names one exact immutable event generation under the stable
+write and receipt identity. The write store allocates and persists it; signer,
+route, publisher, and delivery effects carry it back to the store, which accepts
+a completion only while that materialization remains current.
+
+`ReplaceableEventMaterializer` is the neutral protocol-provider contract. It
+owns no store, signer, route, delivery, or receipt lifecycle. Application
+assembly selects implementations before write recovery so accepted edit formats
+can be interpreted without a universal event-kind switch.
 
 ### Query results are merged source state
 
@@ -1125,7 +1142,7 @@ pub struct ReadRouteRequest {
 pub struct WriteRouteRequest {
     pub event: EventValue,
     pub receipt_id: ReceiptId,
-    pub generation: MaterializationGeneration,
+    pub generation: MaterializationId,
 }
 ```
 
@@ -1632,7 +1649,7 @@ pub trait Publisher: Send + Sync {
 pub struct PublishAttempt {
     pub write_id: WriteId,
     pub receipt_id: ReceiptId,
-    pub generation: MaterializationGeneration,
+    pub generation: MaterializationId,
     pub session: RelaySessionKey,
     pub event: Event,
     pub deadline: Deadline,

@@ -20,14 +20,47 @@ rust_library(
 )
 
 rust_test(
+    name = "semantic_write_store",
+    srcs = [
+        "tests/semantic_write_store.rs",
+        "tests/semantic_write_store/admission.rs",
+        "tests/semantic_write_store/recovery.rs",
+    ],
+    crate_name = "semantic_write_store",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-routing:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "process_kill",
-    srcs = ["tests/process_kill.rs"],
+    srcs = [
+        "tests/process_kill.rs",
+        "tests/process_kill/semantic.rs",
+    ],
     crate_name = "process_kill",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
         ":lib",
+        "//crates/fava:lib",
+        "//crates/fava-delivery-standard:lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-publisher:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-signer-local:lib",
         "//crates/fava-state:lib",
+        "//crates/fava-transport:lib",
         "//crates/fava-write:lib",
         "//crates/fava-write-store:lib",
     ],

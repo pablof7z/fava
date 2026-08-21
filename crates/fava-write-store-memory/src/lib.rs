@@ -6,23 +6,26 @@ use std::sync::{Arc, Mutex};
 
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
+    SourceChanges, SourceKind, SourceSnapshot,
 };
 use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
+    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
-use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
-    validate_receipt_text,
-};
+use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use tokio::sync::{broadcast, watch};
 
+mod lifecycle;
 mod model;
+mod semantic;
+mod state;
 
-use model::{UnsignedEventView, destinations, settle};
+use model::destinations;
+use semantic::WriteState;
+use state::{capacity_reached, next_revision, release_semantic};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -32,23 +35,6 @@ pub struct MemoryWriteStore {
     state: Mutex<WriteState>,
     latest: watch::Sender<Arc<SourceSnapshot>>,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
-}
-
-#[derive(Clone, Debug)]
-struct WriteState {
-    revision: u64,
-    next_identity: u64,
-    writes: BTreeMap<ReceiptId, Receipt>,
-}
-
-impl Default for WriteState {
-    fn default() -> Self {
-        Self {
-            revision: 0,
-            next_identity: 1,
-            writes: BTreeMap::new(),
-        }
-    }
 }
 
 impl Default for MemoryWriteStore {
@@ -71,36 +57,40 @@ impl MemoryWriteStore {
         }
     }
 
-    fn snapshot(state: &WriteState) -> SourceSnapshot {
-        SourceSnapshot {
-            kind: SourceKind::WriteStore,
-            revision: SourceRevision(state.revision),
-            status: SourceStatus::Open,
-            events: state
-                .writes
-                .values()
-                .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
-                .map(|receipt| SourceEvent::Local(receipt.current.clone()))
-                .collect(),
-        }
+    fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, WriteState>, WriteStoreError> {
+        self.state
+            .lock()
+            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))
     }
 
-    fn publish_snapshot(&self, state: &WriteState) {
-        self.latest.send_replace(Arc::new(Self::snapshot(state)));
+    fn publish_receipt(&self, state: &WriteState, receipt: &Receipt) {
+        self.publish_snapshot(state);
+        let _ = self
+            .receipt_changes
+            .send((receipt.receipt_id, Some(receipt.clone())));
     }
 }
 
 impl WriteStore for MemoryWriteStore {
+    fn active_capacity(&self) -> usize {
+        self.capacity.get()
+    }
+
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot()
+    }
+
+    fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        self.release_active_slot(reservation)
+    }
+
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
     }
 
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        if guard.writes.len() == self.capacity.get() {
+        let mut guard = self.lock_state()?;
+        if capacity_reached(&guard, self.capacity.get()) {
             return Err(WriteStoreError::Refused(format!(
                 "bounded write-store capacity {} reached",
                 self.capacity
@@ -116,6 +106,11 @@ impl WriteStore for MemoryWriteStore {
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
+            WritePayload::Edit { .. } => {
+                return Err(WriteStoreError::Refused(
+                    "replaceable-event edit requires materialization before acceptance".to_owned(),
+                ));
+            }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
         let destinations = destinations(&routing);
@@ -124,6 +119,10 @@ impl WriteStore for MemoryWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
+            materialization_id: fava_write::MaterializationId::from_u64(1),
+            materialization_source: None,
+            materialization_failure: None,
+            retired_materializations: Vec::new(),
             signature,
             destinations,
         };
@@ -145,8 +144,7 @@ impl WriteStore for MemoryWriteStore {
         guard.next_identity = next_identity;
         guard.revision = next_revision;
         guard.writes.insert(receipt_id, receipt.clone());
-        self.publish_snapshot(&guard);
-        let _ = self.receipt_changes.send((receipt_id, Some(receipt)));
+        self.publish_receipt(&guard, &receipt);
 
         Ok(AcceptedWrite {
             write_id,
@@ -155,200 +153,161 @@ impl WriteStore for MemoryWriteStore {
         })
     }
 
+    fn accept_materialized_edit(
+        &self,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic(intent, event, source)
+    }
+
+    fn accept_reserved_materialized_edit(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_reserved_semantic(reservation, intent, event, source)
+    }
+
+    fn install_materialization(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.install_semantic(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            event,
+            source,
+        )
+    }
+
+    fn record_materialization_failure(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        source: Option<&Event>,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.record_semantic_failure(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            source,
+            reason,
+        )
+    }
+
+    #[allow(clippy::type_complexity)] // The neutral contract forbids a recovery wrapper.
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.recover_semantic()
+    }
+
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
-        event
-            .verify()
-            .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() {
-            return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-        }
-        let EventValue::Unsigned(unsigned) = &receipt.current.event else {
-            return Err(WriteStoreError::Refused(
-                "event is already signed".to_owned(),
-            ));
-        };
-        if UnsignedEventView::from(unsigned) != UnsignedEventView::from(&event) {
-            return Err(WriteStoreError::Refused(
-                "signature does not match current unsigned event".to_owned(),
-            ));
-        }
-        receipt.current.event = EventValue::Signed(event);
-        receipt.current.publication.signature = SignatureState::Signed;
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(current.clone())));
-        Ok(current)
+        self.install_signed_current(write_id, receipt_id, materialization_id, event_id, event)
     }
 
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        validate_receipt_text(&reason)?;
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() || !matches!(receipt.current.event, EventValue::Unsigned(_)) {
-            return Err(WriteStoreError::Refused(
-                "signer refusal is not current".to_owned(),
-            ));
-        }
-        receipt.current.publication.signature = SignatureState::Refused(reason);
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(current.clone())));
-        Ok(current)
+        self.record_signer_refusal_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
     }
 
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if receipt.is_terminal() {
-            return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-        }
-        apply_route_to_receipt(receipt, plan)?;
-        let updated = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(updated.clone())));
-        Ok(updated)
+        self.apply_route_current(write_id, receipt_id, materialization_id, event_id, plan)
     }
 
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        if !matches!(receipt.current.event, EventValue::Signed(_)) {
-            return Err(WriteStoreError::Refused("event is not signed".to_owned()));
-        }
-        let outcome = receipt
-            .current
-            .publication
-            .destinations
-            .get_mut(session)
-            .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
-        if !matches!(
-            outcome,
-            RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
-        ) {
-            return Err(WriteStoreError::Refused(
-                "destination is not pending".to_owned(),
-            ));
-        }
-        *outcome = RelayDeliveryOutcome::Attempting;
-        let attempts = receipt.attempts.entry(session.clone()).or_default();
-        *attempts = attempts
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(current.clone())));
-        Ok(current)
+        self.begin_attempt_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            session,
+            attempt,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {
-        validate_delivery_outcome(&outcome)?;
-        if !outcome.is_terminal() && !matches!(outcome, RelayDeliveryOutcome::Retryable { .. }) {
-            return Err(WriteStoreError::Refused(
-                "recorded delivery outcome is not terminal".to_owned(),
-            ));
-        }
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
-        let next_revision = next_revision(&guard)?;
-        let receipt = guard
-            .writes
-            .get_mut(&receipt_id)
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let current = receipt
-            .current
-            .publication
-            .destinations
-            .get_mut(session)
-            .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
-        let may_transition = matches!(current, RelayDeliveryOutcome::Attempting)
-            || (matches!(current, RelayDeliveryOutcome::Retryable { .. })
-                && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
-        if !may_transition {
-            return Err(WriteStoreError::Refused(
-                "attempt is not current".to_owned(),
-            ));
-        }
-        *current = outcome;
-        settle(receipt);
-        let current = receipt.clone();
-        guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(current.clone())));
-        Ok(current)
+        self.record_outcome_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            session,
+            attempt,
+            outcome,
+        )
     }
 
     fn cancel(&self, receipt_id: ReceiptId) -> Result<Option<Receipt>, WriteStoreError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let mut guard = self.lock_state()?;
         let next_revision = next_revision(&guard)?;
         let Some(receipt) = guard.writes.get_mut(&receipt_id) else {
             return Ok(None);
@@ -374,26 +333,18 @@ impl WriteStore for MemoryWriteStore {
         receipt.outcome = ReceiptOutcome::Cancelled;
         let current = receipt.clone();
         guard.revision = next_revision;
-        self.publish_snapshot(&guard);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(current.clone())));
+        release_semantic(&mut guard, receipt_id);
+        self.publish_receipt(&guard, &current);
         Ok(Some(current))
     }
 
     fn receipt(&self, receipt_id: ReceiptId) -> Result<Option<Receipt>, WriteStoreError> {
-        let guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let guard = self.lock_state()?;
         Ok(guard.writes.get(&receipt_id).cloned())
     }
 
     fn recover_open(&self) -> Result<Vec<Receipt>, WriteStoreError> {
-        let guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let guard = self.lock_state()?;
         Ok(guard
             .writes
             .values()
@@ -403,10 +354,7 @@ impl WriteStore for MemoryWriteStore {
     }
 
     fn remove_receipt(&self, receipt_id: ReceiptId) -> Result<bool, WriteStoreError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let mut guard = self.lock_state()?;
         if guard
             .writes
             .get(&receipt_id)
@@ -420,6 +368,7 @@ impl WriteStore for MemoryWriteStore {
             return Ok(false);
         }
         let next_revision = next_revision(&guard)?;
+        release_semantic(&mut guard, receipt_id);
         guard.writes.remove(&receipt_id);
         guard.revision = next_revision;
         self.publish_snapshot(&guard);
@@ -428,23 +377,13 @@ impl WriteStore for MemoryWriteStore {
     }
 
     fn len(&self) -> Result<usize, WriteStoreError> {
-        let guard = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let guard = self.lock_state()?;
         Ok(guard
             .writes
             .values()
             .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
             .count())
     }
-}
-
-fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
 }
 
 impl QuerySource for MemoryWriteStore {

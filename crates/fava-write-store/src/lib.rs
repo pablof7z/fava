@@ -1,16 +1,22 @@
 //! Neutral contract for accepted local event materializations.
 
 use fava_query::QuerySource;
-use fava_routing::{CoverageState, RoutePlan};
+use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    EventValue, InvalidEventValue, LocalWriteEvent, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, WriteId, WriteIntent, WriteIntentError, WriteRouting,
+    Event, EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, PublicKey,
+    Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent,
+    WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 use tokio::sync::broadcast;
 
-const MAX_RECEIPT_TEXT_BYTES: usize = 4_096;
+mod receipt;
+
+pub use receipt::{
+    apply_route_to_receipt, destination_evidence_capacity, validate_current_materialization,
+    validate_delivery_outcome, validate_receipt_text,
+};
 
 /// Result returned only after a local event contribution is committed.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,6 +31,39 @@ pub struct AcceptedWrite {
 
 /// Write-store provider contract used by the first local-source slice.
 pub trait WriteStore: QuerySource + Send + Sync {
+    /// Exact active semantic-write admission capacity of this provider.
+    ///
+    /// Providers that do not yet support semantic custody report zero.
+    fn active_capacity(&self) -> usize {
+        0
+    }
+
+    /// Reserve one active semantic-write slot before invoking external providers.
+    ///
+    /// The primitive identity is store-local and has no meaning after it is
+    /// released or consumed by [`WriteStore::accept_reserved_materialized_edit`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] without a reservation when active custody
+    /// plus existing reservations has reached [`WriteStore::active_capacity`].
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support active reservations".to_owned(),
+        ))
+    }
+
+    /// Release one unused store-local active reservation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when the primitive identity is not current.
+    fn release_active(&self, _reservation: u64) -> Result<(), WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support active reservations".to_owned(),
+        ))
+    }
+
     /// Subscribe to committed receipt changes after this call.
     ///
     /// `Some(receipt)` is one committed current receipt; `None` is removal for
@@ -38,6 +77,115 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] when the event is invalid or the complete
     /// acceptance mutation cannot commit.
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError>;
+
+    /// Atomically accept one edit and its already-validated first materialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when semantic custody is unsupported or the
+    /// complete edit, receipt, materialization, and query-source commit refuses.
+    fn accept_materialized_edit(
+        &self,
+        _intent: WriteIntent,
+        _event: UnsignedEvent,
+        _source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support replaceable-event edits".to_owned(),
+        ))
+    }
+
+    /// Atomically consume one active reservation while accepting an edit.
+    ///
+    /// Success and refusal both consume the reservation, so a provider failure
+    /// cannot leak pre-custody capacity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when the reservation is stale or the complete
+    /// acceptance mutation refuses. The reservation is consumed in either case.
+    fn accept_reserved_materialized_edit(
+        &self,
+        _reservation: u64,
+        _intent: WriteIntent,
+        _event: UnsignedEvent,
+        _source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support reserved edit acceptance".to_owned(),
+        ))
+    }
+
+    /// Atomically replace the exact current semantic materialization.
+    ///
+    /// Repeating an already-committed exact update is idempotent. Every other
+    /// stale generation, write, source, body, or terminal update refuses.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] without mutation when any currentness or
+    /// boundedness check fails.
+    #[allow(clippy::too_many_arguments)]
+    fn install_materialization(
+        &self,
+        _write_id: WriteId,
+        _receipt_id: ReceiptId,
+        _expected: MaterializationId,
+        _expected_source: Option<EventId>,
+        _event: UnsignedEvent,
+        _source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support materialization replacement".to_owned(),
+        ))
+    }
+
+    /// Record one bounded post-accept materialization failure against exact
+    /// current write, generation, and selected source identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] without mutation for stale, terminal,
+    /// unqualified, unsupported, or otherwise invalid completion facts.
+    #[allow(clippy::too_many_arguments)]
+    fn record_materialization_failure(
+        &self,
+        _write_id: WriteId,
+        _receipt_id: ReceiptId,
+        _expected: MaterializationId,
+        _expected_source: Option<EventId>,
+        _source: Option<&Event>,
+        _reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support materialization failure evidence".to_owned(),
+        ))
+    }
+
+    /// Recover live semantic custody in stable receipt order.
+    ///
+    /// Each tuple carries the current receipt, durable edit, accepted author,
+    /// current selected source id/timestamp, and last failed source id. No
+    /// separate recovery noun exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when coherent current custody cannot be read.
+    #[allow(clippy::type_complexity)] // Existing values deliberately avoid a recovery wrapper.
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        Ok(Vec::new())
+    }
 
     /// Atomically accept one current event using automatic routing.
     ///
@@ -62,7 +210,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] for stale, invalid, terminal, or failed mutation.
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: fava_write::Event,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -73,7 +224,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] for stale, terminal, or failed mutation.
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -88,7 +242,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// a failed atomic mutation.
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -99,8 +256,12 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] unless the receipt and destination are current.
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError>;
 
     /// Commit one exact destination result after an authorized attempt.
@@ -108,10 +269,15 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// # Errors
     ///
     /// Returns [`WriteStoreError`] unless the attempt remains current.
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -190,150 +356,4 @@ pub enum WriteStoreError {
     /// Provider refused an operation before mutation.
     #[error("write store refused operation: {0}")]
     Refused(String),
-}
-
-/// Refuse provider text that would exceed durable receipt bounds.
-///
-/// # Errors
-///
-/// Returns [`WriteStoreError`] with the actual and maximum byte counts.
-pub fn validate_receipt_text(value: &str) -> Result<(), WriteStoreError> {
-    if value.len() <= MAX_RECEIPT_TEXT_BYTES {
-        Ok(())
-    } else {
-        Err(WriteStoreError::Refused(format!(
-            "receipt text exceeds bound: {} > {MAX_RECEIPT_TEXT_BYTES}",
-            value.len()
-        )))
-    }
-}
-
-/// Refuse any text-bearing delivery outcome that exceeds receipt bounds.
-///
-/// # Errors
-///
-/// Returns [`WriteStoreError`] with the actual and maximum byte counts.
-pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), WriteStoreError> {
-    match outcome {
-        RelayDeliveryOutcome::Retryable { reason }
-        | RelayDeliveryOutcome::GivenUp { reason }
-        | RelayDeliveryOutcome::Unknown { reason } => validate_receipt_text(reason),
-        RelayDeliveryOutcome::Acknowledged { message }
-        | RelayDeliveryOutcome::Rejected { message } => validate_receipt_text(message),
-        RelayDeliveryOutcome::Pending
-        | RelayDeliveryOutcome::Attempting
-        | RelayDeliveryOutcome::CancelledBeforeHandoff => Ok(()),
-    }
-}
-
-/// Apply one newer complete route plan to a mutable receipt.
-///
-/// Provider implementations call this inside their own atomic mutation.
-///
-/// # Errors
-///
-/// Returns [`WriteStoreError`] when the plan is stale, too large, or belongs
-/// to an explicit-route receipt.
-pub fn apply_route_to_receipt(
-    receipt: &mut Receipt,
-    plan: &RoutePlan,
-) -> Result<(), WriteStoreError> {
-    const MAX_DESTINATIONS: usize = 256;
-    const MAX_SHORTFALLS: usize = 256;
-
-    if !matches!(receipt.routing, WriteRouting::Automatic) {
-        return Err(WriteStoreError::Refused(
-            "automatic route cannot mutate an explicit receipt".to_owned(),
-        ));
-    }
-    if plan.revision <= receipt.route_revision {
-        return Err(WriteStoreError::Refused(format!(
-            "route revision is not newer: {} <= {}",
-            plan.revision, receipt.route_revision
-        )));
-    }
-    if plan.destinations.len() > MAX_DESTINATIONS {
-        return Err(WriteStoreError::Refused(format!(
-            "route destination fan-out exceeds bound: {} > {MAX_DESTINATIONS}",
-            plan.destinations.len()
-        )));
-    }
-
-    let desired: std::collections::BTreeSet<_> = plan.destinations.keys().cloned().collect();
-    let mut shortfalls = plan.shortfalls.clone();
-    shortfalls.extend(
-        plan.coverage
-            .iter()
-            .filter(|(_, state)| matches!(state, CoverageState::SettledAbsent))
-            .map(|(target, _)| format!("no relay destination for {target:?}")),
-    );
-    if shortfalls.len() > MAX_SHORTFALLS {
-        return Err(WriteStoreError::Refused(format!(
-            "route shortfall count exceeds bound: {} > {MAX_SHORTFALLS}",
-            shortfalls.len()
-        )));
-    }
-    for shortfall in &shortfalls {
-        validate_receipt_text(shortfall)?;
-    }
-
-    let removed: Vec<_> = receipt
-        .desired_destinations
-        .difference(&desired)
-        .cloned()
-        .collect();
-    for session in removed {
-        match receipt.current.publication.destinations.get(&session) {
-            Some(RelayDeliveryOutcome::Pending) => {
-                receipt.current.publication.destinations.remove(&session);
-                receipt.attempts.remove(&session);
-            }
-            Some(RelayDeliveryOutcome::Retryable { .. }) => {
-                receipt
-                    .current
-                    .publication
-                    .destinations
-                    .insert(session, RelayDeliveryOutcome::CancelledBeforeHandoff);
-            }
-            Some(
-                RelayDeliveryOutcome::Attempting
-                | RelayDeliveryOutcome::Acknowledged { .. }
-                | RelayDeliveryOutcome::Rejected { .. }
-                | RelayDeliveryOutcome::GivenUp { .. }
-                | RelayDeliveryOutcome::Unknown { .. }
-                | RelayDeliveryOutcome::CancelledBeforeHandoff,
-            )
-            | None => {}
-        }
-    }
-    for session in &desired {
-        receipt
-            .current
-            .publication
-            .destinations
-            .entry(session.clone())
-            .or_insert(RelayDeliveryOutcome::Pending);
-    }
-
-    receipt.route_revision = plan.revision;
-    receipt.route_settled = plan.settled;
-    receipt.route_shortfalls = shortfalls;
-    receipt.desired_destinations = desired;
-    settle_route(receipt);
-    Ok(())
-}
-
-fn settle_route(receipt: &mut Receipt) {
-    if !receipt.route_settled
-        || receipt
-            .destinations()
-            .values()
-            .any(|outcome| !outcome.is_terminal())
-    {
-        receipt.outcome = ReceiptOutcome::Open;
-    } else if receipt.desired_destinations.is_empty() {
-        receipt.outcome = ReceiptOutcome::NoDestination;
-    } else {
-        receipt.outcome = ReceiptOutcome::Complete;
-    }
 }

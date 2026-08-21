@@ -1,13 +1,15 @@
 # Edit author at the taker, not the edit
 
-**Status:** proposed (awaiting Pablo approval — vocabulary + spec amendment)
+**Status:** accepted; M7 implementation in progress
 **Authority:** `AGENTS.md` (focused local issue before implementation; vocabulary change),
 `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` WRITE-003 / ID-002 / ID-003,
 `docs/spec/ARCHITECTURE.md` :167-178, :714-716, :900, :1997, :2080, :2583, and
 :726-730 (illustrative)
-**Companion:** `docs/issues/0014-publish-door-ergonomics.md` owns the door the
-application knocks on (`publish` ergonomics, the `by` / `to` scopes, auto
-default, `WriteIntent` demotion, `NonEmptyVec`). Neither lands alone.
+**Related:** `docs/issues/0014-publish-door-ergonomics.md` separately owns the
+proposed application door (`publish` ergonomics, the `by` / `to` scopes, auto
+default, `WriteIntent` demotion, `NonEmptyVec`). M7 restores the amended
+ownership rule through explicit `WriteIntent::edit_as`; it does not approve or
+implement those proposed nouns or ergonomics.
 
 ## Product result
 

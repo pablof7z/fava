@@ -112,7 +112,7 @@ protocol = "NIP-02"
 meaning = "A replaceable kind 3 event describing an author's contacts and relay hints."
 owner = "fava-nip02"
 symbols = []
-crates = []
+crates = ["fava-nip02"]
 spec_crates = ["fava-nip02"]
 
 [[term]]
@@ -122,7 +122,7 @@ protocol = "NIP-51"
 meaning = "A replaceable event carrying an author's public or private bookmarks."
 owner = "fava-bookmarks"
 symbols = []
-crates = []
+crates = ["fava-bookmarks"]
 spec_crates = ["fava-bookmarks"]
 
 [[term]]
@@ -411,13 +411,35 @@ spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
 [[term]]
 name = "ReplaceableEventEdit"
 source = "fava"
-meaning = "A durable change to a replaceable event that can be applied to the newest event at its coordinate or to defined empty state."
+meaning = "A durable protocol-owned change carrying kind and optional identifier, but no author, encoding version, or stored inverse; accepted custody applies it to the newest event at the resolved-author coordinate or to defined empty state."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
-distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
-symbols = ["fava_write::EventBuilder", "fava_write::EventBuildError"]
+distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves one intended change while the accepted write separately freezes the author used for every materialization generation."
+symbols = ["fava_write::ReplaceableEventEdit"]
 crates = []
 spec_symbols = ["ReplaceableEventEdit"]
+
+[[term]]
+name = "ReplaceableEventMaterializer"
+source = "fava"
+meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified source or defined empty state and produces an unsigned replacement event."
+owner = "fava-write"
+nearest_nostr = "replaceable Event and Coordinate"
+distinction = "Nostr defines replacement events but not a client-side provider contract for replaying one durable intention across changing source state without owning publication."
+symbols = ["fava_write::ReplaceableEventMaterializer"]
+crates = []
+spec_symbols = ["ReplaceableEventMaterializer"]
+
+[[term]]
+name = "MaterializationId"
+source = "fava"
+meaning = "The exact identity of one immutable event materialization generation under a stable accepted write and receipt."
+owner = "fava-write"
+nearest_nostr = "EventId"
+distinction = "An EventId identifies one completed event body; MaterializationId correlates every effect and late completion to the exact generation that authorized it."
+symbols = ["fava_write::MaterializationId"]
+crates = []
+spec_symbols = ["MaterializationId"]
 
 [[term]]
 name = "UnsignedEvent"
@@ -426,13 +448,8 @@ meaning = "A complete Nostr event body and id that lacks only its signature."
 owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "An Event contains a valid signature; an UnsignedEvent is the exact body presented to a signer."
-symbols = [
-    "fava_publisher::PublishAttempt",
-    "fava_publisher::PublishOutcome",
-    "fava_publisher::Publisher",
-    "fava_publisher_nip01::Nip01Publisher",
-]
-crates = ["fava-publisher", "fava-publisher-nip01"]
+symbols = []
+crates = []
 spec_symbols = ["UnsignedEvent"]
 
 [[term]]
@@ -443,12 +460,10 @@ owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "Nostr defines Event fields; EventBuilder provides checked construction without interpreting any event kind."
 symbols = [
-    "fava_delivery::DeliveryDecision",
-    "fava_delivery::DeliveryFacts",
-    "fava_delivery::DeliveryPolicy",
-    "fava_delivery_standard::StandardDeliveryPolicy",
+    "fava_write::EventBuilder",
+    "fava_write::EventBuildError",
 ]
-crates = ["fava-delivery", "fava-delivery-standard"]
+crates = []
 spec_symbols = ["EventBuilder"]
 
 [[term]]
@@ -594,12 +609,12 @@ owner = "fava-publisher"
 nearest_nostr = "EVENT and OK messages"
 distinction = "Nostr defines publication messages; Publisher owns one correlated attempt without choosing retry or destination policy."
 symbols = [
-    "fava_signer::Signer",
-    "fava_signer::SignerAvailability",
-    "fava_signer::SignerError",
-    "fava_signer_local::LocalSigner",
+    "fava_publisher::PublishAttempt",
+    "fava_publisher::PublishOutcome",
+    "fava_publisher::Publisher",
+    "fava_publisher_nip01::Nip01Publisher",
 ]
-crates = ["fava-signer", "fava-signer-local"]
+crates = ["fava-publisher", "fava-publisher-nip01"]
 spec_symbols = ["PublishAttempt", "PublishOutcome", "Publisher"]
 spec_crates = ["fava-publisher", "fava-publisher-nip01", "fava-publisher-testkit"]
 
@@ -610,8 +625,13 @@ meaning = "The replaceable policy deciding whether and when current durable deli
 owner = "fava-delivery"
 nearest_nostr = "EVENT and OK messages"
 distinction = "Nostr defines request and acknowledgement messages but not client retry scheduling, attempt ceilings, or give-up decisions."
-symbols = []
-crates = []
+symbols = [
+    "fava_delivery::DeliveryDecision",
+    "fava_delivery::DeliveryFacts",
+    "fava_delivery::DeliveryPolicy",
+    "fava_delivery_standard::StandardDeliveryPolicy",
+]
+crates = ["fava-delivery", "fava-delivery-standard"]
 spec_symbols = ["DeliveryDecision", "DeliveryFacts", "DeliveryPolicy"]
 spec_crates = ["fava-delivery", "fava-delivery-standard"]
 
@@ -622,8 +642,13 @@ meaning = "A replaceable provider that signs an exact UnsignedEvent for its auth
 owner = "fava-signer"
 nearest_nostr = "Event signature"
 distinction = "Nostr defines signature verification; Signer defines the application-owned signing operation and availability lifecycle."
-symbols = []
-crates = []
+symbols = [
+    "fava_signer::Signer",
+    "fava_signer::SignerAvailability",
+    "fava_signer::SignerError",
+    "fava_signer_local::LocalSigner",
+]
+crates = ["fava-signer", "fava-signer-local"]
 spec_symbols = ["Signer"]
 spec_crates = [
     "fava-signer",

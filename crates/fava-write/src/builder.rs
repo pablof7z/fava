@@ -20,12 +20,24 @@ impl EventBuilder {
     /// Begin one event body without interpreting its kind.
     #[must_use]
     pub fn new(author: PublicKey, kind: Kind) -> Self {
+        Self::from_parts(author, kind, Timestamp::now(), Vec::new(), String::new())
+    }
+
+    /// Begin one event from exact raw Nostr parts without interpreting any field.
+    #[must_use]
+    pub fn from_parts(
+        author: PublicKey,
+        kind: Kind,
+        created_at: Timestamp,
+        tags: Vec<Tag>,
+        content: String,
+    ) -> Self {
         Self {
             author,
             kind,
-            created_at: Timestamp::now(),
-            content: String::new(),
-            tags: Vec::new(),
+            created_at,
+            content,
+            tags,
         }
     }
 
@@ -43,11 +55,17 @@ impl EventBuilder {
         self
     }
 
-    /// Add one already-validated Nostr tag.
+    /// Append already-validated Nostr tags in their exact input order.
     #[must_use]
-    pub fn tag(mut self, tag: Tag) -> Self {
-        self.tags.push(tag);
+    pub fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
+        self.tags.extend(tags);
         self
+    }
+
+    /// Append one already-validated Nostr tag.
+    #[must_use]
+    pub fn tag(self, tag: Tag) -> Self {
+        self.tags([tag])
     }
 
     /// Produce the exact unsigned body and deterministic event id.

@@ -26,12 +26,14 @@ thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+fava-bookmarks.workspace = true
 fava-event-cache-memory.workspace = true
 fava-delivery-standard.workspace = true
 fava-publisher.workspace = true
 fava-signer.workspace = true
 fava-signer-local.workspace = true
 fava-query-standard.workspace = true
+fava-nip02.workspace = true
 fava-router-app-relays.workspace = true
 fava-router-fallback-relays.workspace = true
 fava-router-testkit.workspace = true

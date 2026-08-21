@@ -5,20 +5,31 @@ use std::sync::{Arc, Mutex};
 
 use fava_delivery::DeliveryPolicy;
 use fava_publisher::Publisher;
+use fava_query::{QueryEvaluator, QuerySource};
 use fava_routing::Router;
 use fava_signer::Signer;
 use fava_transport::Transport;
-use fava_write::{PublicKey, Receipt, ReceiptId, ReceiptOutcome, WriteIntent};
+use fava_write::{
+    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
+    WritePayload, WriteRouting,
+};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
 use tokio::sync::watch;
 
+mod delivery;
+mod materialization;
 mod run;
+
+use materialization::{PreparedSemantic, SemanticState};
 
 /// Live owner for accepted write signing and destination delivery.
 #[derive(Clone)]
 pub struct Publication {
     store: Arc<dyn WriteStore>,
+    event_source: Arc<dyn QuerySource>,
+    evaluator: Arc<dyn QueryEvaluator>,
+    materializers: Arc<BTreeMap<Kind, Arc<dyn ReplaceableEventMaterializer>>>,
     signers: Arc<BTreeMap<PublicKey, Arc<dyn Signer>>>,
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
@@ -33,14 +44,19 @@ impl Publication {
     /// # Errors
     ///
     /// Returns [`PublicationError`] for duplicate signer public keys.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: Arc<dyn WriteStore>,
+        event_source: Arc<dyn QuerySource>,
+        evaluator: Arc<dyn QueryEvaluator>,
+        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
         signers: impl IntoIterator<Item = Arc<dyn Signer>>,
         publisher: Arc<dyn Publisher>,
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
         routers: Vec<Arc<dyn Router>>,
     ) -> Result<Self, PublicationError> {
+        let materializers = Self::index_materializers(materializers)?;
         let mut indexed = BTreeMap::new();
         for signer in signers {
             let public_key = signer.public_key();
@@ -50,6 +66,9 @@ impl Publication {
         }
         Ok(Self {
             store,
+            event_source,
+            evaluator,
+            materializers: Arc::new(materializers),
             signers: Arc::new(indexed),
             publisher,
             delivery,
@@ -67,6 +86,47 @@ impl Publication {
     /// after a failed acceptance commit.
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
+        if let WritePayload::Edit { edit, author } = intent.payload() {
+            let edit = edit.clone();
+            let author = *author;
+            let reservation = self.store.reserve_active()?;
+            let PreparedSemantic {
+                event,
+                source,
+                route,
+                mut sources,
+            } = match self.prepare_semantic(&intent, None, None) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let _ = self.store.release_active(reservation);
+                    return Err(error);
+                }
+            };
+            let accepted = match self.store.accept_reserved_materialized_edit(
+                reservation,
+                intent.clone(),
+                event,
+                source.as_ref(),
+            ) {
+                Ok(accepted) => accepted,
+                Err(error) => {
+                    sources.close();
+                    return Err(error.into());
+                }
+            };
+            if matches!(intent.routing(), WriteRouting::Automatic) {
+                let _ = self.store.apply_route(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    &route,
+                );
+            }
+            let semantic = SemanticState::accepted(edit, author, source.as_ref(), sources);
+            self.start_semantic(accepted.receipt_id, semantic);
+            return Ok(accepted);
+        }
         let accepted = self.store.accept(intent)?;
         self.start(accepted.receipt_id);
         Ok(accepted)
@@ -81,10 +141,60 @@ impl Publication {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         let receipts = self.store.recover_open()?;
         let count = receipts.len();
+        let semantic = self.store.recover_materialized_edits()?;
+        for (_, edit, _, _, _) in &semantic {
+            self.materializer(edit)?;
+        }
+        let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
+        for (receipt, edit, author, selected, failed_id) in semantic {
+            let sources = match self.open_semantic_sources(&edit, author) {
+                Ok(sources) => sources,
+                Err(error) => {
+                    for (_, state) in &mut prepared {
+                        state.close();
+                    }
+                    return Err(error);
+                }
+            };
+            let selected_id = selected.map(|(id, _)| id);
+            let source_floor = selected.map(|(_, timestamp)| timestamp);
+            prepared.push((
+                receipt.receipt_id,
+                SemanticState::recovered(
+                    edit,
+                    author,
+                    selected_id,
+                    source_floor,
+                    failed_id,
+                    sources,
+                ),
+            ));
+        }
+        let semantic_ids: std::collections::BTreeSet<_> =
+            prepared.iter().map(|(receipt_id, _)| *receipt_id).collect();
+        for (receipt_id, state) in prepared {
+            self.start_semantic(receipt_id, state);
+        }
         for receipt in receipts {
-            self.start(receipt.receipt_id);
+            if !semantic_ids.contains(&receipt.receipt_id) {
+                self.start(receipt.receipt_id);
+            }
         }
         Ok(count)
+    }
+
+    /// Preview the exact current semantic materialization route without custody.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when selection, materialization, or routing refuses.
+    pub fn preview_semantic_routes(
+        &self,
+        intent: &WriteIntent,
+    ) -> Result<fava_routing::RoutePlan, PublicationError> {
+        let mut prepared = self.prepare_semantic(intent, None, None)?;
+        prepared.sources.close();
+        Ok(prepared.route)
     }
 
     /// Cancel while every selected destination is definitely pre-handoff.
