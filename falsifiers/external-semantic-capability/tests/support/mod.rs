@@ -11,7 +11,7 @@ use fava::{
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_external_semantic_capability_proof::selected_materializer;
+use fava_external_semantic_capability_proof::{external_query, selected_materializer};
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
@@ -74,11 +74,8 @@ pub async fn open_external_source(
     fava: &Fava,
     relay: &RelayUrl,
     actor: fava::PublicKey,
-    kind: fava::Kind,
 ) -> Observation {
-    let query = Query::events()
-        .authors([actor])
-        .kind(kind)
+    let query = external_query(actor)
         .from_relays([relay.clone()])
         .expect("one explicit relay");
     fava.observe(query).await.expect("public live query opens")

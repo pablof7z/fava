@@ -2,8 +2,16 @@
 
 mod support;
 
-use fava::{EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome, Timestamp};
-use fava_external_semantic_capability_proof::{external_kind, insert};
+use std::collections::BTreeSet;
+use std::sync::{Arc, Barrier};
+
+use fava::{
+    EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome,
+    RelayDeliveryOutcome, Timestamp,
+};
+use fava_external_semantic_capability_proof::{
+    decode_external_event, external_kind, insert, validate_external_event,
+};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
 use nostr::key::Keys;
 
@@ -25,6 +33,7 @@ async fn external_capability_composes_through_public_fava() {
         .expect("external semantic preview");
     assert!(preview.settled);
     assert_eq!(preview.destinations.len(), 1);
+    let preview_keys = preview.destinations.keys().cloned().collect::<BTreeSet<_>>();
     assert!(
         preview
             .destinations
@@ -35,8 +44,7 @@ async fn external_capability_composes_through_public_fava() {
     assert_eq!(harness.transport.open_count(), 0);
     assert_eq!(harness.transport.publication_count(), 0);
 
-    let mut observation =
-        open_external_source(&harness.fava, &harness.relay, actor, external_kind()).await;
+    let mut observation = open_external_source(&harness.fava, &harness.relay, actor).await;
     let subscription = harness.transport.subscription().await;
     let accepted = harness.fava.publish(intent).expect("external edit accepts");
     let first = harness.transport.published(0).await;
@@ -48,6 +56,19 @@ async fn external_capability_composes_through_public_fava() {
     assert_eq!(accepted.write_id, generation_one.write_id);
     assert_eq!(accepted.receipt_id, generation_one.receipt_id);
     assert_eq!(first.kind, external_kind());
+    assert_eq!(generation_one.desired_destinations, preview_keys);
+    assert_eq!(
+        generation_one
+            .destinations()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        preview_keys
+    );
+    assert_eq!(
+        generation_one.attempts.keys().cloned().collect::<BTreeSet<_>>(),
+        preview_keys
+    );
 
     let preserved_tag = Tag::parse(["x-future", "opaque"]).expect("unknown tag");
     let source = NostrEventBuilder::new(
@@ -81,12 +102,37 @@ async fn external_capability_composes_through_public_fava() {
     let record = wait_generation_record(&mut observation, 2).await;
     assert_eq!(record.event.kind(), external_kind());
     assert_eq!(record.event.tags(), &[preserved_tag]);
+    validate_external_event(&record.event).expect("public typed validation accepts successor");
     assert_eq!(
-        content(&record.event),
-        "external-set-v1\nalpha,omega\nunrelated\nsource-body"
+        decode_external_event(&record.event).expect("public typed decode accepts successor"),
+        (
+            BTreeSet::from(["alpha".to_owned(), "omega".to_owned()]),
+            "unrelated\nsource-body".to_owned()
+        )
     );
 
-    harness.transport.deliver(&subscription, &source);
+    let barrier = Arc::new(Barrier::new(3));
+    std::thread::scope(|scope| {
+        let first_transport = Arc::clone(&harness.transport);
+        let first_barrier = Arc::clone(&barrier);
+        let first_subscription = subscription.clone();
+        let first_source = source.clone();
+        let first_duplicate = scope.spawn(move || {
+            first_barrier.wait();
+            first_transport.deliver(&first_subscription, &first_source);
+        });
+        let second_transport = Arc::clone(&harness.transport);
+        let second_barrier = Arc::clone(&barrier);
+        let second_subscription = subscription.clone();
+        let second_source = source.clone();
+        let second_duplicate = scope.spawn(move || {
+            second_barrier.wait();
+            second_transport.deliver(&second_subscription, &second_source);
+        });
+        barrier.wait();
+        first_duplicate.join().expect("first concurrent duplicate");
+        second_duplicate.join().expect("second concurrent duplicate");
+    });
     harness.transport.eose(&subscription);
     wait_eose(&harness.fava, &subscription).await;
     assert_eq!(harness.transport.publication_count(), 1);
@@ -111,7 +157,26 @@ async fn external_capability_composes_through_public_fava() {
     );
     let second = harness.transport.published(1).await;
     assert_ne!(second.id, retired);
-    assert_eq!(second.content, content(&after_retired.current.event));
+    let before_successor_ack = wait_receipt(&harness.fava, accepted.receipt_id, |receipt| {
+        receipt.current.publication.materialization_id == MaterializationId::from_u64(2)
+            && receipt.attempts.values().copied().sum::<u32>() == 1
+    })
+    .await;
+    assert_eq!(before_successor_ack.outcome, ReceiptOutcome::Open);
+    let successor_outcome = before_successor_ack
+        .destinations()
+        .values()
+        .next()
+        .expect("successor destination exists");
+    assert!(!matches!(
+        successor_outcome,
+        RelayDeliveryOutcome::Acknowledged { .. }
+    ));
+    assert!(!successor_outcome.is_terminal());
+    assert_eq!(
+        decode_external_event(&EventValue::Signed(second.clone())).unwrap(),
+        decode_external_event(&after_retired.current.event).unwrap()
+    );
     let current = harness.transport.acknowledge(1);
     harness.transport.wait_closed(current).await;
     let terminal = harness
@@ -132,8 +197,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let harness = harness(keys.clone());
-    let observation =
-        open_external_source(&harness.fava, &harness.relay, actor, external_kind()).await;
+    let observation = open_external_source(&harness.fava, &harness.relay, actor).await;
     let subscription = harness.transport.subscription().await;
     let accepted = harness
         .fava

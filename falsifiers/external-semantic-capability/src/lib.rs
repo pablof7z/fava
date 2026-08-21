@@ -226,7 +226,7 @@ fn decode_source(source: Option<&Event>) -> Result<(BTreeSet<String>, String), W
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fava::{EventCoordinate, Kind, ReplaceableEventEdit, Timestamp};
+    use fava::{EventCoordinate, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp};
     use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
     use nostr::key::Keys;
 
@@ -243,6 +243,12 @@ mod tests {
         assert_eq!(first.pubkey, actor);
         assert_eq!(first.kind, external_kind());
         assert_eq!(first.content, "external-set-v1\nalpha\n");
+        let first_value = EventValue::Unsigned(first.clone());
+        validate_external_event(&first_value).expect("typed validation accepts first value");
+        assert_eq!(
+            decode_external_event(&first_value).expect("typed decode accepts first value"),
+            (BTreeSet::from(["alpha".to_owned()]), String::new())
+        );
 
         let preserved_tag = Tag::parse(["x-future", "opaque"]).expect("unknown tag");
         let source =
@@ -251,6 +257,15 @@ mod tests {
                 .custom_created_at(Timestamp::from(20))
                 .finalize(&keys)
                 .expect("source signs");
+        let source_value = EventValue::Signed(source.clone());
+        validate_external_event(&source_value).expect("typed validation accepts current source");
+        assert_eq!(
+            decode_external_event(&source_value).expect("typed decode accepts current source"),
+            (
+                BTreeSet::from(["beta".to_owned()]),
+                "unrelated\ncontent".to_owned()
+            )
+        );
         let successor = materializer
             .materialize(&add_alpha, Some(&source), Timestamp::from(21))
             .expect("current state materializes");
@@ -371,11 +386,61 @@ mod tests {
                 .is_err()
         );
 
+        let mut too_many_tags_builder = NostrEventBuilder::new(external_kind(), "opaque");
+        for index in 0..65 {
+            too_many_tags_builder = too_many_tags_builder.tag(
+                Tag::parse(vec!["x".to_owned(), index.to_string()]).expect("bounded tag"),
+            );
+        }
+        let too_many_tags = too_many_tags_builder.finalize(&keys).expect("source signs");
+        assert!(matches!(
+            materializer.materialize(
+                &insert(actor, "alpha").unwrap(),
+                Some(&too_many_tags),
+                Timestamp::from(3),
+            ),
+            Err(WriteIntentError::InvalidEvent(message)) if message.contains("tag count")
+        ));
+
+        let nested_values = std::iter::once("x".to_owned())
+            .chain((0..16).map(|index| index.to_string()))
+            .collect::<Vec<_>>();
+        let nested_source = NostrEventBuilder::new(external_kind(), "opaque")
+            .tag(Tag::parse(nested_values).expect("nested tag"))
+            .finalize(&keys)
+            .expect("source signs");
+        assert!(matches!(
+            materializer.materialize(
+                &insert(actor, "alpha").unwrap(),
+                Some(&nested_source),
+                Timestamp::from(4),
+            ),
+            Err(WriteIntentError::InvalidEvent(message)) if message.contains("nested values")
+        ));
+
+        let large_tag_value = "v".repeat(4_096);
+        let tag_heavy_source = NostrEventBuilder::new(external_kind(), "opaque")
+            .tag(Tag::parse(["x", large_tag_value.as_str()]).expect("large opaque tag"))
+            .finalize(&keys)
+            .expect("source signs");
+        assert!(matches!(
+            materializer.materialize(
+                &insert(actor, "alpha").unwrap(),
+                Some(&tag_heavy_source),
+                Timestamp::from(5),
+            ),
+            Err(WriteIntentError::TooLarge { maximum: 4_096, .. })
+        ));
+
         let coordinate = EventCoordinate::Replaceable {
             author: actor,
             kind: Kind::Custom(15_001),
             identifier: None,
         };
         assert_eq!(insert(actor, "alpha").unwrap().coordinate(), &coordinate);
+        assert_eq!(
+            external_query(actor),
+            Query::events().authors([actor]).kind(external_kind())
+        );
     }
 }
