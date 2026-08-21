@@ -80,7 +80,7 @@ files_reviewed_list:
   - crates/fava/tests/write_bounds.rs
   - docs/internals/vocabulary.toml
   - docs/issues/0010-m7-semantic-writes-and-capability-composition.md
-  - docs/issues/0012-fava-write-bounds-bazel-edge.md
+  - docs/issues/0012 (Fava write-bounds Bazel edge)
   - falsifiers/external-semantic-capability/Cargo.lock
   - falsifiers/external-semantic-capability/Cargo.toml
   - falsifiers/external-semantic-capability/src/capability.rs
