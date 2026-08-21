@@ -10,7 +10,7 @@ use fava_query::{
 };
 use fava_router_outbox::OutboxRouter;
 use fava_routing::{RoutePlan, RouteRequest, RouteTarget, Router};
-use fava_state::{CachedEvent, RelayEvidence, RelayUrl};
+use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelayUrl};
 use fava_write::{EventBuilder, EventValue, Kind, Tag, Timestamp};
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
@@ -48,7 +48,7 @@ async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
         .tag(p_tag(&recipient_b))
         .build()
         .unwrap();
-    let request = RouteRequest::Write(EventValue::Unsigned(event));
+    let request = RouteRequest::write(EventValue::Unsigned(event), RelayAccess::public());
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
     let mut session = router.open(request, upstream).expect("router opens");
 

@@ -8,6 +8,10 @@ mod routes;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
+pub use fava_auth::{
+    Authentication, AuthenticationError, AuthenticationOutcome, AuthenticationPolicy,
+    AuthorizationDecision, PreparedAuthentication, RelayChallenge,
+};
 use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::DiagnosticsSnapshot;
@@ -50,6 +54,7 @@ pub struct Fava {
     next_subscription: Arc<AtomicU64>,
     routers: Vec<Arc<dyn Router>>,
     publication: Option<Publication>,
+    authentication: Option<Arc<Authentication>>,
 }
 
 impl Fava {
@@ -223,14 +228,12 @@ impl Fava {
             }
             fava_write::WritePayload::Presigned(event) => EventValue::Signed(event.clone()),
         };
-        let request = RouteRequest::Write(event);
+        let request = RouteRequest::write(event, intent.access().clone());
         match intent.routing() {
-            WriteRouting::Explicit(relays) => RoutePlan::explicit(
-                relays.iter().cloned(),
-                &fava_state::RelayAccess::public(),
-                &request.targets(),
-            )
-            .map_err(|error| PublicationError::Routing(error.to_string())),
+            WriteRouting::Explicit(relays) => {
+                RoutePlan::explicit(relays.iter().cloned(), intent.access(), &request.targets())
+                    .map_err(|error| PublicationError::Routing(error.to_string()))
+            }
             WriteRouting::Automatic => fava_routing::preview(&self.routers, &request)
                 .map_err(|error| PublicationError::Routing(error.to_string())),
         }
@@ -250,6 +253,7 @@ pub struct FavaBuilder {
     materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
+    authentication: Option<Arc<Authentication>>,
 }
 
 impl FavaBuilder {
@@ -377,6 +381,17 @@ impl FavaBuilder {
         self
     }
 
+    /// Select the NIP-42 relay authentication this assembly may perform.
+    ///
+    /// Relay access identity stays explicit: the same `Authentication` value
+    /// must also be selected by any publisher that answers challenges, so no
+    /// path acquires relay authority Fava did not name.
+    #[must_use]
+    pub fn authentication(mut self, authentication: Arc<Authentication>) -> Self {
+        self.authentication = Some(authentication);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -434,6 +449,7 @@ impl FavaBuilder {
             next_subscription: Arc::new(AtomicU64::new(0)),
             routers: self.routers,
             publication,
+            authentication: self.authentication,
         })
     }
 }

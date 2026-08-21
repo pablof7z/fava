@@ -45,7 +45,7 @@ impl RedbWriteStore {
                 "active reservation is not current".to_owned(),
             ));
         }
-        let (payload, routing) = intent.into_parts();
+        let (payload, routing, access) = intent.into_parts();
         let WritePayload::Edit { edit, author } = payload else {
             return Err(WriteStoreError::Refused(
                 "semantic acceptance requires a replaceable-event edit".to_owned(),
@@ -100,7 +100,7 @@ impl RedbWriteStore {
             materialization_failure: None,
             retired_materializations: Vec::new(),
             signature: SignatureState::Unsigned,
-            destinations: destinations(&routing),
+            destinations: destinations(&routing, &access),
         };
         let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
         let explicit = matches!(routing, WriteRouting::Explicit(_));
@@ -110,6 +110,7 @@ impl RedbWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
+            access,
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,

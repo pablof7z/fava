@@ -232,7 +232,7 @@ impl Publication {
             }
         };
         validate_materialization(edit, *author, &event, intent.routing(), created_at)?;
-        let route = self.route_for(&event, intent.routing())?;
+        let route = self.route_for(&event, intent.routing(), intent.access())?;
         Ok((event, route))
     }
 
@@ -327,15 +327,15 @@ impl Publication {
         &self,
         event: &UnsignedEvent,
         routing: &WriteRouting,
+        access: &RelayAccess,
     ) -> Result<RoutePlan, PublicationError> {
-        let request = RouteRequest::Write(EventValue::Unsigned(event.clone()));
+        let request =
+            RouteRequest::write(EventValue::Unsigned(event.clone()), access.clone());
         match routing {
-            WriteRouting::Explicit(relays) => RoutePlan::explicit(
-                relays.iter().cloned(),
-                &RelayAccess::public(),
-                &request.targets(),
-            )
-            .map_err(|error| PublicationError::Routing(error.to_string())),
+            WriteRouting::Explicit(relays) => {
+                RoutePlan::explicit(relays.iter().cloned(), access, &request.targets())
+                    .map_err(|error| PublicationError::Routing(error.to_string()))
+            }
             WriteRouting::Automatic => fava_routing::preview(self.routers.as_slice(), &request)
                 .map_err(|error| PublicationError::Routing(error.to_string())),
         }

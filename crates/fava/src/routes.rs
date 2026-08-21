@@ -37,6 +37,7 @@ pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, Obser
         cache: Arc::clone(&fava.event_cache),
         diagnostics: Arc::clone(&fava.diagnostics),
         next_subscription: Arc::clone(&fava.next_subscription),
+        authentication: fava.authentication.clone(),
     };
     let mut active = BTreeMap::new();
     add_relays(
@@ -67,6 +68,7 @@ struct Providers {
     cache: Arc<dyn fava_event_cache::EventCache>,
     diagnostics: Arc<fava_diagnostics::Diagnostics>,
     next_subscription: Arc<std::sync::atomic::AtomicU64>,
+    authentication: Option<Arc<fava_auth::Authentication>>,
 }
 
 async fn run(
@@ -149,6 +151,7 @@ async fn add_relays(
             Arc::clone(&providers.cache),
             Arc::clone(&providers.diagnostics),
             Arc::clone(&providers.next_subscription),
+            providers.authentication.clone(),
         )
         .await
         {

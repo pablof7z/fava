@@ -351,7 +351,10 @@ fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
         .build()
         .unwrap();
-    let request = RouteRequest::Write(EventValue::Unsigned(event.clone()));
+    let request = RouteRequest::write(
+        EventValue::Unsigned(event.clone()),
+        fava_state::RelayAccess::public(),
+    );
     let plan = fava_routing::preview(&[], &request).unwrap();
     let store = MemoryWriteStore::default();
     let accepted = store

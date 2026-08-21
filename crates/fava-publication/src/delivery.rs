@@ -199,9 +199,9 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
     match outcome {
         PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
         PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::GivenUp {
-            reason: "relay authentication required".to_owned(),
-        },
+        PublishOutcome::AuthenticationDenied { reason } => {
+            RelayDeliveryOutcome::AuthenticationDenied { reason }
+        }
         PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
         PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
     }

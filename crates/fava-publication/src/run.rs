@@ -244,6 +244,7 @@ impl Publication {
         };
         let Ok(intent) =
             WriteIntent::edit_as(state.edit.clone(), state.author, receipt.routing.clone())
+                .map(|intent| intent.with_relay_access(receipt.access.clone()))
         else {
             return;
         };
@@ -313,7 +314,8 @@ impl Publication {
         let WriteRouting::Automatic = receipt.routing else {
             return (None, receipt.route_revision);
         };
-        let request = RouteRequest::Write(receipt.current.event.clone());
+        let request =
+            RouteRequest::write(receipt.current.event.clone(), receipt.access.clone());
         match fava_routing::open(self.routers.as_slice(), &request) {
             Ok(routes) => {
                 let revision = receipt.route_revision.saturating_add(1);
@@ -403,7 +405,8 @@ impl Publication {
         revision: u64,
         contribution: &RouteContribution,
     ) -> u64 {
-        let request = RouteRequest::Write(receipt.current.event.clone());
+        let request =
+            RouteRequest::write(receipt.current.event.clone(), receipt.access.clone());
         self.apply_route(receipt, revision.saturating_add(1), &request, contribution)
     }
 

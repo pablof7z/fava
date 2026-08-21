@@ -1,8 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    Kind, MAX_EVENT_BYTES, PublicKey, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
-    validate_routing,
+    Kind, MAX_EVENT_BYTES, PublicKey, RelayAccess, WriteIntent, WriteIntentError, WritePayload,
+    WriteRouting, validate_routing,
 };
 
 const MAX_IDENTIFIER_BYTES: usize = 4_096;
@@ -77,6 +77,7 @@ impl WriteIntent {
         Ok(Self {
             payload: WritePayload::Edit { edit, author },
             routing,
+            access: RelayAccess::public(),
         })
     }
 }

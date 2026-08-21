@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use fava_auth::{AUTHENTICATION_DEADLINE, Authentication, AuthenticationOutcome, RelayChallenge};
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_ingest::admit_subscription_event;
@@ -11,7 +12,9 @@ use fava_state::{RelaySessionKey, Timestamp};
 use fava_subscriptions::{SubscriptionPlan, SubscriptionPlanner, demand_for_query};
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
+use nostr::event::EventId;
 use nostr::filter::Filter;
+use nostr::key::PublicKey;
 use tokio::sync::watch;
 
 pub(super) struct OpenedRelay {
@@ -22,8 +25,11 @@ pub(super) struct OpenedRelay {
     cache: Arc<dyn EventCache>,
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
+    authentication: Option<Arc<Authentication>>,
     session: Arc<dyn RelaySession>,
     attribution: BTreeMap<SubscriptionId, Filter>,
+    demand: Vec<ClientMessage<'static>>,
+    pending_authentication: Option<(EventId, PublicKey)>,
 }
 
 impl OpenedRelay {
@@ -36,8 +42,9 @@ impl OpenedRelay {
         cache: Arc<dyn EventCache>,
         diagnostics: Arc<Diagnostics>,
         next_subscription: Arc<AtomicU64>,
+        authentication: Option<Arc<Authentication>>,
     ) -> Result<Self, String> {
-        let (session, attribution) = establish(
+        let established = establish(
             &session_key,
             &query,
             transport.as_ref(),
@@ -54,8 +61,11 @@ impl OpenedRelay {
             cache,
             diagnostics,
             next_subscription,
-            session,
-            attribution,
+            authentication,
+            session: established.session,
+            attribution: established.attribution,
+            demand: established.demand,
+            pending_authentication: None,
         })
     }
 
@@ -84,7 +94,7 @@ impl OpenedRelay {
                 }
                 inbound = self.session.next_message() => {
                     match inbound {
-                        Ok(frame) => self.handle_frame(&frame),
+                        Ok(frame) => self.handle_frame(&frame).await,
                         Err(error) => {
                             self.diagnostics.failed(
                                 self.session_key.clone(),
@@ -101,7 +111,7 @@ impl OpenedRelay {
         }
     }
 
-    fn handle_frame(&self, frame: &str) {
+    async fn handle_frame(&mut self, frame: &str) {
         let generation = self.session.generation();
         let message = match decode_relay(frame) {
             Ok(message) => message,
@@ -114,13 +124,132 @@ impl OpenedRelay {
                 return;
             }
         };
-        handle_message(
-            self.session.as_ref(),
-            self.cache.as_ref(),
-            self.diagnostics.as_ref(),
-            &self.attribution,
-            message,
-        );
+        match message {
+            RelayMessage::Auth { challenge } => {
+                self.answer_challenge(challenge.into_owned()).await;
+            }
+            RelayMessage::Ok {
+                event_id,
+                status,
+                message,
+            } => {
+                self.settle_authentication(event_id, status, message.into_owned())
+                    .await;
+            }
+            message => handle_message(
+                self.session.as_ref(),
+                self.cache.as_ref(),
+                self.diagnostics.as_ref(),
+                &self.attribution,
+                message,
+            ),
+        }
+    }
+
+    /// Answer one exact challenge on the generation that carried it.
+    ///
+    /// The application policy decides. A decline or failure ends only this
+    /// relay session's authentication; the query, other relays, and other
+    /// relay-access identities are untouched.
+    async fn answer_challenge(&mut self, challenge: String) {
+        let generation = self.session.generation();
+        self.diagnostics
+            .authentication_required(self.session_key.clone(), generation);
+        let Some(authentication) = self.authentication.clone() else {
+            return;
+        };
+        let challenge = match RelayChallenge::new(self.session_key.clone(), generation, challenge) {
+            Ok(challenge) => challenge,
+            Err(error) => {
+                self.diagnostics.authentication_denied(
+                    self.session_key.clone(),
+                    generation,
+                    error.to_string(),
+                );
+                return;
+            }
+        };
+        let prepared = match tokio::time::timeout(
+            AUTHENTICATION_DEADLINE,
+            authentication.prepare(&challenge, self.session.as_ref()),
+        )
+        .await
+        {
+            Ok(Ok(prepared)) => prepared,
+            Ok(Err(outcome)) => {
+                self.diagnostics.authentication_denied(
+                    self.session_key.clone(),
+                    generation,
+                    denial_reason(&outcome),
+                );
+                return;
+            }
+            Err(_) => {
+                self.diagnostics.authentication_denied(
+                    self.session_key.clone(),
+                    generation,
+                    "relay authentication decision exceeded its deadline".to_owned(),
+                );
+                return;
+            }
+        };
+        match self.session.send(prepared.frame).await {
+            HandoffOutcome::HandedOff => {
+                self.pending_authentication = Some((prepared.answer, prepared.identity));
+            }
+            HandoffOutcome::NotHandedOff { reason } | HandoffOutcome::Ambiguous { reason } => {
+                self.diagnostics.authentication_denied(
+                    self.session_key.clone(),
+                    generation,
+                    reason,
+                );
+            }
+        }
+    }
+
+    /// Settle a pending authentication and restore demand it unblocked.
+    async fn settle_authentication(&mut self, event_id: EventId, status: bool, message: String) {
+        let Some((answer, identity)) = self.pending_authentication else {
+            return;
+        };
+        if answer != event_id {
+            return;
+        }
+        self.pending_authentication = None;
+        let generation = self.session.generation();
+        match Authentication::settle(identity, status, message) {
+            AuthenticationOutcome::Accepted { identity, .. } => {
+                self.diagnostics.authenticated(
+                    self.session_key.clone(),
+                    generation,
+                    identity.to_hex(),
+                );
+                self.restore_demand().await;
+            }
+            outcome => self.diagnostics.authentication_denied(
+                self.session_key.clone(),
+                generation,
+                denial_reason(&outcome),
+            ),
+        }
+    }
+
+    /// Re-issue the exact accepted plan after authentication unblocks it.
+    async fn restore_demand(&self) {
+        for message in &self.demand {
+            let Ok(frame) = encode_client(message) else {
+                continue;
+            };
+            if let HandoffOutcome::NotHandedOff { reason } | HandoffOutcome::Ambiguous { reason } =
+                self.session.send(frame).await
+            {
+                self.diagnostics.failed(
+                    self.session_key.clone(),
+                    self.session.generation(),
+                    format!("authenticated demand was not restored: {reason}"),
+                );
+            }
+        }
     }
 
     async fn reconnect(&mut self, cancel: &mut watch::Receiver<bool>) -> bool {
@@ -153,9 +282,11 @@ impl OpenedRelay {
                 established = reconnect => established,
             };
             match established {
-                Ok((session, attribution)) => {
-                    self.session = session;
-                    self.attribution = attribution;
+                Ok(established) => {
+                    self.session = established.session;
+                    self.attribution = established.attribution;
+                    self.demand = established.demand;
+                    self.pending_authentication = None;
                     return true;
                 }
                 Err(error) => self.diagnostics.failed(
@@ -168,6 +299,13 @@ impl OpenedRelay {
     }
 }
 
+/// One accepted relay session and the exact demand it carries.
+struct Established {
+    session: Arc<dyn RelaySession>,
+    attribution: BTreeMap<SubscriptionId, Filter>,
+    demand: Vec<ClientMessage<'static>>,
+}
+
 async fn establish(
     session_key: &RelaySessionKey,
     query: &Query,
@@ -175,7 +313,7 @@ async fn establish(
     planner: &dyn SubscriptionPlanner,
     diagnostics: &Diagnostics,
     next_subscription: &AtomicU64,
-) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Filter>), String> {
+) -> Result<Established, String> {
     let subscription = allocate_subscription(next_subscription)?;
     let plan = planner
         .plan(session_key, &[demand_for_query(subscription, query)])
@@ -208,7 +346,25 @@ async fn establish(
     for id in plan.attribution.keys() {
         diagnostics.subscription_opened(session_key.clone(), generation, id.clone());
     }
-    Ok((session, plan.attribution))
+    Ok(Established {
+        session,
+        attribution: plan.attribution,
+        demand: plan.messages,
+    })
+}
+
+/// Exact reason one authentication did not authorize relay access.
+fn denial_reason(outcome: &AuthenticationOutcome) -> String {
+    match outcome {
+        AuthenticationOutcome::Accepted { .. } => "authenticated".to_owned(),
+        AuthenticationOutcome::Refused { message } => {
+            format!("relay refused authentication: {message}")
+        }
+        AuthenticationOutcome::Declined { reason } => {
+            format!("application declined authentication: {reason}")
+        }
+        AuthenticationOutcome::Failed { reason } => format!("authentication failed: {reason}"),
+    }
 }
 
 fn allocate_subscription(next: &AtomicU64) -> Result<SubscriptionId, String> {
@@ -297,11 +453,11 @@ fn handle_message(
                 diagnostics.failed(key, generation, format!("unattributed CLOSED for {id}"));
             }
         }
-        RelayMessage::Auth { .. } => diagnostics.authentication_required(key, generation),
         RelayMessage::Notice(message) => {
             diagnostics.failed(key, generation, format!("relay NOTICE: {message}"));
         }
-        RelayMessage::Ok { .. }
+        RelayMessage::Auth { .. }
+        | RelayMessage::Ok { .. }
         | RelayMessage::Count { .. }
         | RelayMessage::NegMsg { .. }
         | RelayMessage::NegErr { .. } => {}

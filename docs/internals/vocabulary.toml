@@ -704,9 +704,38 @@ meaning = "The lifecycle of accepting, refusing, or failing one NIP-42 challenge
 owner = "fava-auth"
 nearest_nostr = "NIP-42 AUTH"
 distinction = "NIP-42 defines challenge and AUTH messages; Fava owns correlation, application policy, signing, and session-scoped outcomes."
-symbols = []
-crates = []
+symbols = [
+    "fava_auth::Authentication",
+    "fava_auth::AuthenticationError",
+    "fava_auth::AuthenticationOutcome",
+    "fava_auth::AuthenticationPolicy",
+    "fava_auth::PreparedAuthentication",
+]
+crates = ["fava-auth"]
+spec_symbols = ["Authentication", "AuthenticationOutcome", "AuthenticationPolicy"]
 spec_crates = ["fava-auth"]
+
+[[term]]
+name = "AuthorizationDecision"
+source = "fava"
+meaning = "One application answer to one relay challenge: the identity that may hold this relay access, or an exact refusal."
+owner = "fava-auth"
+nearest_nostr = "NIP-42 AUTH"
+distinction = "NIP-42 carries the signed answer; AuthorizationDecision is the prior application choice of whether any identity may authenticate this exact relay access, and it is never derived from event authorship, query authors, or the current account."
+symbols = ["fava_auth::AuthorizationDecision"]
+crates = []
+spec_symbols = ["AuthorizationDecision"]
+
+[[term]]
+name = "RelayChallenge"
+source = "fava"
+meaning = "One relay-supplied NIP-42 challenge bound to an exact relay session key and transport generation."
+owner = "fava-auth"
+nearest_nostr = "NIP-42 challenge string"
+distinction = "NIP-42 defines an opaque challenge string with no identity; RelayChallenge binds it to the exact RelaySessionKey and generation that carried it, so an answer for a retired generation is refused by identity rather than by timing."
+symbols = ["fava_auth::RelayChallenge"]
+crates = []
+spec_symbols = ["RelayChallenge"]
 
 [[term]]
 name = "RelayIngest"

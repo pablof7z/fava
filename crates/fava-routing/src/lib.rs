@@ -20,11 +20,22 @@ pub use chain::{open, preview};
 pub enum RouteRequest {
     /// Route one event query.
     Read(Query),
-    /// Route one event publication.
-    Write(EventValue),
+    /// Route one event publication under an exact relay access.
+    Write {
+        /// Event whose destinations are being derived.
+        event: EventValue,
+        /// Relay access identity under which those destinations execute.
+        access: RelayAccess,
+    },
 }
 
 impl RouteRequest {
+    /// Route one publication under an exact relay access.
+    #[must_use]
+    pub const fn write(event: EventValue, access: RelayAccess) -> Self {
+        Self::Write { event, access }
+    }
+
     /// Exact coverage targets implied by this request.
     #[must_use]
     pub fn targets(&self) -> BTreeSet<RouteTarget> {
@@ -53,7 +64,7 @@ impl RouteRequest {
                     },
                     |authors| authors.iter().copied().map(RouteTarget::Author).collect(),
                 ),
-            Self::Write(event) => {
+            Self::Write { event, .. } => {
                 let mut targets = BTreeSet::from([RouteTarget::Author(event.author())]);
                 for tag in event.tags() {
                     let values = tag.as_slice();
@@ -80,7 +91,7 @@ impl RouteRequest {
     pub fn access(&self) -> RelayAccess {
         match self {
             Self::Read(query) => query.access().clone(),
-            Self::Write(_) => RelayAccess::public(),
+            Self::Write { access, .. } => access.clone(),
         }
     }
 
@@ -89,7 +100,7 @@ impl RouteRequest {
     pub const fn event(&self) -> Option<&EventValue> {
         match self {
             Self::Read(_) => None,
-            Self::Write(event) => Some(event),
+            Self::Write { event, .. } => Some(event),
         }
     }
 
@@ -102,7 +113,7 @@ impl RouteRequest {
     /// Whether this request routes a write.
     #[must_use]
     pub const fn is_write(&self) -> bool {
-        matches!(self, Self::Write(_))
+        matches!(self, Self::Write { .. })
     }
 }
 

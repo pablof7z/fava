@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-auth.workspace = true
 fava-publisher.workspace = true
 fava-transport.workspace = true
 fava-wire.workspace = true

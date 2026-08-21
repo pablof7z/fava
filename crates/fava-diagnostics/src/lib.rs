@@ -11,6 +11,7 @@ type SessionFact = (RelaySessionKey, u64);
 type SubscriptionFact = (RelaySessionKey, u64, SubscriptionId);
 type MessageFact = (RelaySessionKey, u64, SubscriptionId, String);
 type FailureFact = (RelaySessionKey, u64, String);
+type IdentityFact = (RelaySessionKey, u64, String);
 
 /// Bounded exact relay facts currently exposed by Fava.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -33,6 +34,10 @@ pub struct DiagnosticsSnapshot {
     pub closed: Vec<MessageFact>,
     /// Exact sessions that supplied an AUTH challenge.
     pub authentication_required: Vec<SessionFact>,
+    /// Exact sessions authenticated, with the authorized identity.
+    pub authenticated: Vec<IdentityFact>,
+    /// Exact sessions whose authentication was declined, refused, or failed.
+    pub authentication_denied: Vec<FailureFact>,
     /// Exact scoped session failures.
     pub failures: Vec<FailureFact>,
     /// Exact subscriptions withdrawn locally with CLOSE.
@@ -56,6 +61,8 @@ struct State {
     eose: VecDeque<SubscriptionFact>,
     closed: VecDeque<MessageFact>,
     authentication_required: VecDeque<SessionFact>,
+    authenticated: VecDeque<IdentityFact>,
+    authentication_denied: VecDeque<FailureFact>,
     failures: VecDeque<FailureFact>,
     withdrawn: VecDeque<SubscriptionFact>,
 }
@@ -90,6 +97,8 @@ impl Diagnostics {
             eose: state.eose.iter().cloned().collect(),
             closed: state.closed.iter().cloned().collect(),
             authentication_required: state.authentication_required.iter().cloned().collect(),
+            authenticated: state.authenticated.iter().cloned().collect(),
+            authentication_denied: state.authentication_denied.iter().cloned().collect(),
             failures: state.failures.iter().cloned().collect(),
             withdrawn: state.withdrawn.iter().cloned().collect(),
         }
@@ -177,6 +186,26 @@ impl Diagnostics {
             &mut self.lock().authentication_required,
             capacity,
             (session, generation),
+        );
+    }
+
+    /// Record one accepted relay authentication and its authorized identity.
+    pub fn authenticated(&self, session: RelaySessionKey, generation: u64, identity: String) {
+        let capacity = self.capacity.get();
+        push_bounded(
+            &mut self.lock().authenticated,
+            capacity,
+            (session, generation, identity),
+        );
+    }
+
+    /// Record one declined, refused, or failed relay authentication.
+    pub fn authentication_denied(&self, session: RelaySessionKey, generation: u64, reason: String) {
+        let capacity = self.capacity.get();
+        push_bounded(
+            &mut self.lock().authentication_denied,
+            capacity,
+            (session, generation, reason),
         );
     }
 

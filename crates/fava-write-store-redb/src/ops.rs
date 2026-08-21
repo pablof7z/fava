@@ -53,7 +53,7 @@ impl WriteStore for RedbWriteStore {
             .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))?;
         let write_id = WriteId::from_u64(identity);
         let receipt_id = ReceiptId::from_u64(identity);
-        let (payload, routing) = intent.into_parts();
+        let (payload, routing, access) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
             WritePayload::Edit { .. } => {
@@ -63,7 +63,7 @@ impl WriteStore for RedbWriteStore {
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
-        let destinations = destinations(&routing);
+        let destinations = destinations(&routing, &access);
         let desired_destinations = destinations.keys().cloned().collect();
         let explicit = matches!(routing, WriteRouting::Explicit(_));
         let current = LocalWriteEvent::new(
@@ -84,6 +84,7 @@ impl WriteStore for RedbWriteStore {
             receipt_id,
             current: current.clone(),
             routing,
+            access,
             outcome: ReceiptOutcome::Open,
             route_revision: u64::from(explicit),
             route_settled: explicit,

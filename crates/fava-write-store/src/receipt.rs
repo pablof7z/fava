@@ -34,6 +34,7 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
     match outcome {
         RelayDeliveryOutcome::Retryable { reason }
         | RelayDeliveryOutcome::GivenUp { reason }
+        | RelayDeliveryOutcome::AuthenticationDenied { reason }
         | RelayDeliveryOutcome::Unknown { reason } => validate_receipt_text(reason),
         RelayDeliveryOutcome::Acknowledged { message }
         | RelayDeliveryOutcome::Rejected { message } => validate_receipt_text(message),
@@ -143,6 +144,7 @@ pub fn apply_route_to_receipt(
                 | RelayDeliveryOutcome::Acknowledged { .. }
                 | RelayDeliveryOutcome::Rejected { .. }
                 | RelayDeliveryOutcome::GivenUp { .. }
+                | RelayDeliveryOutcome::AuthenticationDenied { .. }
                 | RelayDeliveryOutcome::Unknown { .. }
                 | RelayDeliveryOutcome::CancelledBeforeHandoff,
             )
