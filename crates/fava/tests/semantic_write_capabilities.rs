@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::Arc;
 
 use fava::{
     Event, EventBuilder, EventCoordinate, EventValue, Fava, Kind, MaterializationId, PublicKey,
@@ -12,20 +12,20 @@ use fava::{
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::CachedEvent;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, EventId, FinalizeEvent, Tag};
 use nostr::key::Keys;
 
+#[path = "support/semantic_write_capability_lifecycle.rs"]
+mod capability_lifecycle;
 #[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
 mod support;
 
 use support::{
     BlockingSigner, CountingRouter, CountingSigner, NoopTransport, RecordingPublisher,
-    assert_no_receipt_change, publication_builder, relay_evidence, relay_url,
-    wait_for_materialization, wait_for_signer,
+    publication_builder, relay_url, wait_for_materialization,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
@@ -296,87 +296,6 @@ fn assert_selection_and_capacity_refusals(
     assert!(bounded.publish(explicit_intent(edit)).is_err());
 }
 
-async fn concurrent_duplicate_source_is_one_successor<Add, Adjacent>(
-    kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
-    add: Add,
-    adjacent: Adjacent,
-) where
-    Add: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
-{
-    let keys = Keys::generate();
-    let actor = keys.public_key();
-    let initial = materializer
-        .materialize(&add(actor).unwrap(), None, Timestamp::from(u64::MAX - 3))
-        .unwrap()
-        .finalize(&keys)
-        .unwrap();
-    let cache = Arc::new(MemoryEventCache::default());
-    cache
-        .admit(
-            CachedEvent::new(initial.clone(), relay_evidence()),
-            Timestamp::from(1),
-        )
-        .expect("initial source admits");
-    let store = Arc::new(MemoryWriteStore::default());
-    let signer = Arc::new(BlockingSigner::new(actor));
-    let fava = publication_builder(
-        Arc::clone(&cache),
-        Arc::clone(&store),
-        Arc::clone(&signer),
-        Arc::new(RecordingPublisher::default()),
-    )
-    .materializers([Arc::clone(&materializer)])
-    .build()
-    .expect("concurrency assembly");
-    let accepted = fava
-        .publish(explicit_intent(add(actor).unwrap()))
-        .expect("semantic write accepts");
-    wait_for_signer(&signer, 1).await;
-    let successor = materializer
-        .materialize(
-            &adjacent(actor).unwrap(),
-            Some(&initial),
-            Timestamp::from(u64::MAX - 1),
-        )
-        .unwrap()
-        .finalize(&keys)
-        .unwrap();
-    let barrier = Arc::new(Barrier::new(3));
-    let admissions = Arc::new(Mutex::new(0usize));
-    std::thread::scope(|scope| {
-        for _ in 0..2 {
-            let cache = Arc::clone(&cache);
-            let successor = successor.clone();
-            let barrier = Arc::clone(&barrier);
-            let admissions = Arc::clone(&admissions);
-            scope.spawn(move || {
-                barrier.wait();
-                cache
-                    .admit(
-                        CachedEvent::new(successor, relay_evidence()),
-                        Timestamp::from(2),
-                    )
-                    .expect("concurrent source admission remains readable");
-                *admissions.lock().unwrap() += 1;
-            });
-        }
-        barrier.wait();
-    });
-    assert_eq!(*admissions.lock().unwrap(), 2);
-    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
-    wait_for_signer(&signer, 2).await;
-    assert_eq!(receipt.write_id, accepted.write_id);
-    assert_eq!(receipt.receipt_id, accepted.receipt_id);
-    assert_eq!(
-        receipt.current.publication.materialization_source,
-        Some(successor.id)
-    );
-    assert_eq!(receipt.current.event.kind(), kind);
-    assert_no_receipt_change(&store).await;
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn nip02_passes_public_semantic_write_corpus() {
     let target = Keys::generate().public_key();
@@ -431,7 +350,7 @@ async fn capabilities_share_preview_bounds_and_failure_behavior() {
 async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let follow_target = Keys::generate().public_key();
     let follow_adjacent = Keys::generate().public_key();
-    concurrent_duplicate_source_is_one_successor(
+    capability_lifecycle::exercise(
         Kind::ContactList,
         fava_nip02::materializer(),
         |actor| fava_nip02::follow(actor, follow_target),
@@ -440,16 +359,11 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     .await;
     let bookmark_target = EventId::from_byte_array([11; 32]);
     let bookmark_adjacent = EventId::from_byte_array([12; 32]);
-    concurrent_duplicate_source_is_one_successor(
+    capability_lifecycle::exercise(
         Kind::Custom(10_003),
         fava_bookmarks::materializer(),
         |actor| fava_bookmarks::bookmark_event(actor, bookmark_target),
         |actor| fava_bookmarks::bookmark_event(actor, bookmark_adjacent),
     )
     .await;
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn capabilities_share_public_source_removal_and_processed_stale_success() {
-    panic!("RED: public source-removal and processed stale-success proof not implemented");
 }

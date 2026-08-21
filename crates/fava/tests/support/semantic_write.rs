@@ -101,14 +101,15 @@ pub fn assembly_with_cache(
     (fava, cache, store, signer, publisher)
 }
 
-pub fn publication_builder<S>(
+pub fn publication_builder<S, W>(
     cache: Arc<MemoryEventCache>,
-    store: Arc<MemoryWriteStore>,
+    store: Arc<W>,
     signer: Arc<S>,
     publisher: Arc<RecordingPublisher>,
 ) -> FavaBuilder
 where
     S: Signer + 'static,
+    W: WriteStore + 'static,
 {
     Fava::builder()
         .event_cache(cache)
@@ -430,6 +431,7 @@ pub async fn wait_for_materialization(
     generation: u64,
 ) -> Receipt {
     tokio::time::timeout(Duration::from_secs(1), async {
+        let mut changes = fava.receipt_changes();
         loop {
             let receipt = fava
                 .receipt(receipt_id)
@@ -440,11 +442,16 @@ pub async fn wait_for_materialization(
             {
                 return receipt;
             }
-            tokio::task::yield_now().await;
+            changes.recv().await.expect("receipt changes remain open");
         }
     })
     .await
-    .expect("materialization advances")
+    .unwrap_or_else(|_| {
+        panic!(
+            "materialization {generation} did not advance: {:?}",
+            fava.receipt(receipt_id)
+        )
+    })
 }
 
 pub async fn wait_for_signer(signer: &BlockingSigner, calls: u64) {
