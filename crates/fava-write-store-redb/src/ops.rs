@@ -1,11 +1,9 @@
-use std::collections::BTreeMap;
-
 use fava_routing::RoutePlan;
-use fava_state::{RelayAccess, RelaySessionKey};
+use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent,
-    WritePayload, WriteRouting,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
@@ -13,9 +11,14 @@ use fava_write_store::{
 };
 use tokio::sync::broadcast;
 
-use crate::{RedbWriteStore, StoreState};
+use crate::RedbWriteStore;
+use crate::lifecycle::{UnsignedEventView, destinations, next_revision, settle};
 
 impl WriteStore for RedbWriteStore {
+    fn active_capacity(&self) -> usize {
+        self.limits.active.get()
+    }
+
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
     }
@@ -78,7 +81,7 @@ impl WriteStore for RedbWriteStore {
             attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
-        self.commit_accept(next_identity, &receipt)?;
+        self.commit_accept(next_identity, &receipt, None)?;
         state.next_identity = next_identity;
         state.revision = next_revision;
         state.receipts.insert(receipt_id, receipt.clone());
@@ -89,6 +92,68 @@ impl WriteStore for RedbWriteStore {
             receipt_id,
             current,
         })
+    }
+
+    fn accept_materialized_edit(
+        &self,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic(intent, event, source)
+    }
+
+    fn install_materialization(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.install_semantic(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            event,
+            source,
+        )
+    }
+
+    fn record_materialization_failure(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        source: Option<&Event>,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.record_semantic_failure(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            source,
+            reason,
+        )
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            Option<EventId>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.recover_semantic()
     }
 
     fn install_signed(
@@ -329,7 +394,8 @@ impl WriteStore for RedbWriteStore {
             return Ok(false);
         }
         let next_revision = next_revision(&state)?;
-        self.commit_update(None, &[receipt_id])?;
+        self.commit_update(None, None, &[receipt_id])?;
+        crate::release_semantic(&mut state, receipt_id);
         state.receipts.remove(&receipt_id);
         state.revision = next_revision;
         self.publish_snapshot(&state);
@@ -346,129 +412,4 @@ impl WriteStore for RedbWriteStore {
             .count())
     }
 }
-
-impl RedbWriteStore {
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, StoreState>, WriteStoreError> {
-        self.state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))
-    }
-
-    fn update(
-        &self,
-        receipt_id: ReceiptId,
-        mutation: impl FnOnce(&mut Receipt) -> Result<(), WriteStoreError>,
-    ) -> Result<Receipt, WriteStoreError> {
-        let mut state = self.lock()?;
-        let mut receipt = state
-            .receipts
-            .get(&receipt_id)
-            .cloned()
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let original = receipt.clone();
-        mutation(&mut receipt)?;
-        if receipt == original {
-            return Ok(receipt);
-        }
-        let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
-        let next_revision = next_revision(&state)?;
-        self.commit_update(Some(&receipt), &removals)?;
-        for id in removals {
-            state.receipts.remove(&id);
-        }
-        state.receipts.insert(receipt_id, receipt.clone());
-        state.revision = next_revision;
-        self.publish_snapshot(&state);
-        self.publish_receipt(Some(receipt.clone()), receipt_id);
-        Ok(receipt)
-    }
-}
-
-fn destinations(routing: &WriteRouting) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
-    match routing {
-        WriteRouting::Automatic => BTreeMap::new(),
-        WriteRouting::Explicit(relays) => relays
-            .iter()
-            .cloned()
-            .map(|relay| {
-                (
-                    RelaySessionKey::new(relay, RelayAccess::public()),
-                    RelayDeliveryOutcome::Pending,
-                )
-            })
-            .collect(),
-    }
-}
-
-fn terminal_evictions(state: &StoreState, updated: &Receipt, maximum: usize) -> Vec<ReceiptId> {
-    let mut terminal: Vec<_> = state
-        .receipts
-        .values()
-        .filter(|receipt| receipt.is_terminal() && receipt.receipt_id != updated.receipt_id)
-        .map(|receipt| receipt.receipt_id)
-        .collect();
-    if updated.is_terminal() {
-        terminal.push(updated.receipt_id);
-    }
-    terminal.sort_unstable();
-    let excess = terminal.len().saturating_sub(maximum);
-    terminal.into_iter().take(excess).collect()
-}
-
-fn next_revision(state: &StoreState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
-}
-
-pub(crate) fn settle(receipt: &mut Receipt) {
-    if receipt.route_settled
-        && receipt
-            .destinations()
-            .values()
-            .all(RelayDeliveryOutcome::is_terminal)
-    {
-        receipt.outcome = if receipt.desired_destinations.is_empty() {
-            ReceiptOutcome::NoDestination
-        } else {
-            ReceiptOutcome::Complete
-        };
-    }
-}
-
-#[derive(Eq, PartialEq)]
-struct UnsignedEventView<'a> {
-    id: Option<fava_write::EventId>,
-    pubkey: fava_write::PublicKey,
-    created_at: fava_write::Timestamp,
-    kind: fava_write::Kind,
-    tags: &'a [fava_write::Tag],
-    content: &'a str,
-}
-
-impl<'a> From<&'a fava_write::UnsignedEvent> for UnsignedEventView<'a> {
-    fn from(event: &'a fava_write::UnsignedEvent) -> Self {
-        Self {
-            id: event.id,
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags.as_slice(),
-            content: &event.content,
-        }
-    }
-}
-
-impl<'a> From<&'a Event> for UnsignedEventView<'a> {
-    fn from(event: &'a Event) -> Self {
-        Self {
-            id: Some(event.id),
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags.as_slice(),
-            content: &event.content,
-        }
-    }
-}
+use std::collections::BTreeMap;

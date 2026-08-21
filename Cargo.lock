@@ -643,6 +643,7 @@ dependencies = [
  "fava-write-store",
  "nostr",
  "redb",
+ "serde",
  "serde_json",
  "tokio",
 ]

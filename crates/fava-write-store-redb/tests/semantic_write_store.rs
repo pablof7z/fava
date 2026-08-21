@@ -124,7 +124,7 @@ fn redb_generation_and_failure_state_match_memory() {
             MaterializationId::from_u64(1),
             Some(base.id),
             Some(&failed_source),
-            "first attempt failed".to_owned(),
+            "x".repeat(5_000),
         )
         .expect("failure commits");
     assert_eq!(failed.current.id(), accepted.current.id());
@@ -160,12 +160,13 @@ fn redb_generation_and_failure_state_match_memory() {
         successor.current.publication.retired_materializations[0]
             .3
             .as_deref()
-            .is_some_and(|reason| reason.contains("first attempt failed"))
+            .is_some_and(|reason| reason.ends_with("failed") && reason.len() <= 4_096)
     );
     assert_eq!(reopened.recover_materialized_edits().unwrap()[0].3, None);
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // One causal sequence proves every refusal leaves one row intact.
 fn redb_stale_and_overflow_mutations_are_atomic_noops() {
     assert_eq!(destination_evidence_capacity(), 256);
     let path = unique_path("atomic-noops");
@@ -213,6 +214,46 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
         Some(before_stale)
     );
     assert!(changes.try_recv().is_err(), "refusal notified");
+
+    let mut expected = MaterializationId::from_u64(1);
+    let mut expected_source = None;
+    for generation in 0..destination_evidence_capacity() {
+        let source_time = 4 + generation as u64 * 2;
+        let next_source = source(&keys, source_time, &format!("source {generation}"));
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                expected,
+                expected_source,
+                materialization(
+                    keys.public_key(),
+                    source_time + 1,
+                    &format!("generation {generation}"),
+                ),
+                Some(&next_source),
+            )
+            .unwrap();
+        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected_source = Some(next_source.id);
+    }
+    let before_overflow = store.receipt(accepted.receipt_id).unwrap();
+    let mut overflow_changes = store.receipt_changes();
+    let overflow_source = source(&keys, 1_000, "evidence overflow source");
+    assert!(
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                expected,
+                expected_source,
+                materialization(keys.public_key(), 1_001, "evidence overflow"),
+                Some(&overflow_source),
+            )
+            .is_err()
+    );
+    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), before_overflow);
+    assert!(overflow_changes.try_recv().is_err(), "overflow notified");
 
     let cancelled = store.cancel(accepted.receipt_id).unwrap().unwrap();
     assert!(cancelled.is_terminal());
