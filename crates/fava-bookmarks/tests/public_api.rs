@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    EventId, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntentError,
+    EventId, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntentError,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type EventEdit = fn(PublicKey, EventId) -> EditResult;
-type CoordinateEdit = fn(PublicKey, EventCoordinate) -> EditResult;
+type EventEdit = fn(EventId) -> EditResult;
+type CoordinateEdit = fn(EventCoordinate) -> EditResult;
 type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
 
 const BOOKMARK_EVENT: EventEdit = fava_bookmarks::bookmark_event;

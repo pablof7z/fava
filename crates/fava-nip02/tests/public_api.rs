@@ -7,7 +7,7 @@ use fava_write::{
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type PublicKeyEdit = fn(PublicKey, PublicKey) -> EditResult;
+type PublicKeyEdit = fn(PublicKey) -> EditResult;
 type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
 
 const FOLLOW: PublicKeyEdit = fava_nip02::follow;
