@@ -717,9 +717,9 @@ The accepted form determines the remaining work. It does not create separate pub
 
 For an unsigned or signed event, the author is the event's `pubkey`.
 
-Before a `ReplaceableEventEdit` has produced an event, the edit carries its actor. Every materialization MUST produce an event with that actor as `pubkey`.
+Before a `ReplaceableEventEdit` has produced an event, the accepted write carries its resolved author. Every materialization MUST produce an event with that author as `pubkey`.
 
-Current-account convenience APIs resolve the selected account before producing the accepted event or edit. A later account switch MUST NOT retarget accepted work.
+Current-account convenience APIs resolve the selected account before the write is accepted, and the resolved author is committed with it. A later account switch MUST NOT retarget accepted work.
 
 No parallel author field may contradict the event or edit.
 
@@ -756,7 +756,7 @@ Cancellation or replacement by a newer current event retracts or replaces the wr
 
 A protocol crate may produce a `ReplaceableEventEdit` before the final event body is known, for example `Follow(Bob)` by Alice.
 
-The write store MUST retain the edit and actor independently from the current materialization. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
+The write store MUST retain the edit and its resolved author independently from the current materialization. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
 
 Rematerialization MUST:
 
@@ -1167,7 +1167,7 @@ Write convenience APIs that use the current account resolve it before producing 
 
 ## ID-003 — Missing identity is refused before acceptance
 
-If a convenience publication operation requires a current account and none exists, and no explicit actor/pubkey is supplied, the operation MUST fail before creating a write or receipt.
+If a convenience publication operation requires a current account and none exists, and no explicit author public key is supplied, the operation MUST fail before creating a write or receipt.
 
 A low-level unsigned event already carries its pubkey and does not require current-account resolution.
 
@@ -1614,7 +1614,7 @@ A rewrite is conforming only when all of the following are true:
 - Local query state deterministically merges event-cache and write-store contributions without copying unsigned events into the event cache.
 - Event-cache persistence and retention claims match the selected implementation/profile exactly.
 - Accepted production writes are durable before `Accepted`, visible through the write-store query source, reattachable by receipt, and recoverable after ordinary restart.
-- Event authorship comes from the event `pubkey` or the actor on a replaceable-event edit, with no contradictory parallel authority.
+- Event authorship comes from the event `pubkey` or the author resolved when a replaceable-event edit was accepted, with no contradictory parallel authority.
 - Automatic routing composes independently selectable routers, yields immediate partial results, and expands asynchronously without blocking known work.
 - Explicit routing bypasses automatic routers and remains exact.
 - Routing, subscription planning, transport, publication attempts, and delivery policy remain separate responsibilities.

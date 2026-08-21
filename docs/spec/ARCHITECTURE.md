@@ -164,14 +164,14 @@ This is a mental model, not a requirement for one universal effect enum. Each ow
 
 An unsigned or signed event carries its author in the event's `pubkey` field. Signer selection uses that pubkey.
 
-Before an event exists, a replaceable-event edit carries its actor and event coordinate:
+Before an event exists, a replaceable-event edit carries the replaceable kind it changes and the protocol-owned change itself. It carries no author; the author is resolved once when the write is accepted and is committed with it:
 
 ```rust
 pub struct ReplaceableEventEdit {
-    pub actor: PublicKey,
-    pub coordinate: EventCoordinate,
+    pub kind: Kind,
     pub format: u32,
     pub change: Bytes,
+    pub inverse: Bytes,
 }
 
 pub struct MaterializationId(u64);
@@ -182,7 +182,7 @@ pub trait ReplaceableEventMaterializer: Send + Sync {
 }
 ```
 
-Materialization creates an unsigned event whose `pubkey` is the actor. Current-account convenience APIs resolve the account before the write enters the accepted write lifecycle.
+Materialization creates an unsigned event whose `pubkey` is the accepted write's resolved author. Current-account convenience APIs resolve the account before the write enters the accepted write lifecycle.
 
 `MaterializationId` names one exact immutable event generation under the stable
 write and receipt identity. The write store allocates and persists it; signer,
@@ -729,8 +729,8 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 ## Replaceable-event edits
 
 `ReplaceableEventEdit` is a durable change to a replaceable Nostr event. It
-identifies the actor and event coordinate and carries the protocol-owned edit
-value needed to apply that change again.
+identifies the replaceable kind it changes and carries the protocol-owned edit
+value needed to apply that change again. It carries no author.
 
 Applying an edit to the newest qualified event at its coordinate, or to the
 protocol crate's defined empty state, produces an `UnsignedEvent`. A newer
@@ -740,11 +740,11 @@ same write and receipt identity.
 Concrete protocol APIs produce these values:
 
 ```rust
-fava_nip02::follow(actor, bob) -> ReplaceableEventEdit
-fava_nip02::unfollow(actor, bob) -> ReplaceableEventEdit
+fava_nip02::follow(bob) -> ReplaceableEventEdit
+fava_nip02::unfollow(bob) -> ReplaceableEventEdit
 
-fava_bookmarks::add(actor, target) -> ReplaceableEventEdit
-fava_bookmarks::remove(actor, target) -> ReplaceableEventEdit
+fava_bookmarks::add(target) -> ReplaceableEventEdit
+fava_bookmarks::remove(target) -> ReplaceableEventEdit
 ```
 
 Each protocol crate owns the meaning and durable format of its edit values.
@@ -914,7 +914,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
 - write and receipt identity allocation;
 - accepted unsigned-event, replaceable-event-edit, and pre-signed-event payloads;
-- actor for replaceable-event edits before an event exists;
+- resolved author for replaceable-event edits before an event exists;
 - current materialization and materialization generation;
 - exact unsigned or signed event bytes;
 - signature request and completion state;
@@ -2011,7 +2011,7 @@ The event already contains its pubkey. `WriteStore` commits the event and receip
 
 #### Replaceable-event edit
 
-The edit contains its actor, coordinate, durable protocol-owned change, and format version. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
+The edit contains the replaceable kind it changes, its durable protocol-owned change and inverse, and its format version; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
 
 #### Pre-signed event
 
@@ -2094,7 +2094,7 @@ retention.rs        terminal receipt retention
 A convenience API may resolve `CurrentAccount` through `fava-session`. Before acceptance, it constructs either:
 
 - an `UnsignedEvent` whose `pubkey` is the resolved account; or
-- a `ReplaceableEventEdit` whose `actor` is the resolved account.
+- a `ReplaceableEventEdit`, whose accepted write records the resolved account as its author.
 
 Accepted write state is then self-identifying and independent of later current-account changes.
 
@@ -2597,15 +2597,17 @@ The event cache is not part of acceptance. A later relay echo enters the cache a
 ## Accepting a replaceable-event edit
 
 ```text
-application calls follow(actor=alice, target=bob)
+application calls follow(target=bob)
         ↓
 fava-nip02 creates ReplaceableEventEdit
+        ↓
+publication owner resolves the author (alice) at acceptance
         ↓
 publication owner reads current relevant EventRecord
         ↓
 fava-nip02 materializes UnsignedEvent(kind:3, pubkey:alice)
         ↓
-WriteStore commits operation, receipt, and materialization
+WriteStore commits operation, receipt, resolved author, and materialization
         ↓
 materialization appears through WriteStore QuerySource
         ↓
