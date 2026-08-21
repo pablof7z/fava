@@ -192,8 +192,9 @@ impl Publisher for Nip01Publisher {
                         reason: "transport returned the wrong relay session identity".to_owned(),
                     };
                 }
+                // No connection exists, so no attempt was spent.
                 Err(error) => {
-                    return PublishOutcome::NotHandedOff {
+                    return PublishOutcome::Unreachable {
                         reason: error.to_string(),
                     };
                 }
