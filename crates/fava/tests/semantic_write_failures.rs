@@ -28,7 +28,7 @@ mod support;
 mod transient_reads;
 
 use failure_support::{assembly, edit_intent, save_source, wait_failure, wait_public_failure};
-use support::{EDIT_FORMAT, signed_source};
+use support::signed_source;
 
 const VALID: u8 = 0;
 const ERROR: u8 = 1;
@@ -36,6 +36,7 @@ const PANIC: u8 = 2;
 const WRONG_ACTOR: u8 = 3;
 const OVERSIZE: u8 = 4;
 const WRONG_TIMESTAMP: u8 = 5;
+const WRONG_KIND: u8 = 6;
 
 struct ControlledMaterializer {
     kind: Kind,
@@ -67,12 +68,13 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.format() == EDIT_FORMAT
+        edit.kind() == self.kind
     }
 
     fn materialize(
         &self,
-        edit: &ReplaceableEventEdit,
+        _edit: &ReplaceableEventEdit,
+        author: fava::PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
@@ -85,7 +87,12 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         let actor = if self.mode.load(Ordering::SeqCst) == WRONG_ACTOR {
             Keys::generate().public_key()
         } else {
-            edit.actor()
+            author
+        };
+        let kind = if self.mode.load(Ordering::SeqCst) == WRONG_KIND {
+            Kind::MuteList
+        } else {
+            self.kind
         };
         let content = if self.mode.load(Ordering::SeqCst) == OVERSIZE {
             "x".repeat(140_000)
@@ -100,7 +107,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         } else {
             created_at
         };
-        EventBuilder::new(actor, self.kind)
+        EventBuilder::new(actor, kind)
             .created_at(returned_at)
             .content(content)
             .build()
@@ -161,6 +168,29 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
             .as_deref()
             .is_some_and(|reason| reason.contains("injected timestamp"))
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wrong_author_or_kind_refuses_before_custody() {
+    for mode in [WRONG_ACTOR, WRONG_KIND] {
+        let keys = Keys::generate();
+        let store = Arc::new(MemoryWriteStore::default());
+        let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+        materializer.set(mode);
+        let fava = assembly(
+            &keys,
+            Arc::new(MemoryEventCache::default()),
+            Arc::clone(&store),
+            vec![Arc::clone(&materializer)],
+        );
+
+        assert!(
+            fava.publish(edit_intent(keys.public_key(), Kind::ContactList))
+                .is_err()
+        );
+        assert_eq!(materializer.calls(), 1);
+        assert!(store.is_empty().expect("refusal leaves zero custody"));
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -253,7 +283,7 @@ async fn materializer_panic_is_scoped_and_attributed() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn malformed_and_oversize_outputs_preserve_current() {
-    for mode in [WRONG_ACTOR, OVERSIZE] {
+    for mode in [WRONG_ACTOR, WRONG_KIND, OVERSIZE] {
         let keys = Keys::generate();
         let cache = Arc::new(MemoryEventCache::default());
         let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));

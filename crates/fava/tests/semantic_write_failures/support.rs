@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    Event, EventCoordinate, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    WriteIntent, WriteRouting,
+    Event, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntent,
+    WriteRouting,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -15,23 +15,17 @@ use nostr::key::Keys;
 
 use super::ControlledMaterializer;
 use super::support::{
-    BlockingSigner, EDIT_FORMAT, NoopTransport, RecordingPublisher, relay_evidence, relay_url,
+    BlockingSigner, NoopTransport, RecordingPublisher, relay_evidence, relay_url,
 };
 
-pub(super) fn edit_intent(actor: fava::PublicKey, kind: Kind) -> WriteIntent {
-    let edit = ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind,
-            identifier: None,
-        },
-        EDIT_FORMAT,
-        vec![1],
-        vec![2],
+pub(super) fn edit_intent(author: fava::PublicKey, kind: Kind) -> WriteIntent {
+    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).unwrap();
+    WriteIntent::edit_as(
+        edit,
+        author,
+        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
     )
-    .unwrap();
-    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).unwrap()
+    .unwrap()
 }
 
 pub(super) fn assembly(

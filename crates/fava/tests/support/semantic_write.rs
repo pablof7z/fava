@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, Fava, FavaBuilder, Kind, MaterializationId, PublicKey,
-    Receipt, ReceiptId, RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
-    UnsignedEvent, WriteIntent, WriteIntentError, WriteRouting,
+    Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, PublicKey, Receipt, ReceiptId,
+    RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, UnsignedEvent,
+    WriteIntent, WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -28,29 +28,19 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
 use nostr::key::Keys;
 use tokio::sync::watch;
 
-pub const EDIT_FORMAT: u32 = 7;
-
-pub fn intent(actor: PublicKey, kind: Kind, format: u32) -> WriteIntent {
-    let coordinate = EventCoordinate::Replaceable {
-        author: actor,
-        kind,
-        identifier: None,
-    };
-    let edit = ReplaceableEventEdit::new(actor, coordinate, format, vec![1], vec![2])
-        .expect("bounded edit");
-    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()])))
-        .expect("semantic intent validates")
+pub fn intent(author: PublicKey, kind: Kind) -> WriteIntent {
+    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+    WriteIntent::edit_as(
+        edit,
+        author,
+        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
+    )
+    .expect("semantic intent validates")
 }
 
-pub fn automatic_intent(actor: PublicKey, kind: Kind, format: u32) -> WriteIntent {
-    let coordinate = EventCoordinate::Replaceable {
-        author: actor,
-        kind,
-        identifier: None,
-    };
-    let edit = ReplaceableEventEdit::new(actor, coordinate, format, vec![1], vec![2])
-        .expect("bounded edit");
-    WriteIntent::edit(edit, WriteRouting::Automatic).expect("semantic intent validates")
+pub fn automatic_intent(author: PublicKey, kind: Kind) -> WriteIntent {
+    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+    WriteIntent::edit_as(edit, author, WriteRouting::Automatic).expect("semantic intent validates")
 }
 
 pub fn assembly(
@@ -139,21 +129,21 @@ pub fn assert_no_effects(
 
 #[derive(Clone)]
 pub struct MaterializerCall {
+    pub author: PublicKey,
+    pub identifier: Option<String>,
     pub source: Option<Event>,
     pub created_at: Timestamp,
 }
 
 pub struct TestMaterializer {
     kind: Kind,
-    format: u32,
     calls: Mutex<Vec<MaterializerCall>>,
 }
 
 impl TestMaterializer {
-    pub fn new(kind: Kind, format: u32) -> Self {
+    pub fn new(kind: Kind) -> Self {
         Self {
             kind,
-            format,
             calls: Mutex::new(Vec::new()),
         }
     }
@@ -169,24 +159,23 @@ impl ReplaceableEventMaterializer for TestMaterializer {
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.format() == self.format
-            && matches!(
-                edit.coordinate(),
-                EventCoordinate::Replaceable { kind, .. } if *kind == self.kind
-            )
+        edit.kind() == self.kind
     }
 
     fn materialize(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.lock().unwrap().push(MaterializerCall {
+            author,
+            identifier: edit.identifier().map(ToOwned::to_owned),
             source: source.cloned(),
             created_at,
         });
-        let mut builder = EventBuilder::new(edit.actor(), self.kind)
+        let mut builder = EventBuilder::new(author, self.kind)
             .created_at(created_at)
             .content(match source {
                 Some(source) => format!("{}|edit", source.content),
@@ -196,6 +185,9 @@ impl ReplaceableEventMaterializer for TestMaterializer {
             for tag in source.tags.iter().cloned() {
                 builder = builder.tag(tag);
             }
+        }
+        if let Some(identifier) = edit.identifier() {
+            builder = builder.tag(Tag::identifier(identifier));
         }
         builder
             .build()

@@ -9,7 +9,7 @@ use nostr::key::Keys;
 
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, CountingSigner, EDIT_FORMAT, RecordingPublisher, TestMaterializer, intent,
+    BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, intent,
     publication_builder, relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
 };
 
@@ -19,7 +19,7 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -31,7 +31,7 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     .expect("faulting-store assembly");
     store.fail_receipt_reads(1);
     let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .publish(intent(keys.public_key(), Kind::ContactList))
         .expect("custody commits before transient read");
 
     wait_for_signer(&signer, 1).await;
@@ -59,15 +59,12 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializer(Arc::new(TestMaterializer::new(
-        Kind::ContactList,
-        EDIT_FORMAT,
-    )))
+    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads_after_signature(4);
     let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT))
+        .publish(intent(keys.public_key(), Kind::ContactList))
         .expect("semantic write accepts");
 
     tokio::time::timeout(Duration::from_secs(1), async {
