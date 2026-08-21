@@ -19,6 +19,8 @@ use nostr::key::Keys;
 
 #[path = "support/semantic_write_capability_lifecycle.rs"]
 mod capability_lifecycle;
+#[path = "support/semantic_write_capability_protocol.rs"]
+mod capability_protocol;
 #[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
 mod support;
@@ -302,7 +304,7 @@ async fn nip02_passes_public_semantic_write_corpus() {
     let adjacent = Keys::generate().public_key();
     let target_hex = target.to_hex();
     let adjacent_hex = adjacent.to_hex();
-    public_first_value_and_inverse(
+    capability_protocol::exercise_public_lifecycle(
         Kind::ContactList,
         fava_nip02::materializer(),
         |actor| fava_nip02::follow(actor, target),
@@ -319,7 +321,7 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
     let adjacent = EventId::from_byte_array([9; 32]);
     let target_hex = target.to_hex();
     let adjacent_hex = adjacent.to_hex();
-    public_first_value_and_inverse(
+    capability_protocol::exercise_public_lifecycle(
         Kind::Custom(10_003),
         fava_bookmarks::materializer(),
         |actor| fava_bookmarks::bookmark_event(actor, target),
