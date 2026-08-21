@@ -174,7 +174,7 @@ fn memory_generation_swap_is_compare_and_set() {
                 accepted.write_id,
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
-                Some(base.id),
+                Some(successor_source.id),
                 materialization(keys.public_key(), 31, "stale swap"),
                 Some(&later_source),
             )
