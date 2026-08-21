@@ -40,6 +40,7 @@ impl Publication {
         tokio::spawn(async move { publication.run(receipt_id, cancel_rx, semantic).await });
     }
 
+    #[allow(clippy::too_many_lines)] // One custody loop owns receipt, route, and completion order.
     async fn run(
         self,
         receipt_id: ReceiptId,
@@ -65,6 +66,14 @@ impl Publication {
             let Some(current) = self.read_receipt(receipt_id, &mut cancel).await else {
                 break;
             };
+            let current_materialization = current.current.publication.materialization_id;
+            if current_materialization > materialization_id {
+                route_revision =
+                    self.reopen_materialization(&current, &mut routes, &mut signing_cancel);
+                materialization_id = current_materialization;
+            } else if current_materialization == materialization_id {
+                route_revision = route_revision.max(current.route_revision);
+            }
             self.start_lanes(&current, &mut active, &lane_finished, &cancel);
             if current.is_terminal() {
                 break;
@@ -108,7 +117,7 @@ impl Publication {
                                 latest.current.publication.materialization_id;
                             if next_materialization == materialization_id {
                                 route_revision = route_revision.max(latest.route_revision);
-                            } else {
+                            } else if next_materialization > materialization_id {
                                 route_revision = self.reopen_materialization(
                                     &latest,
                                     &mut routes,
