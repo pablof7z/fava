@@ -82,13 +82,13 @@ impl WriteIntent {
 }
 
 fn validate_coordinate(kind: Kind, identifier: Option<&str>) -> Result<(), WriteIntentError> {
-    if let Some(identifier) = identifier {
-        if identifier.len() > MAX_IDENTIFIER_BYTES {
-            return Err(WriteIntentError::TooLarge {
-                bytes: identifier.len(),
-                maximum: MAX_IDENTIFIER_BYTES,
-            });
-        }
+    if let Some(identifier) = identifier
+        && identifier.len() > MAX_IDENTIFIER_BYTES
+    {
+        return Err(WriteIntentError::TooLarge {
+            bytes: identifier.len(),
+            maximum: MAX_IDENTIFIER_BYTES,
+        });
     }
     match identifier {
         None if kind.is_replaceable() => Ok(()),
