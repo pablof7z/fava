@@ -13,7 +13,7 @@ use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
-    UnsignedEvent, WriteId, WriteIntent, WritePayload,
+    Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use tokio::sync::{broadcast, watch};
@@ -197,7 +197,7 @@ impl WriteStore for MemoryWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
-            Option<EventId>,
+            Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,

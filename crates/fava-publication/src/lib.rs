@@ -10,8 +10,8 @@ use fava_routing::Router;
 use fava_signer::Signer;
 use fava_transport::Transport;
 use fava_write::{
-    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, Timestamp,
-    WriteIntent, WritePayload, WriteRouting,
+    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
+    WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
@@ -137,7 +137,7 @@ impl Publication {
             self.materializer(edit)?;
         }
         let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
-        for (receipt, edit, selected_id, failed_id) in semantic {
+        for (receipt, edit, selected, failed_id) in semantic {
             let sources = match self.open_semantic_sources(&edit) {
                 Ok(sources) => sources,
                 Err(error) => {
@@ -147,19 +147,8 @@ impl Publication {
                     return Err(error);
                 }
             };
-            let selected = selected_id.and_then(|id| Self::source_event(&sources, id));
-            let source_floor = selected.as_ref().map(|event| event.created_at).or_else(|| {
-                selected_id.map(|_| {
-                    Timestamp::from(
-                        receipt
-                            .current
-                            .event
-                            .created_at()
-                            .as_secs()
-                            .saturating_sub(1),
-                    )
-                })
-            });
+            let selected_id = selected.map(|(id, _)| id);
+            let source_floor = selected.map(|(_, timestamp)| timestamp);
             prepared.push((
                 receipt.receipt_id,
                 SemanticState::recovered(edit, selected_id, source_floor, failed_id, sources),

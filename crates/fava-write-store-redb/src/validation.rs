@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use fava_write::{
     EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    SignatureState, WriteRouting,
+    SignatureState, WriteIntent, WriteRouting,
 };
 use fava_write_store::{
     WriteStoreError, destination_evidence_capacity, validate_delivery_outcome,
@@ -180,6 +180,7 @@ fn validate_semantic(
     receipt: &Receipt,
     (edit, current_source, failed_source): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
+    WriteIntent::edit(edit.clone(), receipt.routing.clone())?;
     if receipt.is_terminal()
         || receipt.current.event.author() != edit.actor()
         || receipt

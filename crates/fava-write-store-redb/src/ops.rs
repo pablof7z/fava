@@ -148,7 +148,7 @@ impl WriteStore for RedbWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
-            Option<EventId>,
+            Option<(EventId, fava_write::Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,

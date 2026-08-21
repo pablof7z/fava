@@ -268,7 +268,7 @@ impl RedbWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
-            Option<EventId>,
+            Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,
@@ -279,14 +279,8 @@ impl RedbWriteStore {
             .iter()
             .filter_map(|(receipt_id, (edit, source, failed_source))| {
                 state.receipts.get(receipt_id).and_then(|receipt| {
-                    (!receipt.is_terminal()).then(|| {
-                        (
-                            receipt.clone(),
-                            edit.clone(),
-                            source.map(|(id, _)| id),
-                            *failed_source,
-                        )
-                    })
+                    (!receipt.is_terminal())
+                        .then(|| (receipt.clone(), edit.clone(), *source, *failed_source))
                 })
             })
             .collect())

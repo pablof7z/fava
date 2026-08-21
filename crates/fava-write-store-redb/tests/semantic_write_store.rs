@@ -136,7 +136,7 @@ fn redb_generation_and_failure_state_match_memory() {
     let reopened = RedbWriteStore::open(&path).expect("redb reopens");
     let recovered = reopened.recover_materialized_edits().unwrap();
     assert_eq!(recovered[0].0, failed);
-    assert_eq!(recovered[0].2, Some(base.id));
+    assert_eq!(recovered[0].2, Some((base.id, base.created_at)));
     assert_eq!(recovered[0].3, Some(failed_source.id));
     let successor = reopened
         .install_materialization(
