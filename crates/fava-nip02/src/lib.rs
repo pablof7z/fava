@@ -1,5 +1,9 @@
 //! Pure NIP-02 follow-list semantic edits.
 //!
+//! The package README is the application-facing API and developer-experience
+//! North Star. Its Status section distinguishes the delivered M7 tracer from
+//! the broader typed read and publication surface that is still prospective.
+//!
 //! The compile-fail examples are external privacy checks for protocol nouns.
 //!
 //! ```compile_fail
