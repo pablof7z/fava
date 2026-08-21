@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use canary::{
     ReconOptions, SmokeOptions, run_automatic_publication_scenario, run_grouping_scenario,
     run_live_scenario, run_local_scenario, run_m3_live_scenario, run_public_recon,
-    run_publication_scenario, run_real_relay_smoke, run_routing_scenario, scenario_registry,
+    run_publication_scenario, run_real_relay_smoke, run_routing_scenario,
+    run_semantic_write_scenario, scenario_registry,
 };
 
 #[tokio::main]
@@ -113,6 +114,13 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         }
         "explicit-read-eose" | "explicit-read-live-after-eose" | "explicit-read-cancel" => {
             run_live_scenario(&scenario, smoke_options(&mut arguments, "live-m2")?).await?
+        }
+        "replaceable-edit-first-value"
+        | "replaceable-edit-rematerialization"
+        | "replaceable-edit-inverse"
+        | "protocol-crate-n-plus-one" => {
+            run_semantic_write_scenario(&scenario, smoke_options(&mut arguments, "semantic-m7")?)
+                .await?
         }
         "lab-real-relay-smoke" => {
             let outcome =

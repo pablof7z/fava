@@ -30,3 +30,33 @@ cargo run --manifest-path apps/canary/Cargo.toml -- \
 ```
 
 Evidence is preserved under `apps/canary/runs/` and excluded from Git.
+
+The four M7 semantic-write canaries are deterministic, memory-backed public
+Fava executions. They do not start a relay or use timing sleeps:
+
+```sh
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-first-value --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-rematerialization --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run replaceable-edit-inverse --seed <unique-seed>
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run protocol-crate-n-plus-one --seed <unique-seed>
+```
+
+Each successful run writes `semantic.json`, a bounded event log, a report, and
+a manifest with artifact hashes. Every publication record correlates its exact
+write, receipt, materialization, event, engine-owned timestamp, relay session,
+and attempt number. Semantic generations assert exact timestamp agreement with
+their accepted materialization and strict monotonicity across rematerialization.
+Rematerialization evidence includes the qualified source, explicit processing
+acknowledgements for current and stale successful signing completions, preserved
+fields, and zero stale effects. Inverse evidence includes both final events and
+all ten correlated attempts. N+1 evidence records canonical-package normal-edge
+Cargo reachability, Bazel product reachability, owned-child reaping, and the raw
+future event's exact caller-owned `created_at = 42`, tags, content, and identity.
+A failed run retains bounded `failure.json`, `replay.json`, report, event log,
+and hashed manifest evidence; the replay record names the working directory,
+redacts the caller seed while retaining its hash, and selects a fresh output
+directory. Any missing proof exits nonzero.
