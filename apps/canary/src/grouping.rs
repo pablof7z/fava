@@ -18,6 +18,7 @@ use fava_transport_websocket::WebSocketTransport;
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, EventId, FinalizeEvent, Kind, Tag};
+use nostr::filter::Filter;
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -104,7 +105,9 @@ pub async fn run_grouping_scenario(options: SmokeOptions) -> CanaryResult<PathBu
             standard.request_count, separate.request_count
         )));
     }
-    verify_wire(&artifacts.wire_log(), &separate)?;
+    let grouped_filter =
+        Filter::new().custom_tags(key, corpus.iter().map(|item| item.value.clone()));
+    verify_wire(&artifacts.wire_log(), &grouped_filter, &demand, &separate)?;
 
     processes.push(process.graceful_stop().await?);
     proxy.shutdown().await?;
@@ -411,28 +414,16 @@ fn compare_results(
     Ok(facts)
 }
 
-fn verify_wire(path: &std::path::Path, separate: &PlanExecution) -> CanaryResult<()> {
-    let mut reqs = BTreeMap::<u64, usize>::new();
+fn verify_wire(
+    path: &std::path::Path,
+    grouped_filter: &Filter,
+    logical_demand: &[RelayDemand],
+    separate: &PlanExecution,
+) -> CanaryResult<()> {
+    let mut reqs = BTreeMap::<u64, Vec<Value>>::new();
     let mut capacity_refusals = Vec::new();
-    for line in std::fs::read_to_string(path)?.lines() {
-        let entry: Value = serde_json::from_str(line)?;
-        let payload = entry.get("payload").and_then(Value::as_str).unwrap_or("");
-        if entry.get("direction").and_then(Value::as_str) == Some("client_to_relay")
-            && payload.starts_with("[\"REQ\"")
-        {
-            let connection = entry
-                .get("connection")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| CanaryError::new("REQ omitted proxy connection"))?;
-            *reqs.entry(connection).or_default() += 1;
-        }
-        if entry.get("direction").and_then(Value::as_str) == Some("relay_to_client")
-            && payload.contains(CAPACITY_REFUSAL_TEXT)
-        {
-            capacity_refusals.push(payload.to_owned());
-        }
-    }
-    let mut counts: Vec<_> = reqs.into_values().collect();
+    read_wire_requests(path, &mut reqs, &mut capacity_refusals)?;
+    let mut counts: Vec<_> = reqs.values().map(Vec::len).collect();
     counts.sort_unstable();
     let expected = if separate.capacity_refusal.is_some() {
         let mut expected = vec![1, LOGICAL_QUERY_COUNT];
@@ -445,11 +436,6 @@ fn verify_wire(path: &std::path::Path, separate: &PlanExecution) -> CanaryResult
             expected.push(remainder);
         }
         expected.sort_unstable();
-        if capacity_refusals.is_empty() {
-            return Err(CanaryError::new(
-                "batched execution omitted explicit relay capacity refusal",
-            ));
-        }
         expected
     } else {
         vec![1, LOGICAL_QUERY_COUNT]
@@ -459,7 +445,124 @@ fn verify_wire(path: &std::path::Path, separate: &PlanExecution) -> CanaryResult
             "proxy REQ witness mismatch: expected={expected:?}, actual={counts:?}"
         )));
     }
+    if separate.capacity_refusal.is_some() && capacity_refusals.is_empty() {
+        return Err(CanaryError::new(
+            "batched execution omitted explicit relay capacity refusal",
+        ));
+    }
+    verify_filter_sets(&reqs, grouped_filter, logical_demand, separate)
+}
+
+fn read_wire_requests(
+    path: &std::path::Path,
+    reqs: &mut BTreeMap<u64, Vec<Value>>,
+    capacity_refusals: &mut Vec<String>,
+) -> CanaryResult<()> {
+    for line in std::fs::read_to_string(path)?.lines() {
+        let entry: Value = serde_json::from_str(line)?;
+        let payload = entry.get("payload").and_then(Value::as_str).unwrap_or("");
+        if entry.get("direction").and_then(Value::as_str) == Some("client_to_relay") {
+            let message: Value = serde_json::from_str(payload)?;
+            let Some(parts) = message.as_array() else {
+                return Err(CanaryError::new("client wire payload was not a JSON array"));
+            };
+            if parts.first().and_then(Value::as_str) != Some("REQ") {
+                continue;
+            }
+            if parts.len() != 3
+                || parts.get(1).and_then(Value::as_str).is_none()
+                || parts.get(2).and_then(Value::as_object).is_none()
+            {
+                return Err(CanaryError::new(
+                    "planner REQ must contain one subscription id and one filter",
+                ));
+            }
+            let connection = entry
+                .get("connection")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| CanaryError::new("REQ omitted proxy connection"))?;
+            reqs.entry(connection).or_default().push(parts[2].clone());
+        }
+        if entry.get("direction").and_then(Value::as_str) == Some("relay_to_client")
+            && payload.contains(CAPACITY_REFUSAL_TEXT)
+        {
+            capacity_refusals.push(payload.to_owned());
+        }
+    }
     Ok(())
+}
+
+fn verify_filter_sets(
+    reqs: &BTreeMap<u64, Vec<Value>>,
+    grouped_filter: &Filter,
+    logical_demand: &[RelayDemand],
+    separate: &PlanExecution,
+) -> CanaryResult<()> {
+    let expected_grouped = serde_json::to_value(grouped_filter)?;
+    let grouped_connections = reqs
+        .iter()
+        .filter(|(_, filters)| filters.as_slice() == [expected_grouped.clone()])
+        .map(|(connection, _)| *connection)
+        .collect::<Vec<_>>();
+    if grouped_connections.len() != 1 {
+        return Err(CanaryError::new(format!(
+            "expected one exact grouped filter, found connections {grouped_connections:?}"
+        )));
+    }
+    let grouped_connection = grouped_connections[0];
+    let expected_separate = logical_demand
+        .iter()
+        .map(|demand| serde_json::to_string(&demand.filter))
+        .collect::<Result<Vec<_>, _>>()?;
+    let expected_separate = filter_multiset(expected_separate);
+    let concurrent_connections = reqs
+        .iter()
+        .filter(|(connection, filters)| {
+            **connection != grouped_connection && filters.len() == LOGICAL_QUERY_COUNT
+        })
+        .map(|(connection, filters)| (*connection, filters))
+        .collect::<Vec<_>>();
+    if concurrent_connections.len() != 1 {
+        return Err(CanaryError::new(format!(
+            "expected one {LOGICAL_QUERY_COUNT}-REQ no-grouping connection, found {}",
+            concurrent_connections.len()
+        )));
+    }
+    let concurrent_connection = concurrent_connections[0].0;
+    let concurrent_filters =
+        filter_multiset(concurrent_connections[0].1.iter().map(Value::to_string));
+    if concurrent_filters != expected_separate {
+        return Err(CanaryError::new(
+            "concurrent no-grouping filters differed from logical demand",
+        ));
+    }
+    let retry_filters = filter_multiset(
+        reqs.iter()
+            .filter(|(connection, _)| {
+                **connection != grouped_connection && **connection != concurrent_connection
+            })
+            .flat_map(|(_, filters)| filters.iter().map(Value::to_string)),
+    );
+    if separate.capacity_refusal.is_some() {
+        if retry_filters != expected_separate {
+            return Err(CanaryError::new(
+                "batched no-grouping retry filters differed from logical demand",
+            ));
+        }
+    } else if !retry_filters.is_empty() {
+        return Err(CanaryError::new(
+            "unexpected extra no-grouping filters without a capacity retry",
+        ));
+    }
+    Ok(())
+}
+
+fn filter_multiset(filters: impl IntoIterator<Item = String>) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for filter in filters {
+        *counts.entry(filter).or_default() += 1;
+    }
+    counts
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -538,3 +641,7 @@ fn finish(
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
 }
+
+#[cfg(test)]
+#[path = "grouping_tests.rs"]
+mod tests;
