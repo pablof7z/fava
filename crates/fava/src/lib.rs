@@ -18,7 +18,7 @@ use fava_publication::Publication;
 pub use fava_publication::PublicationError;
 use fava_publisher::Publisher;
 pub use fava_query::{
-    EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority,
+    EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority, SingleLetterTag,
 };
 use fava_query::{QueryEvaluator, QuerySource};
 pub use fava_routing::RoutePlan;
