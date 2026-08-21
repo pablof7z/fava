@@ -277,7 +277,7 @@ Explicit routes bypass this chain and produce an exact route plan directly.
 | Relay execution | `fava-subscriptions`, `fava-transport`, `fava-publisher`, `fava-delivery` | Group demand, move bytes, perform attempts, schedule retries |
 | Identity | `fava-signer`, signer implementation crates, `fava-session`, `fava-auth` | Account, signing, crypto, and relay-access lifecycles |
 | Protocol services | `fava-nip11`, `fava-nip05` and later service crates | Non-event protocol acquisition and interpretation |
-| Protocol crates | `fava-nip02`, `fava-nip29`, `fava-bookmarks`, etc. | Event-kind meaning, typed queries, event construction, and replaceable-event edits |
+| Protocol crates | `fava-nip02`, `fava-simple-groups`, `fava-bookmarks`, etc. | Event-kind meaning, typed queries, event construction, and replaceable-event edits |
 | Universal owners | `fava-ingest`, `fava-observe`, `fava-publication`, `fava-diagnostics`, `fava-runtime` | Fava-instance lifecycles and cross-subsystem ordering |
 | Product assembly | `fava`, `fava-standard`, `fava-ffi`, Swift/Kotlin packages | Public facade, default profile, and platform artifacts |
 
@@ -1867,7 +1867,7 @@ Examples:
 
 ```text
 fava-nip02          follow-list decoding and follow/unfollow operations
-fava-nip29          group-scoped values and operations
+fava-simple-groups  group-scoped values and operations
 fava-nip65          relay-list event semantics
 fava-bookmarks      public bookmark-list semantics
 fava-nip18          repost semantics
@@ -3444,7 +3444,7 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 | `fava-nip11` | NIP-11 values, parsing, validation, and freshness vocabulary. |
 | `fava-nip11-http` | HTTP NIP-11 acquisition and service-owned caching policy. |
 | `fava-nip65` | Pure NIP-65 relay-list event semantics. |
-| `fava-nip02`, `fava-nip29`, `fava-bookmarks`, ... | Independent event-kind protocol crates built from query, event-building, and write primitives. |
+| `fava-nip02`, `fava-simple-groups`, `fava-bookmarks`, ... | Independent event-kind protocol crates built from query, event-building, and write primitives. |
 | `fava-content` | Pure content parsing into structured values without rendering or acquisition. |
 
 ## Testing packages

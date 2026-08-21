@@ -175,6 +175,28 @@ Plans:
 - [x] 07-08-PLAN.md
 - [x] 07-09-PLAN.md
 
+### Phase 07.1: Universal publication vocabulary and typed NIP-02 reads (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 07.1 to break down)
+
+### Phase 07.1.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability defined by its README North Star (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 07.1
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 07.1.1 to break down)
+
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
 **Goal:** Applications receive exact, isolated outcomes under relay authentication, malformed or hostile input, overload, provider failure, retry, ambiguity, and shutdown pressure.
