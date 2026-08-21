@@ -1,7 +1,5 @@
 use fava_state::EventCoordinate;
-use fava_write::{
-    Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag, Timestamp, WriteIntentError,
-};
+use fava_write::{Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
@@ -11,7 +9,13 @@ fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("nonempty test tag")
 }
 
-fn source(keys: &Keys, kind: Kind, created_at: u64, content: &str, tags: Vec<Tag>) -> fava_write::Event {
+fn source(
+    keys: &Keys,
+    kind: Kind,
+    created_at: u64,
+    content: &str,
+    tags: Vec<Tag>,
+) -> fava_write::Event {
     EventBuilder::new(kind, content)
         .tags(tags)
         .custom_created_at(Timestamp::from(created_at))
@@ -34,7 +38,10 @@ fn target_tags(event: &fava_write::UnsignedEvent, target: PublicKey) -> usize {
         .filter(|tag| {
             let values = tag.as_slice();
             values.first().map(String::as_str) == Some("p")
-                && values.get(1).and_then(|value| PublicKey::from_hex(value).ok()) == Some(target)
+                && values
+                    .get(1)
+                    .and_then(|value| PublicKey::from_hex(value).ok())
+                    == Some(target)
         })
         .count()
 }
@@ -64,13 +71,7 @@ fn follow_empty_and_unfollow_inverse() {
     assert_eq!(first.content, "");
     assert_eq!(first.tags.as_slice(), &[tag(&["p", &target.to_hex()])]);
 
-    let signed = source(
-        &actor,
-        Kind::ContactList,
-        7,
-        "opaque",
-        first.tags.to_vec(),
-    );
+    let signed = source(&actor, Kind::ContactList, 7, "opaque", first.tags.to_vec());
     let empty = materialize(&unfollow_edit, Some(&signed), 8).expect("inverse applies");
     assert!(empty.tags.is_empty());
     assert_eq!(empty.content, "opaque");
@@ -81,12 +82,7 @@ fn follow_preserves_unrelated_state_and_orders_deterministically() {
     let actor = Keys::generate();
     let target = Keys::generate().public_key();
     let other = Keys::generate().public_key();
-    let kept = tag(&[
-        "p",
-        &target.to_hex(),
-        "wss://hint.example",
-        "petname",
-    ]);
+    let kept = tag(&["p", &target.to_hex(), "wss://hint.example", "petname"]);
     let tags = vec![
         tag(&["t", "first"]),
         kept.clone(),
@@ -95,7 +91,13 @@ fn follow_preserves_unrelated_state_and_orders_deterministically() {
         tag(&["p", &target.to_hex(), "wss://duplicate.example"]),
         tag(&["p", "not-a-public-key", "malformed"]),
     ];
-    let source = source(&actor, Kind::ContactList, 10, "opaque-content", tags.clone());
+    let source = source(
+        &actor,
+        Kind::ContactList,
+        10,
+        "opaque-content",
+        tags.clone(),
+    );
     let edit = follow(actor.public_key(), target).expect("follow edit");
 
     let first = materialize(&edit, Some(&source), 11).expect("follow applies");
@@ -131,14 +133,26 @@ fn follow_duplicate_and_adjacent_edits_are_idempotent() {
     assert_eq!(target_tags(&once, target), 1);
     assert_eq!(once.tags[0].as_slice(), &["p", &target_hex, "first"]);
 
-    let signed_once = source(&actor, Kind::ContactList, 21, "", once.tags.to_vec());
+    let signed_once = source(
+        &actor,
+        Kind::ContactList,
+        21,
+        "",
+        once.tags.clone().to_vec(),
+    );
     let twice = materialize(&add, Some(&signed_once), 22).expect("repeat is idempotent");
     assert_eq!(once.tags, twice.tags);
 
     let remove = unfollow(actor.public_key(), target).expect("unfollow edit");
     let removed = materialize(&remove, Some(&original), 21).expect("all adjacent matches removed");
     assert_eq!(removed.tags.as_slice(), &[tag(&["x", "kept"])]);
-    let signed_removed = source(&actor, Kind::ContactList, 21, "", removed.tags.to_vec());
+    let signed_removed = source(
+        &actor,
+        Kind::ContactList,
+        21,
+        "",
+        removed.tags.clone().to_vec(),
+    );
     let removed_twice = materialize(&remove, Some(&signed_removed), 22).expect("repeat removal");
     assert_eq!(removed.tags, removed_twice.tags);
 }
@@ -151,12 +165,21 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
     let edit = follow(actor.public_key(), target).expect("follow edit");
     let wrong_actor = source(&other_actor, Kind::ContactList, 1, "", Vec::new());
     let wrong_kind = source(&actor, Kind::from_u16(10_003), 1, "", Vec::new());
-    assert!(matches!(materialize(&edit, Some(&wrong_actor), 2), Err(WriteIntentError::InvalidEvent(_))));
-    assert!(matches!(materialize(&edit, Some(&wrong_kind), 2), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        materialize(&edit, Some(&wrong_actor), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
+    assert!(matches!(
+        materialize(&edit, Some(&wrong_kind), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
 
     let mut tampered = source(&actor, Kind::ContactList, 1, "original", Vec::new());
     tampered.content = "tampered".to_owned();
-    assert!(matches!(materialize(&edit, Some(&tampered), 2), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        materialize(&edit, Some(&tampered), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
 
     let coordinate = edit.coordinate().clone();
     let wrong_format = ReplaceableEventEdit::new(
@@ -178,18 +201,38 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
     )
     .expect("bounded malformed edit");
     assert!(!materializer().supports(&malformed));
-    assert!(matches!(materialize(&malformed, None, 1), Err(WriteIntentError::Encoding(_))));
+    assert!(matches!(
+        materialize(&malformed, None, 1),
+        Err(WriteIntentError::Encoding(_))
+    ));
 
     let too_many = source(
         &actor,
         Kind::ContactList,
         1,
         "",
-        (0..2_001).map(|index| tag(&["x", &index.to_string()])).collect(),
+        (0..2_001)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
     );
-    assert!(matches!(materialize(&edit, Some(&too_many), 2), Err(WriteIntentError::TooLarge { .. })));
-    let too_large = source(&actor, Kind::ContactList, 1, &"x".repeat(140_000), Vec::new());
-    assert!(matches!(materialize(&edit, Some(&too_large), 2), Err(WriteIntentError::TooLarge { .. })));
+    assert!(matches!(
+        materialize(&edit, Some(&too_many), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+    let too_large = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        &"x".repeat(140_000),
+        Vec::new(),
+    );
+    assert!(matches!(
+        materialize(&edit, Some(&too_large), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
     let latest = source(&actor, Kind::ContactList, u64::MAX, "", Vec::new());
-    assert!(matches!(materialize(&edit, Some(&latest), u64::MAX), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        materialize(&edit, Some(&latest), u64::MAX),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
 }
