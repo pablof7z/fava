@@ -15,7 +15,7 @@ affects: [phase-07-verification, capability-composition, public-facade]
 actuals:
   tokens: 16099
   tasks: 2
-  commits: 5
+  commits: 7
 tech-stack:
   added: []
   patterns:
@@ -106,8 +106,9 @@ status: complete
 2. **Task 1 GREEN: Implement external semantic capability** — `934686a` (feat)
 3. **Task 2 RED: Add failing external public lifecycle proof** — `58bd1c5` (test)
 4. **Task 2 GREEN: Prove external public publication lifecycle** — `25da31d` (test)
+5. **Postflight: Remove manifest trailing whitespace** — `87cf4e8` (style)
 
-**Plan metadata:** this commit
+**Plan metadata:** `ff98c84` plus the final summary correction commit
 
 ## Files Created/Modified
 
@@ -142,9 +143,17 @@ status: complete
 - **Verification:** External all-target tests and strict Clippy pass.
 - **Committed in:** `25da31d`
 
+**3. [Rule 1 - Formatting] Removed an extra manifest EOF blank line**
+- **Found during:** Final post-summary diff check
+- **Issue:** `git diff --check` reported a new blank line at EOF in the isolated manifest.
+- **Fix:** Removed the trailing blank line without changing dependencies or behavior.
+- **Files modified:** `falsifiers/external-semantic-capability/Cargo.toml`
+- **Verification:** The base-to-HEAD diff check and all six external tests pass.
+- **Committed in:** `87cf4e8`
+
 ---
 
-**Total deviations:** 2 auto-fixed blocking/cohesion adjustments. **Impact on plan:** Test-only dependencies and private support structure only; no core, facade, product, or vocabulary change.
+**Total deviations:** 3 auto-fixed blocking, cohesion, and formatting adjustments. **Impact on plan:** Test-only dependencies, private support structure, and whitespace only; no core, facade, product, or vocabulary change.
 
 ## Issues Encountered
 
@@ -175,7 +184,7 @@ Plan 07-08 and final Phase 7 verification can consume the external N+1 and raw-f
 
 ## Self-Check: PASSED
 
-All five external artifacts and four task commits exist; every guarded, dependency, vocabulary, diff, line, relevant-public, and full-workspace verification passed.
+All five external artifacts and five implementation/evidence commits exist; every guarded, dependency, vocabulary, diff, line, relevant-public, and full-workspace verification passed.
 
 ---
 *Phase: 07-semantic-writes-and-capability-composition*
