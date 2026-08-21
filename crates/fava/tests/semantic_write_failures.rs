@@ -1,32 +1,26 @@
 //! Public semantic-write failure isolation and attribution evidence.
 
-use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, EventValue, Fava, Kind, MaterializationId,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent,
-    WriteIntentError, WritePayload, WriteRouting,
+    Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntentError,
 };
-use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CacheMutation, CachedEvent};
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
-use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 
+#[path = "semantic_write_failures/support.rs"]
+mod failure_support;
 #[path = "support/semantic_write.rs"]
+#[allow(dead_code)]
 mod support;
 
-use support::{
-    BlockingSigner, EDIT_FORMAT, NoopTransport, RecordingPublisher, relay_evidence, relay_url,
-    signed_source,
-};
+use failure_support::{assembly, edit_intent, save_source, wait_failure, wait_public_failure};
+use support::{EDIT_FORMAT, signed_source};
 
 const VALID: u8 = 0;
 const ERROR: u8 = 1;
@@ -100,75 +94,6 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
     }
 }
 
-fn edit_intent(actor: fava::PublicKey, kind: Kind) -> WriteIntent {
-    let edit = ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind,
-            identifier: None,
-        },
-        EDIT_FORMAT,
-        vec![1],
-        vec![2],
-    )
-    .unwrap();
-    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).unwrap()
-}
-
-fn assembly(
-    keys: &Keys,
-    cache: Arc<MemoryEventCache>,
-    store: Arc<MemoryWriteStore>,
-    materializers: Vec<Arc<ControlledMaterializer>>,
-) -> Fava {
-    Fava::builder()
-        .event_cache(cache)
-        .write_store(store)
-        .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .transport(Arc::new(NoopTransport))
-        .signer(Arc::new(BlockingSigner::new(keys.public_key())))
-        .publisher(Arc::new(RecordingPublisher::default()))
-        .delivery_policy(Arc::new(
-            fava_delivery_standard::StandardDeliveryPolicy::default(),
-        ))
-        .materializers(
-            materializers
-                .into_iter()
-                .map(|value| value as Arc<dyn ReplaceableEventMaterializer>),
-        )
-        .build()
-        .unwrap()
-}
-
-async fn wait_failure(fava: &Fava, receipt_id: fava::ReceiptId) -> fava::Receipt {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let receipt = fava.receipt(receipt_id).unwrap().unwrap();
-            if receipt
-                .current
-                .publication
-                .materialization_failure
-                .is_some()
-            {
-                return receipt;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("failure becomes public")
-}
-
-fn save_source(cache: &MemoryEventCache, source: Event) {
-    cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
-            source,
-            relay_evidence(),
-        ))])
-        .expect("source commits");
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn materializer_error_is_bounded_and_preserves_current() {
     let keys = Keys::generate();
@@ -181,9 +106,22 @@ async fn materializer_error_is_bounded_and_preserves_current() {
         store,
         vec![Arc::clone(&materializer)],
     );
+    let mut observation = fava
+        .observe(
+            fava::Query::events()
+                .authors([keys.public_key()])
+                .kind(Kind::ContactList)
+                .cache_only(),
+        )
+        .await
+        .expect("semantic query opens");
     let accepted = fava
         .publish(edit_intent(keys.public_key(), Kind::ContactList))
         .unwrap();
+    observation
+        .changed()
+        .await
+        .expect("accepted value is public");
     materializer.set(ERROR);
     save_source(
         &cache,
@@ -195,6 +133,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
     let evidence = failed.current.publication.materialization_failure.unwrap();
     assert!(evidence.len() <= 4_096);
     assert!(evidence.contains("materialization 1"));
+    assert_eq!(wait_public_failure(&mut observation).await, evidence);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -202,11 +141,12 @@ async fn materializer_panic_is_scoped_and_attributed() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let healthy = Arc::new(ControlledMaterializer::new(Kind::MuteList));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::new(MemoryWriteStore::default()),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&materializer), Arc::clone(&healthy)],
     );
     let accepted = fava
         .publish(edit_intent(keys.public_key(), Kind::ContactList))
@@ -226,6 +166,19 @@ async fn materializer_panic_is_scoped_and_attributed() {
             .materialization_failure
             .unwrap()
             .contains("panicked")
+    );
+
+    let unaffected = fava
+        .publish(edit_intent(keys.public_key(), Kind::MuteList))
+        .expect("unrelated receipt accepts");
+    save_source(
+        &cache,
+        signed_source(&keys, Kind::MuteList, 20, "healthy source", &[]),
+    );
+    let progressed = support::wait_for_materialization(&fava, unaffected.receipt_id, 2).await;
+    assert_eq!(
+        progressed.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
     );
 }
 
@@ -254,44 +207,125 @@ async fn malformed_and_oversize_outputs_preserve_current() {
     }
 }
 
-#[test]
-fn timestamp_and_evidence_overflow_preserve_current() {
+#[tokio::test(flavor = "current_thread")]
+async fn timestamp_and_evidence_overflow_preserve_current() {
     assert_eq!(destination_evidence_capacity(), 256);
     let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    save_source(
+        &cache,
+        signed_source(
+            &keys,
+            Kind::ContactList,
+            u64::MAX - 1,
+            "penultimate source",
+            &[],
+        ),
+    );
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let fava = assembly(
+        &keys,
+        Arc::clone(&cache),
+        Arc::new(MemoryWriteStore::default()),
+        vec![Arc::clone(&materializer)],
+    );
+    let accepted = fava
+        .publish(edit_intent(keys.public_key(), Kind::ContactList))
+        .unwrap();
+    save_source(
+        &cache,
+        signed_source(&keys, Kind::ContactList, u64::MAX, "last source", &[]),
+    );
+    let failed = wait_failure(&fava, accepted.receipt_id).await;
+    assert_eq!(failed.current.id(), accepted.current.id());
+    assert!(
+        failed
+            .current
+            .publication
+            .materialization_failure
+            .as_deref()
+            .is_some_and(|reason| reason.contains("timestamp exhausted"))
+    );
+
     let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
-    let intent = edit_intent(keys.public_key(), Kind::ContactList);
-    assert!(matches!(intent.payload(), WritePayload::Edit(_)));
-    let current = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let first = EventBuilder::new(keys.public_key(), Kind::ContactList)
         .created_at(Timestamp::from(1))
-        .content("current")
+        .content("generation zero")
         .build()
         .unwrap();
     let accepted = store
-        .accept_materialized_edit(intent, current, None)
+        .accept_materialized_edit(
+            edit_intent(keys.public_key(), Kind::ContactList),
+            first,
+            None,
+        )
         .unwrap();
-    let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    let max_source = EventBuilder::new(keys.public_key(), Kind::ContactList)
-        .created_at(Timestamp::from(u64::MAX))
-        .content("max")
-        .build()
-        .unwrap()
-        .finalize(&keys)
-        .unwrap();
-    assert!(
+    let mut expected = MaterializationId::from_u64(1);
+    let mut expected_source = None;
+    for generation in 0..destination_evidence_capacity() {
+        let source_time = 2 + generation as u64 * 2;
+        let source = signed_source(
+            &keys,
+            Kind::ContactList,
+            source_time,
+            &format!("source {generation}"),
+            &[],
+        );
         store
-            .record_materialization_failure(
+            .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
-                None,
-                Some(&max_source),
-                "materialization timestamp exhausted".to_owned(),
+                expected,
+                expected_source,
+                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                    .created_at(Timestamp::from(source_time + 1))
+                    .content(format!("generation {generation}"))
+                    .build()
+                    .unwrap(),
+                Some(&source),
             )
-            .is_ok()
+            .unwrap();
+        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected_source = Some(source.id);
+    }
+    let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    let overflow_source = signed_source(&keys, Kind::ContactList, 1_000, "overflow source", &[]);
+    assert!(
+        store
+            .install_materialization(
+                accepted.write_id,
+                accepted.receipt_id,
+                expected,
+                expected_source,
+                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                    .created_at(Timestamp::from(1_001))
+                    .content("overflow generation")
+                    .build()
+                    .unwrap(),
+                Some(&overflow_source),
+            )
+            .is_err()
     );
-    let failed = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    assert_eq!(failed.current.id(), before.current.id());
-    assert!(matches!(failed.current.event, EventValue::Unsigned(_)));
+    store
+        .record_materialization_failure(
+            accepted.write_id,
+            accepted.receipt_id,
+            expected,
+            expected_source,
+            Some(&overflow_source),
+            "retired materialization evidence capacity reached".to_owned(),
+        )
+        .unwrap();
+    let exhausted = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    assert_eq!(exhausted.current.id(), before.current.id());
+    assert!(
+        exhausted
+            .current
+            .publication
+            .materialization_failure
+            .as_deref()
+            .is_some_and(|reason| reason.contains("evidence capacity reached"))
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

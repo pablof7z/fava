@@ -95,14 +95,16 @@ impl SemanticState {
         edit: ReplaceableEventEdit,
         selected_id: Option<fava_write::EventId>,
         source_floor: Option<Timestamp>,
-        failed_id: Option<fava_write::EventId>,
+        _failed_id: Option<fava_write::EventId>,
         sources: OpenedSemanticSources,
     ) -> Self {
         Self {
             edit,
             selected_id,
             source_floor,
-            failed_id,
+            // Recovery authorizes exactly one retry of the persisted failed
+            // source. A repeated live failure sets this again and suppresses spin.
+            failed_id: None,
             sources,
         }
     }
@@ -170,23 +172,6 @@ impl Publication {
         })
     }
 
-    pub(super) fn ensure_semantic_admission(&self) -> Result<(), PublicationError> {
-        let capacity = self.store.active_capacity();
-        if capacity == 0 {
-            return Err(fava_write_store::WriteStoreError::Refused(
-                "write store does not support replaceable-event edits".to_owned(),
-            )
-            .into());
-        }
-        if self.store.recover_open()?.len() >= capacity {
-            return Err(fava_write_store::WriteStoreError::Refused(format!(
-                "bounded write-store capacity {capacity} reached"
-            ))
-            .into());
-        }
-        Ok(())
-    }
-
     pub(super) fn materialize_and_route(
         &self,
         intent: &WriteIntent,
@@ -200,12 +185,20 @@ impl Publication {
         };
         let materializer = self.materializer(edit)?;
         let created_at = injected_timestamp(source, current)?;
-        let event = match materializer.materialize(edit, source, created_at) {
-            Ok(event) => event,
-            Err(error) => {
+        let materialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            materializer.materialize(edit, source, created_at)
+        }));
+        let event = match materialized {
+            Ok(Ok(event)) => event,
+            Ok(Err(error)) => {
                 return Err(PublicationError::Routing(format!(
                     "semantic materialization refused: {error}"
                 )));
+            }
+            Err(_) => {
+                return Err(PublicationError::Routing(
+                    "semantic materializer panicked".to_owned(),
+                ));
             }
         };
         validate_materialization(edit, &event, intent.routing())?;

@@ -168,6 +168,7 @@ rust_test(
     name = "semantic_write_failures",
     srcs = [
         "tests/semantic_write_failures.rs",
+        "tests/semantic_write_failures/support.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_failures",
