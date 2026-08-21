@@ -28,7 +28,7 @@ Feature: Semantic replaceable-event writes
   Scenario: opposing operations
     Given a protocol capability has produced a bounded semantic edit
     When the capability produces and publishes the opposing edit
-    Then the opposing operation uses the same write lifecycle and restores the intended protocol state
+    Then both edits use the same write lifecycle and restore the intended protocol state
 
   # fava:rust=external-semantic-capability-proof/public_capability#external_capability_composes_through_public_fava
   Scenario: external N+1

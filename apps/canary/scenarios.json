@@ -151,9 +151,9 @@
       "status": "enabled"
     },
     {
-      "id": "replaceable-edit-inverse",
+      "id": "replaceable-edit-opposing-operations",
       "milestone": "M7",
-      "requirements": ["M7 public NIP-02 and bookmark inverse composition"],
+      "requirements": ["M7 public NIP-02 and bookmark opposing-operation composition"],
       "status": "enabled"
     },
     {

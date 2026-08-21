@@ -89,8 +89,8 @@ async fn replaceable_edit_rematerialization_records_retired_inertness() {
 }
 
 #[tokio::test]
-async fn replaceable_edit_inverse_covers_both_capabilities() {
-    let evidence = run("replaceable-edit-inverse").await;
+async fn replaceable_edit_opposing_operations_cover_both_capabilities() {
+    let evidence = run("replaceable-edit-opposing-operations").await;
     assert_eq!(evidence["operations"], 10);
     assert_eq!(evidence["nip02_final_targets"], 0);
     assert_eq!(evidence["bookmark_final_targets"], 0);

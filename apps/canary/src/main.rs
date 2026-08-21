@@ -117,7 +117,7 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         }
         "replaceable-edit-first-value"
         | "replaceable-edit-rematerialization"
-        | "replaceable-edit-inverse"
+        | "replaceable-edit-opposing-operations"
         | "protocol-crate-n-plus-one" => {
             run_semantic_write_scenario(&scenario, smoke_options(&mut arguments, "semantic-m7")?)
                 .await?

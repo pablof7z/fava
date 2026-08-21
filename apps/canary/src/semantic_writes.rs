@@ -33,7 +33,7 @@ pub(crate) fn has_executor(id: &str) -> bool {
         id,
         "replaceable-edit-first-value"
             | "replaceable-edit-rematerialization"
-            | "replaceable-edit-inverse"
+            | "replaceable-edit-opposing-operations"
             | "protocol-crate-n-plus-one"
     )
 }
@@ -58,7 +58,7 @@ pub async fn run_semantic_write_scenario(id: &str, options: SmokeOptions) -> Can
     let outcome = match id {
         "replaceable-edit-first-value" => first_value(&options.seed).await,
         "replaceable-edit-rematerialization" => rematerialization(&options.seed).await,
-        "replaceable-edit-inverse" => inverse(&options.seed).await,
+        "replaceable-edit-opposing-operations" => opposing_operations(&options.seed).await,
         "protocol-crate-n-plus-one" => semantic_n_plus_one::execute(&options.seed).await,
         _ => unreachable!("executor checked above"),
     };
@@ -372,7 +372,7 @@ fn require_completion(
     Ok(())
 }
 
-async fn inverse(seed: &str) -> CanaryResult<Value> {
+async fn opposing_operations(seed: &str) -> CanaryResult<Value> {
     let keys = deterministic_keys(&format!("{seed}-actor"))?;
     let bob = deterministic_keys(&format!("{seed}-bob"))?.public_key();
     let carol = deterministic_keys(&format!("{seed}-carol"))?.public_key();
@@ -408,11 +408,10 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
             .map_err(error)?;
         let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
         let event = published_event(&receipt)?;
-        let publication_attempt = publisher
-            .attempts()
-            .last()
-            .cloned()
-            .ok_or_else(|| CanaryError::new("inverse publication attempt missing"))?;
+        let publication_attempt =
+            publisher.attempts().last().cloned().ok_or_else(|| {
+                CanaryError::new("opposing-operation publication attempt missing")
+            })?;
         attempts.push(attempt_evidence(&accepted, &receipt, &publication_attempt)?);
         cache
             .admit(
@@ -430,7 +429,7 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
         + target_count(&bookmarks, "e", &bookmark_b.to_hex());
     if nip02_targets != 0 || bookmark_targets != 0 || publisher.attempts().len() != 10 {
         return Err(CanaryError::new(
-            "inverse lifecycle did not return to empty state",
+            "opposing operations did not return to empty state",
         ));
     }
     Ok(json!({

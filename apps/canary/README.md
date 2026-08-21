@@ -40,7 +40,7 @@ cargo run --manifest-path apps/canary/Cargo.toml -- \
 cargo run --manifest-path apps/canary/Cargo.toml -- \
   run replaceable-edit-rematerialization --seed <unique-seed>
 cargo run --manifest-path apps/canary/Cargo.toml -- \
-  run replaceable-edit-inverse --seed <unique-seed>
+  run replaceable-edit-opposing-operations --seed <unique-seed>
 cargo run --manifest-path apps/canary/Cargo.toml -- \
   run protocol-crate-n-plus-one --seed <unique-seed>
 ```
