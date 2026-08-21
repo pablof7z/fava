@@ -185,18 +185,43 @@ Plans:
 **Plans:** 12 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 07.1-01-PLAN.md — Trace universal synchronous publication from public payload to durable, query-visible `Write`
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07.1-02-PLAN.md — Add inert signer/relay scopes and ordered explicit-route custody
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07.1-03-PLAN.md — Add exact receipt summaries and bounded caller-selected settlement
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07.1-04-PLAN.md — Decode kind-3 events into conserving typed `ContactList` values
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 07.1-05-PLAN.md — Add one/many contact reads, follower discovery, and pure projection
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 07.1-06-PLAN.md — Complete lossless README-shaped NIP-02 edit helpers
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 07.1-07-PLAN.md — Migrate primary facade publication regressions
 - [ ] 07.1-08-PLAN.md — Migrate store, lifecycle, signer, and fault harnesses
 - [ ] 07.1-09-PLAN.md — Remove the old facade compatibility surface and prove independent consumption
 - [ ] 07.1-10-PLAN.md — Migrate the existing downstream canary corpus
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 07.1-11-PLAN.md — Replace authoritative specs, vocabulary, issues, validation, and README
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 07.1-12-PLAN.md — Run the controlled Croissant canary twice and close all phase gates
 
 ### Phase 07.1.1: Multi-Relay Simple Groups (INSERTED)
