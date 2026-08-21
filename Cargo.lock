@@ -275,12 +275,14 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-bookmarks",
  "fava-delivery",
  "fava-delivery-standard",
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-ingest",
+ "fava-nip02",
  "fava-observe",
  "fava-publication",
  "fava-publisher",
