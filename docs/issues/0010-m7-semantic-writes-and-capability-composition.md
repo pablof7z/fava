@@ -84,3 +84,33 @@ git diff --exit-code -- crates/fava-write-store/src/lib.rs
 ```
 
 DELIBERATE_BREAK_M7_STALE_COMPLETION: PASS original=50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af restored=50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af baseline=12/12 restored_target=12/12
+
+### Protocol dependency direction
+
+`DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` temporarily inserted only:
+
+```rust
+use fava_signer as _deliberate_break_m7_forbidden_dependency;
+```
+
+into `crates/fava-nip02/src/lib.rs`.
+
+- Original SHA-256: `deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2`.
+- `cargo check -p fava-nip02 --lib` reached the protocol crate and failed with
+  Rust error E0432 at the inserted line: `no external crate fava_signer`.
+  This is the intended undeclared-dependency failure, not syntax or an
+  unrelated target failure.
+- A scoped source edit removed the one temporary import. SHA-256 returned to
+  the original value, the source diff was empty, and NIP-02 passed 7 unit plus
+  1 external public-API test.
+
+DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY: PASS original=deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2 restored=deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2 diagnostic=E0432 restored_target=7+1
+
+### Canary roster authority
+
+The detailed M7 section requires four canaries, including
+`replaceable-edit-inverse`; the global roster omits only that inverse row.
+M7 follows its detailed section, and all four exact IDs are enabled, tested,
+and run through the ordinary CLI.
+
+SPEC_DISCREPANCY_M7_CANARY_ROSTER: RECORDED detailed=4 global=3 decision=detailed-M7
