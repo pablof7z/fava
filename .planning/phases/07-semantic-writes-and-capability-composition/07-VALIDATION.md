@@ -1,11 +1,11 @@
 ---
 phase: 07
 slug: semantic-writes-and-capability-composition
-status: complete
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
-validated: 2026-08-21T14:49:00Z
-validated_head: f520d63c31790f6ed372c4b6b714e0d6773a77d7
+validated: 2026-08-21T17:25:04Z
+validated_head: 0e87083dcd46acb0609100ccdc870d376b581433
 phase_base: 6fe21f745297b4af414e52269c3ae1c813cbf28f
 ---
 
@@ -21,9 +21,10 @@ state.
 
 | Experiment | Broken behavior | Restoration | Result |
 |---|---|---|---|
-| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | Removing the sole current `MaterializationId` predicate left the first-value tracer green but made the exact retired-completion test accept generation-one mutation against the successor event identity. | `fava-write-store/src/lib.rs` returned to SHA-256 `50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af`; full publication target 12/12. | PASS |
+| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | Removing the sole current `MaterializationId` predicate left the first-value tracer green but made the exact retired-completion test accept generation-one mutation against the successor event identity. | `fava-write-store/src/lib.rs` returned byte-identically; current publication target 19/19. | PASS |
 | `DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` | Adding one `fava_signer` import to NIP-02 failed `cargo check -p fava-nip02 --lib` with E0432, `no external crate fava_signer`. | `fava-nip02/src/lib.rs` returned to SHA-256 `deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2`; NIP-02 7+1. | PASS |
 | `DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` | Raising only `MAX_TAGS` from 2000 to 2001 made the exact hostile test accept 2001 raw tags instead of the typed refusal. | `fava-write/src/builder.rs` returned to SHA-256 `abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9`; raw builder target 2/2. | PASS |
+| `DELIBERATE_BREAK_M7_ROUTE_READ_REVISION` | Discarding the successful route mutation result recreated the transient-read race: the queued second destination timed out. | Causal RED `1f901de`; GREEN `0e87083`; focused race test passed 10/10 repeated. | PASS |
 
 No broken source state was committed. All three restored source files have
 zero diff from their pre-experiment bytes. Full transcripts and counterexamples are
@@ -34,18 +35,18 @@ in `docs/issues/0010-m7-semantic-writes-and-capability-composition.md`.
 | Evidence target | Exact count | Measured result |
 |---|---:|---|
 | `fava/semantic_write_contract` | 4 | PASS |
-| `fava/semantic_write_store` | 8 | PASS |
-| `fava/semantic_write_publication` | 12 | PASS |
-| `fava/semantic_write_failures` | 6 | PASS |
-| `fava-write-store-redb/semantic_write_store` | 10 | PASS |
+| `fava/semantic_write_store` | 11 | PASS |
+| `fava/semantic_write_publication` | 19 | PASS |
+| `fava/semantic_write_failures` | 14 | PASS |
+| `fava-write-store-redb/semantic_write_store` | 16 | PASS |
 | `fava-write-store-redb/process_kill` | 6 | PASS; includes all 3 exact semantic SIGKILL cases |
 | `fava-nip02` | 7 unit + 1 external API | PASS |
 | `fava-bookmarks` | 9 unit + 1 external API | PASS |
 | external capability workspace | 3 library + 3 public lifecycle | PASS |
 | `fava-write/event_builder` | 2 | PASS; exact raw fields/order/ID and shared tag/byte bounds |
 | `fava/semantic_write_capabilities` | 4 | PASS; both protocol rows use one public-Fava corpus |
-| canary library | 16 total; 4 exact M7 scenario tests | PASS |
-| Bazel | 35 test targets | PASS |
+| canary library | 18 total; 4 exact M7 scenario tests | PASS |
+| Bazel | 36 test targets | PASS |
 
 The three required semantic process-kill names were discovered exactly once:
 
@@ -62,7 +63,7 @@ The shared corpus discovered exactly:
 
 ## Feature-to-test mapping
 
-`python3 -m unittest tools.tests.test_semantic_write_feature` passed 8/8.
+`python3 -m unittest tools.tests.test_semantic_write_feature` passed 10/10.
 Every feature mapping resolves through Cargo metadata to one real test target
 and exactly one `cargo test -- --list` name. Missing, non-test, empty,
 zero-test, duplicate-name, duplicate-pending-comment, and malformed
@@ -74,28 +75,28 @@ module-qualified fixtures refuse.
 | source-v2 rematerialization | `fava/semantic_write_publication#newer_source_rematerializes_once_and_preserves_unrelated_fields` |
 | stable receipt/new materialization | `fava/semantic_write_store#memory_generation_swap_is_compare_and_set` |
 | retired completion | `fava/semantic_write_publication#interleavings::retired_completion_is_attributable_and_inert` |
-| inverse | `fava/semantic_write_capabilities#nip02_passes_public_semantic_write_corpus` |
+| opposing operations | `fava/semantic_write_capabilities#nip02_passes_public_semantic_write_corpus` |
 | external N+1 | `external-semantic-capability-proof/public_capability#external_capability_composes_through_public_fava` |
 | raw future kinds | `external-semantic-capability-proof/public_capability#raw_future_event_kind_publishes_unchanged` |
 
 ## Fresh CLI evidence
 
-All four enabled M7 IDs ran separately under
-`/tmp/m7-raw-final.5AzWA7`. Each run produced exactly one parseable
+All four enabled M7 IDs ran separately after the final implementation repair under
+`/tmp/m7-final.pP9S7f`. Each run produced exactly one parseable
 `manifest.json`, one `semantic.json`, seven total files, six artifact hashes,
 one 64-character seed hash, bounded JSON shape, no raw caller seed, and at most
 9,383 bytes.
 
 | Scenario | Evidence directory | Files | Bytes |
 |---|---|---:|---:|
-| `replaceable-edit-first-value` | `/tmp/m7-raw-final.5AzWA7/replaceable-edit-first-value/replaceable-edit-first-value-1728995aa2621f26` | 7 | 3,570 |
-| `replaceable-edit-rematerialization` | `/tmp/m7-raw-final.5AzWA7/replaceable-edit-rematerialization/replaceable-edit-rematerialization-eebb3c8f9a4186b0` | 7 | 4,310 |
-| `replaceable-edit-inverse` | `/tmp/m7-raw-final.5AzWA7/replaceable-edit-inverse/replaceable-edit-inverse-5526630394849cb2` | 7 | 9,383 |
-| `protocol-crate-n-plus-one` | `/tmp/m7-raw-final.5AzWA7/protocol-crate-n-plus-one/protocol-crate-n-plus-one-767b9afe6d3827c9` | 7 | 4,060 |
+| `replaceable-edit-first-value` | `/tmp/m7-final.pP9S7f/replaceable-edit-first-value-e3c7bdeba19b4bfa` | 7 | 3,569 |
+| `replaceable-edit-rematerialization` | `/tmp/m7-final.pP9S7f/replaceable-edit-rematerialization-df99e231fc6c04e2` | 7 | 5,570 |
+| `replaceable-edit-opposing-operations` | `/tmp/m7-final.pP9S7f/replaceable-edit-opposing-operations-911a8b07929aa416` | 7 | 9,430 |
+| `protocol-crate-n-plus-one` | `/tmp/m7-final.pP9S7f/protocol-crate-n-plus-one-4a1094f7be1c8680` | 7 | 4,113 |
 
-The detailed M7 section requires all four scenarios. The global canary roster
-omits `replaceable-edit-inverse`; issue 0010 records the discrepancy and the
-detailed M7 roster remains authoritative.
+All four are enabled in the canary registry and execute through the ordinary
+CLI path. The semantic edit stores no inverse; follow/unfollow and
+bookmark/unbookmark are distinct opposing edits.
 
 ## Dependency and vocabulary gates
 
@@ -155,9 +156,9 @@ outside the repository. Restored deliberate-break files have zero diff.
 | CAP-01 | pure protocol edits/opposing operations; two-row shared corpus; opposing-operation CLI | PASS |
 | CAP-02 | author resolved and persisted by accepted custody; authorless edit; exact public event pubkey across generations | PASS |
 | CAP-03 | no-source first value; write-store visibility; first-value CLI | PASS |
-| CAP-04 | qualified source-v2 successor; unrelated state preserved; rematerialization CLI | PASS |
+| CAP-04 | qualified source successor; unrelated state preserved; equal-time lower-ID winner; rematerialization CLI | PASS |
 | CAP-05 | stable write/receipt; redb recovery and 3 semantic SIGKILL cases | PASS |
-| CAP-06 | exact stale signer/route/delivery refusal; causal MaterializationId break | PASS |
+| CAP-06 | exact stale signer/route/delivery refusal; committed route revision survives transient reads | PASS |
 | CAP-07 | NIP-02 and bookmarks share one neutral public-Fava corpus | PASS |
 | CAP-08 | independent public-only N+1 workspace; dependency-negative break and graphs | PASS |
 | CAP-09 | raw kind 50001 preserves caller `created_at = 42`, three arbitrary tags in exact order, content, and accepted/signed/published identity | PASS |
@@ -166,7 +167,7 @@ outside the repository. Restored deliberate-break files have zero diff.
 
 | Threat | Mitigation evidence | Disposition |
 |---|---|---|
-| T-07-33 stale completion repudiation | exact predicate/test, checksum, state counterexample, 12/12 restored rerun | mitigated |
+| T-07-33 stale completion repudiation | exact predicate/test, checksum, state counterexample, 19/19 restored rerun | mitigated |
 | T-07-34 mapping tampering | Cargo metadata, exact `--list`, duplicate-pending refusal, negative fixtures, positive counts | mitigated |
 | T-07-35 evidence/source growth | exact 2000-tag and 131,072-byte builder refusals, causal bound break, fixed seven-file bundles, all-file line gate | mitigated |
 | T-07-36 protocol privilege escalation | E0432 compile break, exact metadata, Cargo tree, Bazel paths | mitigated |
@@ -183,3 +184,12 @@ outside the repository. Restored deliberate-break files have zero diff.
 - Architecture, dependency, boundedness, vocabulary, security, Cargo, Bazel,
   line, and clean-range gates: PASS.
 - Nyquist state: complete.
+
+## Validation Audit 2026-08-21
+
+| Metric | Count |
+|--------|------:|
+| CAP requirements audited | 9 |
+| Behavioral gaps found in final audit cycle | 4 |
+| Behavioral gaps resolved with causal RED/GREEN evidence | 4 |
+| Escalated/manual-only gaps | 0 |
