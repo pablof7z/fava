@@ -96,8 +96,10 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
         )
         .await
         .map_err(error)?;
-    let intent = fava_nip02::follow(keys.public_key(), target).map_err(error)?;
-    let accepted = fava.publish(explicit(intent)?).map_err(error)?;
+    let intent = fava_nip02::follow(target).map_err(error)?;
+    let accepted = fava
+        .publish(explicit(intent, keys.public_key())?)
+        .map_err(error)?;
     let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
     wait_query_event(&mut query, receipt.current.id()).await?;
     let attempts = publisher.attempts();
@@ -160,7 +162,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     )?;
     let accepted = fava
         .publish(explicit(
-            fava_nip02::follow(keys.public_key(), bob).map_err(error)?,
+            fava_nip02::follow(bob).map_err(error)?,
+            keys.public_key(),
         )?)
         .map_err(error)?;
     let first = next_sign(&mut requests).await?;
@@ -287,7 +290,8 @@ async fn prove_timestamp_exhaustion(seed: &str) -> CanaryResult<bool> {
     )?;
     let accepted = fava
         .publish(explicit(
-            fava_nip02::follow(keys.public_key(), target).map_err(error)?,
+            fava_nip02::follow(target).map_err(error)?,
+            keys.public_key(),
         )?)
         .map_err(error)?;
     let _pending = next_sign(&mut requests).await?;
@@ -385,22 +389,22 @@ async fn inverse(seed: &str) -> CanaryResult<Value> {
     )?;
     let actor = keys.public_key();
     let edits = vec![
-        fava_nip02::follow(actor, bob),
-        fava_nip02::follow(actor, carol),
-        fava_nip02::unfollow(actor, bob),
-        fava_nip02::unfollow(actor, carol),
-        fava_nip02::unfollow(actor, bob),
-        fava_bookmarks::bookmark_event(actor, bookmark_a),
-        fava_bookmarks::bookmark_event(actor, bookmark_b),
-        fava_bookmarks::unbookmark_event(actor, bookmark_a),
-        fava_bookmarks::unbookmark_event(actor, bookmark_b),
-        fava_bookmarks::unbookmark_event(actor, bookmark_a),
+        fava_nip02::follow(bob),
+        fava_nip02::follow(carol),
+        fava_nip02::unfollow(bob),
+        fava_nip02::unfollow(carol),
+        fava_nip02::unfollow(bob),
+        fava_bookmarks::bookmark_event(bookmark_a),
+        fava_bookmarks::bookmark_event(bookmark_b),
+        fava_bookmarks::unbookmark_event(bookmark_a),
+        fava_bookmarks::unbookmark_event(bookmark_b),
+        fava_bookmarks::unbookmark_event(bookmark_a),
     ];
     let mut receipts = Vec::with_capacity(edits.len());
     let mut attempts = Vec::with_capacity(edits.len());
     for edit in edits {
         let accepted = fava
-            .publish(explicit(edit.map_err(error)?)?)
+            .publish(explicit(edit.map_err(error)?, actor)?)
             .map_err(error)?;
         let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
         let event = published_event(&receipt)?;

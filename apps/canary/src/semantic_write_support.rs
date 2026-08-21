@@ -188,8 +188,13 @@ where
     Ok((builder.build().map_err(error)?, completions))
 }
 
-pub(super) fn explicit(edit: ReplaceableEventEdit) -> CanaryResult<WriteIntent> {
-    WriteIntent::edit(edit, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).map_err(error)
+pub(super) fn explicit(edit: ReplaceableEventEdit, author: PublicKey) -> CanaryResult<WriteIntent> {
+    WriteIntent::edit_as(
+        edit,
+        author,
+        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
+    )
+    .map_err(error)
 }
 
 pub(super) fn explicit_event(event: UnsignedEvent) -> CanaryResult<WriteIntent> {
