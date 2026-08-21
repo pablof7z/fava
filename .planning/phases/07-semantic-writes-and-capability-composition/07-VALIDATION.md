@@ -82,17 +82,17 @@ module-qualified fixtures refuse.
 ## Fresh CLI evidence
 
 All four enabled M7 IDs ran separately after the final implementation repair under
-`/tmp/m7-final.pP9S7f`. Each run produced exactly one parseable
+`/tmp/m7-f97ecd8.35TrgP`. Each run produced exactly one parseable
 `manifest.json`, one `semantic.json`, seven total files, six artifact hashes,
 one 64-character seed hash, bounded JSON shape, no raw caller seed, and at most
 9,383 bytes.
 
 | Scenario | Evidence directory | Files | Bytes |
 |---|---|---:|---:|
-| `replaceable-edit-first-value` | `/tmp/m7-final.pP9S7f/replaceable-edit-first-value-e3c7bdeba19b4bfa` | 7 | 3,569 |
-| `replaceable-edit-rematerialization` | `/tmp/m7-final.pP9S7f/replaceable-edit-rematerialization-df99e231fc6c04e2` | 7 | 5,570 |
-| `replaceable-edit-opposing-operations` | `/tmp/m7-final.pP9S7f/replaceable-edit-opposing-operations-911a8b07929aa416` | 7 | 9,430 |
-| `protocol-crate-n-plus-one` | `/tmp/m7-final.pP9S7f/protocol-crate-n-plus-one-4a1094f7be1c8680` | 7 | 4,113 |
+| `replaceable-edit-first-value` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-first-value-8b6b97e0f0e78651` | 7 | 3,569 |
+| `replaceable-edit-rematerialization` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-rematerialization-3f7d41f70a7b0894` | 7 | 5,570 |
+| `replaceable-edit-opposing-operations` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-opposing-operations-f290e2f2217ae709` | 7 | 9,430 |
+| `protocol-crate-n-plus-one` | `/tmp/m7-f97ecd8.35TrgP/protocol-crate-n-plus-one-66d296b8a85b5516` | 7 | 4,113 |
 
 All four are enabled in the canary registry and execute through the ordinary
 CLI path. The semantic edit stores no inverse; follow/unfollow and

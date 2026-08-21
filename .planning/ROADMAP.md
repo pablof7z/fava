@@ -124,7 +124,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 ### Phase 7: Semantic Writes and Capability Composition
 
-**Goal:** Applications can express replaceable-event edits through independent protocol crates that reuse one durable publication lifecycle and survive source-state changes.
+**Goal:** As a Fava application developer, I want to express replaceable-event edits through independent protocol crates, so that they reuse one durable publication lifecycle and survive source-state changes.
 **Mode:** mvp
 **Depends on:** Phase 6
 **Requirements:** CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08, CAP-09
