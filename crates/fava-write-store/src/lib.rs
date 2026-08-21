@@ -5,8 +5,8 @@ use fava_routing::{CoverageState, RoutePlan};
 use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, UnsignedEvent, WriteId,
-    WriteIntent, WriteIntentError, WriteRouting,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp,
+    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 use tokio::sync::broadcast;
@@ -114,7 +114,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Recover live semantic custody in stable receipt order.
     ///
     /// Each tuple carries the current receipt, durable edit, current selected
-    /// source id, and last failed source id. No separate recovery noun exists.
+    /// source id/timestamp, and last failed source id. No separate recovery noun exists.
     ///
     /// # Errors
     ///
@@ -126,7 +126,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
-            Option<EventId>,
+            Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,

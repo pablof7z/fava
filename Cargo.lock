@@ -636,13 +636,22 @@ dependencies = [
 name = "fava-write-store-redb"
 version = "0.1.0"
 dependencies = [
+ "fava",
+ "fava-delivery-standard",
+ "fava-event-cache",
+ "fava-event-cache-memory",
+ "fava-publisher",
  "fava-query",
+ "fava-query-standard",
  "fava-routing",
+ "fava-signer-local",
  "fava-state",
+ "fava-transport",
  "fava-write",
  "fava-write-store",
  "nostr",
  "redb",
+ "serde",
  "serde_json",
  "tokio",
 ]

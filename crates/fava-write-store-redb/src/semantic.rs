@@ -1,7 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::collections::BTreeSet;
 
-use fava_query::{SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus};
 use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
@@ -10,57 +8,10 @@ use fava_write::{
 };
 use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capacity};
 
-use super::MemoryWriteStore;
-use super::model::destinations;
+use crate::lifecycle::{active_count, destinations, next_revision};
+use crate::{RedbWriteStore, SemanticCustody};
 
-#[derive(Clone, Debug)]
-pub(super) struct WriteState {
-    pub(super) revision: u64,
-    pub(super) next_identity: u64,
-    pub(super) writes: BTreeMap<ReceiptId, Receipt>,
-    pub(super) coordinates: BTreeMap<EventCoordinate, ReceiptId>,
-    #[allow(clippy::type_complexity)] // Existing values deliberately avoid a state wrapper.
-    pub(super) edits: BTreeMap<
-        ReceiptId,
-        (
-            ReplaceableEventEdit,
-            Option<(EventId, Timestamp)>,
-            Option<EventId>,
-        ),
-    >,
-}
-
-impl Default for WriteState {
-    fn default() -> Self {
-        Self {
-            revision: 0,
-            next_identity: 1,
-            writes: BTreeMap::new(),
-            coordinates: BTreeMap::new(),
-            edits: BTreeMap::new(),
-        }
-    }
-}
-
-impl MemoryWriteStore {
-    pub(super) fn snapshot(state: &WriteState) -> SourceSnapshot {
-        SourceSnapshot {
-            kind: SourceKind::WriteStore,
-            revision: SourceRevision(state.revision),
-            status: SourceStatus::Open,
-            events: state
-                .writes
-                .values()
-                .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
-                .map(|receipt| SourceEvent::Local(receipt.current.clone()))
-                .collect(),
-        }
-    }
-
-    pub(super) fn publish_snapshot(&self, state: &WriteState) {
-        self.latest.send_replace(Arc::new(Self::snapshot(state)));
-    }
-
+impl RedbWriteStore {
     pub(super) fn accept_semantic(
         &self,
         intent: WriteIntent,
@@ -74,13 +25,12 @@ impl MemoryWriteStore {
             ));
         };
         let selected_source = validate_materialization(&edit, &event, source, &routing)?;
-        let mut state = self.lock_state()?;
-
+        let mut state = self.lock()?;
         if let Some(receipt_id) = state.coordinates.get(edit.coordinate()) {
-            let receipt = state.writes.get(receipt_id).ok_or_else(|| {
+            let receipt = state.receipts.get(receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
             })?;
-            let stored = state.edits.get(receipt_id).ok_or_else(|| {
+            let stored = state.semantics.get(receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
             if stored.0 == edit
@@ -98,11 +48,10 @@ impl MemoryWriteStore {
                 "replaceable-event coordinate already has a live edit".to_owned(),
             ));
         }
-
-        if active_count(&state) >= self.capacity.get() {
+        if active_count(&state) >= self.limits.active.get() {
             return Err(WriteStoreError::Refused(format!(
-                "bounded write-store capacity {} reached",
-                self.capacity
+                "active write bound {} reached",
+                self.limits.active
             )));
         }
         let identity = state.next_identity;
@@ -134,20 +83,20 @@ impl MemoryWriteStore {
             route_settled: explicit,
             route_shortfalls: Vec::new(),
             desired_destinations,
-            attempts: BTreeMap::new(),
+            attempts: std::collections::BTreeMap::new(),
         };
+        let custody = (edit, selected_source, None);
         let next_revision = next_revision(&state)?;
-
+        self.commit_accept(next_identity, &receipt, Some(&custody))?;
         state.next_identity = next_identity;
         state.revision = next_revision;
         state
             .coordinates
-            .insert(edit.coordinate().clone(), receipt_id);
-        state
-            .edits
-            .insert(receipt_id, (edit, selected_source, None));
-        state.writes.insert(receipt_id, receipt.clone());
-        self.publish_receipt(&state, &receipt);
+            .insert(custody.0.coordinate().clone(), receipt_id);
+        state.semantics.insert(receipt_id, custody);
+        state.receipts.insert(receipt_id, receipt.clone());
+        self.publish_snapshot(&state);
+        self.publish_receipt(Some(receipt), receipt_id);
         Ok(AcceptedWrite {
             write_id,
             receipt_id,
@@ -165,24 +114,17 @@ impl MemoryWriteStore {
         event: UnsignedEvent,
         source: Option<&Event>,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut state = self.lock_state()?;
+        let mut state = self.lock()?;
         let receipt = state
-            .writes
+            .receipts
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, current_source, _) = state.edits.get(&receipt_id).cloned().ok_or_else(|| {
-            WriteStoreError::Refused("semantic custody does not exist".to_owned())
-        })?;
+        let (edit, current_source, _) =
+            state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
+                WriteStoreError::Refused("semantic custody does not exist".to_owned())
+            })?;
         let selected_source = validate_materialization(&edit, &event, source, &receipt.routing)?;
-
-        if receipt.write_id == write_id
-            && receipt.current.event == EventValue::Unsigned(event.clone())
-            && receipt.current.publication.materialization_source
-                == selected_source.map(|(id, _)| id)
-        {
-            return Ok(receipt);
-        }
         require_current(
             &receipt,
             write_id,
@@ -190,6 +132,13 @@ impl MemoryWriteStore {
             expected_source,
             current_source,
         )?;
+        if receipt.write_id == write_id
+            && receipt.current.event == EventValue::Unsigned(event.clone())
+            && receipt.current.publication.materialization_source
+                == selected_source.map(|(id, _)| id)
+        {
+            return Ok(receipt);
+        }
         require_qualified_source(current_source, selected_source)?;
         if event.created_at <= receipt.current.event.created_at() {
             return Err(WriteStoreError::Refused(
@@ -203,7 +152,6 @@ impl MemoryWriteStore {
                 "retired materialization evidence capacity reached".to_owned(),
             ));
         }
-
         let mut retired = receipt.current.publication.retired_materializations.clone();
         retired.push((
             receipt.current.publication.materialization_id,
@@ -223,10 +171,7 @@ impl MemoryWriteStore {
             .cloned()
             .map(|session| (session, RelayDeliveryOutcome::Pending))
             .collect();
-        let materialization_id = receipt
-            .current
-            .publication
-            .materialization_id
+        let materialization_id = expected
             .as_u64()
             .checked_add(1)
             .map(MaterializationId::from_u64)
@@ -251,14 +196,14 @@ impl MemoryWriteStore {
         updated.outcome = ReceiptOutcome::Open;
         updated.desired_destinations = correction_destinations;
         updated.attempts.clear();
+        let custody: SemanticCustody = (edit, selected_source, None);
         let next_revision = next_revision(&state)?;
-
+        self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
-        state
-            .edits
-            .insert(receipt_id, (edit, selected_source, None));
-        state.writes.insert(receipt_id, updated.clone());
-        self.publish_receipt(&state, &updated);
+        state.semantics.insert(receipt_id, custody);
+        state.receipts.insert(receipt_id, updated.clone());
+        self.publish_snapshot(&state);
+        self.publish_receipt(Some(updated.clone()), receipt_id);
         Ok(updated)
     }
 
@@ -272,14 +217,14 @@ impl MemoryWriteStore {
         source: Option<&Event>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut state = self.lock_state()?;
+        let mut state = self.lock()?;
         let receipt = state
-            .writes
+            .receipts
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
         let (edit, current_source, current_failed_source) =
-            state.edits.get(&receipt_id).cloned().ok_or_else(|| {
+            state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
         require_current(
@@ -303,20 +248,20 @@ impl MemoryWriteStore {
         {
             return Ok(receipt);
         }
-
         let mut updated = receipt;
         updated.current.publication.materialization_failure = Some(failure);
+        let custody: SemanticCustody = (edit, current_source, failed_source_id);
         let next_revision = next_revision(&state)?;
+        self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
-        state
-            .edits
-            .insert(receipt_id, (edit, current_source, failed_source_id));
-        state.writes.insert(receipt_id, updated.clone());
-        self.publish_receipt(&state, &updated);
+        state.semantics.insert(receipt_id, custody);
+        state.receipts.insert(receipt_id, updated.clone());
+        self.publish_snapshot(&state);
+        self.publish_receipt(Some(updated.clone()), receipt_id);
         Ok(updated)
     }
 
-    #[allow(clippy::type_complexity)] // Existing values deliberately avoid a recovery wrapper.
+    #[allow(clippy::type_complexity)]
     pub(super) fn recover_semantic(
         &self,
     ) -> Result<
@@ -328,12 +273,12 @@ impl MemoryWriteStore {
         )>,
         WriteStoreError,
     > {
-        let state = self.lock_state()?;
+        let state = self.lock()?;
         Ok(state
-            .edits
+            .semantics
             .iter()
             .filter_map(|(receipt_id, (edit, source, failed_source))| {
-                state.writes.get(receipt_id).and_then(|receipt| {
+                state.receipts.get(receipt_id).and_then(|receipt| {
                     (!receipt.is_terminal())
                         .then(|| (receipt.clone(), edit.clone(), *source, *failed_source))
                 })
@@ -355,10 +300,7 @@ fn validate_materialization(
         ));
     }
     let selected = validate_source(edit, source)?;
-    let Some((_, source_time)) = selected else {
-        return Ok(None);
-    };
-    if source_time >= event.created_at {
+    if selected.is_some_and(|(_, source_time)| source_time >= event.created_at) {
         return Err(WriteStoreError::Refused(
             "materialization is not newer than its selected source".to_owned(),
         ));
@@ -457,26 +399,5 @@ fn require_qualified_source(
         Err(WriteStoreError::Refused(
             "source event is equal, older, or already consumed".to_owned(),
         ))
-    }
-}
-
-pub(super) fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
-}
-
-pub(super) fn active_count(state: &WriteState) -> usize {
-    state
-        .writes
-        .values()
-        .filter(|receipt| !receipt.is_terminal())
-        .count()
-}
-
-pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
-    if let Some((edit, _, _)) = state.edits.remove(&receipt_id) {
-        state.coordinates.remove(edit.coordinate());
     }
 }

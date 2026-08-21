@@ -330,24 +330,6 @@ impl Publication {
             Some(_) | None => Ok((false, None)),
         }
     }
-
-    pub(super) fn source_event(
-        sources: &OpenedSemanticSources,
-        event_id: fava_write::EventId,
-    ) -> Option<Event> {
-        sources.snapshots().iter().find_map(|source| {
-            source.events.iter().find_map(|event| match event {
-                SourceEvent::Cached(cached) if cached.event.id == event_id => {
-                    Some(cached.event.clone())
-                }
-                SourceEvent::Local(local) => match &local.event {
-                    EventValue::Signed(event) if event.id == event_id => Some(event.clone()),
-                    EventValue::Signed(_) | EventValue::Unsigned(_) => None,
-                },
-                SourceEvent::Cached(_) => None,
-            })
-        })
-    }
 }
 
 fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventId) -> bool {
