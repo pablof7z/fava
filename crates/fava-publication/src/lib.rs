@@ -86,8 +86,9 @@ impl Publication {
     /// after a failed acceptance commit.
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
-        if let WritePayload::Edit(edit) = intent.payload() {
+        if let WritePayload::Edit { edit, author } = intent.payload() {
             let edit = edit.clone();
+            let author = *author;
             let reservation = self.store.reserve_active()?;
             let PreparedSemantic {
                 event,
@@ -122,7 +123,7 @@ impl Publication {
                     &route,
                 );
             }
-            let semantic = SemanticState::accepted(edit, source.as_ref(), sources);
+            let semantic = SemanticState::accepted(edit, author, source.as_ref(), sources);
             self.start_semantic(accepted.receipt_id, semantic);
             return Ok(accepted);
         }
@@ -141,12 +142,12 @@ impl Publication {
         let receipts = self.store.recover_open()?;
         let count = receipts.len();
         let semantic = self.store.recover_materialized_edits()?;
-        for (_, edit, _, _) in &semantic {
+        for (_, edit, _, _, _) in &semantic {
             self.materializer(edit)?;
         }
         let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
-        for (receipt, edit, selected, failed_id) in semantic {
-            let sources = match self.open_semantic_sources(&edit) {
+        for (receipt, edit, author, selected, failed_id) in semantic {
+            let sources = match self.open_semantic_sources(&edit, author) {
                 Ok(sources) => sources,
                 Err(error) => {
                     for (_, state) in &mut prepared {
@@ -159,7 +160,14 @@ impl Publication {
             let source_floor = selected.map(|(_, timestamp)| timestamp);
             prepared.push((
                 receipt.receipt_id,
-                SemanticState::recovered(edit, selected_id, source_floor, failed_id, sources),
+                SemanticState::recovered(
+                    edit,
+                    author,
+                    selected_id,
+                    source_floor,
+                    failed_id,
+                    sources,
+                ),
             ));
         }
         let semantic_ids: std::collections::BTreeSet<_> =

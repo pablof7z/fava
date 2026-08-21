@@ -230,7 +230,9 @@ impl Publication {
         else {
             return;
         };
-        let Ok(intent) = WriteIntent::edit(state.edit.clone(), receipt.routing.clone()) else {
+        let Ok(intent) =
+            WriteIntent::edit_as(state.edit.clone(), state.author, receipt.routing.clone())
+        else {
             return;
         };
         let (event, mut route) = match self.materialize_and_route(

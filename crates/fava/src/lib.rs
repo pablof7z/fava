@@ -214,7 +214,7 @@ impl Fava {
     ) -> Result<RoutePlan, PublicationError> {
         let event = match intent.payload() {
             fava_write::WritePayload::Event(event) => EventValue::Unsigned(event.clone()),
-            fava_write::WritePayload::Edit(_) => {
+            fava_write::WritePayload::Edit { .. } => {
                 return self
                     .publication
                     .as_ref()

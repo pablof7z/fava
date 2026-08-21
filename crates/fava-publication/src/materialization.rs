@@ -5,8 +5,9 @@ use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapsh
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
 use fava_write::{
-    Event, EventValue, Kind, ReceiptId, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Timestamp, UnsignedEvent, WriteIntent, WritePayload, WriteRouting,
+    Event, EventValue, Kind, PublicKey, ReceiptId, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
+    WriteRouting,
 };
 
 use super::{Publication, PublicationError};
@@ -92,6 +93,7 @@ pub(super) struct PreparedSemantic {
 
 pub(super) struct SemanticState {
     pub(super) edit: ReplaceableEventEdit,
+    pub(super) author: PublicKey,
     pub(super) selected_id: Option<fava_write::EventId>,
     pub(super) source_floor: Option<Timestamp>,
     pub(super) failed_id: Option<fava_write::EventId>,
@@ -101,6 +103,7 @@ pub(super) struct SemanticState {
 impl SemanticState {
     pub(super) fn accepted(
         edit: ReplaceableEventEdit,
+        author: PublicKey,
         selected: Option<&Event>,
         sources: OpenedSemanticSources,
     ) -> Self {
@@ -108,6 +111,7 @@ impl SemanticState {
         let source_floor = selected.map(|event| event.created_at);
         Self {
             edit,
+            author,
             selected_id,
             source_floor,
             failed_id: None,
@@ -117,6 +121,7 @@ impl SemanticState {
 
     pub(super) fn recovered(
         edit: ReplaceableEventEdit,
+        author: PublicKey,
         selected_id: Option<fava_write::EventId>,
         source_floor: Option<Timestamp>,
         _failed_id: Option<fava_write::EventId>,
@@ -124,6 +129,7 @@ impl SemanticState {
     ) -> Self {
         Self {
             edit,
+            author,
             selected_id,
             source_floor,
             // Recovery authorizes exactly one retry of the persisted failed
@@ -167,14 +173,14 @@ impl Publication {
         exclude: Option<(ReceiptId, fava_write::MaterializationId)>,
         current: Option<&EventValue>,
     ) -> Result<PreparedSemantic, PublicationError> {
-        let WritePayload::Edit(edit) = intent.payload() else {
+        let WritePayload::Edit { edit, author } = intent.payload() else {
             return Err(PublicationError::Routing(
                 "semantic preparation requires a replaceable-event edit".to_owned(),
             ));
         };
         self.materializer(edit)?;
-        let mut sources = self.open_semantic_sources(edit)?;
-        let source = match self.select_source(edit, sources.snapshots(), exclude) {
+        let mut sources = self.open_semantic_sources(edit, *author)?;
+        let source = match self.select_source(edit, *author, sources.snapshots(), exclude) {
             Ok(source) => source,
             Err(error) => {
                 sources.close();
@@ -202,7 +208,7 @@ impl Publication {
         source: Option<&Event>,
         current: Option<&EventValue>,
     ) -> Result<(UnsignedEvent, RoutePlan), PublicationError> {
-        let WritePayload::Edit(edit) = intent.payload() else {
+        let WritePayload::Edit { edit, author } = intent.payload() else {
             return Err(PublicationError::Routing(
                 "semantic preparation requires a replaceable-event edit".to_owned(),
             ));
@@ -210,7 +216,7 @@ impl Publication {
         let materializer = self.materializer(edit)?;
         let created_at = injected_timestamp(source, current)?;
         let invocation = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            materializer.materialize(edit, source, created_at)
+            materializer.materialize(edit, *author, source, created_at)
         }));
         let event = match invocation {
             Ok(Ok(event)) => event,
@@ -225,7 +231,7 @@ impl Publication {
                 ));
             }
         };
-        validate_materialization(edit, &event, intent.routing(), created_at)?;
+        validate_materialization(edit, *author, &event, intent.routing(), created_at)?;
         let route = self.route_for(&event, intent.routing())?;
         Ok((event, route))
     }
@@ -243,9 +249,8 @@ impl Publication {
         })?;
         if !materializer.supports(edit) {
             return Err(PublicationError::Routing(format!(
-                "selected materializer does not support kind {} edit format {}",
-                kind.as_u16(),
-                edit.format()
+                "selected materializer does not support kind {} edit",
+                kind.as_u16()
             )));
         }
         Ok(Arc::clone(materializer))
@@ -254,8 +259,9 @@ impl Publication {
     pub(super) fn open_semantic_sources(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
     ) -> Result<OpenedSemanticSources, PublicationError> {
-        let query = exact_query(edit)?;
+        let query = exact_query(edit, author)?;
         let cache = self
             .event_source
             .open(&query)
@@ -274,15 +280,29 @@ impl Publication {
     pub(super) fn select_source(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
         sources: &[SourceSnapshot],
         exclude: Option<(ReceiptId, fava_write::MaterializationId)>,
     ) -> Result<Option<Event>, PublicationError> {
         let mut qualified = sources.to_vec();
+        let coordinate = edit_coordinate(edit, author);
         for source in &mut qualified {
             source.events.retain(|event| match event {
-                SourceEvent::Cached(_) => true,
+                SourceEvent::Cached(cached) => {
+                    event_coordinate(
+                        cached.event.id,
+                        cached.event.pubkey,
+                        cached.event.kind,
+                        cached.event.tags.as_slice(),
+                    ) == coordinate
+                }
                 SourceEvent::Local(local) => {
-                    matches!(local.event, EventValue::Signed(_))
+                    matches!(&local.event, EventValue::Signed(event) if event_coordinate(
+                        event.id,
+                        event.pubkey,
+                        event.kind,
+                        event.tags.as_slice(),
+                    ) == coordinate)
                         && exclude.is_none_or(|(receipt_id, materialization_id)| {
                             local.publication.receipt_id != receipt_id
                                 || local.publication.materialization_id != materialization_id
@@ -292,7 +312,7 @@ impl Publication {
         }
         let snapshot = self
             .evaluator
-            .evaluate(&exact_query(edit)?, &qualified)
+            .evaluate(&exact_query(edit, author)?, &qualified)
             .map_err(|error| PublicationError::Routing(error.to_string()))?;
         Ok(snapshot
             .events
@@ -329,6 +349,7 @@ impl Publication {
     ) -> Result<(bool, Option<Event>), PublicationError> {
         let candidate = self.select_source(
             &state.edit,
+            state.author,
             state.sources.snapshots(),
             Some((receipt_id, materialization_id)),
         )?;
@@ -368,29 +389,22 @@ fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventI
 }
 
 pub(super) fn edit_kind(edit: &ReplaceableEventEdit) -> Result<Kind, PublicationError> {
-    match edit.coordinate() {
-        EventCoordinate::Replaceable {
-            kind,
-            identifier: None,
-            ..
-        } => Ok(*kind),
-        EventCoordinate::Replaceable {
-            identifier: Some(_),
-            ..
-        } => Err(PublicationError::Routing(
-            "addressable replaceable-event edits are not supported".to_owned(),
-        )),
-        EventCoordinate::Event(_) => Err(PublicationError::Routing(
-            "semantic edit requires a replaceable coordinate".to_owned(),
-        )),
-    }
+    Ok(edit.kind())
 }
 
-fn exact_query(edit: &ReplaceableEventEdit) -> Result<Query, PublicationError> {
+fn exact_query(edit: &ReplaceableEventEdit, author: PublicKey) -> Result<Query, PublicationError> {
     Ok(Query::events()
-        .authors([edit.actor()])
+        .authors([author])
         .kind(edit_kind(edit)?)
         .cache_only())
+}
+
+fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+    EventCoordinate::Replaceable {
+        author,
+        kind: edit.kind(),
+        identifier: edit.identifier().map(ToOwned::to_owned),
+    }
 }
 
 pub(super) fn injected_timestamp(
@@ -413,6 +427,7 @@ pub(super) fn injected_timestamp(
 
 pub(super) fn validate_materialization(
     edit: &ReplaceableEventEdit,
+    author: PublicKey,
     event: &UnsignedEvent,
     routing: &WriteRouting,
     injected_created_at: Timestamp,
@@ -429,9 +444,10 @@ pub(super) fn validate_materialization(
             "semantic materialization ignored the injected timestamp".to_owned(),
         ));
     }
-    if event.pubkey != edit.actor() || coordinate != *edit.coordinate() {
+    if event.pubkey != author || coordinate != edit_coordinate(edit, author) {
         return Err(PublicationError::Routing(
-            "semantic materialization actor or coordinate does not match edit".to_owned(),
+            "semantic materialization author or coordinate does not match accepted write"
+                .to_owned(),
         ));
     }
     Ok(())
