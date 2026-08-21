@@ -27,9 +27,11 @@ pub(super) fn write_failure_bundle(
             "current_directory": repository.to_string_lossy(),
             "args": [
                 "run", "--manifest-path", "apps/canary/Cargo.toml", "--", "run", id,
-                "--seed", options.seed,
+                "--seed", "<redacted>",
                 "--runs-dir", artifacts.root().join("replay").to_string_lossy(),
             ],
+            "redacted_inputs": ["seed"],
+            "scenario_seed_sha256": seed_hash(&options.seed),
         }),
     )?;
     artifacts.write_report(&format!("{id} failed: {failure}\n"))?;
@@ -106,8 +108,7 @@ mod tests {
         assert!(replay["current_directory"].as_str().is_some());
         let bundle = ["failure.json", "replay.json", "report.md", "manifest.json"]
             .into_iter()
-            .map(|file| std::fs::read(root.join(file)).expect("failure evidence"))
-            .flatten()
+            .flat_map(|file| std::fs::read(root.join(file)).expect("failure evidence"))
             .collect::<Vec<_>>();
         assert!(!String::from_utf8_lossy(&bundle).contains("failure-seed"));
         assert_eq!(replay["redacted_inputs"], serde_json::json!(["seed"]));

@@ -3,12 +3,11 @@
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventValue, Fava, Kind, Observation, PublicKey, Receipt, ReceiptId, RelayUrl,
+    Event, EventValue, Fava, Observation, PublicKey, Receipt, ReceiptId, RelayUrl,
     ReplaceableEventEdit, ReplaceableEventMaterializer, UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
@@ -30,7 +29,6 @@ use crate::semantic_write_store::{CompletionAck, CompletionStore};
 use crate::{CanaryError, CanaryResult, SmokeOptions, command_output, repository_root};
 
 const SIGN_REQUEST_CAPACITY: usize = 2;
-const FIXED_TIMESTAMP_START: u64 = 1_000;
 
 #[derive(Default)]
 pub(super) struct RecordingPublisher {
@@ -166,41 +164,6 @@ impl Signer for DeterministicSigner {
     }
 }
 
-struct FixedTimestampMaterializer {
-    inner: Arc<dyn ReplaceableEventMaterializer>,
-    next: AtomicU64,
-}
-
-impl FixedTimestampMaterializer {
-    fn new(inner: Arc<dyn ReplaceableEventMaterializer>) -> Self {
-        Self {
-            inner,
-            next: AtomicU64::new(FIXED_TIMESTAMP_START),
-        }
-    }
-}
-
-impl ReplaceableEventMaterializer for FixedTimestampMaterializer {
-    fn kind(&self) -> Kind {
-        self.inner.kind()
-    }
-
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        self.inner.supports(edit)
-    }
-
-    fn materialize(
-        &self,
-        edit: &ReplaceableEventEdit,
-        source: Option<&Event>,
-        _created_at: Timestamp,
-    ) -> Result<UnsignedEvent, fava::WriteIntentError> {
-        let timestamp = self.next.fetch_add(1, Ordering::SeqCst);
-        self.inner
-            .materialize(edit, source, Timestamp::from(timestamp))
-    }
-}
-
 pub(super) fn assembly(
     cache: Arc<MemoryEventCache>,
     signer: Arc<dyn Signer>,
@@ -217,9 +180,7 @@ pub(super) fn assembly(
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()));
     for materializer in materializers {
-        let fixed: Arc<dyn ReplaceableEventMaterializer> =
-            Arc::new(FixedTimestampMaterializer::new(materializer));
-        builder = builder.materializers([fixed]);
+        builder = builder.materializers([materializer]);
     }
     Ok((builder.build().map_err(error)?, completions))
 }
@@ -377,6 +338,8 @@ pub(super) fn attempt_evidence(
         "materialization_id": attempt.materialization_id.as_u64(),
         "event_id": attempt.event.id.to_hex(),
         "receipt_event_id": receipt.current.id().to_hex(),
+        "created_at": attempt.event.created_at.as_secs(),
+        "receipt_created_at": receipt.current.event.created_at().as_secs(),
         "session": attempt.session.relay.to_string(),
         "attempt": attempt.number,
     }))

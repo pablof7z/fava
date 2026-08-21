@@ -5,10 +5,13 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
 use crate::{CanaryError, CanaryResult};
 
 const OUTPUT_CAPACITY: usize = 1_048_576;
+const CLEANUP_CAPACITY: Duration = Duration::from_secs(2);
 
 #[derive(Debug)]
 pub(super) struct OwnedOutput {
@@ -39,37 +42,52 @@ pub(super) async fn run_owned(
         .stderr
         .take()
         .ok_or_else(|| CanaryError::new("owned child stderr was not captured"))?;
-    let stdout_reader = tokio::spawn(read_bounded(stdout));
-    let stderr_reader = tokio::spawn(read_bounded(stderr));
+    let mut stdout_reader = tokio::spawn(read_bounded(stdout));
+    let mut stderr_reader = tokio::spawn(read_bounded(stderr));
 
-    let wait = tokio::time::timeout(deadline, child.wait()).await;
-    let timed_out = wait.is_err();
-    let status = if let Ok(status) = wait {
-        status?
-    } else {
-        let group_kill = kill_process_group(pid).await;
-        if group_kill.is_err() {
-            child.kill().await?;
-        }
-        let status = child.wait().await?;
-        group_kill?;
-        status
+    let absolute_deadline = Instant::now() + deadline;
+    let owner = tokio::time::timeout_at(absolute_deadline, child.wait()).await;
+    let (status, owner_reaped) = match owner {
+        Ok(status) => (Some(status?), true),
+        Err(_) => (None, false),
     };
-    let stdout = join_reader(stdout_reader).await?;
-    let stderr = join_reader(stderr_reader).await?;
-    if timed_out {
-        return Err(CanaryError::new(format!(
-            "external proof exceeded bound; process group {pid} killed and owner reaped; stdout: {}; stderr: {}",
-            String::from_utf8_lossy(&stdout),
-            String::from_utf8_lossy(&stderr),
-        )));
+    if let Some(status) = status
+        && let Some((stdout, stderr)) =
+            collect_readers(absolute_deadline, &mut stdout_reader, &mut stderr_reader).await?
+    {
+        return Ok(OwnedOutput {
+            status,
+            stdout,
+            stderr,
+            owner_reaped,
+        });
     }
-    Ok(OwnedOutput {
-        status,
-        stdout,
-        stderr,
-        owner_reaped: true,
-    })
+
+    let cleanup_deadline = Instant::now() + CLEANUP_CAPACITY;
+    let group_kill = tokio::time::timeout_at(cleanup_deadline, kill_process_group(pid))
+        .await
+        .map_err(|_| CanaryError::new(format!("timed out killing process group {pid}")))?;
+    if group_kill.is_err() && !owner_reaped {
+        child.start_kill()?;
+    }
+    if !owner_reaped {
+        tokio::time::timeout_at(cleanup_deadline, child.wait())
+            .await
+            .map_err(|_| CanaryError::new(format!("timed out reaping process owner {pid}")))??;
+    }
+    let captured =
+        collect_readers(cleanup_deadline, &mut stdout_reader, &mut stderr_reader).await?;
+    if captured.is_none() {
+        stdout_reader.abort();
+        stderr_reader.abort();
+    }
+    group_kill?;
+    let (stdout, stderr) = captured.unwrap_or_default();
+    Err(CanaryError::new(format!(
+        "external proof exceeded bound; process group {pid} killed and owner reaped; stdout: {}; stderr: {}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr),
+    )))
 }
 
 async fn kill_process_group(pid: u32) -> CanaryResult<()> {
@@ -109,12 +127,25 @@ async fn read_bounded(mut reader: impl AsyncRead + Unpin) -> CanaryResult<Vec<u8
     Ok(bytes)
 }
 
-async fn join_reader(
-    reader: tokio::task::JoinHandle<CanaryResult<Vec<u8>>>,
-) -> CanaryResult<Vec<u8>> {
-    reader
+async fn join_reader(reader: &mut JoinHandle<CanaryResult<Vec<u8>>>) -> CanaryResult<Vec<u8>> {
+    (&mut *reader)
         .await
         .map_err(|error| CanaryError::new(format!("output reader failed: {error}")))?
+}
+
+async fn collect_readers(
+    deadline: Instant,
+    stdout: &mut JoinHandle<CanaryResult<Vec<u8>>>,
+    stderr: &mut JoinHandle<CanaryResult<Vec<u8>>>,
+) -> CanaryResult<Option<(Vec<u8>, Vec<u8>)>> {
+    match tokio::time::timeout_at(deadline, async {
+        tokio::try_join!(join_reader(stdout), join_reader(stderr))
+    })
+    .await
+    {
+        Ok(output) => output.map(Some),
+        Err(_) => Ok(None),
+    }
 }
 
 #[cfg(test)]

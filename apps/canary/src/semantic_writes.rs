@@ -100,6 +100,7 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
         .ok_or_else(|| CanaryError::new("first-value publication attempt missing"))?;
     let attempt = attempt_evidence(&accepted, &receipt, attempt)?;
     let event = published_event(&receipt)?;
+    let created_at = event.created_at.as_secs();
     if attempts.len() != 1
         || receipt.current.publication.materialization_source.is_some()
         || receipt.current.publication.materialization_id != MaterializationId::from_u64(1)
@@ -118,6 +119,7 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
         "query_events": query.current().events.len(),
         "cache_events": cache.len().map_err(error)?,
         "attempt": attempt,
+        "created_at": created_at,
         "event_bytes": serde_json::to_string(&event).map_err(error)?,
     }))
 }
@@ -157,6 +159,13 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         )
         .map_err(error)?;
     let current = next_sign(&mut requests).await?;
+    let first_created_at = first.event.created_at.as_secs();
+    let current_created_at = current.event.created_at.as_secs();
+    if current_created_at <= first_created_at {
+        return Err(CanaryError::new(
+            "rematerialization timestamp did not advance monotonically",
+        ));
+    }
     let first_event = deterministic_finalize(first.event.clone(), &keys).map_err(error)?;
     let first_id = first_event.id;
     first.complete(first_event)?;
@@ -191,6 +200,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
             "rematerialization lifecycle facts diverged",
         ));
     }
+    let timestamp_exhaustion_preserved_current =
+        prove_timestamp_exhaustion(&format!("{seed}-exhaustion")).await?;
     Ok(json!({
         "event_id": event.id.to_hex(),
         "write_id": accepted.write_id.as_u64(),
@@ -203,9 +214,76 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         "preserved_bob_carol_unrelated": preserved,
         "retired_completion_processed": true,
         "retired_stale_effects": 0,
+        "first_created_at": first_created_at,
+        "current_created_at": current_created_at,
+        "timestamp_exhaustion_preserved_current": timestamp_exhaustion_preserved_current,
         "attempt": attempt,
         "event_bytes": serde_json::to_string(&event).map_err(error)?,
     }))
+}
+
+async fn prove_timestamp_exhaustion(seed: &str) -> CanaryResult<bool> {
+    let keys = deterministic_keys(seed)?;
+    let target = deterministic_keys(&format!("{seed}-target"))?.public_key();
+    let cache = Arc::new(MemoryEventCache::default());
+    cache
+        .admit(
+            CachedEvent::new(contact_source(&keys, &[], u64::MAX - 1)?, relay_evidence()),
+            Timestamp::from(u64::MAX - 1),
+        )
+        .map_err(error)?;
+    let publisher = Arc::new(RecordingPublisher::default());
+    let (gate, mut requests) = GateSigner::new(keys.public_key());
+    let signer: Arc<dyn Signer> = Arc::new(gate);
+    let (fava, _completions) = assembly(
+        Arc::clone(&cache),
+        signer,
+        selected_materializers(),
+        Arc::clone(&publisher),
+    )?;
+    let accepted = fava
+        .publish(explicit(
+            fava_nip02::follow(keys.public_key(), target).map_err(error)?,
+        )?)
+        .map_err(error)?;
+    let _pending = next_sign(&mut requests).await?;
+    let source = contact_source(&keys, &[], u64::MAX)?;
+    cache
+        .admit(
+            CachedEvent::new(source, relay_evidence()),
+            Timestamp::from(u64::MAX),
+        )
+        .map_err(error)?;
+    let exhausted = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let receipt = fava
+                .receipt(accepted.receipt_id)
+                .map_err(error)?
+                .ok_or_else(|| CanaryError::new("timestamp-exhaustion receipt disappeared"))?;
+            if receipt
+                .current
+                .publication
+                .materialization_failure
+                .as_deref()
+                .is_some_and(|reason| reason.contains("timestamp exhausted"))
+            {
+                return Ok::<fava::Receipt, CanaryError>(receipt);
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|_| CanaryError::new("timed out awaiting timestamp-exhaustion evidence"))??;
+    let preserved = exhausted.current.id() == accepted.current.id()
+        && exhausted.current.publication.materialization_id
+            == accepted.current.publication.materialization_id
+        && publisher.attempts().is_empty();
+    if !preserved {
+        return Err(CanaryError::new(
+            "timestamp exhaustion changed current state or publication evidence",
+        ));
+    }
+    Ok(true)
 }
 
 fn contact_source(
