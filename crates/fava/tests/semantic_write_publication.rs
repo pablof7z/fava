@@ -15,6 +15,8 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 
+#[path = "semantic_write_publication/interleavings.rs"]
+mod interleavings;
 #[path = "support/semantic_write.rs"]
 mod support;
 
