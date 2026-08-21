@@ -38,7 +38,10 @@ rust_test(
 
 rust_test(
     name = "process_kill",
-    srcs = ["tests/process_kill.rs"],
+    srcs = [
+        "tests/process_kill.rs",
+        "tests/process_kill/semantic.rs",
+    ],
     crate_name = "process_kill",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
