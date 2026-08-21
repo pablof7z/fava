@@ -1,70 +1,51 @@
-use fava_state::EventCoordinate;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    EventId, Kind, MAX_EVENT_BYTES, PublicKey, WriteIntent, WriteIntentError, WritePayload,
-    WriteRouting, validate_routing,
+    Kind, MAX_EVENT_BYTES, PublicKey, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    validate_routing,
 };
+
+const MAX_IDENTIFIER_BYTES: usize = 4_096;
 
 /// A bounded protocol-owned change to one exact replaceable event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReplaceableEventEdit {
-    actor: PublicKey,
-    coordinate: EventCoordinate,
-    format: u32,
+    kind: Kind,
+    identifier: Option<String>,
     change: Vec<u8>,
-    inverse: Vec<u8>,
 }
 
 impl ReplaceableEventEdit {
-    /// Construct one persistable opaque edit and its inverse.
-    ///
-    /// Coordinate and actor consistency is checked when a [`crate::WriteIntent`]
-    /// is created, so protocol code can construct a value whose refusal is
-    /// observable at the pre-custody boundary.
+    /// Construct one persistable opaque change to a replaceable coordinate.
     ///
     /// # Errors
     ///
-    /// Returns [`WriteIntentError::TooLarge`] when either opaque value exceeds
-    /// the ordinary write-intent byte bound.
+    /// Returns [`WriteIntentError`] when kind and identifier do not form a
+    /// replaceable coordinate or a retained value exceeds its bound.
     pub fn new(
-        actor: PublicKey,
-        coordinate: EventCoordinate,
-        format: u32,
+        kind: Kind,
+        identifier: Option<String>,
         change: Vec<u8>,
-        inverse: Vec<u8>,
     ) -> Result<Self, WriteIntentError> {
+        validate_coordinate(kind, identifier.as_deref())?;
         validate_bytes(&change)?;
-        validate_bytes(&inverse)?;
-        change
-            .len()
-            .checked_add(inverse.len())
-            .ok_or_else(|| WriteIntentError::Encoding("edit byte count overflow".to_owned()))?;
         Ok(Self {
-            actor,
-            coordinate,
-            format,
+            kind,
+            identifier,
             change,
-            inverse,
         })
     }
 
-    /// Actor fixed before any event body exists.
+    /// Replaceable kind affected by this edit.
     #[must_use]
-    pub const fn actor(&self) -> PublicKey {
-        self.actor
+    pub const fn kind(&self) -> Kind {
+        self.kind
     }
 
-    /// Exact replaceable-event coordinate affected by this edit.
+    /// Addressable identifier affected by this edit, when present.
     #[must_use]
-    pub const fn coordinate(&self) -> &EventCoordinate {
-        &self.coordinate
-    }
-
-    /// Protocol-owned durable format version.
-    #[must_use]
-    pub const fn format(&self) -> u32 {
-        self.format
+    pub fn identifier(&self) -> Option<&str> {
+        self.identifier.as_deref()
     }
 
     /// Opaque protocol-owned change bytes.
@@ -73,71 +54,51 @@ impl ReplaceableEventEdit {
         &self.change
     }
 
-    /// Opaque protocol-owned inverse bytes.
-    #[must_use]
-    pub fn inverse_change(&self) -> &[u8] {
-        &self.inverse
-    }
-
-    /// Return the bounded inverse through the same neutral value.
-    #[must_use]
-    pub fn inverse(&self) -> Self {
-        Self {
-            actor: self.actor,
-            coordinate: self.coordinate.clone(),
-            format: self.format,
-            change: self.inverse.clone(),
-            inverse: self.change.clone(),
-        }
-    }
-
     pub(crate) fn validate_for_intent(&self) -> Result<(), WriteIntentError> {
-        validate_bytes(&self.change)?;
-        validate_bytes(&self.inverse)?;
-        self.change
-            .len()
-            .checked_add(self.inverse.len())
-            .ok_or_else(|| WriteIntentError::Encoding("edit byte count overflow".to_owned()))?;
-        match &self.coordinate {
-            EventCoordinate::Replaceable {
-                author,
-                kind,
-                identifier: None,
-            } if *author == self.actor && kind.is_replaceable() => Ok(()),
-            EventCoordinate::Replaceable {
-                identifier: Some(_),
-                ..
-            } => Err(WriteIntentError::InvalidEvent(
-                "addressable replaceable-event edits are not supported".to_owned(),
-            )),
-            EventCoordinate::Replaceable { .. } => Err(WriteIntentError::InvalidEvent(
-                "replaceable-event edit actor and coordinate must match".to_owned(),
-            )),
-            EventCoordinate::Event(_) => Err(WriteIntentError::InvalidEvent(
-                "replaceable-event edit requires a replaceable coordinate".to_owned(),
-            )),
-        }
+        validate_coordinate(self.kind, self.identifier())?;
+        validate_bytes(&self.change)
     }
 }
 
 impl WriteIntent {
-    /// Validate one semantic replaceable-event edit and its route before custody.
+    /// Validate one semantic edit, resolved author, and route before custody.
     ///
     /// # Errors
     ///
-    /// Returns [`WriteIntentError`] for malformed, oversized, addressable, or
-    /// unroutable edit structure. Provider selection is intentionally outside
-    /// this neutral value owner.
-    pub fn edit(
+    /// Returns [`WriteIntentError`] for malformed, oversized, or unroutable
+    /// edit structure. Provider selection remains outside this neutral owner.
+    pub fn edit_as(
         edit: ReplaceableEventEdit,
+        author: PublicKey,
         routing: WriteRouting,
     ) -> Result<Self, WriteIntentError> {
         edit.validate_for_intent()?;
         validate_routing(&routing)?;
         Ok(Self {
-            payload: WritePayload::Edit(edit),
+            payload: WritePayload::Edit { edit, author },
             routing,
         })
+    }
+}
+
+fn validate_coordinate(kind: Kind, identifier: Option<&str>) -> Result<(), WriteIntentError> {
+    if let Some(identifier) = identifier {
+        if identifier.len() > MAX_IDENTIFIER_BYTES {
+            return Err(WriteIntentError::TooLarge {
+                bytes: identifier.len(),
+                maximum: MAX_IDENTIFIER_BYTES,
+            });
+        }
+    }
+    match identifier {
+        None if kind.is_replaceable() => Ok(()),
+        Some(_) if kind.is_addressable() => Ok(()),
+        None => Err(WriteIntentError::InvalidEvent(
+            "replaceable-event edit kind requires an addressable identifier".to_owned(),
+        )),
+        Some(_) => Err(WriteIntentError::InvalidEvent(
+            "replaceable-event edit identifier requires an addressable kind".to_owned(),
+        )),
     }
 }
 
@@ -155,55 +116,9 @@ fn validate_bytes(value: &[u8]) -> Result<(), WriteIntentError> {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct EncodedEdit {
-    actor: PublicKey,
-    coordinate: EncodedCoordinate,
-    format: u32,
+    kind: Kind,
+    identifier: Option<String>,
     change: Vec<u8>,
-    inverse: Vec<u8>,
-}
-
-#[derive(Deserialize, Serialize)]
-enum EncodedCoordinate {
-    Event(EventId),
-    Replaceable {
-        author: PublicKey,
-        kind: Kind,
-        identifier: Option<String>,
-    },
-}
-
-impl From<&EventCoordinate> for EncodedCoordinate {
-    fn from(value: &EventCoordinate) -> Self {
-        match value {
-            EventCoordinate::Event(id) => Self::Event(*id),
-            EventCoordinate::Replaceable {
-                author,
-                kind,
-                identifier,
-            } => Self::Replaceable {
-                author: *author,
-                kind: *kind,
-                identifier: identifier.clone(),
-            },
-        }
-    }
-}
-
-impl From<EncodedCoordinate> for EventCoordinate {
-    fn from(value: EncodedCoordinate) -> Self {
-        match value {
-            EncodedCoordinate::Event(id) => Self::Event(id),
-            EncodedCoordinate::Replaceable {
-                author,
-                kind,
-                identifier,
-            } => Self::Replaceable {
-                author,
-                kind,
-                identifier,
-            },
-        }
-    }
 }
 
 impl Serialize for ReplaceableEventEdit {
@@ -212,11 +127,9 @@ impl Serialize for ReplaceableEventEdit {
         S: Serializer,
     {
         EncodedEdit {
-            actor: self.actor,
-            coordinate: EncodedCoordinate::from(&self.coordinate),
-            format: self.format,
+            kind: self.kind,
+            identifier: self.identifier.clone(),
             change: self.change.clone(),
-            inverse: self.inverse.clone(),
         }
         .serialize(serializer)
     }
@@ -228,13 +141,7 @@ impl<'de> Deserialize<'de> for ReplaceableEventEdit {
         D: Deserializer<'de>,
     {
         let encoded = EncodedEdit::deserialize(deserializer)?;
-        Self::new(
-            encoded.actor,
-            encoded.coordinate.into(),
-            encoded.format,
-            encoded.change,
-            encoded.inverse,
-        )
-        .map_err(serde::de::Error::custom)
+        Self::new(encoded.kind, encoded.identifier, encoded.change)
+            .map_err(serde::de::Error::custom)
     }
 }

@@ -51,7 +51,12 @@ pub enum WritePayload {
     /// Complete unsigned event body.
     Event(UnsignedEvent),
     /// Persistable protocol-owned change awaiting or surviving materialization.
-    Edit(ReplaceableEventEdit),
+    Edit {
+        /// Durable protocol-owned change.
+        edit: ReplaceableEventEdit,
+        /// Author resolved exactly once before custody.
+        author: PublicKey,
+    },
     /// Verified complete signed event.
     Presigned(Event),
 }
@@ -135,6 +140,16 @@ impl WriteIntent {
     #[must_use]
     pub const fn routing(&self) -> &WriteRouting {
         &self.routing
+    }
+
+    /// Exact event author, including the author resolved for an edit.
+    #[must_use]
+    pub fn author(&self) -> PublicKey {
+        match &self.payload {
+            WritePayload::Event(event) => event.pubkey,
+            WritePayload::Edit { author, .. } => *author,
+            WritePayload::Presigned(event) => event.pubkey,
+        }
     }
 
     /// Consume the intent into its exact parts.

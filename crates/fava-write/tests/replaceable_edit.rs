@@ -30,30 +30,25 @@ fn edit_is_exact_coordinate_minus_author_plus_change() {
 
 #[test]
 fn addressable_edit_shape_is_valid_and_bounded() {
-    let edit = ReplaceableEventEdit::new(
-        Kind::from_u16(30_023),
-        Some("article".to_owned()),
-        vec![1],
-    )
-    .expect("addressable coordinate");
+    let edit =
+        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("article".to_owned()), vec![1])
+            .expect("addressable coordinate");
     assert_eq!(edit.identifier(), Some("article"));
     assert!(matches!(
-        ReplaceableEventEdit::new(
-            Kind::from_u16(30_023),
-            Some("x".repeat(4_097)),
-            vec![1],
-        ),
+        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("x".repeat(4_097)), vec![1],),
         Err(WriteIntentError::TooLarge {
             bytes: 4_097,
             maximum: 4_096
         })
     ));
-    assert!(ReplaceableEventEdit::new(
-        Kind::ContactList,
-        Some("not-addressable".to_owned()),
-        vec![1],
-    )
-    .is_err());
+    assert!(
+        ReplaceableEventEdit::new(
+            Kind::ContactList,
+            Some("not-addressable".to_owned()),
+            vec![1],
+        )
+        .is_err()
+    );
     assert!(ReplaceableEventEdit::new(Kind::from_u16(30_023), None, vec![1]).is_err());
 }
 
