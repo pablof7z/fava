@@ -108,11 +108,7 @@ async fn protocol_crate_n_plus_one_records_external_and_raw_proofs() {
     assert_eq!(evidence["raw_content"], "opaque future content");
     assert_eq!(
         evidence["raw_tags"],
-        serde_json::json!([
-            ["something something"],
-            ["x-a", "poop"],
-            ["x", "future"]
-        ])
+        serde_json::json!([["something something"], ["x-a", "poop"], ["x", "future"]])
     );
     assert_eq!(evidence["raw_event_id"], evidence["raw_accepted_event_id"]);
     assert_eq!(evidence["raw_event_id"], evidence["raw_signed_event_id"]);

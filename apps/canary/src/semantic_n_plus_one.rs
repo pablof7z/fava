@@ -235,9 +235,9 @@ async fn raw_future_attempt(seed: &str) -> CanaryResult<Value> {
         Vec::new(),
         "opaque future content".to_owned(),
     )
-        .tags(tags.clone())
-        .build()
-        .map_err(error)?;
+    .tags(tags.clone())
+    .build()
+    .map_err(error)?;
     let expected = event
         .id
         .ok_or_else(|| CanaryError::new("future event has no id"))?;

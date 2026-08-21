@@ -280,9 +280,9 @@ async fn raw_future_event_kind_publishes_unchanged() {
         Vec::new(),
         "opaque future content".to_owned(),
     )
-        .tags(unknown.clone())
-        .build()
-        .expect("raw future event builds");
+    .tags(unknown.clone())
+    .build()
+    .expect("raw future event builds");
     let expected_id = event.id.expect("builder assigned id");
     let mut observation = open_observation(
         &harness.fava,
