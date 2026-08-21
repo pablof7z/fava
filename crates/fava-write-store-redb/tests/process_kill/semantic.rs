@@ -22,7 +22,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
 use fava_state::{CacheMutation, CachedEvent, RelayEvidence};
 use fava_transport::{RelaySession, Transport, TransportError};
-use fava_write::{EventId, Receipt, ReceiptId};
+use fava_write::{Receipt, ReceiptId};
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
@@ -37,12 +37,79 @@ const EDIT_FORMAT: u32 = 7;
 
 #[test]
 fn semantic_boundary_child() {
-    let Ok(_boundary) = env::var(SEMANTIC_BOUNDARY) else {
+    let Ok(boundary) = env::var(SEMANTIC_BOUNDARY) else {
         return;
     };
-    let _path = PathBuf::from(env::var(SEMANTIC_PATH).expect("semantic child database path"));
+    let path = PathBuf::from(env::var(SEMANTIC_PATH).expect("semantic child database path"));
     let marker = PathBuf::from(env::var(SEMANTIC_MARKER).expect("semantic child marker path"));
-    fs::write(marker, b"semantic-harness-not-implemented").expect("semantic marker writes");
+    let store = RedbWriteStore::open(path).expect("semantic child store opens");
+    let base = signed_source(10, "base");
+    let intent = if boundary == "terminal" {
+        WriteIntent::edit(edit(), WriteRouting::Automatic).expect("automatic semantic intent")
+    } else {
+        edit_intent()
+    };
+    let accepted = store
+        .accept_materialized_edit(
+            intent,
+            materialization(11, "generation one"),
+            matches!(boundary.as_str(), "successor" | "failed" | "retired").then_some(&base),
+        )
+        .expect("semantic child acceptance commits");
+    match boundary.as_str() {
+        "first" => {}
+        "successor" | "retired" => {
+            let successor = signed_source(20, "successor source");
+            store
+                .install_materialization(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    MaterializationId::from_u64(1),
+                    Some(base.id),
+                    materialization(21, "generation two"),
+                    Some(&successor),
+                )
+                .expect("semantic successor commits");
+        }
+        "failed" => {
+            let failed = signed_source(20, "failed source");
+            store
+                .record_materialization_failure(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    MaterializationId::from_u64(1),
+                    Some(base.id),
+                    Some(&failed),
+                    "child materializer failure".to_owned(),
+                )
+                .expect("semantic failure commits");
+        }
+        "terminal" => {
+            store
+                .apply_route(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    &fava::RoutePlan {
+                        revision: 2,
+                        destinations: BTreeMap::new(),
+                        coverage: BTreeMap::new(),
+                        unresolved: BTreeSet::new(),
+                        shortfalls: Vec::new(),
+                        settled: true,
+                    },
+                )
+                .expect("semantic terminal state commits");
+        }
+        "cancelled" => {
+            store
+                .cancel(accepted.receipt_id)
+                .expect("semantic cancellation commits");
+        }
+        other => panic!("unknown semantic boundary {other}"),
+    }
+    fs::write(marker, b"semantic-commit-durable").expect("semantic marker writes");
     loop {
         std::thread::park();
     }
@@ -145,7 +212,7 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
                 before.write_id,
                 before.receipt_id,
                 MaterializationId::from_u64(1),
-                Some(signed_source(10, "base").id),
+                before.current.publication.materialization_source,
                 materialization(31, "late retired completion"),
                 Some(&late_source),
             )
