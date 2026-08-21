@@ -1822,13 +1822,23 @@ Illustrative contract:
 
 ```rust
 pub trait RelayInformationFetcher: Send + Sync {
-    async fn get(
-        &self,
-        relay: RelayUrl,
-        policy: RelayInformationCachePolicy,
-    ) -> Result<RelayInformationSnapshot, RelayInformationError>;
+    async fn get(&self, relay: RelayUrl) -> Result<RelayInformation, RelayInformationError>;
 }
 ```
+
+The declared bounds reach universal owners as protocol-independent values, so planning and
+publication never read a NIP-11 document directly:
+
+```rust
+pub struct RelayLimits { /* subscriptions, filters, message length, subid length, filter limit */ }
+
+pub struct RelayWriteLimits { /* message length, content length, tags, pow, auth, restricted */ }
+```
+
+An absent field means the relay did not say. It never means unlimited and never becomes an
+invented default. Planning honors the stricter of Fava's configured bound and the relay's claim,
+and an exceeded bound is an exact typed refusal naming the actual and permitted values, produced
+before any frame is handed off.
 
 `fava-nip11-http` is the standard HTTP implementation. It owns HTTP acquisition, conditional requests, bounded single-flight fetches, and NIP-11-specific cache policy over an optional `FetchCache` namespace.
 

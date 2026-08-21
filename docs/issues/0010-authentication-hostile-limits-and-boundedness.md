@@ -78,6 +78,72 @@ application choice, distinct from the signed NIP-42 answer) and `RelayChallenge`
 nearest Nostr concept, observable distinction, owner, and executable falsifier.
 They require Pablo's ratification before M8 is claimed complete.
 
+## Slice 2 — declared relay limits reach planning and publication (HARD-04)
+
+- `fava-nip11` owns NIP-11 document values, `RelayLimitation`, bounded parsing
+  and validation, and the `RelayInformationFetcher` contract.
+- `fava-nip11-http` owns one bounded HTTP exchange and nothing else.
+- The declared bounds reach universal owners as protocol-independent values:
+  `fava_subscriptions::RelayLimits` for planning and
+  `fava_publisher::RelayWriteLimits` for publication. Neither universal owner
+  reads a NIP-11 document.
+- An absent field means the relay did not say. It never means unlimited and
+  never becomes an invented default. An unreachable, absent, or malformed
+  document leaves every limit unknown, and why it is unknown stays a reported
+  diagnostic fact.
+- `SubscriptionPlanner::plan` takes the relay's limits. `enforce_limits` honors
+  the stricter of Fava's configured bound and the relay's claim and produces an
+  exact typed refusal naming the actual and permitted values. Nothing is
+  truncated, clamped, or collided; explicit query opening stays all-or-nothing,
+  so an over-limit plan is a refusal rather than a silent omission.
+- `Nip01Publisher::with_relay_information` evaluates the locally decidable write
+  claims — frame size, content size, tag count, proof-of-work difficulty — and
+  returns `RelayDeliveryOutcome::RefusedByLimit` **before opening a connection**,
+  so knowingly invalid bytes never move. Claims that depend on relay-side
+  authorization (`auth_required`, `restricted_writes`) inform but never refuse.
+
+### Bounds
+
+- Relay information document: 65,536 bytes, typed refusal above it.
+- Relay information text field: 4,096 bytes.
+- Complete relay information acquisition: 10 s.
+- HTTP response including headers: document bound plus 16,384 bytes.
+- Parsed HTTP response headers: 64.
+
+### Evidence
+
+- `fava_nip11::an_absent_limitation_block_declares_nothing`
+- `fava_nip11::declared_limits_project_into_planning_and_write_bounds`
+- `fava_nip11::an_oversized_document_is_refused_with_exact_counts`
+- `fava_nip11::a_non_document_body_is_malformed_rather_than_an_invented_default`
+- `fava_nip11_http::a_non_success_status_is_a_refusal_rather_than_an_empty_document`
+- `fava_subscriptions_standard::an_unknown_relay_claim_leaves_favas_own_bound_in_force`
+- `fava_subscriptions_standard::a_stricter_relay_subscription_claim_produces_exact_shortfall_not_omission`
+- `fava_subscriptions_standard::a_stricter_relay_message_claim_refuses_the_frame_before_handoff`
+- `fava_subscriptions_standard::a_declared_subscription_id_length_refuses_the_identifier_it_cannot_carry`
+- `fava_subscriptions_standard::a_declared_filter_limit_refuses_a_larger_requested_bound`
+- `fava::a_declared_message_limit_refuses_the_query_before_any_connection`
+- `fava::an_unreachable_relay_information_document_leaves_limits_unknown`
+- `fava::a_declared_content_limit_refuses_publication_before_any_connection`
+- `fava::an_undeclared_content_limit_refuses_nothing`
+- `features/relay-limits.feature`
+
+### Deliberate breaks confirmed
+
+| Break | Failing evidence |
+|-------|------------------|
+| Honor only the configured bound and ignore the relay claim | `a_stricter_relay_subscription_claim_produces_exact_shortfall_not_omission` |
+| Skip the declared-limit check inside the publisher | `a_declared_content_limit_refuses_publication_before_any_connection` |
+
+### Vocabulary
+
+`RelayInformationFetcher` moves from specification-only to implemented and gains
+its `fava-nip11` and `fava-nip11-http` symbols. One focused addition records the
+protocol-independent bound values universal planning and publication consume:
+`RelayLimits`, whose distinction from a NIP-11 limitation object is that an
+absent field means unknown rather than unlimited. It requires Pablo's
+ratification before M8 is claimed complete.
+
 ## Not claimed by this issue
 
 - NIP-11 freshness, staleness, negative caching, single-flight, and `FetchCache`

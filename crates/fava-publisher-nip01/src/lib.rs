@@ -6,7 +6,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use fava_auth::{Authentication, AuthenticationOutcome, RelayChallenge};
-use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
+use fava_nip11::RelayInformationFetcher;
+use fava_publisher::{
+    EventLimitFacts, PublishAttempt, PublishOutcome, Publisher, RelayWriteLimits,
+};
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
 use fava_wire::{ClientMessage, RelayMessage, decode_relay, encode_client};
 
@@ -21,6 +24,7 @@ const MAX_INBOUND_FRAMES: usize = 64;
 #[derive(Clone, Default)]
 pub struct Nip01Publisher {
     authentication: Option<Arc<Authentication>>,
+    relay_information: Option<Arc<dyn RelayInformationFetcher>>,
 }
 
 impl Nip01Publisher {
@@ -29,6 +33,7 @@ impl Nip01Publisher {
     pub const fn new() -> Self {
         Self {
             authentication: None,
+            relay_information: None,
         }
     }
 
@@ -37,7 +42,32 @@ impl Nip01Publisher {
     pub fn authenticated(authentication: Arc<Authentication>) -> Self {
         Self {
             authentication: Some(authentication),
+            relay_information: None,
         }
+    }
+
+    /// Refuse knowingly-invalid work using the limits a relay declares.
+    ///
+    /// Without a relay-information service every limit stays unknown and this
+    /// publisher sends what the application asked for. No claim is invented.
+    #[must_use]
+    pub fn with_relay_information<T>(mut self, fetcher: Arc<T>) -> Self
+    where
+        T: RelayInformationFetcher + 'static,
+    {
+        self.relay_information = Some(fetcher);
+        self
+    }
+
+    /// Resolve the write limits one relay currently declares.
+    async fn write_limits(&self, attempt: &PublishAttempt) -> RelayWriteLimits {
+        let Some(fetcher) = self.relay_information.as_ref() else {
+            return RelayWriteLimits::unknown();
+        };
+        (fetcher.get(attempt.session.relay.clone()).await).map_or_else(
+            |_| RelayWriteLimits::unknown(),
+            |document| document.limitation.writes(),
+        )
     }
 
     /// Answer one challenge and report whether the attempt may continue.
@@ -138,6 +168,22 @@ impl Publisher for Nip01Publisher {
         transport: &'a dyn Transport,
     ) -> Pin<Box<dyn Future<Output = PublishOutcome> + Send + 'a>> {
         Box::pin(async move {
+            let event_frame = match encode_client(&ClientMessage::event(attempt.event.clone())) {
+                Ok(frame) => frame,
+                Err(error) => {
+                    return PublishOutcome::NotHandedOff {
+                        reason: error.to_string(),
+                    };
+                }
+            };
+            // Refuse work the relay has told us it cannot accept before any
+            // connection exists, so knowingly invalid bytes are never sent.
+            let limits = self.write_limits(&attempt).await;
+            if let Some(reason) =
+                limits.refusal(&EventLimitFacts::measure(&attempt.event, event_frame.len()))
+            {
+                return PublishOutcome::RefusedByLimit { reason };
+            }
             let session = match transport.open_session(attempt.session.clone()).await {
                 Ok(session) if session.key() == &attempt.session => session,
                 Ok(session) => {
@@ -147,15 +193,6 @@ impl Publisher for Nip01Publisher {
                     };
                 }
                 Err(error) => {
-                    return PublishOutcome::NotHandedOff {
-                        reason: error.to_string(),
-                    };
-                }
-            };
-            let event_frame = match encode_client(&ClientMessage::event(attempt.event.clone())) {
-                Ok(frame) => frame,
-                Err(error) => {
-                    let _ = session.close().await;
                     return PublishOutcome::NotHandedOff {
                         reason: error.to_string(),
                     };

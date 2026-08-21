@@ -692,10 +692,31 @@ meaning = "A replaceable provider that fetches and validates a relay's NIP-11 in
 owner = "fava-nip11"
 nearest_nostr = "NIP-11 relay information document"
 distinction = "NIP-11 defines the document; the fetcher owns bounded acquisition and result delivery."
-symbols = []
-crates = []
+symbols = [
+    "fava_nip11::RelayInformation",
+    "fava_nip11::RelayInformationError",
+    "fava_nip11::RelayInformationFetcher",
+    "fava_nip11::RelayLimitation",
+    "fava_nip11_http::HttpRelayInformationFetcher",
+]
+crates = ["fava-nip11", "fava-nip11-http"]
 spec_symbols = ["RelayInformationFetcher"]
 spec_crates = ["fava-nip11", "fava-nip11-http"]
+
+[[term]]
+name = "RelayLimits"
+source = "fava"
+meaning = "The bounds a relay declares for the requests and events it will accept, projected into the neutral values planning and publication consume."
+owner = "fava-subscriptions"
+nearest_nostr = "NIP-11 limitation object"
+distinction = "A NIP-11 limitation is one protocol document's claim; RelayLimits and RelayWriteLimits are the protocol-independent bounds universal planning and publication evaluate, where an absent field means unknown rather than unlimited, so no claim is ever invented and every exceeded bound is an exact typed refusal produced before handoff."
+symbols = [
+    "fava_subscriptions::RelayLimits",
+    "fava_publisher::RelayWriteLimits",
+    "fava_publisher::EventLimitFacts",
+]
+crates = []
+spec_symbols = ["RelayLimits", "RelayWriteLimits"]
 
 [[term]]
 name = "Authentication"

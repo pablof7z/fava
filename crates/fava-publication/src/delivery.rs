@@ -199,6 +199,9 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
     match outcome {
         PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
         PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
+        PublishOutcome::RefusedByLimit { reason } => {
+            RelayDeliveryOutcome::RefusedByLimit { reason }
+        }
         PublishOutcome::AuthenticationDenied { reason } => {
             RelayDeliveryOutcome::AuthenticationDenied { reason }
         }

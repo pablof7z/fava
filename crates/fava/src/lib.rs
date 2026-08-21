@@ -16,6 +16,7 @@ use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::DiagnosticsSnapshot;
 use fava_event_cache::EventCache;
+use fava_nip11::RelayInformationFetcher;
 use fava_observe::Observer;
 pub use fava_observe::{Observation, ObservationClosed, ObserveError};
 use fava_publication::Publication;
@@ -55,6 +56,7 @@ pub struct Fava {
     routers: Vec<Arc<dyn Router>>,
     publication: Option<Publication>,
     authentication: Option<Arc<Authentication>>,
+    relay_information: Option<Arc<dyn RelayInformationFetcher>>,
 }
 
 impl Fava {
@@ -254,6 +256,7 @@ pub struct FavaBuilder {
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
     authentication: Option<Arc<Authentication>>,
+    relay_information: Option<Arc<dyn RelayInformationFetcher>>,
 }
 
 impl FavaBuilder {
@@ -392,6 +395,19 @@ impl FavaBuilder {
         self
     }
 
+    /// Select the relay-information service supplying declared relay limits.
+    ///
+    /// Without one, every relay limit stays unknown and only Fava's own
+    /// configured bounds apply. No relay claim is ever invented.
+    #[must_use]
+    pub fn relay_information<T>(mut self, fetcher: Arc<T>) -> Self
+    where
+        T: RelayInformationFetcher + 'static,
+    {
+        self.relay_information = Some(fetcher);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -450,6 +466,7 @@ impl FavaBuilder {
             routers: self.routers,
             publication,
             authentication: self.authentication,
+            relay_information: self.relay_information,
         })
     }
 }

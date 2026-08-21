@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
-use fava_subscriptions::{RelayDemand, SubscriptionPlanError, SubscriptionPlanner};
+use fava_subscriptions::{RelayDemand, RelayLimits, SubscriptionPlanError, SubscriptionPlanner};
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use nostr::filter::Filter;
 use nostr::key::Keys;
@@ -24,7 +24,7 @@ fn compatible_author_filters_group_with_exact_logical_attribution() {
         .collect::<Vec<_>>();
     let relay = relay();
     let plan = StandardSubscriptionPlanner::default()
-        .plan(&relay, &demand)
+        .plan(&relay, &RelayLimits::unknown(), &demand)
         .expect("compatible demand plans");
 
     assert_eq!(plan.messages.len(), 1);
@@ -63,7 +63,7 @@ fn relay_subscription_bound_returns_exact_shortfall() {
     );
 
     assert_eq!(
-        planner.plan(&relay(), &demand),
+        planner.plan(&relay(), &RelayLimits::unknown(), &demand),
         Err(SubscriptionPlanError::TooManySubscriptions {
             required: 2,
             maximum: 1,

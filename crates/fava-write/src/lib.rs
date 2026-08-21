@@ -366,6 +366,11 @@ pub enum RelayDeliveryOutcome {
         /// Exact policy reason.
         reason: String,
     },
+    /// The relay declares it cannot accept this event; nothing was sent.
+    RefusedByLimit {
+        /// Exact declared limit and the actual value that exceeded it.
+        reason: String,
+    },
     /// Relay access was required and not granted for this exact destination.
     AuthenticationDenied {
         /// Exact scoped authentication reason.
@@ -389,6 +394,7 @@ impl RelayDeliveryOutcome {
             Self::Acknowledged { .. }
                 | Self::Rejected { .. }
                 | Self::GivenUp { .. }
+                | Self::RefusedByLimit { .. }
                 | Self::AuthenticationDenied { .. }
                 | Self::Unknown { .. }
                 | Self::CancelledBeforeHandoff

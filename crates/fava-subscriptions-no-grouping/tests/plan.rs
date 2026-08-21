@@ -1,7 +1,7 @@
 //! No-grouping planner contract evidence.
 
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
-use fava_subscriptions::{RelayDemand, SubscriptionPlanner};
+use fava_subscriptions::{RelayDemand, RelayLimits, SubscriptionPlanner};
 use fava_subscriptions_no_grouping::planner;
 use nostr::filter::Filter;
 use nostr::message::{ClientMessage, SubscriptionId};
@@ -21,7 +21,9 @@ fn each_logical_demand_becomes_one_exact_req_with_attribution() {
         RelayDemand::new(second_id.clone(), second.clone()),
     ];
 
-    let plan = planner().plan(&relay, &demand).expect("plan is exact");
+    let plan = planner()
+        .plan(&relay, &RelayLimits::unknown(), &demand)
+        .expect("plan is exact");
 
     assert_eq!(plan.relay, relay);
     assert_eq!(plan.messages.len(), 2);

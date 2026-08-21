@@ -4,9 +4,14 @@ use std::collections::BTreeMap;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    RelayDemand, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    RelayDemand, RelayLimits, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    enforce_limits,
 };
 use fava_wire::ClientMessage;
+
+/// Fava's own bounds for this policy, independent of any relay claim.
+const MAX_SUBSCRIPTIONS: usize = 64;
+const MAX_FRAME_BYTES: usize = 1_048_576;
 
 struct OnePerDemand;
 
@@ -14,6 +19,7 @@ impl SubscriptionPlanner for OnePerDemand {
     fn plan(
         &self,
         relay: &RelaySessionKey,
+        limits: &RelayLimits,
         demand: &[RelayDemand],
     ) -> Result<SubscriptionPlan, SubscriptionPlanError> {
         if demand.is_empty() {
@@ -40,6 +46,7 @@ impl SubscriptionPlanner for OnePerDemand {
                 vec![item.subscription_id.clone()],
             );
         }
+        enforce_limits(limits, MAX_SUBSCRIPTIONS, MAX_FRAME_BYTES, &messages)?;
         Ok(SubscriptionPlan {
             relay: relay.clone(),
             messages,

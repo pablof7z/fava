@@ -6,7 +6,7 @@ use fava_state::RelaySessionKey;
 use tokio::sync::watch;
 
 use super::Fava;
-use super::relay::OpenedRelay;
+use super::relay::{OpenedRelay, RelayProviders};
 
 pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, ObserveError> {
     match query.source().acquisition() {
@@ -28,21 +28,19 @@ async fn open_explicit(fava: &Fava, query: Query) -> Result<Observation, Observe
         .ok_or_else(|| ObserveError::Relay("live queries require a transport".to_owned()))?;
 
     let mut observation = fava.observer.open(query.clone())?;
+    let providers = RelayProviders {
+        transport: Arc::clone(transport),
+        planner: Arc::clone(planner),
+        cache: Arc::clone(&fava.event_cache),
+        diagnostics: Arc::clone(&fava.diagnostics),
+        next_subscription: Arc::clone(&fava.next_subscription),
+        authentication: fava.authentication.clone(),
+        relay_information: fava.relay_information.clone(),
+    };
     let mut opened = Vec::with_capacity(relays.len());
     for relay in relays {
         let session_key = RelaySessionKey::new(relay.clone(), query.access().clone());
-        match OpenedRelay::open(
-            session_key,
-            query.clone(),
-            Arc::clone(transport),
-            Arc::clone(planner),
-            Arc::clone(&fava.event_cache),
-            Arc::clone(&fava.diagnostics),
-            Arc::clone(&fava.next_subscription),
-            fava.authentication.clone(),
-        )
-        .await
-        {
+        match OpenedRelay::open(session_key, query.clone(), providers.clone()).await {
             Ok(relay) => opened.push(relay),
             Err(error) => {
                 observation.close();

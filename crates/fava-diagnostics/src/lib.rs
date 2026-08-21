@@ -38,6 +38,10 @@ pub struct DiagnosticsSnapshot {
     pub authenticated: Vec<IdentityFact>,
     /// Exact sessions whose authentication was declined, refused, or failed.
     pub authentication_denied: Vec<FailureFact>,
+    /// Limits each relay currently declares, or why they stay unknown.
+    pub relay_limits: Vec<(RelaySessionKey, String)>,
+    /// Exact refusals produced before knowingly invalid work was sent.
+    pub relay_limit_shortfalls: Vec<(RelaySessionKey, String)>,
     /// Exact scoped session failures.
     pub failures: Vec<FailureFact>,
     /// Exact subscriptions withdrawn locally with CLOSE.
@@ -63,6 +67,8 @@ struct State {
     authentication_required: VecDeque<SessionFact>,
     authenticated: VecDeque<IdentityFact>,
     authentication_denied: VecDeque<FailureFact>,
+    relay_limits: VecDeque<(RelaySessionKey, String)>,
+    relay_limit_shortfalls: VecDeque<(RelaySessionKey, String)>,
     failures: VecDeque<FailureFact>,
     withdrawn: VecDeque<SubscriptionFact>,
 }
@@ -99,6 +105,8 @@ impl Diagnostics {
             authentication_required: state.authentication_required.iter().cloned().collect(),
             authenticated: state.authenticated.iter().cloned().collect(),
             authentication_denied: state.authentication_denied.iter().cloned().collect(),
+            relay_limits: state.relay_limits.iter().cloned().collect(),
+            relay_limit_shortfalls: state.relay_limit_shortfalls.iter().cloned().collect(),
             failures: state.failures.iter().cloned().collect(),
             withdrawn: state.withdrawn.iter().cloned().collect(),
         }
@@ -206,6 +214,22 @@ impl Diagnostics {
             &mut self.lock().authentication_denied,
             capacity,
             (session, generation, reason),
+        );
+    }
+
+    /// Record the limits one relay currently declares, or why they are unknown.
+    pub fn relay_limits(&self, session: RelaySessionKey, declared: String) {
+        let capacity = self.capacity.get();
+        push_bounded(&mut self.lock().relay_limits, capacity, (session, declared));
+    }
+
+    /// Record one exact refusal produced before knowingly invalid work was sent.
+    pub fn relay_limit_shortfall(&self, session: RelaySessionKey, reason: String) {
+        let capacity = self.capacity.get();
+        push_bounded(
+            &mut self.lock().relay_limit_shortfalls,
+            capacity,
+            (session, reason),
         );
     }
 

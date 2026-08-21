@@ -1,0 +1,20 @@
+[package]
+name = "fava-nip11-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-nip11.workspace = true
+fava-state.workspace = true
+httparse.workspace = true
+rustls.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "time"] }
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

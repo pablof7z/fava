@@ -3,16 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 rust_library(
     name = "lib",
-    crate_name = "fava_publisher_nip01",
+    crate_name = "fava_nip11_http",
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
-        "//crates/fava-auth:lib",
         "//crates/fava-nip11:lib",
-        "//crates/fava-publisher:lib",
-        "//crates/fava-transport:lib",
-        "//crates/fava-wire:lib",
+        "//crates/fava-state:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
