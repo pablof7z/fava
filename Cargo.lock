@@ -364,6 +364,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip02"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+ "nostr",
+]
+
+[[package]]
 name = "fava-nip65"
 version = "0.1.0"
 dependencies = [

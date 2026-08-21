@@ -19,6 +19,7 @@ members = [
     "crates/fava-ingest",
     "crates/fava-diagnostics",
     "crates/fava-routing",
+    "crates/fava-nip02",
     "crates/fava-nip65",
     "crates/fava-router-app-relays",
     "crates/fava-router-outbox",
@@ -55,6 +56,7 @@ fava-transport-testkit = { path = "crates/fava-transport-testkit" }
 fava-ingest = { path = "crates/fava-ingest" }
 fava-diagnostics = { path = "crates/fava-diagnostics" }
 fava-routing = { path = "crates/fava-routing" }
+fava-nip02 = { path = "crates/fava-nip02" }
 fava-nip65 = { path = "crates/fava-nip65" }
 fava-router-app-relays = { path = "crates/fava-router-app-relays" }
 fava-router-outbox = { path = "crates/fava-router-outbox" }

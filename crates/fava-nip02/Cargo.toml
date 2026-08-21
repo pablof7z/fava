@@ -1,0 +1,15 @@
+[package]
+name = "fava-nip02"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-state.workspace = true
+fava-write.workspace = true
+
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+
+[lints]
+workspace = true
