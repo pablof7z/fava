@@ -22,7 +22,24 @@ use crate::{CanaryError, CanaryResult, deterministic_keys, repository_root};
 pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     let root = repository_root()?;
     let manifest = root.join("falsifiers/external-semantic-capability/Cargo.toml");
-    let mut owned_children_reaped = true;
+    let mut owners_reaped = true;
+    let mut process_groups_clean = true;
+    let mut builder = Command::new("cargo");
+    builder
+        .args([
+            "run",
+            "--locked",
+            "--manifest-path",
+            manifest.to_string_lossy().as_ref(),
+            "--bin",
+            "public_event_builder",
+            "--quiet",
+        ])
+        .current_dir(&root);
+    let builder_output = run_owned(builder, Duration::from_secs(60)).await?;
+    owners_reaped &= builder_output.owner_reaped;
+    process_groups_clean &= builder_output.process_group_clean;
+    require_success(&builder_output, "public fava-only event builder")?;
     for test in [
         "external_capability_composes_through_public_fava",
         "raw_future_event_kind_publishes_unchanged",
@@ -42,7 +59,8 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
             ])
             .current_dir(&root);
         let output = run_owned(command, Duration::from_secs(60)).await?;
-        owned_children_reaped &= output.owner_reaped;
+        owners_reaped &= output.owner_reaped;
+        process_groups_clean &= output.process_group_clean;
         require_success(&output, &format!("external proof {test}"))?;
     }
 
@@ -59,7 +77,8 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
         ])
         .current_dir(&root);
     let external_output = run_owned(external_cargo, Duration::from_secs(60)).await?;
-    owned_children_reaped &= external_output.owner_reaped;
+    owners_reaped &= external_output.owner_reaped;
+    process_groups_clean &= external_output.process_group_clean;
     require_success(&external_output, "external locked Cargo metadata")?;
     let external_metadata: Value = serde_json::from_slice(&external_output.stdout)?;
     let external_package_id = external_package_id(&external_metadata, &manifest)?;
@@ -77,7 +96,8 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
         ])
         .current_dir(&root);
     let cargo_output = run_owned(cargo, Duration::from_secs(60)).await?;
-    owned_children_reaped &= cargo_output.owner_reaped;
+    owners_reaped &= cargo_output.owner_reaped;
+    process_groups_clean &= cargo_output.process_group_clean;
     require_success(&cargo_output, "locked Cargo metadata")?;
     let metadata: Value = serde_json::from_slice(&cargo_output.stdout)?;
     let cargo_product_reachable = cargo_reaches_external(&metadata, &external_package_id)?;
@@ -87,7 +107,8 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
         .args(["query", "deps(//...)", "--noshow_progress"])
         .current_dir(&root);
     let bazel_output = run_owned(bazel, Duration::from_secs(60)).await?;
-    owned_children_reaped &= bazel_output.owner_reaped;
+    owners_reaped &= bazel_output.owner_reaped;
+    process_groups_clean &= bazel_output.process_group_clean;
     require_success(&bazel_output, "Bazel product graph")?;
     let bazel_product_reachable =
         String::from_utf8_lossy(&bazel_output.stdout).contains("external-semantic-capability");
@@ -101,6 +122,7 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     Ok(json!({
         "external_manifest": "falsifiers/external-semantic-capability/Cargo.toml",
         "external_capability": true,
+        "public_event_builder": true,
         "raw_future_kind": true,
         "future_kind": 50_001,
         "product_dependency": product_dependency,
@@ -108,7 +130,8 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
         "external_package_id": external_package_id,
         "cargo_product_reachable": cargo_product_reachable,
         "bazel_product_reachable": bazel_product_reachable,
-        "owned_children_reaped": owned_children_reaped,
+        "owners_reaped": owners_reaped,
+        "process_groups_clean": process_groups_clean,
         "attempt": raw["attempt"].clone(),
         "raw_event_id": raw["event_id"].clone(),
         "raw_accepted_event_id": raw["accepted_event_id"].clone(),

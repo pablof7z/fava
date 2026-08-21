@@ -107,13 +107,15 @@ async fn replaceable_edit_inverse_covers_both_capabilities() {
 async fn protocol_crate_n_plus_one_records_external_and_raw_proofs() {
     let evidence = run("protocol-crate-n-plus-one").await;
     assert_eq!(evidence["external_capability"], true);
+    assert_eq!(evidence["public_event_builder"], true);
     assert_eq!(evidence["raw_future_kind"], true);
     assert_eq!(evidence["future_kind"], 50_001);
     assert_eq!(evidence["product_dependency"], false);
     assert_eq!(evidence["cargo_metadata_locked"], true);
     assert_eq!(evidence["cargo_product_reachable"], false);
     assert_eq!(evidence["bazel_product_reachable"], false);
-    assert_eq!(evidence["owned_children_reaped"], true);
+    assert_eq!(evidence["owners_reaped"], true);
+    assert_eq!(evidence["process_groups_clean"], true);
     assert_attempt_correlation(&evidence["attempt"], 1);
     assert_eq!(evidence["raw_created_at"], 42);
     assert_eq!(evidence["raw_content"], "opaque future content");

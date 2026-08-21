@@ -19,6 +19,7 @@ pub(super) struct OwnedOutput {
     pub(super) stdout: Vec<u8>,
     pub(super) stderr: Vec<u8>,
     pub(super) owner_reaped: bool,
+    pub(super) process_group_clean: bool,
 }
 
 pub(super) async fn run_owned(
@@ -55,21 +56,19 @@ pub(super) async fn run_owned(
         && let Some((stdout, stderr)) =
             collect_readers(absolute_deadline, &mut stdout_reader, &mut stderr_reader).await?
     {
+        let cleanup_deadline = Instant::now() + CLEANUP_CAPACITY;
+        clean_process_group(pid, cleanup_deadline).await?;
         return Ok(OwnedOutput {
             status,
             stdout,
             stderr,
             owner_reaped,
+            process_group_clean: true,
         });
     }
 
     let cleanup_deadline = Instant::now() + CLEANUP_CAPACITY;
-    let group_kill = tokio::time::timeout_at(cleanup_deadline, kill_process_group(pid))
-        .await
-        .map_err(|_| CanaryError::new(format!("timed out killing process group {pid}")))?;
-    if group_kill.is_err() && !owner_reaped {
-        child.start_kill()?;
-    }
+    clean_process_group(pid, cleanup_deadline).await?;
     if !owner_reaped {
         tokio::time::timeout_at(cleanup_deadline, child.wait())
             .await
@@ -81,13 +80,58 @@ pub(super) async fn run_owned(
         stdout_reader.abort();
         stderr_reader.abort();
     }
-    group_kill?;
     let (stdout, stderr) = captured.unwrap_or_default();
     Err(CanaryError::new(format!(
         "external proof exceeded bound; process group {pid} killed and owner reaped; stdout: {}; stderr: {}",
         String::from_utf8_lossy(&stdout),
         String::from_utf8_lossy(&stderr),
     )))
+}
+
+async fn clean_process_group(pid: u32, deadline: Instant) -> CanaryResult<()> {
+    if !process_group_has_live_members(pid).await? {
+        return Ok(());
+    }
+    let kill_result = kill_process_group(pid).await;
+    if let Err(error) = kill_result
+        && process_group_has_live_members(pid).await?
+    {
+        return Err(error);
+    }
+    tokio::time::timeout_at(deadline, async {
+        loop {
+            if !process_group_has_live_members(pid).await? {
+                return Ok(());
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|_| CanaryError::new(format!("timed out cleaning process group {pid}")))?
+}
+
+async fn process_group_has_live_members(pid: u32) -> CanaryResult<bool> {
+    let output = tokio::process::Command::new("/bin/ps")
+        .args(["-axo", "pgid=,stat="])
+        .stdin(Stdio::null())
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(CanaryError::new("failed to inspect owned process groups"));
+    }
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let mut fields = line.split_whitespace();
+        let Some(group) = fields.next() else {
+            continue;
+        };
+        let Some(state) = fields.next() else {
+            continue;
+        };
+        if group.parse::<u32>().ok() == Some(pid) && !state.starts_with('Z') {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn kill_process_group(pid: u32) -> CanaryResult<()> {
@@ -203,6 +247,8 @@ mod tests {
             .await
             .expect("successful owner remains successful after group cleanup");
         assert!(output.status.success());
+        assert!(output.owner_reaped);
+        assert!(output.process_group_clean);
         let descendant = String::from_utf8_lossy(&output.stdout)
             .split("DESCENDANT_PID=")
             .nth(1)
