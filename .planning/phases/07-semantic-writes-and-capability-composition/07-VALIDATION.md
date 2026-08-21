@@ -5,7 +5,7 @@ status: complete
 nyquist_compliant: true
 wave_0_complete: true
 validated: 2026-08-21T14:25:50Z
-validated_head: 7149592b18ea2e2e72a3630eae2a945da1fbb919
+validated_head: 362f3e5dfc5ce635a5b875f3495477966017c358
 phase_base: 6fe21f745297b4af414e52269c3ae1c813cbf28f
 ---
 
@@ -78,17 +78,17 @@ zero-test, duplicate-name, and malformed module-qualified fixtures refuse.
 ## Fresh CLI evidence
 
 All four enabled M7 IDs ran separately under
-`/tmp/m7-final.KtKrj7`. Each run produced exactly one parseable
+`/tmp/m7-final.dBVHwC`. Each run produced exactly one parseable
 `manifest.json`, one `semantic.json`, seven total files, six artifact hashes,
 one 64-character seed hash, bounded JSON shape, no raw caller seed, and at most
 9,383 bytes.
 
 | Scenario | Evidence directory | Files | Bytes |
 |---|---|---:|---:|
-| `replaceable-edit-first-value` | `/tmp/m7-final.KtKrj7/replaceable-edit-first-value/replaceable-edit-first-value-4ef87cfe1660ed04` | 7 | 3,569 |
-| `replaceable-edit-rematerialization` | `/tmp/m7-final.KtKrj7/replaceable-edit-rematerialization/replaceable-edit-rematerialization-9f4cb9b399c0f250` | 7 | 4,309 |
-| `replaceable-edit-inverse` | `/tmp/m7-final.KtKrj7/replaceable-edit-inverse/replaceable-edit-inverse-8ce0e50872be9e30` | 7 | 9,382 |
-| `protocol-crate-n-plus-one` | `/tmp/m7-final.KtKrj7/protocol-crate-n-plus-one/protocol-crate-n-plus-one-4cbdb852c97b0784` | 7 | 3,940 |
+| `replaceable-edit-first-value` | `/tmp/m7-final.dBVHwC/replaceable-edit-first-value/replaceable-edit-first-value-4ef87cfe1660ed04` | 7 | 3,570 |
+| `replaceable-edit-rematerialization` | `/tmp/m7-final.dBVHwC/replaceable-edit-rematerialization/replaceable-edit-rematerialization-9f4cb9b399c0f250` | 7 | 4,310 |
+| `replaceable-edit-inverse` | `/tmp/m7-final.dBVHwC/replaceable-edit-inverse/replaceable-edit-inverse-8ce0e50872be9e30` | 7 | 9,383 |
+| `protocol-crate-n-plus-one` | `/tmp/m7-final.dBVHwC/protocol-crate-n-plus-one/protocol-crate-n-plus-one-4cbdb852c97b0784` | 7 | 3,941 |
 
 The detailed M7 section requires all four scenarios. The global canary roster
 omits `replaceable-edit-inverse`; issue 0010 records the discrepancy and the
