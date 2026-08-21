@@ -71,3 +71,29 @@ impl<'a> From<&'a Event> for UnsignedEventView<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use fava_state::RelayUrl;
+    use fava_write::WriteRouting;
+
+    use super::destinations;
+
+    #[test]
+    fn ordered_route_derives_one_lane_per_identity() {
+        let first = relay("first");
+        let second = relay("second");
+        let routing = WriteRouting::explicit([first.clone(), second.clone(), first])
+            .expect("route normalizes");
+
+        assert_eq!(
+            routing,
+            WriteRouting::Explicit(vec![relay("first"), relay("second")])
+        );
+        assert_eq!(destinations(&routing).len(), 2);
+    }
+
+    fn relay(name: &str) -> RelayUrl {
+        RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
+    }
+}

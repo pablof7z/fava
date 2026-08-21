@@ -1,6 +1,5 @@
 //! Public evidence for inert signer and explicit-relay publication scopes.
 
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fava::{
@@ -30,28 +29,26 @@ async fn signer_and_relay_scopes_compose_in_both_orders() {
     let first_route = [relay("first"), relay("second")];
     let second_route = [relay("second"), relay("first")];
 
-    let first = fava
+    let first_scope = fava
         .by(second_author.public_key())
         .to(first_route.clone())
-        .expect("explicit route validates")
-        .publish(fava_nip02::follow(target).expect("first edit builds"))
-        .expect("by then to accepts");
-    let second = fava
+        .expect("explicit route validates");
+    let second_scope = fava
         .to(second_route.clone())
         .expect("explicit route validates")
-        .by(author.public_key())
+        .by(author.public_key());
+    let first = first_scope
+        .publish(fava_nip02::follow(target).expect("first edit builds"))
+        .expect("by then to accepts");
+    let second = second_scope
         .publish(fava_nip02::follow(target).expect("second edit builds"))
         .expect("to then by accepts");
 
     assert_ne!(first.write_id(), second.write_id());
     assert_ne!(first.receipt_id(), second.receipt_id());
     for (write, expected_author, expected_route) in [
-        (
-            &first,
-            second_author.public_key(),
-            BTreeSet::from(first_route),
-        ),
-        (&second, author.public_key(), BTreeSet::from(second_route)),
+        (&first, second_author.public_key(), first_route.to_vec()),
+        (&second, author.public_key(), second_route.to_vec()),
     ] {
         let receipt = write.receipt().expect("receipt remains readable");
         assert_eq!(receipt.current.event.author(), expected_author);
@@ -73,6 +70,61 @@ async fn signer_and_relay_scopes_compose_in_both_orders() {
         1,
         "the first author retains one semantic winner"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn explicit_route_normalizes_duplicates_without_reordering() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, _, _, _) = assembly(Arc::clone(&store), author.clone());
+    let first = relay("first-normalized");
+    let second = relay("second-normalized");
+    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+        .content("ordered route")
+        .build()
+        .expect("event builds");
+
+    let write = fava
+        .to([first.clone(), second.clone(), first.clone()])
+        .expect("duplicate route normalizes")
+        .publish(event)
+        .expect("payload accepts");
+    let receipt = write.receipt().expect("receipt remains readable");
+
+    assert_eq!(receipt.routing, WriteRouting::Explicit(vec![first, second]));
+    assert_eq!(receipt.destinations().len(), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn equivalent_explicitly_authored_edits_have_distinct_custody_identities() {
+    let author = Keys::generate();
+    let target = Keys::generate().public_key();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, _, _, _) = assembly(Arc::clone(&store), author.clone());
+    let edit = fava_nip02::follow(target).expect("edit builds");
+
+    let first = fava
+        .by(author.public_key())
+        .publish(edit.clone())
+        .expect("first edit accepts");
+    let second = fava
+        .by(author.public_key())
+        .publish(edit)
+        .expect("equivalent edit accepts separately");
+
+    assert_ne!(first.write_id(), second.write_id());
+    assert_ne!(first.receipt_id(), second.receipt_id());
+    assert_eq!(store.len().expect("store remains readable"), 2);
+    let observation = fava
+        .observe(
+            Query::events()
+                .authors([author.public_key()])
+                .kind(Kind::ContactList)
+                .cache_only(),
+        )
+        .await
+        .expect("semantic observation opens");
+    assert_eq!(observation.current().events.len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
