@@ -86,10 +86,14 @@ def validate_mapping_target(target, listed_lines, expected_test):
 def cargo_mapping_evidence(mapping):
     package_name = mapping["package"]
     manifest = STANDALONE_MANIFESTS.get(package_name, ROOT / "Cargo.toml")
+    lockfile = manifest.parent / "Cargo.lock"
+    if not lockfile.is_file():
+        raise FileNotFoundError(f"mapping lockfile does not exist: {lockfile}")
     metadata = subprocess.run(
         [
             "cargo",
             "metadata",
+            "--locked",
             "--manifest-path",
             str(manifest),
             "--no-deps",
@@ -119,6 +123,7 @@ def cargo_mapping_evidence(mapping):
         [
             "cargo",
             "test",
+            "--locked",
             "--manifest-path",
             str(manifest),
             "-p",
