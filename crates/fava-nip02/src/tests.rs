@@ -236,3 +236,31 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
         Err(WriteIntentError::InvalidEvent(_))
     ));
 }
+
+#[test]
+fn public_surface_is_functions_over_approved_values_only() {
+    let source = include_str!("lib.rs");
+    for line in source.lines().map(str::trim) {
+        if line.starts_with("pub ") {
+            assert!(
+                line.starts_with("pub fn "),
+                "unexpected public nominal declaration: {line}"
+            );
+        }
+    }
+    for forbidden in [
+        "pub struct ContactList",
+        "pub enum ContactList",
+        "pub struct Descriptor",
+        "pub struct Factory",
+        "pub struct Registry",
+        "pub struct Profile",
+        "pub struct Compatibility",
+        "pub struct Migration",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "forbidden public noun: {forbidden}"
+        );
+    }
+}

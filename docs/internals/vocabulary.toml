@@ -112,7 +112,7 @@ protocol = "NIP-02"
 meaning = "A replaceable kind 3 event describing an author's contacts and relay hints."
 owner = "fava-nip02"
 symbols = []
-crates = []
+crates = ["fava-nip02"]
 spec_crates = ["fava-nip02"]
 
 [[term]]
@@ -122,7 +122,7 @@ protocol = "NIP-51"
 meaning = "A replaceable event carrying an author's public or private bookmarks."
 owner = "fava-bookmarks"
 symbols = []
-crates = []
+crates = ["fava-bookmarks"]
 spec_crates = ["fava-bookmarks"]
 
 [[term]]
