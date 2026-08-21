@@ -394,7 +394,7 @@ Both protocol materializers must be deterministic for the same edit, source, and
 
 ### Pitfall 10: N+1 proof is inside the universal workspace
 
-**What goes wrong:** a capability appears replaceable only because it can reach crate-private APIs or because core metadata already knows it. **Avoid:** implement one outside-workspace crate against public contracts and use only selected assembly changes. **Warning signs:** the external crate is a root workspace member, or its name appears in `fava`, publication, routing, stores, query, state, transport, or provider implementations. [VERIFIED: docs/spec/ARCHITECTURE.md:3053-3079]
+**What goes wrong:** a capability appears replaceable only because it can reach crate-private APIs or because core metadata already knows it. **Avoid:** implement one outside-workspace crate with `fava` as its sole normal dependency; declare existing provider/testkit crates only as explicit dev-dependencies to instantiate integration actors through public builder methods. Do not expand facade re-exports for the falsifier. **Warning signs:** the external crate is a root workspace member, its capability code normally depends on providers, or its name appears in `fava`, publication, routing, stores, query, state, transport, or provider implementations. [VERIFIED: docs/spec/ARCHITECTURE.md:3053-3079]
 
 ## Code Examples
 
@@ -489,27 +489,15 @@ NIP-51 includes both public tags and encrypted private bookmarks. The M7 contrac
 | A4 | The materialization timestamp policy is not specified and requires an explicit authority decision. | Pitfall 8 / Decision 3 | A naive clock policy can fail winner selection or create future-dated successors. |
 | A5 | The external N+1 falsifier directory will be named `falsifiers/external-protocol-capability`. | Project structure / Validation | Path is plan-level only; behavior is unaffected. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **What is the observable receipt state of earlier edits composed at the same coordinate?**
-   - What we know: deterministic composition is required; obsolete active delivery must retire; receipt identity remains stable across generations. [VERIFIED: .planning/phases/07-semantic-writes-and-capability-composition/07-CONTEXT.md:26-31,37-41] [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:913-928]
-   - What's unclear: whether an earlier receipt is terminal-superseded, remains open as an input to a later desired state, or receives successor generations.
-   - Recommendation: resolve in a focused local authority issue before finalizing the store schema.
+1. **Composition at one exact coordinate:** one live semantic edit is admitted per exact coordinate. The write store owns the durable current generation and serializes admission with compare-and-set semantics, so duplicate or simultaneous invocations cannot create two live coordinate owners or duplicate effects. Before winner selection, publication uses existing receipt/materialization provenance to exclude that semantic write's own current local contribution; qualified independent cache events and local contributions from unrelated receipts remain eligible. A source observation starts a successor generation only when it still names the store's current live generation. Equal-timestamp, older, or otherwise unqualified observations are inert.
 
-2. **What exact timestamp policy makes each materialization the intended current replacement?**
-   - What we know: the repository winner rule is timestamp then lowest event id. [VERIFIED: crates/fava-state/src/lib.rs:207-212]
-   - What's unclear: source events equal to or ahead of local wall clock.
-   - Recommendation: inject time, define allowed skew/refusal, and prove without sleep.
+2. **Materialization time:** the publication caller computes one exact checked timestamp and injects that `Timestamp` into the selected materializer. Materializers never read the wall clock. Deterministic tests inject fixed timestamps and use no sleeps; production derives the injected value once, after source selection, so a materialized replacement is strictly newer than its selected source or refuses through an existing typed error when checked timestamp arithmetic cannot satisfy that invariant.
 
-3. **Are private NIP-51 bookmarks part of M7?**
-   - What we know: M7 requires bookmark/unbookmark as the unrelated capability; NIP-51 defines public and private forms. [VERIFIED: .planning/phases/07-semantic-writes-and-capability-composition/07-CONTEXT.md:37-41] [CITED: https://github.com/nostr-protocol/nips/blob/master/51.md]
-   - What's unclear: whether encrypted private content is required now.
-   - Recommendation: lock public-only for M7 to avoid introducing an unrequested cryptographic owner.
+3. **Bookmark scope:** M7 implements public NIP-51 bookmarks only. Private bookmark encryption is deferred because it would introduce a separate cryptographic owner outside the approved M7 vocabulary and capability proof.
 
-4. **Does exact coordinate selection require a query contract extension now?**
-   - What we know: current selection filters ids/authors/kinds, while `EventCoordinate` also supports an addressable identifier. [VERIFIED: crates/fava-query/src/lib.rs:16-25] [VERIFIED: crates/fava-state/src/lib.rs:151-165]
-   - What's unclear: the two selected M7 capabilities are non-addressable standard replacements, but the neutral contract and external N+1 falsifier may challenge addressable coordinates.
-   - Recommendation: either add exact coordinate filtering behind vocabulary approval or constrain the M7 external N+1 edit to a non-addressable replaceable kind and record addressable observation as later work. Do not scan all events unboundedly.
+4. **Addressable selection:** semantic edits whose `EventCoordinate` has a non-empty `d` tag refuse before custody through an existing typed error until Fava has an exact bounded coordinate selector. M7's NIP-02, bookmark, and external N+1 proofs use non-addressable replaceable coordinates. No implementation may approximate addressable selection with an unbounded scan.
 
 ## Environment Availability
 

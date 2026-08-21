@@ -778,21 +778,11 @@ M7 adds equality of stable `WriteId`/`ReceiptId` across differing `Materializati
 
 **Registry and dispatcher pattern** (`apps/canary/src/lib.rs:112-136`, `461-475`; `apps/canary/src/main.rs:87-130`):
 
-```rust
-pub struct Scenario {
-    pub id: String,
-    pub milestone: String,
-    pub requirements: Vec<String>,
-    pub status: String,
-}
-
-pub fn scenario_registry() -> CanaryResult<Vec<Scenario>> {
-    Ok(serde_json::from_str::<ScenarioRegistry>(include_str!("../scenarios.json"))?.scenarios)
-}
-
-// Test invariant:
-assert!(has_executor(&scenario.id), "missing executor for {}", scenario.id);
-```
+The registry record carries an id, milestone, requirement list, and status. The
+registry loader decodes `scenarios.json` into those existing canary records, and
+the invariant test checks that every enabled record id has a dispatcher branch.
+Keep the record and loader names exactly as they already exist in the canary;
+this pattern does not propose a new public type.
 
 Update `scenarios.json`, `has_executor`, exports, CLI dispatch, canary manifest, and lock together. Keep protocol crates in this selected application assembly, not the universal `fava` production dependencies.
 
@@ -802,36 +792,22 @@ Update `scenarios.json`, `has_executor`, exports, CLI dispatch, canary manifest,
 
 **Separate workspace pattern** (`falsifiers/external-null-cache/Cargo.toml:1-17`):
 
-```toml
-[workspace]
-
-[package]
-name = "fava-external-null-cache-proof"
-publish = false
-
-[dependencies]
-fava = { path = "../../crates/fava" }
-fava-event-cache = { path = "../../crates/fava-event-cache" }
-# only public contracts and selected assembly dependencies
-```
+The analog declares its own workspace, marks its task-local package unpublished,
+and keeps `fava` as the sole normal dependency. Existing provider/testkit crates
+needed to instantiate integration actors belong under dev-dependencies. The
+pattern is the dependency boundary and workspace isolation, not the analog's
+package identifier.
 
 `falsifiers/external-protocol-capability` must remain its own workspace. Depend on public neutral contracts and only the providers needed to assemble/run the proof. Its capability name must not appear in universal core manifests or source.
 
 **Public-contract implementation and assembly** (`falsifiers/external-null-cache/src/lib.rs:11-54`, `65-79`):
 
-```rust
-pub struct NullEventCache;
-
-impl EventCache for NullEventCache { /* public contract only */ }
-impl QuerySource for NullEventCache { /* public contract only */ }
-
-let engine = Fava::builder()
-    .event_cache(Arc::new(NullEventCache))
-    .write_store(Arc::new(MemoryWriteStore::default()))
-    .query_evaluator(Arc::new(StandardQueryEvaluator))
-    .build()
-    .expect("public contracts are sufficient for external assembly");
-```
+The analog defines a local cache implementation of the existing `EventCache`
+and `QuerySource` contracts, then passes that implementation, a memory write
+store, and the standard evaluator through public `FavaBuilder` methods. The
+important falsifier is that public contracts suffice for external assembly;
+the analog's concrete type name and declaration syntax are not vocabulary for
+M7.
 
 The N+1 falsifier should define an unrelated external edit codec/materializer, cover empty/current/inverse, register it through `FavaBuilder`, and verify ordinary query/receipt behavior without crate-private access or core edits.
 
