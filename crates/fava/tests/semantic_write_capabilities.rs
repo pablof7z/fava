@@ -20,6 +20,8 @@ use nostr::key::Keys;
 mod capability_lifecycle;
 #[path = "support/semantic_write_capability_protocol.rs"]
 mod capability_protocol;
+#[path = "support/semantic_write_capability_signer.rs"]
+mod capability_signer;
 #[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
 mod support;

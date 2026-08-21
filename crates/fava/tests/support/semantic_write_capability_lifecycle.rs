@@ -1,5 +1,3 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Barrier, Mutex};
 
 use fava::{
@@ -11,16 +9,16 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, Query, QuerySource, QuerySourceError};
 use fava_routing::RoutePlan;
-use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_state::{CacheMutation, CachedEvent, RelaySessionKey};
 use fava_write::{EventId, LocalWriteEvent};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
-use tokio::sync::{broadcast, mpsc, oneshot, watch};
+use tokio::sync::broadcast;
 
 use super::capability_protocol::assert_source_removal;
+use super::capability_signer::GatedSigner;
 use super::explicit_intent;
 use super::support::{
     BlockingSigner, RecordingPublisher, publication_builder, relay_evidence,
@@ -28,7 +26,6 @@ use super::support::{
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type PendingSignature = (UnsignedEvent, oneshot::Sender<Result<Event, SignerError>>);
 
 pub async fn exercise<Add, Adjacent>(
     kind: Kind,
@@ -223,51 +220,6 @@ fn admit_twice(cache: &Arc<MemoryEventCache>, successor: &Event) {
         barrier.wait();
     });
     assert_eq!(*admissions.lock().unwrap(), 2);
-}
-
-struct GatedSigner {
-    public_key: PublicKey,
-    pending: mpsc::Sender<PendingSignature>,
-}
-
-impl GatedSigner {
-    fn new(public_key: PublicKey) -> (Self, mpsc::Receiver<PendingSignature>) {
-        let (pending, requests) = mpsc::channel(2);
-        (
-            Self {
-                public_key,
-                pending,
-            },
-            requests,
-        )
-    }
-}
-
-impl Signer for GatedSigner {
-    fn public_key(&self) -> PublicKey {
-        self.public_key
-    }
-    fn availability(&self) -> SignerAvailability {
-        SignerAvailability::Available
-    }
-    fn sign_event(
-        &self,
-        event: UnsignedEvent,
-        _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
-        Box::pin(async move {
-            let (complete, response) = oneshot::channel();
-            self.pending
-                .send((event, complete))
-                .await
-                .map_err(|error| {
-                    SignerError::Unavailable(format!("signature gate closed: {error}"))
-                })?;
-            response
-                .await
-                .map_err(|_| SignerError::Unavailable("completion dropped".to_owned()))?
-        })
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

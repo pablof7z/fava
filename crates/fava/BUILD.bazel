@@ -213,6 +213,7 @@ rust_test(
         "tests/support/semantic_write.rs",
         "tests/support/semantic_write_capability_lifecycle.rs",
         "tests/support/semantic_write_capability_protocol.rs",
+        "tests/support/semantic_write_capability_signer.rs",
     ],
     crate_name = "semantic_write_capabilities",
     edition = crate_edition(),
