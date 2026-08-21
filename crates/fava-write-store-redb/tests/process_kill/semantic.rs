@@ -60,13 +60,14 @@ fn semantic_boundary_child() {
         "first" => {}
         "successor" | "retired" => {
             let successor = signed_source(20, "successor source");
+            let created_at = if boundary == "successor" { 100 } else { 21 };
             store
                 .install_materialization(
                     accepted.write_id,
                     accepted.receipt_id,
                     MaterializationId::from_u64(1),
                     Some(base.id),
-                    materialization(21, "generation two"),
+                    materialization(created_at, "generation two"),
                     Some(&successor),
                 )
                 .expect("semantic successor commits");
@@ -138,7 +139,8 @@ async fn semantic_successor_and_failed_source_resume_once() {
         return;
     }
     let successor_path = kill_at("successor");
-    let successor_store = RedbWriteStore::open(successor_path).expect("successor store reopens");
+    let successor_store =
+        Arc::new(RedbWriteStore::open(successor_path).expect("successor store reopens"));
     let successor = receipt_one(&successor_store);
     assert_eq!(
         successor.current.publication.materialization_id,
@@ -146,6 +148,43 @@ async fn semantic_successor_and_failed_source_resume_once() {
     );
     assert_eq!(successor.write_id.as_u64(), 1);
     assert_eq!(successor.receipt_id.as_u64(), 1);
+    let newer_source = signed_source(30, "newer post-kill source");
+    let newer_source_id = newer_source.id;
+    let successor_cache = Arc::new(MemoryEventCache::default());
+    successor_cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            newer_source,
+            relay_evidence(),
+        ))])
+        .expect("newer source enters canonical cache");
+    let successor_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let successor_fava = publication_builder(
+        Arc::clone(&successor_cache),
+        Arc::clone(&successor_store),
+        Arc::clone(&successor_materializer),
+    )
+    .build()
+    .expect("successor recovery assembles after materializer validation");
+    let resumed = wait_for_generation(&successor_fava, ReceiptId::from_u64(1), 3).await;
+    assert_eq!(
+        resumed.current.publication.materialization_source,
+        Some(newer_source_id)
+    );
+    successor_fava
+        .wait_terminal(ReceiptId::from_u64(1))
+        .await
+        .expect("successor recovery settles");
+    assert_eq!(successor_materializer.calls(), 1);
+    let inert_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let _inert = publication_builder(
+        successor_cache,
+        successor_store,
+        Arc::clone(&inert_materializer),
+    )
+    .build()
+    .expect("settled successor store reassembles");
+    tokio::task::yield_now().await;
+    assert_eq!(inert_materializer.calls(), 0);
 
     let failed_path = kill_at("failed");
     let store = Arc::new(RedbWriteStore::open(failed_path).expect("failed store reopens"));
