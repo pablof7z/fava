@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 fava = { path = "../../crates/fava" }
+fava-bookmarks = { path = "../../crates/fava-bookmarks" }
 fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
 fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
@@ -30,6 +31,7 @@ fava-subscriptions = { path = "../../crates/fava-subscriptions" }
 fava-transport = { path = "../../crates/fava-transport" }
 fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
 fava-ingest = { path = "../../crates/fava-ingest" }
+fava-nip02 = { path = "../../crates/fava-nip02" }
 fava-wire = { path = "../../crates/fava-wire" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }

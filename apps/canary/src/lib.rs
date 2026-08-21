@@ -15,6 +15,7 @@ mod publication_support;
 mod recon;
 mod relay;
 mod routing;
+mod semantic_writes;
 mod wire;
 
 pub use automatic_publication::run_automatic_publication_scenario;
@@ -26,6 +27,7 @@ pub use publication::run_publication_scenario;
 pub use publication_child::run_crash_child;
 pub use recon::{ReconOptions, ReconOutcome};
 pub use routing::run_routing_scenario;
+pub use semantic_writes::run_semantic_write_scenario;
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -164,7 +166,7 @@ pub fn has_executor(id: &str) -> bool {
             | "hint-routing"
             | "route-preview-parity"
             | "app-relay-versus-fallback-profile"
-    )
+    ) || semantic_writes::has_executor(id)
 }
 
 /// Runs bounded read-only reconnaissance against an explicit public relay.
@@ -457,42 +459,4 @@ pub(crate) fn command_output(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{deterministic_keys, has_executor, run_local_scenario, scenario_registry};
-
-    #[test]
-    fn every_enabled_scenario_has_an_executor() {
-        let scenarios = scenario_registry().expect("registry parses");
-        for scenario in scenarios
-            .iter()
-            .filter(|scenario| scenario.status == "enabled")
-        {
-            assert!(
-                has_executor(&scenario.id),
-                "missing executor for {}",
-                scenario.id
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn local_scenarios_pass_through_the_public_facade() {
-        for scenario in [
-            "local-source-merge",
-            "local-replaceable-shadow-and-cancel",
-            "local-source-removal",
-            "slow-consumer-latest-state",
-        ] {
-            run_local_scenario(scenario, "m1-test")
-                .await
-                .expect("local scenario passes");
-        }
-    }
-
-    #[test]
-    fn disposable_identity_is_seed_deterministic() {
-        let first = deterministic_keys("seed").expect("identity derives");
-        let second = deterministic_keys("seed").expect("identity derives");
-        assert_eq!(first.public_key(), second.public_key());
-    }
-}
+mod lib_tests;
