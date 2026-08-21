@@ -6,13 +6,14 @@ use std::sync::{Arc, Mutex};
 
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
+    SourceChanges, SourceKind, SourceSnapshot,
 };
 use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
@@ -21,8 +22,10 @@ use fava_write_store::{
 use tokio::sync::{broadcast, watch};
 
 mod model;
+mod semantic;
 
 use model::{UnsignedEventView, destinations, settle};
+use semantic::{WriteState, next_revision};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -32,23 +35,6 @@ pub struct MemoryWriteStore {
     state: Mutex<WriteState>,
     latest: watch::Sender<Arc<SourceSnapshot>>,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
-}
-
-#[derive(Clone, Debug)]
-struct WriteState {
-    revision: u64,
-    next_identity: u64,
-    writes: BTreeMap<ReceiptId, Receipt>,
-}
-
-impl Default for WriteState {
-    fn default() -> Self {
-        Self {
-            revision: 0,
-            next_identity: 1,
-            writes: BTreeMap::new(),
-        }
-    }
 }
 
 impl Default for MemoryWriteStore {
@@ -70,27 +56,13 @@ impl MemoryWriteStore {
             receipt_changes,
         }
     }
-
-    fn snapshot(state: &WriteState) -> SourceSnapshot {
-        SourceSnapshot {
-            kind: SourceKind::WriteStore,
-            revision: SourceRevision(state.revision),
-            status: SourceStatus::Open,
-            events: state
-                .writes
-                .values()
-                .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
-                .map(|receipt| SourceEvent::Local(receipt.current.clone()))
-                .collect(),
-        }
-    }
-
-    fn publish_snapshot(&self, state: &WriteState) {
-        self.latest.send_replace(Arc::new(Self::snapshot(state)));
-    }
 }
 
 impl WriteStore for MemoryWriteStore {
+    fn active_capacity(&self) -> usize {
+        self.capacity.get()
+    }
+
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
     }
@@ -162,6 +134,49 @@ impl WriteStore for MemoryWriteStore {
             receipt_id,
             current,
         })
+    }
+
+    fn accept_materialized_edit(
+        &self,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic(intent, event, source)
+    }
+
+    fn install_materialization(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.install_semantic(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            event,
+            source,
+        )
+    }
+
+    #[allow(clippy::type_complexity)] // The neutral contract forbids a recovery wrapper.
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            Option<EventId>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.recover_semantic()
     }
 
     fn install_signed(
@@ -447,13 +462,6 @@ impl WriteStore for MemoryWriteStore {
             .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
             .count())
     }
-}
-
-fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
 }
 
 impl QuerySource for MemoryWriteStore {

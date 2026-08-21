@@ -4,8 +4,8 @@ use std::sync::{Arc, Barrier};
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp,
-    UnsignedEvent, WriteIntent, WriteRouting,
+    Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
+    WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -27,11 +27,7 @@ fn edit(actor: fava_write::PublicKey) -> ReplaceableEventEdit {
     .expect("bounded edit")
 }
 
-fn materialization(
-    actor: fava_write::PublicKey,
-    created_at: u64,
-    content: &str,
-) -> UnsignedEvent {
+fn materialization(actor: fava_write::PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
     EventBuilder::new(actor, Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
@@ -77,9 +73,18 @@ fn memory_first_edit_has_no_prior() {
         .expect("receipt retained");
     assert_eq!(receipt.write_id, accepted.write_id);
     assert_eq!(receipt.receipt_id, accepted.receipt_id);
-    assert_eq!(receipt.current.publication.materialization_id, MaterializationId::from_u64(1));
+    assert_eq!(
+        receipt.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
     assert_eq!(receipt.current.publication.materialization_source, None);
-    assert!(receipt.current.publication.retired_materializations.is_empty());
+    assert!(
+        receipt
+            .current
+            .publication
+            .retired_materializations
+            .is_empty()
+    );
     assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
 }
 
@@ -175,7 +180,10 @@ fn memory_generation_swap_is_compare_and_set() {
             )
             .is_err()
     );
-    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(before_stale));
+    assert_eq!(
+        store.receipt(accepted.receipt_id).unwrap(),
+        Some(before_stale)
+    );
 }
 
 #[test]
@@ -236,7 +244,10 @@ fn memory_unqualified_source_is_inert() {
             )
             .is_err()
     );
-    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(unchanged));
+    assert_eq!(
+        store.receipt(accepted.receipt_id).unwrap(),
+        Some(unchanged.clone())
+    );
     assert_eq!(changes.try_recv().unwrap().0, accepted.receipt_id);
     assert!(matches!(
         changes.try_recv(),

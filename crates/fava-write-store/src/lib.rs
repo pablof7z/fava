@@ -4,13 +4,15 @@ use fava_query::QuerySource;
 use fava_routing::{CoverageState, RoutePlan};
 use fava_state::RelaySessionKey;
 use fava_write::{
-    EventValue, InvalidEventValue, LocalWriteEvent, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, WriteId, WriteIntent, WriteIntentError, WriteRouting,
+    Event, EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, UnsignedEvent, WriteId,
+    WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 use tokio::sync::broadcast;
 
 const MAX_RECEIPT_TEXT_BYTES: usize = 4_096;
+const DESTINATION_EVIDENCE_CAPACITY: usize = 256;
 
 /// Result returned only after a local event contribution is committed.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,6 +27,13 @@ pub struct AcceptedWrite {
 
 /// Write-store provider contract used by the first local-source slice.
 pub trait WriteStore: QuerySource + Send + Sync {
+    /// Exact active semantic-write admission capacity of this provider.
+    ///
+    /// Providers that do not yet support semantic custody report zero.
+    fn active_capacity(&self) -> usize {
+        0
+    }
+
     /// Subscribe to committed receipt changes after this call.
     ///
     /// `Some(receipt)` is one committed current receipt; `None` is removal for
@@ -38,6 +47,70 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] when the event is invalid or the complete
     /// acceptance mutation cannot commit.
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError>;
+
+    /// Atomically accept one edit and its already-validated first materialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when semantic custody is unsupported or the
+    /// complete edit, receipt, materialization, and query-source commit refuses.
+    fn accept_materialized_edit(
+        &self,
+        _intent: WriteIntent,
+        _event: UnsignedEvent,
+        _source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support replaceable-event edits".to_owned(),
+        ))
+    }
+
+    /// Atomically replace the exact current semantic materialization.
+    ///
+    /// Repeating an already-committed exact update is idempotent. Every other
+    /// stale generation, write, source, body, or terminal update refuses.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] without mutation when any currentness or
+    /// boundedness check fails.
+    #[allow(clippy::too_many_arguments)]
+    fn install_materialization(
+        &self,
+        _write_id: WriteId,
+        _receipt_id: ReceiptId,
+        _expected: MaterializationId,
+        _expected_source: Option<EventId>,
+        _event: UnsignedEvent,
+        _source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support materialization replacement".to_owned(),
+        ))
+    }
+
+    /// Recover live semantic custody in stable receipt order.
+    ///
+    /// Each tuple carries the current receipt, durable edit, current selected
+    /// source id, and last failed source id. No separate recovery noun exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when coherent current custody cannot be read.
+    #[allow(clippy::type_complexity)] // Existing values deliberately avoid a recovery wrapper.
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            Option<EventId>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        Ok(Vec::new())
+    }
 
     /// Atomically accept one current event using automatic routing.
     ///
@@ -226,6 +299,15 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
     }
 }
 
+/// Shared bound for current destinations and retained publication evidence.
+///
+/// Publication queues and write-store providers consume this function rather
+/// than repeating the underlying number.
+#[must_use]
+pub const fn destination_evidence_capacity() -> usize {
+    DESTINATION_EVIDENCE_CAPACITY
+}
+
 /// Apply one newer complete route plan to a mutable receipt.
 ///
 /// Provider implementations call this inside their own atomic mutation.
@@ -238,9 +320,6 @@ pub fn apply_route_to_receipt(
     receipt: &mut Receipt,
     plan: &RoutePlan,
 ) -> Result<(), WriteStoreError> {
-    const MAX_DESTINATIONS: usize = 256;
-    const MAX_SHORTFALLS: usize = 256;
-
     if !matches!(receipt.routing, WriteRouting::Automatic) {
         return Err(WriteStoreError::Refused(
             "automatic route cannot mutate an explicit receipt".to_owned(),
@@ -252,10 +331,11 @@ pub fn apply_route_to_receipt(
             plan.revision, receipt.route_revision
         )));
     }
-    if plan.destinations.len() > MAX_DESTINATIONS {
+    if plan.destinations.len() > destination_evidence_capacity() {
         return Err(WriteStoreError::Refused(format!(
-            "route destination fan-out exceeds bound: {} > {MAX_DESTINATIONS}",
-            plan.destinations.len()
+            "route destination fan-out exceeds bound: {} > {}",
+            plan.destinations.len(),
+            destination_evidence_capacity()
         )));
     }
 
@@ -267,10 +347,11 @@ pub fn apply_route_to_receipt(
             .filter(|(_, state)| matches!(state, CoverageState::SettledAbsent))
             .map(|(target, _)| format!("no relay destination for {target:?}")),
     );
-    if shortfalls.len() > MAX_SHORTFALLS {
+    if shortfalls.len() > destination_evidence_capacity() {
         return Err(WriteStoreError::Refused(format!(
-            "route shortfall count exceeds bound: {} > {MAX_SHORTFALLS}",
-            shortfalls.len()
+            "route shortfall count exceeds bound: {} > {}",
+            shortfalls.len(),
+            destination_evidence_capacity()
         )));
     }
     for shortfall in &shortfalls {
