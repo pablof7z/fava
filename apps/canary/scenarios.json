@@ -87,7 +87,7 @@
     {
       "id": "subscription-grouping-equivalence",
       "milestone": "M4",
-      "requirements": ["M4 planner grouping preserves logical query results"],
+      "requirements": ["D-12 300 literal tag-value queries prove 1-versus-300 exact result and relay-evidence equivalence"],
       "status": "enabled"
     },
     {

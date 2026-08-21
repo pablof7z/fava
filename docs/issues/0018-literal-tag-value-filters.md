@@ -54,6 +54,18 @@ refiltering reproduce each original query.
 - Confirm the new evidence fails before implementation and under a named
   deliberate case-folding or empty-axis break.
 
+### Controlled-relay artifact
+
+- Green command: `cargo fmt --manifest-path apps/canary/Cargo.toml -- --check && runs_dir=$(mktemp -d /tmp/fava-tag-values-06-1.XXXXXX) && cargo run --manifest-path apps/canary/Cargo.toml -- run subscription-grouping-equivalence --relay-bin /Users/pablofernandez/.cargo/bin/nostr-rs-relay --seed tag-values-06-1 --runs-dir "$runs_dir"`
+- Green result: exit 0; `passed subscription-grouping-equivalence`.
+- Preserved run: `/tmp/fava-tag-values-06-1.vqT3jj/subscription-grouping-equivalence-a4a09b5efe5d6565`
+- Manifest SHA-256: `452230c195affa5c107f9f147727ee8967616827a24be5d4f194657b2e717d53`
+- Relay: `nostr-rs-relay 0.8.12`; process and wire facts are retained in the hashed bundle.
+- Case-isolation preflight: lowercase `#d` and uppercase `#D` remained two standard-planner messages.
+- Workload result: 300 exact public tag-value queries produced one grouped REQ versus 300 no-grouping REQs; every query returned exactly its seeded event ID with equal exact relay-session evidence.
+- No-grouping execution: the concurrent-first 300-REQ attempt received the exact refusal `NOTICE: Subscription error: Maximum concurrent subscription count reached`; deterministic batches of 32 then completed all 300 REQs against the same seeded relay.
+- Witnesses: `wire/proxy.jsonl`, `results.json`, `evidence.jsonl`, `report.md`, relay process facts/logs, and `manifest.json`.
+
 ## Exclusions
 
 - Reactive `ValueSet` projections and query algebra.
@@ -61,4 +73,3 @@ refiltering reproduce each original query.
 - A general encoded-request byte or term bound, owned by the hostile-boundary
   milestone.
 - A mandatory physical tag index for every event-cache provider.
-
