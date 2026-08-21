@@ -28,10 +28,7 @@ impl QueryEvaluator for StandardQueryEvaluator {
         }
 
         let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
-        for record in by_id.into_values().filter(|record| {
-            matches_selection(query.selection(), record)
-                && matches_authority(query.source().authority(), record)
-        }) {
+        for record in by_id.into_values() {
             let coordinate = record
                 .event
                 .coordinate()
@@ -48,7 +45,13 @@ impl QueryEvaluator for StandardQueryEvaluator {
             }
         }
 
-        let mut events: Vec<_> = by_coordinate.into_values().collect();
+        let mut events: Vec<_> = by_coordinate
+            .into_values()
+            .filter(|record| {
+                matches_selection(query.selection(), record)
+                    && matches_authority(query.source().authority(), record)
+            })
+            .collect();
         events.sort_by(|left, right| match query.ordering() {
             QueryOrdering::NewestFirst => right
                 .created_at()
