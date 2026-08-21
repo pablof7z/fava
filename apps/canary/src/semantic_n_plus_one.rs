@@ -22,47 +22,8 @@ use crate::{CanaryError, CanaryResult, deterministic_keys, repository_root};
 pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     let root = repository_root()?;
     let manifest = root.join("falsifiers/external-semantic-capability/Cargo.toml");
-    let mut owners_reaped = true;
-    let mut process_groups_clean = true;
-    let mut builder = Command::new("cargo");
-    builder
-        .args([
-            "run",
-            "--locked",
-            "--manifest-path",
-            manifest.to_string_lossy().as_ref(),
-            "--bin",
-            "public_event_builder",
-            "--quiet",
-        ])
-        .current_dir(&root);
-    let builder_output = run_owned(builder, Duration::from_secs(60)).await?;
-    owners_reaped &= builder_output.owner_reaped;
-    process_groups_clean &= builder_output.process_group_clean;
-    require_success(&builder_output, "public fava-only event builder")?;
-    for test in [
-        "external_capability_composes_through_public_fava",
-        "raw_future_event_kind_publishes_unchanged",
-    ] {
-        let mut command = Command::new("cargo");
-        command
-            .args([
-                "test",
-                "--locked",
-                "--manifest-path",
-                manifest.to_string_lossy().as_ref(),
-                "--test",
-                "public_capability",
-                test,
-                "--",
-                "--exact",
-            ])
-            .current_dir(&root);
-        let output = run_owned(command, Duration::from_secs(60)).await?;
-        owners_reaped &= output.owner_reaped;
-        process_groups_clean &= output.process_group_clean;
-        require_success(&output, &format!("external proof {test}"))?;
-    }
+    let (mut owners_reaped, mut process_groups_clean) =
+        run_external_proofs(&root, &manifest).await?;
 
     let mut external_cargo = Command::new("cargo");
     external_cargo
@@ -141,6 +102,51 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
         "raw_content": raw["content"].clone(),
         "raw_tags": raw["tags"].clone(),
     }))
+}
+
+async fn run_external_proofs(root: &Path, manifest: &Path) -> CanaryResult<(bool, bool)> {
+    let mut owners_reaped = true;
+    let mut process_groups_clean = true;
+    let mut builder = Command::new("cargo");
+    builder
+        .args([
+            "run",
+            "--locked",
+            "--manifest-path",
+            manifest.to_string_lossy().as_ref(),
+            "--bin",
+            "public_event_builder",
+            "--quiet",
+        ])
+        .current_dir(root);
+    let builder_output = run_owned(builder, Duration::from_secs(60)).await?;
+    owners_reaped &= builder_output.owner_reaped;
+    process_groups_clean &= builder_output.process_group_clean;
+    require_success(&builder_output, "public fava-only event builder")?;
+    for test in [
+        "external_capability_composes_through_public_fava",
+        "raw_future_event_kind_publishes_unchanged",
+    ] {
+        let mut command = Command::new("cargo");
+        command
+            .args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                manifest.to_string_lossy().as_ref(),
+                "--test",
+                "public_capability",
+                test,
+                "--",
+                "--exact",
+            ])
+            .current_dir(root);
+        let output = run_owned(command, Duration::from_secs(60)).await?;
+        owners_reaped &= output.owner_reaped;
+        process_groups_clean &= output.process_group_clean;
+        require_success(&output, &format!("external proof {test}"))?;
+    }
+    Ok((owners_reaped, process_groups_clean))
 }
 
 fn require_success(output: &OwnedOutput, label: &str) -> CanaryResult<()> {
