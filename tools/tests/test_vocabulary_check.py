@@ -61,6 +61,19 @@ class VocabularyCheckTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_temporary_path_does_not_suppress_same_line_crate_reference(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=(
+                "unregistered fava-hidden remains invalid; "
+                "evidence: /tmp/fava-hidden/run-id\n"
+            ),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("undocumented specified architectural crate: fava-hidden", result.stderr)
+
     def run_check(
         self,
         *,

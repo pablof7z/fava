@@ -178,9 +178,10 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
             continue
         symbols.update(PUBLIC_NOUN.findall(content))
         for line in content.splitlines():
-            for crate in SPEC_CRATE.findall(line):
-                if f"/tmp/{crate}" not in line:
-                    crates.add(crate)
+            for match in SPEC_CRATE.finditer(line):
+                prefix = line[max(0, match.start() - len("/tmp/")) : match.start()]
+                if prefix != "/tmp/":
+                    crates.add(match.group(1))
     return symbols, crates, problems
 
 
