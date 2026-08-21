@@ -54,7 +54,9 @@ pub(super) async fn run_owned(
     let stderr = join_reader(stderr_reader).await?;
     if timed_out {
         return Err(CanaryError::new(format!(
-            "external proof exceeded bound; process group {pid} killed and owner reaped"
+            "external proof exceeded bound; process group {pid} killed and owner reaped; stdout: {}; stderr: {}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr),
         )));
     }
     Ok(OwnedOutput {
@@ -120,11 +122,23 @@ mod tests {
     #[tokio::test]
     async fn timeout_kills_owned_group_and_reaps_owner() {
         let mut command = Command::new("/bin/sh");
-        command.args(["-c", "sleep 30 & wait"]);
-        let failure = run_owned(command, Duration::from_millis(50))
+        command.args(["-c", "sleep 30 & echo DESCENDANT_PID=$!; wait"]);
+        let failure = run_owned(command, Duration::from_secs(1))
             .await
             .expect_err("owned process tree must exceed the bound");
-        assert!(failure.to_string().contains("process group"));
-        assert!(failure.to_string().contains("owner reaped"));
+        let message = failure.to_string();
+        assert!(message.contains("process group"));
+        assert!(message.contains("owner reaped"));
+        let descendant = message
+            .split("DESCENDANT_PID=")
+            .nth(1)
+            .and_then(|suffix| suffix.split_whitespace().next())
+            .expect("descendant process identifier");
+        let status = Command::new("ps")
+            .args(["-o", "stat=", "-p", descendant])
+            .output()
+            .expect("inspect descendant after group kill");
+        let state = String::from_utf8_lossy(&status.stdout);
+        assert!(state.trim().is_empty() || state.trim_start().starts_with('Z'));
     }
 }
