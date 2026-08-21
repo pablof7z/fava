@@ -126,6 +126,12 @@ fn matches_selection(selection: &FilterSelection, record: &EventRecord) -> bool 
             .kinds
             .as_ref()
             .is_none_or(|kinds| kinds.contains(&record.event.kind()))
+        && selection.tag_values.iter().all(|(key, values)| {
+            record.event.tags().iter().any(|tag| {
+                tag.single_letter_tag() == Some(*key)
+                    && tag.content().is_some_and(|value| values.contains(value))
+            })
+        })
 }
 
 fn matches_authority(authority: &ResultAuthority, record: &EventRecord) -> bool {

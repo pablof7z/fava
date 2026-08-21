@@ -1,5 +1,7 @@
 //! Declarative event queries, local source contracts, and application snapshots.
 
+mod selection;
+
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::num::NonZeroUsize;
@@ -11,18 +13,8 @@ use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
 pub use nostr::event::{EventId, Kind};
 pub use nostr::key::PublicKey;
 pub use nostr::types::{RelayUrl, Timestamp};
+pub use selection::{FilterSelection, SingleLetterTag};
 use thiserror::Error;
-
-/// Declarative event-filter axes supported by the first vertical slice.
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub struct FilterSelection {
-    /// Event ids, or all ids when absent. A present empty set matches nothing.
-    pub ids: Option<BTreeSet<EventId>>,
-    /// Authors, or all authors when absent. A present empty set matches nothing.
-    pub authors: Option<BTreeSet<PublicKey>>,
-    /// Kinds, or all kinds when absent. A present empty set matches nothing.
-    pub kinds: Option<BTreeSet<Kind>>,
-}
 
 /// Relays Fava should ask for acquisition.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -125,33 +117,6 @@ impl Default for Query {
 }
 
 impl Query {
-    /// Start an unconstrained event query.
-    #[must_use]
-    pub fn events() -> Self {
-        Self::default()
-    }
-
-    /// Match one event kind.
-    #[must_use]
-    pub fn kind(mut self, kind: Kind) -> Self {
-        self.selection.kinds = Some(BTreeSet::from([kind]));
-        self
-    }
-
-    /// Match a literal author set. An empty set intentionally matches nothing.
-    #[must_use]
-    pub fn authors(mut self, authors: impl IntoIterator<Item = PublicKey>) -> Self {
-        self.selection.authors = Some(authors.into_iter().collect());
-        self
-    }
-
-    /// Match a literal event-id set. An empty set intentionally matches nothing.
-    #[must_use]
-    pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Self {
-        self.selection.ids = Some(ids.into_iter().collect());
-        self
-    }
-
     /// Ask exactly these relays while retaining ordinary local result visibility.
     ///
     /// # Errors
@@ -208,12 +173,6 @@ impl Query {
     pub const fn oldest_first(mut self) -> Self {
         self.ordering = QueryOrdering::OldestFirst;
         self
-    }
-
-    /// Event selection.
-    #[must_use]
-    pub const fn selection(&self) -> &FilterSelection {
-        &self.selection
     }
 
     /// Acquisition and result-authority policy.
