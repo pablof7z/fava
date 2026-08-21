@@ -1,298 +1,469 @@
-<!-- refreshed: 2026-08-20 -->
+<!-- refreshed: 2026-08-21 -->
 # Architecture
 
-**Analysis Date:** 2026-08-20
+**Analysis Date:** 2026-08-21
 
 ## System Overview
 
-The checkout implements the M0 evidence lab plus an intentionally narrow M1 local-source tracer. The full target is specified but is not yet present. Behavioral authority, architectural ownership, evidence discipline, and sequencing live respectively in `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`, and `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`; `docs/spec/partial-spec-api-semantics.md` refines query-source semantics without outranking those four files. Current milestone status is recorded outside the normative specs in `docs/issues/0001-local-source-merge.md` and `docs/issues/0002-m0-evidence-foundation.md`.
+Fava is a statically assembled Rust library. The implemented product covers the completed M0-M6
+milestone set recorded in `docs/issues/0001-local-source-merge.md` through
+`docs/issues/0008-automatic-write-routing.md`: coherent local queries, explicit and automatic live
+relay queries, bounded multi-relay observation, ordered routing, durable explicit publication, and
+asynchronously expanding automatic write routing. M7-M11 remain delivery specifications in
+`docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`; their named owners and native artifacts are not
+present under `crates/`, `apps/`, or `docs/issues/`.
+
+The authority chain is:
+
+1. `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` for required behavior.
+2. `docs/spec/ARCHITECTURE.md` for responsibilities and lifecycle ownership.
+3. `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md` for behavioral proof.
+4. `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` for milestone sequencing and exit gates.
+5. `docs/spec/partial-spec-api-semantics.md` for compatible query refinements.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│                         Downstream Rust app                          │
-│                   `crates/fava/src/lib.rs`                           │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │ Fava::observe(Query)
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     Local observation owner                         │
-│                 `crates/fava-observe/src/lib.rs`                     │
-└───────────────┬──────────────────────────────┬───────────────────────┘
-                │                              │
-                ▼                              ▼
-┌────────────────────────────┐   ┌─────────────────────────────────────┐
-│ Neutral source contracts   │   │ Replaceable evaluation contract    │
-│ `crates/fava-query/`       │   │ `crates/fava-query/src/lib.rs`     │
-└──────────────┬─────────────┘   └──────────────────┬──────────────────┘
-               │                                    │
-      ┌────────┴────────┐                           ▼
-      ▼                 ▼               ┌──────────────────────────────┐
-┌──────────────┐  ┌──────────────┐       │ Standard full reevaluator    │
-│ Event cache  │  │ Write store  │       │ `crates/fava-query-standard/`│
-│ contracts +  │  │ contracts +  │       └──────────────┬───────────────┘
-│ memory impl  │  │ memory impl  │                      │
-└──────┬───────┘  └──────┬───────┘                      │
-       └────────────┬─────┴──────────────────────────────┘
-                    ▼
-          one merged QuerySnapshot / EventRecord
-             `crates/fava-query/src/lib.rs`
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Downstream application / canary                                             │
+│ `crates/fava/src/lib.rs` · `apps/canary/src/main.rs`                    │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │ public `Fava` operations
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Thin facade and static assembly · `crates/fava/src/`                      │
+├───────────────────────────────┬──────────────────────────────────────────────┤
+│ Query path                    │ Publication path                             │
+│ `Fava::observe`             │ `Fava::publish` / receipt operations       │
+└───────────────┬───────────────┴───────────────────┬──────────────────────────┘
+                │                                   │
+                ▼                                   ▼
+┌───────────────────────────────┐     ┌────────────────────────────────────────┐
+│ `fava-observe`              │     │ `fava-publication`                   │
+│ merged latest-state owner     │     │ durable signing/routing/delivery owner │
+└───────────┬───────────────────┘     └──────┬──────────┬──────────┬───────────┘
+            │                                │          │          │
+            ▼                                ▼          ▼          ▼
+┌───────────────────────────────┐     ┌──────────┐ ┌──────────┐ ┌─────────────┐
+│ `QuerySource` contracts     │     │ `Signer`│ │ `Router` │ │ `Publisher`│
+│ event cache + write store     │     │ contract │ │ chain    │ │ + delivery  │
+└──────────┬───────────┬────────┘     └──────────┘ └────┬─────┘ └──────┬──────┘
+           │           │                                └──────┬───────┘
+           ▼           ▼                                       ▼
+┌──────────────┐ ┌────────────────┐              ┌────────────────────────────┐
+│ memory event │ │ memory / Redb  │              │ subscription + transport   │
+│ cache        │ │ write stores   │              │ + NIP-01 wire boundaries   │
+└──────┬───────┘ └────────┬───────┘              └──────────────┬─────────────┘
+       └──────────┬───────┘                                     │ real WebSocket
+                  ▼                                             ▼
+        one `QuerySnapshot`                            external Nostr relay
+        with exact evidence
 
-Separate evidence boundary:
-
-`apps/canary/src/main.rs` -> relay supervisor `apps/canary/src/relay.rs`
-    -> transparent proxy `apps/canary/src/proxy.rs`
-    -> independent NIP-01 witness `apps/canary/src/wire.rs`
-    -> preserved run bundle `apps/canary/src/artifacts.rs`
+Independent evidence boundary:
+`apps/canary/src/relay.rs` -> `apps/canary/src/proxy.rs`
+    -> `apps/canary/src/wire.rs` -> `apps/canary/src/artifacts.rs`
 ```
 
-The implemented dependency direction is acyclic: domain crates `crates/fava-state/` and `crates/fava-write/` feed the query vocabulary in `crates/fava-query/`; neutral contracts in `crates/fava-event-cache/` and `crates/fava-write-store/` depend on that vocabulary; implementations in `crates/fava-event-cache-memory/`, `crates/fava-write-store-memory/`, and `crates/fava-query-standard/` depend on the contracts or value owners; `crates/fava-observe/` owns orchestration; and `crates/fava/` is the facade. Cargo remains the dependency-metadata authority in `Cargo.toml` and `Cargo.lock`; Bazel mirrors first-party edges explicitly in targets such as `crates/fava-query/BUILD.bazel`, `crates/fava-observe/BUILD.bazel`, and `crates/fava/BUILD.bazel`, and imports the locked third-party graph through `MODULE.bazel`.
+The dependency direction is domain values -> neutral contracts -> implementations and lifecycle
+owners -> facade. Concrete standard providers are selected by the application; they are not normal
+dependencies of `crates/fava/Cargo.toml`. Cargo owns package metadata in `Cargo.toml` and
+`Cargo.lock`; Bazel mirrors first-party edges in `crates/*/BUILD.bazel` and imports the locked
+third-party graph through `MODULE.bazel`.
 
 ## Component Responsibilities
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| Behavioral authority | Defines required live-query/write-intent behavior and universal invariants; it does not report implementation status. | `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` |
-| Target architecture | Assigns target owners, crate families, dependency direction, flows, and falsifiers; many named crates remain specification-only. | `docs/spec/ARCHITECTURE.md` |
-| Delivery authority | Sequences vertical slices and milestone exit gates; M0 precedes any M1 completion claim. | `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
-| Evidence authority | Requires behavior-first TDD/BDD, narrow owner tests, deliberate breaks, and public capstones. | `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md` |
-| `fava-state` | Owns implemented relay-evidence values, event coordinates, and deterministic same-coordinate winner comparison. | `crates/fava-state/src/lib.rs` |
-| `fava-write` | Owns implemented write/receipt identifiers, unsigned-or-signed event values, and local publication evidence. | `crates/fava-write/src/lib.rs` |
-| `fava-query` | Owns query descriptions, source policy, source observation contracts, `EventRecord`, `QuerySnapshot`, and evaluator contract. | `crates/fava-query/src/lib.rs` |
-| `fava-query-standard` | Supplies the current merge oracle: same-id evidence merge, coordinate winner selection, authority filtering, ordering, and limits. | `crates/fava-query-standard/src/lib.rs` |
-| `fava-event-cache` | Defines the neutral event-cache provider contract as a specialized `QuerySource`. | `crates/fava-event-cache/src/lib.rs` |
-| `fava-event-cache-memory` | Owns bounded current-process relay-event retention, atomic batch application, source revisions, and latest snapshots. | `crates/fava-event-cache-memory/src/lib.rs` |
-| `fava-write-store` | Defines the current neutral contract for accepting/cancelling already-materialized local events and exposing them as a `QuerySource`. | `crates/fava-write-store/src/lib.rs` |
-| `fava-write-store-memory` | Owns bounded volatile accepted-local-event state, write/receipt allocation, cancellation, source revisions, and latest snapshots. | `crates/fava-write-store-memory/src/lib.rs` |
-| `fava-observe` | Owns all-or-nothing opening of both local sources, current source state, reevaluation, query revisions, coalesced delivery, and close. | `crates/fava-observe/src/lib.rs` |
-| `fava` | Provides explicit provider assembly and the current public `observe` facade; it silently selects no provider. | `crates/fava/src/lib.rs` |
-| M0 canary | Runs a separate-process relay, independent proxy/wire witness, kill/restart scenario, reconnaissance, and evidence persistence without depending on Fava crates. | `apps/canary/src/lib.rs` |
-| External-provider falsifier | Proves an outside-workspace null event cache can implement public contracts and assemble through the facade. | `falsifiers/external-null-cache/src/lib.rs` |
+| Behavioral authority | Defines required behavior without reporting completion status. | `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` |
+| Architecture authority | Assigns facts, lifecycle owners, dependency rules, boundaries, and falsifiers. | `docs/spec/ARCHITECTURE.md` |
+| Delivery authority | Defines M0-M11 vertical milestones and exit gates. | `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
+| Vocabulary authority | Closes concepts, crate names, and public nominal Rust symbols by default. | `docs/internals/vocabulary.toml` |
+| `fava-state` | Owns relay/access/session evidence, event coordinates, replaceable ordering, deletion, and expiration mutations. | `crates/fava-state/src/lib.rs` |
+| `fava-write` | Owns checked event building, write intents, routing mode, identities, materialized events, delivery outcomes, and receipts. | `crates/fava-write/src/lib.rs`, `crates/fava-write/src/builder.rs` |
+| `fava-query` | Owns the sole public query, acquisition versus result authority, source contracts, event records, snapshots, and evaluator contract. | `crates/fava-query/src/lib.rs` |
+| `fava-query-standard` | Supplies same-ID evidence merge, coordinate winner selection, filters, ordering, and limits. | `crates/fava-query-standard/src/lib.rs` |
+| `fava-event-cache` | Defines signed relay-event retention as a specialized `QuerySource`; applies universal admission and expiration rules. | `crates/fava-event-cache/src/lib.rs` |
+| `fava-event-cache-memory` | Owns bounded in-process cached events, atomic mutation batches, revisions, and snapshots. | `crates/fava-event-cache-memory/src/lib.rs` |
+| `fava-write-store` | Defines custody, receipt transitions, routing application, attempts, cancellation, recovery, removal, and source observation. | `crates/fava-write-store/src/lib.rs` |
+| Write-store providers | Implement bounded volatile custody and immediate-durability Redb custody/recovery. | `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write-store-redb/src/lib.rs`, `crates/fava-write-store-redb/src/ops.rs` |
+| `fava-observe` | Atomically opens local sources, reevaluates current state, coalesces bounded snapshots, and owns close. | `crates/fava-observe/src/lib.rs` |
+| `fava-wire` | Encodes and decodes exact NIP-01 messages without owning transport or subscription policy. | `crates/fava-wire/src/lib.rs` |
+| `fava-subscriptions` | Defines logical demand, exact wire plans, inbound attribution, planner contract, and query-to-filter conversion. | `crates/fava-subscriptions/src/lib.rs` |
+| Subscription planners | Provide one-REQ-per-demand and bounded compatible-author grouping policies. | `crates/fava-subscriptions-no-grouping/src/lib.rs`, `crates/fava-subscriptions-standard/src/lib.rs` |
+| `fava-transport` | Defines exact session generation, frame handoff, receive, and idempotent close contracts. | `crates/fava-transport/src/lib.rs` |
+| WebSocket transport | Owns WebSocket connections, generation allocation, socket resources, frame bounds, and handoff ambiguity. | `crates/fava-transport-websocket/src/lib.rs` |
+| `fava-ingest` | Attributes EVENT frames, verifies ID/signature/filter, and admits only valid signed events. | `crates/fava-ingest/src/lib.rs` |
+| `fava-diagnostics` | Owns bounded public facts for coalescing, routes, sessions, subscriptions, EOSE, CLOSED, AUTH needs, failures, and withdrawal. | `crates/fava-diagnostics/src/lib.rs` |
+| `fava-routing` | Owns read/write requests, targets, coverage, contributions, ordered live composition, preview, deduplication, and bounds. | `crates/fava-routing/src/lib.rs`, `crates/fava-routing/src/chain.rs` |
+| Router providers | Supply app-relay, fallback, NIP-65 outbox, Nostr hint/evidence, and delayed-test policies. | `crates/fava-router-app-relays/src/lib.rs`, `crates/fava-router-fallback-relays/src/lib.rs`, `crates/fava-router-outbox/src/lib.rs`, `crates/fava-router-hints/src/lib.rs`, `crates/fava-router-testkit/src/lib.rs` |
+| `fava-nip65` | Owns pure kind:10002 relay-list parsing and replacement ordering, not routing. | `crates/fava-nip65/src/lib.rs` |
+| Signer boundary | Separates exact author-bound signing from its local-key implementation. | `crates/fava-signer/src/lib.rs`, `crates/fava-signer-local/src/lib.rs` |
+| Publisher boundary | Separates one exact publication attempt from the NIP-01 implementation. | `crates/fava-publisher/src/lib.rs`, `crates/fava-publisher-nip01/src/lib.rs` |
+| Delivery boundary | Separates retry/give-up decisions from the bounded standard policy. | `crates/fava-delivery/src/lib.rs`, `crates/fava-delivery-standard/src/lib.rs` |
+| `fava-publication` | Orders durable acceptance, signing, route revisions, destination lanes, policy decisions, cancellation, terminal waiting, and recovery. | `crates/fava-publication/src/lib.rs`, `crates/fava-publication/src/run.rs` |
+| `fava` | Exposes the facade, validates assembly, owns live-query relay tasks, and delegates publication lifecycle. | `crates/fava/src/lib.rs`, `crates/fava/src/live.rs`, `crates/fava/src/relay.rs`, `crates/fava/src/routes.rs` |
+| Canary/evidence app | Runs enabled M0-M6 scenarios, relay processes, proxies, hostile witnesses, crash children, and artifacts. | `apps/canary/src/main.rs`, `apps/canary/src/lib.rs`, `apps/canary/scenarios.json` |
+| External falsifier | Proves an outside-workspace event-cache provider can use only public contracts. | `falsifiers/external-null-cache/src/lib.rs` |
 
 ## Pattern Overview
 
-**Overall:** Statically assembled, layered library with semantic-owner crates, neutral provider contracts, replaceable implementations, and lifecycle-owner orchestration (`Cargo.toml`, `docs/spec/ARCHITECTURE.md`).
+**Overall:** Statically assembled ports-and-adapters library with semantic-owner crates, neutral
+contracts, separately selectable implementations, and focused asynchronous lifecycle owners.
 
 **Key Characteristics:**
-- Keep one owner for every type and mutable lifecycle; implemented owners are visible in `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `crates/fava-observe/src/lib.rs`.
-- Keep contract crates separate from implementation crates; the current pairs are `crates/fava-event-cache/` with `crates/fava-event-cache-memory/`, and `crates/fava-write-store/` with `crates/fava-write-store-memory/`.
-- Assemble providers statically through `FavaBuilder`; do not add runtime plugin registries or hidden defaults to `crates/fava/src/lib.rs`.
-- Merge event-cache and write-store contributions only through the evaluator contract in `crates/fava-query/src/lib.rs` and the current oracle in `crates/fava-query-standard/src/lib.rs`.
-- Treat complete current snapshots as the public observation model; `tokio::sync::watch` remains private to providers and the observation owner in `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `crates/fava-observe/src/lib.rs`.
-- Stabilize boundaries through vertical slices and competing implementations, not empty frameworks; the required sequence is in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, and the current external challenge is `falsifiers/external-null-cache/src/lib.rs`.
-- Keep build topology aligned with architecture: declare dependency metadata once in `Cargo.toml` and `Cargo.lock`, mirror first-party crate edges in per-crate targets such as `crates/fava-state/BUILD.bazel` and `crates/fava/BUILD.bazel`, and make `bazel test //...` the authoritative main-workspace build through `.bazelrc` and `MODULE.bazel`.
+- Use `FavaBuilder` in `crates/fava/src/lib.rs` for composition; missing mandatory roles return
+  `BuildError`, and publication roles become jointly mandatory when publication is selected.
+- Keep each contract independent of its implementation, as in `crates/fava-transport/` versus
+  `crates/fava-transport-websocket/` and `crates/fava-write-store/` versus provider crates.
+- Use complete replacement snapshots for current source and router state. Providers own
+  `SourceRevision`; the observer owns `QueryRevision`; route owners apply monotonic revisions.
+- Use `tokio::sync::watch` for bounded latest state and `tokio::sync::broadcast` for causal receipt
+  changes that must report lag rather than silently coalesce.
+- Keep acquisition scope separate from result provenance in `QuerySourcePolicy`; asking a relay
+  never fabricates evidence that it served an event.
+- Keep optimistic local events solely in `WriteStore`; only verified relay observations enter
+  `EventCache` through `fava-ingest` and `EventCache::admit`.
+- Route reads and writes through the same `RouteRequest`, `Router`, and ordered chain. Preview uses
+  the same derivation but opens no router sessions or relay work.
+- Start independent work as facts become available: automatic reads open immediate relays and add
+  later ones; automatic writes deliver while other targets remain unresolved.
+- Retain exact relay/access/session, subscription, receipt, attempt, and route revision identity at
+  asynchronous boundaries.
+- Keep protocol meaning in protocol crates such as `crates/fava-nip65/`; universal routing,
+  building, publication, and facade crates do not switch on NIP-specific product behavior.
 
-## Implemented State Versus Specified Target
+## Implementation Coverage
 
-| Status | Scope | Evidence |
-|--------|-------|----------|
-| Implemented M0 | Independent real-relay evidence lab, enabled `lab-real-relay-smoke`, bounded public reconnaissance, and reconstructable artifacts. | `apps/canary/src/lib.rs`, `apps/canary/scenarios.json`, `docs/issues/0002-m0-evidence-foundation.md`, `features/relay-lab.feature` |
-| Implemented tracer | Local query values, independent cache/write sources, full reevaluation, latest-state observation, memory providers, and thin observe facade. | `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs` |
-| M1 incomplete | Stable equivalent-query sharing, full deletion/expiry semantics, the named local-source-removal canary, and the complete shared provider corpus are not claimed complete. | `docs/issues/0001-local-source-merge.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
-| Specified only | Wire/ingest, routing, subscription planning, transport, publication, delivery, signing, sessions, auth, diagnostics, persistent providers, protocol services, protocol crates, runtime, Swift, and Kotlin remain target architecture. | `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
+| Milestone | Current implementation boundary | Evidence |
+|-----------|---------------------------------|----------|
+| M0 | Independent real-relay process/wire/persistence lab and reconstructable artifacts. | `docs/issues/0002-m0-evidence-foundation.md`, `apps/canary/src/lib.rs`, `features/relay-lab.feature` |
+| M1 | Local event state, memory cache/write sources, source merge, deletion/expiry, cancellation retraction, and bounded observation. | `docs/issues/0001-local-source-merge.md`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs` |
+| M2 | Explicit live query, NIP-01 planning/wire/transport, verified admission, EOSE/CLOSED diagnostics, and CLOSE. | `docs/issues/0004-explicit-live-query.md`, `crates/fava/tests/explicit_live.rs`, `crates/fava-ingest/tests/admission.rs` |
+| M3 | Multi-relay provenance, reconnect generations, stale-subscription refusal, and bounded coalescing. | `docs/issues/0005-multi-relay-observation.md`, `crates/fava/tests/multi_relay.rs`, `crates/fava/tests/observation_bounds.rs` |
+| M4 | Ordered live routers, relay reconciliation, preview, explicit bypass, and interchangeable subscription grouping. | `docs/issues/0006-ordered-automatic-routing.md`, `crates/fava/tests/automatic_routes.rs`, `crates/fava-subscriptions-standard/tests/grouping.rs` |
+| M5 | Durable explicit publication, signer/publisher/delivery seams, Redb recovery, receipts, and cancellation. | `docs/issues/0007-durable-explicit-publication.md`, `crates/fava/tests/explicit_publication.rs`, `crates/fava-write-store-redb/tests/process_kill.rs` |
+| M6 | Automatic write routing, partial delivery, live expansion under one receipt, router providers, and preview parity. | `docs/issues/0008-automatic-write-routing.md`, `crates/fava/tests/automatic_publication.rs`, `crates/fava-router-outbox/tests/outbox.rs` |
+| M7-M11 | Specification and vocabulary entries only. No edit protocol, auth, fetch-cache/service, persistent event-cache, provider matrix, FFI, Swift, or Kotlin implementation exists. | `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/internals/vocabulary.toml`, `Cargo.toml`, `apps/canary/scenarios.json` |
 
 ## Layers
 
 **Authoritative Design Layer:**
-- Purpose: Own required behavior, responsibility allocation, proof discipline, and sequencing without mixing status into normative text.
-- Location: `docs/spec/`
-- Contains: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, and `docs/spec/partial-spec-api-semantics.md`.
-- Depends on: No implementation crate; authority order is indexed by `docs/spec/README.md`.
-- Used by: Local slice records in `docs/issues/`, behavior features in `features/`, and implementation under `crates/` and `apps/canary/`.
+- Purpose: Own behavior, architecture, proof discipline, sequencing, and closed vocabulary.
+- Location: `docs/spec/`, `docs/internals/`
+- Contains: The five authoritative specifications and `docs/internals/vocabulary.toml`.
+- Depends on: No implementation crate.
+- Used by: `docs/issues/`, `features/`, `crates/`, `apps/canary/`, and `tools/check_vocabulary.py`.
 
-**Semantic Value Layer:**
-- Purpose: Define stable protocol/query/write values and deterministic rules without provider resources.
-- Location: `crates/fava-state/`, `crates/fava-write/`, `crates/fava-query/`
-- Contains: Relay evidence and coordinates in `crates/fava-state/src/lib.rs`; write identity and local materializations in `crates/fava-write/src/lib.rs`; query/source/result contracts in `crates/fava-query/src/lib.rs`.
-- Depends on: `nostr` plus lower value owners as declared in `crates/fava-state/Cargo.toml`, `crates/fava-write/Cargo.toml`, and `crates/fava-query/Cargo.toml`.
-- Used by: Contracts, providers, observation, facade, and tests under `crates/`.
+**Domain and Protocol Value Layer:**
+- Purpose: Define stable Nostr/Fava values and deterministic rules without provider resources.
+- Location: `crates/fava-state/`, `crates/fava-write/`, `crates/fava-query/`, `crates/fava-wire/`, `crates/fava-nip65/`
+- Contains: Event state/evidence, write/receipt values, query/result values, NIP-01 messages, and NIP-65 lists.
+- Depends on: `nostr`, serialization/error libraries, and lower semantic owners.
+- Used by: Contract, provider, lifecycle, facade, and acceptance crates.
 
-**Neutral Provider Contract Layer:**
-- Purpose: Name one replaceable storage responsibility per trait while reusing `QuerySource` for continuous local state.
-- Location: `crates/fava-event-cache/`, `crates/fava-write-store/`
-- Contains: `EventCache` in `crates/fava-event-cache/src/lib.rs` and `WriteStore` in `crates/fava-write-store/src/lib.rs`.
-- Depends on: Semantic/query crates declared in `crates/fava-event-cache/Cargo.toml` and `crates/fava-write-store/Cargo.toml`.
-- Used by: Memory providers, facade builder, acceptance tests, and the external falsifier in `falsifiers/external-null-cache/`.
+**Neutral Contract Layer:**
+- Purpose: Define replaceable roles without selecting mechanisms.
+- Location: `crates/fava-event-cache/`, `crates/fava-write-store/`, `crates/fava-subscriptions/`, `crates/fava-transport/`, `crates/fava-routing/`, `crates/fava-signer/`, `crates/fava-publisher/`, `crates/fava-delivery/`
+- Contains: Object-safe provider traits, exact request/result values, and scoped typed errors.
+- Depends on: Domain values and neutral lower contracts only.
+- Used by: Providers, lifecycle owners, facade, testkits, and external falsifiers.
 
 **Provider and Policy Layer:**
-- Purpose: Supply replaceable algorithms/resources without changing universal meanings.
-- Location: `crates/fava-event-cache-memory/`, `crates/fava-write-store-memory/`, `crates/fava-query-standard/`
-- Contains: Two bounded in-memory authorities and one deliberately simple full-reevaluation oracle in their respective `src/lib.rs` files.
-- Depends on: Neutral contracts and semantic values via each crate's `Cargo.toml`.
-- Used by: Public acceptance tests in `crates/fava/tests/local_source_merge.rs`; implementations are dev-dependencies rather than facade dependencies in `crates/fava/Cargo.toml`.
+- Purpose: Supply concrete algorithms, storage, transport, signing, routing, and planning choices.
+- Location: `crates/fava-*-memory/`, `crates/fava-write-store-redb/`, `crates/fava-*-standard/`, `crates/fava-transport-websocket/`, `crates/fava-signer-local/`, `crates/fava-publisher-nip01/`, `crates/fava-router-*/`
+- Contains: Memory/Redb stores, evaluator, planners, WebSocket sessions, signing, NIP-01 publication,
+  delivery policy, and router policies.
+- Depends on: Corresponding neutral contracts and domain crates; concrete routers do not flow into
+  `crates/fava-routing/Cargo.toml`.
+- Used by: `apps/canary/Cargo.toml` and public integration tests under `crates/fava/tests/`.
 
-**Lifecycle Owner Layer:**
-- Purpose: Order source opening, evaluate coherent current state, own a query's live task, and close provisional or installed resources.
-- Location: `crates/fava-observe/`
-- Contains: `Observer`, `Observation`, typed open errors, source-state replacement, and bounded watch delivery in `crates/fava-observe/src/lib.rs`.
-- Depends on: Only the neutral query/evaluator vocabulary declared in `crates/fava-observe/Cargo.toml`.
-- Used by: The facade in `crates/fava/src/lib.rs`.
+**Universal Lifecycle Owner Layer:**
+- Purpose: Order work across contracts while leaving policy/mechanism with their owners.
+- Location: `crates/fava-observe/`, `crates/fava-ingest/`, `crates/fava-publication/`
+- Contains: Query observation, relay-event admission, and accepted-write execution/recovery.
+- Depends on: Neutral contracts, not standard implementations.
+- Used by: `crates/fava/`.
 
-**Facade and Product Assembly Layer:**
-- Purpose: Validate explicit provider selection and expose the current public workload entry point.
+**Facade and Relay Coordination Layer:**
+- Purpose: Validate assembly and bind public handles to relay/route tasks.
 - Location: `crates/fava/`
-- Contains: `Fava`, `FavaBuilder`, and `BuildError` in `crates/fava/src/lib.rs`.
-- Depends on: Contract and owner crates only in normal dependencies declared by `crates/fava/Cargo.toml`; concrete providers are test-only dev-dependencies there.
-- Used by: Downstream applications and public acceptance evidence in `crates/fava/tests/local_source_merge.rs` and `falsifiers/external-null-cache/src/lib.rs`.
+- Contains: `Fava`, `FavaBuilder`, explicit/automatic query opening, reconnect loops, route
+  reconciliation, `QuerySource for Fava`, and publication delegation.
+- Depends on: Contract and lifecycle-owner crates; concrete providers are dev dependencies only.
+- Used by: Rust applications, the canary, and the external falsifier.
 
 **Evidence and Falsification Layer:**
-- Purpose: Prove public behavior with BDD examples, an independent real-relay application, and outside-workspace provider substitution.
-- Location: `features/`, `apps/canary/`, `falsifiers/`, `docs/issues/`
-- Contains: Behavior declarations in `features/local-source-merge.feature` and `features/relay-lab.feature`; canary orchestration in `apps/canary/src/`; external provider proof in `falsifiers/external-null-cache/src/lib.rs`; slice status in `docs/issues/`.
-- Depends on: The canary has its own workspace and no Fava dependency in `apps/canary/Cargo.toml`; the falsifier has its own workspace and consumes only public crates in `falsifiers/external-null-cache/Cargo.toml`.
-- Used by: Milestone exit decisions defined in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
+- Purpose: Prove owner behavior, public composition, real sockets/processes, persistence, and replaceability.
+- Location: `crates/*/tests/`, `crates/fava/tests/`, `features/`, `apps/canary/`, `falsifiers/`, `docs/issues/`
+- Contains: Component corpora, facade tests, BDD features, 22 enabled M0-M6 canary scenarios,
+  crash/restart evidence, and an outside-workspace null cache.
+- Depends on: Public contracts and selected providers; M0 wire witnessing in
+  `apps/canary/src/wire.rs` remains independent from Fava diagnostics.
+- Used by: Milestone exit decisions.
 
 ## Data Flow
 
-### Primary Request Path: Open a Local Query
+### Primary Request Path
 
-1. The application calls `Fava::observe` through the public facade (`crates/fava/src/lib.rs:33`).
-2. `Observer::open` canonicalizes the query, opens the event-cache source, then opens the write-store source; a second-source refusal explicitly closes the first provisional source (`crates/fava-observe/src/lib.rs:41`).
-3. `Observation::start` evaluates both initial snapshots before installing the observation and assigns revision 1 (`crates/fava-observe/src/lib.rs:73`).
-4. The selected evaluator merges current source contributions into one `QuerySnapshot`; the standard implementation deduplicates by event id and then selects one winner per coordinate (`crates/fava-query-standard/src/lib.rs:17`, `crates/fava-query-standard/src/lib.rs:64`).
-5. The caller reads the complete current value immediately with `Observation::current` and awaits coalesced newer current values with `Observation::changed` (`crates/fava-observe/src/lib.rs:149`, `crates/fava-observe/src/lib.rs:159`).
+1. The application constructs `Query` and calls `Fava::observe` in `crates/fava/src/lib.rs`.
+2. `Freshness::CacheOnly` opens `Observer` directly; live queries dispatch through
+   `crates/fava/src/live.rs` to explicit or automatic relay acquisition.
+3. `Observer::open` in `crates/fava-observe/src/lib.rs` opens event-cache then write-store sources.
+   A second-source refusal closes the provisional first source.
+4. `StandardQueryEvaluator` in `crates/fava-query-standard/src/lib.rs` merges same-ID evidence,
+   selects one event per coordinate, applies authority, ordering, and limits, and produces revision 1.
+5. Sources publish complete replacement snapshots; the observer reevaluates and replaces one
+   `watch` value. `Observation::current` is immediate; `changed` yields newer complete state.
+6. Dropping or closing the handle cancels attached relay and router work.
 
-### Local Write Visibility and Cancellation
+### Explicit Live Relay Flow
 
-1. In the current tracer, the caller/test retains the selected provider and calls `MemoryWriteStore::accept_materialized` directly; the facade does not yet expose the target write-intent lifecycle (`crates/fava-write-store-memory/src/lib.rs:80`, `crates/fava/tests/local_source_merge.rs`).
-2. The store validates a stable event id, allocates matching write/receipt identities, commits the local contribution and new source revision under one mutex, then replaces the bounded latest snapshot (`crates/fava-write-store-memory/src/lib.rs:80`, `crates/fava-write/src/lib.rs`).
-3. The observation task receives the complete write-source snapshot, reevaluates both sources, and publishes a new complete query revision (`crates/fava-observe/src/lib.rs:73`).
-4. Cancellation removes only the write-store contribution and emits another source revision; the evaluator can therefore reveal a still-retained cached predecessor naturally (`crates/fava-write-store-memory/src/lib.rs:124`, `crates/fava-query-standard/tests/source_merge.rs`).
+1. `crates/fava/src/live.rs` creates one `RelaySessionKey` per exact relay and asks
+   `OpenedRelay::open` in `crates/fava/src/relay.rs` to establish it.
+2. `SubscriptionPlanner` creates exact REQ messages plus subscription/filter attribution.
+3. `Transport` opens a fresh generation; `fava-wire` encodes frames and the session hands them off.
+4. Inbound frames match current attribution. `fava-ingest` verifies signature, ID, and filter before
+   `EventCache::admit`; cache changes then use the ordinary observation path.
+5. EOSE, CLOSED, AUTH need, failure, and withdrawal remain bounded diagnostic facts.
+6. Disconnect records the generation and establishes a fresh session/subscription identity; close
+   sends exact CLOSE frames.
 
-### Relay-Evidence Enrichment in the M1 Tracer
+### Automatic Live Query Flow
 
-1. Tests seed a canonical `CacheMutation` directly because production wire admission is a later slice (`crates/fava-event-cache-memory/src/lib.rs:64`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`).
-2. `MemoryEventCache` applies the entire batch to a cloned next state, refuses capacity/conflicting-body errors before replacing current state, increments its source revision, and publishes a complete snapshot (`crates/fava-event-cache-memory/src/lib.rs:64`).
-3. `StandardQueryEvaluator` merges the cache's relay evidence with the write store's publication evidence for the same event id, producing one `EventRecord` (`crates/fava-query-standard/src/lib.rs:64`, `crates/fava-query/src/lib.rs:376`).
+1. `crates/fava/src/routes.rs` opens configured routers through `fava_routing::open` with
+   `RouteRequest::Read`.
+2. `crates/fava-routing/src/chain.rs` obtains immediate contributions in application-selected order
+   and sends later routers the current upstream `RoutePlan`.
+3. Immediate destinations start before unresolved routers settle. Later complete contributions
+   replace prior contributions and produce newer plans.
+4. Reconciliation leaves unchanged relay tasks live, cancels retracted relays, and opens added relays.
+5. `Fava::preview_routes` runs the same derivation without sessions or connections.
 
-### Independent M0 Relay-Lab Flow
+### Durable Explicit Publication Flow
 
-1. The CLI selects `run lab-real-relay-smoke` in `apps/canary/src/main.rs` and dispatches to `run_real_relay_smoke` (`apps/canary/src/lib.rs:162`).
-2. The canary creates an isolated run bundle, launches a pinned third-party relay, and starts a transparent proxy (`apps/canary/src/artifacts.rs`, `apps/canary/src/relay.rs`, `apps/canary/src/proxy.rs`).
-3. Independent wire code signs/publishes an event, observes matching `OK`, queries to exact `EVENT` plus `EOSE`, hard-kills the relay, restarts the same data directory, and repeats the query (`apps/canary/src/lib.rs:229`, `apps/canary/src/wire.rs`).
-4. The canary records JSONL evidence, process facts, wire frames, logs, hashes, and a manifest below ignored `apps/canary/runs/` (`apps/canary/src/artifacts.rs`, `.gitignore`).
+1. The application creates `WriteIntent` in `crates/fava-write/src/lib.rs` and calls `Fava::publish`.
+2. `Publication::accept` in `crates/fava-publication/src/lib.rs` requires Tokio, then
+   `WriteStore::accept` atomically commits identities, materialization, destinations, and revision.
+3. The write-source snapshot makes the local event immediately visible without cache pollution.
+4. `Publication` selects signer by author; `install_signed` accepts only a matching body.
+5. Each lane durably calls `begin_attempt`; `Publisher` performs one attempt through `Transport`;
+   `DeliveryPolicy` alone decides retry or give-up.
+6. The store commits exact outcomes. Bounded receipt broadcasts preserve causal changes and report lag.
+
+### Automatic Publication and Route Expansion
+
+1. Automatic intent acceptance commits durable custody before router acquisition in
+   `crates/fava-publication/src/run.rs`.
+2. `Publication` opens `RouteRequest::Write` and atomically applies its immediate contribution.
+3. Known destinations begin independent work while other targets remain unresolved. Later
+   contributions increment route revision under the same receipt.
+4. `WriteStore::apply_route` adds lanes, retires only definite pre-handoff withdrawals, and retains
+   attempting or terminal history.
+5. Duplicate destination reasons collapse by `RelaySessionKey`. `preview_write_routes` derives the
+   initial plan without custody, signing, router sessions, store changes, or transport effects.
+
+### Restart Recovery
+
+1. `RedbWriteStore::open` loads identities/receipts and converts persisted `Attempting` to exact
+   `Unknown` ambiguity in `crates/fava-write-store-redb/src/lib.rs`.
+2. `FavaBuilder::build` constructs `Publication` and calls `Publication::recover`.
+3. Every nonterminal receipt restarts without application resubmission; stable receipt identity and
+   committed facts remain authoritative.
+
+### Independent M0 Evidence Flow
+
+1. `apps/canary/src/main.rs` dispatches `lab-real-relay-smoke`.
+2. `apps/canary/src/relay.rs` starts a pinned relay and `apps/canary/src/proxy.rs` records frames.
+3. `apps/canary/src/wire.rs` publishes, observes OK, queries EVENT+EOSE, hard-kills, restarts the
+   same data directory, and repeats the query.
+4. `apps/canary/src/artifacts.rs` writes manifest, JSONL, frames, process facts, logs, and hashes
+   below ignored `apps/canary/runs/`.
 
 **State Management:**
-- Provider state is instance-local, not global: `MemoryEventCache` uses `Mutex<CacheState>` in `crates/fava-event-cache-memory/src/lib.rs`, and `MemoryWriteStore` uses `Mutex<WriteState>` in `crates/fava-write-store-memory/src/lib.rs`.
-- Each source owns a monotonic `SourceRevision`; each observation owns delivered `QueryRevision` and a private vector of current source snapshots in `crates/fava-query/src/lib.rs` and `crates/fava-observe/src/lib.rs`.
-- Provider-to-observer delivery uses single-value Tokio watch channels, so slow consumers coalesce intermediates while retaining exact current state in `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `crates/fava-observe/src/lib.rs`.
-- The facade stores only the configured `Observer`; selected providers remain ordinary `Arc` instances owned by the assembly/caller in `crates/fava/src/lib.rs`.
+- Instance-local `Mutex` state owns memory cache/write facts in
+  `crates/fava-event-cache-memory/src/lib.rs` and `crates/fava-write-store-memory/src/lib.rs`.
+- Immediate Redb transactions own durable receipt and identity facts in
+  `crates/fava-write-store-redb/src/lib.rs` and `crates/fava-write-store-redb/src/ops.rs`.
+- `watch` retains one latest source/query/route value; `broadcast` retains bounded causal receipt
+  changes; route lane completion is bounded by the 256-destination limit.
+- Diagnostics retain at most 256 facts per category by default in
+  `crates/fava-diagnostics/src/lib.rs`.
+- No mutable process-global Fava state exists; facts belong to assembled instances and handles.
 
 ## Key Abstractions
 
 **`Query`:**
-- Purpose: Carry valid inert selection, acquisition scope, result authority, relay access, freshness, ordering, and result bounds with stable equality and hash identity.
-- Examples: `crates/fava-query/src/lib.rs`, `docs/spec/partial-spec-api-semantics.md`.
-- Pattern: Private representation and fallible constructors refuse invalid inputs before any source work (`crates/fava-query/src/lib.rs:160`, `crates/fava-query/src/lib.rs:201`).
+- Purpose: One valid request covering selection, acquisition, result authority, access, freshness,
+  ordering, and result bound.
+- Examples: `crates/fava-query/src/lib.rs`, `crates/fava-query/tests/query_identity.rs`.
+- Pattern: Immutable builder; invalid relay sets and zero limits fail before work.
 
-**`QuerySource`:**
-- Purpose: Establish one coherent initial `SourceSnapshot` plus one continuous stream of complete later source revisions.
-- Examples: Contract in `crates/fava-query/src/lib.rs:348`; implementations in `crates/fava-event-cache-memory/src/lib.rs:125`, `crates/fava-write-store-memory/src/lib.rs:161`, and `falsifiers/external-null-cache/src/lib.rs`.
-- Pattern: Neutral, closeable provider contract returning semantic values rather than backend handles.
+**`QuerySource` / `QueryEvaluator`:**
+- Purpose: Separate independent complete contributions from merge semantics.
+- Examples: `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`.
+- Pattern: Replaceable source stream plus pure evaluator; cache, write store, and `Fava` reuse it.
 
-**`QueryEvaluator`:**
-- Purpose: Own exact matching, source merge, coordinate winner selection, ordering, and whole-query limits.
-- Examples: Contract in `crates/fava-query/src/lib.rs:475`; reference oracle in `crates/fava-query-standard/src/lib.rs`.
-- Pattern: Stateless replaceable policy over complete immutable source snapshots.
-
-**`EventCache` and `WriteStore`:**
-- Purpose: Specialize `QuerySource` into independent storage authorities for relay-observed signed events and accepted local materializations respectively.
+**`EventCache` / `WriteStore`:**
+- Purpose: Separate learned signed relay state from accepted local obligations.
 - Examples: `crates/fava-event-cache/src/lib.rs`, `crates/fava-write-store/src/lib.rs`.
-- Pattern: Contract crate plus provider crate; never merge the two roles because they may share physical storage later.
+- Pattern: Contract crates own operations; provider crates own representation, capacity, and schema.
 
-**`EventRecord`:**
-- Purpose: Present one logical event plus independently merged relay and publication evidence.
-- Examples: Type in `crates/fava-query/src/lib.rs:376`; merge proof in `crates/fava-query-standard/tests/source_merge.rs`.
-- Pattern: Application-domain value; do not expose cache rows, store rows, or source precedence to callers.
+**`Router` / `RouterSession` / `RoutePlan`:**
+- Purpose: Produce ordered, attributable live relay knowledge for reads and writes.
+- Examples: `crates/fava-routing/src/lib.rs`, `crates/fava-routing/src/chain.rs`.
+- Pattern: Immediate current plus replacement contributions; core validates bounds and deduplicates.
 
-**`Observer` / `Observation`:**
-- Purpose: Own all-or-nothing query opening, current merged state, revision delivery, and exact source closure.
-- Examples: `crates/fava-observe/src/lib.rs:14`, `crates/fava-observe/src/lib.rs:67`.
-- Pattern: One lifecycle owner above neutral sources and evaluator; runtime primitives remain private.
+**`SubscriptionPlanner`:**
+- Purpose: Map relay-assigned logical demand into exact messages and inbound attribution.
+- Examples: `crates/fava-subscriptions/src/lib.rs`, `crates/fava-subscriptions-standard/src/lib.rs`.
+- Pattern: Replaceable exact planner independent from routing and transport.
+
+**`Transport` / `RelaySession`:**
+- Purpose: Own connection generations and frame handoff/receive/close behavior.
+- Examples: `crates/fava-transport/src/lib.rs`, `crates/fava-transport-websocket/src/lib.rs`.
+- Pattern: Object-safe async contract with handed-off, not-handed-off, and ambiguous results.
+
+**`Publication`:**
+- Purpose: Order durable receipt facts, signer work, routing, attempts, and recovery.
+- Examples: `crates/fava-publication/src/lib.rs`, `crates/fava-publication/src/run.rs`.
+- Pattern: Universal owner over neutral contracts; it owns no concrete mechanism.
 
 **`FavaBuilder`:**
-- Purpose: Require one event cache, one write store, and one evaluator for the current slice.
-- Examples: `crates/fava/src/lib.rs:40`, external composition in `falsifiers/external-null-cache/src/lib.rs`.
-- Pattern: Static construction-time composition with typed missing-role refusal.
+- Purpose: Make provider selection explicit and assemble the facade.
+- Examples: `crates/fava/src/lib.rs`, `falsifiers/external-null-cache/src/lib.rs`.
+- Pattern: Static dependency injection through `Arc<dyn Contract>` with typed refusal.
 
 ## Entry Points
 
 **Rust Library Facade:**
 - Location: `crates/fava/src/lib.rs`
-- Triggers: A downstream Rust application calls `Fava::builder`, supplies providers, then calls `Fava::observe` (`crates/fava/src/lib.rs:22`, `crates/fava/src/lib.rs:33`).
-- Responsibilities: Validate the current assembly and delegate local observation without importing concrete providers (`crates/fava/Cargo.toml`).
+- Triggers: `Fava::builder`, `observe`, `publish`, route preview, diagnostics, receipt, cancellation,
+  recovery inspection, or terminal waiting.
+- Responsibilities: Validate assembly, expose public values/handles, and delegate to owners.
 
 **Canary CLI:**
 - Location: `apps/canary/src/main.rs`
-- Triggers: `canary list`, `canary run lab-real-relay-smoke`, or `canary recon --relay ...` as documented in `apps/canary/README.md`.
-- Responsibilities: Dispatch enabled/evidence-only scenarios and exit nonzero on orchestration or evidence failure (`apps/canary/src/main.rs`).
-
-**Canary Library:**
-- Location: `apps/canary/src/lib.rs`
-- Triggers: The CLI or canary tests call `run_real_relay_smoke`, `run_public_recon`, or `scenario_registry` (`apps/canary/src/lib.rs:116`, `apps/canary/src/lib.rs:132`, `apps/canary/src/lib.rs:162`).
-- Responsibilities: Own scenario orchestration while delegating process, proxy, wire, reconnaissance, and artifacts to sibling modules under `apps/canary/src/`.
+- Triggers: `list`, `run <scenario>`, `recon`, and internal `crash-child`.
+- Responsibilities: Dispatch M0-M6 scenarios, enforce prerequisites, and fail on missing evidence.
 
 **External Provider Proof:**
 - Location: `falsifiers/external-null-cache/src/lib.rs`
-- Triggers: The separate falsifier workspace runs its test through `falsifiers/external-null-cache/Cargo.toml`.
-- Responsibilities: Compile an outside-workspace provider against public contracts and open it through `FavaBuilder` without private access.
+- Triggers: Its separate workspace test.
+- Responsibilities: Implement public contracts outside the main workspace and assemble normally.
+
+**Vocabulary Gate:**
+- Location: `tools/check_vocabulary.py`
+- Triggers: Direct invocation and `tools/tests/test_vocabulary_check.py`.
+- Responsibilities: Reject unregistered crates and public nominal symbols.
 
 ## Architectural Constraints
 
-- **Threading:** The library uses async Tokio tasks and bounded watch channels; `Observation::start` spawns one task per current observation, while provider mutation is synchronous under short `std::sync::Mutex` critical sections (`crates/fava-observe/src/lib.rs:73`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`).
-- **Global state:** No product-global mutable singleton is implemented; state belongs to `Fava`, `Observer`, each provider instance, each `Observation`, or each canary run object in `crates/fava/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, and `apps/canary/src/artifacts.rs`.
-- **Circular imports:** The current workspace dependency graph in `Cargo.toml`, `crates/fava-query/Cargo.toml`, `crates/fava-observe/Cargo.toml`, and `crates/fava/Cargo.toml` is one-way from semantic values to contracts/providers to owner/facade; no crate cycle is present.
-- **Build graph:** Bazel is the authoritative build/test surface for the main workspace in `.bazelrc`; `MODULE.bazel` imports the dependency graph from `Cargo.toml` and `Cargo.lock`, while first-party edges remain explicit in targets such as `crates/fava-query-standard/BUILD.bazel` and `crates/fava/BUILD.bazel`. Keep each crate's `Cargo.toml` and `BUILD.bazel` synchronized when crate edges or test targets change.
-- **Build platform:** `MODULE.bazel` configures only `aarch64-apple-darwin` and pins Rust 1.90.0; the separate workspaces at `apps/canary/Cargo.toml` and `falsifiers/external-null-cache/Cargo.toml` are not represented by the root `BUILD.bazel` or any child Bazel package.
-- **Authority:** Behavior and ownership must follow `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` before illustrative names in `docs/spec/ARCHITECTURE.md`; proof and sequencing follow `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md` and `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-- **Clean-room boundary:** Add no compatibility path or copied prior implementation; the repository rule is explicit in `AGENTS.md`, and active sources are under `crates/`, `apps/`, `falsifiers/`, and `features/`.
-- **File size:** Keep Rust code below the 800-line hard limit and require a cohesion reason above 500 lines as mandated by `AGENTS.md`; current product Rust files are below 500 lines.
-- **Replaceability:** Universal owners and the facade depend on contracts rather than memory providers in `crates/fava-observe/Cargo.toml` and the normal dependency section of `crates/fava/Cargo.toml`.
-- **Failure isolation:** Do not hold provider locks/transactions across external async work; current mutex guards are confined to synchronous memory-provider mutations in `crates/fava-event-cache-memory/src/lib.rs` and `crates/fava-write-store-memory/src/lib.rs`.
-- **Boundedness:** Preserve explicit query limits, provider capacities, coalesced observation delivery, and canary deadlines/frame limits in `crates/fava-query/src/lib.rs`, both memory-provider `src/lib.rs` files, `crates/fava-observe/src/lib.rs`, and `apps/canary/src/wire.rs`.
-- **Milestone claims:** Do not claim M1 or later from individual passing tests; `docs/issues/0001-local-source-merge.md` names the tracer's remaining M1 gates, and `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` owns exit criteria.
+- **Threading:** Tokio tasks own observations, routes, relay sessions, signing, and delivery; no OS
+  thread is allocated per query. Live publication/query-source entry points require Tokio
+  (`crates/fava-publication/src/lib.rs`, `crates/fava/src/query_source.rs`).
+- **Global state:** No product singleton exists. Mutable facts live in provider/lifecycle instances.
+- **Circular imports:** Dependencies are acyclic. Value/contract crates do not depend on concrete
+  providers or facade; `crates/fava/Cargo.toml` uses contracts and owners only.
+- **Static assembly:** Do not add hidden flags, silent defaults, or compatibility aliases to
+  `crates/fava/src/lib.rs`.
+- **Exact identity:** Use `RelaySessionKey`, generation, `SubscriptionId`, `WriteId`, `ReceiptId`,
+  route revision, and attempt count at asynchronous boundaries.
+- **Boundedness:** Explicit routes and contributions cap at 256, routers at 32, events at 131,072
+  bytes, diagnostics/receipt changes at 256 by default, and WebSocket frames at 1,048,576 bytes.
+  Extend with typed refusal, never silent truncation.
+- **Storage separation:** Never place unpublished local events in `EventCache`; only verified relay
+  echoes enter it.
+- **Vocabulary:** New crates, nominal types, contracts, persisted entities, configuration concepts,
+  synonyms, and owners require `docs/internals/vocabulary.toml` plus `AGENTS.md` approval.
+- **File size:** Rust code uses 500-line soft and 800-line hard limits; current files are at or below 500.
+- **Build:** Cargo owns dependency metadata; every main-workspace crate has matching `BUILD.bazel`.
+- **Implementation boundary:** M7-M11 names are not implemented contracts. Do not depend on absent
+  edit, auth, service-cache, profile, or native crates before their vertical slices.
 
 ## Anti-Patterns
 
-### Facade-Bypassing Product Evidence
+### Concrete Defaults in the Facade
 
-**What happens:** Current M1 acceptance tests retain `Arc<MemoryWriteStore>` and call `accept_materialized`/`cancel` directly because the facade exposes only observation (`crates/fava/tests/local_source_merge.rs`, `crates/fava/src/lib.rs`).
-**Why it's wrong:** This proves source merge but not the specified ordinary application write-intent path or the M1 canary's public-facade gate (`docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/issues/0001-local-source-merge.md`).
-**Do this instead:** Keep direct provider mutation as narrow provider/owner evidence; when the write slice is implemented, route public capstones through the owning facade operation in `crates/fava/src/lib.rs` and leave provider-specific setup in component tests under the relevant crate.
+**What happens:** `crates/fava/src/lib.rs` constructs a standard provider internally.
+**Why it's wrong:** The default gains a private bypass unavailable to external providers.
+**Do this instead:** Preserve neutral contracts and require explicit `FavaBuilder` selection.
 
-### Treating Direct Cache Commit as Relay Admission
+### Contract/Implementation Collapse
 
-**What happens:** Current local-source tests insert `CacheMutation` directly through `EventCache::commit` because wire verification and ingest do not exist yet (`crates/fava/tests/local_source_merge.rs`, `crates/fava-event-cache/src/lib.rs`).
-**Why it's wrong:** A direct cache mutation does not prove session attribution, signature verification, off-filter rejection, or the production relay path required by `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`.
-**Do this instead:** Keep direct commits as M1 state fixtures; introduce relay-originated state only through the future `fava-wire`/`fava-ingest` slice prescribed by `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` and owned in `docs/spec/ARCHITECTURE.md`.
+**What happens:** A trait moves into its first implementation crate or its split is deferred.
+**Why it's wrong:** Universal owners couple to one mechanism and private state.
+**Do this instead:** Follow `crates/fava-transport/` plus `crates/fava-transport-websocket/` and
+`crates/fava-write-store/` plus its provider crates.
 
-### Collapsing Post-Open Failures to Closure
+### Local Write Cache Pollution
 
-**What happens:** A post-open evaluator error breaks the observation task, and callers receive only `ObservationClosed`; source-stream closure is retained as scoped `SourceStatus`, but evaluator cause is not (`crates/fava-observe/src/lib.rs`).
-**Why it's wrong:** The target requires typed, attributable failure rather than losing which owner failed (`docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/spec/ARCHITECTURE.md`).
-**Do this instead:** When post-open provider/evaluator failure semantics are expanded, preserve the owning failure as bounded query evidence or a typed terminal outcome in `crates/fava-query/src/lib.rs` and project it through `crates/fava-observe/src/lib.rs`.
+**What happens:** An unsigned or locally signed event enters an event-cache provider for visibility.
+**Why it's wrong:** It fabricates relay provenance and destroys source ownership.
+**Do this instead:** Commit through `WriteStore`; merge real relay echoes only in the evaluator.
 
-### Speculative Empty Frameworks
+### Routing, Planning, and Transport Conflation
 
-**What happens:** The target architecture names many future owners, but only Slice 1 contracts have implementation evidence (`docs/spec/ARCHITECTURE.md`, `docs/issues/0001-local-source-merge.md`).
-**Why it's wrong:** Stabilizing all future traits before a full vertical slice and competing implementation would encode guesses and violate the delivery sequence (`docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`).
-**Do this instead:** Add the next contract and implementation together with its narrow failing proof, public capstone where required, and external/alternative falsifier in the locations prescribed by `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
+**What happens:** A router emits REQ, a planner chooses relays, or transport owns retry policy.
+**Why it's wrong:** Destination policy, wire planning, resources, and attempts cannot be substituted.
+**Do this instead:** Use `fava-routing`, `fava-subscriptions`, `fava-transport`, and `fava-delivery`
+for their separate responsibilities.
+
+### Protocol Meaning in Universal Owners
+
+**What happens:** `EventBuilder`, publication, routing, or facade switches on NIP-specific meaning.
+**Why it's wrong:** Adding protocol N+1 changes universal code.
+**Do this instead:** Keep protocol behavior in a protocol crate, as `crates/fava-nip65/src/lib.rs`
+does, then pass ordinary values through universal owners.
+
+### Acquisition-Provenance Conflation
+
+**What happens:** A planned relay is credited as a source without serving the event.
+**Why it's wrong:** Acquisition intent is not result evidence.
+**Do this instead:** Record `RelayEvidence` only during exact admitted EVENT handling.
+
+### Coalescing Causal Receipt Facts
+
+**What happens:** Receipt transitions use a latest-value channel and erase committed facts.
+**Why it's wrong:** Causal delivery cannot report lag or removal truthfully.
+**Do this instead:** Use bounded broadcast in `crates/fava-write-store/src/lib.rs`; reserve `watch`
+for current state.
 
 ## Error Handling
 
-**Strategy:** Return typed, owner-scoped library refusals before effects; preserve atomic provider state on refusal; represent expected post-open source termination in query evidence; make the canary fail closed with a nonzero process result and preserved failure artifacts (`crates/fava-query/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, `crates/fava-write-store/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `apps/canary/src/main.rs`, `apps/canary/src/lib.rs`).
+**Strategy:** Refuse invalid work before effects, preserve typed/scoped owner errors, and turn
+post-open degradation into attributable evidence or exact terminal facts.
 
 **Patterns:**
-- Use per-owner `thiserror` enums such as `QueryError`, `QuerySourceError`, `QueryEvaluationError`, `EventCacheError`, `WriteStoreError`, `ObserveError`, and `BuildError` in the corresponding `src/lib.rs` files under `crates/fava-*`.
-- Refuse invalid explicit relay sets, mismatched authority, and zero limits during query construction/canonicalization before opening sources in `crates/fava-query/src/lib.rs`.
-- Close already-opened provisional sources if the second source or initial evaluation fails in `crates/fava-observe/src/lib.rs:41` and `crates/fava-observe/src/lib.rs:73`.
-- Clone memory-provider state, apply the complete mutation, and replace current state only after all checks pass in `crates/fava-event-cache-memory/src/lib.rs`; validate before modifying write-store identity/revision in `crates/fava-write-store-memory/src/lib.rs`.
-- Preserve post-open source closure as `SourceStatus::Closed` while retaining its last coherent snapshot in `crates/fava-query/src/lib.rs` and `crates/fava-observe/src/lib.rs`.
-- Convert canary subsystem failures into one `CanaryError`, record failure evidence/report where a run bundle exists, and exit nonzero in `apps/canary/src/lib.rs` and `apps/canary/src/main.rs`.
+- Constructors reject invalid queries, event bodies, routes, limits, and assembly before work
+  (`crates/fava-query/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava/src/lib.rs`).
+- Contracts use role errors such as `EventCacheError`, `WriteStoreError`, `RouterError`,
+  `SubscriptionPlanError`, `TransportError`, and `SignerError`, not a common bucket.
+- Query open is all-or-nothing; post-open source closure updates `SourceStatus`
+  (`crates/fava-observe/src/lib.rs`).
+- Router failure becomes bounded shortfall evidence without blocking immediate contributions
+  (`crates/fava-routing/src/chain.rs`).
+- Transport distinguishes definite refusal, handoff, and ambiguity; publication maps ambiguity to
+  `RelayDeliveryOutcome::Unknown`.
+- Store transitions validate receipt, route revision, destination, signature, and attempt state
+  before commit; stale transitions are refused.
+- Relay parse, attribution, verification, filter, CLOSED, NOTICE, and reconnect failures remain
+  scoped to exact session/subscription diagnostics in `crates/fava/src/relay.rs`.
 
 ## Cross-Cutting Concerns
 
-**Logging:** The library crates under `crates/` do not implement a logging subsystem. The evidence application writes ordered JSONL, stdout/stderr, reports, process facts, resource samples, and wire frames through `apps/canary/src/artifacts.rs`, `apps/canary/src/proxy.rs`, and `apps/canary/src/lib.rs`.
-**Validation:** Query/source-policy validation lives in `crates/fava-query/src/lib.rs`; event-value identity validation lives in `crates/fava-write/src/lib.rs`; provider capacity/atomicity checks live in the memory provider crates; independent canary wire events are cryptographically verified in `apps/canary/src/wire.rs`. Production relay admission remains unimplemented according to `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-**Authentication:** No Fava authentication owner or NIP-42 product path is implemented; the target boundary is specified in `docs/spec/ARCHITECTURE.md`, while the current M0 relay lab explicitly disables NIP-42 in generated configuration from `apps/canary/src/relay.rs`.
-**Diagnostics:** No product diagnostics facade is implemented in `crates/`; current external evidence comes from `apps/canary/`, and future bounded diagnostics ownership is specified in `docs/spec/ARCHITECTURE.md` and sequenced by `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-**Testing and proof:** Put durable app-visible behavior in `features/`, narrow executable evidence beside the owning crate, public Rust composition evidence in `crates/fava/tests/`, independent relay proof in `apps/canary/`, and public-contract substitution proof in `falsifiers/`, following `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
+**Logging:** Product evidence uses bounded `DiagnosticsSnapshot` in
+`crates/fava-diagnostics/src/lib.rs`; external effects use independent JSONL, process logs, wire
+transcripts, reports, and manifests in `apps/canary/src/artifacts.rs`.
+
+**Validation:** Constructors, contracts, provider commits, ingest, routing composition, and durable
+receipt transitions validate exact shape and bounds. Architectural/public API changes run
+`tools/check_vocabulary.py` and `tools/tests/test_vocabulary_check.py`.
+
+**Authentication:** `RelayAccess` and AUTH-required diagnostics exist in `crates/fava-state/src/lib.rs`
+and `crates/fava-diagnostics/src/lib.rs`; NIP-42 challenge policy/execution are unimplemented M8 scope.
+
+**Durability:** `EventCache` does not promise persistence. `MemoryWriteStore` is volatile;
+`RedbWriteStore` owns durable receipt schema, transactions, and recovery. Persistent event and
+fetch/service cache profiles are M9 specification only.
+
+---
+
+*Architecture analysis: 2026-08-21*

@@ -1,393 +1,554 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-20
+**Analysis Date:** 2026-08-21
 
-The checkout contains the completed M0 evidence lab and an explicitly incomplete M1 local-source tracer. `docs/issues/0002-m0-evidence-foundation.md` claims M0 complete; `docs/issues/0001-local-source-merge.md` limits current M1 claims and names its remaining gates. Concerns below distinguish defects in implemented/public code from later work specified in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
+## Scope Boundary
+
+The implemented baseline is M0-M6. Completion claims and evidence owners are
+recorded in `docs/issues/0002-m0-evidence-foundation.md`,
+`docs/issues/0001-local-source-merge.md`, and
+`docs/issues/0004-explicit-live-query.md` through
+`docs/issues/0008-automatic-write-routing.md`. This document distinguishes
+defects and risks in that implementation from the unimplemented M7-M11 scope
+specified in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
 
 ## Tech Debt
 
-**Six-gate architecture audit:**
+**Universal event-state rules stop at the event-cache boundary:**
+- Issue: NIP-09 deletion is applied only to the current `EventCache` slice. The
+  retained deletion event is not interpreted by the cross-source evaluator, so
+  a matching `WriteStore` contribution remains visible.
+- Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-query-standard/src/lib.rs`, `crates/fava-write-store/src/lib.rs`
+- Impact: The merged application view can contain a locally accepted event
+  after an authorized deletion, contrary to the universal current-state rule.
+- Fix approach: Apply deletion tombstones at the owner of the merged state, or
+  expose an invariant-bearing state decision that every source/evaluator must
+  consume; prove cached-only, local-only, and merged targets with one corpus.
 
-| Gate | Current concern | Evidence |
-|---|---|---|
-| Ownership | Relay admission is not represented by an opaque admitted-event value. Public callers can construct relay evidence and submit raw `CachedEvent` values, so the cache boundary cannot prove that `fava-ingest` owned validation. | `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, `docs/spec/ARCHITECTURE.md` |
-| Dependency direction | Cargo follows semantic values -> contracts -> implementations, but Bazel targets are maintained separately and exclude the canary and falsifier workspaces. | `Cargo.toml`, `MODULE.bazel`, `crates/*/BUILD.bazel`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml` |
-| Replaceability | Only event-cache assembly has an outside-workspace proof, and it exercises open only. Evaluator and write-store contracts lack competing implementations and public conformance kits. | `falsifiers/external-null-cache/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-write-store/src/lib.rs` |
-| Failure isolation | Provider open/evaluation runs synchronously on caller/runtime tasks; blocking and panic are uncontained, and background evaluation failure becomes an unattributed close. | `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`, `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` |
-| Boundedness | Memory providers bound record count only. Item bytes, evidence entries, query/result size, observation count, and retained run evidence lack aggregate bounds or typed overload. | `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-query/src/lib.rs`, `apps/canary/src/artifacts.rs` |
-| Behavioral proof | Cargo validation is green, but M1 exit-gate evidence is incomplete and the Bazel authority runs only two integration targets. M0 live proof is a manual command with ignored local artifacts. | `.bazelrc`, `crates/*/BUILD.bazel`, `apps/canary/README.md`, `docs/issues/0001-local-source-merge.md`, `docs/issues/0002-m0-evidence-foundation.md` |
+**Expiry has no lifecycle owner:**
+- Issue: Expiry occurs only when a caller directly invokes
+  `EventCache::expire(now)`. No Fava clock/maintenance owner calls it, and the
+  write-store contract has no operation that retracts a locally accepted event
+  when its future NIP-40 expiration becomes due.
+- Files: `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-event-cache-memory/src/lib.rs`,
+  `crates/fava-write-store/src/lib.rs`, `crates/fava/src/lib.rs`,
+  `apps/canary/src/local.rs`
+- Impact: Open queries can retain expired cached or local events indefinitely;
+  the M1 canary proves manual expiry mutation, not due-time ownership.
+- Fix approach: Add a deterministic-time expiry owner that schedules exact
+  cache and local-source retractions without unrelated query sweeps; keep the
+  clock contract replaceable and test time advance through the public facade.
 
-**Admission and evidence boundary is forgeable:**
+**The event-cache mutation contract exposes an admission bypass:**
+- Issue: Public callers can construct `CachedEvent`, `RelayEvidence`, and raw
+  `CacheMutation` values and call `EventCache::commit` directly. Signature
+  verification in the memory provider does not prove subscription attribution,
+  filter match, expiry/deletion processing, or genuine relay provenance.
+- Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-ingest/src/lib.rs`
+- Impact: A consuming application or provider can create query-visible signed
+  state with fabricated relay evidence or bypass universal state consequences.
+- Fix approach: Make production mutation accept only the admitted/state-decision
+  value owned by `fava-ingest` and `fava-state`; keep arbitrary seeding in an
+  explicit testkit contract.
 
-- Issue: `RelayEvidence::one`, `CachedEvent::new`, and `EventCache::commit` are public; neither the contract nor `MemoryEventCache` verifies ID/signature or exact current session/request attribution.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`
-- Impact: A caller or faulty provider can fabricate provenance or insert an invalid body into query-visible state, contrary to the universal evidence and M1 admission rules in `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` and `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-- Fix approach: Introduce the specified admitted/verified relay value at `fava-ingest`; keep direct seeding in an explicit testkit; make cache mutation accept only the semantic decision produced by the admission/state owner in `docs/spec/ARCHITECTURE.md`.
+**Local-source contracts trust invariant-bearing provider output:**
+- Issue: `SourceSnapshot` lets a provider self-report `SourceKind`, revision,
+  status, and either source-event variant. `Observer` replaces a source by the
+  reported kind and accepts duplicate or regressing revisions.
+- Files: `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`,
+  `crates/fava/tests/source_contract.rs`
+- Impact: A malformed external source can overwrite the other source role,
+  regress evidence, or inject the wrong semantic contribution without a typed
+  refusal.
+- Fix approach: Bind role at assembly/open, validate strictly increasing
+  revisions and role-specific payloads in `fava-observe`, and publish a shared
+  negative conformance corpus.
 
-**Evaluator contract can redefine universal facts:**
+**Provider calls have no execution isolation:**
+- Issue: Source open, query evaluation, router open/preview, write-store calls,
+  and provider availability checks execute synchronously on caller or Tokio
+  tasks. Panics, blocking calls, ignored cancellation, and late results have no
+  containment boundary.
+- Files: `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`,
+  `crates/fava-routing/src/chain.rs`, `crates/fava-publication/src/run.rs`
+- Impact: One application-selected provider can block unrelated query,
+  publication, and shutdown progress.
+- Fix approach: Introduce bounded provider execution with operation and
+  generation identity, panic capture, cancellation deadlines, and stale-result
+  rejection; keep the contract separate from its runtime implementation.
 
-- Issue: A replaceable `QueryEvaluator` returns the complete `QuerySnapshot`, including source evidence, without validation by `fava-observe`.
-- Files: `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`
-- Impact: A substitute can reorder incorrectly, fabricate evidence, omit source status, or violate limits even though `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` reserves those meanings to Fava.
-- Fix approach: Narrow evaluator output to records/deltas that the observation owner wraps with authoritative source facts; validate invariant-bearing output; add the substitution corpus required by `docs/spec/ARCHITECTURE.md`.
+**Large owner modules have no growth room:**
+- Issue: `crates/fava-query/src/lib.rs` is 500 lines, while
+  `apps/canary/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`,
+  `crates/fava-write/src/lib.rs`, and `crates/fava-routing/src/chain.rs` are near
+  the 500-line soft limit.
+- Files: `crates/fava-query/src/lib.rs`, `apps/canary/src/lib.rs`,
+  `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write/src/lib.rs`,
+  `crates/fava-routing/src/chain.rs`, `AGENTS.md`
+- Impact: M7 additions in these files either cross the repository limit or mix
+  query syntax, evidence, source contracts, lifecycle, and protocol-edit state.
+- Fix approach: Split only along existing ownership boundaries: query value,
+  source contract, result evidence, write values, and routing composition.
 
-**Source role and revision claims are trusted:**
-
-- Issue: `Observer` accepts each provider's `SourceSnapshot.kind`, replaces sources by that self-reported kind, and never checks monotonic `SourceRevision` progress.
-- Files: `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`
-- Impact: An external cache can label itself `WriteStore`, or regress a revision, without a typed contract violation.
-- Fix approach: Bind role at assembly/open, keep source identity outside provider payloads, and refuse duplicate/regressing revisions with scoped evidence.
-
-**Bazel and Cargo are not one validation surface:**
-
-- Issue: `.bazelrc` declares `bazel test //...` authoritative, but only `crates/fava:local_source_merge`, `crates/fava-query-standard:source_merge`, and `crates/fava-query:query_identity` are Bazel test targets.
-- Files: `.bazelrc`, `crates/*/BUILD.bazel`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`
-- Impact: A green authoritative command omits cache atomicity, observation lifecycle, coordinate semantics, canary registry, and external-provider tests.
-- Fix approach: Add Bazel unit/external-workspace targets, or define one checked-in pass command that invokes Bazel plus the canary and falsifier Cargo workspaces.
-
-**Query module is at the file-size threshold:**
-
-- Issue: The 500-line file combines syntax, policy, source lifecycle, result/evidence values, evaluator contract, and errors while later query algebra remains absent.
-- Files: `crates/fava-query/src/lib.rs`, `AGENTS.md`, `docs/spec/ARCHITECTURE.md`
-- Impact: Adding specified behavior in place crosses the 500-line soft limit and weakens ownership-sensitive review.
-- Fix approach: Split query construction, source contracts, result/evidence, and evaluator contract under `crates/fava-query/src/` before adding more behavior.
+**Validation remains a multi-command surface:**
+- Issue: Bazel covers the Rust crate graph and many integration targets, but it
+  does not build the separate `apps/canary` or
+  `falsifiers/external-null-cache` workspaces, run vocabulary checks, or execute
+  unit tests embedded in libraries lacking a `rust_test` target.
+- Files: `.bazelrc`, `BUILD.bazel`, `crates/*/BUILD.bazel`,
+  `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`,
+  `tools/check_vocabulary.py`
+- Impact: `bazel test //...` alone is weaker than the milestone validation set
+  recorded in `docs/issues/0001-local-source-merge.md` and later issue ledgers.
+- Fix approach: Keep one checked-in validation entry point that invokes Bazel,
+  the two independent Cargo workspaces, and vocabulary tests, or add equivalent
+  Bazel targets without weakening the external-workspace proof.
 
 ## Known Bugs
 
-**Equal-timestamp replaceable events select the wrong ID:**
+**Authorized deletion does not retract a matching local write:**
+- Symptoms: A valid kind:5 event removes a cached target, but
+  `StandardQueryEvaluator` still emits the same or another matching event from
+  `WriteStore` because it performs no deletion-tombstone pass across sources.
+- Files: `crates/fava-state/src/lib.rs`,
+  `crates/fava-query-standard/src/lib.rs`,
+  `crates/fava/tests/local_source_merge.rs`
+- Trigger: Accept an event through `Fava::accept_event`, open a matching query,
+  then admit an authorized deletion through the event cache.
+- Workaround: Cancel the local receipt separately; this is not equivalent to
+  applying the NIP-09 fact.
 
-- Symptoms: `candidate_is_newer` and `StandardQueryEvaluator` prefer the greatest event ID when timestamps tie. NIP-01 requires the lowest ID in lexical order.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-query/src/lib.rs`
-- Trigger: Supply two valid same-coordinate replaceable events with equal `created_at` values and different IDs.
-- Workaround: Avoid equal timestamps; there is no correct workaround for received ties.
-- Fix approach: Separate presentation ordering from winner ordering, choose the lower ID on ties, and add a shared tie corpus. Protocol reference: [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md).
+**Future expiration does not retract automatically:**
+- Symptoms: Events accepted before their expiration remain in current queries
+  after the timestamp passes unless external code calls the cache provider's
+  `expire` method; local write events have no corresponding call.
+- Files: `crates/fava-write/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-write-store/src/lib.rs`, `crates/fava/src/lib.rs`
+- Trigger: Admit or accept an event whose expiration is in the future, retain
+  the open observation, and let that timestamp pass.
+- Workaround: Directly call `EventCache::expire` for cached state; no public
+  Fava workaround exists for a local write contribution.
 
-**Relay-access isolation is not enforced:**
+**Duplicate local acceptance terminates query evaluation:**
+- Symptoms: The memory and Redb stores allocate distinct receipts for the same
+  deterministic event id. `StandardQueryEvaluator` finds conflicting single
+  `PublicationEvidence` values and refuses the snapshot; an already-open
+  observation then closes without the cause.
+- Files: `crates/fava-write-store-memory/src/lib.rs`,
+  `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-query-standard/src/lib.rs`, `crates/fava-observe/src/lib.rs`
+- Trigger: Accept the same finalized unsigned or signed event twice, then open
+  or update a matching query.
+- Workaround: Applications must deduplicate before acceptance, although the
+  public write contract does not require it.
 
-- Symptoms: `Query` includes `RelayAccess` in its identity, but `StandardQueryEvaluator` ignores it. `RelayEvidence::includes_any_relay` matches URL only and records expose observations from every relay access.
-- Files: `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-state/src/lib.rs`
-- Trigger: Cache evidence under relay access A, then run `only_from_relays` for the same URL under relay access B; A qualifies and is exposed.
-- Workaround: Use separate cache instances per relay access; the API does not enforce this.
-- Fix approach: Filter or partition by exact `RelaySessionKey`, enforce query relay access during authority matching, and add cross-access negative tests.
+**Redb terminal eviction can diverge memory from durable state:**
+- Symptoms: `terminal_evictions` may select the receipt currently being
+  updated. `commit_update` inserts and then removes that receipt in Redb, while
+  the in-memory update removes and then reinserts it.
+- Files: `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-write-store-redb/src/lib.rs`
+- Trigger: With a small terminal bound, complete an older active receipt after
+  enough newer receipts are terminal so that the older updated id is selected
+  for eviction; it exists before restart and disappears after reopen.
+- Workaround: Use a terminal bound that is never reached.
 
-**Duplicate local acceptance can poison query evaluation:**
+**Automatic Redb evictions emit no receipt-removal fact:**
+- Symptoms: Terminal retention eviction removes receipts and changes the query
+  snapshot, but `receipt_changes` publishes only the updated receipt and no
+  `(evicted_id, None)` items.
+- Files: `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-write-store-redb/src/lib.rs`,
+  `crates/fava-write-store/src/lib.rs`
+- Trigger: Exceed the configured terminal-receipt bound while a receipt-change
+  subscriber is current.
+- Workaround: Poll every receipt id after every unrelated update; this defeats
+  the causal removal contract.
 
-- Symptoms: `MemoryWriteStore` accepts one event ID repeatedly under new receipt/write IDs; `StandardQueryEvaluator` refuses the resulting snapshot because publication evidence conflicts.
-- Files: `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-write/src/lib.rs`
-- Trigger: Call `accept_materialized` twice with the same finalized event, then open/update a matching query.
-- Workaround: Applications must deduplicate before acceptance, though the contract does not require it.
-- Fix approach: Define duplicate submission as idempotent or multiple obligations, encode that in evidence, and reject/merge before committing source state.
+**Configured WebSocket inbound frame bound is not enforced:**
+- Symptoms: `WebSocketTransport::bounded` checks outbound `send` size only;
+  `next_message` returns arbitrarily larger text messages accepted by the
+  underlying default WebSocket configuration.
+- Files: `crates/fava-transport-websocket/src/lib.rs`,
+  `crates/fava-transport-websocket/tests/conformance.rs`
+- Trigger: Configure a small bound and have a relay send a larger text frame.
+- Workaround: Place a separately bounded proxy in front of the transport.
 
-**Opening can return a stale initial cross-source view:**
+**A slow first relay blocks later known relays:**
+- Symptoms: Explicit and automatic relay additions await `OpenedRelay::open`
+  sequentially, and WebSocket connection establishment has no Fava deadline.
+  One slow DNS/TCP/TLS open delays every later relay and can prevent the initial
+  observation handle from returning.
+- Files: `crates/fava/src/live.rs`, `crates/fava/src/routes.rs`,
+  `crates/fava/src/relay.rs`, `crates/fava-transport-websocket/src/lib.rs`
+- Trigger: Put a silent or slow endpoint before a healthy endpoint in an exact
+  relay set or route plan.
+- Workaround: Avoid mixed-health relay sets; ordering inside `BTreeSet` is not an
+  application-controlled isolation mechanism.
 
-- Symptoms: `Observer::open` captures the cache initial snapshot, opens the write store afterward, and evaluates without draining cache changes that arrived during the second open.
-- Files: `crates/fava-observe/src/lib.rs`, `crates/fava-query/src/lib.rs`, `docs/spec/ARCHITECTURE.md`
-- Trigger: Commit a cache change after cache open but before write-store open finishes; the returned handle initially exposes older state.
-- Workaround: Wait for a later `changed()` update, which defeats the coherent-current initial-view contract.
-- Fix approach: Buffer/drain source revisions through an explicit opening boundary before initial evaluation.
-
-**Biased polling can starve write-store changes:**
-
-- Symptoms: `tokio::select! { biased; ... }` polls cache before write store. A continuously ready cache branch can prevent a ready write revision from being processed.
-- Files: `crates/fava-observe/src/lib.rs`
-- Trigger: Use a cache source whose `next_change` remains ready while the write source also has a revision.
-- Workaround: Quiesce cache updates.
-- Fix approach: Use fair selection or bounded round-robin draining while preserving cancellation priority.
-
-**Runtime evaluation failure loses its cause:**
-
-- Symptoms: A post-open evaluator error silently exits the task; the application sees only `ObservationClosed`, indistinguishable from close, teardown, or revision exhaustion.
+**Post-open evaluation failure loses its cause:**
+- Symptoms: A later `QueryEvaluator` refusal exits the observation task. The
+  application receives only `ObservationClosed`, identical to explicit close,
+  source teardown, or revision exhaustion.
 - Files: `crates/fava-observe/src/lib.rs`, `crates/fava-query/src/lib.rs`
-- Trigger: Use an evaluator that succeeds initially and refuses a later source revision.
-- Workaround: External evaluator logging only.
-- Fix approach: Deliver a typed terminal fact with evaluator/source cause and exact observation revision.
+- Trigger: Use an evaluator that accepts the initial sources and refuses a later
+  source revision, including the duplicate-local-event case.
+- Workaround: Provider-private logging; Fava diagnostics contain no evaluator
+  terminal fact.
 
-**Failed M0 runs omit the manifest:**
-
-- Symptoms: The error path writes best-effort stderr/JSONL/report, then returns without hashes or `manifest.json`; a retained failed run under `apps/canary/runs/` has this shape.
-- Files: `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`, `docs/issues/0002-m0-evidence-foundation.md`
-- Trigger: Fail startup, proxy, query, or evidence work after `RunArtifacts::create`.
-- Workaround: Reconstruct manually from partial logs; revision, hash inventory, and terminal process facts may be absent.
-- Fix approach: Centralize terminalization in a run owner that always stops children and writes a success/failure manifest.
-
-**Write-store overflow paths are not atomic:**
-
-- Symptoms: `accept_materialized` updates `next_identity` before revision overflow checking, and `cancel` removes a write before that check. Both can return `Refused` after mutation.
-- Files: `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write-store/src/lib.rs`
-- Trigger: Reach `u64::MAX` source revision; this is latent rather than a near-term operational limit.
-- Workaround: None after exhaustion.
-- Fix approach: Precompute all checked counters and a complete next state before mutating the guard.
+**Failed M0 smoke runs omit the reconstructable manifest:**
+- Symptoms: The failure path writes best-effort stderr, JSONL, and a report, then
+  returns without artifact hashes, process inventory, toolchain facts, or
+  `manifest.json`.
+- Files: `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`,
+  `docs/issues/0002-m0-evidence-foundation.md`
+- Trigger: Fail the smoke scenario after `RunArtifacts::create` but before
+  `finish_success`.
+- Workaround: Reconstruct the partial run manually from whichever files were
+  flushed before failure.
 
 ## Security Considerations
 
-**Cross-context provenance disclosure:**
+**Fabricated provenance through public cache mutation:**
+- Risk: Any holder of the selected `EventCache` can attach an arbitrary
+  `RelaySessionKey` to a valid signed event and bypass subscription attribution.
+- Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-ingest/src/lib.rs`
+- Current mitigation: The production relay path uses
+  `admit_subscription_event`; `MemoryEventCache::commit` independently verifies
+  event signatures.
+- Recommendations: Seal admitted provenance behind the ingestion/state owner
+  and provide a separate hostile-input testkit.
 
-- Risk: Results reveal evidence from another authorization context and use it to qualify the current context.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`
-- Current mitigation: Context is retained in `RelaySessionKey` and query identity, but no evaluator rule consumes it.
-- Recommendations: Enforce exact-context matching/redaction and the access-isolation conformance cases required by `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`.
+**Relay-controlled memory growth:**
+- Risk: Inbound WebSocket text, CLOSED/NOTICE/error strings, relay evidence per
+  event, and event-cache item bytes are not bounded by aggregate memory limits.
+- Files: `crates/fava-transport-websocket/src/lib.rs`,
+  `crates/fava-diagnostics/src/lib.rs`, `crates/fava-state/src/lib.rs`,
+  `crates/fava-event-cache-memory/src/lib.rs`
+- Current mitigation: Diagnostics retain 256 entries per category and the
+  memory cache retains 10,000 records, but neither is a byte bound.
+- Recommendations: Reject oversized inbound frames before allocation where
+  possible, bound retained text/evidence/item bytes, and expose exact overload
+  facts.
 
-**Untrusted cache input can fabricate validity/provenance:**
-
-- Risk: Invalid bodies or invented observations can enter `MemoryEventCache` and become visible without signature, filter, session, or request verification.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`
-- Current mitigation: Tests seed genuinely signed events; relay networking is not connected yet.
-- Recommendations: Restrict admitted-event creation to future `fava-ingest`/testkit and run forged/wrong-ID/off-filter scenarios before M2 claims in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-
-**Provider code lacks panic/blocking containment:**
-
-- Risk: An application source/evaluator can panic or block synchronously on a runtime thread, stopping unrelated work on a current-thread runtime and preventing bounded shutdown.
-- Files: `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`, `falsifiers/external-null-cache/src/lib.rs`
-- Current mitigation: No Fava lock is held across calls; each post-open observation has its own task.
-- Recommendations: Route calls through specified `fava-runtime` isolation, catch panics, apply deadlines/cancellation, and retain provider identity in terminal facts from `docs/spec/ARCHITECTURE.md`.
-
-**Canary relay executable is version-string pinned only:**
-
-- Risk: Any selected binary that prints `nostr-rs-relay 0.8.12` is accepted; the manifest does not hash it.
-- Files: `apps/canary/src/relay.rs`, `apps/canary/src/lib.rs`, `apps/canary/README.md`
-- Current mitigation: Documentation installs exact version with `--locked` and records selected path/version.
-- Recommendations: Record executable SHA-256/provenance and optionally enforce a profile digest.
-
-**No production credential surface exists yet:**
-
-- Risk: Signer, NIP-42, restore, and native key custody are absent, so current code is not security-qualified for real accounts.
-- Files: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `crates/fava/src/lib.rs`
-- Current mitigation: `apps/canary/src/lib.rs` derives disposable keys and does not persist private key material.
-- Recommendations: Keep this classified as future M8-M11 work; do not expand M0/M1 claims.
+**Relay executable identity is version-string based:**
+- Risk: The canary accepts the configured binary after checking its reported
+  `nostr-rs-relay 0.8.12` version; the evidence manifest does not hash the
+  executable.
+- Files: `apps/canary/src/relay.rs`, `apps/canary/src/lib.rs`,
+  `apps/canary/README.md`
+- Current mitigation: Installation documentation uses an exact version and
+  `--locked`, and the selected path/command is recorded.
+- Recommendations: Record the binary SHA-256 and build provenance in every
+  live-run manifest.
 
 ## Performance Bottlenecks
 
-**Provider mutations clone full retained sources:**
+**Whole-source cloning on every mutation:**
+- Problem: Memory cache and both write stores rebuild complete
+  `SourceSnapshot` vectors while holding synchronous mutexes; watch channels
+  retain full immutable snapshots.
+- Files: `crates/fava-event-cache-memory/src/lib.rs`,
+  `crates/fava-write-store-memory/src/lib.rs`,
+  `crates/fava-write-store-redb/src/lib.rs`
+- Cause: The source contract publishes complete replacement state only.
+- Improvement path: Keep full snapshots as the conformance oracle, then use
+  structural sharing or bounded deltas internally while preserving coherent
+  open plus gapless revision semantics.
 
-- Problem: Both memory providers clone all `BTreeMap` values into `Vec<SourceEvent>` while holding a `std::sync::Mutex`.
-- Files: `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`
-- Cause: Global watch channels publish full source snapshots.
-- Improvement path: Publish bounded changes or structurally shared snapshots; move expensive construction outside the critical section; benchmark mutation latency versus retained records.
+**Every query revision performs a full merge and sort:**
+- Problem: The standard evaluator builds maps over every source event, merges
+  evidence, resolves every coordinate, sorts all winners, then truncates.
+- Files: `crates/fava-query-standard/src/lib.rs`,
+  `crates/fava-observe/src/lib.rs`
+- Cause: No affected-coordinate incremental path exists.
+- Improvement path: Add an incremental evaluator behind the same exact corpus;
+  keep `StandardQueryEvaluator` as the simple oracle.
 
-**Observations fully reevaluate/reclone all records:**
+**Known relay acquisition is sequential:**
+- Problem: `add_relays` and explicit opening perform network setup one relay at
+  a time.
+- Files: `crates/fava/src/live.rs`, `crates/fava/src/routes.rs`,
+  `crates/fava/src/relay.rs`
+- Cause: Opening and rollback are represented as a serial loop.
+- Improvement path: Open bounded concurrent relay operations with deterministic
+  result attribution and all-or-nothing rollback only where the query contract
+  requires it.
 
-- Problem: Each revision clones full sources; `StandardQueryEvaluator` builds two maps, clones values, sorts all winners, then truncates.
-- Files: `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-query/src/lib.rs`
-- Cause: The oracle has no incremental `update` path specified in `docs/spec/ARCHITECTURE.md`.
-- Improvement path: Retain full reevaluation as oracle; add affected-coordinate incremental evaluation behind the same corpus; apply safe top-k/index bounds earlier.
-
-**Synchronous wire logging blocks the async proxy:**
-
-- Problem: Every frame locks `Mutex<File>`, serializes, writes, and flushes synchronously on Tokio.
-- Files: `apps/canary/src/proxy.rs`
-- Cause: Witness durability is coupled to forwarding.
-- Improvement path: Use a bounded causal writer queue with explicit overflow failure and join/flush before scenario completion.
-
-**Artifact hashing buffers whole files:**
-
-- Problem: `artifact_hashes` calls `fs::read` for every database, WAL, log, and transcript.
-- Files: `apps/canary/src/artifacts.rs`
-- Cause: Whole-file rather than streaming hashing.
-- Improvement path: Hash chunks, record sizes, and refuse artifact trees beyond the run profile bound.
+**Canary witness I/O blocks async tasks:**
+- Problem: Proxy frames and evidence lines use synchronous file locks, writes,
+  and per-record flushes on Tokio tasks; artifact hashing buffers each complete
+  file.
+- Files: `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`
+- Cause: Witness durability is coupled directly to forwarding and scenario
+  control flow.
+- Improvement path: Use a bounded causal writer queue with explicit overflow,
+  join/flush it during terminalization, and stream artifact hashes.
 
 ## Fragile Areas
 
-**Live-query opening and teardown:**
+**Publication worker lifecycle:**
+- Files: `crates/fava-publication/src/lib.rs`,
+  `crates/fava-publication/src/run.rs`
+- Why fragile: Detached signing, routing, and per-destination tasks communicate
+  through store polling and a cancellation map. Most store/provider errors are
+  discarded, so an open receipt can lose its active worker without a terminal
+  diagnostic.
+- Safe modification: Give one receipt run exact child-task ownership and a
+  terminal error/parked fact; reject late completions by receipt, destination,
+  attempt, and generation identity.
+- Test coverage: No corpus injects store failure, provider panic/block, ignored
+  cancellation, or late signer/publisher completion.
 
+**Relay reconnect and terminal protocol handling:**
+- Files: `crates/fava/src/relay.rs`,
+  `crates/fava-transport-websocket/src/lib.rs`,
+  `crates/fava-diagnostics/src/lib.rs`
+- Why fragile: Transport error triggers replacement without an explicit close
+  of the prior provider session; CLOSED and AUTH frames are recorded but do not
+  change subscription work; reconnect retries indefinitely at a fixed 50 ms.
+- Safe modification: Model session/subscription terminal state explicitly,
+  close every retired generation, apply bounded backoff, and keep late frames
+  attributable to their exact generation.
+- Test coverage: Existing M2/M3 tests cover disconnect/reconnect identity, not
+  provider sessions that remain live after error, repeated refusal, CLOSED
+  continuation, or AUTH state.
+
+**Redb retention and recovery:**
+- Files: `crates/fava-write-store-redb/src/lib.rs`,
+  `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-write-store-redb/tests/process_kill.rs`
+- Why fragile: Persistent update, terminal eviction, in-memory publication,
+  broadcast facts, and restart repair are separate steps around one mutex.
+- Safe modification: Compute one next durable state, commit it, mirror that
+  exact state in memory, then publish every changed/removal fact.
+- Test coverage: Process-kill tests cover acceptance through outcome/cancel
+  boundaries, but not retention eviction, eviction during the updated receipt,
+  or reopen under different configured limits.
+
+**Observation source loop:**
 - Files: `crates/fava-observe/src/lib.rs`, `crates/fava-query/src/lib.rs`
-- Why fragile: One task owns polling, evaluation, revisioning, delivery, and teardown; role/revision violations, fairness, evaluator failure, and cancellation converge on implicit loop exits.
-- Safe modification: Add controlled source/evaluator fixtures first; preserve provisional-open cleanup and source-scoped closure while adding terminal causes/open barriers.
-- Test coverage: Existing tests omit concurrent opening changes, revision regression, starvation, panic/block, and runtime evaluation failure.
+- Why fragile: Biased polling, source role replacement, closure evidence,
+  evaluation, observation revisioning, and teardown share one task. A
+  continuously ready cache branch can delay the write-store branch.
+- Safe modification: Bind roles outside snapshots, validate revisions, poll
+  sources fairly or in bounded round-robin order, and deliver a typed terminal
+  observation fact.
+- Test coverage: No test covers wrong source role, revision regression,
+  evaluator failure after open, starvation, or revision exhaustion.
 
-**Local write identity/query merge:**
+**Canary process and evidence terminalization:**
+- Files: `apps/canary/src/lib.rs`, `apps/canary/src/relay.rs`,
+  `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`
+- Why fragile: Success paths assemble manifests explicitly; failure paths and
+  several scenario modules rely on local cleanup sequences and `Drop`.
+  `reserve_port` releases its listener before the relay binds.
+- Safe modification: Use one run owner that registers every child/socket/file,
+  terminalizes success and failure, and either transfers an already-bound
+  listener or retries the complete setup after a recorded collision.
+- Test coverage: No controlled port collision, partial-manifest failure,
+  proxy-writer failure, or cleanup resource-baseline scenario exists.
 
-- Files: `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `crates/fava-write/src/lib.rs`
-- Why fragile: Store identity is receipt-keyed, query deduplication is event-ID-keyed, and `EventRecord` holds one `PublicationEvidence`.
-- Safe modification: Decide duplicate-event semantics at the write contract, then test acceptance/cancellation/duplicates/echo/rematerialization as one corpus.
-- Test coverage: `crates/fava-write-store-memory/src/lib.rs` has no unit tests.
-
-**Canary process/witness lifecycle:**
-
-- Files: `apps/canary/src/lib.rs`, `apps/canary/src/relay.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`
-- Why fragile: Relay, proxy, process, database, and manifest lifecycles rely on function returns/`Drop`; connection errors are printed and swallowed rather than propagated to run state.
-- Safe modification: Use one run owner with child registration, terminalization, and join order; make witness failure fail the scenario and enter JSONL/manifest.
-- Test coverage: No automated live failure, proxy-write, port-collision, partial-finalization, or cleanup cases.
-
-**Port reservation race:**
-
-- Files: `apps/canary/src/lib.rs`, `apps/canary/src/relay.rs`
-- Why fragile: `reserve_port` drops its listener before the relay binds.
-- Safe modification: Prefer inherited listener/socket activation or retry complete setup on bind collision with causal evidence.
-- Test coverage: No controlled collision case exists.
-
-**Scenario registry/dispatch drift:**
-
-- Files: `apps/canary/scenarios.json`, `apps/canary/src/lib.rs`, `apps/canary/src/main.rs`
-- Why fragile: IDs are duplicated across JSON, `has_executor`, and CLI arms; the test checks only the named M0 entry rather than every enabled scenario.
-- Safe modification: Use one dispatch table and assert every enabled entry maps to exactly one executor.
-- Test coverage: Adding a second enabled but undispatched scenario does not fail the current test.
-
-**M0 evidence portability:**
-
-- Files: `apps/canary/README.md`, `apps/canary/src/artifacts.rs`, `docs/issues/0002-m0-evidence-foundation.md`, `.gitignore`
-- Why fragile: Complete bundles exist only under ignored `apps/canary/runs/`; a clone retains prose but not manifest/transcript/logs/hashes.
-- Safe modification: Preserve an immutable reviewable summary/archive with explicit retention while keeping large databases out of ordinary history.
-- Test coverage: No test proves a documented completed run remains reconstructable from distributed artifacts.
+**Evidence portability:**
+- Files: `.gitignore`, `apps/canary/README.md`,
+  `docs/issues/0002-m0-evidence-foundation.md`,
+  `docs/issues/0004-explicit-live-query.md` through
+  `docs/issues/0008-automatic-write-routing.md`
+- Why fragile: Complete live bundles are under ignored `apps/canary/runs/` or
+  milestone worktrees. A clean clone retains outcome prose but not the manifests,
+  wire transcripts, databases, or artifact hashes.
+- Safe modification: Publish immutable evidence bundles or compact signed hash
+  inventories at a durable review location while excluding large mutable run
+  directories from ordinary source history.
+- Test coverage: No gate proves that another checkout can retrieve and verify a
+  completed milestone bundle.
 
 ## Scaling Limits
 
-**Memory provider byte growth:**
+**Memory event cache:**
+- Current capacity: 10,000 retained event ids by default.
+- Limit: Event bytes, tags, evidence observations, snapshot clones, and total
+  memory have no aggregate budget.
+- Files: `crates/fava-event-cache-memory/src/lib.rs`,
+  `crates/fava-state/src/lib.rs`
+- Scaling path: Add item, evidence, and total-byte limits with typed refusal or
+  coherent eviction.
 
-- Current capacity: 10,000 records per default provider.
-- Limit: Content, tags, evidence entries, context strings, and clone work are unbounded, so record count is not a memory bound.
-- Files: `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`
-- Scaling path: Define item/tag/evidence/total-byte/work budgets with typed refusal or eviction.
+**Queries and observations:**
+- Current capacity: Query id/author/kind sets have no construction bound;
+  result limit is optional; each observation retains one latest snapshot.
+- Limit: Evaluation still processes the complete source state before result
+  truncation, and the observation count has no assembly-level ceiling.
+- Files: `crates/fava-query/src/lib.rs`,
+  `crates/fava-query-standard/src/lib.rs`, `crates/fava-observe/src/lib.rs`
+- Scaling path: Refuse oversized query structure before opening work, declare an
+  observation/session budget, and apply safe indexed bounds before full sort.
 
-**Query structure/output:**
+**Automatic read routing:**
+- Current capacity: 32 routers, each contributing up to 256 destinations; a
+  combined read plan can therefore retain and attempt thousands of sessions.
+- Limit: There is no Fava-wide relay-session pool or per-application network
+  resource budget.
+- Files: `crates/fava-routing/src/chain.rs`, `crates/fava/src/routes.rs`,
+  `crates/fava-transport-websocket/src/lib.rs`
+- Scaling path: Add bounded session pooling and typed route shortfall before
+  opening excess relay work.
 
-- Current capacity: ID/author/kind/relay sets and result length have no maximum; `limit` defaults to none.
-- Limit: Large queries/source snapshots allocate and evaluate without bound before truncation.
-- Files: `crates/fava-query/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`
-- Scaling path: Add canonical structure and acquisition/result budgets; refuse before opening; make work proportional to declared bounds.
+**Diagnostics:**
+- Current capacity: 256 facts per category by default.
+- Limit: Text bytes, route destination vectors, snapshot clone size, and total
+  diagnostic memory are unbounded; eviction count is not reported.
+- Files: `crates/fava-diagnostics/src/lib.rs`
+- Scaling path: Bound bytes and nested collection sizes, report coalesced or
+  evicted diagnostic counts, and expose typed refusal where exact retention is
+  required.
 
-**Observation/task count:**
-
-- Current capacity: Every `observe` spawns a task and opens two receivers; there is no admission ceiling or equivalent-query sharing.
-- Limit: Tasks, receivers, and full reevaluation scale linearly with handles.
-- Files: `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`, `docs/issues/0001-local-source-merge.md`
-- Scaling path: Complete semantic identity, shared ownership/refcounts, and typed overload.
-
-**Canary evidence retention:**
-
-- Current capacity: Reconnaissance bounds frame count; local proxy logs, databases, run count, and total bytes lack policy bounds.
-- Limit: `apps/canary/runs/` and hashing cost grow indefinitely.
-- Files: `apps/canary/src/wire.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`, `apps/canary/README.md`
-- Scaling path: Declare per-frame/run/retention budgets and provide evidence-aware archive/pruning.
-
-**Proxy connection fan-out:**
-
-- Current capacity: Unbounded `JoinSet` task per loopback connection.
-- Limit: A faulty local process can exhaust tasks/file descriptors.
-- Files: `apps/canary/src/proxy.rs`
-- Scaling path: Add a connection semaphore, typed overflow evidence, and profile FD/task budgets.
+**Durable receipts:**
+- Current capacity: 10,000 active and 10,000 terminal receipts in the standard
+  Redb profile; the memory store retains 10,000 total receipts until explicit
+  removal.
+- Limit: Recovered snapshots clone every retained non-cancelled event, and Redb
+  retention eviction has correctness defects described above.
+- Files: `crates/fava-write-store-redb/src/lib.rs`,
+  `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-write-store-memory/src/lib.rs`
+- Scaling path: Fix exact eviction first, then benchmark recovery, snapshot
+  publication, and receipt-change fan-out at declared limits.
 
 ## Dependencies at Risk
 
-**Platform-locked Bazel graph:**
+**External relay executable:**
+- Risk: Live proof depends on a locally installed `nostr-rs-relay 0.8.12`
+  executable selected by path and version output.
+- Impact: A nominally equal binary can differ by platform, build inputs, or
+  tampering while producing the same version string.
+- Migration plan: Pin and publish a reproducible binary/container digest while
+  retaining a separately built second relay implementation for interoperability.
+- Files: `apps/canary/src/relay.rs`, `apps/canary/README.md`,
+  `docs/issues/0002-m0-evidence-foundation.md`
 
-- Risk: `crate_universe` renders only `aarch64-apple-darwin`.
-- Impact: The authoritative build is unavailable to Linux, Intel macOS, and the eventual platform matrix.
-- Files: `MODULE.bazel`, `.bazeliskrc`, `rust-toolchain.toml`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`
-- Migration plan: Add tested triples/execution platforms as milestones require while retaining exact tool pins.
-
-**Locally installed relay prerequisite:**
-
-- Risk: M0 relies on an executable outside the repository; version output is checked, but binary digest/provenance are not.
-- Impact: Clean-machine reproduction depends on repeating local Cargo installation.
-- Files: `apps/canary/README.md`, `apps/canary/src/relay.rs`, `docs/issues/0002-m0-evidence-foundation.md`
-- Migration plan: Add pinned acquisition/verification or a hermetic profile and record executable digest.
-
-**Dual build metadata:**
-
-- Risk: Cargo owns dependency metadata while first-party target/test lists are duplicated in `BUILD.bazel`.
-- Impact: A crate/test can pass one build and be absent or differently wired in the other.
-- Files: `Cargo.toml`, `crates/*/Cargo.toml`, `MODULE.bazel`, `crates/*/BUILD.bazel`
-- Migration plan: Generate/check BUILD targets from Cargo metadata or compare graphs in a drift test.
+**Separate dependency graphs:**
+- Risk: The root workspace, canary workspace, and external falsifier have
+  independent manifests/locks and can drift despite current exact pins.
+- Impact: One validation surface can compile against versions not exercised by
+  another.
+- Migration plan: Check compatible exact versions across all three manifests
+  without merging the external falsifier into the workspace it is meant to
+  challenge.
+- Files: `Cargo.toml`, `Cargo.lock`, `apps/canary/Cargo.toml`,
+  `apps/canary/Cargo.lock`, `falsifiers/external-null-cache/Cargo.toml`,
+  `falsifiers/external-null-cache/Cargo.lock`
 
 ## Missing Critical Features
 
-**M1 exit gates remain open — current milestone work:**
+These are specified M7-M11 scopes, not defects in the completed M0-M6 slices.
 
-- Problem: Equivalent-query identity/sharing, deletion/expiry, `local-source-removal`, and the shared semantic corpus are absent.
-- Blocks: M1 completion and a full local semantic-state claim.
-- Files: `docs/issues/0001-local-source-merge.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `crates/fava-state/src/lib.rs`, `crates/fava-query/src/lib.rs`, `apps/canary/scenarios.json`
+**M7 replaceable-event edits and protocol composition:**
+- Problem: No `ReplaceableEventEdit` payload/store lifecycle, rematerialization
+  generation, inverse operation, `fava-nip02`, or second protocol crate exists.
+- Blocks: Protocol-owned follow/unfollow, stable receipt across source-driven
+  rematerialization, and stale generation rejection.
+- Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`,
+  `crates/fava-write/src/lib.rs`, `crates/fava-publication/src/run.rs`,
+  `Cargo.toml`
 
-**No public-facade write operation — M1 gap:**
+**M8 authentication and hostile-boundary qualification:**
+- Problem: NIP-42 execution, NIP-11 relay-limit planning, bounded provider
+  execution, session pooling, hostile-frame handling, and complete resource
+  envelopes are absent.
+- Blocks: Authenticated profiles and claims that hostile or blocking providers
+  cannot affect unrelated work.
+- Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`,
+  `crates/fava/src/relay.rs`, `crates/fava-transport-websocket/src/lib.rs`,
+  `crates/fava-diagnostics/src/lib.rs`
 
-- Problem: `Fava` exposes only `observe`; tests call `MemoryWriteStore` directly.
-- Blocks: The M1 canary gate requiring only public-facade queries/writes.
-- Files: `crates/fava/src/lib.rs`, `crates/fava/tests/local_source_merge.rs`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`
+**M9 cache and service profiles:**
+- Problem: Only the memory event cache exists; persistent event-cache, generic
+  fetch cache, NIP-05, NIP-11 service semantics, profile declaration, and
+  destructive reset are absent.
+- Blocks: Truthful persistent/ephemeral cache guarantees and service-cache
+  freshness/restart claims.
+- Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`,
+  `crates/fava-event-cache-memory/src/lib.rs`, `Cargo.toml`
 
-**`Freshness::Live` is public before live demand exists:**
+**M10 full provider substitution matrix:**
+- Problem: The no-grouping planner exists and the external null-cache falsifier
+  proves limited outside-workspace assembly, but no alternative durable write
+  store, router, transport, publisher, signer, delivery policy, or full shared
+  conformance matrix exists.
+- Blocks: Repository-wide replaceability qualification and provider contract
+  stabilization.
+- Files: `falsifiers/external-null-cache/src/lib.rs`,
+  `crates/fava-subscriptions-no-grouping/src/lib.rs`,
+  `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`
 
-- Problem: Queries default to `Live`, and the facade says live query, but the observer opens local sources only and neither creates relay demand nor refuses unsupported live behavior.
-- Blocks: QUERY-013 for callers that do not explicitly select `cache_only`.
-- Files: `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`, `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`
-
-**Diagnostics for implemented owners are absent:**
-
-- Problem: No public facts expose query identity/source count, provider profile/capacity, coalescing, or terminal causes.
-- Blocks: The cross-cutting diagnostic rule and failure attribution.
-- Files: `crates/fava/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`
-
-**M2-M11 are future work, not current regressions:**
-
-- Problem: Relay ingest/transport, planning/routing, durable publication/recovery, protocol crates, auth/hostile limits, persistent profiles, provider qualification, and Swift/Kotlin are absent.
-- Blocks: M2-M11 and release only; current docs do not claim them complete.
-- Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/spec/ARCHITECTURE.md`, `README.md`, `Cargo.toml`
-
-**Five product decisions intentionally remain open:**
-
-- Problem: Windowing, partial-handoff cancellation, outage backfill, full delivery history, and recommended persistent event cache are unresolved.
-- Blocks: Later owning milestone API/profile choices; these are decision blockers, not bugs.
-- Files: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/issues/0001-local-source-merge.md`
+**M11 native products and release qualification:**
+- Problem: No FFI projection, Swift package, Kotlin/JVM package, Android AAR,
+  iOS artifact, parity inventory, or real-device process evidence exists.
+- Blocks: Native product and cross-language behavioral-equivalence claims.
+- Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `Cargo.toml`
 
 ## Test Coverage Gaps
 
-**Replacement/state semantics:**
-
-- What's not tested: Equal-timestamp lowest-ID winner, deletion/tombstones, expiry, resurrection prevention, and broad property corpora.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`
-- Risk: Protocol-divergent state passes example tests.
+**Cross-source deletion and due-time expiry:**
+- What's not tested: Deletion of a local or merged event, automatic cached-event
+  expiry, local-write expiry, and expiry while an observation remains open.
+- Files: `crates/fava/tests/local_source_merge.rs`,
+  `apps/canary/src/local.rs`
+- Risk: M1 current-state rules pass only when tests call the provider mutation
+  directly.
 - Priority: High
 
-**Access/evidence isolation:**
-
-- What's not tested: Cross-context reads, exact session qualification, evidence redaction, and fabricated evidence.
-- Files: `crates/fava-state/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava/tests/local_source_merge.rs`
-- Risk: Authorization-context evidence leaks unnoticed.
+**Duplicate local event identity:**
+- What's not tested: Two acceptances of the same deterministic event id before
+  query open and while a query is live, for both memory and Redb stores.
+- Files: `crates/fava-write-store-memory/src/lib.rs`,
+  `crates/fava-write-store-redb/src/ops.rs`,
+  `crates/fava-query-standard/tests/source_merge.rs`
+- Risk: A valid public write sequence refuses or closes ordinary queries.
 - Priority: High
 
-**Observation concurrency/failure:**
-
-- What's not tested: Changes during open, starvation, revision regression, role mismatch, provider panic/block, later evaluator refusal, close races, and pending-pull cancellation.
-- Files: `crates/fava-observe/src/lib.rs`, `crates/fava-query/src/lib.rs`
-- Risk: Stale initial results, hung updates, and unattributed termination.
+**Redb retention eviction:**
+- What's not tested: Updated-receipt eviction, exact `None` broadcasts for
+  automatic eviction, restart parity after eviction, and configured-bound
+  changes across reopen.
+- Files: `crates/fava-write-store-redb/tests/process_kill.rs`,
+  `crates/fava-write-store-redb/src/ops.rs`
+- Risk: Durable and in-memory receipt truth diverge.
 - Priority: High
 
-**Write-store contract:**
-
-- What's not tested: Duplicate event acceptance, capacity atomicity, unknown cancellation, counter overflow, and a provider-shared corpus.
-- Files: `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write-store/src/lib.rs`, `crates/fava/tests/local_source_merge.rs`
-- Risk: The store commits evaluator-refused state or fails after mutation.
+**Hostile transport bounds and connection isolation:**
+- What's not tested: Oversized inbound text, never-completing connect, slow-first
+  relay with a healthy later relay, repeated reconnect refusal, and a provider
+  session that remains live after returning an error.
+- Files: `crates/fava-transport-websocket/tests/conformance.rs`,
+  `crates/fava/tests/multi_relay.rs`, `crates/fava/tests/automatic_routes.rs`
+- Risk: One relay causes excess memory or blocks unrelated progress.
 - Priority: High
 
-**Provider conformance:**
-
-- What's not tested: The null cache proves open only; ordinary/malformed/cancel/late/overload/restart/context cases and external evaluator/write-store proofs are absent.
-- Files: `falsifiers/external-null-cache/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-write-store/src/lib.rs`, `docs/spec/ARCHITECTURE.md`
-- Risk: Replaceable contracts rely on private conventions or violate invariants.
+**Malformed source/evaluator behavior:**
+- What's not tested: Wrong source role, duplicate/regressing source revision,
+  wrong source-event variant, evaluator panic/block, and post-open evaluator
+  refusal with an application-visible cause.
+- Files: `crates/fava-observe/src/lib.rs`,
+  `crates/fava/tests/source_contract.rs`
+- Risk: Replaceable providers can violate universal observation facts or close
+  work without attribution.
 - Priority: High
 
-**Bazel authoritative gate:**
-
-- What's not tested: Bazel omits unit tests in state, cache, and observer plus canary/falsifier tests.
-- Files: `.bazelrc`, `crates/fava-state/BUILD.bazel`, `crates/fava-event-cache-memory/BUILD.bazel`, `crates/fava-observe/BUILD.bazel`, `apps/canary/Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`
-- Risk: The advertised gate is weaker than the separate Cargo set.
-- Priority: High
-
-**M0 live/failure evidence:**
-
-- What's not tested: Fast tests do not launch the relay, require complete failed bundles, inject witness failures, collide ports, or prove cleanup.
-- Files: `apps/canary/src/lib.rs`, `apps/canary/src/relay.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`, `docs/issues/0002-m0-evidence-foundation.md`
-- Risk: Process/evidence regressions survive all automated tests.
-- Priority: High
-
-**Mutation proof durability:**
-
-- What's not tested: Falsifiers exist as feature comments/issue prose, not a checked-in rerunnable mutation harness.
-- Files: `features/local-source-merge.feature`, `features/relay-lab.feature`, `docs/issues/0001-local-source-merge.md`, `docs/issues/0002-m0-evidence-foundation.md`
-- Risk: Tests can stop detecting their claimed mechanisms.
+**Canary failure evidence and retrieval:**
+- What's not tested: Manifest creation on every failure path, cleanup after
+  partial setup, artifact hash streaming, and verification of evidence from a
+  fresh checkout.
+- Files: `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`,
+  `apps/canary/src/proxy.rs`, `.gitignore`
+- Risk: A failed or historical live claim cannot be reconstructed independently.
 - Priority: Medium
 
-**Performance/boundedness:**
+---
 
-- What's not tested: Allocation/latency versus records/observations, byte limits, fairness, task/FD ceilings, proxy throughput, artifact size, and typed overload.
-- Files: `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/artifacts.rs`
-- Risk: Count-bounded APIs exceed memory/latency budgets or starve work.
-- Priority: Medium
+*Concerns audit: 2026-08-21*

@@ -1,44 +1,45 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-08-20
+**Analysis Date:** 2026-08-21
 
 ## Naming Patterns
 
 **Files:**
 - Use kebab-case for crate directories and package names, keeping the owner in the name: `crates/fava-query/`, `crates/fava-event-cache-memory/`, `falsifiers/external-null-cache/` (`Cargo.toml`, `falsifiers/external-null-cache/Cargo.toml`).
-- Use snake_case for Rust module files and integration-test targets: `apps/canary/src/artifacts.rs`, `apps/canary/src/relay.rs`, `crates/fava/tests/local_source_merge.rs`.
-- Use behavior-oriented kebab-case for Gherkin files rather than mirroring crate names: `features/local-source-merge.feature` and `features/relay-lab.feature` group application-visible promises.
-- Keep each crate entry point at `src/lib.rs`; use `src/main.rs` only for a binary entry point such as `apps/canary/src/main.rs` (`crates/fava/src/lib.rs`).
+- Use snake_case for Rust module files and integration-test targets: `crates/fava/src/query_source.rs`, `crates/fava-publication/src/run.rs`, `crates/fava/tests/automatic_publication.rs`, and `crates/fava-write-store-redb/tests/process_kill.rs`.
+- Use behavior-oriented kebab-case for Gherkin files rather than mirroring crate names: `features/automatic-publication.feature`, `features/explicit-live-query.feature`, and `features/write-recovery.feature` group application-visible promises.
+- Keep each crate entry point at `src/lib.rs`; use `src/main.rs` only for a binary entry point such as `apps/canary/src/main.rs`. Split cohesive private machinery into named modules before a file crosses the size limit (`crates/fava/src/relay.rs`, `crates/fava-routing/src/chain.rs`, `crates/fava-write-store-memory/src/model.rs`).
 
 **Functions:**
-- Use snake_case and name the observable action or fact: `accept_materialized`, `coordinate_for_event`, `run_real_relay_smoke`, `require_complete_query` (`crates/fava-write-store/src/lib.rs`, `crates/fava-state/src/lib.rs`, `apps/canary/src/lib.rs`).
-- Use `new` for direct construction, `builder` for staged assembly, and domain verbs for lifecycle work: `RelaySessionKey::new`, `Fava::builder`, `Observer::open`, `Observation::close` (`crates/fava-state/src/lib.rs`, `crates/fava/src/lib.rs`, `crates/fava-observe/src/lib.rs`).
+- Use snake_case and name the observable action or fact: `accept_materialized`, `preview_write_routes`, `record_outcome`, `recover_open`, and `run_real_relay_smoke` (`crates/fava-write-store/src/lib.rs`, `crates/fava/src/lib.rs`, `crates/fava-publication/src/run.rs`, `apps/canary/src/lib.rs`).
+- Use `new` for direct construction, `builder` for staged assembly, and domain verbs for lifecycle work: `RelaySessionKey::new`, `Fava::builder`, `Publication::accept`, `Observer::open`, and `RouterSession::next_change` (`crates/fava-state/src/lib.rs`, `crates/fava/src/lib.rs`, `crates/fava-publication/src/lib.rs`, `crates/fava-routing/src/lib.rs`).
 - Prefix predicates with `is_` or `has_` and use noun accessors for exact values: `is_empty`, `has_executor`, `current`, `revision` (`crates/fava-event-cache/src/lib.rs`, `apps/canary/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava-query/src/lib.rs`).
-- Name tests as complete behavioral statements in snake_case, such as `accepted_local_event_is_visible_without_cache_pollution` and `second_source_open_failure_closes_the_first_source` (`crates/fava/tests/local_source_merge.rs`, `crates/fava-observe/src/lib.rs`).
+- Name tests as complete behavioral statements in snake_case, such as `reconnect_uses_fresh_identity_and_rejects_old_subscription_frames`, `slow_receipt_consumer_gets_explicit_lag_instead_of_silent_loss`, and `every_m5_commit_and_effect_boundary_survives_sigkill_exactly` (`crates/fava/tests/multi_relay.rs`, `crates/fava/tests/write_bounds.rs`, `crates/fava-write-store-redb/tests/process_kill.rs`).
 
 **Variables:**
 - Use descriptive snake_case tied to exact responsibilities: `event_cache`, `write_store`, `relay_evidence`, `receipt_id`, and `source_revision` make ownership explicit (`crates/fava/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-write/src/lib.rs`).
-- Keep identity and lifecycle qualifiers in names when they affect correctness: `next_identity`, `cache_open`, `writes_open`, `generation`, and `started_unix_ms` distinguish otherwise similar facts (`crates/fava-write-store-memory/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `apps/canary/src/lib.rs`).
-- Use `SCREAMING_SNAKE_CASE` for constants, including local bounds such as `RELAY_VERSION` and `FRAME_LIMIT` (`apps/canary/src/relay.rs`, `apps/canary/src/wire.rs`).
+- Keep identity and lifecycle qualifiers in names when they affect correctness: `next_identity`, `current_subscription`, `route_revision`, `generation`, and `cancel_rx` distinguish otherwise similar facts (`crates/fava-write-store-redb/src/lib.rs`, `crates/fava/src/relay.rs`, `crates/fava-publication/src/run.rs`).
+- Use `SCREAMING_SNAKE_CASE` for constants, including owner-local bounds and process protocol keys such as `MAX_ROUTERS`, `MAX_DESTINATIONS`, `ATTEMPT_TIMEOUT`, and `CHILD_BOUNDARY` (`crates/fava-routing/src/chain.rs`, `crates/fava-publication/src/run.rs`, `crates/fava-write-store-redb/tests/process_kill.rs`).
 
 **Types:**
-- Use approved UpperCamelCase nouns for structs, enums, and traits: `Query`, `QuerySource`, `SourceSnapshot`, `MemoryEventCache` (`docs/internals/vocabulary.toml`, `crates/fava-query/src/lib.rs`, `crates/fava-event-cache-memory/src/lib.rs`).
-- Suffix public failure types with `Error` and terminal facts with a precise noun: `QueryError`, `QuerySourceError`, `ObservationClosed`, and `CanaryError` (`crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `apps/canary/src/lib.rs`).
+- Use approved UpperCamelCase nouns for structs, enums, and traits: `Query`, `RoutePlan`, `WriteIntent`, `Receipt`, and `RelaySessionKey` (`docs/internals/vocabulary.toml`, `crates/fava-query/src/lib.rs`, `crates/fava-routing/src/lib.rs`, `crates/fava-write/src/lib.rs`).
+- Suffix public failure types with `Error` and terminal facts with a precise noun: `RouterError`, `PublicationError`, `WriteStoreError`, `ObservationClosed`, and `CanaryError` (`crates/fava-routing/src/lib.rs`, `crates/fava-publication/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `apps/canary/src/lib.rs`).
 - Wrap semantic identities in small newtypes instead of passing raw integers: `WriteId`, `ReceiptId`, `SourceRevision`, and `QueryRevision` preserve meaning at boundaries (`crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`).
 - Derive only traits justified by value semantics; immutable semantic values commonly derive `Clone`, `Debug`, `Eq`, `Hash`, and ordering traits, while lifecycle owners such as `Observer` and `Observation` do not (`crates/fava-state/src/lib.rs`, `crates/fava-observe/src/lib.rs`).
 
 ## Code Style
 
 **Formatting:**
-- Run `cargo fmt --all -- --check`; formatting is controlled by `rustfmt.toml` with Rust 2024 edition, 100-column width, field-init shorthand, and try shorthand (`rustfmt.toml`, `docs/issues/0001-local-source-merge.md`).
-- Keep code within the repository size policy: 500 lines is the soft limit and 800 lines is the hard limit for code files; a file above 500 lines needs a concrete cohesion reason (`AGENTS.md`).
-- Prefer deterministic standard-library collections where observable order or identity matters; current semantic code uses `BTreeMap` and `BTreeSet` throughout query and state evaluation (`crates/fava-state/src/lib.rs`, `crates/fava-query-standard/src/lib.rs`).
+- Run `cargo fmt --all -- --check` or `bazel build //... --config=fmt-check`; `rustfmt.toml` fixes Rust 2024, 100-column width, field-init shorthand, and try shorthand (`rustfmt.toml`, `.bazelrc`).
+- Keep code within the repository size policy: 500 lines is the soft limit and 800 lines is the hard limit. The largest tracked Rust source is `crates/fava-query/src/lib.rs` at exactly 500 lines, so extend it by extracting a cohesive owner-preserving module (`AGENTS.md`).
+- Prefer deterministic standard-library collections where observable order or identity matters; query selection, route plans, receipt destinations, and relay evidence use `BTreeMap` and `BTreeSet` (`crates/fava-query/src/lib.rs`, `crates/fava-routing/src/lib.rs`, `crates/fava-write/src/lib.rs`).
+- Keep bounds beside the owner that enforces them rather than in a generic constants module: routing bounds live in `crates/fava-routing/src/chain.rs`; write and durable receipt bounds live in `crates/fava-write/src/lib.rs` and `crates/fava-write-store/src/lib.rs`.
 
 **Linting:**
 - Every workspace crate inherits `[workspace.lints]`; `unsafe_code = "forbid"`, `missing_docs = "warn"`, and Clippy `all` plus `pedantic` are the baseline (`Cargo.toml`, `crates/fava-query/Cargo.toml`).
-- Treat lint warnings as failures in validation with `cargo clippy --workspace --all-targets -- -D warnings` (`docs/issues/0001-local-source-merge.md`).
+- Treat lint warnings as failures with `cargo clippy --workspace --all-targets -- -D warnings` or `bazel build //... --config=clippy` (`.bazelrc`, `docs/issues/0008-automatic-write-routing.md`).
 - Standalone workspaces must declare or run their own lint policy: `apps/canary/Cargo.toml` repeats the workspace lint set, while `falsifiers/external-null-cache/Cargo.toml` is validated with an explicit `cargo clippy ... -D warnings` command recorded in `docs/issues/0001-local-source-merge.md`.
-- Use narrowly scoped lint exceptions with a rationale; the current example preserves the specified asynchronous facade with `#[allow(clippy::unused_async)]` next to the reason (`crates/fava/src/lib.rs`).
+- Use narrowly scoped lint exceptions with a rationale. Current examples are object-safe future type complexity in `crates/fava-transport/src/lib.rs`, route-chain type complexity in `crates/fava-routing/src/lib.rs`, and cohesive orchestration arguments in `crates/fava/src/relay.rs`.
 
 ## Import Organization
 
@@ -57,7 +58,7 @@
 - Return `Result` with typed, scoped errors at public library boundaries; `thiserror::Error` enums carry precise refusal variants in `crates/fava-query/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`, and `crates/fava-write-store/src/lib.rs`.
 - Use `#[error(transparent)]` and `#[from]` when one owner exposes another owner's refusal without erasing its type, as in `ObserveError` and `WriteStoreError` (`crates/fava-observe/src/lib.rs`, `crates/fava-write-store/src/lib.rs`).
 - Map implementation failures to the provider's scoped refusal instead of panicking: poisoned locks and exhausted counters become `Refused(String)` errors in `crates/fava-event-cache-memory/src/lib.rs` and `crates/fava-write-store-memory/src/lib.rs`.
-- Refuse invalid inputs before opening work: empty relay sets, mismatched source authority, zero limits, and missing event IDs become typed errors in `crates/fava-query/src/lib.rs` and `crates/fava-write/src/lib.rs`.
+- Refuse invalid or oversized input before opening work or committing partial state: query construction, route contribution validation, relay fanout, and receipt mutation return exact errors (`crates/fava-query/src/lib.rs`, `crates/fava-routing/src/chain.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-write-store/src/lib.rs`).
 - Use `?` for propagation in production code; reserve `expect` for tests and locally proven constants with causal messages (`crates/fava/tests/local_source_merge.rs`, `crates/fava-event-cache-memory/src/lib.rs`).
 - The canary intentionally collapses heterogeneous orchestration failures into `CanaryError(String)`, records the failure, and has `apps/canary/src/main.rs` print once and exit non-zero (`apps/canary/src/lib.rs`, `apps/canary/src/main.rs`).
 
@@ -74,7 +75,7 @@
 
 **When to Comment:**
 - Start each Rust module with `//!` explaining its owned role, as in `crates/fava-query-standard/src/lib.rs` and `apps/canary/src/wire.rs`.
-- Use inline comments for non-obvious design constraints or lint exceptions, not to narrate mechanics; see the async-facade rationale in `crates/fava/src/lib.rs`.
+- Use inline comments for non-obvious design constraints or lint exceptions, not to narrate mechanics; see the object-safe future rationale in `crates/fava-transport/src/lib.rs` and build-authority notes in `MODULE.bazel`.
 - Put durable product meaning and deliberate-break descriptions in behavior files, not implementation comments (`features/local-source-merge.feature`, `features/relay-lab.feature`).
 
 **JSDoc/TSDoc:**
@@ -110,6 +111,22 @@
 
 - Write observable behavior, executable evidence, and then production code; confirm the evidence is red before implementation and under its named deliberate break (`AGENTS.md`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`).
 - Keep each mutable fact and lifecycle under one owner; dependencies flow from semantic values to neutral contracts to providers (`AGENTS.md`, `docs/spec/ARCHITECTURE.md`).
-- Keep externally influenced inputs, outputs, queues, observations, and retained evidence bounded or return typed refusal/shortfall (`AGENTS.md`, `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`).
+- Keep externally influenced inputs, outputs, queues, observations, and retained evidence bounded or return typed refusal/shortfall (`AGENTS.md`, `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `crates/fava-routing/src/chain.rs`).
 - Do not add hidden runtime feature flags or compatibility behavior; provider selection is static assembly through public contracts (`AGENTS.md`, `crates/fava/src/lib.rs`).
-- Use exact operation and generation identity for late completions and make cancellation, failure, and provider closure attributable to the owning work (`AGENTS.md`, `crates/fava-observe/src/lib.rs`, `apps/canary/src/relay.rs`).
+- Use exact operation, subscription, receipt, route revision, and generation identity for late completions; keep cancellation, failure, and provider closure attributable to their owner (`AGENTS.md`, `crates/fava/src/relay.rs`, `crates/fava-publication/src/run.rs`, `crates/fava-observe/src/lib.rs`).
+
+## Architectural Vocabulary
+
+- Treat `docs/internals/vocabulary.toml` as a closed registry for concepts, public Rust symbols, specified public symbols, and crate names. Run `python3 tools/check_vocabulary.py` and `python3 -m unittest tools/tests/test_vocabulary_check.py` for every architectural or public-API change (`AGENTS.md`, `tools/check_vocabulary.py`).
+- A new crate, public or cross-crate nominal type, provider contract, persisted entity, configuration concept, lifecycle owner, synonym, wrapper, or adjective-qualified variant requires a separate focused architecture change approved by Pablo (`AGENTS.md`).
+- Keep contracts separate from implementations even with one provider. Active examples are `fava-transport` / `fava-transport-websocket`, `fava-signer` / `fava-signer-local`, `fava-publisher` / `fava-publisher-nip01`, and `fava-delivery` / `fava-delivery-standard` (`Cargo.toml`, `AGENTS.md`).
+- Keep policy out of neutral cores: NIP-65 parsing is in `crates/fava-nip65/`; outbox, hints, app-relay, and fallback policies live in their own router crates; ordered composition stays in `crates/fava-routing/` (`docs/issues/0008-automatic-write-routing.md`).
+
+## Implemented Scope Boundary
+
+- Treat M0 through M6 as implemented and evidenced. Their complete issue records are `docs/issues/0002-m0-evidence-foundation.md`, `docs/issues/0001-local-source-merge.md`, and `docs/issues/0004-explicit-live-query.md` through `docs/issues/0008-automatic-write-routing.md`; their behavior files use built status and `apps/canary/scenarios.json` enables scenarios through M6.
+- Treat M7 through M11 as specified only. Their goals and candidate artifacts occur in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, but no M7+ scenario is registered in `apps/canary/scenarios.json`; do not cite planned signatures, crates, protocol services, native SDKs, or parity artifacts as existing conventions.
+
+---
+
+*Convention analysis: 2026-08-21*

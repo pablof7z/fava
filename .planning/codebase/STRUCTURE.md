@@ -1,259 +1,394 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-08-20
+**Analysis Date:** 2026-08-21
 
 ## Directory Layout
 
 ```text
 nnn/
-├── AGENTS.md                         # Repository authority, delivery, and Rust constraints
-├── Cargo.toml                        # Main Rust workspace and shared dependency/lint policy
-├── Cargo.lock                        # Main workspace dependency lock
-├── MODULE.bazel                      # Bazel module, Rust toolchain, and Cargo graph import
-├── MODULE.bazel.lock                 # Resolved Bazel module dependency lock
-├── BUILD.bazel                       # Root formatting target and exported Cargo metadata
-├── .bazelrc                          # Authoritative build/test, cache, lint, and format settings
-├── .bazeliskrc                       # Pinned Bazel release
-├── .bazelignore                      # Nested Cargo/output/worktree package exclusions
-├── rust-toolchain.toml               # Pinned Rust toolchain/components
-├── rustfmt.toml                      # Workspace formatting policy
-├── README.md                         # Product/status orientation
-├── crates/                           # Main Fava library workspace
-│   ├── fava-state/                   # Relay evidence and event-coordinate semantics
-│   ├── fava-write/                   # Event/write/receipt values
-│   ├── fava-query/                   # Query language, source/evaluator contracts, result values
-│   ├── fava-query-standard/          # Reference full-reevaluation oracle
+├── AGENTS.md                         # Delivery and architecture rules
+├── README.md                         # Current product orientation
+├── Cargo.toml                        # 34-crate main workspace and shared deps/lints
+├── Cargo.lock                        # Locked main-workspace dependency graph
+├── rust-toolchain.toml               # Rust 1.90.0 + Clippy + rustfmt
+├── rustfmt.toml                      # Edition-2024 formatting policy
+├── BUILD.bazel                       # Root Cargo exports and format alias
+├── MODULE.bazel                      # Bazel/rules_rust/crate_universe configuration
+├── crates/
+│   ├── fava-state/                   # Relay evidence and event-state rules
+│   ├── fava-write/                   # Event, intent, publication, receipt values
+│   ├── fava-query/                   # Query/source/result contracts
+│   ├── fava-query-standard/          # Reference query evaluator
 │   ├── fava-event-cache/             # Event-cache contract
-│   ├── fava-event-cache-memory/      # Bounded memory event-cache provider
+│   ├── fava-event-cache-memory/      # Bounded memory event cache
 │   ├── fava-write-store/             # Write-store contract
-│   ├── fava-write-store-memory/      # Bounded volatile write-store provider
-│   ├── fava-observe/                 # Local live-query lifecycle owner
+│   ├── fava-write-store-memory/      # Volatile write-store provider
+│   ├── fava-write-store-redb/        # Durable Redb write-store provider
+│   ├── fava-observe/                 # Query observation owner
+│   ├── fava-wire/                    # NIP-01 wire values and codec
+│   ├── fava-subscriptions/           # Subscription-planner contract
+│   ├── fava-subscriptions-no-grouping/ # One REQ per demand
+│   ├── fava-subscriptions-standard/  # Bounded compatible grouping
+│   ├── fava-transport/               # Relay transport/session contract
+│   ├── fava-transport-websocket/     # WebSocket implementation
+│   ├── fava-transport-testkit/       # Shared transport conformance fixture
+│   ├── fava-ingest/                  # Relay EVENT admission owner
+│   ├── fava-diagnostics/             # Bounded public diagnostic facts
+│   ├── fava-routing/                 # Ordered read/write router chain
+│   ├── fava-router-app-relays/       # App-selected relay policy
+│   ├── fava-router-fallback-relays/  # Reactive fallback policy
+│   ├── fava-router-outbox/           # NIP-65 outbox/inbox policy
+│   ├── fava-router-hints/            # Nostr hint/evidence policy
+│   ├── fava-router-testkit/          # Delayed routing fixture
+│   ├── fava-nip65/                   # Pure NIP-65 relay-list semantics
+│   ├── fava-signer/                  # Signer contract
+│   ├── fava-signer-local/            # Local-key signer
+│   ├── fava-publisher/               # One-attempt publisher contract
+│   ├── fava-publisher-nip01/         # NIP-01 publisher
+│   ├── fava-delivery/                # Delivery-decision contract
+│   ├── fava-delivery-standard/       # Bounded standard delivery policy
+│   ├── fava-publication/             # Durable publication lifecycle owner
 │   └── fava/                         # Thin facade and public integration tests
 ├── apps/
-│   └── canary/                       # Separate downstream app/evidence workspace
+│   └── canary/                       # Separate downstream acceptance/evidence workspace
 ├── falsifiers/
-│   └── external-null-cache/          # Separate outside-workspace provider proof
-├── features/                         # Durable app-visible BDD behavior
+│   └── external-null-cache/          # Separate public-boundary substitution proof
+├── features/                         # M0-M6 app-visible BDD behavior
 ├── docs/
-│   ├── spec/                         # Authoritative behavior/architecture/testing/plan inputs
-│   └── issues/                       # Focused local slice status and evidence records
+│   ├── spec/                         # Authoritative clean-room specifications
+│   ├── internals/                    # Closed vocabulary registry
+│   └── issues/                       # Focused implementation/evidence ledger
+├── tools/                            # Vocabulary enforcement and tests
 └── .planning/
-    └── codebase/                     # Generated GSD codebase maps
+    ├── codebase/                     # GSD current-state maps
+    ├── research/                     # Generated planning research
+    ├── PROJECT.md                    # Project context
+    ├── REQUIREMENTS.md               # Requirement ledger
+    ├── ROADMAP.md                    # Phase roadmap
+    └── STATE.md                      # Current GSD state
 ```
 
-Product structure is rooted by the main workspace members in `Cargo.toml`, with matching first-party Bazel packages such as `crates/fava-state/BUILD.bazel`, `crates/fava-query-standard/BUILD.bazel`, and `crates/fava/BUILD.bazel`. Bazel owns the main build/test entry through `.bazelrc`, while `MODULE.bazel` imports third-party dependency metadata from `Cargo.toml` and `Cargo.lock`. `apps/canary/Cargo.toml` and `falsifiers/external-null-cache/Cargo.toml` each declare `[workspace]`, so they are deliberately separate Cargo compilation boundaries and have no `BUILD.bazel` targets below `apps/` or `falsifiers/`.
+The main workspace contains 34 crates listed in `Cargo.toml`. Every main-workspace crate has a
+co-located `Cargo.toml` and `BUILD.bazel`. `apps/canary/Cargo.toml` and
+`falsifiers/external-null-cache/Cargo.toml` each declare their own `[workspace]`, so they compile
+as separate downstream boundaries and do not appear in root Bazel packages.
+
+The tracked implementation covers M0-M6. Current crate membership contains no M7-M11 owners such as
+`crates/fava-nip02/`, `crates/fava-auth/`, `crates/fava-fetch-cache/`, `crates/fava-nip05/`,
+`crates/fava-nip11/`, `crates/fava-session/`, `crates/fava-runtime/`, or `crates/fava-ffi/`.
 
 ## Directory Purposes
 
 **`crates/`:**
-- Purpose: Holds the implemented reusable Fava library slice and its neutral contracts/providers.
-- Contains: One crate per value owner, provider contract, implementation, lifecycle owner, or facade listed in `Cargo.toml`.
-- Key files: `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`, `crates/fava-query/src/lib.rs`, `crates/fava-observe/src/lib.rs`, `crates/fava/src/lib.rs`.
+- Purpose: Holds reusable product values, contracts, implementations, lifecycle owners, and facade.
+- Contains: 34 Rust library crates declared explicitly in root `Cargo.toml`.
+- Key files: `Cargo.toml`, `crates/fava/src/lib.rs`, `crates/fava-publication/src/run.rs`,
+  `crates/fava-routing/src/chain.rs`.
 
-**`crates/fava-state/`:**
-- Purpose: Own implemented event-state vocabulary and deterministic coordinate/winner semantics.
-- Contains: One library source at `crates/fava-state/src/lib.rs` and package declaration at `crates/fava-state/Cargo.toml`.
-- Key files: `crates/fava-state/src/lib.rs`.
+**Domain/value crates:**
+- Purpose: Own stable meanings and deterministic rules before provider mechanisms.
+- Contains: `crates/fava-state/`, `crates/fava-write/`, `crates/fava-query/`,
+  `crates/fava-wire/`, and `crates/fava-nip65/`.
+- Key files: `crates/fava-state/src/lib.rs`, `crates/fava-write/src/lib.rs`,
+  `crates/fava-query/src/lib.rs`, `crates/fava-wire/src/lib.rs`,
+  `crates/fava-nip65/src/lib.rs`.
 
-**`crates/fava-write/`:**
-- Purpose: Own implemented event values, stable write/receipt identifiers, and local publication evidence.
-- Contains: One library source at `crates/fava-write/src/lib.rs` and package declaration at `crates/fava-write/Cargo.toml`.
-- Key files: `crates/fava-write/src/lib.rs`.
+**Storage contracts and providers:**
+- Purpose: Keep signed relay-event retention separate from accepted local write custody.
+- Contains: `crates/fava-event-cache/`, `crates/fava-event-cache-memory/`,
+  `crates/fava-write-store/`, `crates/fava-write-store-memory/`, and
+  `crates/fava-write-store-redb/`.
+- Key files: `crates/fava-event-cache/src/lib.rs`,
+  `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-write-store/src/lib.rs`,
+  `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write-store-redb/src/ops.rs`.
 
-**`crates/fava-query/`:**
-- Purpose: Own the current declarative query API, source policy, provider-neutral source/evaluator traits, and application snapshots.
-- Contains: Query values and contracts in `crates/fava-query/src/lib.rs` with dependencies in `crates/fava-query/Cargo.toml`.
-- Key files: `crates/fava-query/src/lib.rs`, `docs/spec/partial-spec-api-semantics.md`.
+**Query and observation:**
+- Purpose: Evaluate independent complete sources and deliver bounded latest state.
+- Contains: `crates/fava-query-standard/`, `crates/fava-observe/`, and source/result contracts
+  in `crates/fava-query/`.
+- Key files: `crates/fava-query-standard/src/lib.rs`,
+  `crates/fava-query-standard/tests/source_merge.rs`, `crates/fava-observe/src/lib.rs`.
 
-**`crates/fava-query-standard/`:**
-- Purpose: Supply the current simple semantic oracle and component evidence for source merging.
-- Contains: Implementation in `crates/fava-query-standard/src/lib.rs`; integration corpus in `crates/fava-query-standard/tests/source_merge.rs`.
-- Key files: `crates/fava-query-standard/src/lib.rs`, `crates/fava-query-standard/tests/source_merge.rs`.
+**Relay planning and execution:**
+- Purpose: Separate NIP-01 wire values, subscription planning, session resources, and verified ingest.
+- Contains: `crates/fava-wire/`, `crates/fava-subscriptions/`, both planner providers,
+  `crates/fava-transport/`, `crates/fava-transport-websocket/`,
+  `crates/fava-transport-testkit/`, and `crates/fava-ingest/`.
+- Key files: `crates/fava-subscriptions/src/lib.rs`,
+  `crates/fava-subscriptions-standard/src/lib.rs`, `crates/fava-transport/src/lib.rs`,
+  `crates/fava-transport-websocket/src/lib.rs`, `crates/fava-ingest/src/lib.rs`.
 
-**`crates/fava-event-cache/` and `crates/fava-write-store/`:**
-- Purpose: Define separate neutral contracts for relay-observed cache state and accepted local materializations.
-- Contains: Traits/errors in `crates/fava-event-cache/src/lib.rs` and `crates/fava-write-store/src/lib.rs`.
-- Key files: `crates/fava-event-cache/Cargo.toml`, `crates/fava-write-store/Cargo.toml`.
+**Routing contracts and providers:**
+- Purpose: Derive live relay destinations for reads and writes without owning wire subscriptions.
+- Contains: `crates/fava-routing/`, app-relay, fallback, outbox, hint, and testkit router crates,
+  plus pure `crates/fava-nip65/` parsing.
+- Key files: `crates/fava-routing/src/lib.rs`, `crates/fava-routing/src/chain.rs`,
+  `crates/fava-router-outbox/src/lib.rs`, `crates/fava-router-hints/src/lib.rs`.
 
-**`crates/fava-event-cache-memory/` and `crates/fava-write-store-memory/`:**
-- Purpose: Provide bounded current-process implementations of the two storage roles.
-- Contains: Provider implementations and local unit tests in `crates/fava-event-cache-memory/src/lib.rs` and `crates/fava-write-store-memory/src/lib.rs`.
-- Key files: `crates/fava-event-cache-memory/Cargo.toml`, `crates/fava-write-store-memory/Cargo.toml`.
-
-**`crates/fava-observe/`:**
-- Purpose: Own local live-query opening, source observation, reevaluation, coalesced delivery, and close.
-- Contains: Owner and owner-level failure tests in `crates/fava-observe/src/lib.rs`.
-- Key files: `crates/fava-observe/src/lib.rs`, `crates/fava-observe/Cargo.toml`.
+**Publication contracts, providers, and owner:**
+- Purpose: Separate signing, one-attempt publishing, delivery policy, and durable lifecycle ordering.
+- Contains: `crates/fava-signer/`, `crates/fava-signer-local/`, `crates/fava-publisher/`,
+  `crates/fava-publisher-nip01/`, `crates/fava-delivery/`,
+  `crates/fava-delivery-standard/`, and `crates/fava-publication/`.
+- Key files: `crates/fava-signer/src/lib.rs`, `crates/fava-publisher/src/lib.rs`,
+  `crates/fava-delivery/src/lib.rs`, `crates/fava-publication/src/lib.rs`,
+  `crates/fava-publication/src/run.rs`.
 
 **`crates/fava/`:**
-- Purpose: Expose the thin public facade and validate explicit provider assembly.
-- Contains: Facade in `crates/fava/src/lib.rs`; public integration evidence in `crates/fava/tests/local_source_merge.rs`.
-- Key files: `crates/fava/src/lib.rs`, `crates/fava/tests/local_source_merge.rs`, `crates/fava/Cargo.toml`.
+- Purpose: Expose public assembly and operations while delegating mutable lifecycle to owners.
+- Contains: Facade/builder in `crates/fava/src/lib.rs`; query coordination in
+  `crates/fava/src/live.rs`, `crates/fava/src/relay.rs`, and `crates/fava/src/routes.rs`;
+  nested source adapter in `crates/fava/src/query_source.rs`; public tests in `crates/fava/tests/`.
+- Key files: `crates/fava/src/lib.rs`, `crates/fava/Cargo.toml`, `crates/fava/BUILD.bazel`.
 
 **`apps/canary/`:**
-- Purpose: Act as an ordinary downstream application and independent evidence lab, not as a Fava-internal test harness.
-- Contains: Separate package/lockfile, CLI, scenario registry, relay supervision, transparent proxy, independent wire witness, reconnaissance, artifact assembly, and ignored run bundles under `apps/canary/runs/`.
-- Key files: `apps/canary/Cargo.toml`, `apps/canary/src/main.rs`, `apps/canary/src/lib.rs`, `apps/canary/scenarios.json`, `apps/canary/README.md`.
+- Purpose: Act as an ordinary downstream Rust product plus independent process/wire evidence lab.
+- Contains: Separate manifest/lockfile, registry, CLI, M0-M6 scenario modules, relay supervisor,
+  proxy, independent wire witness, hostile fixtures, crash child, and artifact writer.
+- Key files: `apps/canary/Cargo.toml`, `apps/canary/scenarios.json`,
+  `apps/canary/src/main.rs`, `apps/canary/src/lib.rs`, `apps/canary/src/artifacts.rs`.
 
 **`falsifiers/`:**
-- Purpose: Challenge replaceable public boundaries from outside the main Cargo workspace.
-- Contains: The current null-cache provider and its assembly test in `falsifiers/external-null-cache/src/lib.rs`.
-- Key files: `falsifiers/external-null-cache/Cargo.toml`, `falsifiers/external-null-cache/Cargo.lock`, `falsifiers/external-null-cache/src/lib.rs`.
+- Purpose: Challenge public replaceability from outside the main Cargo workspace.
+- Contains: One independent null event-cache proof.
+- Key files: `falsifiers/external-null-cache/Cargo.toml`,
+  `falsifiers/external-null-cache/src/lib.rs`.
 
 **`features/`:**
-- Purpose: Preserve app-visible behavior and named deliberate breaks independently from crate layout.
-- Contains: M0 relay-lab behavior in `features/relay-lab.feature` and current M1 tracer behavior in `features/local-source-merge.feature`.
-- Key files: `features/relay-lab.feature`, `features/local-source-merge.feature`.
+- Purpose: Preserve durable app-visible behavior and named falsifiers independently from crate layout.
+- Contains: Nine `.feature` files covering relay lab, local source merge, explicit live query,
+  multi-relay observation, routing/planning, publication, and write recovery.
+- Key files: `features/relay-lab.feature`, `features/local-source-merge.feature`,
+  `features/explicit-live-query.feature`, `features/automatic-publication.feature`.
 
 **`docs/spec/`:**
-- Purpose: Hold the authoritative clean-room behavior, architecture, testing, delivery, and supplemental API semantics.
-- Contains: The five documents indexed in authority order by `docs/spec/README.md`.
-- Key files: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`, `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`, `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/spec/partial-spec-api-semantics.md`.
+- Purpose: Hold authoritative clean-room behavior, architecture, testing, delivery, and query semantics.
+- Contains: The five authorities indexed by `docs/spec/README.md`.
+- Key files: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`,
+  `docs/spec/ARCHITECTURE.md`, `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`,
+  `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`, `docs/spec/partial-spec-api-semantics.md`.
+
+**`docs/internals/`:**
+- Purpose: Define the closed architecture vocabulary used by code, specs, and planning.
+- Contains: Registry documentation and TOML definitions.
+- Key files: `docs/internals/README.md`, `docs/internals/vocabulary.toml`.
 
 **`docs/issues/`:**
-- Purpose: Record focused local slice outcomes, exclusions, proof, and incomplete gates without contaminating normative specs with status.
-- Contains: M1 tracer record at `docs/issues/0001-local-source-merge.md` and completed M0 evidence record at `docs/issues/0002-m0-evidence-foundation.md`.
-- Key files: `docs/issues/0001-local-source-merge.md`, `docs/issues/0002-m0-evidence-foundation.md`.
+- Purpose: Record focused implementation status, ownership, proof, and deliberate breaks without
+  adding status narration to normative specifications.
+- Contains: Completed M0-M6 records in `docs/issues/0001-local-source-merge.md` through
+  `docs/issues/0008-automatic-write-routing.md`; planning reconciliation is a separate local slice.
+- Key files: `docs/issues/0004-explicit-live-query.md`,
+  `docs/issues/0007-durable-explicit-publication.md`,
+  `docs/issues/0008-automatic-write-routing.md`.
+
+**`tools/`:**
+- Purpose: Enforce architectural vocabulary against Rust and documentation surfaces.
+- Contains: Python checker and fixture-based unit tests.
+- Key files: `tools/check_vocabulary.py`, `tools/tests/test_vocabulary_check.py`.
+
+**`.planning/`:**
+- Purpose: Hold GSD project, requirements, roadmap, state, research, and codebase maps.
+- Contains: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`,
+  `.planning/STATE.md`, `.planning/codebase/`, and `.planning/research/`.
+- Key files: `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STRUCTURE.md`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `crates/fava/src/lib.rs`: Public Rust library builder and `observe` facade.
-- `apps/canary/src/main.rs`: Executable canary command parser and process exit boundary.
-- `apps/canary/src/lib.rs`: Canary scenario registry and orchestration API.
-- `falsifiers/external-null-cache/src/lib.rs`: External provider composition proof entry through its test.
+- `crates/fava/src/lib.rs`: Public Rust builder and application operations.
+- `apps/canary/src/main.rs`: Canary command/exit boundary.
+- `apps/canary/src/lib.rs`: Scenario registry and M0 relay-lab orchestration.
+- `falsifiers/external-null-cache/src/lib.rs`: External provider substitution test.
+- `tools/check_vocabulary.py`: Architectural vocabulary gate.
 
 **Configuration:**
-- `Cargo.toml`: Main workspace membership, shared versions, dependency aliases, and lint policy.
-- `MODULE.bazel`: Bazel 9 module graph, `rules_rust` 0.73.0, Rust 1.90.0 toolchain, supported `aarch64-apple-darwin` target, and Cargo/crate-universe import.
-- `MODULE.bazel.lock`: Resolved Bazel module and extension dependency graph.
-- `BUILD.bazel`: Root exports for `Cargo.toml` and `Cargo.lock` plus the public `//:fmt` alias.
-- `.bazelrc`: Authoritative `bazel test //...` workflow, shared bounded disk cache, output symlink prefix, and Clippy/rustfmt aspect configurations.
-- `.bazeliskrc`: Bazel 9.2.0 pin used by Bazelisk.
-- `.bazelignore`: Excludes Cargo `target/` trees and nested `.claude/` worktrees from Bazel package discovery.
-- `crates/fava/BUILD.bazel`: Public facade library target and `local_source_merge` acceptance-test target.
-- `crates/fava-query-standard/BUILD.bazel`: Standard evaluator library and `source_merge` test target.
-- `crates/fava-state/BUILD.bazel`: Representative leaf library target; corresponding higher-layer targets include `crates/fava-query/BUILD.bazel`, `crates/fava-observe/BUILD.bazel`, and `crates/fava/BUILD.bazel`.
-- `rust-toolchain.toml`: Rust 1.90.0 toolchain with `clippy` and `rustfmt`.
-- `rustfmt.toml`: Edition 2024, 100-column width, and shorthand formatting settings.
-- `.gitignore`: Excludes root/nested `target/` directories and `apps/canary/runs/` evidence bundles.
-- `apps/canary/Cargo.toml`: Separate canary package/runtime dependencies.
-- `apps/canary/scenarios.json`: Canonical current scenario status registry.
-- `falsifiers/external-null-cache/Cargo.toml`: Separate provider-falsifier workspace and public path dependencies.
+- `Cargo.toml`: Workspace membership, shared metadata, dependency aliases, and lints.
+- `Cargo.lock`: Locked dependency graph consumed by Cargo and Bazel crate_universe.
+- `crates/*/Cargo.toml`: Per-crate first-party dependency boundaries.
+- `MODULE.bazel`: Bazel 9 module, `rules_rust` 0.73.0, Rust 1.90.0, and Cargo import.
+- `MODULE.bazel.lock`: Resolved Bazel graph.
+- `BUILD.bazel`: Root exports and `//:fmt` alias.
+- `crates/*/BUILD.bazel`: Explicit first-party Bazel graph and tests.
+- `.bazelrc`: Test, disk cache, output prefix, Clippy, and format aspects.
+- `.bazeliskrc`: Bazelisk version pin.
+- `.bazelignore`: Bazel package-discovery exclusions.
+- `rust-toolchain.toml`: Rust 1.90.0 with Clippy and rustfmt.
+- `rustfmt.toml`: Edition 2024 and 100-column formatting.
+- `apps/canary/Cargo.toml`: Separate downstream application dependencies.
+- `apps/canary/scenarios.json`: Current 22-enabled-scenario M0-M6 registry.
+- `falsifiers/external-null-cache/Cargo.toml`: Separate public-contract proof dependencies.
 
 **Core Logic:**
-- `crates/fava-state/src/lib.rs`: Relay evidence and event-coordinate semantics.
-- `crates/fava-write/src/lib.rs`: Local event/write/publication values.
-- `crates/fava-query/src/lib.rs`: Query language, source contracts, result/evidence types, evaluator contract.
-- `crates/fava-query-standard/src/lib.rs`: Standard source merge/evaluation oracle.
-- `crates/fava-observe/src/lib.rs`: Live local observation lifecycle.
-- `crates/fava/src/lib.rs`: Public assembly facade.
+- `crates/fava-state/src/lib.rs`: Event state, deletion, expiration, and relay evidence.
+- `crates/fava-write/src/lib.rs`: Intent, materialization, receipt, and outcome values.
+- `crates/fava-query/src/lib.rs`: Query, source, event-record, snapshot, and evaluator contracts.
+- `crates/fava-observe/src/lib.rs`: Local merged observation lifecycle.
+- `crates/fava-routing/src/lib.rs`: Routing values and provider contract.
+- `crates/fava-routing/src/chain.rs`: Ordered asynchronous composition and bounds.
+- `crates/fava-publication/src/run.rs`: Signing, routing, and delivery loop.
+- `crates/fava/src/relay.rs`: Live session, attribution, reconnect, and withdrawal.
 
-**Provider Contracts and Implementations:**
+**Provider Contracts:**
 - `crates/fava-event-cache/src/lib.rs`: Event-cache contract.
-- `crates/fava-event-cache-memory/src/lib.rs`: Memory event-cache provider.
 - `crates/fava-write-store/src/lib.rs`: Write-store contract.
-- `crates/fava-write-store-memory/src/lib.rs`: Memory write-store provider.
+- `crates/fava-subscriptions/src/lib.rs`: Subscription-planner contract.
+- `crates/fava-transport/src/lib.rs`: Transport/session contract.
+- `crates/fava-routing/src/lib.rs`: Router/session contract.
+- `crates/fava-signer/src/lib.rs`: Signer contract.
+- `crates/fava-publisher/src/lib.rs`: Publisher contract.
+- `crates/fava-delivery/src/lib.rs`: Delivery-policy contract.
 
-**Testing and Evidence:**
-- `crates/fava-query-standard/tests/source_merge.rs`: Component source-merge corpus.
-- `crates/fava/tests/local_source_merge.rs`: Public facade acceptance evidence for the local tracer.
-- `crates/fava-observe/src/lib.rs`: Owner-level failure/closure tests co-located under `#[cfg(test)]`.
-- `features/local-source-merge.feature`: App-readable M1 tracer behavior and falsifiers.
-- `features/relay-lab.feature`: App-readable M0 process/wire behavior and falsifier.
-- `apps/canary/src/`: Independent relay-lab implementation.
-- `falsifiers/external-null-cache/src/lib.rs`: Public provider-substitution test.
-- `docs/issues/0001-local-source-merge.md`: M1 tracer evidence and remaining gates.
-- `docs/issues/0002-m0-evidence-foundation.md`: M0 evidence record.
+**Provider Implementations:**
+- `crates/fava-event-cache-memory/src/lib.rs`: Memory event cache.
+- `crates/fava-write-store-memory/src/lib.rs`: Memory write store.
+- `crates/fava-write-store-redb/src/lib.rs`: Durable Redb write store.
+- `crates/fava-query-standard/src/lib.rs`: Standard evaluator.
+- `crates/fava-subscriptions-standard/src/lib.rs`: Grouping planner.
+- `crates/fava-subscriptions-no-grouping/src/lib.rs`: One-per-demand planner.
+- `crates/fava-transport-websocket/src/lib.rs`: WebSocket transport.
+- `crates/fava-signer-local/src/lib.rs`: Local signer.
+- `crates/fava-publisher-nip01/src/lib.rs`: NIP-01 publisher.
+- `crates/fava-delivery-standard/src/lib.rs`: Standard delivery policy.
+- `crates/fava-router-*/src/lib.rs`: Independently selected router policies.
+
+**Testing:**
+- `crates/fava/tests/`: Public facade tests for M1-M6.
+- `crates/fava-query-standard/tests/source_merge.rs`: Shared source semantic corpus.
+- `crates/fava-write-store-redb/tests/process_kill.rs`: Durable crash-boundary corpus.
+- `crates/fava-transport-websocket/tests/conformance.rs`: Transport conformance.
+- `crates/fava-subscriptions-standard/tests/grouping.rs`: Planner grouping equivalence.
+- `crates/fava-router-outbox/tests/outbox.rs`: NIP-65 route acquisition.
+- `apps/canary/src/`: Public real-process acceptance scenarios.
+- `features/`: Product-readable BDD and falsifier statements.
+- `docs/issues/`: Exact completion and mutation evidence.
 
 ## Naming Conventions
 
 **Files:**
-- Use `lib.rs` for each library crate root and `main.rs` only for an executable entry point, as in `crates/fava/src/lib.rs` and `apps/canary/src/main.rs`.
-- Use snake_case Rust module filenames for cohesive canary responsibilities, as in `apps/canary/src/artifacts.rs`, `apps/canary/src/proxy.rs`, `apps/canary/src/relay.rs`, `apps/canary/src/wire.rs`, and `apps/canary/src/recon.rs`.
-- Use snake_case integration-test filenames, as in `crates/fava-query-standard/tests/source_merge.rs` and `crates/fava/tests/local_source_merge.rs`.
-- Use kebab-case behavior filenames ending in `.feature`, as in `features/local-source-merge.feature` and `features/relay-lab.feature`.
-- Use zero-padded issue numbers plus a kebab-case slug, as in `docs/issues/0001-local-source-merge.md` and `docs/issues/0002-m0-evidence-foundation.md`.
-- Keep authoritative spec filenames explicit and upper-case where established in `docs/spec/`; do not duplicate their rules into status documents, per `docs/spec/README.md`.
+- Use `lib.rs` for library roots and `main.rs` only for executable roots, as in
+  `crates/fava/src/lib.rs` and `apps/canary/src/main.rs`.
+- Split cohesive submodules into snake_case files before crossing the 500-line soft limit, following
+  `crates/fava/src/query_source.rs`, `crates/fava-publication/src/run.rs`, and
+  `crates/fava-write-store-redb/src/ops.rs`.
+- Use snake_case integration-test filenames under `tests/`, such as
+  `crates/fava/tests/automatic_publication.rs`.
+- Use kebab-case `.feature` names, such as `features/explicit-live-query.feature`.
+- Use zero-padded issue numbers plus a kebab-case scope, such as
+  `docs/issues/0008-automatic-write-routing.md`.
+- Keep established uppercase authoritative spec filenames under `docs/spec/`.
 
 **Directories:**
-- Use kebab-case `fava-*` crate directories that match Cargo package names, as in `crates/fava-query-standard/` and `crates/fava-event-cache-memory/`.
-- Pair a neutral provider contract with separately named implementation directories, as in `crates/fava-event-cache/` plus `crates/fava-event-cache-memory/` and `crates/fava-write-store/` plus `crates/fava-write-store-memory/`.
-- Place outside-workspace boundary challenges under a descriptive kebab-case child of `falsifiers/`, as in `falsifiers/external-null-cache/`.
-- Place ordinary downstream acceptance products under `apps/`, as in `apps/canary/`; do not place them inside `crates/fava/`.
+- Use kebab-case `fava-*` matching the Cargo package name.
+- Keep contract and implementation directories separate as `fava-<role>/` and
+  `fava-<role>-<implementation>/`, as in `crates/fava-transport/` and
+  `crates/fava-transport-websocket/`.
+- Put protocol meaning in a vocabulary-approved protocol crate, following `crates/fava-nip65/`.
+- Put outside-workspace challenges below `falsifiers/<proof>/`; downstream products below
+  `apps/<product>/`.
 
 ## Where to Add New Code
 
-**New Vertical Feature:**
-- Primary code: Add behavior at its single owner under the existing `crates/fava-*/src/` path, or add the target owner crate named by `docs/spec/ARCHITECTURE.md` only when its vertical slice begins in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
-- Tests: Put the first executable proof beside the owner (`src/lib.rs` under `#[cfg(test)]` or `tests/*.rs`), add public composition evidence under `crates/fava/tests/` only when it proves another boundary, and update app-visible behavior under `features/` according to `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
-- Status/evidence: Record focused implementation status and deliberate-break results in a new numbered file under `docs/issues/`; keep normative meaning in the owning file under `docs/spec/`.
+**New Feature:**
+- Primary code: Change the single existing owner under `crates/fava-*/src/`; create an owner only
+  when the active milestone requires it and the vocabulary approval gate permits the name.
+- Tests: Add the first causal proof at the owner under `src/` or `tests/*.rs`; add
+  `crates/fava/tests/*.rs` only for public cross-boundary composition.
+- Product evidence: Update `features/<behavior>.feature`, register the capstone in
+  `apps/canary/scenarios.json`, and use a cohesive `apps/canary/src/*.rs` module.
+- Status: Add one focused numbered record under `docs/issues/`; never add implementation status to
+  `docs/spec/`.
 
-**New Domain Value or Rule:**
-- Implementation: Extend the owner, not a generic common crate: event-state rules in `crates/fava-state/src/`, event/write/receipt values in `crates/fava-write/src/`, and query/source/result meaning in `crates/fava-query/src/`.
-- Tests: Add pure/property/model evidence under the same crate or its `tests/` directory, following placement guidance in `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
+**New Component/Module:**
+- Domain values: event/provenance in `crates/fava-state/src/`; write/receipt meaning in
+  `crates/fava-write/src/`; query/source/result meaning in `crates/fava-query/src/`.
+- Protocol meaning: use the vocabulary-approved protocol crate, following
+  `crates/fava-nip65/src/lib.rs`; do not add NIP switches to universal crates.
+- Provider contract: add or extend `crates/fava-<role>/` using domain values.
+- Provider implementation: add `crates/fava-<role>-<implementation>/` in the same vertical slice;
+  do not place the contract in its implementation crate or defer the split.
+- Workspace/build: add both crates to root `Cargo.toml` and matching `BUILD.bazel` files with
+  explicit first-party labels.
+- Assembly: expose the neutral contract through `FavaBuilder`; keep concrete providers out of
+  normal `crates/fava/Cargo.toml` dependencies.
 
-**New Provider Boundary:**
-- Contract: Create or extend one neutral `crates/fava-<role>/` contract using domain values from their owners, following existing patterns in `crates/fava-event-cache/` and `crates/fava-write-store/`.
-- Implementation: Put each concrete algorithm/backend in its own `crates/fava-<role>-<implementation>/`, following `crates/fava-event-cache-memory/` and `crates/fava-write-store-memory/`.
-- Falsifier: Add a meaningfully different provider outside the main workspace under `falsifiers/<provider-proof>/`, following `falsifiers/external-null-cache/`; do not stabilize a contract from one implementation alone, per `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
-- Assembly: Add path/version aliases and a workspace member in root `Cargo.toml`; add concrete providers to `crates/fava/Cargo.toml` only when intentionally required by facade code or test-only dev dependencies.
-- Build target: Add `crates/fava-<role>/BUILD.bazel` beside the new crate manifest, declare first-party dependencies as explicit `//crates/<package>:lib` labels, and source third-party dependencies through `@crates` as demonstrated by `crates/fava-event-cache-memory/BUILD.bazel`.
+**New Router:**
+- Implementation: add `crates/fava-router-<policy>/` implementing `Router` from
+  `crates/fava-routing/src/lib.rs`.
+- Dependencies: depend on routing plus only needed domain/query sources; never add the router to
+  `crates/fava-routing/Cargo.toml`.
+- Tests: add owner tests and public ordered-chain evidence under `crates/fava/tests/` or canary.
 
-**New Query Evaluator:**
-- Contract: Reuse `QueryEvaluator` in `crates/fava-query/src/lib.rs` unless product meaning changes.
-- Standard implementation: Extend the oracle in `crates/fava-query-standard/src/lib.rs` and its corpus in `crates/fava-query-standard/tests/`.
-- Alternative implementation: Add a separate provider crate under `crates/fava-query-<implementation>/` and prove differential equivalence against `crates/fava-query-standard/`, as required by `docs/spec/ARCHITECTURE.md`.
+**New Planner, Transport, Signer, Publisher, or Delivery Policy:**
+- Reuse the corresponding neutral trait in `crates/fava-subscriptions/`, `crates/fava-transport/`,
+  `crates/fava-signer/`, `crates/fava-publisher/`, or `crates/fava-delivery/`.
+- Add a separately named implementation crate; keep provider-private resources there.
+- Reuse/extend owner conformance, following `crates/fava-transport-testkit/` and
+  `crates/fava-transport-websocket/tests/conformance.rs`.
 
-**New Lifecycle Owner:**
-- Implementation: Add the focused owner crate named by the relevant target slice in `docs/spec/ARCHITECTURE.md`, rather than adding policy to `crates/fava/src/lib.rs` or execution policy to `crates/fava-observe/src/lib.rs`.
-- Facade: Expose only the thin application operation/handle in `crates/fava/src/lib.rs`; keep state and lifecycle in its owner crate.
-- Tests: Put schedule/failure tests at the owner and a public capstone in `crates/fava/tests/` or `apps/canary/` only when cross-boundary behavior requires it, following `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
+**M7 Protocol Composition:**
+- Add specified `crates/fava-nip02/` and a second unrelated protocol crate only when M7 begins;
+  each depends on ordinary query/write values, not runtime, transport, stores, routers, or publisher.
+- Put generic replaceable-event edit values with their approved semantic owner, durable edit storage
+  behind `crates/fava-write-store/`, and rematerialization in `crates/fava-publication/`.
+- Prove first value, rematerialization, inverse, stale generation, and protocol N+1 without changing
+  NIP-specific behavior in `crates/fava/src/lib.rs`.
 
-**New Canary Scenario:**
-- Registry: Add status/requirements to `apps/canary/scenarios.json`.
-- CLI dispatch: Add the user command boundary to `apps/canary/src/main.rs` only if the scenario needs a new command shape.
-- Orchestration: Add scenario control to `apps/canary/src/lib.rs` and reuse focused modules under `apps/canary/src/`; add a new module only for a cohesive responsibility.
-- Evidence: Reuse `apps/canary/src/artifacts.rs`, proxy/witness facilities in `apps/canary/src/proxy.rs` and `apps/canary/src/wire.rs`, and ignored output under `apps/canary/runs/`.
-- Behavior: Add/update the owning scenario under `features/` and link its exact executable evidence as prescribed by `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md`.
+**Later Specified Owners:**
+- M8: add vocabulary-approved auth/provider hardening contracts only with owning scenarios.
+- M9: add persistent event-cache and fetch-cache contract/provider crates; keep NIP-05/NIP-11
+  semantics in their protocol-service crates.
+- M10: add alternatives outside default-provider crates for the provider matrix.
+- M11: add FFI, Swift, and Kotlin products outside universal Rust core.
 
 **Utilities:**
-- Shared domain helpers: Keep them with the owner in `crates/fava-state/src/`, `crates/fava-write/src/`, or `crates/fava-query/src/`; do not create a generic `common` bucket, per `docs/spec/ARCHITECTURE.md`.
-- Canary-only helpers: Keep them within focused modules under `apps/canary/src/`, as demonstrated by `apps/canary/src/artifacts.rs` and `apps/canary/src/wire.rs`.
+- Shared product helpers: keep with the semantic owner; do not create a generic common crate.
+- Canary-only helpers: keep under `apps/canary/src/`.
+- Architecture enforcement: keep repository checks under `tools/` with tests under `tools/tests/`.
 
 ## Special Directories
 
 **`apps/canary/runs/`:**
-- Purpose: Stores per-run manifests, reports, JSONL evidence, logs, resources, relay data/configuration, and proxy frames created by `apps/canary/src/artifacts.rs`.
-- Generated: Yes; `apps/canary/src/lib.rs` creates it during canary/reconnaissance runs.
+- Purpose: Generated manifests, reports, JSONL, relay config/data/logs, process facts, resources,
+  child runs, and proxy frames.
+- Generated: Yes, by `apps/canary/src/artifacts.rs` and scenario modules.
 - Committed: No; ignored by `.gitignore`.
 
 **`target/` and nested `*/target/`:**
-- Purpose: Cargo build output for the main and separate workspaces.
-- Generated: Yes; manifests are `Cargo.toml`, `apps/canary/Cargo.toml`, and `falsifiers/external-null-cache/Cargo.toml`.
+- Purpose: Cargo output for main, canary, and falsifier workspaces.
+- Generated: Yes.
 - Committed: No; ignored by `.gitignore`.
 
 **`bazel-bin/`, `bazel-out/`, `bazel-testlogs/`, and `bazel-nnn/`:**
-- Purpose: Bazel convenience symlinks into generated build, test, and execution-root output owned by `.bazelrc` and the Bazel workspace named in `MODULE.bazel`.
-- Generated: Yes; Bazel creates these paths when root targets such as `//crates/fava:lib` or `//crates/fava:local_source_merge` are built or tested.
-- Committed: No; `bazel-bin/`, `bazel-out/`, `bazel-testlogs/`, and `bazel-nnn/` are currently untracked build symlinks, and `.gitignore` does not currently exclude them.
+- Purpose: Bazel output symlinks created with the `bazel-` prefix from `.bazelrc`.
+- Generated: Yes.
+- Committed: No; ignored through `bazel-*`.
 
 **`falsifiers/external-null-cache/`:**
-- Purpose: Compile a provider outside the main workspace boundary against public Fava contracts.
-- Generated: No; source is maintained at `falsifiers/external-null-cache/src/lib.rs`.
-- Committed: Yes; package, lockfile, and source are tracked under `falsifiers/external-null-cache/`.
+- Purpose: Maintained external-workspace provider proof against public contracts.
+- Generated: No.
+- Committed: Yes, excluding `target/`.
 
-**`apps/canary/`:**
-- Purpose: Preserve a real downstream/evidence boundary independent of Fava internals.
-- Generated: No; sources are maintained under `apps/canary/src/`.
-- Committed: Yes, except generated `apps/canary/runs/` and build output excluded by `.gitignore`.
+**`docs/internals/`:**
+- Purpose: Maintained architectural name/public symbol authority.
+- Generated: No.
+- Committed: Yes; changes require separate vocabulary approval.
 
 **`.planning/codebase/`:**
-- Purpose: Holds generated GSD maps consumed by later planning/execution commands.
-- Generated: Yes; this map writes `.planning/codebase/ARCHITECTURE.md` and `.planning/codebase/STRUCTURE.md`.
-- Committed: Orchestrator-controlled; mapper agents do not stage or commit `.planning/codebase/`.
+- Purpose: GSD maps consumed by planning and execution.
+- Generated: Yes.
+- Committed: Orchestrator-controlled; mapper agents write but do not commit.
+
+**`.planning/research/`:**
+- Purpose: Generated planning research.
+- Generated: Yes.
+- Committed: No under current ignore policy.
 
 **`.codex/`, `.pi/`, and `.claude/`:**
-- Purpose: Local agent/GSD runtime material and worktrees, not Fava product architecture.
-- Generated: Locally installed or tool-managed; product code remains under `crates/`, `apps/`, `falsifiers/`, `features/`, and `docs/`.
-- Committed: Not part of tracked product source in the current checkout; do not place Fava implementation code in `.codex/`, `.pi/`, or `.claude/`.
+- Purpose: Local agent/GSD runtime material, not Fava product architecture.
+- Generated: Tool-managed.
+- Committed: No; ignored. Do not place product code here.
+
+---
+
+*Structure analysis: 2026-08-21*
