@@ -247,6 +247,10 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
             .is_some_and(|reason| reason.contains("timestamp exhausted"))
     );
 
+    prove_evidence_exhaustion(&keys);
+}
+
+fn prove_evidence_exhaustion(keys: &Keys) {
     let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
     let first = EventBuilder::new(keys.public_key(), Kind::ContactList)
         .created_at(Timestamp::from(1))
@@ -265,7 +269,7 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
     for generation in 0..destination_evidence_capacity() {
         let source_time = 2 + generation as u64 * 2;
         let source = signed_source(
-            &keys,
+            keys,
             Kind::ContactList,
             source_time,
             &format!("source {generation}"),
@@ -289,7 +293,7 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
         expected_source = Some(source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    let overflow_source = signed_source(&keys, Kind::ContactList, 1_000, "overflow source", &[]);
+    let overflow_source = signed_source(keys, Kind::ContactList, 1_000, "overflow source", &[]);
     assert!(
         store
             .install_materialization(

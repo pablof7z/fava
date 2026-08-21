@@ -185,10 +185,10 @@ impl Publication {
         };
         let materializer = self.materializer(edit)?;
         let created_at = injected_timestamp(source, current)?;
-        let materialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let invocation = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             materializer.materialize(edit, source, created_at)
         }));
-        let event = match materialized {
+        let event = match invocation {
             Ok(Ok(event)) => event,
             Ok(Err(error)) => {
                 return Err(PublicationError::Routing(format!(

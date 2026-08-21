@@ -216,6 +216,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// # Errors
     ///
     /// Returns [`WriteStoreError`] unless the attempt remains current.
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
         write_id: WriteId,

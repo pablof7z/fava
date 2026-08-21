@@ -224,6 +224,7 @@ impl WriteStore for RedbWriteStore {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
         write_id: WriteId,

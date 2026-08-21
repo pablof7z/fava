@@ -263,6 +263,7 @@ impl WriteStore for MemoryWriteStore {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
         write_id: WriteId,
