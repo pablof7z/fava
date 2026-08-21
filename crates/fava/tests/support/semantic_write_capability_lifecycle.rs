@@ -37,8 +37,8 @@ pub async fn exercise<Add, Adjacent>(
     adjacent: Adjacent,
     target: (&str, &str),
 ) where
-    Add: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
+    Adjacent: Fn() -> EditResult,
 {
     prove_source_removal(kind, Arc::clone(&materializer), &add, target).await;
     prove_processed_stale_success(kind, materializer, add, adjacent).await;
@@ -50,7 +50,7 @@ async fn prove_source_removal<Add>(
     add: &Add,
     target: (&str, &str),
 ) where
-    Add: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
@@ -81,7 +81,9 @@ async fn prove_source_removal<Add>(
     .materializers([materializer])
     .build()
     .unwrap();
-    let accepted = fava.publish(explicit_intent(add(actor).unwrap())).unwrap();
+    let accepted = fava
+        .publish(explicit_intent(add().unwrap(), actor))
+        .unwrap();
     wait_for_signer(&signer, 1).await;
     cache
         .commit(vec![CacheMutation::Retract(current.id)])
@@ -97,13 +99,18 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     add: Add,
     adjacent: Adjacent,
 ) where
-    Add: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
+    Adjacent: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let initial = materializer
-        .materialize(&add(actor).unwrap(), None, Timestamp::from(u64::MAX - 100))
+        .materialize(
+            &add().unwrap(),
+            actor,
+            None,
+            Timestamp::from(u64::MAX - 100),
+        )
         .unwrap()
         .finalize(&keys)
         .unwrap();
@@ -126,11 +133,14 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     .materializers([Arc::clone(&materializer)])
     .build()
     .unwrap();
-    let accepted = fava.publish(explicit_intent(add(actor).unwrap())).unwrap();
+    let accepted = fava
+        .publish(explicit_intent(add().unwrap(), actor))
+        .unwrap();
     let (first, first_completion) = signatures.recv().await.unwrap();
     let successor = materializer
         .materialize(
-            &adjacent(actor).unwrap(),
+            &adjacent().unwrap(),
+            actor,
             Some(&initial),
             Timestamp::from(u64::MAX - 50),
         )
@@ -384,6 +394,7 @@ impl WriteStore for CompletionStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
+            PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,

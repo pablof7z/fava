@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    AcceptedWrite, Event, EventBuilder, EventCoordinate, EventValue, Fava, Kind, PublicKey,
-    PublicationError, Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    WriteIntent, WriteIntentError, WriteRouting, WriteStoreError,
+    AcceptedWrite, Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError,
+    Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntent,
+    WriteIntentError, WriteRouting, WriteStoreError,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -59,9 +59,9 @@ pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     adjacent: Adjacent,
     tags: (&str, &str, &str),
 ) where
-    Add: Fn(PublicKey) -> EditResult,
-    Remove: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
+    Remove: Fn() -> EditResult,
+    Adjacent: Fn() -> EditResult,
 {
     prove_first_value(kind, Arc::clone(&materializer), &add, tags.0, tags.1).await;
     prove_composed_writes(
@@ -83,7 +83,7 @@ async fn prove_first_value<Add>(
     tag_name: &str,
     target: &str,
 ) where
-    Add: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
@@ -98,7 +98,7 @@ async fn prove_first_value<Add>(
         )
         .await
         .expect("public semantic query opens");
-    let (accepted, receipt, event) = publish_terminal(&empty, add(actor).unwrap()).await;
+    let (accepted, receipt, event) = publish_terminal(&empty, add().unwrap(), actor).await;
     let visible = tokio::time::timeout(Duration::from_secs(1), observation.changed())
         .await
         .expect("first value observation is bounded")
@@ -127,9 +127,9 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     adjacent: &Adjacent,
     tags: (&str, &str, &str),
 ) where
-    Add: Fn(PublicKey) -> EditResult,
-    Remove: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
+    Remove: Fn() -> EditResult,
+    Adjacent: Fn() -> EditResult,
 {
     let (tag_name, target, adjacent_target) = tags;
     let keys = Keys::generate();
@@ -161,7 +161,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     .build()
     .unwrap();
 
-    let (added_write, added_receipt, added) = publish_terminal(&fava, add(actor).unwrap()).await;
+    let (added_write, added_receipt, added) = publish_terminal(&fava, add().unwrap(), actor).await;
     assert_stable(&added_write, &added_receipt);
     assert_eq!(
         added_receipt.current.publication.materialization_source,
@@ -171,7 +171,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_preserved(&added);
 
     let (duplicate_write, duplicate_receipt, duplicate) =
-        publish_terminal(&fava, add(actor).unwrap()).await;
+        publish_terminal(&fava, add().unwrap(), actor).await;
     assert_stable(&duplicate_write, &duplicate_receipt);
     assert_eq!(
         duplicate_receipt.current.publication.materialization_source,
@@ -182,7 +182,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_eq!(target_count(&duplicate, tag_name, target), 1);
 
     let (adjacent_write, adjacent_receipt, adjacent_event) =
-        publish_terminal(&fava, adjacent(actor).unwrap()).await;
+        publish_terminal(&fava, adjacent().unwrap(), actor).await;
     assert_stable(&adjacent_write, &adjacent_receipt);
     assert_eq!(
         adjacent_receipt.current.publication.materialization_source,
@@ -193,7 +193,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_preserved(&adjacent_event);
 
     let (removed_write, removed_receipt, removed) =
-        publish_terminal(&fava, remove(actor).unwrap()).await;
+        publish_terminal(&fava, remove().unwrap(), actor).await;
     assert_stable(&removed_write, &removed_receipt);
     assert_eq!(
         removed_receipt.current.publication.materialization_source,
@@ -206,7 +206,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_eq!(publisher.attempts().len(), 4);
 
     let (inverse_empty, _, _, _, _) = assembly(keys, materializer);
-    let (_, _, empty_event) = publish_terminal(&inverse_empty, remove(actor).unwrap()).await;
+    let (_, _, empty_event) = publish_terminal(&inverse_empty, remove().unwrap(), actor).await;
     assert!(empty_event.tags.is_empty());
 }
 
@@ -215,23 +215,15 @@ fn prove_public_refusals<Add>(
     materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: Add,
 ) where
-    Add: Fn(PublicKey) -> EditResult,
+    Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
-    let edit = add(actor).unwrap();
-    let format = edit.format();
-    let malformed = ReplaceableEventEdit::new(
-        actor,
-        edit.coordinate().clone(),
-        edit.format(),
-        Vec::new(),
-        edit.inverse_change().to_vec(),
-    )
-    .unwrap();
+    let edit = add().unwrap();
+    let malformed = ReplaceableEventEdit::new(edit.kind(), None, Vec::new()).unwrap();
     let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&materializer));
     assert!(matches!(
-        fava.publish(explicit_intent(malformed)),
+        fava.publish(explicit_intent(malformed, actor)),
         Err(PublicationError::Routing(_))
     ));
     assert_no_effects(&store, &signer, &publisher, 0);
@@ -265,7 +257,7 @@ fn prove_public_refusals<Add>(
     .build()
     .unwrap();
     assert!(matches!(
-        bounded.publish(explicit_intent(edit.clone())),
+        bounded.publish(explicit_intent(edit.clone(), actor)),
         Err(PublicationError::Routing(_))
     ));
     assert_no_effects(&store, &signer, &publisher, 0);
@@ -286,27 +278,19 @@ fn prove_public_refusals<Add>(
         ))
         .unwrap();
     assert!(matches!(
-        capacity.publish(explicit_intent(edit)),
+        capacity.publish(explicit_intent(edit, actor)),
         Err(PublicationError::Store(WriteStoreError::Refused(_)))
     ));
     assert!(matches!(
-        WriteIntent::edit(add(actor).unwrap(), WriteRouting::Explicit(BTreeSet::new())),
+        WriteIntent::edit_as(
+            add().unwrap(),
+            actor,
+            WriteRouting::Explicit(BTreeSet::new()),
+        ),
         Err(WriteIntentError::EmptyExplicitRelays)
     ));
-    let addressable = ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind,
-            identifier: Some("addressable".to_owned()),
-        },
-        format,
-        vec![1],
-        vec![2],
-    )
-    .unwrap();
     assert!(matches!(
-        WriteIntent::edit(addressable, WriteRouting::Automatic),
+        ReplaceableEventEdit::new(kind, Some("addressable".to_owned()), vec![1]),
         Err(WriteIntentError::InvalidEvent(_))
     ));
 }
@@ -340,8 +324,9 @@ fn assembly(
 async fn publish_terminal(
     fava: &Fava,
     edit: ReplaceableEventEdit,
+    author: PublicKey,
 ) -> (AcceptedWrite, Receipt, Event) {
-    let accepted = fava.publish(explicit_intent(edit)).unwrap();
+    let accepted = fava.publish(explicit_intent(edit, author)).unwrap();
     let receipt = tokio::time::timeout(
         Duration::from_secs(1),
         fava.wait_terminal(accepted.receipt_id),
