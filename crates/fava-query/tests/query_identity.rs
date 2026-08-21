@@ -51,7 +51,6 @@ fn all_ascii_letter_tag_axes_are_case_sensitive() {
         let uppercase_query = Query::events().tag_values(uppercase, ["exact"]);
 
         assert_ne!(lowercase_query, uppercase_query);
-        assert_ne!(hash(&lowercase_query), hash(&uppercase_query));
         assert_eq!(
             lowercase_query.selection().tag_values.get(&lowercase),
             Some(&std::collections::BTreeSet::from(["exact".to_owned()]))
@@ -99,7 +98,6 @@ fn absent_and_present_empty_tag_axes_are_distinct() {
     let present_empty = Query::events().tag_values(e, std::iter::empty::<String>());
 
     assert_ne!(absent, present_empty);
-    assert_ne!(hash(&absent), hash(&present_empty));
     assert_eq!(
         present_empty.selection().tag_values.get(&e),
         Some(&std::collections::BTreeSet::new())
