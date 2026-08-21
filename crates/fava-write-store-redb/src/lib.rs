@@ -11,8 +11,8 @@ use fava_query::{
 };
 use fava_state::EventCoordinate;
 use fava_write::{
-    EventId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit,
-    Timestamp,
+    EventId, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    ReplaceableEventEdit, Timestamp,
 };
 use fava_write_store::WriteStoreError;
 use redb::Database;
@@ -28,6 +28,7 @@ const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
 type SemanticCustody = (
     ReplaceableEventEdit,
+    PublicKey,
     Option<(EventId, Timestamp)>,
     Option<EventId>,
 );
@@ -201,8 +202,10 @@ fn recover_ambiguous(state: &mut StoreState) -> Vec<ReceiptId> {
 }
 
 fn release_semantic(state: &mut StoreState, receipt_id: ReceiptId) {
-    if let Some((edit, _, _)) = state.semantics.remove(&receipt_id) {
-        state.coordinates.remove(edit.coordinate());
+    if let Some((edit, author, _, _)) = state.semantics.remove(&receipt_id) {
+        state
+            .coordinates
+            .remove(&semantic::edit_coordinate(&edit, author));
     }
 }
 

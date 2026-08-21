@@ -178,17 +178,17 @@ fn validate_materializations(
 
 fn validate_semantic(
     receipt: &Receipt,
-    (edit, current_source, failed_source): &SemanticCustody,
+    (edit, author, current_source, failed_source): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
-    WriteIntent::edit(edit.clone(), receipt.routing.clone())?;
+    WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
     if receipt.is_terminal()
-        || receipt.current.event.author() != edit.actor()
+        || receipt.current.event.author() != *author
         || receipt
             .current
             .event
             .coordinate()
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?
-            != *edit.coordinate()
+            != crate::semantic::edit_coordinate(edit, *author)
         || receipt.current.publication.materialization_source != current_source.map(|(id, _)| id)
         || current_source.is_some_and(|(_, time)| time >= receipt.current.event.created_at())
     {

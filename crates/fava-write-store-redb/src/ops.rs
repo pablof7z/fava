@@ -53,7 +53,7 @@ impl WriteStore for RedbWriteStore {
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
-            WritePayload::Edit(_) => {
+            WritePayload::Edit { .. } => {
                 return Err(WriteStoreError::Refused(
                     "replaceable-event edit requires materialization before acceptance".to_owned(),
                 ));
@@ -166,6 +166,7 @@ impl WriteStore for RedbWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
+            fava_write::PublicKey,
             Option<(EventId, fava_write::Timestamp)>,
             Option<EventId>,
         )>,

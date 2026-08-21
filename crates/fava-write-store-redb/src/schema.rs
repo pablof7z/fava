@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use fava_state::EventCoordinate;
-use fava_write::{EventId, Receipt, ReceiptId, ReplaceableEventEdit, Timestamp};
+use fava_write::{EventId, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, Timestamp};
 use fava_write_store::WriteStoreError;
 use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const NEXT_ID: &str = "next_id";
 const SCHEMA_VERSION_KEY: &str = "schema_version";
-const SCHEMA_VERSION: u64 = 1;
+const SCHEMA_VERSION: u64 = 2;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PersistedReceipt {
@@ -23,6 +23,7 @@ struct PersistedReceipt {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PersistedSemantic {
     edit: ReplaceableEventEdit,
+    author: PublicKey,
     current_source: Option<(EventId, Timestamp)>,
     failed_source: Option<EventId>,
 }
@@ -31,10 +32,13 @@ impl PersistedReceipt {
     fn from_current(receipt: &Receipt, semantic: Option<&SemanticCustody>) -> Self {
         Self {
             receipt: receipt.clone(),
-            semantic: semantic.map(|(edit, current_source, failed_source)| PersistedSemantic {
-                edit: edit.clone(),
-                current_source: *current_source,
-                failed_source: *failed_source,
+            semantic: semantic.map(|(edit, author, current_source, failed_source)| {
+                PersistedSemantic {
+                    edit: edit.clone(),
+                    author: *author,
+                    current_source: *current_source,
+                    failed_source: *failed_source,
+                }
             }),
         }
     }
@@ -117,7 +121,10 @@ pub(super) fn load(
                 ));
             }
             if coordinates
-                .insert(semantic.edit.coordinate().clone(), receipt_id)
+                .insert(
+                    crate::semantic::edit_coordinate(&semantic.edit, semantic.author),
+                    receipt_id,
+                )
                 .is_some()
             {
                 return Err(WriteStoreError::Refused(
@@ -128,6 +135,7 @@ pub(super) fn load(
                 receipt_id,
                 (
                     semantic.edit,
+                    semantic.author,
                     semantic.current_source,
                     semantic.failed_source,
                 ),

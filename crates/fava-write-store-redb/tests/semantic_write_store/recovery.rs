@@ -201,7 +201,14 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
 }
 
 #[test]
-fn schema_v1_reconstruction_refuses_every_malformed_invariant() {
+fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
+    assert_row_mutation_refused("semantic-author", |row| {
+        set(
+            row,
+            "/semantic/author",
+            serde_json::to_value(Keys::generate().public_key()).unwrap(),
+        );
+    });
     assert_row_mutation_refused("publication-identity", |row| {
         set(row, "/receipt/current/publication/receipt_id", json!(99));
     });
@@ -299,7 +306,7 @@ fn schema_v1_reconstruction_refuses_every_malformed_invariant() {
 }
 
 #[test]
-fn schema_version_refusal_precedes_malformed_row_decode() {
+fn schema_v1_refusal_precedes_malformed_row_decode() {
     let path = valid_path("version-before-row");
     let database = Database::create(&path).unwrap();
     let mut transaction = database.begin_write().unwrap();
@@ -308,7 +315,7 @@ fn schema_version_refusal_precedes_malformed_row_decode() {
         transaction
             .open_table(META)
             .unwrap()
-            .insert("schema_version", u64::MAX)
+            .insert("schema_version", 1)
             .unwrap();
     }
     {
@@ -331,7 +338,7 @@ fn schema_version_refusal_precedes_malformed_row_decode() {
 }
 
 #[test]
-fn schema_v1_accepts_attributed_empty_source_failure() {
+fn schema_v2_accepts_attributed_empty_source_failure() {
     let path = unique_path("empty-source-failure");
     let keys = Keys::generate();
     let base = source(&keys, 10, "base");

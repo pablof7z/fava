@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
+    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capacity};
@@ -45,13 +45,14 @@ impl RedbWriteStore {
             ));
         }
         let (payload, routing) = intent.into_parts();
-        let WritePayload::Edit(edit) = payload else {
+        let WritePayload::Edit { edit, author } = payload else {
             return Err(WriteStoreError::Refused(
                 "semantic acceptance requires a replaceable-event edit".to_owned(),
             ));
         };
-        let selected_source = validate_materialization(&edit, &event, source, &routing)?;
-        if let Some(receipt_id) = state.coordinates.get(edit.coordinate()) {
+        let coordinate = edit_coordinate(&edit, author);
+        let selected_source = validate_materialization(&edit, author, &event, source, &routing)?;
+        if let Some(receipt_id) = state.coordinates.get(&coordinate) {
             let receipt = state.receipts.get(receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
             })?;
@@ -59,7 +60,8 @@ impl RedbWriteStore {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
             if stored.0 == edit
-                && stored.1 == selected_source
+                && stored.1 == author
+                && stored.2 == selected_source
                 && receipt.routing == routing
                 && receipt.current.event == EventValue::Unsigned(event)
             {
@@ -110,14 +112,12 @@ impl RedbWriteStore {
             desired_destinations,
             attempts: std::collections::BTreeMap::new(),
         };
-        let custody = (edit, selected_source, None);
+        let custody = (edit, author, selected_source, None);
         let next_revision = next_revision(&state)?;
         self.commit_accept(next_identity, &receipt, Some(&custody))?;
         state.next_identity = next_identity;
         state.revision = next_revision;
-        state
-            .coordinates
-            .insert(custody.0.coordinate().clone(), receipt_id);
+        state.coordinates.insert(coordinate, receipt_id);
         state.semantics.insert(receipt_id, custody);
         state.receipts.insert(receipt_id, receipt.clone());
         self.publish_snapshot(&state);
@@ -175,11 +175,12 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, current_source, _) =
+        let (edit, author, current_source, _) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
-        let selected_source = validate_materialization(&edit, &event, source, &receipt.routing)?;
+        let selected_source =
+            validate_materialization(&edit, author, &event, source, &receipt.routing)?;
         require_current(
             &receipt,
             write_id,
@@ -251,7 +252,7 @@ impl RedbWriteStore {
         updated.outcome = ReceiptOutcome::Open;
         updated.desired_destinations = correction_destinations;
         updated.attempts.clear();
-        let custody: SemanticCustody = (edit, selected_source, None);
+        let custody: SemanticCustody = (edit, author, selected_source, None);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -278,7 +279,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, current_source, current_failed_source) =
+        let (edit, author, current_source, current_failed_source) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
@@ -289,7 +290,7 @@ impl RedbWriteStore {
             expected_source,
             current_source,
         )?;
-        let failed_source = validate_source(&edit, source)?;
+        let failed_source = validate_source(&edit, author, source)?;
         require_failure_source(current_source, failed_source)?;
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
@@ -305,7 +306,7 @@ impl RedbWriteStore {
         }
         let mut updated = receipt;
         updated.current.publication.materialization_failure = Some(failure);
-        let custody: SemanticCustody = (edit, current_source, failed_source_id);
+        let custody: SemanticCustody = (edit, author, current_source, failed_source_id);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -323,6 +324,7 @@ impl RedbWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
+            PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
@@ -332,10 +334,17 @@ impl RedbWriteStore {
         Ok(state
             .semantics
             .iter()
-            .filter_map(|(receipt_id, (edit, source, failed_source))| {
+            .filter_map(|(receipt_id, (edit, author, source, failed_source))| {
                 state.receipts.get(receipt_id).and_then(|receipt| {
-                    (!receipt.is_terminal())
-                        .then(|| (receipt.clone(), edit.clone(), *source, *failed_source))
+                    (!receipt.is_terminal()).then(|| {
+                        (
+                            receipt.clone(),
+                            edit.clone(),
+                            *author,
+                            *source,
+                            *failed_source,
+                        )
+                    })
                 })
             })
             .collect())
@@ -344,17 +353,20 @@ impl RedbWriteStore {
 
 fn validate_materialization(
     edit: &ReplaceableEventEdit,
+    author: PublicKey,
     event: &UnsignedEvent,
     source: Option<&Event>,
     routing: &WriteRouting,
 ) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
     WriteIntent::event(event.clone(), routing.clone())?;
-    if event.pubkey != edit.actor() || event_coordinate_of_unsigned(event)? != *edit.coordinate() {
+    if event.pubkey != author
+        || event_coordinate_of_unsigned(event)? != edit_coordinate(edit, author)
+    {
         return Err(WriteStoreError::Refused(
             "materialization actor or coordinate does not match edit".to_owned(),
         ));
     }
-    let selected = validate_source(edit, source)?;
+    let selected = validate_source(edit, author, source)?;
     if selected.is_some_and(|(_, source_time)| source_time >= event.created_at) {
         return Err(WriteStoreError::Refused(
             "materialization is not newer than its selected source".to_owned(),
@@ -365,6 +377,7 @@ fn validate_materialization(
 
 fn validate_source(
     edit: &ReplaceableEventEdit,
+    author: PublicKey,
     source: Option<&Event>,
 ) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
     let Some(source) = source else {
@@ -378,13 +391,21 @@ fn validate_source(
         source.pubkey,
         source.kind,
         source.tags.as_slice(),
-    ) != *edit.coordinate()
+    ) != edit_coordinate(edit, author)
     {
         return Err(WriteStoreError::Refused(
             "materialization source does not match edit coordinate".to_owned(),
         ));
     }
     Ok(Some((source.id, source.created_at)))
+}
+
+pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+    EventCoordinate::Replaceable {
+        author,
+        kind: edit.kind(),
+        identifier: edit.identifier().map(str::to_owned),
+    }
 }
 
 fn attributed_failure(

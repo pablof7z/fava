@@ -1,7 +1,18 @@
-use fava_write::{EventId, MaterializationId, ReceiptId, Timestamp};
+use fava_state::EventCoordinate;
+use fava_write::{
+    EventId, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit, Timestamp,
+};
 use fava_write_store::WriteStoreError;
 
 use crate::semantic::WriteState;
+
+pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+    EventCoordinate::Replaceable {
+        author,
+        kind: edit.kind(),
+        identifier: edit.identifier().map(str::to_owned),
+    }
+}
 
 pub(super) fn attributed_failure(
     materialization_id: MaterializationId,
@@ -38,8 +49,8 @@ pub(super) fn active_count(state: &WriteState) -> usize {
 }
 
 pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
-    if let Some((edit, _, _)) = state.edits.remove(&receipt_id) {
-        state.coordinates.remove(edit.coordinate());
+    if let Some((edit, author, _, _)) = state.edits.remove(&receipt_id) {
+        state.coordinates.remove(&edit_coordinate(&edit, author));
     }
 }
 

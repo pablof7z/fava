@@ -11,8 +11,8 @@ use fava_query::{
 use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
+    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
@@ -106,7 +106,7 @@ impl WriteStore for MemoryWriteStore {
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
-            WritePayload::Edit(_) => {
+            WritePayload::Edit { .. } => {
                 return Err(WriteStoreError::Refused(
                     "replaceable-event edit requires materialization before acceptance".to_owned(),
                 ));
@@ -217,6 +217,7 @@ impl WriteStore for MemoryWriteStore {
         Vec<(
             Receipt,
             ReplaceableEventEdit,
+            PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
