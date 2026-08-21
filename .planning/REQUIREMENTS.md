@@ -97,15 +97,15 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 
 ### Semantic Writes and Capabilities
 
-- [ ] **CAP-01**: Protocol capability crates expose ordinary event values or semantic replaceable-event edits, including opposing operations, without signing, routing, publishing, or owning receipts.
-- [ ] **CAP-02**: The accepted write resolves and persists the author before materialization, and every resulting event generation uses that frozen author while the edit itself carries none.
-- [ ] **CAP-03**: A first-value semantic operation can materialize when no prior replaceable event exists.
-- [ ] **CAP-04**: A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
-- [ ] **CAP-05**: One write and receipt identity remains stable across materialization generations.
-- [ ] **CAP-06**: Signer, route, publisher, and delivery completions for retired materialization generations are attributable and inert.
-- [ ] **CAP-07**: At least two unrelated protocol capability crates prove the semantic-edit contract is not shaped around one NIP.
-- [ ] **CAP-08**: Adding capability N+1 changes only its crate and selected assembly/artifact metadata, with zero universal-core behavior changes.
-- [ ] **CAP-09**: Raw arbitrary and future Nostr event kinds remain usable without adding universal-core switches over event-kind meaning.
+- [x] **CAP-01**: Protocol capability crates expose ordinary event values or semantic replaceable-event edits, including opposing operations, without signing, routing, publishing, or owning receipts.
+- [x] **CAP-02**: The accepted write resolves and persists the author before materialization, and every resulting event generation uses that frozen author while the edit itself carries none.
+- [x] **CAP-03**: A first-value semantic operation can materialize when no prior replaceable event exists.
+- [x] **CAP-04**: A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
+- [x] **CAP-05**: One write and receipt identity remains stable across materialization generations.
+- [x] **CAP-06**: Signer, route, publisher, and delivery completions for retired materialization generations are attributable and inert.
+- [x] **CAP-07**: At least two unrelated protocol capability crates prove the semantic-edit contract is not shaped around one NIP.
+- [x] **CAP-08**: Adding capability N+1 changes only its crate and selected assembly/artifact metadata, with zero universal-core behavior changes.
+- [x] **CAP-09**: Raw arbitrary and future Nostr event kinds remain usable without adding universal-core switches over event-kind meaning.
 
 ### Authentication, Hostility, and Bounds
 
@@ -269,15 +269,15 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | WRITE-21 | Phase 6 | Complete |
 | WRITE-22 | Phase 6 | Complete |
 | WRITE-23 | Phase 6 | Complete |
-| CAP-01 | Phase 7 | Pending |
-| CAP-02 | Phase 7 | Pending |
-| CAP-03 | Phase 7 | Pending |
-| CAP-04 | Phase 7 | Pending |
-| CAP-05 | Phase 7 | Pending |
-| CAP-06 | Phase 7 | Pending |
-| CAP-07 | Phase 7 | Pending |
-| CAP-08 | Phase 7 | Pending |
-| CAP-09 | Phase 7 | Pending |
+| CAP-01 | Phase 7 | Complete |
+| CAP-02 | Phase 7 | Complete |
+| CAP-03 | Phase 7 | Complete |
+| CAP-04 | Phase 7 | Complete |
+| CAP-05 | Phase 7 | Complete |
+| CAP-06 | Phase 7 | Complete |
+| CAP-07 | Phase 7 | Complete |
+| CAP-08 | Phase 7 | Complete |
+| CAP-09 | Phase 7 | Complete |
 | HARD-01 | Phase 8 | Pending |
 | HARD-02 | Phase 8 | Pending |
 | HARD-03 | Phase 8 | Pending |
