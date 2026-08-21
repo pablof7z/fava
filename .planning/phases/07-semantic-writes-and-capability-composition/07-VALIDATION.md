@@ -100,7 +100,7 @@ bookmark/unbookmark are distinct opposing edits.
 
 ## Dependency and vocabulary gates
 
-- NIP-02 normal dependencies: exactly `fava-state,fava-write`.
+- NIP-02 normal dependencies: exactly `fava-write`.
 - Bookmarks normal dependencies: exactly `fava-state,fava-write`.
 - Canary normal dependencies explicitly include both protocol crates.
 - External capability normal dependencies: exactly `fava`.
