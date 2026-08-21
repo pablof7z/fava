@@ -45,12 +45,16 @@ cargo run --manifest-path apps/canary/Cargo.toml -- \
   run protocol-crate-n-plus-one --seed <unique-seed>
 ```
 
-Each run writes `semantic.json`, a bounded event log, a report, and a manifest
-with artifact hashes. First-value evidence includes the stable write/receipt,
-materialization, exact route, publication attempt, public-query result, and
-cache absence. Rematerialization evidence includes the qualified source,
-current and retired materializations, preserved fields, and one publication.
-Inverse evidence includes both final events, all ten stable receipt IDs, empty
-target counts, adjacent empty operations, and exact publication count. N+1
-evidence records the independent public-only capability, raw future-kind proof,
-and absence from the product dependency graph. Any missing proof exits nonzero.
+Each successful run writes `semantic.json`, a bounded event log, a report, and
+a manifest with artifact hashes. Every publication record correlates its exact
+write, receipt, materialization, event, relay session, and attempt number.
+First-value events replay to identical signed bytes and IDs for the same seed.
+Rematerialization evidence includes the qualified source, explicit processing
+acknowledgements for current and stale successful signing completions, preserved
+fields, and zero stale effects. Inverse evidence includes both final events and
+all ten correlated attempts. N+1 evidence records locked Cargo reachability,
+Bazel product reachability, and owned-child reaping around the independent
+public-only capability and raw future-kind proof. A failed run retains bounded
+`failure.json`, `replay.json`, report, event log, and hashed manifest evidence;
+the replay record names the working directory, seed, command, and a fresh output
+directory. Any missing proof exits nonzero.
