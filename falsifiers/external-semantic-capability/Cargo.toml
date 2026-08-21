@@ -1,0 +1,25 @@
+[workspace]
+
+[package]
+name = "fava-external-semantic-capability-proof"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fava = { path = "../../crates/fava" }
+
+[dev-dependencies]
+fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
+fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
+fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
+fava-query-standard = { path = "../../crates/fava-query-standard" }
+fava-signer-local = { path = "../../crates/fava-signer-local" }
+fava-state = { path = "../../crates/fava-state" }
+fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
+fava-transport = { path = "../../crates/fava-transport" }
+fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
+nostr = { version = "=0.45.3", default-features = false, features = ["std", "os-rng"] }
+serde_json = "=1.0.151"
+tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
+
