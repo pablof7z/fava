@@ -28,6 +28,8 @@ members = [
     "crates/fava-subscriptions-standard",
     "crates/fava-signer",
     "crates/fava-auth",
+    "crates/fava-nip11",
+    "crates/fava-nip11-http",
     "crates/fava-signer-local",
     "crates/fava-publisher",
     "crates/fava-publisher-nip01",
@@ -65,6 +67,8 @@ fava-router-testkit = { path = "crates/fava-router-testkit" }
 fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
 fava-signer = { path = "crates/fava-signer" }
 fava-auth = { path = "crates/fava-auth" }
+fava-nip11 = { path = "crates/fava-nip11" }
+fava-nip11-http = { path = "crates/fava-nip11-http" }
 fava-signer-local = { path = "crates/fava-signer-local" }
 fava-publisher = { path = "crates/fava-publisher" }
 fava-publisher-nip01 = { path = "crates/fava-publisher-nip01" }
@@ -86,6 +90,10 @@ redb = "=4.2.0"
 thiserror = "=2.0.20"
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "=0.30.0", features = ["rustls-tls-webpki-roots"] }
+tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "=1.0.9"
+httparse = "=1.10.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

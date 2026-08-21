@@ -5,9 +5,10 @@ use std::num::NonZeroUsize;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    RelayDemand, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    RelayDemand, RelayLimits, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    enforce_limits,
 };
-use fava_wire::{ClientMessage, SubscriptionId, encode_client};
+use fava_wire::{ClientMessage, SubscriptionId};
 use nostr::filter::Filter;
 
 /// Exact subscription planner that groups compatible author filters.
@@ -40,6 +41,7 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
     fn plan(
         &self,
         relay: &RelaySessionKey,
+        limits: &RelayLimits,
         demand: &[RelayDemand],
     ) -> Result<SubscriptionPlan, SubscriptionPlanError> {
         if demand.is_empty() {
@@ -62,31 +64,21 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
                 });
             }
         }
-        if groups.len() > self.max_subscriptions.get() {
-            return Err(SubscriptionPlanError::TooManySubscriptions {
-                required: groups.len(),
-                maximum: self.max_subscriptions.get(),
-            });
-        }
-
         let mut messages = Vec::with_capacity(groups.len());
         let mut attribution = BTreeMap::new();
         let mut logical = BTreeMap::new();
         for group in groups {
             let message = ClientMessage::req(group.wire_id.clone(), group.filter.clone());
-            let bytes = encode_client(&message)
-                .map_err(|error| SubscriptionPlanError::Encoding(error.to_string()))?
-                .len();
-            if bytes > self.max_frame_bytes.get() {
-                return Err(SubscriptionPlanError::FrameTooLarge {
-                    bytes,
-                    maximum: self.max_frame_bytes.get(),
-                });
-            }
             attribution.insert(group.wire_id.clone(), group.filter);
             logical.insert(group.wire_id, group.logical);
             messages.push(message);
         }
+        enforce_limits(
+            limits,
+            self.max_subscriptions.get(),
+            self.max_frame_bytes.get(),
+            &messages,
+        )?;
         Ok(SubscriptionPlan {
             relay: relay.clone(),
             messages,

@@ -1,19 +1,16 @@
 [package]
-name = "fava-subscriptions-standard"
+name = "fava-nip11"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-publisher.workspace = true
 fava-state.workspace = true
 fava-subscriptions.workspace = true
-fava-wire.workspace = true
-nostr.workspace = true
+serde.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies]
-fava-query.workspace = true
-nostr = { workspace = true, features = ["os-rng"] }
+thiserror.workspace = true
 
 [lints]
 workspace = true

@@ -282,6 +282,7 @@ dependencies = [
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-ingest",
+ "fava-nip11",
  "fava-observe",
  "fava-publication",
  "fava-publisher",
@@ -297,6 +298,7 @@ dependencies = [
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
+ "fava-subscriptions-standard",
  "fava-transport",
  "fava-wire",
  "fava-write",
@@ -382,6 +384,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip11"
+version = "0.1.0"
+dependencies = [
+ "fava-publisher",
+ "fava-state",
+ "fava-subscriptions",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "fava-nip11-http"
+version = "0.1.0"
+dependencies = [
+ "fava-nip11",
+ "fava-state",
+ "httparse",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots 1.0.9",
+]
+
+[[package]]
 name = "fava-nip65"
 version = "0.1.0"
 dependencies = [
@@ -430,6 +457,7 @@ name = "fava-publisher-nip01"
 version = "0.1.0"
 dependencies = [
  "fava-auth",
+ "fava-nip11",
  "fava-publisher",
  "fava-transport",
  "fava-wire",
@@ -572,6 +600,7 @@ dependencies = [
 name = "fava-subscriptions-standard"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "fava-subscriptions",
  "fava-wire",
@@ -1158,6 +1187,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
 dependencies = [
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",

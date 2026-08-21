@@ -8,6 +8,46 @@ use fava_wire::{ClientMessage, SubscriptionId};
 use nostr::filter::Filter;
 use thiserror::Error;
 
+/// Limits one relay declares for the requests it will accept.
+///
+/// Every field is optional and means exactly "the relay did not tell us".
+/// A missing, stale, malformed, or unsupported claim stays unknown; it never
+/// becomes an invented default. Planners combine what a relay declares with
+/// their own configured bounds and honor whichever is stricter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RelayLimits {
+    /// Largest number of concurrent wire subscriptions per session.
+    pub max_subscriptions: Option<usize>,
+    /// Largest number of filters in one REQ.
+    pub max_filters: Option<usize>,
+    /// Largest accepted frame in bytes.
+    pub max_message_length: Option<usize>,
+    /// Largest accepted subscription id in bytes.
+    pub max_subscription_id_length: Option<usize>,
+    /// Largest accepted per-filter `limit` value.
+    pub max_filter_limit: Option<usize>,
+}
+
+impl RelayLimits {
+    /// No relay claim is currently known for this relay.
+    #[must_use]
+    pub const fn unknown() -> Self {
+        Self {
+            max_subscriptions: None,
+            max_filters: None,
+            max_message_length: None,
+            max_subscription_id_length: None,
+            max_filter_limit: None,
+        }
+    }
+
+    /// Strictest of one configured bound and any relay claim.
+    #[must_use]
+    pub fn strictest(configured: usize, declared: Option<usize>) -> usize {
+        declared.map_or(configured, |declared| configured.min(declared))
+    }
+}
+
 /// One logical filter assigned to an exact Nostr subscription ID.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayDemand {
@@ -51,15 +91,16 @@ impl SubscriptionPlan {
 
 /// Replaceable mapping from logical demand to exact Nostr subscriptions.
 pub trait SubscriptionPlanner: Send + Sync {
-    /// Produce a complete exact plan for one relay session.
+    /// Produce a complete exact plan for one relay session within its limits.
     ///
     /// # Errors
     ///
     /// Returns [`SubscriptionPlanError`] when demand is empty, ambiguous, or
-    /// cannot be represented exactly.
+    /// cannot be represented exactly inside the declared and configured bounds.
     fn plan(
         &self,
         relay: &RelaySessionKey,
+        limits: &RelayLimits,
         demand: &[RelayDemand],
     ) -> Result<SubscriptionPlan, SubscriptionPlanError>;
 }
@@ -89,9 +130,106 @@ pub enum SubscriptionPlanError {
         /// Declared maximum frame size.
         maximum: usize,
     },
+    /// One exact REQ carries more filters than the relay permits.
+    #[error("REQ carries {filters} filters but relay allows {maximum}")]
+    TooManyFilters {
+        /// Exact filter count in one REQ.
+        filters: usize,
+        /// Declared maximum filter count.
+        maximum: usize,
+    },
+    /// One subscription id exceeds the relay's declared identifier length.
+    #[error("subscription id {id} uses {bytes} bytes but relay allows {maximum}")]
+    SubscriptionIdTooLong {
+        /// Exact subscription id that cannot be represented.
+        id: SubscriptionId,
+        /// Exact identifier size.
+        bytes: usize,
+        /// Declared maximum identifier size.
+        maximum: usize,
+    },
+    /// A filter result bound exceeds the relay's declared maximum.
+    #[error("filter limit {requested} exceeds relay maximum {maximum}")]
+    FilterLimitTooLarge {
+        /// Exact requested per-filter limit.
+        requested: usize,
+        /// Declared maximum per-filter limit.
+        maximum: usize,
+    },
     /// Exact Nostr REQ encoding failed before handoff.
     #[error("REQ encoding failed: {0}")]
     Encoding(String),
+}
+
+/// Refuse a candidate wire plan the relay has told us it cannot accept.
+///
+/// Every check uses the stricter of Fava's configured bound and the relay's
+/// declared claim. An unknown claim leaves Fava's own bound in force. Nothing
+/// is truncated, clamped, or renamed: an exceeded bound is an exact refusal
+/// naming the actual and maximum values, produced before any handoff.
+///
+/// # Errors
+///
+/// Returns the exact [`SubscriptionPlanError`] for the first exceeded bound.
+pub fn enforce_limits(
+    limits: &RelayLimits,
+    max_subscriptions: usize,
+    max_frame_bytes: usize,
+    messages: &[ClientMessage<'static>],
+) -> Result<(), SubscriptionPlanError> {
+    let subscription_bound = RelayLimits::strictest(max_subscriptions, limits.max_subscriptions);
+    if messages.len() > subscription_bound {
+        return Err(SubscriptionPlanError::TooManySubscriptions {
+            required: messages.len(),
+            maximum: subscription_bound,
+        });
+    }
+    let frame_bound = RelayLimits::strictest(max_frame_bytes, limits.max_message_length);
+    for message in messages {
+        let ClientMessage::Req {
+            subscription_id,
+            filters,
+        } = message
+        else {
+            continue;
+        };
+        if let Some(maximum) = limits.max_subscription_id_length
+            && subscription_id.as_str().len() > maximum
+        {
+            return Err(SubscriptionPlanError::SubscriptionIdTooLong {
+                id: subscription_id.clone().into_owned(),
+                bytes: subscription_id.as_str().len(),
+                maximum,
+            });
+        }
+        if let Some(maximum) = limits.max_filters
+            && filters.len() > maximum
+        {
+            return Err(SubscriptionPlanError::TooManyFilters {
+                filters: filters.len(),
+                maximum,
+            });
+        }
+        if let Some(maximum) = limits.max_filter_limit {
+            for filter in filters {
+                if let Some(requested) = filter.limit
+                    && requested > maximum
+                {
+                    return Err(SubscriptionPlanError::FilterLimitTooLarge { requested, maximum });
+                }
+            }
+        }
+        let bytes = fava_wire::encode_client(message)
+            .map_err(|error| SubscriptionPlanError::Encoding(error.to_string()))?
+            .len();
+        if bytes > frame_bound {
+            return Err(SubscriptionPlanError::FrameTooLarge {
+                bytes,
+                maximum: frame_bound,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Convert one public Query into one exact NIP-01 relay demand.

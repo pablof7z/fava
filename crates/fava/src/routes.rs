@@ -5,12 +5,10 @@ use fava_observe::{Observation, ObserveError};
 use fava_query::Query;
 use fava_routing::{RoutePlan, RouteRequest, RouterSession};
 use fava_state::RelaySessionKey;
-use fava_subscriptions::SubscriptionPlanner;
-use fava_transport::Transport;
 use tokio::sync::watch;
 
 use super::Fava;
-use super::relay::OpenedRelay;
+use super::relay::{OpenedRelay, RelayProviders};
 
 pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, ObserveError> {
     let planner = fava.subscription_planner.as_ref().ok_or_else(|| {
@@ -31,13 +29,14 @@ pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, Obser
     record_plan(fava, &initial);
 
     let mut observation = fava.observer.open(query.clone())?;
-    let providers = Providers {
+    let providers = RelayProviders {
         transport: Arc::clone(transport),
         planner: Arc::clone(planner),
         cache: Arc::clone(&fava.event_cache),
         diagnostics: Arc::clone(&fava.diagnostics),
         next_subscription: Arc::clone(&fava.next_subscription),
         authentication: fava.authentication.clone(),
+        relay_information: fava.relay_information.clone(),
     };
     let mut active = BTreeMap::new();
     add_relays(
@@ -62,18 +61,9 @@ pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, Obser
     Ok(observation)
 }
 
-struct Providers {
-    transport: Arc<dyn Transport>,
-    planner: Arc<dyn SubscriptionPlanner>,
-    cache: Arc<dyn fava_event_cache::EventCache>,
-    diagnostics: Arc<fava_diagnostics::Diagnostics>,
-    next_subscription: Arc<std::sync::atomic::AtomicU64>,
-    authentication: Option<Arc<fava_auth::Authentication>>,
-}
-
 async fn run(
     query: Query,
-    providers: Providers,
+    providers: RelayProviders,
     mut routes: Box<dyn RouterSession>,
     mut active: BTreeMap<RelaySessionKey, watch::Sender<bool>>,
     mut cancel: watch::Receiver<bool>,
@@ -137,24 +127,13 @@ async fn run(
 
 async fn add_relays(
     query: &Query,
-    providers: &Providers,
+    providers: &RelayProviders,
     relays: Vec<RelaySessionKey>,
     active: &mut BTreeMap<RelaySessionKey, watch::Sender<bool>>,
     revision: u64,
 ) {
     for relay in relays {
-        match OpenedRelay::open(
-            relay.clone(),
-            query.clone(),
-            Arc::clone(&providers.transport),
-            Arc::clone(&providers.planner),
-            Arc::clone(&providers.cache),
-            Arc::clone(&providers.diagnostics),
-            Arc::clone(&providers.next_subscription),
-            providers.authentication.clone(),
-        )
-        .await
-        {
+        match OpenedRelay::open(relay.clone(), query.clone(), providers.clone()).await {
             Ok(opened) => {
                 let (cancel, cancel_rx) = watch::channel(false);
                 active.insert(relay, cancel);

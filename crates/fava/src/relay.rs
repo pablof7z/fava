@@ -7,9 +7,10 @@ use fava_auth::{AUTHENTICATION_DEADLINE, Authentication, AuthenticationOutcome, 
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_ingest::admit_subscription_event;
+use fava_nip11::{RelayInformationFetcher, RelayLimitation};
 use fava_query::Query;
 use fava_state::{RelaySessionKey, Timestamp};
-use fava_subscriptions::{SubscriptionPlan, SubscriptionPlanner, demand_for_query};
+use fava_subscriptions::{RelayLimits, SubscriptionPlan, SubscriptionPlanner, demand_for_query};
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
 use nostr::event::EventId;
@@ -17,15 +18,49 @@ use nostr::filter::Filter;
 use nostr::key::PublicKey;
 use tokio::sync::watch;
 
+/// Providers one live relay task needs, selected once by the assembly.
+#[derive(Clone)]
+pub(super) struct RelayProviders {
+    pub(super) transport: Arc<dyn Transport>,
+    pub(super) planner: Arc<dyn SubscriptionPlanner>,
+    pub(super) cache: Arc<dyn EventCache>,
+    pub(super) diagnostics: Arc<Diagnostics>,
+    pub(super) next_subscription: Arc<AtomicU64>,
+    pub(super) authentication: Option<Arc<Authentication>>,
+    pub(super) relay_information: Option<Arc<dyn RelayInformationFetcher>>,
+}
+
+impl RelayProviders {
+    /// Resolve the limits this relay currently declares.
+    ///
+    /// A relay that is unreachable for its information document, or that
+    /// answers with something Fava cannot interpret, leaves every limit
+    /// unknown. Fava's own configured bounds still apply; no relay claim is
+    /// invented.
+    async fn limits(&self, session_key: &RelaySessionKey) -> RelayLimits {
+        let Some(fetcher) = self.relay_information.as_ref() else {
+            return RelayLimits::unknown();
+        };
+        match fetcher.get(session_key.relay.clone()).await {
+            Ok(document) => {
+                let limits = document.limitation.planning();
+                self.diagnostics
+                    .relay_limits(session_key.clone(), describe(&document.limitation));
+                limits
+            }
+            Err(error) => {
+                self.diagnostics
+                    .relay_limits(session_key.clone(), format!("unknown: {error}"));
+                RelayLimits::unknown()
+            }
+        }
+    }
+}
+
 pub(super) struct OpenedRelay {
     session_key: RelaySessionKey,
     query: Query,
-    transport: Arc<dyn Transport>,
-    planner: Arc<dyn SubscriptionPlanner>,
-    cache: Arc<dyn EventCache>,
-    diagnostics: Arc<Diagnostics>,
-    next_subscription: Arc<AtomicU64>,
-    authentication: Option<Arc<Authentication>>,
+    providers: RelayProviders,
     session: Arc<dyn RelaySession>,
     attribution: BTreeMap<SubscriptionId, Filter>,
     demand: Vec<ClientMessage<'static>>,
@@ -33,35 +68,16 @@ pub(super) struct OpenedRelay {
 }
 
 impl OpenedRelay {
-    #[allow(clippy::too_many_arguments)]
     pub(super) async fn open(
         session_key: RelaySessionKey,
         query: Query,
-        transport: Arc<dyn Transport>,
-        planner: Arc<dyn SubscriptionPlanner>,
-        cache: Arc<dyn EventCache>,
-        diagnostics: Arc<Diagnostics>,
-        next_subscription: Arc<AtomicU64>,
-        authentication: Option<Arc<Authentication>>,
+        providers: RelayProviders,
     ) -> Result<Self, String> {
-        let established = establish(
-            &session_key,
-            &query,
-            transport.as_ref(),
-            planner.as_ref(),
-            diagnostics.as_ref(),
-            next_subscription.as_ref(),
-        )
-        .await?;
+        let established = establish(&session_key, &query, &providers).await?;
         Ok(Self {
             session_key,
             query,
-            transport,
-            planner,
-            cache,
-            diagnostics,
-            next_subscription,
-            authentication,
+            providers,
             session: established.session,
             attribution: established.attribution,
             demand: established.demand,
@@ -72,7 +88,7 @@ impl OpenedRelay {
     pub(super) async fn abort(self) {
         withdraw(
             self.session.as_ref(),
-            self.diagnostics.as_ref(),
+            self.providers.diagnostics.as_ref(),
             &self.attribution,
         )
         .await;
@@ -86,7 +102,7 @@ impl OpenedRelay {
                     if changed.is_err() || *cancel.borrow_and_update() {
                         withdraw(
                             self.session.as_ref(),
-                            self.diagnostics.as_ref(),
+                            self.providers.diagnostics.as_ref(),
                             &self.attribution,
                         ).await;
                         return;
@@ -96,7 +112,7 @@ impl OpenedRelay {
                     match inbound {
                         Ok(frame) => self.handle_frame(&frame).await,
                         Err(error) => {
-                            self.diagnostics.failed(
+                            self.providers.diagnostics.failed(
                                 self.session_key.clone(),
                                 self.session.generation(),
                                 error.to_string(),
@@ -116,7 +132,7 @@ impl OpenedRelay {
         let message = match decode_relay(frame) {
             Ok(message) => message,
             Err(error) => {
-                self.diagnostics.failed(
+                self.providers.diagnostics.failed(
                     self.session_key.clone(),
                     generation,
                     format!("invalid relay message: {error}"),
@@ -138,8 +154,8 @@ impl OpenedRelay {
             }
             message => handle_message(
                 self.session.as_ref(),
-                self.cache.as_ref(),
-                self.diagnostics.as_ref(),
+                self.providers.cache.as_ref(),
+                self.providers.diagnostics.as_ref(),
                 &self.attribution,
                 message,
             ),
@@ -153,15 +169,16 @@ impl OpenedRelay {
     /// relay-access identities are untouched.
     async fn answer_challenge(&mut self, challenge: String) {
         let generation = self.session.generation();
-        self.diagnostics
+        self.providers
+            .diagnostics
             .authentication_required(self.session_key.clone(), generation);
-        let Some(authentication) = self.authentication.clone() else {
+        let Some(authentication) = self.providers.authentication.clone() else {
             return;
         };
         let challenge = match RelayChallenge::new(self.session_key.clone(), generation, challenge) {
             Ok(challenge) => challenge,
             Err(error) => {
-                self.diagnostics.authentication_denied(
+                self.providers.diagnostics.authentication_denied(
                     self.session_key.clone(),
                     generation,
                     error.to_string(),
@@ -177,7 +194,7 @@ impl OpenedRelay {
         {
             Ok(Ok(prepared)) => prepared,
             Ok(Err(outcome)) => {
-                self.diagnostics.authentication_denied(
+                self.providers.diagnostics.authentication_denied(
                     self.session_key.clone(),
                     generation,
                     denial_reason(&outcome),
@@ -185,7 +202,7 @@ impl OpenedRelay {
                 return;
             }
             Err(_) => {
-                self.diagnostics.authentication_denied(
+                self.providers.diagnostics.authentication_denied(
                     self.session_key.clone(),
                     generation,
                     "relay authentication decision exceeded its deadline".to_owned(),
@@ -198,7 +215,7 @@ impl OpenedRelay {
                 self.pending_authentication = Some((prepared.answer, prepared.identity));
             }
             HandoffOutcome::NotHandedOff { reason } | HandoffOutcome::Ambiguous { reason } => {
-                self.diagnostics.authentication_denied(
+                self.providers.diagnostics.authentication_denied(
                     self.session_key.clone(),
                     generation,
                     reason,
@@ -219,14 +236,14 @@ impl OpenedRelay {
         let generation = self.session.generation();
         match Authentication::settle(identity, status, message) {
             AuthenticationOutcome::Accepted { identity, .. } => {
-                self.diagnostics.authenticated(
+                self.providers.diagnostics.authenticated(
                     self.session_key.clone(),
                     generation,
                     identity.to_hex(),
                 );
                 self.restore_demand().await;
             }
-            outcome => self.diagnostics.authentication_denied(
+            outcome => self.providers.diagnostics.authentication_denied(
                 self.session_key.clone(),
                 generation,
                 denial_reason(&outcome),
@@ -243,7 +260,7 @@ impl OpenedRelay {
             if let HandoffOutcome::NotHandedOff { reason } | HandoffOutcome::Ambiguous { reason } =
                 self.session.send(frame).await
             {
-                self.diagnostics.failed(
+                self.providers.diagnostics.failed(
                     self.session_key.clone(),
                     self.session.generation(),
                     format!("authenticated demand was not restored: {reason}"),
@@ -263,14 +280,7 @@ impl OpenedRelay {
                 }
                 () = tokio::time::sleep(Duration::from_millis(50)) => {}
             }
-            let reconnect = establish(
-                &self.session_key,
-                &self.query,
-                self.transport.as_ref(),
-                self.planner.as_ref(),
-                self.diagnostics.as_ref(),
-                self.next_subscription.as_ref(),
-            );
+            let reconnect = establish(&self.session_key, &self.query, &self.providers);
             let established = tokio::select! {
                 biased;
                 changed = cancel.changed() => {
@@ -289,7 +299,7 @@ impl OpenedRelay {
                     self.pending_authentication = None;
                     return true;
                 }
-                Err(error) => self.diagnostics.failed(
+                Err(error) => self.providers.diagnostics.failed(
                     self.session_key.clone(),
                     self.session.generation(),
                     format!("reconnect refused: {error}"),
@@ -309,17 +319,25 @@ struct Established {
 async fn establish(
     session_key: &RelaySessionKey,
     query: &Query,
-    transport: &dyn Transport,
-    planner: &dyn SubscriptionPlanner,
-    diagnostics: &Diagnostics,
-    next_subscription: &AtomicU64,
+    providers: &RelayProviders,
 ) -> Result<Established, String> {
-    let subscription = allocate_subscription(next_subscription)?;
-    let plan = planner
-        .plan(session_key, &[demand_for_query(subscription, query)])
-        .map_err(|error| error.to_string())?;
+    let diagnostics = providers.diagnostics.as_ref();
+    let limits = providers.limits(session_key).await;
+    let subscription = allocate_subscription(providers.next_subscription.as_ref())?;
+    let plan = providers
+        .planner
+        .plan(
+            session_key,
+            &limits,
+            &[demand_for_query(subscription, query)],
+        )
+        .map_err(|error| {
+            diagnostics.relay_limit_shortfall(session_key.clone(), error.to_string());
+            error.to_string()
+        })?;
     validate_plan(session_key, &plan)?;
-    let session = transport
+    let session = providers
+        .transport
         .open_session(session_key.clone())
         .await
         .map_err(|error| error.to_string())?;
@@ -496,5 +514,36 @@ async fn withdraw(
             session.generation(),
             error.to_string(),
         );
+    }
+}
+
+/// Exact text for the limits one relay currently declares.
+fn describe(limitation: &RelayLimitation) -> String {
+    let mut declared = Vec::new();
+    let mut record = |name: &str, value: Option<usize>| {
+        if let Some(value) = value {
+            declared.push(format!("{name}={value}"));
+        }
+    };
+    record("max_subscriptions", limitation.max_subscriptions);
+    record("max_filters", limitation.max_filters);
+    record("max_message_length", limitation.max_message_length);
+    record("max_subid_length", limitation.max_subid_length);
+    record("max_limit", limitation.max_limit);
+    record("max_content_length", limitation.max_content_length);
+    record("max_event_tags", limitation.max_event_tags);
+    if let Some(difficulty) = limitation.min_pow_difficulty {
+        declared.push(format!("min_pow_difficulty={difficulty}"));
+    }
+    if let Some(required) = limitation.auth_required {
+        declared.push(format!("auth_required={required}"));
+    }
+    if let Some(restricted) = limitation.restricted_writes {
+        declared.push(format!("restricted_writes={restricted}"));
+    }
+    if declared.is_empty() {
+        "declares no limits".to_owned()
+    } else {
+        declared.join(" ")
     }
 }

@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 fava-auth.workspace = true
+fava-nip11.workspace = true
 fava-diagnostics.workspace = true
 fava-event-cache.workspace = true
 fava-ingest.workspace = true
@@ -40,6 +41,7 @@ fava-router-fallback-relays.workspace = true
 fava-router-testkit.workspace = true
 fava-state.workspace = true
 fava-subscriptions-no-grouping.workspace = true
+fava-subscriptions-standard.workspace = true
 fava-transport.workspace = true
 fava-wire.workspace = true
 fava-write.workspace = true
