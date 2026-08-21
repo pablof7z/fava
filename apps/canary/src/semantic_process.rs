@@ -47,8 +47,13 @@ pub(super) async fn run_owned(
     let status = if let Ok(status) = wait {
         status?
     } else {
-        kill_process_group(pid).await?;
-        child.wait().await?
+        let group_kill = kill_process_group(pid).await;
+        if group_kill.is_err() {
+            child.kill().await?;
+        }
+        let status = child.wait().await?;
+        group_kill?;
+        status
     };
     let stdout = join_reader(stdout_reader).await?;
     let stderr = join_reader(stderr_reader).await?;
