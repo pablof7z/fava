@@ -107,6 +107,9 @@ pub fn demand_for_query(subscription_id: SubscriptionId, query: &Query) -> Relay
     if let Some(kinds) = &query.selection().kinds {
         filter = filter.kinds(kinds.iter().copied());
     }
+    for (key, values) in &query.selection().tag_values {
+        filter = filter.custom_tags(*key, values.iter().cloned());
+    }
     if let Some(limit) = query.result_limit() {
         filter = filter.limit(limit.get());
     }

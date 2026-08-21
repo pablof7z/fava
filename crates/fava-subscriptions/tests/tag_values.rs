@@ -10,8 +10,7 @@ fn tag(key: char) -> SingleLetterTag {
 
 fn encode_query(id: &str, query: &Query) -> String {
     let demand = demand_for_query(SubscriptionId::new(id), query);
-    encode_client(&ClientMessage::req(demand.subscription_id, demand.filter))
-        .expect("REQ encodes")
+    encode_client(&ClientMessage::req(demand.subscription_id, demand.filter)).expect("REQ encodes")
 }
 
 #[test]
