@@ -62,7 +62,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 
 ### Pending Todos
 
-None yet.
+1 pending — Evaluate pagination through query primitives (major, docs).
 
 ### Blockers/Concerns
 
