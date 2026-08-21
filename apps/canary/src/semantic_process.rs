@@ -191,4 +191,29 @@ mod tests {
         assert!(message.contains("process group"));
         assert!(message.contains("owner reaped"));
     }
+
+    #[tokio::test]
+    async fn successful_owner_cleans_descendant_with_redirected_streams() {
+        let mut command = Command::new("/bin/sh");
+        command.args([
+            "-c",
+            "sleep 30 </dev/null >/dev/null 2>/dev/null & echo DESCENDANT_PID=$!",
+        ]);
+        let output = run_owned(command, Duration::from_secs(1))
+            .await
+            .expect("successful owner remains successful after group cleanup");
+        assert!(output.status.success());
+        let descendant = String::from_utf8_lossy(&output.stdout)
+            .split("DESCENDANT_PID=")
+            .nth(1)
+            .and_then(|suffix| suffix.split_whitespace().next())
+            .expect("descendant process identifier")
+            .to_owned();
+        let status = Command::new("ps")
+            .args(["-o", "stat=", "-p", &descendant])
+            .output()
+            .expect("inspect descendant after successful owner exit");
+        let state = String::from_utf8_lossy(&status.stdout);
+        assert!(state.trim().is_empty() || state.trim_start().starts_with('Z'));
+    }
 }
