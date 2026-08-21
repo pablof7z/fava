@@ -25,7 +25,7 @@ async fn external_capability_composes_through_public_fava() {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let harness = harness(keys.clone());
-    let intent = explicit_intent(insert(actor, "alpha").unwrap(), &harness.relay);
+    let intent = explicit_intent(insert("alpha").unwrap(), actor, &harness.relay);
 
     let preview = harness
         .fava
@@ -213,7 +213,8 @@ async fn external_retired_completion_and_failure_preserve_current() {
     let accepted = harness
         .fava
         .publish(explicit_intent(
-            insert(actor, "alpha").unwrap(),
+            insert("alpha").unwrap(),
+            actor,
             &harness.relay,
         ))
         .expect("external edit accepts");

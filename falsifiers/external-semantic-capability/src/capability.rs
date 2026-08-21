@@ -2,12 +2,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, EventValue, Kind, PublicKey, Query, ReplaceableEventEdit,
+    Event, EventBuilder, EventValue, Kind, PublicKey, Query, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const KIND: Kind = Kind::Custom(15_001);
-const FORMAT: u32 = 1;
 const INSERT: u8 = 1;
 const REMOVE: u8 = 2;
 const MAX_ITEM_BYTES: usize = 256;
@@ -79,8 +78,8 @@ pub fn decode_external_event(
 ///
 /// Returns an existing write-intent refusal when the item is malformed or
 /// exceeds the capability's private bound.
-pub fn insert(actor: PublicKey, item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, item, INSERT, REMOVE)
+pub fn insert(item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(item, INSERT)
 }
 
 /// Construct one bounded removal edit using public Fava values.
@@ -89,8 +88,8 @@ pub fn insert(actor: PublicKey, item: &str) -> Result<ReplaceableEventEdit, Writ
 ///
 /// Returns an existing write-intent refusal when the item is malformed or
 /// exceeds the capability's private bound.
-pub fn remove(actor: PublicKey, item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, item, REMOVE, INSERT)
+pub fn remove(item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(item, REMOVE)
 }
 
 /// Return the capability provider behind the public neutral contract.
@@ -99,25 +98,9 @@ pub fn selected_materializer() -> Arc<dyn ReplaceableEventMaterializer> {
     Arc::new(ExternalSetMaterializer)
 }
 
-fn edit(
-    actor: PublicKey,
-    item: &str,
-    operation: u8,
-    inverse: u8,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+fn edit(item: &str, operation: u8) -> Result<ReplaceableEventEdit, WriteIntentError> {
     let change = encode_action(operation, item)?;
-    let inverse = encode_action(inverse, item)?;
-    ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind: KIND,
-            identifier: None,
-        },
-        FORMAT,
-        change,
-        inverse,
-    )
+    ReplaceableEventEdit::new(KIND, None, change)
 }
 
 fn encode_action(operation: u8, item: &str) -> Result<Vec<u8>, WriteIntentError> {
@@ -144,13 +127,8 @@ fn decode_action(bytes: &[u8]) -> Result<(u8, &str), WriteIntentError> {
     Ok((*operation, item))
 }
 
-fn validate_pair(edit: &ReplaceableEventEdit) -> Result<(u8, String), WriteIntentError> {
+fn validate_change(edit: &ReplaceableEventEdit) -> Result<(u8, String), WriteIntentError> {
     let (operation, item) = decode_action(edit.change())?;
-    let (inverse, inverse_item) = decode_action(edit.inverse_change())?;
-    if inverse_item != item || !matches!((operation, inverse), (INSERT, REMOVE) | (REMOVE, INSERT))
-    {
-        return Err(edit_refusal());
-    }
     Ok((operation, item.to_owned()))
 }
 
@@ -185,21 +163,13 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.format() == FORMAT
-            && matches!(
-                edit.coordinate(),
-                EventCoordinate::Replaceable {
-                    author,
-                    kind,
-                    identifier: None,
-                } if *author == edit.actor() && *kind == KIND
-            )
-            && validate_pair(edit).is_ok()
+        edit.kind() == KIND && edit.identifier().is_none() && validate_change(edit).is_ok()
     }
 
     fn materialize(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
@@ -207,14 +177,14 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
             return Err(edit_refusal());
         }
         if let Some(source) = source
-            && (source.pubkey != edit.actor() || source.kind != KIND)
+            && (source.pubkey != author || source.kind != KIND)
         {
             return Err(WriteIntentError::InvalidEvent(
                 "external capability source has the wrong coordinate".to_owned(),
             ));
         }
         let (mut items, preserved) = decode_source(source)?;
-        let (operation, item) = validate_pair(edit)?;
+        let (operation, item) = validate_change(edit)?;
         match operation {
             INSERT => {
                 items.insert(item);
@@ -237,7 +207,7 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
             )
         });
         validate_bounds(&content, tag_count, tag_shapes)?;
-        let mut builder = EventBuilder::new(edit.actor(), KIND)
+        let mut builder = EventBuilder::new(author, KIND)
             .created_at(created_at)
             .content(content);
         if let Some(source) = source {

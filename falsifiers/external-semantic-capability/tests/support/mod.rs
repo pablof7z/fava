@@ -58,9 +58,14 @@ pub fn harness(keys: Keys) -> Harness {
     }
 }
 
-pub fn explicit_intent(edit: fava::ReplaceableEventEdit, relay: &RelayUrl) -> WriteIntent {
-    WriteIntent::edit(
+pub fn explicit_intent(
+    edit: fava::ReplaceableEventEdit,
+    author: fava::PublicKey,
+    relay: &RelayUrl,
+) -> WriteIntent {
+    WriteIntent::edit_as(
         edit,
+        author,
         WriteRouting::Explicit(BTreeSet::from([relay.clone()])),
     )
     .expect("external edit intent")

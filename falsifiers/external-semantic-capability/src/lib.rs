@@ -12,21 +12,19 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use fava::{
-        EventCoordinate, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp, WriteIntentError,
-    };
+    use fava::{EventValue, Kind, Query, ReplaceableEventEdit, Timestamp, WriteIntentError};
     use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
     use nostr::key::Keys;
 
     #[test]
-    fn external_first_value_inverse_and_preservation() {
+    fn external_first_value_opposing_operation_and_preservation() {
         let keys = Keys::generate();
         let actor = keys.public_key();
         let materializer = selected_materializer();
-        let add_alpha = insert(actor, "alpha").expect("bounded external edit");
+        let add_alpha = insert("alpha").expect("bounded external edit");
 
         let first = materializer
-            .materialize(&add_alpha, None, Timestamp::from(10))
+            .materialize(&add_alpha, actor, None, Timestamp::from(10))
             .expect("empty state materializes");
         assert_eq!(first.pubkey, actor);
         assert_eq!(first.kind, external_kind());
@@ -55,7 +53,7 @@ mod tests {
             )
         );
         let successor = materializer
-            .materialize(&add_alpha, Some(&source), Timestamp::from(21))
+            .materialize(&add_alpha, actor, Some(&source), Timestamp::from(21))
             .expect("current state materializes");
         assert_eq!(
             successor.content,
@@ -64,10 +62,10 @@ mod tests {
         assert_eq!(successor.tags.as_slice(), &[preserved_tag]);
 
         let successor = successor.finalize(&keys).expect("successor signs");
-        let inverse = add_alpha.inverse();
+        let remove_alpha = remove("alpha").expect("opposing edit");
         let restored = materializer
-            .materialize(&inverse, Some(&successor), Timestamp::from(22))
-            .expect("inverse materializes through the same contract");
+            .materialize(&remove_alpha, actor, Some(&successor), Timestamp::from(22))
+            .expect("opposing edit materializes through the same contract");
         assert_eq!(
             restored.content,
             "external-set-v1\nbeta\nunrelated\ncontent"
@@ -79,42 +77,44 @@ mod tests {
         let keys = Keys::generate();
         let actor = keys.public_key();
         let materializer = selected_materializer();
-        let add_alpha = insert(actor, "alpha").expect("alpha edit");
-        let add_beta = insert(actor, "beta").expect("beta edit");
+        let add_alpha = insert("alpha").expect("alpha edit");
+        let add_beta = insert("beta").expect("beta edit");
 
         let beta = materializer
-            .materialize(&add_beta, None, Timestamp::from(1))
+            .materialize(&add_beta, actor, None, Timestamp::from(1))
             .unwrap()
             .finalize(&keys)
             .unwrap();
         let alpha_then_beta = materializer
-            .materialize(&add_alpha, Some(&beta), Timestamp::from(2))
+            .materialize(&add_alpha, actor, Some(&beta), Timestamp::from(2))
             .unwrap();
         let duplicate = materializer
             .materialize(
                 &add_alpha,
+                actor,
                 Some(&alpha_then_beta.clone().finalize(&keys).unwrap()),
                 Timestamp::from(3),
             )
             .unwrap();
 
         let alpha = materializer
-            .materialize(&add_alpha, None, Timestamp::from(1))
+            .materialize(&add_alpha, actor, None, Timestamp::from(1))
             .unwrap()
             .finalize(&keys)
             .unwrap();
         let beta_then_alpha = materializer
-            .materialize(&add_beta, Some(&alpha), Timestamp::from(2))
+            .materialize(&add_beta, actor, Some(&alpha), Timestamp::from(2))
             .unwrap();
 
         assert_eq!(alpha_then_beta.content, "external-set-v1\nalpha,beta\n");
         assert_eq!(duplicate.content, alpha_then_beta.content);
         assert_eq!(beta_then_alpha.content, alpha_then_beta.content);
 
-        let remove_beta = remove(actor, "beta").expect("remove edit");
+        let remove_beta = remove("beta").expect("remove edit");
         let adjacent = materializer
             .materialize(
                 &remove_beta,
+                actor,
                 Some(&beta_then_alpha.finalize(&keys).unwrap()),
                 Timestamp::from(4),
             )
@@ -128,22 +128,12 @@ mod tests {
         let actor = keys.public_key();
         let materializer = selected_materializer();
 
-        assert!(insert(actor, &"x".repeat(257)).is_err());
-        let malformed_edit = ReplaceableEventEdit::new(
-            actor,
-            EventCoordinate::Replaceable {
-                author: actor,
-                kind: external_kind(),
-                identifier: None,
-            },
-            1,
-            vec![99, 0, 0],
-            vec![1, 0, 0],
-        )
-        .unwrap();
+        assert!(insert(&"x".repeat(257)).is_err());
+        let malformed_edit =
+            ReplaceableEventEdit::new(external_kind(), None, vec![99, 0, 0]).unwrap();
         assert!(
             materializer
-                .materialize(&malformed_edit, None, Timestamp::from(1))
+                .materialize(&malformed_edit, actor, None, Timestamp::from(1))
                 .is_err()
         );
 
@@ -154,7 +144,8 @@ mod tests {
         assert!(
             materializer
                 .materialize(
-                    &insert(actor, "alpha").unwrap(),
+                    &insert("alpha").unwrap(),
+                    actor,
                     Some(&malformed_source),
                     Timestamp::from(2),
                 )
@@ -167,7 +158,8 @@ mod tests {
         assert!(
             materializer
                 .materialize(
-                    &insert(actor, "alpha").unwrap(),
+                    &insert("alpha").unwrap(),
+                    actor,
                     Some(&oversized_source),
                     Timestamp::from(2),
                 )
@@ -182,7 +174,8 @@ mod tests {
         let too_many_tags = too_many_tags_builder.finalize(&keys).expect("source signs");
         assert!(matches!(
             materializer.materialize(
-                &insert(actor, "alpha").unwrap(),
+                &insert("alpha").unwrap(),
+                actor,
                 Some(&too_many_tags),
                 Timestamp::from(3),
             ),
@@ -198,7 +191,8 @@ mod tests {
             .expect("source signs");
         assert!(matches!(
             materializer.materialize(
-                &insert(actor, "alpha").unwrap(),
+                &insert("alpha").unwrap(),
+                actor,
                 Some(&nested_source),
                 Timestamp::from(4),
             ),
@@ -212,19 +206,17 @@ mod tests {
             .expect("source signs");
         assert!(matches!(
             materializer.materialize(
-                &insert(actor, "alpha").unwrap(),
+                &insert("alpha").unwrap(),
+                actor,
                 Some(&tag_heavy_source),
                 Timestamp::from(5),
             ),
             Err(WriteIntentError::TooLarge { maximum: 4_096, .. })
         ));
 
-        let coordinate = EventCoordinate::Replaceable {
-            author: actor,
-            kind: Kind::Custom(15_001),
-            identifier: None,
-        };
-        assert_eq!(insert(actor, "alpha").unwrap().coordinate(), &coordinate);
+        let edit = insert("alpha").unwrap();
+        assert_eq!(edit.kind(), Kind::Custom(15_001));
+        assert_eq!(edit.identifier(), None);
         assert_eq!(
             external_query(actor),
             Query::events().authors([actor]).kind(external_kind())
