@@ -129,11 +129,11 @@ spec_crates = ["fava-bookmarks"]
 name = "Group"
 source = "nostr"
 protocol = "NIP-29"
-meaning = "A relay-based Nostr group and its protocol events."
-owner = "fava-nip29"
+meaning = "A relay-based Nostr group and its protocol events, represented by Fava over an explicit non-empty host-relay set without merging per-relay authority."
+owner = "fava-simple-groups"
 symbols = []
 crates = []
-spec_crates = ["fava-nip29"]
+spec_crates = ["fava-simple-groups"]
 
 [[term]]
 name = "RelayList"

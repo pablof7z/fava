@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 08
-current_phase_name: Authentication, Hostile Boundaries, and Boundedness
-status: ready_to_plan
-stopped_at: Phases 06.1 and 07 verified and complete; Phase 08 is next
-last_updated: "2026-08-21T20:10:49.957Z"
+current_phase: 07.1
+current_phase_name: Universal publication vocabulary and typed NIP-02 reads
+status: Ready for phase specification
+stopped_at: Phase 07.1 inserted after Phase 7; run $gsd-spec-phase 07.1
+last_updated: "2026-08-21T20:45:19.179Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 06.1 verified and completed after the Phase 07 merge; Phase 08 is next
-state_head: cb1b698d7b3697f9fab8026e8717a1336a8c812d
+last_activity_desc: Phase 07.1 inserted after Phase 7
+state_head: 1eb3862ee87231628d4eb5935ebe2251d9e36d06
 progress:
-  total_phases: 12
+  total_phases: 14
   completed_phases: 8
   total_plans: 12
   completed_plans: 12
-  percent: 67
+  percent: 57
 ---
 
 # Project State
@@ -23,18 +23,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 08 — Authentication, Hostile Boundaries, and Boundedness
+**Current focus:** Phase 07.1 — Universal publication vocabulary and typed NIP-02 reads
 
 ## Current Position
 
-Phase: 08 (Authentication, Hostile Boundaries, and Boundedness) — NOT STARTED
+Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — NOT STARTED
 Plan: —
-Status: Ready for phase planning
-Last activity: 2026-08-21 — Phase 06.1 verified and completed after the Phase 07 merge
+Status: Ready for phase specification
+Last activity: 2026-08-21 — Phase 07.1 inserted after Phase 7
 
-Progress: [███████░░░] 67%
+Progress: [██████░░░░] 57%
 
-Phase progress is 8/12. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
+Phase progress is 8/14. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
 all authored plans and their review and verification gates.
 
 ## Performance Metrics
@@ -108,6 +108,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 ### Roadmap Evolution
 
 - Phase 06.1 inserted after Phase 6: Literal Tag-Value Query Semantics Remediation
+- Phase 07.1 inserted after Phase 7: Universal publication vocabulary and typed NIP-02 reads (URGENT)
+- Phase 07.1.1 inserted after Phase 07.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability
 
 ## Deferred Items
 
@@ -119,6 +121,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T20:10:49.957Z
-Stopped at: Phases 06.1 and 07 verified and complete; Phase 08 is next
+Last session: 2026-08-21T20:45:19.179Z
+Stopped at: Phase 07.1 inserted after Phase 7; run $gsd-spec-phase 07.1
 Resume file: None
