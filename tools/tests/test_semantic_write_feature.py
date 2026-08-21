@@ -1,4 +1,6 @@
+import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -8,9 +10,14 @@ FEATURE = ROOT / "features" / "semantic-writes.feature"
 SCENARIO = re.compile(r"^  Scenario: (?P<name>.+)$")
 MAPPING = re.compile(
     r"^  # fava:rust=(?P<package>[a-z0-9-]+)/(?P<target>[a-z0-9_]+)#"
-    r"(?P<test>[a-z][a-z0-9_]*)$"
+    r"(?P<test>[a-z][a-z0-9_]*(?:::[a-z][a-z0-9_]*)*)$"
 )
 STEP = re.compile(r"^    (?:Given|When|Then|And) (.+)$")
+STANDALONE_MANIFESTS = {
+    "external-semantic-capability-proof": (
+        ROOT / "falsifiers" / "external-semantic-capability" / "Cargo.toml"
+    ),
+}
 
 
 def parse_feature(text: str):
@@ -40,6 +47,76 @@ def parse_feature(text: str):
         if step is not None and current is not None:
             current["steps"].append(step.group(1))
     return scenarios, malformed_mappings, pending_mapping
+
+
+def validate_mapping_target(target, listed_lines, expected_test):
+    if target is None or "test" not in target.get("kind", []):
+        raise ValueError("mapping target does not resolve to a Cargo test target")
+    listed_tests = [
+        line.removesuffix(": test")
+        for line in listed_lines
+        if line.endswith(": test")
+    ]
+    if not listed_tests:
+        raise ValueError("mapping target listed zero tests")
+    if listed_tests.count(expected_test) != 1:
+        raise ValueError("mapped test must occur exactly once in Cargo --list output")
+    return expected_test
+
+
+def cargo_mapping_evidence(mapping):
+    package_name = mapping["package"]
+    manifest = STANDALONE_MANIFESTS.get(package_name, ROOT / "Cargo.toml")
+    metadata = subprocess.run(
+        [
+            "cargo",
+            "metadata",
+            "--manifest-path",
+            str(manifest),
+            "--no-deps",
+            "--format-version",
+            "1",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    packages = [
+        package
+        for package in json.loads(metadata.stdout)["packages"]
+        if package["name"] == package_name
+    ]
+    if len(packages) != 1:
+        raise ValueError("mapping package must resolve exactly once")
+    targets = [
+        target
+        for target in packages[0]["targets"]
+        if target["name"] == mapping["target"]
+    ]
+    if len(targets) != 1:
+        raise ValueError("mapping target must resolve exactly once")
+    listed = subprocess.run(
+        [
+            "cargo",
+            "test",
+            "--manifest-path",
+            str(manifest),
+            "-p",
+            package_name,
+            "--test",
+            mapping["target"],
+            "--",
+            "--list",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return validate_mapping_target(
+        targets[0], listed.stdout.splitlines(), mapping["test"]
+    )
 
 
 class SemanticWriteFeatureMappingTests(unittest.TestCase):
@@ -118,6 +195,14 @@ class SemanticWriteFeatureMappingTests(unittest.TestCase):
             with self.subTest(target=target_value, listed=listed, name=name):
                 with self.assertRaises(ValueError):
                     validate_mapping_target(target_value, listed, name)
+
+    def test_every_mapping_resolves_to_one_real_cargo_test(self):
+        for scenario in self.scenarios:
+            with self.subTest(scenario=scenario["name"]):
+                self.assertEqual(
+                    cargo_mapping_evidence(scenario["mapping"]),
+                    scenario["mapping"]["test"],
+                )
 
 
 if __name__ == "__main__":
