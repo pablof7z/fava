@@ -6,6 +6,7 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_query::SingleLetterTag;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
@@ -49,6 +50,34 @@ fn unsigned_event(
         .finalize_unsigned(keys.public_key());
     event.ensure_id();
     event
+}
+
+fn signed_event_with_tags(keys: &Keys, created_at: u64, content: &str, tags: Vec<Tag>) -> Event {
+    EventBuilder::new(Kind::TextNote, content)
+        .tags(tags)
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize(keys)
+        .expect("test event signs")
+}
+
+fn unsigned_event_with_tags(
+    keys: &Keys,
+    created_at: u64,
+    content: &str,
+    tags: Vec<Tag>,
+) -> UnsignedEvent {
+    let mut event = EventBuilder::new(Kind::TextNote, content)
+        .tags(tags)
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize_unsigned(keys.public_key());
+    event.ensure_id();
+    event
+}
+
+fn literal_tag(key: char, value: &str, later_cells: &[&str]) -> Tag {
+    let mut cells = vec![key.to_string(), value.to_owned()];
+    cells.extend(later_cells.iter().map(|cell| (*cell).to_owned()));
+    Tag::parse(cells).expect("valid literal tag")
 }
 
 fn evidence(relay: &str, observed_at: u64) -> RelayEvidence {
@@ -285,4 +314,134 @@ async fn deletion_and_expiration_update_the_same_open_query() {
         1
     );
     assert!(next_snapshot(&mut feed).await.events.is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn literal_tag_selection_preserves_exact_sources_through_public_observation() {
+    let (fava, cache, _writes) = assembly();
+    let keys = Keys::generate();
+    let signed = signed_event_with_tags(
+        &keys,
+        40,
+        "signed exact",
+        vec![
+            literal_tag('e', "café", &["ignored"]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let unsigned = unsigned_event_with_tags(
+        &keys,
+        41,
+        "unsigned exact",
+        vec![
+            literal_tag('e', "東京", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let unsigned_id = unsigned.id.expect("builder computes id");
+    let opposite_key = signed_event_with_tags(
+        &keys,
+        42,
+        "opposite key",
+        vec![
+            literal_tag('E', "café", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let missing_conjunct =
+        signed_event_with_tags(&keys, 43, "missing P", vec![literal_tag('e', "café", &[])]);
+    let wrong_value_case = unsigned_event_with_tags(
+        &keys,
+        44,
+        "wrong value case",
+        vec![
+            literal_tag('e', "CAFÉ", &[]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let wrong_value_case_id = wrong_value_case.id.expect("builder computes id");
+    let later_cell_only = unsigned_event_with_tags(
+        &keys,
+        45,
+        "later cell decoy",
+        vec![
+            literal_tag('e', "wrong", &["café"]),
+            literal_tag('P', "CaseSensitive", &[]),
+        ],
+    );
+    let later_cell_only_id = later_cell_only.id.expect("builder computes id");
+    let relay = evidence("wss://relay.example", 1);
+    cache
+        .commit(vec![
+            CacheMutation::Upsert(CachedEvent::new(signed.clone(), relay.clone())),
+            CacheMutation::Upsert(CachedEvent::new(opposite_key.clone(), relay.clone())),
+            CacheMutation::Upsert(CachedEvent::new(missing_conjunct.clone(), relay)),
+        ])
+        .expect("signed cache corpus commits");
+    let accepted = fava
+        .accept_event(EventValue::Unsigned(unsigned))
+        .expect("exact unsigned event accepts");
+    fava.accept_event(EventValue::Unsigned(wrong_value_case))
+        .expect("wrong-case decoy accepts");
+    fava.accept_event(EventValue::Unsigned(later_cell_only))
+        .expect("later-cell decoy accepts");
+    let all_ids = [
+        signed.id,
+        unsigned_id,
+        opposite_key.id,
+        missing_conjunct.id,
+        wrong_value_case_id,
+        later_cell_only_id,
+    ];
+    let e = SingleLetterTag::from_char('e').expect("lowercase tag key");
+    let upper_p = SingleLetterTag::from_char('P').expect("uppercase tag key");
+    let query = Query::events()
+        .ids(all_ids)
+        .authors([keys.public_key()])
+        .kind(Kind::TextNote)
+        .tag_values(e, ["café", "東京"])
+        .tag_values(upper_p, ["CaseSensitive"])
+        .cache_only();
+
+    let feed = fava.observe(query).await.expect("query opens");
+    let snapshot = feed.current();
+
+    assert_eq!(snapshot.events.len(), 2);
+    let cached_record = snapshot
+        .events
+        .iter()
+        .find(|record| record.id() == signed.id)
+        .expect("signed cache match remains visible");
+    assert_eq!(cached_record.relay_evidence.len(), 1);
+    assert!(cached_record.publication.is_none());
+    let local_record = snapshot
+        .events
+        .iter()
+        .find(|record| record.id() == unsigned_id)
+        .expect("unsigned write-store match remains visible");
+    assert!(local_record.relay_evidence.is_empty());
+    assert_eq!(
+        local_record
+            .publication
+            .as_ref()
+            .map(|publication| publication.receipt_id),
+        Some(accepted.receipt_id)
+    );
+    assert_eq!(snapshot.evidence.sources.len(), 2);
+    assert!(
+        cache
+            .event(unsigned_id)
+            .expect("cache remains readable")
+            .is_none()
+    );
+
+    let empty = fava
+        .observe(
+            Query::events()
+                .tag_values(e, std::iter::empty::<String>())
+                .cache_only(),
+        )
+        .await
+        .expect("present-empty query opens");
+    assert!(empty.current().events.is_empty());
 }
