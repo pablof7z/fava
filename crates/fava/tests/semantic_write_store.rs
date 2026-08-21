@@ -37,13 +37,11 @@ fn materialization(actor: fava_write::PublicKey, created_at: u64, content: &str)
         .build()
         .expect("valid materialization")
 }
-
 fn source(keys: &Keys, created_at: u64, content: &str) -> Event {
     materialization(keys.public_key(), created_at, content)
         .finalize(keys)
         .expect("valid signed source")
 }
-
 fn accept(
     store: &MemoryWriteStore,
     edit: ReplaceableEventEdit,
