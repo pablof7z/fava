@@ -476,7 +476,7 @@
           "REPO_MAPPING:rules_rust+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_rust+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_rust+,rules_cc rules_cc+",
-          "FILE:@@//Cargo.lock f99281d895005d7ad9b458ba4c6d1a23ec8251f9d3029b1c5cfb0560ba0e5d11",
+          "FILE:@@//Cargo.lock c702973d524a4c1cac395597562055500bb498adadab197b78e75ec6b1076e68",
           "FILE:@@//Cargo.toml 78423558ec0088125060e61147679a7c1f7726d66ffd057eda5f849531bcc7ee",
           "FILE:@@//crates/fava-state/Cargo.toml e6701732e236c7428834a7c55fc4f23b77f3a97b3cf1f0bd238da378fadafe20",
           "FILE:@@//crates/fava-write/Cargo.toml 73bde744a35206c6348c38873bd65ca2fa16c35e688cbb392c1de3bf2efc8106",
@@ -509,7 +509,7 @@
           "FILE:@@//crates/fava-publisher-nip01/Cargo.toml 6e712651fbb148e78eaf97a2f334a384c7bb51f8c6cabca0eb597e91176da0e6",
           "FILE:@@//crates/fava-delivery/Cargo.toml 07303eb8d67d34da53b5e1ad1c3b5402a3b74e8bcd466c60727f6ba2c1a60776",
           "FILE:@@//crates/fava-delivery-standard/Cargo.toml fe7acb447d745bc4691ae84dbc652ae3876afe342fd18fa7d566e32213b2990d",
-          "FILE:@@//crates/fava-publication/Cargo.toml b55397a4bdc30bc8f8df3587505dd6df3df6c9a083866d312b000303860e585d",
+          "FILE:@@//crates/fava-publication/Cargo.toml 92205321c2993b331fccb63d559a3a117983a189a583a4b063161efc514ee597",
           "FILE:@@//crates/fava-write-store-redb/Cargo.toml b4d8efb20694fde01277c5f1042c5e05fd2483c3bfd62828852d82deeea8ad52",
           "FILE:@@//crates/fava/Cargo.toml 3a8aae359259513d66c9b103b657b03bb424eaf3b1e4f33d70f89cc6289629b2"
         ],
