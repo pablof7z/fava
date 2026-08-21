@@ -12,7 +12,10 @@ use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capa
 
 use super::MemoryWriteStore;
 use super::model::destinations;
-use super::state::{active_count, attributed_failure, next_revision};
+use super::state::{
+    active_count, attributed_failure, next_revision, require_failure_source,
+    require_qualified_source,
+};
 
 #[derive(Clone, Debug)]
 pub(super) struct WriteState {
@@ -349,7 +352,7 @@ impl MemoryWriteStore {
             current_source,
         )?;
         let failed_source = validate_source(&edit, source)?;
-        require_qualified_source(current_source, failed_source)?;
+        require_failure_source(current_source, failed_source)?;
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
         if current_failed_source == failed_source_id
@@ -478,23 +481,4 @@ fn require_current(
         ));
     }
     Ok(())
-}
-fn require_qualified_source(
-    current: Option<(EventId, Timestamp)>,
-    candidate: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    let qualified = match (current, candidate) {
-        (None, Some(_)) | (Some(_), None) => true,
-        (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_id != current_id && candidate_time > current_time
-        }
-        (None, None) => false,
-    };
-    if qualified {
-        Ok(())
-    } else {
-        Err(WriteStoreError::Refused(
-            "source event is equal, older, or already consumed".to_owned(),
-        ))
-    }
 }

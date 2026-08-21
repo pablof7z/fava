@@ -212,9 +212,6 @@ fn validate_semantic(
             return incoherent("durable failed-source attribution is incoherent");
         }
     }
-    if current_source.map(|(id, _)| id) == *failed_source && failed_source.is_some() {
-        return incoherent("durable failed source is already current");
-    }
     Ok(())
 }
 

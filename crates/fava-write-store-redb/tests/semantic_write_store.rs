@@ -331,6 +331,74 @@ fn redb_schema_mismatch_refuses_without_fallback() {
     assert!(RedbWriteStore::open(&missing_path).is_err());
 }
 
+#[test]
+fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
+    let path = unique_path("active-reservation");
+    let store = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .expect("bounded store opens");
+    let first = store.reserve_active().expect("one reservation fits");
+    assert!(store.reserve_active().is_err());
+    store
+        .release_active(first)
+        .expect("unused reservation releases");
+
+    let consumed = store.reserve_active().expect("released slot is reusable");
+    let keys = Keys::generate();
+    let ordinary = WriteIntent::event(
+        materialization(keys.public_key(), 1, "not an edit"),
+        WriteRouting::Automatic,
+    )
+    .unwrap();
+    assert!(
+        store
+            .accept_reserved_materialized_edit(
+                consumed,
+                ordinary,
+                materialization(keys.public_key(), 1, "not an edit"),
+                None,
+            )
+            .is_err()
+    );
+    let reusable = store
+        .reserve_active()
+        .expect("refused acceptance consumed its reservation");
+    store.release_active(reusable).unwrap();
+    drop(store);
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn redb_pre_custody_reservation_disappears_on_reopen() {
+    let path = unique_path("reservation-reopen");
+    {
+        let store = RedbWriteStore::open_bounded(
+            &path,
+            NonZeroUsize::new(1).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+        )
+        .expect("bounded store opens");
+        store
+            .reserve_active()
+            .expect("reservation is held in process");
+    }
+    let reopened = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .expect("store reopens after pre-custody loss");
+    let reservation = reopened
+        .reserve_active()
+        .expect("process loss releases pre-custody reservation");
+    reopened.release_active(reservation).unwrap();
+    drop(reopened);
+    std::fs::remove_file(path).ok();
+}
+
 fn unique_path(label: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

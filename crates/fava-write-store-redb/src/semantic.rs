@@ -290,7 +290,7 @@ impl RedbWriteStore {
             current_source,
         )?;
         let failed_source = validate_source(&edit, source)?;
-        require_qualified_source(current_source, failed_source)?;
+        require_failure_source(current_source, failed_source)?;
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
         if current_failed_source == failed_source_id
@@ -454,5 +454,16 @@ fn require_qualified_source(
         Err(WriteStoreError::Refused(
             "source event is equal, older, or already consumed".to_owned(),
         ))
+    }
+}
+
+fn require_failure_source(
+    current: Option<(EventId, Timestamp)>,
+    failed: Option<(EventId, Timestamp)>,
+) -> Result<(), WriteStoreError> {
+    if current == failed {
+        Ok(())
+    } else {
+        require_qualified_source(current, failed)
     }
 }

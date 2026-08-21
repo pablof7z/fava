@@ -354,8 +354,8 @@ fn memory_successful_retry_clears_failure_atomically() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
-            Some(base.id),
+            MaterializationId::from_u64(2),
+            Some(retry_source.id),
             successor_event,
             Some(&retry_source),
         )

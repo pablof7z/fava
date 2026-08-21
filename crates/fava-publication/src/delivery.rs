@@ -65,6 +65,7 @@ impl Publication {
                 ),
             );
             tokio::spawn(async move {
+                let lane_cancel = cancel.clone();
                 publication
                     .run_destination(
                         write_id,
@@ -72,6 +73,7 @@ impl Publication {
                         materialization_id,
                         event_id,
                         session.clone(),
+                        lane_cancel,
                     )
                     .await;
                 tokio::select! {
@@ -96,9 +98,10 @@ impl Publication {
         materialization_id: MaterializationId,
         event_id: EventId,
         session: RelaySessionKey,
+        mut cancel: watch::Receiver<bool>,
     ) {
         loop {
-            let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
+            let Some(receipt) = self.read_receipt(receipt_id, &mut cancel).await else {
                 return;
             };
             if receipt.write_id != write_id

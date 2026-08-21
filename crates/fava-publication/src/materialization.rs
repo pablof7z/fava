@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceSnapshot};
+use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot, SourceStatus};
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
 use fava_write::{
@@ -17,6 +17,7 @@ pub(super) struct OpenedSemanticSources {
     pub(super) cache: OpenedQuerySource,
     pub(super) writes: OpenedQuerySource,
     snapshots: [SourceSnapshot; 2],
+    live: [bool; 2],
 }
 
 impl OpenedSemanticSources {
@@ -26,6 +27,7 @@ impl OpenedSemanticSources {
             cache,
             writes,
             snapshots,
+            live: [true; 2],
         }
     }
 
@@ -33,24 +35,46 @@ impl OpenedSemanticSources {
         &self.snapshots
     }
 
-    pub(super) async fn next_change(&mut self) -> bool {
-        tokio::select! {
-            biased;
-            changed = self.cache.changes.next_change() => match changed {
-                Ok(snapshot) => {
-                    self.snapshots[0] = snapshot;
-                    true
-                }
-                Err(_) => false,
+    pub(super) async fn next_change(&mut self) -> Option<Result<SourceKind, SourceKind>> {
+        let (index, changed) = match self.live {
+            [true, true] => tokio::select! {
+                biased;
+                changed = self.cache.changes.next_change() => (0, changed),
+                changed = self.writes.changes.next_change() => (1, changed),
             },
-            changed = self.writes.changes.next_change() => match changed {
-                Ok(snapshot) => {
-                    self.snapshots[1] = snapshot;
-                    true
-                }
-                Err(_) => false,
-            },
+            [true, false] => (0, self.cache.changes.next_change().await),
+            [false, true] => (1, self.writes.changes.next_change().await),
+            [false, false] => return None,
+        };
+        let kind = if index == 0 {
+            SourceKind::EventCache
+        } else {
+            SourceKind::WriteStore
+        };
+        if let Ok(snapshot) = changed {
+            self.snapshots[index] = snapshot;
+            Some(Ok(kind))
+        } else {
+            self.live[index] = false;
+            self.snapshots[index].status = SourceStatus::Closed;
+            Some(Err(kind))
         }
+    }
+
+    pub(super) fn selected(&self, selected_id: Option<fava_write::EventId>) -> Option<Event> {
+        let selected_id = selected_id?;
+        self.snapshots.iter().find_map(|snapshot| {
+            snapshot.events.iter().find_map(|event| match event {
+                SourceEvent::Cached(cached) if cached.event.id == selected_id => {
+                    Some(cached.event.clone())
+                }
+                SourceEvent::Local(local) => match &local.event {
+                    EventValue::Signed(event) if event.id == selected_id => Some(event.clone()),
+                    EventValue::Unsigned(_) | EventValue::Signed(_) => None,
+                },
+                SourceEvent::Cached(_) => None,
+            })
+        })
     }
 
     pub(super) fn close(&mut self) {

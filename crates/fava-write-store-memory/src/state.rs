@@ -1,4 +1,4 @@
-use fava_write::{EventId, MaterializationId, ReceiptId};
+use fava_write::{EventId, MaterializationId, ReceiptId, Timestamp};
 use fava_write_store::WriteStoreError;
 
 use crate::semantic::WriteState;
@@ -40,5 +40,36 @@ pub(super) fn active_count(state: &WriteState) -> usize {
 pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
     if let Some((edit, _, _)) = state.edits.remove(&receipt_id) {
         state.coordinates.remove(edit.coordinate());
+    }
+}
+
+pub(super) fn require_qualified_source(
+    current: Option<(EventId, Timestamp)>,
+    candidate: Option<(EventId, Timestamp)>,
+) -> Result<(), WriteStoreError> {
+    let qualified = match (current, candidate) {
+        (None, Some(_)) | (Some(_), None) => true,
+        (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
+            candidate_id != current_id && candidate_time > current_time
+        }
+        (None, None) => false,
+    };
+    if qualified {
+        Ok(())
+    } else {
+        Err(WriteStoreError::Refused(
+            "source event is equal, older, or already consumed".to_owned(),
+        ))
+    }
+}
+
+pub(super) fn require_failure_source(
+    current: Option<(EventId, Timestamp)>,
+    failed: Option<(EventId, Timestamp)>,
+) -> Result<(), WriteStoreError> {
+    if current == failed {
+        Ok(())
+    } else {
+        require_qualified_source(current, failed)
     }
 }

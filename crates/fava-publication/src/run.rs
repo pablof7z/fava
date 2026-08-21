@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
+use fava_query::SourceKind;
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
 use fava_signer::{SignerAvailability, SignerError};
 use fava_write::{EventValue, Receipt, ReceiptId, WriteIntent, WriteRouting};
@@ -8,6 +10,8 @@ use tokio::sync::{mpsc, watch};
 
 use super::Publication;
 use super::materialization::SemanticState;
+
+const STORE_READ_RETRY_DELAY: Duration = Duration::from_millis(10);
 
 impl Publication {
     pub(super) fn start(&self, receipt_id: ReceiptId) {
@@ -42,7 +46,10 @@ impl Publication {
         mut cancel: watch::Receiver<bool>,
         mut semantic: Option<SemanticState>,
     ) {
-        let Some((receipt, mut routes)) = self.initialize(receipt_id, &mut semantic) else {
+        let Some((receipt, mut routes)) = self
+            .initialize(receipt_id, &mut semantic, &mut cancel)
+            .await
+        else {
             return;
         };
         let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
@@ -52,15 +59,10 @@ impl Publication {
         let mut receipt_changes = self.store.receipt_changes();
         let (lane_finished, mut finished_lanes) = mpsc::channel(destination_evidence_capacity());
         let mut active = BTreeMap::new();
-        let mut route_revision = self
-            .store
-            .receipt(receipt_id)
-            .ok()
-            .flatten()
-            .map_or(0, |receipt| receipt.route_revision);
+        let mut route_revision = receipt.route_revision;
 
         loop {
-            let Some(current) = self.store.receipt(receipt_id).ok().flatten() else {
+            let Some(current) = self.read_receipt(receipt_id, &mut cancel).await else {
                 break;
             };
             self.start_lanes(&current, &mut active, &lane_finished, &cancel);
@@ -81,13 +83,23 @@ impl Publication {
                     let request = RouteRequest::Write(current.current.event.clone());
                     self.apply_route(&current, route_revision, &request, &contribution);
                 }
-                source_open = next_semantic_source(&mut semantic), if semantic.is_some() => {
-                    if source_open {
-                        if let Some(state) = &mut semantic {
-                            self.rematerialize(&current, state);
+                source = next_semantic_source(&mut semantic), if semantic.is_some() => {
+                    match source {
+                        Some(Ok(_)) => {
+                            if let Some(state) = &mut semantic {
+                                self.rematerialize(&current, state);
+                            }
                         }
-                    } else if let Some(mut state) = semantic.take() {
-                        state.close();
+                        Some(Err(kind)) => {
+                            if let Some(state) = &mut semantic {
+                                self.record_source_failure(&current, state, kind);
+                            }
+                        }
+                        None => {
+                            if let Some(mut state) = semantic.take() {
+                                state.close();
+                            }
+                        }
                     }
                 }
                 change = receipt_changes.recv() => {
@@ -137,12 +149,13 @@ impl Publication {
         self.finished(receipt_id);
     }
 
-    fn initialize(
+    async fn initialize(
         &self,
         receipt_id: ReceiptId,
         semantic: &mut Option<SemanticState>,
+        cancel: &mut watch::Receiver<bool>,
     ) -> Option<(Receipt, Option<Box<dyn RouterSession>>)> {
-        let Some(mut receipt) = self.store.receipt(receipt_id).ok().flatten() else {
+        let Some(mut receipt) = self.read_receipt(receipt_id, cancel).await else {
             if let Some(semantic) = semantic {
                 semantic.close();
             }
@@ -151,7 +164,7 @@ impl Publication {
         };
         if let Some(state) = semantic {
             self.rematerialize(&receipt, state);
-            let Some(current) = self.store.receipt(receipt_id).ok().flatten() else {
+            let Some(current) = self.read_receipt(receipt_id, cancel).await else {
                 state.close();
                 self.finished(receipt_id);
                 return None;
@@ -167,6 +180,47 @@ impl Publication {
             return None;
         }
         Some((receipt, routes))
+    }
+
+    pub(super) async fn read_receipt(
+        &self,
+        receipt_id: ReceiptId,
+        cancel: &mut watch::Receiver<bool>,
+    ) -> Option<Receipt> {
+        loop {
+            if *cancel.borrow() {
+                return None;
+            }
+            match self.store.receipt(receipt_id) {
+                Ok(receipt) => return receipt,
+                Err(_) => {
+                    tokio::select! {
+                        changed = cancel.changed() => {
+                            if changed.is_err() || *cancel.borrow_and_update() {
+                                return None;
+                            }
+                        }
+                        () = tokio::time::sleep(STORE_READ_RETRY_DELAY) => {}
+                    }
+                }
+            }
+        }
+    }
+
+    fn record_source_failure(&self, receipt: &Receipt, state: &SemanticState, kind: SourceKind) {
+        let source = state.sources.selected(state.selected_id);
+        let label = match kind {
+            SourceKind::EventCache => "event-cache",
+            SourceKind::WriteStore => "write-store",
+        };
+        let _ = self.store.record_materialization_failure(
+            receipt.write_id,
+            receipt.receipt_id,
+            receipt.current.publication.materialization_id,
+            receipt.current.publication.materialization_source,
+            source.as_ref(),
+            format!("{label} source observation closed"),
+        );
     }
 
     fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
@@ -363,7 +417,9 @@ async fn next_route(
     }
 }
 
-async fn next_semantic_source(semantic: &mut Option<SemanticState>) -> bool {
+async fn next_semantic_source(
+    semantic: &mut Option<SemanticState>,
+) -> Option<Result<SourceKind, SourceKind>> {
     match semantic {
         Some(semantic) => semantic.sources.next_change().await,
         None => std::future::pending().await,
