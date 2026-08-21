@@ -117,8 +117,16 @@ fn validate_bytes(value: &[u8]) -> Result<(), WriteIntentError> {
 #[serde(deny_unknown_fields)]
 struct EncodedEdit {
     kind: Kind,
+    #[serde(deserialize_with = "deserialize_identifier")]
     identifier: Option<String>,
     change: Vec<u8>,
+}
+
+fn deserialize_identifier<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
 }
 
 impl Serialize for ReplaceableEventEdit {
