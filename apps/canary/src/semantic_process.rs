@@ -194,6 +194,7 @@ async fn collect_readers(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::process::Command;
     use std::time::Duration;
 
@@ -261,5 +262,41 @@ mod tests {
             .expect("inspect descendant after successful owner exit");
         let state = String::from_utf8_lossy(&status.stdout);
         assert!(state.trim().is_empty() || state.trim_start().starts_with('Z'));
+    }
+
+    #[tokio::test]
+    async fn bounded_output_failure_cleans_redirected_descendant_before_returning() {
+        let pid_file = std::env::temp_dir().join(format!(
+            "fava-canary-output-bound-descendant-{}.pid",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&pid_file);
+        let mut command = Command::new("/bin/sh");
+        command.args([
+            "-c",
+            "sleep 30 </dev/null >/dev/null 2>/dev/null & printf '%s' \"$!\" > \"$1\"; /usr/bin/head -c 1048577 /dev/zero",
+            "fava-output-bound",
+            pid_file.to_str().expect("temporary path is UTF-8"),
+        ]);
+        let failure = run_owned(command, Duration::from_secs(2))
+            .await
+            .expect_err("oversized output must be refused");
+        assert!(failure.to_string().contains("exceeded 1048576 bytes"));
+
+        let descendant = fs::read_to_string(&pid_file).expect("descendant pid was recorded");
+        fs::remove_file(&pid_file).expect("temporary pid file removed");
+        let status = Command::new("ps")
+            .args(["-o", "stat=", "-p", descendant.trim()])
+            .output()
+            .expect("inspect descendant after bounded-output refusal");
+        let state = String::from_utf8_lossy(&status.stdout);
+        let clean = state.trim().is_empty() || state.trim_start().starts_with('Z');
+        if !clean {
+            Command::new("/bin/kill")
+                .args(["-KILL", descendant.trim()])
+                .status()
+                .expect("remove leaked descendant after failed assertion");
+        }
+        assert!(clean);
     }
 }
