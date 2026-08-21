@@ -143,6 +143,7 @@ rust_test(
     srcs = [
         "tests/semantic_write_publication.rs",
         "tests/semantic_write_publication/interleavings.rs",
+        "tests/semantic_write_publication/shared_capacity.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_publication",
@@ -172,7 +173,11 @@ rust_test(
     name = "semantic_write_failures",
     srcs = [
         "tests/semantic_write_failures.rs",
+        "tests/semantic_write_failures/faults.rs",
+        "tests/semantic_write_failures/reservation.rs",
+        "tests/semantic_write_failures/source_isolation.rs",
         "tests/semantic_write_failures/support.rs",
+        "tests/semantic_write_failures/transient_reads.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_failures",
@@ -184,6 +189,7 @@ rust_test(
         "//crates/fava-event-cache:lib",
         "//crates/fava-event-cache-memory:lib",
         "//crates/fava-publisher:lib",
+        "//crates/fava-query:lib",
         "//crates/fava-query-standard:lib",
         "//crates/fava-routing:lib",
         "//crates/fava-signer:lib",
