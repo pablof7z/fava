@@ -431,7 +431,6 @@ dependencies = [
 name = "fava-nip02"
 version = "0.1.0"
 dependencies = [
- "fava-state",
  "fava-write",
 ]
 
