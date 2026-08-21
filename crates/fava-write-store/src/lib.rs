@@ -89,6 +89,28 @@ pub trait WriteStore: QuerySource + Send + Sync {
         ))
     }
 
+    /// Record one bounded post-accept materialization failure against exact
+    /// current write, generation, and selected source identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] without mutation for stale, terminal,
+    /// unqualified, unsupported, or otherwise invalid completion facts.
+    #[allow(clippy::too_many_arguments)]
+    fn record_materialization_failure(
+        &self,
+        _write_id: WriteId,
+        _receipt_id: ReceiptId,
+        _expected: MaterializationId,
+        _expected_source: Option<EventId>,
+        _source: Option<&Event>,
+        _reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        Err(WriteStoreError::Refused(
+            "write store does not support materialization failure evidence".to_owned(),
+        ))
+    }
+
     /// Recover live semantic custody in stable receipt order.
     ///
     /// Each tuple carries the current receipt, durable edit, current selected

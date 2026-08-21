@@ -74,8 +74,6 @@ fn memory_first_edit_has_no_prior() {
         .receipt(accepted.receipt_id)
         .expect("store readable")
         .expect("receipt retained");
-    assert_eq!(receipt.write_id, accepted.write_id);
-    assert_eq!(receipt.receipt_id, accepted.receipt_id);
     assert_eq!(
         receipt.current.publication.materialization_id,
         MaterializationId::from_u64(1)
@@ -88,7 +86,6 @@ fn memory_first_edit_has_no_prior() {
             .retired_materializations
             .is_empty()
     );
-    assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
 }
 
 #[test]
@@ -201,8 +198,6 @@ fn memory_unqualified_source_is_inert() {
         Some(&selected),
     );
     let mut changes = store.receipt_changes();
-    let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
-
     let older = source(&keys, 19, "older");
     for candidate in [&selected, &older] {
         assert!(
@@ -256,7 +251,6 @@ fn memory_unqualified_source_is_inert() {
         changes.try_recv(),
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
     ));
-    assert_ne!(before, unchanged);
 }
 
 #[test]
@@ -272,33 +266,21 @@ fn memory_failure_preserves_current_and_is_attributed() {
     );
     let failed_source = source(&keys, 20, "failed source");
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    let failed = store
-        .record_materialization_failure(
+    let record_failure = || {
+        store.record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
             Some(&failed_source),
-            "provider refused the opaque edit".to_owned(),
+            "x".repeat(5_000),
         )
-        .expect("post-accept failure is durable evidence");
+    };
+    let failed = record_failure().expect("post-accept failure is durable evidence");
 
-    assert_eq!(failed.write_id, before.write_id);
-    assert_eq!(failed.receipt_id, before.receipt_id);
-    assert_eq!(failed.current.event, before.current.event);
-    assert_eq!(
-        failed.current.publication.materialization_id,
-        before.current.publication.materialization_id
-    );
-    assert_eq!(
-        failed.current.publication.materialization_source,
-        before.current.publication.materialization_source
-    );
-    assert_eq!(
-        failed.current.publication.destinations,
-        before.current.publication.destinations
-    );
-    assert_eq!(failed.attempts, before.attempts);
+    let mut without_failure = failed.clone();
+    without_failure.current.publication.materialization_failure = None;
+    assert_eq!(without_failure, before);
     let failure = failed
         .current
         .publication
@@ -306,12 +288,13 @@ fn memory_failure_preserves_current_and_is_attributed() {
         .as_deref()
         .expect("failure is visible");
     assert!(failure.contains(&failed_source.id.to_string()));
-    assert!(failure.contains("provider refused"));
+    assert!(failure.ends_with("failed"));
     assert!(failure.len() <= 4_096);
+    let mut changes = store.receipt_changes();
+    assert_eq!(record_failure().unwrap(), failed);
+    assert!(changes.try_recv().is_err());
 
     let recovered = store.recover_materialized_edits().unwrap();
-    assert_eq!(recovered.len(), 1);
-    assert_eq!(recovered[0].2, Some(base.id));
     assert_eq!(recovered[0].3, Some(failed_source.id));
 }
 

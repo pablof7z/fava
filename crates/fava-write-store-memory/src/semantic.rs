@@ -74,10 +74,7 @@ impl MemoryWriteStore {
             ));
         };
         let selected_source = validate_materialization(&edit, &event, source, &routing)?;
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let mut state = self.lock_state()?;
 
         if let Some(receipt_id) = state.coordinates.get(edit.coordinate()) {
             let receipt = state.writes.get(receipt_id).ok_or_else(|| {
@@ -150,8 +147,7 @@ impl MemoryWriteStore {
             .edits
             .insert(receipt_id, (edit, selected_source, None));
         state.writes.insert(receipt_id, receipt.clone());
-        self.publish_snapshot(&state);
-        let _ = self.receipt_changes.send((receipt_id, Some(receipt)));
+        self.publish_receipt(&state, &receipt);
         Ok(AcceptedWrite {
             write_id,
             receipt_id,
@@ -169,10 +165,7 @@ impl MemoryWriteStore {
         event: UnsignedEvent,
         source: Option<&Event>,
     ) -> Result<Receipt, WriteStoreError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let mut state = self.lock_state()?;
         let receipt = state
             .writes
             .get(&receipt_id)
@@ -265,10 +258,61 @@ impl MemoryWriteStore {
             .edits
             .insert(receipt_id, (edit, selected_source, None));
         state.writes.insert(receipt_id, updated.clone());
-        self.publish_snapshot(&state);
-        let _ = self
-            .receipt_changes
-            .send((receipt_id, Some(updated.clone())));
+        self.publish_receipt(&state, &updated);
+        Ok(updated)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn record_semantic_failure(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        source: Option<&Event>,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        let mut state = self.lock_state()?;
+        let receipt = state
+            .writes
+            .get(&receipt_id)
+            .cloned()
+            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        let (edit, current_source, current_failed_source) =
+            state.edits.get(&receipt_id).cloned().ok_or_else(|| {
+                WriteStoreError::Refused("semantic custody does not exist".to_owned())
+            })?;
+        require_current(
+            &receipt,
+            write_id,
+            expected,
+            expected_source,
+            current_source,
+        )?;
+        let failed_source = validate_source(&edit, source)?;
+        require_qualified_source(current_source, failed_source)?;
+        let failed_source_id = failed_source.map(|(id, _)| id);
+        let failure = attributed_failure(expected, failed_source_id, reason);
+        if current_failed_source == failed_source_id
+            && receipt
+                .current
+                .publication
+                .materialization_failure
+                .as_deref()
+                == Some(failure.as_str())
+        {
+            return Ok(receipt);
+        }
+
+        let mut updated = receipt;
+        updated.current.publication.materialization_failure = Some(failure);
+        let next_revision = next_revision(&state)?;
+        state.revision = next_revision;
+        state
+            .edits
+            .insert(receipt_id, (edit, current_source, failed_source_id));
+        state.writes.insert(receipt_id, updated.clone());
+        self.publish_receipt(&state, &updated);
         Ok(updated)
     }
 
@@ -284,10 +328,7 @@ impl MemoryWriteStore {
         )>,
         WriteStoreError,
     > {
-        let state = self
-            .state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let state = self.lock_state()?;
         Ok(state
             .edits
             .iter()
@@ -319,6 +360,22 @@ fn validate_materialization(
             "materialization actor or coordinate does not match edit".to_owned(),
         ));
     }
+    let selected = validate_source(edit, source)?;
+    let Some((_, source_time)) = selected else {
+        return Ok(None);
+    };
+    if source_time >= event.created_at {
+        return Err(WriteStoreError::Refused(
+            "materialization is not newer than its selected source".to_owned(),
+        ));
+    }
+    Ok(selected)
+}
+
+fn validate_source(
+    edit: &ReplaceableEventEdit,
+    source: Option<&Event>,
+) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
     let Some(source) = source else {
         return Ok(None);
     };
@@ -336,12 +393,26 @@ fn validate_materialization(
             "materialization source does not match edit coordinate".to_owned(),
         ));
     }
-    if source.created_at >= event.created_at {
-        return Err(WriteStoreError::Refused(
-            "materialization is not newer than its selected source".to_owned(),
-        ));
-    }
     Ok(Some((source.id, source.created_at)))
+}
+
+fn attributed_failure(
+    materialization_id: MaterializationId,
+    source: Option<EventId>,
+    reason: String,
+) -> String {
+    let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
+    let prefix = format!(
+        "materialization {} from source {source} failed",
+        materialization_id.as_u64()
+    );
+    let attributed = format!("{prefix}: {reason}");
+    drop(reason);
+    if fava_write_store::validate_receipt_text(&attributed).is_ok() {
+        attributed
+    } else {
+        prefix
+    }
 }
 
 fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
@@ -402,10 +473,16 @@ pub(super) fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> 
         .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
 }
 
-fn active_count(state: &WriteState) -> usize {
+pub(super) fn active_count(state: &WriteState) -> usize {
     state
         .writes
         .values()
         .filter(|receipt| !receipt.is_terminal())
         .count()
+}
+
+pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
+    if let Some((edit, _, _)) = state.edits.remove(&receipt_id) {
+        state.coordinates.remove(edit.coordinate());
+    }
 }
