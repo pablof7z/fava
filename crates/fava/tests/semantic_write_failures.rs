@@ -19,6 +19,8 @@ mod failure_support;
 mod faults;
 #[path = "semantic_write_failures/reservation.rs"]
 mod reservation;
+#[path = "semantic_write_failures/route_revision.rs"]
+mod route_revision;
 #[path = "semantic_write_failures/source_isolation.rs"]
 mod source_isolation;
 #[path = "support/semantic_write.rs"]

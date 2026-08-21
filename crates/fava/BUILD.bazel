@@ -179,6 +179,7 @@ rust_test(
         "tests/semantic_write_failures.rs",
         "tests/semantic_write_failures/faults.rs",
         "tests/semantic_write_failures/reservation.rs",
+        "tests/semantic_write_failures/route_revision.rs",
         "tests/semantic_write_failures/source_isolation.rs",
         "tests/semantic_write_failures/support.rs",
         "tests/semantic_write_failures/transient_reads.rs",

@@ -1,4 +1,6 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::time::Duration;
 
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
@@ -96,17 +98,45 @@ pub(super) struct FaultingWriteStore {
     inner: MemoryWriteStore,
     closed: broadcast::Sender<()>,
     failing_reads: AtomicUsize,
+    pause_after_route_millis: AtomicU64,
+    receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
+    reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
+    route_commits: AtomicU64,
+    suppressed_receipt_changes: Arc<AtomicUsize>,
 }
 
 impl FaultingWriteStore {
     pub(super) fn new() -> Self {
         let (closed, _) = broadcast::channel(4);
+        let inner = MemoryWriteStore::default();
+        let mut inner_changes = inner.receipt_changes();
+        let (receipt_changes, _) = broadcast::channel(64);
+        let forwarded_changes = receipt_changes.clone();
+        let suppressed_receipt_changes = Arc::new(AtomicUsize::new(0));
+        let suppressed = Arc::clone(&suppressed_receipt_changes);
+        tokio::spawn(async move {
+            while let Ok(change) = inner_changes.recv().await {
+                if suppressed
+                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                        count.checked_sub(1)
+                    })
+                    .is_err()
+                {
+                    let _ = forwarded_changes.send(change);
+                }
+            }
+        });
         Self {
-            inner: MemoryWriteStore::default(),
+            inner,
             closed,
             failing_reads: AtomicUsize::new(0),
+            pause_after_route_millis: AtomicU64::new(0),
+            receipt_changes,
+            reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
+            route_commits: AtomicU64::new(0),
+            suppressed_receipt_changes,
         }
     }
 
@@ -120,6 +150,26 @@ impl FaultingWriteStore {
 
     pub(super) fn fail_receipt_reads_after_signature(&self, count: usize) {
         self.reads_after_signature.store(count, Ordering::SeqCst);
+    }
+
+    pub(super) fn fail_receipt_reads_after_route(&self, count: usize) {
+        self.reads_after_route.store(count, Ordering::SeqCst);
+    }
+
+    pub(super) fn pause_after_next_route(&self, duration: Duration) {
+        self.pause_after_route_millis.store(
+            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
+            Ordering::SeqCst,
+        );
+    }
+
+    pub(super) fn suppress_next_receipt_change(&self) {
+        self.suppressed_receipt_changes
+            .fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub(super) fn route_commits(&self) -> u64 {
+        self.route_commits.load(Ordering::SeqCst)
     }
 
     fn should_fail_read(&self) -> bool {
@@ -148,7 +198,7 @@ impl WriteStore for FaultingWriteStore {
         self.inner.release_active(reservation)
     }
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
-        self.inner.receipt_changes()
+        self.receipt_changes.subscribe()
     }
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept(intent)
@@ -258,8 +308,19 @@ impl WriteStore for FaultingWriteStore {
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner
-            .apply_route(write_id, receipt_id, materialization_id, event_id, plan)
+        let applied =
+            self.inner
+                .apply_route(write_id, receipt_id, materialization_id, event_id, plan);
+        if applied.is_ok() {
+            let failures = self.reads_after_route.swap(0, Ordering::SeqCst);
+            self.failing_reads.store(failures, Ordering::SeqCst);
+            self.route_commits.fetch_add(1, Ordering::SeqCst);
+            let pause = self.pause_after_route_millis.swap(0, Ordering::SeqCst);
+            if pause > 0 {
+                std::thread::sleep(Duration::from_millis(pause));
+            }
+        }
+        applied
     }
     fn begin_attempt(
         &self,
