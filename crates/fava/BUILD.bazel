@@ -138,9 +138,39 @@ rust_test(
     name = "semantic_write_publication",
     srcs = [
         "tests/semantic_write_publication.rs",
+        "tests/semantic_write_publication/interleavings.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_publication",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-delivery-standard:lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-publisher:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-routing:lib",
+        "//crates/fava-signer:lib",
+        "//crates/fava-signer-local:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-transport:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+        "//crates/fava-write-store-memory:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "semantic_write_failures",
+    srcs = [
+        "tests/semantic_write_failures.rs",
+        "tests/support/semantic_write.rs",
+    ],
+    crate_name = "semantic_write_failures",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
