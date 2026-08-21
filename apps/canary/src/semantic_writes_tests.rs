@@ -57,10 +57,20 @@ async fn replaceable_edit_rematerialization_records_retired_inertness() {
     assert_eq!(evidence["first_materialization_id"], 1);
     assert_eq!(evidence["current_materialization_id"], 2);
     assert_eq!(evidence["retired_materializations"], 1);
-    assert_eq!(evidence["publisher_attempts"], 1);
+    assert_eq!(evidence["source_one_bob_count"], 0);
+    assert_eq!(evidence["source_two_bob_count"], 0);
+    assert_eq!(evidence["current_bob_count"], 1);
+    assert_eq!(evidence["current_carol_count"], 1);
+    assert_eq!(evidence["publisher_attempts"], 2);
     assert_eq!(evidence["preserved_bob_carol_unrelated"], true);
-    assert_eq!(evidence["retired_completion_processed"], true);
-    assert_eq!(evidence["retired_stale_effects"], 0);
+    assert_eq!(evidence["first_delivery_materialization_id"], 1);
+    assert_eq!(evidence["current_delivery_materialization_id"], 2);
+    assert_eq!(evidence["retired_delivery_completion_processed"], true);
+    assert_eq!(evidence["retired_delivery_installed"], false);
+    assert_eq!(
+        evidence["generation_two_unchanged_after_retired_delivery"],
+        true
+    );
     assert!(
         evidence["current_created_at"]
             .as_u64()
