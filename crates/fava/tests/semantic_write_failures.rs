@@ -27,6 +27,7 @@ const ERROR: u8 = 1;
 const PANIC: u8 = 2;
 const WRONG_ACTOR: u8 = 3;
 const OVERSIZE: u8 = 4;
+const WRONG_TIMESTAMP: u8 = 5;
 
 struct ControlledMaterializer {
     kind: Kind,
@@ -86,12 +87,72 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
                 |event| format!("{}|edit", event.content),
             )
         };
+        let returned_at = if self.mode.load(Ordering::SeqCst) == WRONG_TIMESTAMP {
+            Timestamp::from(created_at.as_secs().saturating_sub(1))
+        } else {
+            created_at
+        };
         EventBuilder::new(actor, self.kind)
-            .created_at(created_at)
+            .created_at(returned_at)
             .content(content)
             .build()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current() {
+    let first_keys = Keys::generate();
+    let first_store = Arc::new(MemoryWriteStore::default());
+    let first_materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    first_materializer.set(WRONG_TIMESTAMP);
+    let first = assembly(
+        &first_keys,
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&first_store),
+        vec![Arc::clone(&first_materializer)],
+    );
+    assert!(
+        first
+            .publish(edit_intent(first_keys.public_key(), Kind::ContactList))
+            .is_err()
+    );
+    assert_eq!(first_materializer.calls(), 1);
+    assert!(first_store.is_empty().expect("first store remains empty"));
+
+    let keys = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let fava = assembly(
+        &keys,
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        vec![Arc::clone(&materializer)],
+    );
+    let accepted = fava
+        .publish(edit_intent(keys.public_key(), Kind::ContactList))
+        .expect("valid first generation accepts");
+    materializer.set(WRONG_TIMESTAMP);
+    save_source(
+        &cache,
+        signed_source(&keys, Kind::ContactList, 10, "new source", &[]),
+    );
+    let failed = wait_failure(&fava, accepted.receipt_id).await;
+
+    assert_eq!(failed.current.id(), accepted.current.id());
+    assert_eq!(
+        failed.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    assert!(
+        failed
+            .current
+            .publication
+            .materialization_failure
+            .as_deref()
+            .is_some_and(|reason| reason.contains("injected timestamp"))
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
