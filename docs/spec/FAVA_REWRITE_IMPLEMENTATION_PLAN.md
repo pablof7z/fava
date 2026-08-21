@@ -723,9 +723,9 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 
 ### Required behavior
 
-- Protocol crates expose replaceable-event edits and their inverses, such as follow/unfollow.
+- Protocol crates expose replaceable-event edits, such as follow and unfollow.
 - Protocol-crate code produces replaceable-event edits or ordinary event values; it does not sign, route, publish, or own receipts.
-- Actor identity exists on the edit before materialization; the resulting unsigned event carries it in `pubkey`.
+- The author is resolved when the write is accepted, before materialization; the resulting unsigned event carries it in `pubkey`.
 - First-value operation materializes against no prior event.
 - A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
 - One receipt remains stable across materialization generations.
@@ -749,7 +749,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 - Local current materialization preserves Carol and Bob.
 - Receipt remains the same; stale signature/delivery for old materialization is inert.
 
-`replaceable-edit-inverse`
+`replaceable-edit-opposing-operations`
 
 - Follow then unfollow, or bookmark then unbookmark.
 - Operations normalize to the correct desired state without accumulating obsolete active delivery.

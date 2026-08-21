@@ -1220,7 +1220,7 @@ A protocol crate may provide:
 - typed decoding;
 - query fragments;
 - event construction helpers;
-- replaceable-event edits and their inverses;
+- replaceable-event edits;
 - validation;
 - presentation-neutral parsed values; and
 - edit application for replaceable events.
