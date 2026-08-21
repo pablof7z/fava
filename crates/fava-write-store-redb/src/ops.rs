@@ -1,20 +1,32 @@
-use std::collections::BTreeMap;
-
 use fava_routing::RoutePlan;
-use fava_state::{RelayAccess, RelaySessionKey};
+use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload, WriteRouting,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
-    validate_receipt_text,
+    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
+    validate_current_materialization, validate_delivery_outcome, validate_receipt_text,
 };
 use tokio::sync::broadcast;
 
-use crate::{RedbWriteStore, StoreState};
+use crate::RedbWriteStore;
+use crate::lifecycle::{UnsignedEventView, destinations, next_revision, settle};
 
 impl WriteStore for RedbWriteStore {
+    fn active_capacity(&self) -> usize {
+        self.limits.active.get()
+    }
+
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot()
+    }
+
+    fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        self.release_active_slot(reservation)
+    }
+
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
     }
@@ -26,7 +38,10 @@ impl WriteStore for RedbWriteStore {
             .values()
             .filter(|receipt| !receipt.is_terminal())
             .count();
-        if active == self.limits.active.get() {
+        if active
+            .checked_add(state.reservations.len())
+            .is_none_or(|used| used >= self.limits.active.get())
+        {
             return Err(WriteStoreError::Refused(format!(
                 "active write bound {} reached",
                 self.limits.active
@@ -41,6 +56,11 @@ impl WriteStore for RedbWriteStore {
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
+            WritePayload::Edit { .. } => {
+                return Err(WriteStoreError::Refused(
+                    "replaceable-event edit requires materialization before acceptance".to_owned(),
+                ));
+            }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
         let destinations = destinations(&routing);
@@ -51,6 +71,10 @@ impl WriteStore for RedbWriteStore {
             PublicationEvidence {
                 receipt_id,
                 write_id,
+                materialization_id: fava_write::MaterializationId::from_u64(1),
+                materialization_source: None,
+                materialization_failure: None,
+                retired_materializations: Vec::new(),
                 signature,
                 destinations,
             },
@@ -68,7 +92,7 @@ impl WriteStore for RedbWriteStore {
             attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
-        self.commit_accept(next_identity, &receipt)?;
+        self.commit_accept(next_identity, &receipt, None)?;
         state.next_identity = next_identity;
         state.revision = next_revision;
         state.receipts.insert(receipt_id, receipt.clone());
@@ -81,27 +105,106 @@ impl WriteStore for RedbWriteStore {
         })
     }
 
+    fn accept_materialized_edit(
+        &self,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic(intent, event, source)
+    }
+
+    fn accept_reserved_materialized_edit(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_reserved_semantic(reservation, intent, event, source)
+    }
+
+    fn install_materialization(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.install_semantic(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            event,
+            source,
+        )
+    }
+
+    fn record_materialization_failure(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        expected: MaterializationId,
+        expected_source: Option<EventId>,
+        source: Option<&Event>,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.record_semantic_failure(
+            write_id,
+            receipt_id,
+            expected,
+            expected_source,
+            source,
+            reason,
+        )
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn recover_materialized_edits(
+        &self,
+    ) -> Result<
+        Vec<(
+            Receipt,
+            ReplaceableEventEdit,
+            fava_write::PublicKey,
+            Option<(EventId, fava_write::Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.recover_semantic()
+    }
+
     fn install_signed(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
         event
             .verify()
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() {
-                return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
-            }
-            let EventValue::Unsigned(unsigned) = &receipt.current.event else {
-                return Err(WriteStoreError::Refused(
-                    "event is already signed".to_owned(),
-                ));
-            };
-            if UnsignedEventView::from(unsigned) != UnsignedEventView::from(&event) {
-                return Err(WriteStoreError::Refused(
-                    "signature does not match current unsigned event".to_owned(),
-                ));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            match &receipt.current.event {
+                EventValue::Signed(current) if current == &event => return Ok(()),
+                EventValue::Signed(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "event is already signed differently".to_owned(),
+                    ));
+                }
+                EventValue::Unsigned(unsigned)
+                    if UnsignedEventView::from(unsigned) == UnsignedEventView::from(&event) => {}
+                EventValue::Unsigned(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "signature does not match current unsigned event".to_owned(),
+                    ));
+                }
             }
             receipt.current.event = EventValue::Signed(event);
             receipt.current.publication.signature = SignatureState::Signed;
@@ -111,15 +214,23 @@ impl WriteStore for RedbWriteStore {
 
     fn record_signer_refusal(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         validate_receipt_text(&reason)?;
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() || !matches!(receipt.current.event, EventValue::Unsigned(_)) {
-                return Err(WriteStoreError::Refused(
-                    "signer refusal is not current".to_owned(),
-                ));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            match &receipt.current.publication.signature {
+                SignatureState::Refused(current) if current == &reason => return Ok(()),
+                SignatureState::Unsigned => {}
+                SignatureState::Signed | SignatureState::Refused(_) => {
+                    return Err(WriteStoreError::Refused(
+                        "signer refusal is not current".to_owned(),
+                    ));
+                }
             }
             receipt.current.publication.signature = SignatureState::Refused(reason);
             Ok(())
@@ -128,12 +239,22 @@ impl WriteStore for RedbWriteStore {
 
     fn apply_route(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
-            if receipt.is_terminal() {
-                return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            let destinations: std::collections::BTreeSet<_> =
+                plan.destinations.keys().cloned().collect();
+            if plan.revision == receipt.route_revision
+                && destinations == receipt.desired_destinations
+                && plan.shortfalls == receipt.route_shortfalls
+                && plan.settled == receipt.route_settled
+            {
+                return Ok(());
             }
             apply_route_to_receipt(receipt, plan)
         })
@@ -141,12 +262,34 @@ impl WriteStore for RedbWriteStore {
 
     fn begin_attempt(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
             if !matches!(receipt.current.event, EventValue::Signed(_)) {
                 return Err(WriteStoreError::Refused("event is not signed".to_owned()));
+            }
+            let current_attempt = receipt.attempts.get(session).copied().unwrap_or(0);
+            if current_attempt == attempt
+                && matches!(
+                    receipt.current.publication.destinations.get(session),
+                    Some(RelayDeliveryOutcome::Attempting)
+                )
+            {
+                return Ok(());
+            }
+            let expected_attempt = current_attempt
+                .checked_add(1)
+                .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
+            if attempt != expected_attempt {
+                return Err(WriteStoreError::Refused(
+                    "attempt is not current".to_owned(),
+                ));
             }
             let outcome = receipt
                 .current
@@ -163,18 +306,20 @@ impl WriteStore for RedbWriteStore {
                 ));
             }
             *outcome = RelayDeliveryOutcome::Attempting;
-            let attempts = receipt.attempts.entry(session.clone()).or_default();
-            *attempts = attempts
-                .checked_add(1)
-                .ok_or_else(|| WriteStoreError::Refused("attempt count exhausted".to_owned()))?;
+            receipt.attempts.insert(session.clone(), attempt);
             Ok(())
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_outcome(
         &self,
+        write_id: WriteId,
         receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
         session: &RelaySessionKey,
+        attempt: u32,
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {
         validate_delivery_outcome(&outcome)?;
@@ -184,12 +329,21 @@ impl WriteStore for RedbWriteStore {
             ));
         }
         self.update(receipt_id, |receipt| {
+            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            if receipt.attempts.get(session).copied() != Some(attempt) {
+                return Err(WriteStoreError::Refused(
+                    "attempt is not current".to_owned(),
+                ));
+            }
             let current = receipt
                 .current
                 .publication
                 .destinations
                 .get_mut(session)
                 .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
+            if current == &outcome {
+                return Ok(());
+            }
             let may_transition = matches!(current, RelayDeliveryOutcome::Attempting)
                 || (matches!(current, RelayDeliveryOutcome::Retryable { .. })
                     && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
@@ -262,7 +416,8 @@ impl WriteStore for RedbWriteStore {
             return Ok(false);
         }
         let next_revision = next_revision(&state)?;
-        self.commit_update(None, &[receipt_id])?;
+        self.commit_update(None, None, &[receipt_id])?;
+        crate::release_semantic(&mut state, receipt_id);
         state.receipts.remove(&receipt_id);
         state.revision = next_revision;
         self.publish_snapshot(&state);
@@ -279,125 +434,4 @@ impl WriteStore for RedbWriteStore {
             .count())
     }
 }
-
-impl RedbWriteStore {
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, StoreState>, WriteStoreError> {
-        self.state
-            .lock()
-            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))
-    }
-
-    fn update(
-        &self,
-        receipt_id: ReceiptId,
-        mutation: impl FnOnce(&mut Receipt) -> Result<(), WriteStoreError>,
-    ) -> Result<Receipt, WriteStoreError> {
-        let mut state = self.lock()?;
-        let mut receipt = state
-            .receipts
-            .get(&receipt_id)
-            .cloned()
-            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        mutation(&mut receipt)?;
-        let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
-        let next_revision = next_revision(&state)?;
-        self.commit_update(Some(&receipt), &removals)?;
-        for id in removals {
-            state.receipts.remove(&id);
-        }
-        state.receipts.insert(receipt_id, receipt.clone());
-        state.revision = next_revision;
-        self.publish_snapshot(&state);
-        self.publish_receipt(Some(receipt.clone()), receipt_id);
-        Ok(receipt)
-    }
-}
-
-fn destinations(routing: &WriteRouting) -> BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
-    match routing {
-        WriteRouting::Automatic => BTreeMap::new(),
-        WriteRouting::Explicit(relays) => relays
-            .iter()
-            .cloned()
-            .map(|relay| {
-                (
-                    RelaySessionKey::new(relay, RelayAccess::public()),
-                    RelayDeliveryOutcome::Pending,
-                )
-            })
-            .collect(),
-    }
-}
-
-fn terminal_evictions(state: &StoreState, updated: &Receipt, maximum: usize) -> Vec<ReceiptId> {
-    let mut terminal: Vec<_> = state
-        .receipts
-        .values()
-        .filter(|receipt| receipt.is_terminal() && receipt.receipt_id != updated.receipt_id)
-        .map(|receipt| receipt.receipt_id)
-        .collect();
-    if updated.is_terminal() {
-        terminal.push(updated.receipt_id);
-    }
-    terminal.sort_unstable();
-    let excess = terminal.len().saturating_sub(maximum);
-    terminal.into_iter().take(excess).collect()
-}
-
-fn next_revision(state: &StoreState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
-}
-
-pub(crate) fn settle(receipt: &mut Receipt) {
-    if receipt.route_settled
-        && receipt
-            .destinations()
-            .values()
-            .all(RelayDeliveryOutcome::is_terminal)
-    {
-        receipt.outcome = if receipt.desired_destinations.is_empty() {
-            ReceiptOutcome::NoDestination
-        } else {
-            ReceiptOutcome::Complete
-        };
-    }
-}
-
-#[derive(Eq, PartialEq)]
-struct UnsignedEventView<'a> {
-    id: Option<fava_write::EventId>,
-    pubkey: fava_write::PublicKey,
-    created_at: fava_write::Timestamp,
-    kind: fava_write::Kind,
-    tags: &'a [fava_write::Tag],
-    content: &'a str,
-}
-
-impl<'a> From<&'a fava_write::UnsignedEvent> for UnsignedEventView<'a> {
-    fn from(event: &'a fava_write::UnsignedEvent) -> Self {
-        Self {
-            id: event.id,
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags.as_slice(),
-            content: &event.content,
-        }
-    }
-}
-
-impl<'a> From<&'a Event> for UnsignedEventView<'a> {
-    fn from(event: &'a Event) -> Self {
-        Self {
-            id: Some(event.id),
-            pubkey: event.pubkey,
-            created_at: event.created_at,
-            kind: event.kind,
-            tags: event.tags.as_slice(),
-            content: &event.content,
-        }
-    }
-}
+use std::collections::BTreeMap;

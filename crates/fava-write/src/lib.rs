@@ -12,9 +12,13 @@ use thiserror::Error;
 mod attempt_map;
 mod builder;
 mod delivery_map;
+mod edit;
+mod materialization;
 mod session_set;
 
 pub use builder::{EventBuildError, EventBuilder};
+pub use edit::ReplaceableEventEdit;
+pub use materialization::{MaterializationId, ReplaceableEventMaterializer};
 
 pub(crate) const MAX_EVENT_BYTES: usize = 131_072;
 const MAX_EXPLICIT_RELAYS: usize = 256;
@@ -46,6 +50,13 @@ pub struct ReceiptId(u64);
 pub enum WritePayload {
     /// Complete unsigned event body.
     Event(UnsignedEvent),
+    /// Persistable protocol-owned change awaiting or surviving materialization.
+    Edit {
+        /// Durable protocol-owned change.
+        edit: ReplaceableEventEdit,
+        /// Author resolved exactly once before custody.
+        author: PublicKey,
+    },
     /// Verified complete signed event.
     Presigned(Event),
 }
@@ -129,6 +140,16 @@ impl WriteIntent {
     #[must_use]
     pub const fn routing(&self) -> &WriteRouting {
         &self.routing
+    }
+
+    /// Exact event author, including the author resolved for an edit.
+    #[must_use]
+    pub fn author(&self) -> PublicKey {
+        match &self.payload {
+            WritePayload::Event(event) => event.pubkey,
+            WritePayload::Edit { author, .. } => *author,
+            WritePayload::Presigned(event) => event.pubkey,
+        }
     }
 
     /// Consume the intent into its exact parts.
@@ -355,6 +376,15 @@ pub struct PublicationEvidence {
     pub receipt_id: ReceiptId,
     /// Accepted write identity.
     pub write_id: WriteId,
+    /// Exact current immutable materialization generation.
+    pub materialization_id: MaterializationId,
+    /// Qualified source event used for the current materialization, when any.
+    pub materialization_source: Option<EventId>,
+    /// Bounded post-accept materialization failure attributed to current work.
+    pub materialization_failure: Option<String>,
+    /// Bounded retired generation, event, source, and optional failure facts.
+    pub retired_materializations:
+        Vec<(MaterializationId, EventId, Option<EventId>, Option<String>)>,
     /// Current signing fact.
     pub signature: SignatureState,
     /// Exact current fact for every selected relay session.

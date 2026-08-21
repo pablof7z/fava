@@ -137,6 +137,30 @@
       "milestone": "M6",
       "requirements": ["M6 independently selected app-relay and fallback write profiles"],
       "status": "enabled"
+    },
+    {
+      "id": "replaceable-edit-first-value",
+      "milestone": "M7",
+      "requirements": ["M7 first semantic value through public Fava"],
+      "status": "enabled"
+    },
+    {
+      "id": "replaceable-edit-rematerialization",
+      "milestone": "M7",
+      "requirements": ["M7 qualified successor and retired completion isolation"],
+      "status": "enabled"
+    },
+    {
+      "id": "replaceable-edit-opposing-operations",
+      "milestone": "M7",
+      "requirements": ["M7 public NIP-02 and bookmark opposing-operation composition"],
+      "status": "enabled"
+    },
+    {
+      "id": "protocol-crate-n-plus-one",
+      "milestone": "M7",
+      "requirements": ["M7 external capability and raw future-kind proof"],
+      "status": "enabled"
     }
   ]
 }

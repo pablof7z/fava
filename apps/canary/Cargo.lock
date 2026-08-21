@@ -130,10 +130,13 @@ name = "canary"
 version = "0.1.0"
 dependencies = [
  "fava",
+ "fava-bookmarks",
  "fava-delivery-standard",
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-ingest",
+ "fava-nip02",
+ "fava-publisher",
  "fava-publisher-nip01",
  "fava-query",
  "fava-query-standard",
@@ -159,6 +162,7 @@ dependencies = [
  "futures-util",
  "hex",
  "nostr",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2",
@@ -361,6 +365,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-bookmarks"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+]
+
+[[package]]
 name = "fava-delivery"
 version = "0.1.0"
 dependencies = [
@@ -416,6 +428,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip02"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
+]
+
+[[package]]
 name = "fava-nip65"
 version = "0.1.0"
 dependencies = [
@@ -439,6 +458,7 @@ version = "0.1.0"
 dependencies = [
  "fava-delivery",
  "fava-publisher",
+ "fava-query",
  "fava-routing",
  "fava-signer",
  "fava-state",
@@ -680,6 +700,7 @@ dependencies = [
  "fava-write",
  "fava-write-store",
  "redb",
+ "serde",
  "serde_json",
  "tokio",
 ]

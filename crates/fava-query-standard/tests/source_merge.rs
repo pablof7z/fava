@@ -98,6 +98,10 @@ fn publication() -> PublicationEvidence {
     PublicationEvidence {
         receipt_id: ReceiptId::from_u64(7),
         write_id: WriteId::from_u64(11),
+        materialization_id: fava_write::MaterializationId::from_u64(1),
+        materialization_source: None,
+        materialization_failure: None,
+        retired_materializations: Vec::new(),
         signature: SignatureState::Signed,
         destinations: BTreeMap::new(),
     }

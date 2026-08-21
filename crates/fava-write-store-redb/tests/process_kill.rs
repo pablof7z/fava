@@ -18,6 +18,9 @@ use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 
+#[path = "process_kill/semantic.rs"]
+mod semantic;
+
 const CHILD_BOUNDARY: &str = "FAVA_REDB_KILL_BOUNDARY";
 const CHILD_PATH: &str = "FAVA_REDB_KILL_PATH";
 const CHILD_MARKER: &str = "FAVA_REDB_KILL_MARKER";
@@ -37,19 +40,36 @@ fn boundary_child() {
                 .finalize(&keys())
                 .expect("deterministic event signs");
             store
-                .install_signed(accepted.receipt_id, signed)
+                .install_signed(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    signed,
+                )
                 .expect("child signature commits");
         }
         if matches!(boundary.as_str(), "attempt" | "outcome") {
             store
-                .begin_attempt(accepted.receipt_id, &session())
+                .begin_attempt(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                    &session(),
+                    1,
+                )
                 .expect("child attempt commits");
         }
         if boundary == "outcome" {
             store
                 .record_outcome(
+                    accepted.write_id,
                     accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
                     &session(),
+                    1,
                     RelayDeliveryOutcome::Acknowledged {
                         message: "stored".to_owned(),
                     },

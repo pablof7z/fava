@@ -275,12 +275,14 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-bookmarks",
  "fava-delivery",
  "fava-delivery-standard",
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-ingest",
+ "fava-nip02",
  "fava-observe",
  "fava-publication",
  "fava-publisher",
@@ -305,6 +307,15 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "fava-bookmarks"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+ "nostr",
 ]
 
 [[package]]
@@ -364,6 +375,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip02"
+version = "0.1.0"
+dependencies = [
+ "fava-write",
+ "nostr",
+]
+
+[[package]]
 name = "fava-nip65"
 version = "0.1.0"
 dependencies = [
@@ -388,6 +407,7 @@ version = "0.1.0"
 dependencies = [
  "fava-delivery",
  "fava-publisher",
+ "fava-query",
  "fava-routing",
  "fava-signer",
  "fava-state",
@@ -635,13 +655,22 @@ dependencies = [
 name = "fava-write-store-redb"
 version = "0.1.0"
 dependencies = [
+ "fava",
+ "fava-delivery-standard",
+ "fava-event-cache",
+ "fava-event-cache-memory",
+ "fava-publisher",
  "fava-query",
+ "fava-query-standard",
  "fava-routing",
+ "fava-signer-local",
  "fava-state",
+ "fava-transport",
  "fava-write",
  "fava-write-store",
  "nostr",
  "redb",
+ "serde",
  "serde_json",
  "tokio",
 ]

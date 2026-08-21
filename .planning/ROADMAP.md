@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through eleven vertical phases corresponding exactly to authoritative milestones M1 through M11. M1-M6 are complete from focused pre-GSD milestone slices; M7 is the current phase. Each phase delivers one public-facade capability, retains its milestone's complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
+Fava advances from the completed M0 evidence baseline through eleven vertical phases corresponding exactly to authoritative milestones M1 through M11. M1-M7 are complete; M8 is next. Each phase delivers one public-facade capability, retains its milestone's complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -22,7 +22,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 4: Ordered Routing and Subscription Planning** - Complete M4's asynchronous route contributions and meaning-preserving wire planning.
 - [x] **Phase 5: Durable Explicit-Route Publication** - Complete M5's durable write, local visibility, exact explicit delivery, receipt, cancellation, and recovery spine.
 - [x] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
-- [ ] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
+- [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
 - [ ] **Phase 10: Provider Substitution Qualification** - Complete M10's public-contract substitution matrix and architecture falsifiers.
@@ -152,18 +152,28 @@ Plans:
 
 ### Phase 7: Semantic Writes and Capability Composition
 
-**Goal:** Applications can express replaceable-event edits through independent protocol crates that reuse one durable publication lifecycle and survive source-state changes.
+**Goal:** As a Fava application developer, I want to express replaceable-event edits through independent protocol crates, so that they reuse one durable publication lifecycle and survive source-state changes.
 **Mode:** mvp
 **Depends on:** Phase 06.1
 **Requirements:** CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08, CAP-09
 **Success Criteria** (what must be TRUE):
 
-  1. A protocol capability crate exposes ordinary event values or semantic edits/inverses with actor identity, and a first-value edit materializes and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
+  1. A protocol capability crate exposes ordinary event values or authorless semantic edits and opposing operations; acceptance freezes the author once, and a first-value edit materializes and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
   2. When newer qualified source state arrives, still-live edits rematerialize while preserving unrelated changes and the same write/receipt identity across generations.
   3. Signer, route, publisher, and delivery completions for retired materialization generations are attributable but inert.
   4. Two unrelated capability crates pass the shared public corpus; adding capability N+1 changes only its crate and selected assembly metadata, while arbitrary/future event kinds remain usable without universal-core switches.
 
-**Plans:** TBD
+**Plans:** 9/9 complete
+
+- [x] 07-01-PLAN.md
+- [x] 07-02-PLAN.md
+- [x] 07-03-PLAN.md
+- [x] 07-04-PLAN.md
+- [x] 07-05-PLAN.md
+- [x] 07-06-PLAN.md
+- [x] 07-07-PLAN.md
+- [x] 07-08-PLAN.md
+- [x] 07-09-PLAN.md
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
@@ -239,7 +249,7 @@ Plans:
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | In Progress|  |
-| 7. Semantic Writes and Capability Composition | 0/TBD | Not started | - |
+| 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |

@@ -85,6 +85,7 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     assert_eq!(partial.receipt_id, accepted.receipt_id);
     assert_eq!(partial.outcome, ReceiptOutcome::Open);
     assert!(!partial.route_settled);
+    assert_eq!(partial.route_revision, 1);
     assert_eq!(
         partial.desired_destinations,
         preview.destinations.keys().cloned().collect()
@@ -99,30 +100,21 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         ],
         [],
     ));
-    let terminal = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("receipt settles");
+    let terminal = tokio::time::timeout(
+        Duration::from_secs(1),
+        fava.wait_terminal(accepted.receipt_id),
+    )
+    .await
+    .expect("terminal deadline elapsed")
+    .expect("receipt settles");
 
     assert_eq!(terminal.receipt_id, accepted.receipt_id);
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert!(terminal.route_settled);
+    assert_eq!(terminal.route_revision, 2);
     assert_eq!(terminal.destinations().len(), 4);
     assert_eq!(publisher.count(), 4);
     assert!(publisher.all_once_under(accepted.receipt_id));
-}
-
-trait BuilderTags {
-    fn tags(self, tags: impl IntoIterator<Item = Tag>) -> Self;
-}
-
-impl BuilderTags for EventBuilder {
-    fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
-        for tag in tags {
-            self = self.tag(tag);
-        }
-        self
-    }
 }
 
 fn contribution(

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 current_phase: 06.1
 current_phase_name: Literal Tag-Value Query Semantics Remediation
-status: executing
-stopped_at: Completed 06.1-03-PLAN.md
-last_updated: "2026-08-21T19:20:43.460Z"
+status: verifying
+stopped_at: Phase 06.1 execution and code review complete; goal verification pending
+last_updated: "2026-08-21T20:05:00Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 06.1 execution started
-state_head: bf37401c447a7e232573120303dccc93ff17df1b
+last_activity_desc: Phase 07 merged; Phase 06.1 execution and review complete
+state_head: 68962d7818fcd9302e4111fa1ba46a2285b8bf2e
 progress:
   total_phases: 12
-  completed_phases: 6
-  total_plans: 3
-  completed_plans: 3
-  percent: 50
+  completed_phases: 7
+  total_plans: 12
+  completed_plans: 12
+  percent: 58
 ---
 
 # Project State
@@ -27,40 +27,51 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — EXECUTING
+Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — VERIFYING
 Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-08-21 — Phase 06.1 execution started
+Status: Execution and code review complete; goal verification pending
+Last activity: 2026-08-21 — Phase 07 merged; Phase 06.1 review converged cleanly
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 58%
 
-Phase progress is 6/12. GSD plan metrics remain 0/0 because Phases 1-6 were
-executed before GSD and no retrospective plans or summaries were created.
+Phase progress is 7/12. Phases 1-6 predate GSD plans; Phase 7 completed all
+nine authored plans and its review, security, validation, and verification gates.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 12
+- Average duration: 37 minutes
+- Total execution time: 7 hours 29 minutes
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| Phase 07 | 9 | 407 min | 45 min |
+| Phase 06.1 | 3 | 42 min | 14 min |
 
 **Recent Trend:**
 
-- Last 5 plans: None
-- Trend: Not established
+- Last 5 plans: 134 min, 38 min, 15 min, 9 min, 18 min
+- Trend: Phase 06.1 remediation slices completed well below the Phase 7 capstone duration
 
 **Per-Plan Metrics:**
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
+| Phase 07 P01 | 11min | 2 tasks | 13 files |
+| Phase 07 P02 | 18min | 2 tasks | 8 files |
+| Phase 07 P03 | 32min | 2 tasks | 20 files |
+| Phase 07 P04 | 58min | 2 tasks | 30 files |
+| Phase 07 P05 | 40min | 2 tasks | 21 files |
+| Phase 07 P06 | 39min | 3 tasks | 17 files |
+| Phase 07 P07 | 37min | 2 tasks | 8 files |
+| Phase 07 P08 | 134min | 3 tasks | 24 files |
+| Phase 07 P09 | 38min | 2 tasks | 14 files |
 | Phase 06.1 P01 | 15min | 3 tasks | 7 files |
+| Phase 06.1 P02 | 9min | 2 tasks | 8 files |
 | Phase 06.1 P03 | 18min | 2 tasks | 9 files |
 
 ## Accumulated Context
@@ -81,6 +92,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 06.1]: Attempt all 300 no-grouping subscriptions concurrently; batch at 32 only after the controlled relay's exact capacity refusal.
 - [Phase 06.1]: Compare exact serving RelaySessionKey values per logical result; observation timestamps remain execution-local facts.
 - [Phase 06.1]: Ignore a crate-like vocabulary candidate only when the same line identifies that exact token as a /tmp evidence path.
+- [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic rematerialization time. — Raw events are complete caller-authored values, while semantic edits must be rematerializable against changing sources without a hidden clock override.
+- [Phase 07]: `ReplaceableEventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
 
 ### Pending Todos
 
@@ -89,8 +102,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 ### Blockers/Concerns
 
 - No current blocker.
-- Phase 06.1 must restore exact case-sensitive tag-value selection and semantically equivalent relay grouping before Phase 7 continues.
-- Phase 7 must qualify semantic edit ownership, rematerialization, generation identity, two independent capability crates, and change amplification through the ordinary write lifecycle.
+- Phase 06.1 awaits final goal verification; implementation and code review are complete.
 - Targeted research remains required during planning for Phases 7-11; recommendations do not override specifications.
 
 ### Roadmap Evolution
@@ -107,6 +119,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T19:20:43.449Z
-Stopped at: Completed 06.1-03-PLAN.md
+Last session: 2026-08-21T20:05:00Z
+Stopped at: Phase 06.1 execution and code review complete; goal verification pending
 Resume file: None
