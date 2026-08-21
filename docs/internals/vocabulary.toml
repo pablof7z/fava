@@ -415,7 +415,7 @@ meaning = "A durable change to a replaceable event that can be applied to the ne
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
-symbols = []
+symbols = ["fava_write::ReplaceableEventEdit"]
 crates = []
 spec_symbols = ["ReplaceableEventEdit"]
 
@@ -426,7 +426,7 @@ meaning = "A replaceable protocol provider that applies one durable semantic edi
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events but not a client-side provider contract for replaying one durable intention across changing source state without owning publication."
-symbols = []
+symbols = ["fava_write::ReplaceableEventMaterializer"]
 crates = []
 spec_symbols = ["ReplaceableEventMaterializer"]
 
@@ -437,7 +437,7 @@ meaning = "The exact identity of one immutable event materialization generation 
 owner = "fava-write"
 nearest_nostr = "EventId"
 distinction = "An EventId identifies one completed event body; MaterializationId correlates every effect and late completion to the exact generation that authorized it."
-symbols = []
+symbols = ["fava_write::MaterializationId"]
 crates = []
 spec_symbols = ["MaterializationId"]
 

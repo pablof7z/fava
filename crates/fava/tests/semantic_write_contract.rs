@@ -1,10 +1,12 @@
 //! Public neutral-contract evidence for semantic replaceable-event writes.
 
+use std::collections::BTreeMap;
+
 use fava_state::EventCoordinate;
 use fava_write::{
-    Event, EventBuilder, Kind, MaterializationId, ReceiptId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteId, WriteIntent,
-    WriteIntentError, WriteRouting,
+    Event, EventBuilder, Kind, MaterializationId, PublicationEvidence, ReceiptId,
+    ReplaceableEventEdit, ReplaceableEventMaterializer, SignatureState, Timestamp, UnsignedEvent,
+    WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use nostr::key::Keys;
 
@@ -29,10 +31,12 @@ fn edit_contract_is_bounded_and_round_trips() {
     assert_eq!(original.change(), &[1, 2, 3]);
     assert_eq!(original.inverse_change(), &[3, 2, 1]);
     assert_eq!(original.inverse().inverse(), original);
+    let intent = WriteIntent::edit(original.clone(), WriteRouting::Automatic)
+        .expect("structurally valid edit becomes the third write form");
+    assert!(matches!(intent.payload(), WritePayload::Edit(edit) if edit == &original));
 
     let encoded = serde_json::to_string(&original).expect("edit serializes");
-    let decoded: ReplaceableEventEdit =
-        serde_json::from_str(&encoded).expect("edit round-trips");
+    let decoded: ReplaceableEventEdit = serde_json::from_str(&encoded).expect("edit round-trips");
     assert_eq!(decoded, original);
 
     let duplicate_format = encoded.replacen('{', "{\"format\":7,", 1);
@@ -42,13 +46,7 @@ fn edit_contract_is_bounded_and_round_trips() {
     assert!(serde_json::from_str::<ReplaceableEventEdit>("{malformed").is_err());
 
     assert_eq!(
-        ReplaceableEventEdit::new(
-            actor,
-            coordinate,
-            7,
-            vec![0; 131_073],
-            Vec::new(),
-        ),
+        ReplaceableEventEdit::new(actor, coordinate, 7, vec![0; 131_073], Vec::new(),),
         Err(WriteIntentError::TooLarge {
             bytes: 131_073,
             maximum: 131_072,
@@ -120,14 +118,40 @@ fn addressable_edit_refuses_before_custody() {
 
 #[test]
 fn materialization_identity_changes_but_receipt_identity_does_not() {
+    let actor = Keys::generate().public_key();
     let write_id = WriteId::from_u64(9);
     let receipt_id = ReceiptId::from_u64(11);
     let first = MaterializationId::from_u64(1);
     let successor = MaterializationId::from_u64(2);
+    let first_event = EventBuilder::new(actor, Kind::ContactList)
+        .created_at(Timestamp::from(1))
+        .build()
+        .expect("first event");
+    let successor_event = EventBuilder::new(actor, Kind::ContactList)
+        .created_at(Timestamp::from(2))
+        .build()
+        .expect("successor event");
+    let first_event_id = first_event.id.expect("first id");
+    let successor_event_id = successor_event.id.expect("successor id");
+    let evidence = PublicationEvidence {
+        receipt_id,
+        write_id,
+        materialization_id: successor,
+        materialization_source: Some(first_event_id),
+        materialization_failure: Some("bounded materializer refusal".to_owned()),
+        retired_materializations: vec![(first, first_event_id, None, None)],
+        signature: SignatureState::Unsigned,
+        destinations: BTreeMap::new(),
+    };
 
     assert_ne!(first, successor);
     assert_eq!(first.as_u64(), 1);
     assert_eq!(successor.as_u64(), 2);
     assert_eq!((write_id.as_u64(), receipt_id.as_u64()), (9, 11));
-    assert_eq!((write_id.as_u64(), receipt_id.as_u64()), (9, 11));
+    assert_eq!(evidence.write_id, write_id);
+    assert_eq!(evidence.receipt_id, receipt_id);
+    assert_eq!(evidence.materialization_id, successor);
+    assert_eq!(evidence.materialization_source, Some(first_event_id));
+    assert_eq!(evidence.retired_materializations[0].0, first);
+    assert_ne!(first_event_id, successor_event_id);
 }

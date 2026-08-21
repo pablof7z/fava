@@ -116,6 +116,11 @@ impl WriteStore for MemoryWriteStore {
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
+            WritePayload::Edit(_) => {
+                return Err(WriteStoreError::Refused(
+                    "replaceable-event edit requires materialization before acceptance".to_owned(),
+                ));
+            }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
         let destinations = destinations(&routing);
@@ -124,6 +129,10 @@ impl WriteStore for MemoryWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
+            materialization_id: fava_write::MaterializationId::from_u64(1),
+            materialization_source: None,
+            materialization_failure: None,
+            retired_materializations: Vec::new(),
             signature,
             destinations,
         };

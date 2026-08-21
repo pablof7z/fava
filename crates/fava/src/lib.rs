@@ -211,6 +211,11 @@ impl Fava {
     ) -> Result<RoutePlan, PublicationError> {
         let event = match intent.payload() {
             fava_write::WritePayload::Event(event) => EventValue::Unsigned(event.clone()),
+            fava_write::WritePayload::Edit(_) => {
+                return Err(PublicationError::Routing(
+                    "replaceable-event edit requires a selected materializer".to_owned(),
+                ));
+            }
             fava_write::WritePayload::Presigned(event) => EventValue::Signed(event.clone()),
         };
         let request = RouteRequest::Write(event);
