@@ -1,6 +1,5 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Barrier, Mutex};
 
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
@@ -97,13 +96,13 @@ impl EventCache for ClosingEventCache {
 pub(super) struct FaultingWriteStore {
     inner: MemoryWriteStore,
     closed: broadcast::Sender<()>,
+    drop_receipt_changes: Arc<AtomicBool>,
     failing_reads: AtomicUsize,
-    pause_after_route_millis: AtomicU64,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
     reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
+    route_barrier: Mutex<Option<Arc<Barrier>>>,
     route_commits: AtomicU64,
-    suppressed_receipt_changes: Arc<AtomicUsize>,
 }
 
 impl FaultingWriteStore {
@@ -113,16 +112,11 @@ impl FaultingWriteStore {
         let mut inner_changes = inner.receipt_changes();
         let (receipt_changes, _) = broadcast::channel(64);
         let forwarded_changes = receipt_changes.clone();
-        let suppressed_receipt_changes = Arc::new(AtomicUsize::new(0));
-        let suppressed = Arc::clone(&suppressed_receipt_changes);
+        let drop_receipt_changes = Arc::new(AtomicBool::new(false));
+        let drop_changes = Arc::clone(&drop_receipt_changes);
         tokio::spawn(async move {
             while let Ok(change) = inner_changes.recv().await {
-                if suppressed
-                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                        count.checked_sub(1)
-                    })
-                    .is_err()
-                {
+                if !drop_changes.load(Ordering::SeqCst) {
                     let _ = forwarded_changes.send(change);
                 }
             }
@@ -130,13 +124,13 @@ impl FaultingWriteStore {
         Self {
             inner,
             closed,
+            drop_receipt_changes,
             failing_reads: AtomicUsize::new(0),
-            pause_after_route_millis: AtomicU64::new(0),
             receipt_changes,
             reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
+            route_barrier: Mutex::new(None),
             route_commits: AtomicU64::new(0),
-            suppressed_receipt_changes,
         }
     }
 
@@ -156,16 +150,12 @@ impl FaultingWriteStore {
         self.reads_after_route.store(count, Ordering::SeqCst);
     }
 
-    pub(super) fn pause_after_next_route(&self, duration: Duration) {
-        self.pause_after_route_millis.store(
-            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
-            Ordering::SeqCst,
-        );
+    pub(super) fn drop_receipt_changes(&self) {
+        self.drop_receipt_changes.store(true, Ordering::SeqCst);
     }
 
-    pub(super) fn suppress_next_receipt_change(&self) {
-        self.suppressed_receipt_changes
-            .fetch_add(1, Ordering::SeqCst);
+    pub(super) fn pause_after_next_route(&self, barrier: Arc<Barrier>) {
+        *self.route_barrier.lock().unwrap() = Some(barrier);
     }
 
     pub(super) fn route_commits(&self) -> u64 {
@@ -315,9 +305,10 @@ impl WriteStore for FaultingWriteStore {
             let failures = self.reads_after_route.swap(0, Ordering::SeqCst);
             self.failing_reads.store(failures, Ordering::SeqCst);
             self.route_commits.fetch_add(1, Ordering::SeqCst);
-            let pause = self.pause_after_route_millis.swap(0, Ordering::SeqCst);
-            if pause > 0 {
-                std::thread::sleep(Duration::from_millis(pause));
+            let barrier = self.route_barrier.lock().unwrap().take();
+            if let Some(barrier) = barrier {
+                barrier.wait();
+                barrier.wait();
             }
         }
         applied

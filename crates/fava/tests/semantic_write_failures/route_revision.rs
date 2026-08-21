@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use fava::{Fava, Kind, Receipt, ReceiptId};
@@ -19,11 +19,11 @@ use tokio::sync::{broadcast, watch};
 use super::faults::FaultingWriteStore;
 use super::support::{
     BlockingSigner, RecordingPublisher, TestMaterializer, automatic_intent, publication_builder,
-    relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
+    relay_evidence, signed_source, wait_for_signer,
 };
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn route_commit_result_survives_transient_receipt_read_failure() {
+#[tokio::test(flavor = "current_thread")]
+async fn successful_reads_reconcile_dropped_materialization_and_route_changes() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
@@ -44,7 +44,24 @@ async fn route_commit_result_survives_transient_receipt_read_failure() {
         .publish(automatic_intent(keys.public_key(), Kind::ContactList))
         .unwrap();
     wait_for_signer(&signer, 1).await;
+    wait_for_opens(&router, 1).await;
+    wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+        receipt.route_revision >= 1
+    })
+    .await;
 
+    let later = relay("wss://later-route.example");
+    let later_contribution = contribution(std::slice::from_ref(&later));
+    let barrier = Arc::new(Barrier::new(2));
+    store.pause_after_next_route(Arc::clone(&barrier));
+    store.drop_receipt_changes();
+    store.fail_receipt_reads_after_route(1);
+    let queued_router = Arc::clone(&router);
+    let release = std::thread::spawn(move || {
+        barrier.wait();
+        queued_router.send(later_contribution);
+        barrier.wait();
+    });
     let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
     cache
         .commit(vec![CacheMutation::Upsert(CachedEvent::new(
@@ -52,45 +69,35 @@ async fn route_commit_result_survives_transient_receipt_read_failure() {
             relay_evidence(),
         ))])
         .unwrap();
-    wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+        receipt.current.publication.materialization_id == fava::MaterializationId::from_u64(2)
+    })
+    .await;
+    release.join().unwrap();
     wait_for_signer(&signer, 2).await;
     wait_for_opens(&router, 2).await;
-    let stable = wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
-        receipt.route_revision >= 3
+    let later_session = RelaySessionKey::new(later, RelayAccess::public());
+    let rematerialized = wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+        receipt.destinations().contains_key(&later_session)
     })
     .await;
 
-    store.fail_receipt_reads_after_route(1);
-    store.pause_after_next_route(Duration::from_millis(100));
-    store.suppress_next_receipt_change();
-    let first = relay("wss://first-later-route.example");
     let second = relay("wss://second-later-route.example");
     let baseline_commits = store.route_commits();
-    let queued_router = Arc::clone(&router);
-    let queued_store = Arc::clone(&store);
-    let queued_first = first.clone();
-    let queued_second = second.clone();
-    let enqueue = tokio::spawn(async move {
-        while queued_store.route_commits() <= baseline_commits {
-            tokio::task::yield_now().await;
-        }
-        queued_router.send(contribution(&[queued_first, queued_second]));
-    });
-    router.send(contribution(std::slice::from_ref(&first)));
-    enqueue.await.unwrap();
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    router.send(contribution(&[later_session.relay.clone(), second.clone()]));
+    wait_for_route_commits(&store, baseline_commits.saturating_add(1)).await;
 
     let second_session = RelaySessionKey::new(second, RelayAccess::public());
     let updated = wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
         receipt.destinations().contains_key(&second_session)
     })
     .await;
-    assert!(updated.route_revision >= stable.route_revision.saturating_add(2));
+    assert!(updated.route_revision > rematerialized.route_revision);
 }
 
 struct QueuedRouter {
-    initial: RouteContribution,
     changes: broadcast::Sender<RouteContribution>,
+    current: Mutex<RouteContribution>,
     opens: AtomicU64,
 }
 
@@ -98,14 +105,15 @@ impl QueuedRouter {
     fn new(initial: RouteContribution) -> Self {
         let (changes, _) = broadcast::channel(8);
         Self {
-            initial,
             changes,
+            current: Mutex::new(initial),
             opens: AtomicU64::new(0),
         }
     }
 
     fn send(&self, contribution: RouteContribution) {
-        self.changes.send(contribution).unwrap();
+        *self.current.lock().unwrap() = contribution.clone();
+        let _ = self.changes.send(contribution);
     }
 }
 
@@ -119,7 +127,7 @@ impl Router for QueuedRouter {
         _request: &RouteRequest,
         _upstream: &RoutePlan,
     ) -> Result<RouteContribution, RouterError> {
-        Ok(self.initial.clone())
+        Ok(self.current.lock().unwrap().clone())
     }
 
     fn open(
@@ -129,7 +137,7 @@ impl Router for QueuedRouter {
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         self.opens.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(QueuedSession {
-            current: self.initial.clone(),
+            current: self.current.lock().unwrap().clone(),
             changes: self.changes.subscribe(),
         }))
     }
@@ -187,19 +195,28 @@ async fn wait_for_opens(router: &QueuedRouter, count: u64) {
     .expect("router did not reopen for successor materialization");
 }
 
+async fn wait_for_route_commits(store: &FaultingWriteStore, count: u64) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while store.route_commits() < count {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("route plan did not commit");
+}
+
 async fn wait_for_receipt(
     fava: &Fava,
     receipt_id: ReceiptId,
     predicate: impl Fn(&Receipt) -> bool,
 ) -> Receipt {
     tokio::time::timeout(Duration::from_secs(1), async {
-        let mut changes = fava.receipt_changes();
         loop {
             let receipt = fava.receipt(receipt_id).unwrap().unwrap();
             if predicate(&receipt) {
                 return receipt;
             }
-            changes.recv().await.unwrap();
+            tokio::task::yield_now().await;
         }
     })
     .await
