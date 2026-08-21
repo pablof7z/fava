@@ -18,6 +18,9 @@ use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 
+#[path = "process_kill/semantic.rs"]
+mod semantic;
+
 const CHILD_BOUNDARY: &str = "FAVA_REDB_KILL_BOUNDARY";
 const CHILD_PATH: &str = "FAVA_REDB_KILL_PATH";
 const CHILD_MARKER: &str = "FAVA_REDB_KILL_MARKER";

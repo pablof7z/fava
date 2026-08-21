@@ -16,6 +16,14 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+fava = { path = "../fava" }
+fava-delivery-standard.workspace = true
+fava-event-cache.workspace = true
+fava-event-cache-memory.workspace = true
+fava-publisher.workspace = true
+fava-query-standard.workspace = true
+fava-signer-local.workspace = true
+fava-transport.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]
