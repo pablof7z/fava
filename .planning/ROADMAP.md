@@ -162,6 +162,25 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 **Plans:** TBD
 
+- [ ] 08-01-PLAN.md
+- [x] 08-02-PLAN.md
+- [ ] 08-03-PLAN.md
+- [ ] 08-04-PLAN.md
+- [ ] 08-05-PLAN.md
+- [ ] 08-06-PLAN.md
+- [ ] 08-07-PLAN.md
+- [ ] 08-08-PLAN.md
+- [ ] 08-09-PLAN.md
+- [ ] 08-10-PLAN.md
+- [ ] 08-11-PLAN.md
+- [ ] 08-12-PLAN.md
+- [ ] 08-13-PLAN.md
+- [ ] 08-14-PLAN.md
+- [ ] 08-15-PLAN.md
+- [ ] 08-16-PLAN.md
+- [ ] 08-17-PLAN.md
+- [ ] 08-18-PLAN.md
+
 ### Phase 9: Truthful Profiles and Protocol Services
 
 **Goal:** Applications can select persistent or ephemeral provider profiles and service caches whose restart, freshness, reset, and failure guarantees are explicit and truthful.
@@ -221,7 +240,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | In Progress|  |
-| 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
+| 8. Authentication, Hostile Boundaries, and Boundedness | 1/18 | In Progress|  |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |
 | 11. Native Products and Release Qualification | 0/TBD | Not started | - |

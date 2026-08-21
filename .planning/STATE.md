@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 current_phase: 08
 current_phase_name: Authentication, Hostile Boundaries, and Boundedness
-status: ready_to_plan
-stopped_at: Phase 07 verified and complete
-last_updated: "2026-08-21T17:45:03Z"
-last_activity: 2026-08-21
-last_activity_desc: Phase 07 goal verified; Phase 08 is next
-state_head: 31139e2
+status: executing
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-08-21T23:21:49.612Z"
+last_activity: 2026-08-22
+last_activity_desc: Phase 08 execution started
+state_head: 81f313e1385b0db537fadd25064c372841390e37
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 9
-  completed_plans: 9
-  percent: 64
+  total_plans: 27
+  completed_plans: 10
+  percent: 37
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 08 (Authentication, Hostile Boundaries, and Boundedness) — NOT STARTED
-Plan: —
-Status: Ready for phase planning
-Last activity: 2026-08-21 — Phase 07 verified and completed
+Phase: 08 (Authentication, Hostile Boundaries, and Boundedness) — EXECUTING
+Plan: 2 of 18
+Status: Ready to execute
+Last activity: 2026-08-22 — Phase 08 execution started
 
-Progress: [██████░░░░] 64%
+Progress: [████░░░░░░] 37%
 
 Phase progress is 7/11. Phases 1-6 predate GSD plans; Phase 7 completed all
 nine authored plans and its review, security, validation, and verification gates.
@@ -69,6 +69,7 @@ nine authored plans and its review, security, validation, and verification gates
 | Phase 07 P07 | 37min | 2 tasks | 8 files |
 | Phase 07 P08 | 134min | 3 tasks | 24 files |
 | Phase 07 P09 | 38min | 2 tasks | 14 files |
+| Phase 08 P02 | 10min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Windowing/resume tokens, outage backfill, partial-handoff cancellation, full attempt-history retention, and the recommended persistent event-cache profile remain explicitly unpromised pending their owning phase evidence.
 - [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic rematerialization time. — Raw events are complete caller-authored values, while semantic edits must be rematerializable against changing sources without a hidden clock override.
 - [Phase 07]: `ReplaceableEventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
+- [Phase 08]: Delivery policy consumes Receipt::spent while Receipt::attempts remains monotonic operation generation. — Offline retries need exact late-completion identity without spending the real-attempt ceiling.
+- [Phase 08]: Cargo and Bazel execute the same public delivery_bounds integration source. — One behavior harness prevents graph-specific claims from drifting.
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T17:45:03Z
-Stopped at: Phase 07 verified and complete
+Last session: 2026-08-21T23:21:49.566Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
