@@ -1,5 +1,5 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "lib",
@@ -15,4 +15,18 @@ rust_library(
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "tag_values",
+    crate_name = "tag_values",
+    srcs = ["tests/tag_values.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-wire:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
 )
