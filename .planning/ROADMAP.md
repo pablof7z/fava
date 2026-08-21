@@ -124,7 +124,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 ### Phase 06.1: Literal Tag-Value Query Semantics Remediation (INSERTED)
 
-**Goal:** Applications can select events by any exact case-sensitive ASCII one-letter Nostr tag key, and compatible relay demand can be grouped without changing logical results or evidence.
+**Goal:** As a Fava application developer, I want to select events by any exact case-sensitive ASCII one-letter Nostr tag key and safely group compatible relay demand, so that wire optimization never changes logical results or evidence.
 **Mode:** mvp
 **Requirements:** LOCAL-09, ROUTE-10
 **Depends on:** Phase 6
