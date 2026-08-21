@@ -142,6 +142,7 @@ rust_test(
     name = "semantic_write_publication",
     srcs = [
         "tests/semantic_write_publication.rs",
+        "tests/semantic_write_publication/author.rs",
         "tests/semantic_write_publication/interleavings.rs",
         "tests/semantic_write_publication/shared_capacity.rs",
         "tests/support/semantic_write.rs",
@@ -178,6 +179,7 @@ rust_test(
         "tests/semantic_write_failures/source_isolation.rs",
         "tests/semantic_write_failures/support.rs",
         "tests/semantic_write_failures/transient_reads.rs",
+        "tests/semantic_write_failures/validation.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_failures",
