@@ -179,7 +179,14 @@ impl Publication {
             self.finished(receipt_id);
             return None;
         }
-        Some((receipt, routes))
+        let Some(current) = self.read_receipt(receipt_id, cancel).await else {
+            if let Some(semantic) = semantic {
+                semantic.close();
+            }
+            self.finished(receipt_id);
+            return None;
+        };
+        Some((current, routes))
     }
 
     pub(super) async fn read_receipt(
