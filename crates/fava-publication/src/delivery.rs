@@ -40,7 +40,9 @@ impl Publication {
             };
             if !matches!(
                 outcome,
-                RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
+                RelayDeliveryOutcome::Pending
+                    | RelayDeliveryOutcome::Retryable { .. }
+                    | RelayDeliveryOutcome::Unreachable { .. }
             ) || active.contains_key(session)
             {
                 continue;
@@ -114,9 +116,36 @@ impl Publication {
             let Some(outcome) = receipt.destinations().get(&session) else {
                 return;
             };
-            let attempts = receipt.attempts.get(&session).copied().unwrap_or(0);
-            match self.delivery.decide(DeliveryFacts { attempts, outcome }) {
+            let attempt_generation = receipt.attempts.get(&session).copied().unwrap_or(0);
+            let spent_attempts = receipt.spent(&session);
+            match self.delivery.decide(DeliveryFacts {
+                attempts: spent_attempts,
+                outcome,
+            }) {
                 DeliveryDecision::Settled => return,
+                DeliveryDecision::WaitFor(interval) => {
+                    // Waiting is not an attempt. After the bounded timer, the
+                    // store revalidates exact identity before the next effect.
+                    tokio::select! {
+                        biased;
+                        changed = cancel.changed() => {
+                            if changed.is_err() || *cancel.borrow_and_update() {
+                                return;
+                            }
+                        }
+                        () = tokio::time::sleep(interval) => {
+                            self.attempt(
+                                write_id,
+                                receipt_id,
+                                materialization_id,
+                                event_id,
+                                &session,
+                                attempt_generation,
+                            )
+                            .await;
+                        }
+                    }
+                }
                 DeliveryDecision::GiveUp { reason } => {
                     let _ = self.store.record_outcome(
                         write_id,
@@ -124,7 +153,7 @@ impl Publication {
                         materialization_id,
                         event_id,
                         &session,
-                        attempts,
+                        attempt_generation,
                         RelayDeliveryOutcome::GivenUp { reason },
                     );
                     return;
@@ -136,7 +165,7 @@ impl Publication {
                         materialization_id,
                         event_id,
                         &session,
-                        attempts,
+                        attempt_generation,
                     )
                     .await;
                 }
@@ -205,6 +234,7 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
         PublishOutcome::AuthenticationDenied { reason } => {
             RelayDeliveryOutcome::AuthenticationDenied { reason }
         }
+        PublishOutcome::Unreachable { reason } => RelayDeliveryOutcome::Unreachable { reason },
         PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
         PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
     }

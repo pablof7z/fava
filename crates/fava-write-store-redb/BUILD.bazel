@@ -42,6 +42,22 @@ rust_test(
 )
 
 rust_test(
+    name = "delivery_lifecycle",
+    srcs = ["tests/delivery_lifecycle.rs"],
+    crate_name = "delivery_lifecycle",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "process_kill",
     srcs = [
         "tests/process_kill.rs",
