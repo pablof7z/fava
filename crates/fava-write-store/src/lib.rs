@@ -216,6 +216,7 @@ pub fn validate_receipt_text(value: &str) -> Result<(), WriteStoreError> {
 pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), WriteStoreError> {
     match outcome {
         RelayDeliveryOutcome::Retryable { reason }
+        | RelayDeliveryOutcome::Unreachable { reason }
         | RelayDeliveryOutcome::GivenUp { reason }
         | RelayDeliveryOutcome::RefusedByLimit { reason }
         | RelayDeliveryOutcome::AuthenticationDenied { reason }
@@ -290,7 +291,7 @@ pub fn apply_route_to_receipt(
                 receipt.current.publication.destinations.remove(&session);
                 receipt.attempts.remove(&session);
             }
-            Some(RelayDeliveryOutcome::Retryable { .. }) => {
+            Some(RelayDeliveryOutcome::Retryable { .. } | RelayDeliveryOutcome::Unreachable { .. }) => {
                 receipt
                     .current
                     .publication

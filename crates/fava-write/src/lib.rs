@@ -330,6 +330,15 @@ pub enum RelayDeliveryOutcome {
         /// Exact definite pre-handoff failure.
         reason: String,
     },
+    /// No connection to this destination existed, so no attempt was spent.
+    ///
+    /// Being offline or unreachable is not a failed delivery attempt. The lane
+    /// stays open, the attempt budget is untouched, and the exact reason is
+    /// retained as evidence.
+    Unreachable {
+        /// Exact reason no connection could be established.
+        reason: String,
+    },
     /// Relay accepted the event with this exact message.
     Acknowledged {
         /// Exact bounded relay message.
@@ -470,8 +479,17 @@ pub struct Receipt {
     #[serde(with = "session_set")]
     pub desired_destinations: BTreeSet<RelaySessionKey>,
     /// Number of durably authorized attempts per destination.
+    ///
+    /// This is attempt generation identity. It only ever increases, so a late
+    /// completion always names exactly one attempt.
     #[serde(with = "attempt_map")]
     pub attempts: BTreeMap<RelaySessionKey, u32>,
+    /// Attempts that actually reached a relay, per destination.
+    ///
+    /// This is the budget a delivery policy spends. Time spent offline or
+    /// unreachable never appears here.
+    #[serde(default, with = "attempt_map")]
+    pub spent_attempts: BTreeMap<RelaySessionKey, u32>,
 }
 
 impl Receipt {
@@ -479,6 +497,12 @@ impl Receipt {
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
         !matches!(self.outcome, ReceiptOutcome::Open)
+    }
+
+    /// Attempts this destination has actually spent reaching a relay.
+    #[must_use]
+    pub fn spent(&self, session: &RelaySessionKey) -> u32 {
+        self.spent_attempts.get(session).copied().unwrap_or(0)
     }
 
     /// Current per-destination facts.

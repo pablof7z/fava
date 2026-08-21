@@ -55,7 +55,7 @@ impl Publication {
             let Some(current) = self.store.receipt(receipt_id).ok().flatten() else {
                 break;
             };
-            self.start_lanes(&current, &mut active, &lane_finished);
+            self.start_lanes(&current, &mut active, &lane_finished, &cancel);
             if current.is_terminal() {
                 break;
             }
@@ -170,6 +170,7 @@ impl Publication {
         receipt: &Receipt,
         active: &mut BTreeSet<RelaySessionKey>,
         finished: &mpsc::UnboundedSender<RelaySessionKey>,
+        cancel: &watch::Receiver<bool>,
     ) {
         if !matches!(receipt.current.event, EventValue::Signed(_)) {
             return;
@@ -180,7 +181,9 @@ impl Publication {
             };
             if !matches!(
                 outcome,
-                RelayDeliveryOutcome::Pending | RelayDeliveryOutcome::Retryable { .. }
+                RelayDeliveryOutcome::Pending
+                    | RelayDeliveryOutcome::Retryable { .. }
+                    | RelayDeliveryOutcome::Unreachable { .. }
             ) || !active.insert(session.clone())
             {
                 continue;
@@ -189,17 +192,26 @@ impl Publication {
             let session = session.clone();
             let finished = finished.clone();
             let receipt_id = receipt.receipt_id;
+            let cancel = cancel.clone();
             tokio::spawn(async move {
                 publication
-                    .run_destination(receipt_id, session.clone())
+                    .run_destination(receipt_id, session.clone(), cancel)
                     .await;
                 let _ = finished.send(session);
             });
         }
     }
 
-    async fn run_destination(&self, receipt_id: ReceiptId, session: RelaySessionKey) {
+    async fn run_destination(
+        &self,
+        receipt_id: ReceiptId,
+        session: RelaySessionKey,
+        mut cancel: watch::Receiver<bool>,
+    ) {
         loop {
+            if *cancel.borrow_and_update() {
+                return;
+            }
             let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
                 return;
             };
@@ -209,9 +221,22 @@ impl Publication {
             let Some(outcome) = receipt.destinations().get(&session) else {
                 return;
             };
-            let attempts = receipt.attempts.get(&session).copied().unwrap_or(0);
+            let attempts = receipt.spent(&session);
             match self.delivery.decide(DeliveryFacts { attempts, outcome }) {
                 DeliveryDecision::Settled => return,
+                DeliveryDecision::WaitFor(interval) => {
+                    // Waiting is not an attempt. The lane holds one bounded
+                    // timer and wakes early when its owner cancels.
+                    tokio::select! {
+                        biased;
+                        changed = cancel.changed() => {
+                            if changed.is_err() || *cancel.borrow_and_update() {
+                                return;
+                            }
+                        }
+                        () = tokio::time::sleep(interval) => {}
+                    }
+                }
                 DeliveryDecision::GiveUp { reason } => {
                     let _ = self.store.record_outcome(
                         receipt_id,
@@ -276,6 +301,7 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
         PublishOutcome::AuthenticationDenied { reason } => {
             RelayDeliveryOutcome::AuthenticationDenied { reason }
         }
+        PublishOutcome::Unreachable { reason } => RelayDeliveryOutcome::Unreachable { reason },
         PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
         PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
     }

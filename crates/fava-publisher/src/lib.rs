@@ -164,6 +164,14 @@ pub enum PublishOutcome {
         /// Exact scoped authentication reason.
         reason: String,
     },
+    /// No connection to the destination could be established.
+    ///
+    /// This is not a failed attempt. It reports that the relay was offline or
+    /// unreachable, so the attempt budget was never spent.
+    Unreachable {
+        /// Exact reason no connection could be established.
+        reason: String,
+    },
     /// Bytes definitely were not handed to transport.
     NotHandedOff {
         /// Exact definite failure reason.

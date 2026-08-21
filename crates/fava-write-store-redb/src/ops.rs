@@ -67,6 +67,7 @@ impl WriteStore for RedbWriteStore {
             route_shortfalls: Vec::new(),
             desired_destinations,
             attempts: BTreeMap::new(),
+            spent_attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
         self.commit_accept(next_identity, &receipt)?;
@@ -179,7 +180,12 @@ impl WriteStore for RedbWriteStore {
         outcome: RelayDeliveryOutcome,
     ) -> Result<Receipt, WriteStoreError> {
         validate_delivery_outcome(&outcome)?;
-        if !outcome.is_terminal() && !matches!(outcome, RelayDeliveryOutcome::Retryable { .. }) {
+        if !outcome.is_terminal()
+            && !matches!(
+                outcome,
+                RelayDeliveryOutcome::Retryable { .. } | RelayDeliveryOutcome::Unreachable { .. }
+            )
+        {
             return Err(WriteStoreError::Refused(
                 "recorded delivery outcome is not terminal or retryable".to_owned(),
             ));
@@ -192,14 +198,26 @@ impl WriteStore for RedbWriteStore {
                 .get_mut(session)
                 .ok_or_else(|| WriteStoreError::Refused("destination does not exist".to_owned()))?;
             let may_transition = matches!(current, RelayDeliveryOutcome::Attempting)
-                || (matches!(current, RelayDeliveryOutcome::Retryable { .. })
-                    && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
+                || (matches!(
+                    current,
+                    RelayDeliveryOutcome::Retryable { .. }
+                        | RelayDeliveryOutcome::Unreachable { .. }
+                ) && matches!(outcome, RelayDeliveryOutcome::GivenUp { .. }));
             if !may_transition {
                 return Err(WriteStoreError::Refused(
                     "attempt is not current".to_owned(),
                 ));
             }
+            // Only an attempt that actually reached a relay spends budget. A
+        // policy give-up recorded from a parked lane is a decision, not an
+        // attempt, and unreachable time is not an attempt either.
+        let spends_budget = matches!(current, RelayDeliveryOutcome::Attempting)
+            && !matches!(outcome, RelayDeliveryOutcome::Unreachable { .. });
             *current = outcome;
+            if spends_budget {
+                let spent = receipt.spent_attempts.entry(session.clone()).or_default();
+                *spent = spent.saturating_add(1);
+            }
             settle(receipt);
             Ok(())
         })

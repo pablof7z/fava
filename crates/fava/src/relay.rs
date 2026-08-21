@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -65,6 +65,12 @@ pub(super) struct OpenedRelay {
     attribution: BTreeMap<SubscriptionId, Filter>,
     demand: Vec<ClientMessage<'static>>,
     pending_authentication: Option<(EventId, PublicKey)>,
+    /// Subscriptions this generation has seen terminated by the relay.
+    ///
+    /// A relay that says CLOSED has ended that exact request. Anything it
+    /// sends afterwards for the same id belongs to no current work and is
+    /// refused by identity, not by content.
+    terminated: BTreeSet<SubscriptionId>,
 }
 
 impl OpenedRelay {
@@ -82,6 +88,7 @@ impl OpenedRelay {
             attribution: established.attribution,
             demand: established.demand,
             pending_authentication: None,
+            terminated: BTreeSet::new(),
         })
     }
 
@@ -152,13 +159,79 @@ impl OpenedRelay {
                 self.settle_authentication(event_id, status, message.into_owned())
                     .await;
             }
-            message => handle_message(
-                self.session.as_ref(),
-                self.providers.cache.as_ref(),
-                self.providers.diagnostics.as_ref(),
-                &self.attribution,
+            message => self.handle_relay_message(message),
+        }
+    }
+
+    /// Apply one attributed relay message to this exact generation.
+    fn handle_relay_message(&mut self, message: RelayMessage<'static>) {
+        let key = self.session_key.clone();
+        let generation = self.session.generation();
+        let diagnostics = self.providers.diagnostics.as_ref();
+        match message {
+            RelayMessage::Event {
+                subscription_id,
+                event,
+            } => {
+                let id = subscription_id.into_owned();
+                if self.terminated.contains(&id) {
+                    diagnostics.failed(
+                        key,
+                        generation,
+                        format!("EVENT after CLOSED for {id} is inert"),
+                    );
+                    return;
+                }
+                let Some(filter) = self.attribution.get(&id) else {
+                    diagnostics.failed(key, generation, format!("unattributed EVENT for {id}"));
+                    return;
+                };
+                if let Err(error) = admit_subscription_event(
+                    self.providers.cache.as_ref(),
+                    &self.session_key,
+                    &id,
+                    &id,
+                    filter,
+                    event.into_owned(),
+                    Timestamp::now(),
+                ) {
+                    diagnostics.failed(key, generation, error.to_string());
+                }
+            }
+            RelayMessage::EndOfStoredEvents(subscription) => {
+                let id = subscription.into_owned();
+                if self.terminated.contains(&id) {
+                    diagnostics.failed(
+                        key,
+                        generation,
+                        format!("EOSE after CLOSED for {id} is inert"),
+                    );
+                } else if self.attribution.contains_key(&id) {
+                    diagnostics.eose(key, generation, id);
+                } else {
+                    diagnostics.failed(key, generation, format!("unattributed EOSE for {id}"));
+                }
+            }
+            RelayMessage::Closed {
+                subscription_id,
                 message,
-            ),
+            } => {
+                let id = subscription_id.into_owned();
+                if self.attribution.contains_key(&id) {
+                    self.terminated.insert(id.clone());
+                    diagnostics.closed(key, generation, id, message.into_owned());
+                } else {
+                    diagnostics.failed(key, generation, format!("unattributed CLOSED for {id}"));
+                }
+            }
+            RelayMessage::Notice(message) => {
+                diagnostics.failed(key, generation, format!("relay NOTICE: {message}"));
+            }
+            RelayMessage::Auth { .. }
+            | RelayMessage::Ok { .. }
+            | RelayMessage::Count { .. }
+            | RelayMessage::NegMsg { .. }
+            | RelayMessage::NegErr { .. } => {}
         }
     }
 
@@ -252,7 +325,11 @@ impl OpenedRelay {
     }
 
     /// Re-issue the exact accepted plan after authentication unblocks it.
-    async fn restore_demand(&self) {
+    ///
+    /// Restoring demand opens the same subscription ids again on this same
+    /// generation, so their earlier terminal state no longer applies.
+    async fn restore_demand(&mut self) {
+        self.terminated.clear();
         for message in &self.demand {
             let Ok(frame) = encode_client(message) else {
                 continue;
@@ -297,6 +374,7 @@ impl OpenedRelay {
                     self.attribution = established.attribution;
                     self.demand = established.demand;
                     self.pending_authentication = None;
+                    self.terminated.clear();
                     return true;
                 }
                 Err(error) => self.providers.diagnostics.failed(
@@ -419,67 +497,6 @@ fn validate_plan(expected: &RelaySessionKey, plan: &SubscriptionPlan) -> Result<
         }
     }
     Ok(())
-}
-
-fn handle_message(
-    session: &dyn RelaySession,
-    cache: &dyn EventCache,
-    diagnostics: &Diagnostics,
-    attribution: &BTreeMap<SubscriptionId, Filter>,
-    message: RelayMessage<'static>,
-) {
-    let key = session.key().clone();
-    let generation = session.generation();
-    match message {
-        RelayMessage::Event {
-            subscription_id,
-            event,
-        } => {
-            let id = subscription_id.into_owned();
-            let Some(filter) = attribution.get(&id) else {
-                diagnostics.failed(key, generation, format!("unattributed EVENT for {id}"));
-                return;
-            };
-            if let Err(error) = admit_subscription_event(
-                cache,
-                session.key(),
-                &id,
-                &id,
-                filter,
-                event.into_owned(),
-                Timestamp::now(),
-            ) {
-                diagnostics.failed(key, generation, error.to_string());
-            }
-        }
-        RelayMessage::EndOfStoredEvents(subscription) => {
-            let id = subscription.into_owned();
-            if attribution.contains_key(&id) {
-                diagnostics.eose(key, generation, id);
-            } else {
-                diagnostics.failed(key, generation, format!("unattributed EOSE for {id}"));
-            }
-        }
-        RelayMessage::Closed {
-            subscription_id,
-            message,
-        } => {
-            let id = subscription_id.into_owned();
-            if attribution.contains_key(&id) {
-                diagnostics.closed(key, generation, id, message.into_owned());
-            } else {
-                diagnostics.failed(key, generation, format!("unattributed CLOSED for {id}"));
-            }
-        }
-        RelayMessage::Notice(message) => {
-            diagnostics.failed(key, generation, format!("relay NOTICE: {message}"));
-        }
-        RelayMessage::Auth { .. }
-        | RelayMessage::Ok { .. }
-        | RelayMessage::Count { .. }
-        | RelayMessage::NegMsg { .. }
-        | RelayMessage::NegErr { .. } => {}
-    }
 }
 
 async fn withdraw(
