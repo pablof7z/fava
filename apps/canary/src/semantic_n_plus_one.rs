@@ -285,19 +285,19 @@ mod tests {
         let metadata = json!({
             "workspace_members": ["root 0.1.0 (path+file:///repo/root)"],
             "packages": [{
-                "id": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0",
-                "name": "fava-external-semantic-capability-proof",
+                "id": "path+file:///repo/falsifiers/external-semantic-capability#external-semantic-capability-proof@0.1.0",
+                "name": "external-semantic-capability-proof",
                 "manifest_path": "/repo/falsifiers/external-semantic-capability/Cargo.toml"
             }],
             "resolve": {"nodes": [
                 {"id": "root 0.1.0 (path+file:///repo/root)", "deps": [{
-                    "pkg": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0",
+                    "pkg": "path+file:///repo/falsifiers/external-semantic-capability#external-semantic-capability-proof@0.1.0",
                     "dep_kinds": [{"kind": null, "target": null}]
                 }]},
-                {"id": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0", "deps": []}
+                {"id": "path+file:///repo/falsifiers/external-semantic-capability#external-semantic-capability-proof@0.1.0", "deps": []}
             ]}
         });
-        let external = "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0";
+        let external = "path+file:///repo/falsifiers/external-semantic-capability#external-semantic-capability-proof@0.1.0";
         assert!(cargo_reaches_external(&metadata, external).expect("valid fixture metadata"));
         let mut dev_only = metadata;
         dev_only["resolve"]["nodes"][0]["deps"][0]["dep_kinds"][0]["kind"] = json!("dev");

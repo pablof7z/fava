@@ -195,6 +195,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "external-semantic-capability-proof"
+version = "0.1.0"
+dependencies = [
+ "fava",
+ "fava-delivery-standard",
+ "fava-event-cache-memory",
+ "fava-publisher-nip01",
+ "fava-query-standard",
+ "fava-signer-local",
+ "fava-state",
+ "fava-subscriptions-standard",
+ "fava-transport",
+ "fava-write-store-memory",
+ "nostr",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "faster-hex"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,25 +290,6 @@ dependencies = [
  "fava-state",
  "nostr",
  "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "fava-external-semantic-capability-proof"
-version = "0.1.0"
-dependencies = [
- "fava",
- "fava-delivery-standard",
- "fava-event-cache-memory",
- "fava-publisher-nip01",
- "fava-query-standard",
- "fava-signer-local",
- "fava-state",
- "fava-subscriptions-standard",
- "fava-transport",
- "fava-write-store-memory",
- "nostr",
- "serde_json",
  "tokio",
 ]
 
