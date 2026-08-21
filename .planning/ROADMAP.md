@@ -130,7 +130,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Requirements:** CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08, CAP-09
 **Success Criteria** (what must be TRUE):
 
-  1. A protocol capability crate exposes ordinary event values or semantic edits/inverses with actor identity, and a first-value edit materializes and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
+  1. A protocol capability crate exposes ordinary event values or authorless semantic edits and opposing operations; acceptance freezes the author once, and a first-value edit materializes and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
   2. When newer qualified source state arrives, still-live edits rematerialize while preserving unrelated changes and the same write/receipt identity across generations.
   3. Signer, route, publisher, and delivery completions for retired materialization generations are attributable but inert.
   4. Two unrelated capability crates pass the shared public corpus; adding capability N+1 changes only its crate and selected assembly metadata, while arbitrary/future event kinds remain usable without universal-core switches.

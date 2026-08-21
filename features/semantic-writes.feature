@@ -25,10 +25,10 @@ Feature: Semantic replaceable-event writes
     Then the completion remains attributable and cannot change current receipt or event state
 
   # fava:rust=fava/semantic_write_capabilities#nip02_passes_public_semantic_write_corpus
-  Scenario: inverse
+  Scenario: opposing operations
     Given a protocol capability has produced a bounded semantic edit
-    When the capability produces and publishes the edit's inverse
-    Then the inverse uses the same write lifecycle and restores the intended protocol state
+    When the capability produces and publishes the opposing edit
+    Then the opposing operation uses the same write lifecycle and restores the intended protocol state
 
   # fava:rust=external-semantic-capability-proof/public_capability#external_capability_composes_through_public_fava
   Scenario: external N+1

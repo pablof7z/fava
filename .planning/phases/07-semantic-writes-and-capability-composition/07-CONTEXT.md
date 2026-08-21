@@ -20,9 +20,12 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 
 ### Authoritative behavior
 - `WriteIntent` gains the third authoritative accepted form: a bounded,
-  persistable replaceable-event edit carrying its actor before materialization.
-- The edit's protocol crate owns its coordinate, empty-state behavior, durable
-  change format, inverse, and application to qualified source state.
+  persistable replaceable-event edit whose accepted custody freezes the author
+  before materialization; the edit itself carries no author.
+- The edit's protocol crate owns its kind, optional addressable identifier,
+  opaque change encoding, empty-state behavior, opposing operations, and
+  application to qualified source state. The edit carries no version or stored
+  inverse.
 - First-value edits materialize without a predecessor. Newer qualified source
   state rematerializes every still-live edit while preserving unrelated source
   changes.
@@ -38,7 +41,7 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 - Implement NIP-02 follow/unfollow and a separate bookmarks
   bookmark/unbookmark capability to challenge the shared contract.
 - Both capabilities must pass one public conformance corpus, including first
-  value, inverse, source change, deterministic composition, and bounds.
+  value, opposing operations, source change, deterministic composition, and bounds.
 - Prove N+1 outside the workspace or selected product assembly: universal core
   behavior does not change, and raw arbitrary/future kinds remain constructible
   and publishable.
@@ -98,7 +101,7 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 ## Specific Ideas
 
 Use the implementation-plan canaries `replaceable-edit-first-value`,
-`replaceable-edit-rematerialization`, `replaceable-edit-inverse`, and
+`replaceable-edit-rematerialization`, `replaceable-edit-opposing-operations`, and
 `protocol-crate-n-plus-one` as the externally observable spine.
 
 </specifics>

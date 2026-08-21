@@ -1,5 +1,12 @@
 # Phase 7: Semantic Writes and Capability Composition - Pattern Map
 
+> **Authority correction (2026-08-21):** Main commits `e5c3abd`, `e9117ad`,
+> and `94dad7f` supersede every actor-on-edit, format/version, and stored-inverse
+> recommendation below. Final edits carry only `kind`, optional `identifier`,
+> and opaque `change`; accepted custody separately freezes the author, and
+> opposing operations are independent edits. The remaining analog mappings are
+> retained as historical implementation guidance.
+
 **Mapped:** 2026-08-21
 **Baseline:** `309e421` (`feat: complete M6 automatic write routing`)
 **Candidate files classified:** 43 across 19 change sets

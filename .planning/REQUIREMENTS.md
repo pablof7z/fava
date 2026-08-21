@@ -97,8 +97,8 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 
 ### Semantic Writes and Capabilities
 
-- [ ] **CAP-01**: Protocol capability crates expose ordinary event values or semantic replaceable-event edits and their inverses without signing, routing, publishing, or owning receipts.
-- [ ] **CAP-02**: Actor identity exists on a semantic edit before materialization and becomes the author of every resulting event generation.
+- [ ] **CAP-01**: Protocol capability crates expose ordinary event values or semantic replaceable-event edits, including opposing operations, without signing, routing, publishing, or owning receipts.
+- [ ] **CAP-02**: The accepted write resolves and persists the author before materialization, and every resulting event generation uses that frozen author while the edit itself carries none.
 - [ ] **CAP-03**: A first-value semantic operation can materialize when no prior replaceable event exists.
 - [ ] **CAP-04**: A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
 - [ ] **CAP-05**: One write and receipt identity remains stable across materialization generations.

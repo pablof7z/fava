@@ -411,10 +411,10 @@ spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
 [[term]]
 name = "ReplaceableEventEdit"
 source = "fava"
-meaning = "A durable change to a replaceable event that can be applied to the newest event at its coordinate or to defined empty state."
+meaning = "A durable protocol-owned change carrying kind and optional identifier, but no author, encoding version, or stored inverse; accepted custody applies it to the newest event at the resolved-author coordinate or to defined empty state."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
-distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves an intended change so Fava can produce a new event again after the current event changes."
+distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves one intended change while the accepted write separately freezes the author used for every materialization generation."
 symbols = ["fava_write::ReplaceableEventEdit"]
 crates = []
 spec_symbols = ["ReplaceableEventEdit"]
@@ -422,7 +422,7 @@ spec_symbols = ["ReplaceableEventEdit"]
 [[term]]
 name = "ReplaceableEventMaterializer"
 source = "fava"
-meaning = "A replaceable protocol provider that applies one durable semantic edit to qualified source or defined empty state and produces an unsigned replacement event."
+meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified source or defined empty state and produces an unsigned replacement event."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events but not a client-side provider contract for replaying one durable intention across changing source state without owning publication."

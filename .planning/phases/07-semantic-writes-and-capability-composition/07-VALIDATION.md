@@ -152,8 +152,8 @@ outside the repository. Restored deliberate-break files have zero diff.
 
 | Requirement | Final evidence | Result |
 |---|---|---|
-| CAP-01 | pure protocol edits/inverses; two-row shared corpus; inverse CLI | PASS |
-| CAP-02 | actor before materialization; exact public event pubkey; atomic store custody | PASS |
+| CAP-01 | pure protocol edits/opposing operations; two-row shared corpus; opposing-operation CLI | PASS |
+| CAP-02 | author resolved and persisted by accepted custody; authorless edit; exact public event pubkey across generations | PASS |
 | CAP-03 | no-source first value; write-store visibility; first-value CLI | PASS |
 | CAP-04 | qualified source-v2 successor; unrelated state preserved; rematerialization CLI | PASS |
 | CAP-05 | stable write/receipt; redb recovery and 3 semantic SIGKILL cases | PASS |

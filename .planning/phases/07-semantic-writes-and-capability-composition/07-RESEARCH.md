@@ -4,6 +4,14 @@
 **Domain:** Durable semantic replaceable-event edits, generation-correlated publication, and protocol-crate composition
 **Confidence:** HIGH
 
+> **Authority correction (2026-08-21):** Main commits `e5c3abd`, `e9117ad`,
+> and `94dad7f` supersede the actor/format/inverse assumptions recorded in this
+> pre-implementation research. The final edit carries only `kind`, optional
+> `identifier`, and protocol-owned `change`; accepted custody separately freezes
+> the author. Follow/unfollow and add/remove are opposing edits, not stored
+> inverse pairs. Historical plan and research rows below remain execution
+> provenance, while `07-VALIDATION.md` owns the final conformance record.
+
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
 
