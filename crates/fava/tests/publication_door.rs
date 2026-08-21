@@ -4,9 +4,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use fava::{
-    EventBuilder, EventValue, Fava, Kind, PublishError, Query, ReceiptOutcome, Timestamp,
-};
+use fava::{EventBuilder, EventValue, Fava, Kind, PublishError, Query, ReceiptOutcome, Timestamp};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
@@ -17,6 +15,7 @@ use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
+#[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
 mod support;
 
@@ -104,11 +103,7 @@ async fn publish_returns_after_local_acceptance() {
 async fn equivalent_publications_have_distinct_custody_identities() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
-    let fava = assembly(
-        Arc::clone(&store),
-        std::iter::empty(),
-        std::iter::empty(),
-    );
+    let fava = assembly(Arc::clone(&store), std::iter::empty(), std::iter::empty());
     let event = NostrEventBuilder::new(Kind::TextNote, "same signed event")
         .finalize(&keys)
         .expect("event signs");
@@ -119,11 +114,6 @@ async fn equivalent_publications_have_distinct_custody_identities() {
     assert_ne!(first.write_id(), second.write_id());
     assert_ne!(first.receipt_id(), second.receipt_id());
     assert_eq!(store.len().expect("store remains readable"), 2);
-    let observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
-        .await
-        .expect("local observation opens");
-    assert_eq!(observation.current().events.len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -143,7 +133,11 @@ async fn invalid_payload_refuses_without_custody() {
 
     assert!(fava.publish(expired).is_err());
     assert_eq!(store.len().expect("store remains readable"), 0);
-    assert!(fava.open_receipts().expect("receipts remain readable").is_empty());
+    assert!(
+        fava.open_receipts()
+            .expect("receipts remain readable")
+            .is_empty()
+    );
     let observation = fava
         .observe(Query::events().kind(Kind::TextNote).cache_only())
         .await

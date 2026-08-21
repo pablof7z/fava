@@ -365,11 +365,17 @@ spec_crates = ["fava-event-cache-redb", "fava-event-cache-testkit"]
 [[term]]
 name = "Write"
 source = "fava"
-meaning = "An accepted local publication obligation and its current event and receipt facts."
-owner = "fava-write"
+meaning = "An accepted local publication obligation, its application handle, and its current event and receipt facts."
+owner = "fava owns the application handle; fava-write and fava-publication own the referenced custody and receipt facts"
 nearest_nostr = "EVENT and OK messages"
-distinction = "Nostr defines publication messages; a Write persists local responsibility across signing, routing, delivery, cancellation, and restart."
+distinction = "Nostr defines publication messages; Write identifies accepted local responsibility across signing, routing, delivery, cancellation, and restart without making network progress part of acceptance."
+counterexample = "An EVENT sent to a relay without durable local custody is not a Write, and an AcceptedWrite is a store result rather than the application handle."
+lifecycle = "Fava creates the handle only after fava-publication atomically accepts custody; the handle reads receipt facts while neutral owners retain and remove them."
+forcing_requirement = "WRITE-004 and WRITE-005 require atomic durable acceptance and immediate query visibility, while WRITE-013 forbids routing or network progress from delaying the acceptance result."
+falsifier = "The publication_door test publish_returns_after_local_acceptance must fail when the facade waits for a blocked downstream receipt before returning."
 symbols = [
+    "fava::Write",
+    "fava::PublishError",
     "fava_write::WriteId",
     "fava_write::ReceiptId",
     "fava_write::EventValue",

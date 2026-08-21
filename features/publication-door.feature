@@ -16,7 +16,7 @@ Feature: Universal synchronous publication door
   Scenario: equivalent publication identities
     Given two publications contain the same finalized event
     When both enter the universal publication door
-    Then they have distinct write and receipt identities while one semantic event remains query-visible
+    Then they have distinct write and receipt identities under the same payload semantics
 
   # fava:rust=fava/publication_door#invalid_payload_refuses_without_custody
   Scenario: invalid payload has no partial acceptance

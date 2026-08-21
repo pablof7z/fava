@@ -1,6 +1,7 @@
 //! Thin Rust facade over the selected Fava provider assembly.
 
 mod live;
+mod publication;
 mod query_source;
 mod relay;
 mod routes;
@@ -35,6 +36,7 @@ pub use fava_write::{
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
+pub use publication::{PublishError, Write};
 use thiserror::Error;
 use tokio::sync::broadcast;
 
@@ -94,16 +96,17 @@ impl Fava {
             .map(|receipt| receipt.is_some())
     }
 
-    /// Durably accept and begin one checked publication intent.
+    /// Durably accept one checked payload and begin its publication lifecycle.
     ///
     /// # Errors
     ///
-    /// Returns [`PublicationError`] when this assembly cannot accept or start it.
-    pub fn publish(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
-        self.publication
-            .as_ref()
-            .ok_or(PublicationError::NotConfigured)?
-            .accept(intent)
+    /// Returns [`PublishError`] when this assembly cannot validate or accept it.
+    #[allow(private_bounds)]
+    pub fn publish<P>(&self, payload: P) -> Result<Write, PublishError>
+    where
+        P: publication::PublishPayload,
+    {
+        publication::publish(self.publication.as_ref(), payload)
     }
 
     /// Read current exact receipt facts.
