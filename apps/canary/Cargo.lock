@@ -136,6 +136,7 @@ dependencies = [
  "fava-event-cache-memory",
  "fava-ingest",
  "fava-nip02",
+ "fava-publisher",
  "fava-publisher-nip01",
  "fava-query",
  "fava-query-standard",

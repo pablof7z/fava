@@ -15,6 +15,7 @@ mod publication_support;
 mod recon;
 mod relay;
 mod routing;
+mod semantic_write_support;
 mod semantic_writes;
 mod wire;
 

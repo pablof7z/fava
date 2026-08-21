@@ -32,6 +32,7 @@ fava-transport = { path = "../../crates/fava-transport" }
 fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
 fava-ingest = { path = "../../crates/fava-ingest" }
 fava-nip02 = { path = "../../crates/fava-nip02" }
+fava-publisher = { path = "../../crates/fava-publisher" }
 fava-wire = { path = "../../crates/fava-wire" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
