@@ -1,196 +1,148 @@
 ---
 phase: 07-semantic-writes-and-capability-composition
-reviewed: 2026-08-21T15:10:16Z
-depth: standard
-files_reviewed: 86
+reviewed: 2026-08-21T16:50:24Z
+depth: deep
+files_reviewed: 80
 files_reviewed_list:
-  - Cargo.lock
-  - Cargo.toml
-  - MODULE.bazel.lock
-  - apps/canary/Cargo.lock
-  - apps/canary/Cargo.toml
   - apps/canary/README.md
   - apps/canary/scenarios.json
-  - apps/canary/src/lib.rs
-  - apps/canary/src/lib_tests.rs
   - apps/canary/src/main.rs
-  - apps/canary/src/semantic_failure.rs
+  - apps/canary/src/semantic_delivery_support.rs
   - apps/canary/src/semantic_n_plus_one.rs
   - apps/canary/src/semantic_process.rs
   - apps/canary/src/semantic_write_store.rs
   - apps/canary/src/semantic_write_support.rs
   - apps/canary/src/semantic_writes.rs
   - apps/canary/src/semantic_writes_tests.rs
-  - crates/fava-bookmarks/BUILD.bazel
-  - crates/fava-bookmarks/Cargo.toml
-  - crates/fava-bookmarks/src/bounds.rs
   - crates/fava-bookmarks/src/lib.rs
   - crates/fava-bookmarks/src/tests.rs
   - crates/fava-bookmarks/tests/public_api.rs
   - crates/fava-nip02/BUILD.bazel
   - crates/fava-nip02/Cargo.toml
-  - crates/fava-nip02/src/bounds.rs
   - crates/fava-nip02/src/lib.rs
   - crates/fava-nip02/src/tests.rs
   - crates/fava-nip02/tests/public_api.rs
-  - crates/fava-publication/BUILD.bazel
-  - crates/fava-publication/Cargo.toml
   - crates/fava-publication/src/delivery.rs
   - crates/fava-publication/src/lib.rs
   - crates/fava-publication/src/materialization.rs
   - crates/fava-publication/src/run.rs
-  - crates/fava-publisher/src/lib.rs
-  - crates/fava-query-standard/tests/source_merge.rs
   - crates/fava-write-store-memory/src/lib.rs
   - crates/fava-write-store-memory/src/lifecycle.rs
   - crates/fava-write-store-memory/src/semantic.rs
-  - crates/fava-write-store-redb/BUILD.bazel
-  - crates/fava-write-store-redb/Cargo.toml
+  - crates/fava-write-store-memory/src/state.rs
   - crates/fava-write-store-redb/src/lib.rs
-  - crates/fava-write-store-redb/src/lifecycle.rs
   - crates/fava-write-store-redb/src/ops.rs
   - crates/fava-write-store-redb/src/schema.rs
   - crates/fava-write-store-redb/src/semantic.rs
   - crates/fava-write-store-redb/src/validation.rs
-  - crates/fava-write-store-redb/tests/process_kill.rs
   - crates/fava-write-store-redb/tests/process_kill/semantic.rs
   - crates/fava-write-store-redb/tests/semantic_write_store.rs
   - crates/fava-write-store-redb/tests/semantic_write_store/recovery.rs
   - crates/fava-write-store/src/lib.rs
+  - crates/fava-write-store/src/receipt.rs
   - crates/fava-write/BUILD.bazel
-  - crates/fava-write/src/builder.rs
   - crates/fava-write/src/edit.rs
   - crates/fava-write/src/lib.rs
   - crates/fava-write/src/materialization.rs
-  - crates/fava-write/tests/event_builder.rs
+  - crates/fava-write/tests/replaceable_edit.rs
   - crates/fava/BUILD.bazel
-  - crates/fava/Cargo.toml
   - crates/fava/src/lib.rs
   - crates/fava/tests/automatic_publication.rs
   - crates/fava/tests/semantic_write_capabilities.rs
   - crates/fava/tests/semantic_write_contract.rs
   - crates/fava/tests/semantic_write_failures.rs
+  - crates/fava/tests/semantic_write_failures/faults.rs
+  - crates/fava/tests/semantic_write_failures/reservation.rs
+  - crates/fava/tests/semantic_write_failures/source_isolation.rs
   - crates/fava/tests/semantic_write_failures/support.rs
+  - crates/fava/tests/semantic_write_failures/transient_reads.rs
+  - crates/fava/tests/semantic_write_failures/validation.rs
   - crates/fava/tests/semantic_write_publication.rs
+  - crates/fava/tests/semantic_write_publication/author.rs
   - crates/fava/tests/semantic_write_publication/interleavings.rs
+  - crates/fava/tests/semantic_write_publication/shared_capacity.rs
   - crates/fava/tests/semantic_write_store.rs
+  - crates/fava/tests/semantic_write_store/author.rs
+  - crates/fava/tests/semantic_write_store/current_guard.rs
   - crates/fava/tests/support/semantic_write.rs
   - crates/fava/tests/support/semantic_write_capability_lifecycle.rs
   - crates/fava/tests/support/semantic_write_capability_protocol.rs
-  - crates/fava/tests/write_bounds.rs
+  - crates/fava/tests/support/semantic_write_capability_signer.rs
   - docs/internals/vocabulary.toml
-  - docs/issues/0010-m7-semantic-writes-and-capability-composition.md
-  - docs/issues/0012 (Fava write-bounds Bazel edge)
-  - falsifiers/external-semantic-capability/Cargo.lock
-  - falsifiers/external-semantic-capability/Cargo.toml
+  - docs/issues/0013-edit-author-at-taker.md
+  - docs/issues/0014-publish-door-ergonomics.md
+  - docs/issues/0015-publish-scope-vocabulary.md
+  - docs/issues/0016-runtime-handle-at-assembly.md
+  - docs/issues/0017-routers-required-at-assembly.md
+  - docs/spec/ARCHITECTURE.md
+  - docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md
+  - docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md
+  - falsifiers/external-semantic-capability/src/bin/public_event_builder.rs
   - falsifiers/external-semantic-capability/src/capability.rs
   - falsifiers/external-semantic-capability/src/lib.rs
   - falsifiers/external-semantic-capability/tests/public_capability.rs
   - falsifiers/external-semantic-capability/tests/support/mod.rs
-  - falsifiers/external-semantic-capability/tests/support/waits.rs
   - features/semantic-writes.feature
   - tools/tests/test_semantic_write_feature.py
 findings:
-  critical: 7
-  warning: 2
+  critical: 4
+  warning: 0
   info: 0
-  total: 9
+  total: 4
 status: issues_found
 ---
 
 # Phase 07: Code Review Report
 
-**Reviewed:** 2026-08-21T15:10:16Z
-**Depth:** standard
-**Files Reviewed:** 86
+**Reviewed:** 2026-08-21T16:50:24Z
+**Depth:** deep
+**Files Reviewed:** 80
 **Status:** issues_found
 
 ## Summary
 
-The phase is not shippable. Seven correctness or isolation defects break exact-generation, bounded-admission, source-failure, raw-facade, or canary guarantees. Two evidence defects let required checks pass without proving the claimed behavior. The focused memory-store, publication, canary process, vocabulary, and feature-mapping suites pass, demonstrating that current tests do not discriminate these branches.
+Re-review of the complete non-planning change set from `3290823` through `d1b80e0` found four shipping blockers. The repair series closes prior CR-01, CR-02, CR-04, CR-05, CR-06, CR-07, WR-01, and WR-02. CR-03's ordinary full-capacity case is fixed, but the new store reservation can still be stolen by an unreserved acceptance, so it remains open under concurrency.
 
-All nine Phase 07 summaries were cross-checked against the commit-range file list; the scope above contains every existing non-planning source/config artifact changed in `6fe21f745297b4af414e52269c3ae1c813cbf28f..HEAD`.
+The durable edit is now exactly `{ kind, identifier, change }`; author is resolved once and persisted beside custody; schema v2 refuses incompatible durable state; addressable selection uses exact author/kind/identifier matching; no executable `actor`, `format`, `inverse`, or codec-version edit path remains. Focused Cargo, Bazel, Python feature mapping, vocabulary, formatting, clippy, external-capability, and process-kill targets pass, but the current tests either miss or explicitly encode the defects below.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01 [BLOCKER]: Memory idempotence bypasses exact current-generation validation
+### CR-03 [BLOCKER]: An unreserved acceptance can steal a reserved active slot
 
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava-write-store-memory/src/semantic.rs:179-192`
+**Files:** `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-memory/src/lib.rs:91-99`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-memory/src/semantic.rs:99-143`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-redb/src/ops.rs:34-46`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-redb/src/semantic.rs:41-83`
 
-**Issue:** `install_materialization` returns success for an identical event/source before calling `require_current`. A stale `expected` materialization/source, or a terminal receipt that still retains semantic custody, can therefore be accepted as an idempotent success. The redb provider correctly performs the exact-current guard first at `crates/fava-write-store-redb/src/semantic.rs:128-140`, so the two selected providers have observably different CAS semantics. The redb-only regression at `crates/fava-write-store-redb/tests/semantic_write_store/recovery.rs:19-69` proves the intended order; the memory corpus has no equivalent.
+**Issue:** `reserve_active` counts active receipts plus reservations, but both stores' ordinary `accept` paths and unreserved semantic paths check only active receipts. With capacity one, semantic acceptance A can reserve the only slot, then ordinary acceptance B can commit into that slot. A has already been authorized to invoke its external materializer, but `accept_reserved_materialized_edit` removes A's reservation and refuses because B made `active_count == capacity`. The reservation is therefore not a permit: provider work can still run for an edit that loses pre-custody admission to a racing path. This leaves the original CR-03 and T-07-10 mitigation incomplete.
 
-**Fix:** Move `require_current(...)` before the memory idempotent-return branch. Add a memory-provider parity test that submits the identical body/source with a stale materialization ID, stale source ID, and terminal receipt, requires refusal/no notification, then proves the exact current replay remains idempotent.
+**Fix:** Make every unreserved admission count outstanding reservations, or require every capacity-consuming path to acquire and atomically consume the same permit primitive. Once a current reservation is consumed, do not reject solely because an unreserved path stole its promised slot. Add a deterministic capacity-one interleaving for both stores: reserve A, attempt raw/unreserved B, then consume A; assert B refuses before custody and A commits without a second capacity refusal.
 
-### CR-02 [BLOCKER]: Universal publication accepts a materializer that ignores the injected timestamp
+### CR-08 [BLOCKER]: Rematerialization rejects the authoritative equal-timestamp winner
 
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava-publication/src/materialization.rs:175-205`
+**Files:** `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-publication/src/materialization.rs:356-375`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-memory/src/state.rs:57-74`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-write-store-redb/src/semantic.rs:461-478`, `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava/tests/semantic_write_publication.rs:315-373`
 
-**Issue:** Publication computes the owner-controlled `created_at` and supplies it to the materializer, but `validate_materialization` checks only ordinary event validity, ID, actor, and coordinate (`:390-407`). A third-party materializer can return any valid timestamp—including stale or far-future time—and the first generation is accepted and signed. Successor monotonicity in the stores is not an exact equality check and does not protect the first generation. This violates the exact injected-time contract at the universal boundary.
+**Issue:** The standard evaluator correctly chooses the lower event id when two replaceable events share a timestamp, but `semantic_successor` admits only a strictly greater timestamp. The equal-timestamp test deliberately starts from the higher id, adds the lower-id winner, and asserts that the edit remains applied to the losing event. Semantic custody therefore diverges from the event view required by EVENT-002's timestamp-and-event-id tie-breaking. Both store guards duplicate the strict-timestamp rule, so fixing selection alone would still refuse the correct winner transition.
 
-**Fix:** Pass the injected timestamp into `validate_materialization` and refuse unless `event.created_at == injected_created_at`, before routing or store mutation. Add malicious external-materializer tests for both first value and successor that return a valid event with the wrong timestamp and assert zero custody/effects or preserved current state respectively.
+**Fix:** Apply the same `(created_at, event_id)` winner ordering as the query evaluator: a greater timestamp wins, and at equal timestamp the lower event id wins. Change both store guards to enforce that complete ordering instead of timestamp alone. Reverse the existing equal-timestamp assertion and cover the transition through both memory and redb stores.
 
-### CR-03 [BLOCKER]: Capacity exhaustion invokes provider code before admission
+### CR-09 [BLOCKER]: A rematerialization resets the live router revision behind durable state
 
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava-publication/src/lib.rs:87-107`
+**File:** `/Users/pablofernandez/Work/nnn-m7-reaudit/crates/fava-publication/src/run.rs:105-122`
 
-**Issue:** Semantic acceptance opens sources and invokes the selected third-party materializer before the write store performs its atomic capacity admission. At full active capacity, an ultimately refused request can still execute arbitrary provider code, panic handling, source work, and routing. The test at `crates/fava/tests/semantic_write_publication.rs:142-167` explicitly requires one materializer call in this exhausted case, so it enshrines rather than detects the failure. Phase ownership requires an admission permit before that work.
+**Issue:** On a new materialization notification, `open_routes(&latest)` immediately persists revision `latest.route_revision + 1`, but line 120 then resets the runner's local `route_revision` to the pre-update value from `latest`. The following route-update notification is ignored because its materialization id did not change. The first later contribution from the newly opened router therefore reuses the already committed revision; `apply_route_to_receipt` refuses it as stale, and the fallback shortfall uses the same stale revision and is also refused. A valid live route change after semantic rematerialization is silently lost.
 
-**Fix:** Add a store-owned reservation/permit operation derived from the provider's active capacity, acquire it before `prepare_semantic`, and consume or release it atomically with acceptance/refusal. Change the capacity test to require zero materializer, signer, router, publisher, transport, custody, task, and notification effects when no permit is available.
+**Fix:** Have route opening return the revision it actually committed, or reread the receipt after opening and initialize the local counter from durable current state. Also refresh the local revision on same-materialization receipt changes. Add a controlled semantic-source successor followed by a delayed router contribution and assert that the new destination commits at a strictly newer revision.
 
-### CR-04 [BLOCKER]: Closing either semantic source silently disables the surviving source
+### CR-10 [BLOCKER]: Bounded-output errors bypass process-group cleanup
 
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava-publication/src/materialization.rs:36-59`
+**File:** `/Users/pablofernandez/Work/nnn-m7-reaudit/apps/canary/src/semantic_process.rs:49-68`
 
-**Issue:** `OpenedSemanticSources::next_change` returns `false` when either the cache or write-store change stream fails/closes. The runner then removes all semantic state and closes both streams at `crates/fava-publication/src/run.rs:84-91`. The receipt remains live with no failure evidence, but later qualified changes from the still-valid source can never rematerialize it. This violates source failure isolation: one source failure erases the other source's ongoing contribution.
+**Issue:** After a successful owner exit, `collect_readers(...).await?` propagates any stdout/stderr reader error before `clean_process_group` runs. `read_bounded` returns exactly such an error when output exceeds 1 MiB. A canary child can therefore emit oversized output, retain a redirected descendant, exit successfully, and leave that descendant running indefinitely. The repaired cleanup covers normal successful output and timeout paths, but not output-bound, reader-I/O, or reader-join failures.
 
-**Fix:** Track cache and write-store stream liveness independently, retain each source's last valid snapshot, and continue selecting from/observing the surviving source. Persist bounded, source-attributed failure/shortfall evidence and stop semantic observation only when both sources are unavailable or the receipt ends. Add tests closing each source independently and then changing the other source.
-
-### CR-05 [BLOCKER]: Store read failures are treated as receipt deletion and permanently end the runner
-
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava-publication/src/run.rs:52-69`
-
-**Issue:** The main loop converts `store.receipt(...)` with `.ok().flatten()`, conflating a provider error with `Ok(None)`. Any transient redb/read failure therefore exits the runner, closes routing/signing/semantic ownership, removes its cancellation entry, and leaves the durable non-terminal receipt stranded until an external restart. The same collapse occurs during initialization at `:145-159`, and destination lanes independently treat read failure as disappearance at `crates/fava-publication/src/delivery.rs:100-109`.
-
-**Fix:** Match `Ok(Some(_))`, `Ok(None)`, and `Err(_)` explicitly. Only `Ok(None)` may end ownership. Keep the owned runner alive across a bounded retry/reopen policy for store errors and surface attributable diagnostics/failure evidence where the store can accept it. Add an injected transient-read-error store that fails once, then proves the same receipt resumes signing/routing/delivery/rematerialization without restart.
-
-### CR-06 [BLOCKER]: The public raw builder cannot be used through the public Fava dependency alone
-
-**File:** `/Users/pablofernandez/Work/nnn-m7/crates/fava/src/lib.rs:30-34`
-
-**Issue:** The facade re-exports `EventBuilder`, but not the `Tag` type required by `EventBuilder::from_parts`, `.tags`, and `.tag`, nor `EventBuildError` returned by `.build()` (`crates/fava-write/src/builder.rs:28-34,58-76`). An application depending only on `fava` cannot construct validated arbitrary tags or name/match builder refusal without adding an implementation-layer `nostr` or `fava-write` dependency. The alleged outside-consumer proof masks the missing facade because it imports `nostr::event::Tag` from an explicit dev-dependency at `falsifiers/external-semantic-capability/tests/public_capability.rs:8-16,265-285`.
-
-**Fix:** Re-export the existing `Tag` and `EventBuildError` symbols from `fava` (no new vocabulary), then add a compile/run consumer whose only normal dependency is `fava` and which builds arbitrary ordered tags, exact `created_at`, arbitrary kind/content, and pattern-matches an oversized-builder refusal through that facade.
-
-### CR-07 [BLOCKER]: Successful canary owners can leave detached descendants running
-
-**File:** `/Users/pablofernandez/Work/nnn-m7/apps/canary/src/semantic_process.rs:48-64`
-
-**Issue:** When the process-group owner exits successfully and both pipe readers reach EOF before the deadline, `run_owned` returns immediately without checking or terminating the rest of the process group. A child that redirects stdin/stdout/stderr and keeps running escapes cleanup. Existing tests cover only a descendant that retains inherited pipes (`:181-193`), while `semantic_n_plus_one` reports `owned_children_reaped: true` based solely on `owner_reaped` (`apps/canary/src/semantic_n_plus_one.rs:25-45,111`). The canary can thus claim bounded process cleanup while an external proof process continues mutating files or consuming resources.
-
-**Fix:** On every owner exit, verify the process group is empty; terminate remaining group members within `CLEANUP_CAPACITY` before returning success. Rename evidence to distinguish owner reaping from group termination. Add a test spawning `sleep 30` with all standard streams redirected, let the shell exit zero, then require the descendant to be absent/zombie and group-clean evidence to be true.
-
-## Warnings
-
-### WR-01 [WARNING]: The rematerialization canary is vacuous for two claimed behaviors
-
-**File:** `/Users/pablofernandez/Work/nnn-m7/apps/canary/src/semantic_writes.rs:127-219`
-
-**Issue:** Source v1 already contains Bob, then the accepted edit is `follow(Bob)`, so both source v1 and source v2 (`Bob + Carol`) satisfy the final Bob/Carol assertion even if the edit is ignored. Separately, generation one is retired before its signer completes and never reaches a route/publication/delivery attempt; nevertheless the evidence records `retired_stale_effects: 0`. The canary therefore does not prove that the edit survives an unrelated source change or that a stale delivery completion is inert.
-
-**Fix:** Start with a source that lacks Bob, update to a source that adds unrelated Carol but still lacks Bob, and require exactly one Bob plus one Carol after rematerialization. Also hold an actual generation-one delivery completion, install generation two, release the old completion, and assert generation-two receipt/event/route/delivery evidence remains byte-for-byte current.
-
-### WR-02 [WARNING]: Feature-to-test mapping can silently change dependency resolution
-
-**File:** `/Users/pablofernandez/Work/nnn-m7/tools/tests/test_semantic_write_feature.py:85-134`
-
-**Issue:** The mapping verifier runs both `cargo metadata` and `cargo test` without `--locked`. A stale or missing root/standalone lock can be rewritten during what is presented as deterministic mapping evidence, allowing the mapping gate to pass against an uncommitted dependency graph and making an ostensibly read-only validation mutate the checkout.
-
-**Fix:** Add `--locked` to both Cargo invocations, assert the relevant lockfile exists, and add a negative fixture proving an out-of-date lock fails rather than being updated.
+**Fix:** Make process-group cleanup unconditional after spawn. Capture the owner/read result without `?`, clean the group and reap/abort readers in a finally-style path, then return the original error (or a combined cleanup error). Add a test whose successful owner emits oversized output and leaves a redirected `sleep` descendant; assert the call refuses and the descendant is absent or zombie afterward.
 
 ---
 
-_Reviewed: 2026-08-21T15:10:16Z_
+_Reviewed: 2026-08-21T16:50:24Z_
 _Reviewer: the agent (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: deep_
