@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::time::Duration;
 
 use fava::{EventValue, Kind, MaterializationId, Query, ReplaceableEventMaterializer, Timestamp};
 use fava_event_cache::EventCache;
@@ -52,7 +53,7 @@ pub async fn run_semantic_write_scenario(id: &str, options: SmokeOptions) -> Can
         "replaceable-edit-first-value" => first_value(&options.seed).await?,
         "replaceable-edit-rematerialization" => rematerialization(&options.seed).await?,
         "replaceable-edit-inverse" => inverse(&options.seed).await?,
-        "protocol-crate-n-plus-one" => n_plus_one()?,
+        "protocol-crate-n-plus-one" => n_plus_one().await?,
         _ => unreachable!("executor checked above"),
     };
     finish(artifacts, id, &options, &details)
@@ -284,14 +285,15 @@ async fn current_event(
     }
 }
 
-fn n_plus_one() -> CanaryResult<Value> {
+async fn n_plus_one() -> CanaryResult<Value> {
     let root = repository_root()?;
     let manifest = root.join("falsifiers/external-semantic-capability/Cargo.toml");
     for test in [
         "external_capability_composes_through_public_fava",
         "raw_future_event_kind_publishes_unchanged",
     ] {
-        let status = Command::new("cargo")
+        let mut command = tokio::process::Command::from(Command::new("cargo"));
+        command
             .args([
                 "test",
                 "--manifest-path",
@@ -305,8 +307,10 @@ fn n_plus_one() -> CanaryResult<Value> {
             .current_dir(&root)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
+            .stderr(Stdio::null());
+        let status = tokio::time::timeout(Duration::from_secs(60), command.status())
+            .await
+            .map_err(|_| CanaryError::new(format!("external proof exceeded bound: {test}")))??;
         if !status.success() {
             return Err(CanaryError::new(format!("external proof failed: {test}")));
         }
