@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome,
-    RelayDeliveryOutcome, Timestamp,
+    EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome, RelayDeliveryOutcome,
+    Timestamp,
 };
 use fava_external_semantic_capability_proof::{
     decode_external_event, external_kind, insert, validate_external_event,
@@ -16,8 +16,8 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
 use nostr::key::Keys;
 
 use support::{
-    explicit_intent, harness, open_external_source, raw_intent, signed, wait_eose,
-    wait_generation_record, wait_receipt,
+    explicit_intent, harness, open_external_source, open_observation, raw_intent, signed,
+    wait_eose, wait_first_record, wait_generation_record, wait_receipt, wait_terminal,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -33,7 +33,11 @@ async fn external_capability_composes_through_public_fava() {
         .expect("external semantic preview");
     assert!(preview.settled);
     assert_eq!(preview.destinations.len(), 1);
-    let preview_keys = preview.destinations.keys().cloned().collect::<BTreeSet<_>>();
+    let preview_keys = preview
+        .destinations
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
     assert!(
         preview
             .destinations
@@ -66,7 +70,11 @@ async fn external_capability_composes_through_public_fava() {
         preview_keys
     );
     assert_eq!(
-        generation_one.attempts.keys().cloned().collect::<BTreeSet<_>>(),
+        generation_one
+            .attempts
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
         preview_keys
     );
 
@@ -131,7 +139,9 @@ async fn external_capability_composes_through_public_fava() {
         });
         barrier.wait();
         first_duplicate.join().expect("first concurrent duplicate");
-        second_duplicate.join().expect("second concurrent duplicate");
+        second_duplicate
+            .join()
+            .expect("second concurrent duplicate");
     });
     harness.transport.eose(&subscription);
     wait_eose(&harness.fava, &subscription).await;
@@ -179,11 +189,12 @@ async fn external_capability_composes_through_public_fava() {
     );
     let current = harness.transport.acknowledge(1);
     harness.transport.wait_closed(current).await;
-    let terminal = harness
-        .fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("successor settles");
+    let terminal = wait_terminal(
+        &harness.fava,
+        accepted.receipt_id,
+        "successor terminal receipt",
+    )
+    .await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.write_id, accepted.write_id);
     assert_eq!(terminal.receipt_id, accepted.receipt_id);
@@ -239,11 +250,12 @@ async fn external_retired_completion_and_failure_preserve_current() {
 
     let current = harness.transport.acknowledge(0);
     harness.transport.wait_closed(current).await;
-    let terminal = harness
-        .fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("preserved generation settles");
+    let terminal = wait_terminal(
+        &harness.fava,
+        accepted.receipt_id,
+        "preserved generation terminal receipt",
+    )
+    .await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.current.id(), first.id);
     assert_eq!(terminal.current.publication.materialization_id.as_u64(), 1);
@@ -264,20 +276,17 @@ async fn raw_future_event_kind_publishes_unchanged() {
         .build()
         .expect("raw future event builds");
     let expected_id = event.id.expect("builder assigned id");
-    let mut observation = harness
-        .fava
-        .observe(Query::events().kind(future_kind).cache_only())
-        .await
-        .expect("raw future query opens");
+    let mut observation = open_observation(
+        &harness.fava,
+        Query::events().kind(future_kind).cache_only(),
+        "raw future observation open",
+    )
+    .await;
     let accepted = harness
         .fava
         .publish(raw_intent(event, &harness.relay))
         .expect("raw future event accepts without matching materializer");
-    let visible = observation
-        .changed()
-        .await
-        .expect("raw event is query-visible");
-    let record = visible.events.first().expect("one raw event");
+    let record = wait_first_record(&mut observation, "raw future query visibility").await;
     assert_eq!(record.id(), expected_id);
     assert_eq!(record.event.kind(), future_kind);
     assert_eq!(record.event.tags(), std::slice::from_ref(&unknown));
@@ -290,11 +299,12 @@ async fn raw_future_event_kind_publishes_unchanged() {
     assert_eq!(published.content, "opaque future content");
     let id = harness.transport.acknowledge(0);
     harness.transport.wait_closed(id).await;
-    let terminal = harness
-        .fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("raw future event settles");
+    let terminal = wait_terminal(
+        &harness.fava,
+        accepted.receipt_id,
+        "raw future terminal receipt",
+    )
+    .await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(signed(&terminal), &published);
     observation.close();

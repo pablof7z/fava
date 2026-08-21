@@ -5,13 +5,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{
-    EventValue, Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl,
-    WriteIntent, WriteRouting,
-};
+use fava::{EventValue, Fava, Receipt, RelayUrl, WriteIntent, WriteRouting};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_external_semantic_capability_proof::{external_query, selected_materializer};
+use fava_external_semantic_capability_proof::selected_materializer;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
@@ -25,6 +22,13 @@ use serde_json::{Value, json};
 use tokio::sync::Notify;
 
 const DEADLINE: Duration = Duration::from_secs(2);
+
+mod waits;
+
+pub use waits::{
+    open_external_source, open_observation, wait_eose, wait_first_record, wait_generation_record,
+    wait_receipt, wait_terminal,
+};
 
 pub struct Harness {
     pub fava: Fava,
@@ -68,84 +72,6 @@ pub fn raw_intent(event: fava::UnsignedEvent, relay: &RelayUrl) -> WriteIntent {
         WriteRouting::Explicit(BTreeSet::from([relay.clone()])),
     )
     .expect("raw future intent")
-}
-
-pub async fn open_external_source(
-    fava: &Fava,
-    relay: &RelayUrl,
-    actor: fava::PublicKey,
-) -> Observation {
-    let query = external_query(actor)
-        .from_relays([relay.clone()])
-        .expect("one explicit relay");
-    fava.observe(query).await.expect("public live query opens")
-}
-
-pub async fn wait_receipt(
-    fava: &Fava,
-    receipt_id: ReceiptId,
-    predicate: impl Fn(&Receipt) -> bool,
-) -> Receipt {
-    let mut changes = fava.receipt_changes();
-    tokio::time::timeout(DEADLINE, async {
-        loop {
-            if let Some(receipt) = fava.receipt(receipt_id).expect("receipt reads")
-                && predicate(&receipt)
-            {
-                return receipt;
-            }
-            if let Ok((changed, Some(receipt))) = changes.recv().await
-                && changed == receipt_id
-                && predicate(&receipt)
-            {
-                return receipt;
-            }
-        }
-    })
-    .await
-    .expect("receipt transition deadline")
-}
-
-pub async fn wait_generation_record(
-    observation: &mut Observation,
-    generation: u64,
-) -> fava::EventRecord {
-    tokio::time::timeout(DEADLINE, async {
-        loop {
-            let snapshot = observation.current();
-            if let Some(record) = snapshot.events.iter().find(|record| {
-                record.publication.as_ref().is_some_and(|evidence| {
-                    evidence.materialization_id == MaterializationId::from_u64(generation)
-                })
-            }) {
-                return record.clone();
-            }
-            observation
-                .changed()
-                .await
-                .expect("observation remains live");
-        }
-    })
-    .await
-    .expect("query generation deadline")
-}
-
-pub async fn wait_eose(fava: &Fava, subscription: &str) {
-    tokio::time::timeout(DEADLINE, async {
-        loop {
-            if fava
-                .diagnostics()
-                .eose
-                .iter()
-                .any(|(_, _, observed)| observed.as_str() == subscription)
-            {
-                return;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("EOSE processing deadline");
 }
 
 pub fn signed(receipt: &Receipt) -> &Event {
@@ -218,12 +144,14 @@ impl ScriptedTransport {
     }
 
     pub async fn subscription(&self) -> String {
-        self.wait_for(|state| state.subscriptions.keys().next().cloned())
-            .await
+        self.wait_for("subscription open", |state| {
+            state.subscriptions.keys().next().cloned()
+        })
+        .await
     }
 
     pub async fn published(&self, index: usize) -> Event {
-        self.wait_for(|state| {
+        self.wait_for("publication handoff", |state| {
             state
                 .publications
                 .get(index)
@@ -276,12 +204,14 @@ impl ScriptedTransport {
     }
 
     pub async fn wait_closed(&self, event_id: EventId) {
-        self.wait_for(|state| state.closed_publications.contains(&event_id).then_some(()))
-            .await;
+        self.wait_for("publication session close", |state| {
+            state.closed_publications.contains(&event_id).then_some(())
+        })
+        .await;
     }
 
-    async fn wait_for<T>(&self, predicate: impl Fn(&ScriptState) -> Option<T>) -> T {
-        tokio::time::timeout(DEADLINE, async {
+    async fn wait_for<T>(&self, label: &str, predicate: impl Fn(&ScriptState) -> Option<T>) -> T {
+        waits::with_deadline(label, || self.shared.describe(), async {
             loop {
                 let changed = self.shared.changed.notified();
                 if let Some(value) = predicate(&self.shared.state.lock().expect("script lock")) {
@@ -291,11 +221,21 @@ impl ScriptedTransport {
             }
         })
         .await
-        .expect("script transition deadline")
     }
 }
 
 impl Shared {
+    fn describe(&self) -> String {
+        let state = self.state.lock().expect("script lock");
+        format!(
+            "opens={}, subscriptions={}, publications={}, closed_publications={}",
+            self.opens.load(Ordering::SeqCst),
+            state.subscriptions.len(),
+            state.publications.len(),
+            state.closed_publications.len()
+        )
+    }
+
     fn sent(&self, inbox: &Arc<Inbox>, frame: &str) -> HandoffOutcome {
         let Ok(value) = serde_json::from_str::<Value>(frame) else {
             return HandoffOutcome::NotHandedOff {
@@ -413,7 +353,14 @@ impl RelaySession for ScriptedSession {
                 if self.inbox.closed.load(Ordering::SeqCst) {
                     return Err(TransportError::Closed);
                 }
-                notified.await;
+                if tokio::time::timeout(DEADLINE, notified).await.is_err() {
+                    let queued = self.inbox.frames.lock().expect("inbox lock").len();
+                    let publication = *self.inbox.publication.lock().expect("publication lock");
+                    return Err(TransportError::Disconnected(format!(
+                        "script inbound deadline exceeded {DEADLINE:?}; last state: queued={queued}, closed={}, publication={publication:?}",
+                        self.inbox.closed.load(Ordering::SeqCst)
+                    )));
+                }
             }
         })
     }
