@@ -128,7 +128,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Mode:** mvp
 **Requirements:** LOCAL-09, ROUTE-10
 **Depends on:** Phase 6
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 **Success Criteria** (what must be TRUE):
 
@@ -248,7 +248,7 @@ Plans:
 | 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
-| 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | In Progress|  |
+| 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |

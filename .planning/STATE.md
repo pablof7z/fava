@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 06.1
-current_phase_name: Literal Tag-Value Query Semantics Remediation
-status: verifying
-stopped_at: Phase 06.1 execution and code review complete; goal verification pending
-last_updated: "2026-08-21T20:05:00Z"
+current_phase: 08
+current_phase_name: Authentication, Hostile Boundaries, and Boundedness
+status: ready_to_plan
+stopped_at: Phases 06.1 and 07 verified and complete; Phase 08 is next
+last_updated: "2026-08-21T20:10:49.957Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 07 merged; Phase 06.1 execution and review complete
-state_head: 68962d7818fcd9302e4111fa1ba46a2285b8bf2e
+last_activity_desc: Phase 06.1 verified and completed after the Phase 07 merge; Phase 08 is next
+state_head: cb1b698d7b3697f9fab8026e8717a1336a8c812d
 progress:
   total_phases: 12
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 12
   completed_plans: 12
-  percent: 58
+  percent: 67
 ---
 
 # Project State
@@ -23,19 +23,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 06.1 — Literal Tag-Value Query Semantics Remediation
+**Current focus:** Phase 08 — Authentication, Hostile Boundaries, and Boundedness
 
 ## Current Position
 
-Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — VERIFYING
-Plan: 3 of 3
-Status: Execution and code review complete; goal verification pending
-Last activity: 2026-08-21 — Phase 07 merged; Phase 06.1 review converged cleanly
+Phase: 08 (Authentication, Hostile Boundaries, and Boundedness) — NOT STARTED
+Plan: —
+Status: Ready for phase planning
+Last activity: 2026-08-21 — Phase 06.1 verified and completed after the Phase 07 merge
 
-Progress: [██████░░░░] 58%
+Progress: [███████░░░] 67%
 
-Phase progress is 7/12. Phases 1-6 predate GSD plans; Phase 7 completed all
-nine authored plans and its review, security, validation, and verification gates.
+Phase progress is 8/12. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
+all authored plans and their review and verification gates.
 
 ## Performance Metrics
 
@@ -103,7 +103,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 
 - No current blocker.
 - Phase 06.1 awaits final goal verification; implementation and code review are complete.
-- Targeted research remains required during planning for Phases 7-11; recommendations do not override specifications.
+- Targeted research remains required during planning for Phases 8-11; recommendations do not override specifications.
 
 ### Roadmap Evolution
 
@@ -119,6 +119,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T20:05:00Z
-Stopped at: Phase 06.1 execution and code review complete; goal verification pending
+Last session: 2026-08-21T20:10:49.957Z
+Stopped at: Phases 06.1 and 07 verified and complete; Phase 08 is next
 Resume file: None
