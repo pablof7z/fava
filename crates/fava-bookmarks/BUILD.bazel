@@ -29,3 +29,15 @@ rust_test(
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )
+
+rust_test(
+    name = "public_api",
+    crate_name = "fava_bookmarks_public_api",
+    srcs = ["tests/public_api.rs"],
+    edition = crate_edition(),
+    deps = [
+        ":lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+    ],
+)

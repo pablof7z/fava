@@ -1,4 +1,4 @@
-use fava_state::EventCoordinate;
+use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{EventId, Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
@@ -93,6 +93,45 @@ fn bookmark_empty_and_unbookmark_inverse() {
         coordinate_event.tags.as_slice(),
         &[tag(&["a", &coordinate_text(&coordinate)])]
     );
+}
+
+#[test]
+fn empty_identifier_addressable_coordinate_round_trips_from_event_helper() {
+    let actor = Keys::generate();
+    let target_author = Keys::generate().public_key();
+    let coordinate = event_coordinate(
+        EventId::from_byte_array([6; 32]),
+        target_author,
+        Kind::from_u16(30_023),
+        &[],
+    );
+    assert_eq!(
+        coordinate,
+        EventCoordinate::Replaceable {
+            author: target_author,
+            kind: Kind::from_u16(30_023),
+            identifier: Some(String::new()),
+        }
+    );
+
+    let add = bookmark_coordinate(actor.public_key(), coordinate.clone())
+        .expect("empty identifier is a valid addressable coordinate");
+    let added = materialize(&add, None, 1).expect("coordinate codec round trips");
+    assert_eq!(
+        added.tags.as_slice(),
+        &[tag(&["a", &coordinate_text(&coordinate)])]
+    );
+    let signed = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        1,
+        "opaque",
+        added.tags.to_vec(),
+    );
+    let remove = unbookmark_coordinate(actor.public_key(), coordinate).expect("remove edit");
+    let removed = materialize(&remove, Some(&signed), 2).expect("inverse codec round trips");
+    assert!(removed.tags.is_empty());
+    assert_eq!(removed.content, "opaque");
 }
 
 #[test]
@@ -196,6 +235,46 @@ fn bookmark_duplicate_and_adjacent_edits_are_idempotent() {
 }
 
 #[test]
+fn equivalent_duplicate_sets_canonicalize_across_permutations() {
+    let actor = Keys::generate();
+    let event_id = EventId::from_byte_array([12; 32]);
+    let event_hex = event_id.to_hex();
+    let low = tag(&["e", &event_hex, "wss://a.example", "a"]);
+    let high = tag(&["e", &event_hex, "wss://z.example", "z"]);
+    let first = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        30,
+        "opaque",
+        vec![
+            tag(&["x", "before"]),
+            high.clone(),
+            tag(&["x", "between"]),
+            low.clone(),
+            tag(&["x", "after"]),
+        ],
+    );
+    let second = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        30,
+        "opaque",
+        vec![
+            tag(&["x", "before"]),
+            low.clone(),
+            tag(&["x", "between"]),
+            high,
+            tag(&["x", "after"]),
+        ],
+    );
+    let edit = bookmark_event(actor.public_key(), event_id).expect("bookmark edit");
+    let first_output = materialize(&edit, Some(&first), 31).expect("first permutation");
+    let second_output = materialize(&edit, Some(&second), 31).expect("second permutation");
+    assert_eq!(first_output, second_output);
+    assert_eq!(first_output.tags[1], low);
+}
+
+#[test]
 fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
     let actor = Keys::generate();
     let event_id = EventId::from_byte_array([11; 32]);
@@ -203,6 +282,70 @@ fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
     assert_source_refusals(&actor, &edit);
     assert_codec_and_target_refusals(&actor, event_id, &edit);
     assert_size_and_timestamp_refusals(&actor, &edit);
+}
+
+#[test]
+fn hostile_sources_are_bounded_before_signature_verification() {
+    let actor = Keys::generate();
+    let event_id = EventId::from_byte_array([13; 32]);
+    let edit = bookmark_event(actor.public_key(), event_id).expect("bookmark edit");
+
+    let mut escaped = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        1,
+        &"\\".repeat(70_000),
+        Vec::new(),
+    );
+    escaped.id = EventId::from_byte_array([43; 32]);
+    assert!(matches!(
+        materialize(&edit, Some(&escaped), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+
+    let mut nested_values = Vec::with_capacity(43_692);
+    nested_values.push("x".to_owned());
+    nested_values.resize(43_692, String::new());
+    let mut nested = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        1,
+        "opaque",
+        vec![Tag::parse(nested_values).expect("nonempty hostile tag")],
+    );
+    nested.id = EventId::from_byte_array([44; 32]);
+    assert!(matches!(
+        materialize(&edit, Some(&nested), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+}
+
+#[test]
+fn insertion_is_decided_before_the_tag_cap_is_allocated() {
+    let actor = Keys::generate();
+    let event_id = EventId::from_byte_array([14; 32]);
+    let edit = bookmark_event(actor.public_key(), event_id).expect("bookmark edit");
+    let mut at_cap: Vec<_> = (0..1_999)
+        .map(|index| tag(&["x", &index.to_string()]))
+        .collect();
+    at_cap.push(tag(&["e", &event_id.to_hex(), "hint"]));
+    let existing = source(&actor, Kind::from_u16(BOOKMARK_KIND), 1, "", at_cap);
+    let retained = materialize(&edit, Some(&existing), 2).expect("no insertion at cap");
+    assert_eq!(retained.tags.len(), 2_000);
+
+    let full_without_target = source(
+        &actor,
+        Kind::from_u16(BOOKMARK_KIND),
+        1,
+        "",
+        (0..2_000)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
+    );
+    assert!(matches!(
+        materialize(&edit, Some(&full_without_target), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
 }
 
 fn assert_source_refusals(actor: &Keys, edit: &ReplaceableEventEdit) {

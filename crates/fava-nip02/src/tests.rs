@@ -1,5 +1,5 @@
 use fava_state::EventCoordinate;
-use fava_write::{Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
+use fava_write::{EventId, Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
@@ -234,6 +234,70 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
     assert!(matches!(
         materialize(&edit, Some(&latest), u64::MAX),
         Err(WriteIntentError::InvalidEvent(_))
+    ));
+}
+
+#[test]
+fn hostile_sources_are_bounded_before_signature_verification() {
+    let actor = Keys::generate();
+    let target = Keys::generate().public_key();
+    let edit = follow(actor.public_key(), target).expect("follow edit");
+
+    let mut escaped = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        &"\\".repeat(70_000),
+        Vec::new(),
+    );
+    escaped.id = EventId::from_byte_array([41; 32]);
+    assert!(matches!(
+        materialize(&edit, Some(&escaped), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+
+    let mut nested_values = Vec::with_capacity(43_692);
+    nested_values.push("x".to_owned());
+    nested_values.resize(43_692, String::new());
+    let mut nested = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        "",
+        vec![Tag::parse(nested_values).expect("nonempty hostile tag")],
+    );
+    nested.id = EventId::from_byte_array([42; 32]);
+    assert!(matches!(
+        materialize(&edit, Some(&nested), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+}
+
+#[test]
+fn insertion_is_decided_before_the_tag_cap_is_allocated() {
+    let actor = Keys::generate();
+    let target = Keys::generate().public_key();
+    let edit = follow(actor.public_key(), target).expect("follow edit");
+    let mut at_cap: Vec<_> = (0..1_999)
+        .map(|index| tag(&["x", &index.to_string()]))
+        .collect();
+    at_cap.push(tag(&["p", &target.to_hex(), "hint"]));
+    let existing = source(&actor, Kind::ContactList, 1, "", at_cap);
+    let retained = materialize(&edit, Some(&existing), 2).expect("no insertion at cap");
+    assert_eq!(retained.tags.len(), 2_000);
+
+    let full_without_target = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        "",
+        (0..2_000)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
+    );
+    assert!(matches!(
+        materialize(&edit, Some(&full_without_target), 2),
+        Err(WriteIntentError::TooLarge { .. })
     ));
 }
 
