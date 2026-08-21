@@ -16,45 +16,36 @@
 
 use std::sync::Arc;
 
-use fava_state::EventCoordinate;
 use fava_write::{
     Event, EventBuildError, EventBuilder, Kind, PublicKey, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
-const FORMAT: u32 = 1;
-const CODEC_VERSION: u8 = 1;
 const ADD: u8 = 1;
 const REMOVE: u8 = 2;
-const CODEC_LEN: usize = 34;
+const CODEC_LEN: usize = 33;
 mod bounds;
 
 use bounds::MAX_TAGS;
 
-/// Produce one bounded edit that follows `target` in the actor's kind-3 list.
+/// Produce one bounded edit that follows `target` in a kind-3 list.
 ///
 /// # Errors
 ///
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
-pub fn follow(
-    actor: PublicKey,
-    target: PublicKey,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, target, Operation::Add)
+pub fn follow(target: PublicKey) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(target, Operation::Add)
 }
 
-/// Produce one bounded edit that removes `target` from the actor's kind-3 list.
+/// Produce one bounded edit that removes `target` from a kind-3 list.
 ///
 /// # Errors
 ///
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
-pub fn unfollow(
-    actor: PublicKey,
-    target: PublicKey,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, target, Operation::Remove)
+pub fn unfollow(target: PublicKey) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(target, Operation::Remove)
 }
 
 /// Select the pure NIP-02 materializer for application assembly.
@@ -76,13 +67,6 @@ impl Operation {
             Self::Remove => REMOVE,
         }
     }
-
-    const fn inverse(self) -> Self {
-        match self {
-            Self::Add => Self::Remove,
-            Self::Remove => Self::Add,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -91,73 +75,47 @@ struct Change {
     target: PublicKey,
 }
 
-fn edit(
-    actor: PublicKey,
-    target: PublicKey,
-    operation: Operation,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    let coordinate = EventCoordinate::Replaceable {
-        author: actor,
-        kind: Kind::ContactList,
-        identifier: None,
-    };
+fn edit(target: PublicKey, operation: Operation) -> Result<ReplaceableEventEdit, WriteIntentError> {
     ReplaceableEventEdit::new(
-        actor,
-        coordinate,
-        FORMAT,
+        Kind::ContactList,
+        None,
         encode(Change { operation, target }),
-        encode(Change {
-            operation: operation.inverse(),
-            target,
-        }),
     )
 }
 
 fn encode(change: Change) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(CODEC_LEN);
-    bytes.push(CODEC_VERSION);
     bytes.push(change.operation.code());
     bytes.extend_from_slice(change.target.as_bytes());
     bytes
 }
 
 fn decode(bytes: &[u8]) -> Result<Change, WriteIntentError> {
-    if bytes.len() != CODEC_LEN || bytes[0] != CODEC_VERSION {
-        return Err(codec_refusal("unsupported or malformed NIP-02 edit"));
+    if bytes.len() != CODEC_LEN {
+        return Err(codec_refusal("malformed NIP-02 edit"));
     }
-    let operation = match bytes[1] {
+    let operation = match bytes[0] {
         ADD => Operation::Add,
         REMOVE => Operation::Remove,
         _ => return Err(codec_refusal("unknown NIP-02 edit operation")),
     };
-    let target = PublicKey::from_slice(&bytes[2..])
+    let target = PublicKey::from_slice(&bytes[1..])
         .map_err(|_| codec_refusal("invalid NIP-02 target public key"))?;
     Ok(Change { operation, target })
 }
 
 fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> {
     validate_coordinate(edit)?;
-    if edit.format() != FORMAT {
-        return Err(codec_refusal("unsupported NIP-02 edit format"));
-    }
-    let change = decode(edit.change())?;
-    let inverse = decode(edit.inverse_change())?;
-    if inverse.target != change.target || inverse.operation != change.operation.inverse() {
-        return Err(codec_refusal("NIP-02 edit inverse does not match change"));
-    }
-    Ok(change)
+    decode(edit.change())
 }
 
 fn validate_coordinate(edit: &ReplaceableEventEdit) -> Result<(), WriteIntentError> {
-    match edit.coordinate() {
-        EventCoordinate::Replaceable {
-            author,
-            kind: Kind::ContactList,
-            identifier: None,
-        } if *author == edit.actor() => Ok(()),
-        _ => Err(WriteIntentError::InvalidEvent(
-            "NIP-02 edit requires its actor's kind-3 coordinate".to_owned(),
-        )),
+    if edit.kind() == Kind::ContactList && edit.identifier().is_none() {
+        Ok(())
+    } else {
+        Err(WriteIntentError::InvalidEvent(
+            "NIP-02 edit requires a non-addressable kind-3 coordinate".to_owned(),
+        ))
     }
 }
 
@@ -175,23 +133,24 @@ impl ReplaceableEventMaterializer for Nip02Materializer {
     fn materialize(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
-        let (content, source_tags) = qualified_source(edit, source, created_at)?;
+        let (content, source_tags) = qualified_source(author, source, created_at)?;
         let tags = apply(source_tags, change)?;
-        let event = build(edit.actor(), content, tags, created_at)?;
-        validate_output(edit, &event, created_at)?;
+        let event = build(author, content, tags, created_at)?;
+        validate_output(author, &event, created_at)?;
         Ok(event)
     }
 }
 
-fn qualified_source<'a>(
-    edit: &ReplaceableEventEdit,
-    source: Option<&'a Event>,
+fn qualified_source(
+    author: PublicKey,
+    source: Option<&Event>,
     created_at: Timestamp,
-) -> Result<(&'a str, &'a [Tag]), WriteIntentError> {
+) -> Result<(&str, &[Tag]), WriteIntentError> {
     let Some(source) = source else {
         return Ok(("", &[]));
     };
@@ -199,9 +158,9 @@ fn qualified_source<'a>(
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-    if source.pubkey != edit.actor() || source.kind != Kind::ContactList {
+    if source.pubkey != author || source.kind != Kind::ContactList {
         return Err(WriteIntentError::InvalidEvent(
-            "NIP-02 source actor or kind does not match edit coordinate".to_owned(),
+            "NIP-02 source author or kind does not match accepted write".to_owned(),
         ));
     }
     if created_at <= source.created_at {
@@ -273,16 +232,13 @@ fn build(
 }
 
 fn validate_output(
-    edit: &ReplaceableEventEdit,
+    author: PublicKey,
     event: &UnsignedEvent,
     created_at: Timestamp,
 ) -> Result<(), WriteIntentError> {
-    if event.pubkey != edit.actor()
-        || event.kind != Kind::ContactList
-        || event.created_at != created_at
-    {
+    if event.pubkey != author || event.kind != Kind::ContactList || event.created_at != created_at {
         return Err(WriteIntentError::InvalidEvent(
-            "NIP-02 materializer produced the wrong actor, kind, or timestamp".to_owned(),
+            "NIP-02 materializer produced the wrong author, kind, or timestamp".to_owned(),
         ));
     }
     event
