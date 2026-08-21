@@ -201,7 +201,7 @@ impl Publication {
                 ));
             }
         };
-        validate_materialization(edit, &event, intent.routing())?;
+        validate_materialization(edit, &event, intent.routing(), created_at)?;
         let route = self.route_for(&event, intent.routing())?;
         Ok((event, route))
     }
@@ -391,6 +391,7 @@ pub(super) fn validate_materialization(
     edit: &ReplaceableEventEdit,
     event: &UnsignedEvent,
     routing: &WriteRouting,
+    injected_created_at: Timestamp,
 ) -> Result<(), PublicationError> {
     WriteIntent::event(event.clone(), routing.clone()).map_err(|error| {
         PublicationError::Routing(format!("semantic materialization refused: {error}"))
@@ -399,6 +400,11 @@ pub(super) fn validate_materialization(
         PublicationError::Routing("semantic materialization has no event id".to_owned())
     })?;
     let coordinate = event_coordinate(id, event.pubkey, event.kind, event.tags.as_slice());
+    if event.created_at != injected_created_at {
+        return Err(PublicationError::Routing(
+            "semantic materialization ignored the injected timestamp".to_owned(),
+        ));
+    }
     if event.pubkey != edit.actor() || coordinate != *edit.coordinate() {
         return Err(PublicationError::Routing(
             "semantic materialization actor or coordinate does not match edit".to_owned(),

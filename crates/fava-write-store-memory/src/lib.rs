@@ -21,9 +21,11 @@ use tokio::sync::{broadcast, watch};
 mod lifecycle;
 mod model;
 mod semantic;
+mod state;
 
 use model::destinations;
-use semantic::{WriteState, active_count, next_revision, release_semantic};
+use semantic::WriteState;
+use state::{active_count, next_revision, release_semantic};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -72,6 +74,14 @@ impl MemoryWriteStore {
 impl WriteStore for MemoryWriteStore {
     fn active_capacity(&self) -> usize {
         self.capacity.get()
+    }
+
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot()
+    }
+
+    fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        self.release_active_slot(reservation)
     }
 
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
@@ -150,6 +160,16 @@ impl WriteStore for MemoryWriteStore {
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic(intent, event, source)
+    }
+
+    fn accept_reserved_materialized_edit(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_reserved_semantic(reservation, intent, event, source)
     }
 
     fn install_materialization(

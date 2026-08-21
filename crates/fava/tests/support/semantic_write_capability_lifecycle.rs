@@ -311,6 +311,12 @@ impl WriteStore for CompletionStore {
     fn active_capacity(&self) -> usize {
         self.inner.active_capacity()
     }
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        self.inner.reserve_active()
+    }
+    fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        self.inner.release_active(reservation)
+    }
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.inner.receipt_changes()
     }
@@ -324,6 +330,16 @@ impl WriteStore for CompletionStore {
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept_materialized_edit(intent, event, source)
+    }
+    fn accept_reserved_materialized_edit(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.inner
+            .accept_reserved_materialized_edit(reservation, intent, event, source)
     }
     fn install_materialization(
         &self,

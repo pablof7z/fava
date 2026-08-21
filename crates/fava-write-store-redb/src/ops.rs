@@ -19,6 +19,14 @@ impl WriteStore for RedbWriteStore {
         self.limits.active.get()
     }
 
+    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot()
+    }
+
+    fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        self.release_active_slot(reservation)
+    }
+
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
     }
@@ -101,6 +109,16 @@ impl WriteStore for RedbWriteStore {
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic(intent, event, source)
+    }
+
+    fn accept_reserved_materialized_edit(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_reserved_semantic(reservation, intent, event, source)
     }
 
     fn install_materialization(

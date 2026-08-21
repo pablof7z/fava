@@ -11,7 +11,7 @@ use fava_write_store::{
 
 use super::MemoryWriteStore;
 use super::model::{UnsignedEventView, settle};
-use super::semantic::{next_revision, release_semantic};
+use super::state::{next_revision, release_semantic};
 
 impl MemoryWriteStore {
     pub(super) fn install_signed_current(

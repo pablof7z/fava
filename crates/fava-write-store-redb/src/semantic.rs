@@ -18,6 +18,32 @@ impl RedbWriteStore {
         event: UnsignedEvent,
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic_inner(None, intent, event, source)
+    }
+
+    pub(super) fn accept_reserved_semantic(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic_inner(Some(reservation), intent, event, source)
+    }
+
+    fn accept_semantic_inner(
+        &self,
+        reservation: Option<u64>,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        let mut state = self.lock()?;
+        if reservation.is_some_and(|reservation| !state.reservations.remove(&reservation)) {
+            return Err(WriteStoreError::Refused(
+                "active reservation is not current".to_owned(),
+            ));
+        }
         let (payload, routing) = intent.into_parts();
         let WritePayload::Edit(edit) = payload else {
             return Err(WriteStoreError::Refused(
@@ -25,7 +51,6 @@ impl RedbWriteStore {
             ));
         };
         let selected_source = validate_materialization(&edit, &event, source, &routing)?;
-        let mut state = self.lock()?;
         if let Some(receipt_id) = state.coordinates.get(edit.coordinate()) {
             let receipt = state.receipts.get(receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
@@ -102,6 +127,36 @@ impl RedbWriteStore {
             receipt_id,
             current,
         })
+    }
+
+    pub(super) fn reserve_active_slot(&self) -> Result<u64, WriteStoreError> {
+        let mut state = self.lock()?;
+        if active_count(&state)
+            .checked_add(state.reservations.len())
+            .is_none_or(|used| used >= self.limits.active.get())
+        {
+            return Err(WriteStoreError::Refused(format!(
+                "active write bound {} reached",
+                self.limits.active
+            )));
+        }
+        let reservation = state.next_reservation;
+        state.next_reservation = reservation
+            .checked_add(1)
+            .ok_or_else(|| WriteStoreError::Refused("active reservation exhausted".to_owned()))?;
+        state.reservations.insert(reservation);
+        Ok(reservation)
+    }
+
+    pub(super) fn release_active_slot(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        let mut state = self.lock()?;
+        if state.reservations.remove(&reservation) {
+            Ok(())
+        } else {
+            Err(WriteStoreError::Refused(
+                "active reservation is not current".to_owned(),
+            ))
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

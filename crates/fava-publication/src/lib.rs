@@ -88,23 +88,31 @@ impl Publication {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         if let WritePayload::Edit(edit) = intent.payload() {
             let edit = edit.clone();
+            let reservation = self.store.reserve_active()?;
             let PreparedSemantic {
                 event,
                 source,
                 route,
                 mut sources,
-            } = self.prepare_semantic(&intent, None, None)?;
-            let accepted =
-                match self
-                    .store
-                    .accept_materialized_edit(intent.clone(), event, source.as_ref())
-                {
-                    Ok(accepted) => accepted,
-                    Err(error) => {
-                        sources.close();
-                        return Err(error.into());
-                    }
-                };
+            } = match self.prepare_semantic(&intent, None, None) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let _ = self.store.release_active(reservation);
+                    return Err(error);
+                }
+            };
+            let accepted = match self.store.accept_reserved_materialized_edit(
+                reservation,
+                intent.clone(),
+                event,
+                source.as_ref(),
+            ) {
+                Ok(accepted) => accepted,
+                Err(error) => {
+                    sources.close();
+                    return Err(error.into());
+                }
+            };
             if matches!(intent.routing(), WriteRouting::Automatic) {
                 let _ = self.store.apply_route(
                     accepted.write_id,

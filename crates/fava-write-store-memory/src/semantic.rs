@@ -12,11 +12,14 @@ use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capa
 
 use super::MemoryWriteStore;
 use super::model::destinations;
+use super::state::{active_count, attributed_failure, next_revision};
 
 #[derive(Clone, Debug)]
 pub(super) struct WriteState {
     pub(super) revision: u64,
     pub(super) next_identity: u64,
+    pub(super) next_reservation: u64,
+    pub(super) reservations: BTreeSet<u64>,
     pub(super) writes: BTreeMap<ReceiptId, Receipt>,
     pub(super) coordinates: BTreeMap<EventCoordinate, ReceiptId>,
     #[allow(clippy::type_complexity)] // Existing values deliberately avoid a state wrapper.
@@ -35,6 +38,8 @@ impl Default for WriteState {
         Self {
             revision: 0,
             next_identity: 1,
+            next_reservation: 1,
+            reservations: BTreeSet::new(),
             writes: BTreeMap::new(),
             coordinates: BTreeMap::new(),
             edits: BTreeMap::new(),
@@ -67,6 +72,32 @@ impl MemoryWriteStore {
         event: UnsignedEvent,
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic_inner(None, intent, event, source)
+    }
+
+    pub(super) fn accept_reserved_semantic(
+        &self,
+        reservation: u64,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        self.accept_semantic_inner(Some(reservation), intent, event, source)
+    }
+
+    fn accept_semantic_inner(
+        &self,
+        reservation: Option<u64>,
+        intent: WriteIntent,
+        event: UnsignedEvent,
+        source: Option<&Event>,
+    ) -> Result<AcceptedWrite, WriteStoreError> {
+        let mut state = self.lock_state()?;
+        if reservation.is_some_and(|reservation| !state.reservations.remove(&reservation)) {
+            return Err(WriteStoreError::Refused(
+                "active reservation is not current".to_owned(),
+            ));
+        }
         let (payload, routing) = intent.into_parts();
         let WritePayload::Edit(edit) = payload else {
             return Err(WriteStoreError::Refused(
@@ -74,7 +105,6 @@ impl MemoryWriteStore {
             ));
         };
         let selected_source = validate_materialization(&edit, &event, source, &routing)?;
-        let mut state = self.lock_state()?;
 
         if let Some(receipt_id) = state.coordinates.get(edit.coordinate()) {
             let receipt = state.writes.get(receipt_id).ok_or_else(|| {
@@ -155,6 +185,36 @@ impl MemoryWriteStore {
         })
     }
 
+    pub(super) fn reserve_active_slot(&self) -> Result<u64, WriteStoreError> {
+        let mut state = self.lock_state()?;
+        if active_count(&state)
+            .checked_add(state.reservations.len())
+            .is_none_or(|used| used >= self.capacity.get())
+        {
+            return Err(WriteStoreError::Refused(format!(
+                "bounded write-store capacity {} reached",
+                self.capacity
+            )));
+        }
+        let reservation = state.next_reservation;
+        state.next_reservation = reservation
+            .checked_add(1)
+            .ok_or_else(|| WriteStoreError::Refused("active reservation exhausted".to_owned()))?;
+        state.reservations.insert(reservation);
+        Ok(reservation)
+    }
+
+    pub(super) fn release_active_slot(&self, reservation: u64) -> Result<(), WriteStoreError> {
+        let mut state = self.lock_state()?;
+        if state.reservations.remove(&reservation) {
+            Ok(())
+        } else {
+            Err(WriteStoreError::Refused(
+                "active reservation is not current".to_owned(),
+            ))
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(super) fn install_semantic(
         &self,
@@ -176,13 +236,6 @@ impl MemoryWriteStore {
         })?;
         let selected_source = validate_materialization(&edit, &event, source, &receipt.routing)?;
 
-        if receipt.write_id == write_id
-            && receipt.current.event == EventValue::Unsigned(event.clone())
-            && receipt.current.publication.materialization_source
-                == selected_source.map(|(id, _)| id)
-        {
-            return Ok(receipt);
-        }
         require_current(
             &receipt,
             write_id,
@@ -190,6 +243,12 @@ impl MemoryWriteStore {
             expected_source,
             current_source,
         )?;
+        if receipt.current.event == EventValue::Unsigned(event.clone())
+            && receipt.current.publication.materialization_source
+                == selected_source.map(|(id, _)| id)
+        {
+            return Ok(receipt);
+        }
         require_qualified_source(current_source, selected_source)?;
         if event.created_at <= receipt.current.event.created_at() {
             return Err(WriteStoreError::Refused(
@@ -390,25 +449,6 @@ fn validate_source(
     Ok(Some((source.id, source.created_at)))
 }
 
-fn attributed_failure(
-    materialization_id: MaterializationId,
-    source: Option<EventId>,
-    reason: String,
-) -> String {
-    let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
-    let prefix = format!(
-        "materialization {} from source {source} failed",
-        materialization_id.as_u64()
-    );
-    let attributed = format!("{prefix}: {reason}");
-    drop(reason);
-    if fava_write_store::validate_receipt_text(&attributed).is_ok() {
-        attributed
-    } else {
-        prefix
-    }
-}
-
 fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
     let id = event
         .id
@@ -439,7 +479,6 @@ fn require_current(
     }
     Ok(())
 }
-
 fn require_qualified_source(
     current: Option<(EventId, Timestamp)>,
     candidate: Option<(EventId, Timestamp)>,
@@ -457,26 +496,5 @@ fn require_qualified_source(
         Err(WriteStoreError::Refused(
             "source event is equal, older, or already consumed".to_owned(),
         ))
-    }
-}
-
-pub(super) fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> {
-    state
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
-}
-
-pub(super) fn active_count(state: &WriteState) -> usize {
-    state
-        .writes
-        .values()
-        .filter(|receipt| !receipt.is_terminal())
-        .count()
-}
-
-pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
-    if let Some((edit, _, _)) = state.edits.remove(&receipt_id) {
-        state.coordinates.remove(edit.coordinate());
     }
 }
