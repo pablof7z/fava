@@ -177,7 +177,10 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
             problems.append(f"cannot read {document}: {error}")
             continue
         symbols.update(PUBLIC_NOUN.findall(content))
-        crates.update(SPEC_CRATE.findall(content))
+        for line in content.splitlines():
+            for crate in SPEC_CRATE.findall(line):
+                if f"/tmp/{crate}" not in line:
+                    crates.add(crate)
     return symbols, crates, problems
 
 

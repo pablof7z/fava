@@ -316,6 +316,9 @@ async fn deletion_and_expiration_update_the_same_open_query() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+// Keep the public cache-only result and source-evidence counterexamples in one
+// observation lifecycle so the facade proof cannot pass on isolated fixtures.
+#[allow(clippy::too_many_lines)]
 async fn literal_tag_selection_preserves_exact_sources_through_public_observation() {
     let (fava, cache, _writes) = assembly();
     let keys = Keys::generate();

@@ -73,7 +73,11 @@ fn local_unsigned(event: UnsignedEvent) -> SourceEvent {
 }
 
 fn result_ids(snapshot: &fava_query::QuerySnapshot) -> BTreeSet<EventId> {
-    snapshot.events.iter().map(|record| record.id()).collect()
+    snapshot
+        .events
+        .iter()
+        .map(fava_query::EventRecord::id)
+        .collect()
 }
 
 fn relay_evidence(urls: &[&str]) -> RelayEvidence {
@@ -231,6 +235,9 @@ fn replaceable_tie_selects_the_lowest_event_id() {
 }
 
 #[test]
+// Keep the signed/unsigned exact-cell matrix together so one query and one
+// source-evidence assertion cover the same semantic counterexamples.
+#[allow(clippy::too_many_lines)]
 fn literal_tag_selection_matches_exact_signed_and_unsigned_cells() {
     let keys = Keys::generate();
     let signed = signed_event_with_tags(

@@ -52,6 +52,15 @@ class VocabularyCheckTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_ignores_temporary_evidence_directory_as_a_crate(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification="evidence: /tmp/fava-tag-values-06-1/run-id\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def run_check(
         self,
         *,
