@@ -7,7 +7,7 @@
 
 ## Status Boundary
 
-M0 is complete. Fava currently has an intentionally narrow M1 tracer, not a completed M1 implementation. Missing relay ingest, routing, durable publication, protocol services, hardening, persistent profiles, provider qualification, and native SDKs are specified M2-M11 work, not current regressions. The pitfalls below identify how roadmap slices could implement or prove that future work incorrectly.
+M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent profiles and protocol services, full provider qualification, and native SDKs remain specified M7-M11 work rather than current regressions. The pitfalls below now serve both as regression guards for M1-M6 and implementation warnings for future phases.
 
 ## Critical Pitfalls
 
@@ -486,8 +486,8 @@ M0 is complete. Fava currently has an intentionally narrow M1 tracer, not a comp
 
 | Phase Topic | Likely Pitfall | Warning Sign | Mitigation / Required Proof |
 |-------------|----------------|--------------|-----------------------------|
-| M1 — local semantic state | Mistaking the narrow tracer for completed query semantics | No canonical equivalent-query identity, deletion/expiry corpus, source removal, or public-facade write path | Finish shared state corpus, coherent open barrier, merged evidence, shadow/cancel/reveal, source-removal capstone; source-concatenation mutation fails |
-| M1 — current code defects | Building M2 over known semantic/ownership gaps | Equal-timestamp winner chooses highest ID; access context ignored; duplicate local acceptance poisons evaluation; stale opening possible | Correct through M1 behavior-first owner tests before networking multiplies the state space; do not label absent M2 behavior a regression |
+| M1 — local semantic state | Regressing the completed semantic oracle into source concatenation | Canonical identity, deletion/expiry, source removal, or public-facade behavior stops passing | Preserve the shared state corpus, coherent open barrier, merged evidence, shadow/cancel/reveal, and source-concatenation falsifier |
+| M1 — ownership regression | Weakening admitted-event, access-context, or opening invariants under later changes | Equal-timestamp order flips; access context disappears; duplicate acceptance poisons evaluation; stale opening returns | Keep M1 owner tests and public capstones in every later regression set |
 | M2 — one-relay live read | Crediting unverified/off-filter/stale frames | Cache accepts caller-constructed relay evidence or raw events | Opaque admission value; exact request/session identity; forged/wrong-ID/off-filter/CLOSED corpus; bypass-verification mutation fails |
 | M3 — multi-relay observation | Using latest-state coalescing for causal facts or one task per handle | Receipt transitions disappear; tasks grow linearly; old generation updates current state | Separate snapshot and causal delivery; canonical sharing; bounded mailbox; 1,000-idle-observation envelope; remove-generation-check mutation fails |
 | M4 — routing/planning | Awaiting final route or embedding policy in primitive | One `resolve()` future; routing crate names NIP-65/fallback; planner silently truncates | Immediate/replacement contributions; live downstream reaction; explicit bypass; grouping differential; exact shortfall |
@@ -503,10 +503,10 @@ M0 is complete. Fava currently has an intentionally narrow M1 tracer, not a comp
 
 ## Roadmap Guidance
 
-1. Complete M1 semantic ownership before adding relay work. The highest rewrite risk is not WebSocket transport; it is making exact source authority, canonical query identity, removal, and coherent opening impossible to recover later.
-2. Build M2-M3 around exact request/generation identity and two distinct delivery shapes: bounded latest current state and bounded causal facts.
-3. Introduce routing and subscription planning as separate M4 owners before publication depends on them. Make partial progress observable from the first route contribution.
-4. Treat M5 as the durable write spine. No later protocol or automatic-routing work should create a second acceptance/receipt lifecycle.
+1. Preserve the completed M1 semantic oracle; later capability and provider work must not weaken source authority, canonical query identity, removal, or coherent opening.
+2. Preserve M2-M3 request/generation identity and the distinction between bounded latest current state and bounded causal facts.
+3. Preserve M4 routing/planning separation and immediate progress from the first route contribution.
+4. Reuse M5-M6 as the durable write and automatic-routing spine. M7 protocol work must not create a second acceptance, receipt, route, or delivery lifecycle.
 5. Keep bounds and isolation in every introducing slice; use M8 to qualify the composition against hostile relays/providers rather than to retrofit fundamentally unbounded contracts.
 6. Use M10 to falsify replaceability, not to create it. Every earlier contract must already place the standard implementation behind the same public seam.
 7. Keep M11 focused on real native lifecycle/parity. Do not let Swift/Kotlin wrappers reinterpret Rust state, cancellation, or evidence.

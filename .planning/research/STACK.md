@@ -1,7 +1,7 @@
 # Technology Stack
 
 **Project:** Fava
-**Scope:** Complete M1 and deliver M2-M11; preserve completed M0 behavior/evidence
+**Scope:** Preserve completed M0-M6 behavior/evidence and deliver M7-M11
 **Researched:** 2026-08-21
 **Overall confidence:** HIGH for specification fit; MEDIUM for ecosystem currency and unbuilt native packaging
 

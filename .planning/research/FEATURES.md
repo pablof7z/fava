@@ -14,7 +14,7 @@ This document classifies already-decided Fava behavior; it does not redefine sco
 - **Fava differentiator:** required Fava behavior whose rigor goes beyond basic protocol or SDK availability.
 - **Anti-feature:** behavior the Fava specification explicitly rejects.
 
-M0 is complete and must remain the independent evidence foundation. The next product claim is completion of all M1 exit gates, not expansion or replacement of M0.
+M0-M6 are complete. M0 remains the independent evidence foundation, and the next product claim is completion of all M7 semantic-write and capability-composition exit gates.
 
 ## Table Stakes
 
@@ -25,7 +25,7 @@ Features users of an embeddable Nostr engine reasonably expect. Every row below 
 | Raw Nostr events and filters | NIP-01 defines signed events, authors, ids, kinds, tags, time windows, limits, subscriptions, and publication messages; SDKs expose these primitives | Arbitrary/future kinds and validated raw tags remain expressible through the small public surface | Med | Semantic values; M1-M2 |
 | Cryptographic and contextual event admission | A client cannot trust relay-supplied ids, signatures, subscription attribution, or filter compliance | Parse under bounds; recompute id; verify Schnorr signature; bind to exact session/request; refuse stale and off-filter input before cache, routing, or application visibility | High | Wire identity, verification, query context; M2, hardened M8 |
 | Reactive live subscriptions | Official SDKs expose reactive subscriptions; NIP-01 distinguishes stored events, EOSE, live events, CLOSE, and relay-side CLOSED | Open atomically; return the complete local view immediately; start live demand at open; update on every relevant state/evidence change; deterministic cancel/close | High | M1 semantic state, M2 transport, M3 observation |
-| Canonical event-state semantics | Applications expect one current view despite duplicate, replaceable, addressable, deleted, or expired events | Deterministic event-id deduplication, replaceable winner/tie rules, author-valid deletion, expiry, source removal, and evidence merge across providers | High | Complete M1 before networking claims |
+| Canonical event-state semantics | Applications expect one current view despite duplicate, replaceable, addressable, deleted, or expired events | Deterministic event-id deduplication, replaceable winner/tie rules, author-valid deletion, expiry, source removal, and evidence merge across providers | High | Completed M1 oracle; preserve through M7-M11 |
 | Multi-relay connection and subscription management | Relay pools, deduplication, reconnect, and grouped subscriptions are standard SDK capabilities | One logical result across relays; only actual serving relays receive provenance; fresh generation identity on reconnect; safe planner grouping with logical attribution preserved | High | M2 then M3-M4 |
 | Local caching and offline reuse | Current SDKs expose memory, SQLite, LMDB/nostrdb, IndexedDB, Redis, and other cache adapters | Baseline cache is coherent without implying persistence; each product profile declares eviction, provenance, tombstone, expiry, coverage, restart, and resource guarantees truthfully | High | M1 memory sources; persistent/ephemeral qualification M9 |
 | Pluggable signing and crypto operations | Local, browser/extension, remote, and hardware-compatible signer shapes are established SDK expectations | Exact pubkey/body/generation binding; distinct unavailable/rejected/invalid/cancelled/stale outcomes; signer cannot own publication success; secrets never enter generic state | High | M5 publication; M8 isolation; M11 bridges |
@@ -66,7 +66,7 @@ Features and shortcuts to explicitly not build.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Reopening or replacing validated M0 | M0 is already the independent evidence foundation; revisiting it obscures the next incomplete claim | Reuse its relay lab, supervisor, wire evidence, and falsifier machinery for M1-M11 gates |
+| Reopening or replacing validated M0 | M0 is already the independent evidence foundation; revisiting it obscures the next incomplete claim | Continue reusing its relay lab, supervisor, wire evidence, and falsifier machinery for M7-M11 gates |
 | Application framework ownership | UI state, navigation, ranking, moderation, recommendation, account UX, and product workflows vary by application | Keep Fava an embeddable library; expose values, lifecycles, diagnostics, and platform-native wrappers |
 | Global `synced`, `complete`, percentage, authoritative-empty, or end-of-history | No queried relay set proves the whole Nostr network | Report exact relay/request EOSE, errors, auth, shortfall, and records currently known |
 | Inferring gap-free history from reconnect | Reconnect restores current demand but cannot prove events missed during outage were recovered | Require explicit backfill/windowing behavior before making a history guarantee |
@@ -145,11 +145,11 @@ Bounded owner delivery -> deterministic close -> mobile lifecycle/resource quali
 
 For the next validated increment, prioritize:
 
-1. Complete M1’s entire semantic corpus: stable equivalent-query identity, canonical replacement/deletion/expiry, source merge/removal, bounded current-state delivery, shared provider corpora, and all public-canary exit gates.
-2. Deliver M2’s explicit single-relay read path with exact admission, stored/live behavior, EOSE, cancellation, diagnostics, and independent wire proof.
-3. Deliver M3’s multi-relay dedup/provenance, reconnect-generation fencing, source removals, and slow-consumer boundedness.
+1. Deliver M7 semantic edits through the ordinary durable write lifecycle with stable write/receipt identity and exact materialization generations.
+2. Prove two unrelated capability crates and narrow N+1 change amplification without universal-core event-kind switches.
+3. Prepare M8 hostile-boundary qualification from the bounds and failure identities already established in M1-M7.
 
-Then continue M4-M11 under the authoritative dependency graph. No normative later milestone is dropped; it is deferred only until its prerequisite product claims pass. Do not call the existing M1 tracer an M1 completion and do not reopen M0.
+Then continue M8-M11 under the authoritative dependency graph. No normative later milestone is dropped, and completed M0-M6 behavior remains regression evidence rather than work to reopen.
 
 ## Explicitly Unresolved Product Decisions
 

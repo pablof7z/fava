@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through eleven active vertical phases corresponding exactly to authoritative milestones M1 through M11. Each phase delivers one public-facade capability, retains its milestone's complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done. The existing M1 local-source tracer is evidence for a narrow path, not completion of Phase 1.
+Fava advances from the completed M0 evidence baseline through eleven vertical phases corresponding exactly to authoritative milestones M1 through M11. M1-M6 are complete from focused pre-GSD milestone slices; M7 is the current phase. Each phase delivers one public-facade capability, retains its milestone's complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -16,12 +16,12 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 ## Phases
 
-- [ ] **Phase 1: Deterministic Local Semantic State** - Complete M1's coherent local view from independent event-cache and write-store sources.
-- [ ] **Phase 2: Exact Single-Relay Live Query** - Complete M2's explicit real-relay read path with exact admission, evidence, cancellation, and close.
-- [ ] **Phase 3: Multi-Relay Reactivity and Bounded Observation** - Complete M3's deduplication, provenance, reconnect, removal, and bounded observation behavior.
-- [ ] **Phase 4: Ordered Routing and Subscription Planning** - Complete M4's asynchronous route contributions and meaning-preserving wire planning.
-- [ ] **Phase 5: Durable Explicit-Route Publication** - Complete M5's durable write, local visibility, exact explicit delivery, receipt, cancellation, and recovery spine.
-- [ ] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
+- [x] **Phase 1: Deterministic Local Semantic State** - Complete M1's coherent local view from independent event-cache and write-store sources.
+- [x] **Phase 2: Exact Single-Relay Live Query** - Complete M2's explicit real-relay read path with exact admission, evidence, cancellation, and close.
+- [x] **Phase 3: Multi-Relay Reactivity and Bounded Observation** - Complete M3's deduplication, provenance, reconnect, removal, and bounded observation behavior.
+- [x] **Phase 4: Ordered Routing and Subscription Planning** - Complete M4's asynchronous route contributions and meaning-preserving wire planning.
+- [x] **Phase 5: Durable Explicit-Route Publication** - Complete M5's durable write, local visibility, exact explicit delivery, receipt, cancellation, and recovery spine.
+- [x] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
 - [ ] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
@@ -40,7 +40,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. A pending local replacement shadows a cached predecessor without cache pollution; cancellation or source removal retracts only the owning contribution and every affected open query naturally reveals the still-qualified state.
   3. Equivalent query descriptions have stable semantic identity, and slow consumers remain bounded while each delivered value rebases them onto the exact latest result with truthful coalescing.
   4. An ordinary downstream application uses only the public Fava facade to inspect cache/write-store evidence and passes the same semantic corpus against the independent memory providers without relay, transport, or runtime networking.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `01-VERIFICATION.md` without inventing retrospective plans.
 
 ### Phase 2: Exact Single-Relay Live Query
 **Goal:** Applications can run one exact explicit live query against a real relay with verified admission, source-scoped evidence, and deterministic cancellation.
@@ -52,7 +52,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. Only events verified and attributed to the accepted relay session, request generation, access context, and subscription can affect cache/query state; malformed, forged, off-filter, stale, and post-terminal input remains inert.
   3. The application can distinguish empty-plus-EOSE, silence, failure, authentication required, NOTICE, CLOSED, timeout, cancellation, and shortfall without any global completeness claim.
   4. Cancellation performs exact withdrawal, wakes pending pulls, prevents later delivery for the cancelled generation, and idempotent close releases owned resources; public diagnostics and the independent wire witness agree on identities and effects.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `02-VERIFICATION.md` without inventing retrospective plans.
 
 ### Phase 3: Multi-Relay Reactivity and Bounded Observation
 **Goal:** Applications retain exact current state and lifecycle truth as multiple relays, reconnect generations, removals, and slow consumers interact.
@@ -64,7 +64,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. Reconnect restores active demand under fresh session/request generation identity without application resubscription; stale completions are inert and no outage backfill or history-completeness claim is implied.
   3. Slow current-state consumers receive a bounded exact latest result with truthful coalescing/loss diagnostics, while causal lifecycle facts remain loss-honest and repeated pending-pull cancellation cannot retain stale waiters or backlog.
   4. Public diagnostics expose exact query, relay session, access context, request generation, logical demand, wire subscription, terminal reason, and source counts, while at least 1,000 idle observations stay within the declared standard resource envelope.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `03-VERIFICATION.md` without inventing retrospective plans.
 **Open product decisions:** A public growable-window/resume-token model and any outage-interval backfill guarantee remain explicitly unpromised unless Phase 3 qualifies them from forcing workloads and measured bounds.
 
 ### Phase 4: Ordered Routing and Subscription Planning
@@ -77,7 +77,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. Explicit routing creates no automatic router session or router-owned acquisition, router acquisition uses explicit non-recursive sources, and route preview matches real derivation without creating write or delivery effects.
   3. Standard and no-grouping planners may produce different bounded wire shapes for relay-assigned logical demand while applications observe identical query meaning, evidence, access isolation, and cancellation.
   4. Relay limits and router contribution/fan-out budgets produce exact typed shortfall rather than silent omission, and public diagnostics show immediate versus delayed contributions without private inspection.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `04-VERIFICATION.md` without inventing retrospective plans.
 
 ### Phase 5: Durable Explicit-Route Publication
 **Goal:** Applications can durably accept, observe, publish, cancel, recover, and reattach explicit-route writes under one exact write and receipt identity.
@@ -89,7 +89,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. Matching queries expose the accepted write-store materialization before relay acknowledgement, while the event cache contains no unsigned/unpublished local event and may later admit only the verified relay echo.
   3. Exact explicit destinations bypass routers; publisher handoff and delivery retry/give-up policy remain separate, and each destination exposes exact attempt generation, relay text, acknowledgement, rejection, ambiguity, cancellation, and terminal reason.
   4. Proven pre-handoff cancellation emits zero EVENT frames, retracts local visibility, and records an idempotent terminal receipt independently of receipt removal; process kill after acceptance recovers the same obligation, write, receipt, and materialization without resubmission.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `05-VERIFICATION.md` without inventing retrospective plans.
 
 ### Phase 6: Automatic Routing and Partial Delivery
 **Goal:** Applications can publish immediately to known automatic destinations and add later destinations under the same signed event and receipt without duplicate delivery.
@@ -101,7 +101,7 @@ The five open product decisions remain unpromised unless their owning phase qual
   2. Known destinations begin delivery while needs remain unresolved; later route contributions add lanes under the same receipt and signed event, and duplicate contributions never duplicate handoffs.
   3. Route retraction retires only work proven not to have crossed handoff, preserves exact historical delivery facts, and continued route evaluation uses exact route-revision and lane-generation identity.
   4. Route contributions, fan-out, destinations, attempts, retries, receipt facts, and retained history remain explicitly bounded or return typed refusal/shortfall while independent wire evidence proves partial progress.
-**Plans:** TBD
+**Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `06-VERIFICATION.md` without inventing retrospective plans.
 **Open product decisions:** Cancellation after partial handoff and retention of full historical attempt detail remain explicitly unpromised unless Phase 6 qualifies exact semantics and bounds.
 
 ### Phase 7: Semantic Writes and Capability Composition
@@ -171,13 +171,13 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Deterministic Local Semantic State | 0/TBD | Not started | - |
-| 2. Exact Single-Relay Live Query | 0/TBD | Not started | - |
-| 3. Multi-Relay Reactivity and Bounded Observation | 0/TBD | Not started | - |
-| 4. Ordered Routing and Subscription Planning | 0/TBD | Not started | - |
-| 5. Durable Explicit-Route Publication | 0/TBD | Not started | - |
-| 6. Automatic Routing and Partial Delivery | 0/TBD | Not started | - |
-| 7. Semantic Writes and Capability Composition | 0/TBD | Not started | - |
+| 1. Deterministic Local Semantic State | pre-GSD | Complete | 2026-08-21 |
+| 2. Exact Single-Relay Live Query | pre-GSD | Complete | 2026-08-21 |
+| 3. Multi-Relay Reactivity and Bounded Observation | pre-GSD | Complete | 2026-08-21 |
+| 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
+| 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
+| 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
+| 7. Semantic Writes and Capability Composition | 0/TBD | Current | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |

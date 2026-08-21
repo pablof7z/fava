@@ -11,7 +11,7 @@
 - ✓ **M0-04**: Enabled evidence scenarios fail on unavailable prerequisites or scenario errors and never silently skip.
 - ✓ **M0-05**: The canary proves M0 without depending on Fava implementation crates.
 
-M0 is complete and is a prerequisite baseline, not an active roadmap phase. The existing local-source tracer proves a subset of M1 but does not satisfy the complete M1 requirements below.
+M0 is complete and is a prerequisite baseline, not an active roadmap phase. M1-M6 are also complete; their 66 requirements are checked below from the focused milestone records, implementation commits, current validation, and retroactive phase verification reports. M7-M11 remain active.
 
 ## v1 Requirements
 
@@ -19,81 +19,81 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 
 ### Local Semantic State
 
-- [ ] **LOCAL-01**: Applications observe deterministic event identity, replaceable/addressable winner selection, deletion, expiry, ordering, and evidence merge semantics.
-- [ ] **LOCAL-02**: An event-cache provider accepts only admitted signed relay events and cannot retain unpublished local materializations.
-- [ ] **LOCAL-03**: A write-store provider exposes current local unsigned and signed materializations as an independent query source.
-- [ ] **LOCAL-04**: Contributions for the same event from event cache and write store merge into one `EventRecord` with source-specific evidence.
-- [ ] **LOCAL-05**: A pending local replaceable event can shadow a cached predecessor without mutating or deleting that predecessor in the event cache.
-- [ ] **LOCAL-06**: Cancelling a local write retracts only its write-store contribution and naturally reveals any still-qualified cached predecessor.
-- [ ] **LOCAL-07**: Removal, deletion, expiry, or eviction of a source contribution revises every affected open query without a parallel removal API.
-- [ ] **LOCAL-08**: Opening a local query is all-or-nothing and returns one complete current snapshot without waiting for relay work.
-- [ ] **LOCAL-09**: Equivalent query descriptions, including access context, acquisition scope, and result authority, have stable semantic identity.
-- [ ] **LOCAL-10**: Current-state delivery is bounded, may coalesce intermediate states, and always rebases the consumer onto one exact latest result.
-- [ ] **LOCAL-11**: Applications can inspect cache and write-store evidence through public event records without seeing provider storage internals.
-- [ ] **LOCAL-12**: The same semantic corpus passes through memory event-cache and write-store providers and the public Fava facade without relay, transport, or runtime networking dependencies.
+- [x] **LOCAL-01**: Applications observe deterministic event identity, replaceable/addressable winner selection, deletion, expiry, ordering, and evidence merge semantics.
+- [x] **LOCAL-02**: An event-cache provider accepts only admitted signed relay events and cannot retain unpublished local materializations.
+- [x] **LOCAL-03**: A write-store provider exposes current local unsigned and signed materializations as an independent query source.
+- [x] **LOCAL-04**: Contributions for the same event from event cache and write store merge into one `EventRecord` with source-specific evidence.
+- [x] **LOCAL-05**: A pending local replaceable event can shadow a cached predecessor without mutating or deleting that predecessor in the event cache.
+- [x] **LOCAL-06**: Cancelling a local write retracts only its write-store contribution and naturally reveals any still-qualified cached predecessor.
+- [x] **LOCAL-07**: Removal, deletion, expiry, or eviction of a source contribution revises every affected open query without a parallel removal API.
+- [x] **LOCAL-08**: Opening a local query is all-or-nothing and returns one complete current snapshot without waiting for relay work.
+- [x] **LOCAL-09**: Equivalent query descriptions, including access context, acquisition scope, and result authority, have stable semantic identity.
+- [x] **LOCAL-10**: Current-state delivery is bounded, may coalesce intermediate states, and always rebases the consumer onto one exact latest result.
+- [x] **LOCAL-11**: Applications can inspect cache and write-store evidence through public event records without seeing provider storage internals.
+- [x] **LOCAL-12**: The same semantic corpus passes through memory event-cache and write-store providers and the public Fava facade without relay, transport, or runtime networking dependencies.
 
 ### Live Relay Queries
 
-- [ ] **READ-01**: Applications can open a live query against an exact, non-empty explicit relay list without invoking automatic routers.
-- [ ] **READ-02**: Opening a live query starts relay work immediately when live freshness is requested.
-- [ ] **READ-03**: Product transport sends and receives exact bounded NIP-01 wire messages over real sockets.
-- [ ] **READ-04**: Every inbound event is attributed to an accepted relay session, request, generation, access context, and subscription before admission.
-- [ ] **READ-05**: Invalid-id, invalid-signature, malformed, off-filter, stale-generation, and post-terminal events cannot affect cache state or query results.
-- [ ] **READ-06**: EOSE evidence exists only after the actual relay frame and remains scoped to the exact relay request and generation.
-- [ ] **READ-07**: Applications can distinguish empty-plus-EOSE, silence, failure, authentication required, NOTICE, CLOSED, timeout, cancellation, and shortfall.
-- [ ] **READ-08**: A query remains live after EOSE and delivers later matching events without application resubscription.
-- [ ] **READ-09**: Query cancellation performs exact withdrawal, wakes pending pulls, and prevents later application delivery for the cancelled generation.
-- [ ] **READ-10**: Query close is idempotent and deterministically releases owned relay, task, queue, and subscription resources.
-- [ ] **READ-11**: The same event served by several relays appears once with evidence for every relay that actually served it.
-- [ ] **READ-12**: A relay that was planned or contacted but did not serve an event is never credited as provenance for that event.
-- [ ] **READ-13**: Reconnect restores active demand under fresh session and request generation identity without application resubscription.
-- [ ] **READ-14**: Reconnect does not imply that events missed during an outage were recovered or that history is complete.
-- [ ] **READ-15**: Source- or provenance-only changes revise an existing event record without duplicating the event.
-- [ ] **READ-16**: Slow current-state consumers receive an exact bounded latest result with truthful coalescing and loss diagnostics.
-- [ ] **READ-17**: Causal receipt and lifecycle facts use loss-honest delivery separate from coalescible current-state snapshots.
-- [ ] **READ-18**: Repeated cancellation and retry of pending pulls cannot accumulate an update backlog or retain stale waiters.
-- [ ] **READ-19**: Public diagnostics identify query, relay session, access context, request generation, logical demand, wire subscription, terminal reason, and source counts without private inspection.
-- [ ] **READ-20**: The declared standard profile keeps at least 1,000 simultaneous idle observations within explicit task, memory, descriptor, and queue bounds.
+- [x] **READ-01**: Applications can open a live query against an exact, non-empty explicit relay list without invoking automatic routers.
+- [x] **READ-02**: Opening a live query starts relay work immediately when live freshness is requested.
+- [x] **READ-03**: Product transport sends and receives exact bounded NIP-01 wire messages over real sockets.
+- [x] **READ-04**: Every inbound event is attributed to an accepted relay session, request, generation, access context, and subscription before admission.
+- [x] **READ-05**: Invalid-id, invalid-signature, malformed, off-filter, stale-generation, and post-terminal events cannot affect cache state or query results.
+- [x] **READ-06**: EOSE evidence exists only after the actual relay frame and remains scoped to the exact relay request and generation.
+- [x] **READ-07**: Applications can distinguish empty-plus-EOSE, silence, failure, authentication required, NOTICE, CLOSED, timeout, cancellation, and shortfall.
+- [x] **READ-08**: A query remains live after EOSE and delivers later matching events without application resubscription.
+- [x] **READ-09**: Query cancellation performs exact withdrawal, wakes pending pulls, and prevents later application delivery for the cancelled generation.
+- [x] **READ-10**: Query close is idempotent and deterministically releases owned relay, task, queue, and subscription resources.
+- [x] **READ-11**: The same event served by several relays appears once with evidence for every relay that actually served it.
+- [x] **READ-12**: A relay that was planned or contacted but did not serve an event is never credited as provenance for that event.
+- [x] **READ-13**: Reconnect restores active demand under fresh session and request generation identity without application resubscription.
+- [x] **READ-14**: Reconnect does not imply that events missed during an outage were recovered or that history is complete.
+- [x] **READ-15**: Source- or provenance-only changes revise an existing event record without duplicating the event.
+- [x] **READ-16**: Slow current-state consumers receive an exact bounded latest result with truthful coalescing and loss diagnostics.
+- [x] **READ-17**: Causal receipt and lifecycle facts use loss-honest delivery separate from coalescible current-state snapshots.
+- [x] **READ-18**: Repeated cancellation and retry of pending pulls cannot accumulate an update backlog or retain stale waiters.
+- [x] **READ-19**: Public diagnostics identify query, relay session, access context, request generation, logical demand, wire subscription, terminal reason, and source counts without private inspection.
+- [x] **READ-20**: The declared standard profile keeps at least 1,000 simultaneous idle observations within explicit task, memory, descriptor, and queue bounds.
 
 ### Routing and Subscription Planning
 
-- [ ] **ROUTE-01**: Automatic routing evaluates the application-selected router chain in configured order.
-- [ ] **ROUTE-02**: Every router produces an immediate complete current contribution and may later replace that contribution as its facts change.
-- [ ] **ROUTE-03**: A slow or blocked router cannot delay destinations already known from other router contributions.
-- [ ] **ROUTE-04**: Downstream routers react to the live accumulated upstream plan without taking ownership of upstream facts.
-- [ ] **ROUTE-05**: Identical relay destinations deduplicate while preserving every contributing reason, target, and unresolved need.
-- [ ] **ROUTE-06**: Explicit routing creates no automatic router session or router-owned acquisition work.
-- [ ] **ROUTE-07**: Router-owned acquisition uses explicit sources and cannot recursively invoke automatic routing.
-- [ ] **ROUTE-08**: Route preview uses the same derivation as real routing while creating no write, receipt, signing, delivery lane, or router acquisition.
-- [ ] **ROUTE-09**: Subscription planning receives logical demand already assigned to one relay session and remains separate from routing policy.
-- [ ] **ROUTE-10**: Planner grouping may change wire shape but cannot change query meaning, evidence, access isolation, or cancellation.
-- [ ] **ROUTE-11**: Relay limits and bounded router contribution/fan-out budgets yield exact typed shortfall instead of silent dropped demand.
+- [x] **ROUTE-01**: Automatic routing evaluates the application-selected router chain in configured order.
+- [x] **ROUTE-02**: Every router produces an immediate complete current contribution and may later replace that contribution as its facts change.
+- [x] **ROUTE-03**: A slow or blocked router cannot delay destinations already known from other router contributions.
+- [x] **ROUTE-04**: Downstream routers react to the live accumulated upstream plan without taking ownership of upstream facts.
+- [x] **ROUTE-05**: Identical relay destinations deduplicate while preserving every contributing reason, target, and unresolved need.
+- [x] **ROUTE-06**: Explicit routing creates no automatic router session or router-owned acquisition work.
+- [x] **ROUTE-07**: Router-owned acquisition uses explicit sources and cannot recursively invoke automatic routing.
+- [x] **ROUTE-08**: Route preview uses the same derivation as real routing while creating no write, receipt, signing, delivery lane, or router acquisition.
+- [x] **ROUTE-09**: Subscription planning receives logical demand already assigned to one relay session and remains separate from routing policy.
+- [x] **ROUTE-10**: Planner grouping may change wire shape but cannot change query meaning, evidence, access isolation, or cancellation.
+- [x] **ROUTE-11**: Relay limits and bounded router contribution/fan-out budgets yield exact typed shortfall instead of silent dropped demand.
 
 ### Durable Publication
 
-- [ ] **WRITE-01**: Applications can accept unsigned events and verified pre-signed events through one durable write-intent lifecycle.
-- [ ] **WRITE-02**: An unsigned event's author identity selects the signer without conflating authorship with relay authentication identity.
-- [ ] **WRITE-03**: `Accepted` is returned only after the write obligation, current materialization, receipt identity, and recovery cursor are durably committed.
-- [ ] **WRITE-04**: Matching queries expose the accepted local materialization directly from the write store before relay acknowledgement.
-- [ ] **WRITE-05**: No unsigned or unpublished local event is copied into the event cache; only an admitted signed relay echo may enter it.
-- [ ] **WRITE-06**: Exact explicit publication routes bypass automatic routers.
-- [ ] **WRITE-07**: A publisher owns one transport handoff attempt while delivery policy alone decides retry, scheduling, and give-up.
-- [ ] **WRITE-08**: Every destination outcome preserves exact relay text, attempt identity, generation, acknowledgement, rejection, ambiguity, cancellation, and terminal reason.
-- [ ] **WRITE-09**: Proven pre-handoff cancellation produces zero `EVENT` frames, retracts the local query contribution, and records an exact idempotent terminal receipt state.
-- [ ] **WRITE-10**: Receipt removal is separate from write cancellation and obeys explicit retention and lifecycle rules.
-- [ ] **WRITE-11**: A hard process kill after acceptance recovers one obligation, the same write and receipt identities, and the current materialization without application resubmission.
-- [ ] **WRITE-12**: The application-selected router chain is the only automatic write-routing policy.
-- [ ] **WRITE-13**: Outbox routing acquires kind:10002 facts through explicit indexer queries owned by its router crate.
-- [ ] **WRITE-14**: Hint routing uses pointer-like hints and admitted relay evidence through its own independently selectable crate.
-- [ ] **WRITE-15**: App-relay routing always contributes configured relays according to its documented read/write scope.
-- [ ] **WRITE-16**: Fallback routing contributes and retracts independently as upstream target coverage changes.
-- [ ] **WRITE-17**: Known destinations begin delivery immediately while other recipient or route needs remain unresolved.
-- [ ] **WRITE-18**: Later route destinations create new delivery lanes under the same receipt and signed event without duplicate sends to existing destinations.
-- [ ] **WRITE-19**: Duplicate destination contributions cannot create duplicate publication handoffs.
-- [ ] **WRITE-20**: A removed desired route can retire only work proven not to have crossed a handoff boundary; historical delivery facts remain exact.
-- [ ] **WRITE-21**: Automatic routes continue to re-evaluate while work remains open, using exact route revision and lane generation identity.
-- [ ] **WRITE-22**: Route preview and initial real routing are identical when their input facts do not change.
-- [ ] **WRITE-23**: Route contributions, destinations, attempts, retries, receipt facts, and retained history have explicit bounds or typed refusal/shortfall.
+- [x] **WRITE-01**: Applications can accept unsigned events and verified pre-signed events through one durable write-intent lifecycle.
+- [x] **WRITE-02**: An unsigned event's author identity selects the signer without conflating authorship with relay authentication identity.
+- [x] **WRITE-03**: `Accepted` is returned only after the write obligation, current materialization, receipt identity, and recovery cursor are durably committed.
+- [x] **WRITE-04**: Matching queries expose the accepted local materialization directly from the write store before relay acknowledgement.
+- [x] **WRITE-05**: No unsigned or unpublished local event is copied into the event cache; only an admitted signed relay echo may enter it.
+- [x] **WRITE-06**: Exact explicit publication routes bypass automatic routers.
+- [x] **WRITE-07**: A publisher owns one transport handoff attempt while delivery policy alone decides retry, scheduling, and give-up.
+- [x] **WRITE-08**: Every destination outcome preserves exact relay text, attempt identity, generation, acknowledgement, rejection, ambiguity, cancellation, and terminal reason.
+- [x] **WRITE-09**: Proven pre-handoff cancellation produces zero `EVENT` frames, retracts the local query contribution, and records an exact idempotent terminal receipt state.
+- [x] **WRITE-10**: Receipt removal is separate from write cancellation and obeys explicit retention and lifecycle rules.
+- [x] **WRITE-11**: A hard process kill after acceptance recovers one obligation, the same write and receipt identities, and the current materialization without application resubmission.
+- [x] **WRITE-12**: The application-selected router chain is the only automatic write-routing policy.
+- [x] **WRITE-13**: Outbox routing acquires kind:10002 facts through explicit indexer queries owned by its router crate.
+- [x] **WRITE-14**: Hint routing uses pointer-like hints and admitted relay evidence through its own independently selectable crate.
+- [x] **WRITE-15**: App-relay routing always contributes configured relays according to its documented read/write scope.
+- [x] **WRITE-16**: Fallback routing contributes and retracts independently as upstream target coverage changes.
+- [x] **WRITE-17**: Known destinations begin delivery immediately while other recipient or route needs remain unresolved.
+- [x] **WRITE-18**: Later route destinations create new delivery lanes under the same receipt and signed event without duplicate sends to existing destinations.
+- [x] **WRITE-19**: Duplicate destination contributions cannot create duplicate publication handoffs.
+- [x] **WRITE-20**: A removed desired route can retire only work proven not to have crossed a handoff boundary; historical delivery facts remain exact.
+- [x] **WRITE-21**: Automatic routes continue to re-evaluate while work remains open, using exact route revision and lane generation identity.
+- [x] **WRITE-22**: Route preview and initial real routing are identical when their input facts do not change.
+- [x] **WRITE-23**: Route contributions, destinations, attempts, retries, receipt facts, and retained history have explicit bounds or typed refusal/shortfall.
 
 ### Semantic Writes and Capabilities
 
@@ -199,76 +199,76 @@ These remain explicitly unpromised unless resolved in their owning milestones:
 
 ## Traceability
 
-Every v1 requirement maps to exactly one active phase. M0 remains a completed prerequisite baseline outside the active roadmap.
+Every v1 requirement maps to exactly one active phase. M0 remains a completed prerequisite baseline outside the active roadmap. `Complete` denotes an evidence-backed owning milestone verdict; Phases 1-6 were executed before GSD phase artifacts existed and are reconciled without retrospective PLAN.md or SUMMARY.md files.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LOCAL-01 | Phase 1 | Pending |
-| LOCAL-02 | Phase 1 | Pending |
-| LOCAL-03 | Phase 1 | Pending |
-| LOCAL-04 | Phase 1 | Pending |
-| LOCAL-05 | Phase 1 | Pending |
-| LOCAL-06 | Phase 1 | Pending |
-| LOCAL-07 | Phase 1 | Pending |
-| LOCAL-08 | Phase 1 | Pending |
-| LOCAL-09 | Phase 1 | Pending |
-| LOCAL-10 | Phase 1 | Pending |
-| LOCAL-11 | Phase 1 | Pending |
-| LOCAL-12 | Phase 1 | Pending |
-| READ-01 | Phase 2 | Pending |
-| READ-02 | Phase 2 | Pending |
-| READ-03 | Phase 2 | Pending |
-| READ-04 | Phase 2 | Pending |
-| READ-05 | Phase 2 | Pending |
-| READ-06 | Phase 2 | Pending |
-| READ-07 | Phase 2 | Pending |
-| READ-08 | Phase 2 | Pending |
-| READ-09 | Phase 2 | Pending |
-| READ-10 | Phase 2 | Pending |
-| READ-11 | Phase 3 | Pending |
-| READ-12 | Phase 3 | Pending |
-| READ-13 | Phase 3 | Pending |
-| READ-14 | Phase 3 | Pending |
-| READ-15 | Phase 3 | Pending |
-| READ-16 | Phase 3 | Pending |
-| READ-17 | Phase 3 | Pending |
-| READ-18 | Phase 3 | Pending |
-| READ-19 | Phase 3 | Pending |
-| READ-20 | Phase 3 | Pending |
-| ROUTE-01 | Phase 4 | Pending |
-| ROUTE-02 | Phase 4 | Pending |
-| ROUTE-03 | Phase 4 | Pending |
-| ROUTE-04 | Phase 4 | Pending |
-| ROUTE-05 | Phase 4 | Pending |
-| ROUTE-06 | Phase 4 | Pending |
-| ROUTE-07 | Phase 4 | Pending |
-| ROUTE-08 | Phase 4 | Pending |
-| ROUTE-09 | Phase 4 | Pending |
-| ROUTE-10 | Phase 4 | Pending |
-| ROUTE-11 | Phase 4 | Pending |
-| WRITE-01 | Phase 5 | Pending |
-| WRITE-02 | Phase 5 | Pending |
-| WRITE-03 | Phase 5 | Pending |
-| WRITE-04 | Phase 5 | Pending |
-| WRITE-05 | Phase 5 | Pending |
-| WRITE-06 | Phase 5 | Pending |
-| WRITE-07 | Phase 5 | Pending |
-| WRITE-08 | Phase 5 | Pending |
-| WRITE-09 | Phase 5 | Pending |
-| WRITE-10 | Phase 5 | Pending |
-| WRITE-11 | Phase 5 | Pending |
-| WRITE-12 | Phase 6 | Pending |
-| WRITE-13 | Phase 6 | Pending |
-| WRITE-14 | Phase 6 | Pending |
-| WRITE-15 | Phase 6 | Pending |
-| WRITE-16 | Phase 6 | Pending |
-| WRITE-17 | Phase 6 | Pending |
-| WRITE-18 | Phase 6 | Pending |
-| WRITE-19 | Phase 6 | Pending |
-| WRITE-20 | Phase 6 | Pending |
-| WRITE-21 | Phase 6 | Pending |
-| WRITE-22 | Phase 6 | Pending |
-| WRITE-23 | Phase 6 | Pending |
+| LOCAL-01 | Phase 1 | Complete |
+| LOCAL-02 | Phase 1 | Complete |
+| LOCAL-03 | Phase 1 | Complete |
+| LOCAL-04 | Phase 1 | Complete |
+| LOCAL-05 | Phase 1 | Complete |
+| LOCAL-06 | Phase 1 | Complete |
+| LOCAL-07 | Phase 1 | Complete |
+| LOCAL-08 | Phase 1 | Complete |
+| LOCAL-09 | Phase 1 | Complete |
+| LOCAL-10 | Phase 1 | Complete |
+| LOCAL-11 | Phase 1 | Complete |
+| LOCAL-12 | Phase 1 | Complete |
+| READ-01 | Phase 2 | Complete |
+| READ-02 | Phase 2 | Complete |
+| READ-03 | Phase 2 | Complete |
+| READ-04 | Phase 2 | Complete |
+| READ-05 | Phase 2 | Complete |
+| READ-06 | Phase 2 | Complete |
+| READ-07 | Phase 2 | Complete |
+| READ-08 | Phase 2 | Complete |
+| READ-09 | Phase 2 | Complete |
+| READ-10 | Phase 2 | Complete |
+| READ-11 | Phase 3 | Complete |
+| READ-12 | Phase 3 | Complete |
+| READ-13 | Phase 3 | Complete |
+| READ-14 | Phase 3 | Complete |
+| READ-15 | Phase 3 | Complete |
+| READ-16 | Phase 3 | Complete |
+| READ-17 | Phase 3 | Complete |
+| READ-18 | Phase 3 | Complete |
+| READ-19 | Phase 3 | Complete |
+| READ-20 | Phase 3 | Complete |
+| ROUTE-01 | Phase 4 | Complete |
+| ROUTE-02 | Phase 4 | Complete |
+| ROUTE-03 | Phase 4 | Complete |
+| ROUTE-04 | Phase 4 | Complete |
+| ROUTE-05 | Phase 4 | Complete |
+| ROUTE-06 | Phase 4 | Complete |
+| ROUTE-07 | Phase 4 | Complete |
+| ROUTE-08 | Phase 4 | Complete |
+| ROUTE-09 | Phase 4 | Complete |
+| ROUTE-10 | Phase 4 | Complete |
+| ROUTE-11 | Phase 4 | Complete |
+| WRITE-01 | Phase 5 | Complete |
+| WRITE-02 | Phase 5 | Complete |
+| WRITE-03 | Phase 5 | Complete |
+| WRITE-04 | Phase 5 | Complete |
+| WRITE-05 | Phase 5 | Complete |
+| WRITE-06 | Phase 5 | Complete |
+| WRITE-07 | Phase 5 | Complete |
+| WRITE-08 | Phase 5 | Complete |
+| WRITE-09 | Phase 5 | Complete |
+| WRITE-10 | Phase 5 | Complete |
+| WRITE-11 | Phase 5 | Complete |
+| WRITE-12 | Phase 6 | Complete |
+| WRITE-13 | Phase 6 | Complete |
+| WRITE-14 | Phase 6 | Complete |
+| WRITE-15 | Phase 6 | Complete |
+| WRITE-16 | Phase 6 | Complete |
+| WRITE-17 | Phase 6 | Complete |
+| WRITE-18 | Phase 6 | Complete |
+| WRITE-19 | Phase 6 | Complete |
+| WRITE-20 | Phase 6 | Complete |
+| WRITE-21 | Phase 6 | Complete |
+| WRITE-22 | Phase 6 | Complete |
+| WRITE-23 | Phase 6 | Complete |
 | CAP-01 | Phase 7 | Pending |
 | CAP-02 | Phase 7 | Pending |
 | CAP-03 | Phase 7 | Pending |

@@ -16,14 +16,13 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 
 - ✓ An independent real-relay evidence lab can publish and query a genuinely signed event, hard-kill and restart the relay against the same data directory, query the event again, and preserve reconstructable wire/process evidence — M0
 - ✓ The canary remains independent of Fava internals and fails enabled scenarios rather than silently skipping unavailable prerequisites — M0
-- ✓ A narrow M1 tracer merges independent event-cache and write-store contributions into one current local view, preserves their separate authority, and exposes the path through the public facade — existing tracer only; not an M1 completion claim
+- ✓ M1 delivers deterministic local semantic state across independent event-cache and write-store authorities, including replacement, deletion, expiry, source removal, stable query identity, bounded observation, and public-facade evidence
+- ✓ M2-M3 deliver exact explicit and multi-relay live queries with verified admission, scoped EOSE/provenance, reconnect generations, cancellation, diagnostics, and bounded observation through real-relay evidence
+- ✓ M4 delivers ordered reactive routing and meaning-preserving subscription planning with immediate progress, explicit bypass, typed shortfall, and public route preview
+- ✓ M5-M6 deliver durable explicit and automatic-route publication with optimistic local visibility, exact receipts, cancellation, process-kill recovery, immediate partial delivery, and later route expansion under one receipt
 
 ### Active
 
-- [ ] Complete M1 local event state: stable equivalent-query identity, deterministic deletion and expiry, full source-removal behavior, shared provider corpora, and every M1 exit gate
-- [ ] Deliver explicit and multi-relay live queries with exact source-scoped evidence, bounded observation, cancellation, reconnect generations, removals, and real-relay proof
-- [ ] Deliver ordered asynchronous routing and subscription planning where known work starts immediately, later route contributions expand work safely, and explicit routing bypasses automatic routers
-- [ ] Deliver durable explicit and automatic-route publication with local visibility, signing, exact receipts, partial delivery, cancellation, recovery, and reattachment under one write identity
 - [ ] Deliver replaceable-event edits and independent protocol crates without expanding the universal workload model beyond live queries and write intents
 - [ ] Qualify authentication, hostile-relay behavior, typed limits, overload, ambiguous handoff, give-up, and resource boundedness with attributable failures
 - [ ] Deliver truthful persistent and ephemeral cache/service profiles, restart guarantees, NIP-05 and NIP-11 services, and durable write recovery
@@ -44,7 +43,7 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 
 - The Fava documents under `docs/spec/` are authoritative.
 - Authority order is: behavioral goals and objectives, architecture, TDD/BDD testing guide, implementation plan, then the partial Rust query-semantics refinement where it does not conflict with the complete authorities.
-- The current checkout contains a completed M0 real-relay evidence foundation and an intentionally narrow M1 local-source tracer. M1 is incomplete; M2–M11 remain specified target work.
+- The current checkout implements completed M0-M6 product slices. M7-M11 remain specified target work; Phase 7 semantic writes and capability composition is next.
 - The implementation uses focused Rust owner, contract, provider, lifecycle-owner, and facade crates. The canary and external provider falsifiers are separate workspaces so they can act as independent witnesses.
 - Behavior features preserve app-visible meaning. Executable owner tests drive implementation. Canary and native capstones prove additional public behavior only when they exercise real boundaries.
 - The five later product decisions left open by the normative specification—windowing, partial-handoff cancellation, outage backfill, full delivery history, and the recommended persistent event-cache profile—remain decisions for their owning milestones rather than initialization guesses.
@@ -73,7 +72,7 @@ Applications can rely on coherent live queries and durable writes with exact, bo
 | Keep Fava a library with a small public surface | Applications retain product and presentation policy while Fava owns reusable Nostr machinery and lifecycle correctness | — Pending |
 | Select providers through static application composition | Replaceability is explicit and testable without runtime plugin machinery or hidden defaults | — Pending |
 | Use live queries and write intents as the two long-lived workload concepts | Keeps cancellation, recovery, routing, observation, and diagnostics coherent | — Pending |
-| Treat M0 as complete and M1 as the next incomplete milestone | Current evidence passes M0; the local-source tracer proves only a subset of M1 | — Pending |
+| Treat M0-M6 as complete and M7 as the next milestone | Focused issue records, milestone commits, preserved canary bundles, current validation, and retroactive phase verification support the completed claims | Accepted |
 
 ## Evolution
 
@@ -93,4 +92,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-20 after initialization*
+*Last updated: 2026-08-21 after M0-M6 planning-state reconciliation*

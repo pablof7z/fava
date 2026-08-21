@@ -9,7 +9,7 @@
 
 Fava is a clean-room Rust implementation of an embeddable Nostr client engine with first-class Swift and Kotlin products. Its defining value is not basic protocol access: it is coherent live queries and durable write intents whose source evidence, cancellation, recovery, failure, and resource behavior remain exact across replaceable provider compositions. Experts should build it as a set of semantic owners and neutral public contracts, with runtime, storage, transport, protocol, and native mechanisms subordinate to those owners. The authoritative specifications under `docs/spec/` decide behavior and the M0-M11 sequence; research recommendations select mechanisms only where those documents intentionally leave room.
 
-The current status must remain explicit. M0 is complete and is the independent real-relay evidence foundation. M1 has a useful public tracer that merges memory event-cache and write-store contributions, but M1 is incomplete: stable equivalent-query identity, full replacement/deletion/expiry behavior, coherent opening, source removal, bounded observation, shared provider corpora, and all public exit gates remain. M2-M11 are future specified work. The recommended delivery approach is therefore to finish M1 as the semantic oracle, then follow the existing milestone order: exact single-relay acquisition, multi-relay reactivity, routing/planning, durable publication, automatic routing, semantic edits, hostile-boundary qualification, truthful profiles, provider substitution, and native parity.
+The current status must remain explicit. M0-M6 are complete: the independent evidence foundation, deterministic local state, exact single- and multi-relay queries, routing/planning, durable explicit publication, and automatic partial delivery are implemented and recorded by their focused milestone evidence. M7-M11 remain future specified work. The recommended delivery approach is therefore to build semantic edits and independent capability crates on the existing write spine, then continue with hostile-boundary qualification, truthful profiles, provider substitution, and native parity.
 
 The largest risks are architectural shortcuts that initially look simpler: collapsing event-cache and write-store authority, turning request-scoped evidence into global truth, using logical IDs without generation identity, reporting write acceptance before durable commitment, waiting for routing to settle instead of exposing partial progress, and calling providers replaceable while defaults retain private access. Prevent these with one owner per mutable fact and lifecycle, facts-before-effects ordering, exact operation/generation correlation, explicit bounds and shortfalls from each introducing slice, contract-plus-implementation-plus-conformance delivery, independent witnesses, and deliberate-break evidence. M8 qualifies the mature system under hostile conditions; it must not be used to postpone boundedness or isolation in earlier public contracts.
 
@@ -18,7 +18,7 @@ The largest risks are architectural shortcuts that initially look simpler: colla
 | Category | Current conclusion | Planning consequence |
 |----------|--------------------|----------------------|
 | Normative | `docs/spec/` owns behavior, architecture, evidence discipline, and M0-M11 sequencing | Roadmap work may refine slices but must not reorder, weaken, or rename away milestone exit gates |
-| Implemented | M0 complete; narrow M1 tracer present; M1 incomplete; M2-M11 absent | Requirements must distinguish validated evidence from tracer evidence and future specifications |
+| Implemented | M0-M6 complete; M7-M11 absent | Requirements must distinguish completed milestone evidence from future specifications |
 | Recommended | Stack, provider, transport, test, and FFI mechanisms described below | Adopt only with the first real vertical slice and prove them against the owning contract |
 | Open | Windowing, partial-handoff cancellation, outage backfill, full delivery history, recommended persistent event-cache profile | Resolve in the owning milestones from forcing workloads; do not guess during initialization |
 
@@ -132,8 +132,8 @@ Detailed findings: [PITFALLS.md](./PITFALLS.md).
 
 - Preserve normative, implemented, and recommended status in every requirement.
 - Mark M0 evidence as validated; do not reopen M0 when later scenarios extend the lab.
-- Treat the current merged-source path as tracer evidence only. The next completion claim is all of M1.
-- Keep M2-M11 active and unvalidated until their complete owner, public-facade, independent-witness, resource, and mutation gates pass.
+- Treat M1-M6 as completed regression authorities backed by their focused issue records and phase verification reports.
+- Keep M7-M11 active and unvalidated until their complete owner, public-facade, independent-witness, resource, and mutation gates pass.
 - Express source evidence, access context, identity, generation, bounds, shortfall, cancellation, ambiguity, and teardown as observable requirements.
 - Preserve declarative live queries and durable write intents as the two primary long-lived workloads.
 - Require a separate neutral contract and implementation crate with the first real provider slice.
@@ -142,7 +142,7 @@ Detailed findings: [PITFALLS.md](./PITFALLS.md).
 
 ## Implications for Roadmap
 
-The authoritative M0-M11 order remains the roadmap. Research supports finer vertical slicing within each milestone, not a replacement sequence. M0 is a preserved completed baseline; the active phases are M1-M11.
+The authoritative M0-M11 order remains the roadmap. Research supports finer vertical slicing within each milestone, not a replacement sequence. M0-M6 are preserved completed phases; the active phases are M7-M11.
 
 ### Phase M1: Deterministic Local Semantic State
 
@@ -307,15 +307,15 @@ The authoritative M0-M11 order remains the roadmap. Research supports finer vert
 | Stack | HIGH for specification fit; MEDIUM for ecosystem currency | Existing Rust/Tokio/`nostr` baseline is verified. Future transport, database, and native mechanisms need owning-phase executable qualification. |
 | Features | HIGH for Fava scope; MEDIUM for ecosystem characterization | Normative features and anti-features come from authoritative specifications. External SDK comparisons establish expectations but do not define scope. |
 | Architecture | HIGH for target/current-state distinctions; MEDIUM for external mechanisms | Ownership, dependency direction, lifecycle, and M0-M11 gates are repository-owned. Tokio/database/UniFFI guidance is official but unproved in Fava products. |
-| Pitfalls | HIGH for Fava-specific risks; MEDIUM for time-sensitive external details | Risks follow from required invariants and known M1 gaps. NIP, database, runtime, and native details must be rechecked in their milestones. |
+| Pitfalls | HIGH for Fava-specific risks; MEDIUM for time-sensitive external details | Risks follow from required invariants and implemented M1-M6 regression surfaces. NIP, database, runtime, and native details must be rechecked in their milestones. |
 
 **Overall confidence:** HIGH that the authoritative sequence and architecture constraints are correct; MEDIUM that recommended future mechanisms and exact versions will survive milestone-specific validation unchanged.
 
 ### Gaps to Address
 
-- **M1 completion evidence:** Convert tracer gaps into requirements and vertical owner/capstone slices before M2 completion work.
+- **M7 capability contract:** Qualify semantic edits, first-value materialization, rematerialization, stable receipt identity, stale-generation refusal, and two unrelated capability crates before M8.
 - **Five open product decisions:** Decide windowing, partial-handoff cancellation, outage backfill, full delivery history, and the recommended persistent event-cache profile only with forcing milestone evidence.
-- **Durable write provider:** Treat Redb as the leading recommendation; select at M5 only after crash, filesystem, migration, bound, and recovery proof.
+- **Durable write regression:** Preserve the Redb M5 process-kill and recovery corpus while M7 adds materialization generations.
 - **Resource budgets:** Measure representative profiles and encode typed admission/refusal/shortfall per owner.
 - **NIP drift:** Recheck and record pinned revisions for NIP-01/05/09/11/40/42/65 in their owning phases.
 - **Provider isolation:** Determine where cooperative in-process isolation is sufficient and where dedicated thread/process quarantine is required.

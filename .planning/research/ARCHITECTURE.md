@@ -405,7 +405,7 @@ The numbered milestone gates remain the safest roadmap. Preparatory pure-value o
 - `.planning/PROJECT.md` — project scope, validated/current milestone status, constraints, and open decisions.
 - `docs/spec/ARCHITECTURE.md` — authoritative target responsibilities, ownership ledger, flows, dependency rules, falsifiers, and vertical slices.
 - `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` — M0-M11 product gates, ordering, canary scenarios, and release definition.
-- `.planning/codebase/ARCHITECTURE.md` — implemented M0 plus narrow M1 tracer, concrete dependency graph, current lifecycle and evidence limitations.
+- `.planning/codebase/ARCHITECTURE.md` — implemented M0-M6 dependency graph, current lifecycles, provider boundaries, and evidence limitations.
 
 ### Current Primary Documentation — MEDIUM (official sources discovered by web search and cross-checked)
 
