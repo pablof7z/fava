@@ -5,11 +5,10 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use fava::{
-    Event, EventBuilder, EventCoordinate, EventValue, Fava, Kind, MaterializationId, PublicKey,
+    BuildError, Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError,
     ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, WriteIntent, WriteIntentError,
-    WriteRouting,
+    WriteRouting, WriteStoreError,
 };
-use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_write_store::WriteStore;
@@ -26,8 +25,8 @@ mod capability_protocol;
 mod support;
 
 use support::{
-    BlockingSigner, CountingRouter, CountingSigner, NoopTransport, RecordingPublisher,
-    publication_builder, relay_url, wait_for_materialization,
+    BlockingSigner, CountingRouter, CountingSigner, EDIT_FORMAT, NoopTransport, RecordingPublisher,
+    TestMaterializer, publication_builder, relay_url, wait_for_materialization,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
@@ -61,122 +60,7 @@ fn target_count(event: &Event, tag_name: &str, target: &str) -> usize {
         .count()
 }
 
-async fn public_first_value_and_inverse<Add, Remove, Adjacent>(
-    kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
-    add: Add,
-    remove: Remove,
-    adjacent: Adjacent,
-    tags: (&str, &str, &str),
-) where
-    Add: Fn(PublicKey) -> EditResult,
-    Remove: Fn(PublicKey) -> EditResult,
-    Adjacent: Fn(PublicKey) -> EditResult,
-{
-    let (tag_name, target, adjacent_target) = tags;
-    let keys = Keys::generate();
-    let actor = keys.public_key();
-    let cache = Arc::new(MemoryEventCache::default());
-    let store = Arc::new(MemoryWriteStore::default());
-    let signer = Arc::new(CountingSigner::new(keys.clone()));
-    let publisher = Arc::new(RecordingPublisher::default());
-    let fava = publication_builder(
-        Arc::clone(&cache),
-        Arc::clone(&store),
-        Arc::clone(&signer),
-        Arc::clone(&publisher),
-    )
-    .materializers([Arc::clone(&materializer)])
-    .build()
-    .expect("public capability assembly");
-    let mut observation = fava
-        .observe(
-            fava::Query::events()
-                .authors([actor])
-                .kind(kind)
-                .cache_only(),
-        )
-        .await
-        .expect("public semantic query opens");
-
-    let accepted = fava
-        .publish(explicit_intent(add(actor).expect("add edit")))
-        .expect("first semantic value accepts");
-    let visible = tokio::time::timeout(std::time::Duration::from_secs(1), observation.changed())
-        .await
-        .expect("first value becomes visible")
-        .expect("observation stays open");
-    let receipt = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("first value settles");
-    let attempt = publisher.attempts().pop().expect("one publication attempt");
-
-    assert_eq!(accepted.write_id, receipt.write_id);
-    assert_eq!(accepted.receipt_id, receipt.receipt_id);
-    assert_eq!(attempt.receipt_id, accepted.receipt_id);
-    assert_eq!(attempt.materialization_id, MaterializationId::from_u64(1));
-    assert_eq!(attempt.event.id, receipt.current.event.id().unwrap());
-    assert_eq!(visible.events.len(), 1);
-    assert_eq!(target_count(&attempt.event, tag_name, target), 1);
-    assert_eq!(signer.calls(), 1);
-    assert!(
-        cache
-            .is_empty()
-            .expect("unpublished event never enters cache")
-    );
-    assert_eq!(store.len().expect("write store remains readable"), 1);
-
-    let mut source_tags = attempt.event.tags.to_vec();
-    source_tags.push(Tag::parse(["x", "unrelated", "bytes"]).unwrap());
-    let source = signed(&keys, kind, 20, "opaque", source_tags);
-    let duplicate = materializer
-        .materialize(&add(actor).unwrap(), Some(&source), Timestamp::from(21))
-        .expect("duplicate add materializes");
-    let duplicate_again = materializer
-        .materialize(&add(actor).unwrap(), Some(&source), Timestamp::from(21))
-        .expect("equal input materializes");
-    assert_eq!(duplicate, duplicate_again);
-    let duplicate = duplicate.finalize(&keys).expect("duplicate output signs");
-    assert_eq!(duplicate.content, "opaque");
-    assert_eq!(target_count(&duplicate, tag_name, target), 1);
-    assert_eq!(
-        duplicate.tags.last().unwrap().as_slice(),
-        &["x", "unrelated", "bytes"]
-    );
-
-    let adjacent = materializer
-        .materialize(
-            &adjacent(actor).unwrap(),
-            Some(&duplicate),
-            Timestamp::from(22),
-        )
-        .expect("adjacent add materializes")
-        .finalize(&keys)
-        .expect("adjacent output signs");
-    assert_eq!(target_count(&adjacent, tag_name, target), 1);
-    assert_eq!(target_count(&adjacent, tag_name, adjacent_target), 1);
-
-    let removed = materializer
-        .materialize(
-            &remove(actor).unwrap(),
-            Some(&adjacent),
-            Timestamp::from(23),
-        )
-        .expect("inverse materializes")
-        .finalize(&keys)
-        .expect("inverse output signs");
-    assert_eq!(target_count(&removed, tag_name, target), 0);
-    assert_eq!(target_count(&removed, tag_name, adjacent_target), 1);
-    assert_eq!(removed.content, "opaque");
-    let empty = materializer
-        .materialize(&remove(actor).unwrap(), None, Timestamp::from(1))
-        .expect("empty inverse is valid");
-    assert!(empty.tags.is_empty());
-}
-
 async fn shared_preview_bounds_and_failure<Add>(
-    kind: Kind,
     materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: Add,
 ) where
@@ -185,46 +69,6 @@ async fn shared_preview_bounds_and_failure<Add>(
     let keys = Keys::generate();
     let actor = keys.public_key();
     let edit = add(actor).expect("add edit");
-    let malformed = ReplaceableEventEdit::new(
-        actor,
-        edit.coordinate().clone(),
-        edit.format(),
-        Vec::new(),
-        edit.inverse_change().to_vec(),
-    )
-    .expect("bounded malformed edit");
-    assert!(!materializer.supports(&malformed));
-    assert!(WriteIntent::edit(edit.clone(), WriteRouting::Explicit(BTreeSet::new())).is_err());
-    let addressable = ReplaceableEventEdit::new(
-        actor,
-        EventCoordinate::Replaceable {
-            author: actor,
-            kind: Kind::Custom(30_001),
-            identifier: Some("addressable".to_owned()),
-        },
-        edit.format(),
-        edit.change().to_vec(),
-        edit.inverse_change().to_vec(),
-    )
-    .unwrap();
-    assert!(WriteIntent::edit(addressable, WriteRouting::Automatic).is_err());
-
-    let mut hostile = signed(
-        &keys,
-        kind,
-        1,
-        "hostile",
-        vec![Tag::parse(["x", "valid"]).unwrap()],
-    );
-    hostile.tags = (0..2_001)
-        .map(|index| Tag::parse(["x", &index.to_string()]).unwrap())
-        .collect();
-    assert!(
-        materializer
-            .materialize(&edit, Some(&hostile), Timestamp::from(2))
-            .is_err()
-    );
-
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(BlockingSigner::new(actor));
@@ -265,7 +109,10 @@ fn assert_selection_and_capacity_refusals(
     )
     .build()
     .expect("publication without materializers is valid");
-    assert!(empty.publish(explicit_intent(edit.clone())).is_err());
+    assert!(matches!(
+        empty.publish(explicit_intent(edit.clone())),
+        Err(PublicationError::Routing(_))
+    ));
     let duplicate = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::new(MemoryWriteStore::default()),
@@ -274,7 +121,21 @@ fn assert_selection_and_capacity_refusals(
     )
     .materializers([Arc::clone(&materializer), Arc::clone(&materializer)])
     .build();
-    assert!(duplicate.is_err());
+    assert!(matches!(duplicate, Err(BuildError::Publication(_))));
+    let overflow = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::new(MemoryWriteStore::default()),
+        Arc::new(CountingSigner::new(keys.clone())),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializers((0..65).map(|offset| {
+        Arc::new(TestMaterializer::new(
+            Kind::Custom(20_000 + offset),
+            EDIT_FORMAT,
+        )) as Arc<dyn ReplaceableEventMaterializer>
+    }))
+    .build();
+    assert!(matches!(overflow, Err(BuildError::Publication(_))));
 
     let bounded_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let bounded = Fava::builder()
@@ -295,7 +156,10 @@ fn assert_selection_and_capacity_refusals(
             EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
         ))
         .expect("one active write fills capacity");
-    assert!(bounded.publish(explicit_intent(edit)).is_err());
+    assert!(matches!(
+        bounded.publish(explicit_intent(edit)),
+        Err(PublicationError::Store(WriteStoreError::Refused(_)))
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -335,16 +199,14 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
 #[tokio::test(flavor = "current_thread")]
 async fn capabilities_share_preview_bounds_and_failure_behavior() {
     let follow_target = Keys::generate().public_key();
-    shared_preview_bounds_and_failure(Kind::ContactList, fava_nip02::materializer(), |actor| {
+    shared_preview_bounds_and_failure(fava_nip02::materializer(), |actor| {
         fava_nip02::follow(actor, follow_target)
     })
     .await;
     let bookmark_target = EventId::from_byte_array([10; 32]);
-    shared_preview_bounds_and_failure(
-        Kind::Custom(10_003),
-        fava_bookmarks::materializer(),
-        |actor| fava_bookmarks::bookmark_event(actor, bookmark_target),
-    )
+    shared_preview_bounds_and_failure(fava_bookmarks::materializer(), |actor| {
+        fava_bookmarks::bookmark_event(actor, bookmark_target)
+    })
     .await;
 }
 
@@ -357,6 +219,7 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
         fava_nip02::materializer(),
         |actor| fava_nip02::follow(actor, follow_target),
         |actor| fava_nip02::follow(actor, follow_adjacent),
+        ("p", &follow_target.to_hex()),
     )
     .await;
     let bookmark_target = EventId::from_byte_array([11; 32]);
@@ -366,6 +229,7 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
         fava_bookmarks::materializer(),
         |actor| fava_bookmarks::bookmark_event(actor, bookmark_target),
         |actor| fava_bookmarks::bookmark_event(actor, bookmark_adjacent),
+        ("e", &bookmark_target.to_hex()),
     )
     .await;
 }

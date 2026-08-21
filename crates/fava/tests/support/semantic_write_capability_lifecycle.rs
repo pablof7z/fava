@@ -20,6 +20,7 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
+use super::capability_protocol::assert_source_removal;
 use super::explicit_intent;
 use super::support::{
     BlockingSigner, RecordingPublisher, publication_builder, relay_evidence,
@@ -34,11 +35,12 @@ pub async fn exercise<Add, Adjacent>(
     materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: Add,
     adjacent: Adjacent,
+    target: (&str, &str),
 ) where
     Add: Fn(PublicKey) -> EditResult,
     Adjacent: Fn(PublicKey) -> EditResult,
 {
-    prove_source_removal(kind, Arc::clone(&materializer), &add).await;
+    prove_source_removal(kind, Arc::clone(&materializer), &add, target).await;
     prove_processed_stale_success(kind, materializer, add, adjacent).await;
 }
 
@@ -46,6 +48,7 @@ async fn prove_source_removal<Add>(
     kind: Kind,
     materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: &Add,
+    target: (&str, &str),
 ) where
     Add: Fn(PublicKey) -> EditResult,
 {
@@ -84,12 +87,7 @@ async fn prove_source_removal<Add>(
         .commit(vec![CacheMutation::Retract(current.id)])
         .unwrap();
     let removed = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
-    assert!(removed.current.publication.materialization_source.is_none());
-    assert_eq!(
-        removed.current.publication.retired_materializations.len(),
-        1
-    );
-    assert_eq!(removed.current.event.kind(), kind);
+    assert_source_removal(&accepted, &removed, current.id, kind, actor, target);
     assert!(publisher.attempts().is_empty());
 }
 
