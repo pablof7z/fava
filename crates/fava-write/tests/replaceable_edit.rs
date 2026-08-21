@@ -73,6 +73,11 @@ fn accepted_edit_payload_carries_the_resolved_author() {
 
 #[test]
 fn superseded_edit_json_fields_are_refused() {
+    assert!(serde_json::from_value::<ReplaceableEventEdit>(json!({
+        "kind": 3,
+        "change": [1]
+    }))
+    .is_err());
     for obsolete in ["actor", "coordinate", "format", "inverse"] {
         let mut value = serde_json::to_value(plain_edit()).expect("edit serializes");
         value
