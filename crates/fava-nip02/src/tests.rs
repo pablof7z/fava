@@ -256,9 +256,9 @@ fn hostile_sources_are_bounded_before_signature_verification() {
         Err(WriteIntentError::TooLarge { .. })
     ));
 
-    let mut nested_values = Vec::with_capacity(43_692);
+    let mut nested_values = Vec::with_capacity(43_580);
     nested_values.push("x".to_owned());
-    nested_values.resize(43_692, String::new());
+    nested_values.resize(43_580, String::new());
     let mut nested = source(
         &actor,
         Kind::ContactList,
@@ -271,6 +271,22 @@ fn hostile_sources_are_bounded_before_signature_verification() {
         materialize(&edit, Some(&nested), 2),
         Err(WriteIntentError::TooLarge { .. })
     ));
+}
+
+#[test]
+fn structural_size_matches_exact_nostr_json_encoding() {
+    let actor = Keys::generate();
+    let event = source(
+        &actor,
+        Kind::ContactList,
+        123_456,
+        "quote=\" slash=\\ line=\n control=\u{0001} unicode=π",
+        vec![tag(&["x", "\"", "\\", "\n", "\u{0002}", "π"])],
+    );
+    assert_eq!(
+        super::bounds::encoded_len(&event).expect("bounded exact size"),
+        event.as_json().len()
+    );
 }
 
 #[test]
@@ -299,32 +315,4 @@ fn insertion_is_decided_before_the_tag_cap_is_allocated() {
         materialize(&edit, Some(&full_without_target), 2),
         Err(WriteIntentError::TooLarge { .. })
     ));
-}
-
-#[test]
-fn public_surface_is_functions_over_approved_values_only() {
-    let source = include_str!("lib.rs");
-    for line in source.lines().map(str::trim) {
-        if line.starts_with("pub ") {
-            assert!(
-                line.starts_with("pub fn "),
-                "unexpected public nominal declaration: {line}"
-            );
-        }
-    }
-    for forbidden in [
-        "pub struct ContactList",
-        "pub enum ContactList",
-        "pub struct Descriptor",
-        "pub struct Factory",
-        "pub struct Registry",
-        "pub struct Profile",
-        "pub struct Compatibility",
-        "pub struct Migration",
-    ] {
-        assert!(
-            !source.contains(forbidden),
-            "forbidden public noun: {forbidden}"
-        );
-    }
 }

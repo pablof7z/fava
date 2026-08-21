@@ -1,10 +1,28 @@
 //! Pure public NIP-51 bookmark-list semantic edits.
+//!
+//! The compile-fail examples are external privacy checks for protocol nouns.
+//!
+//! ```compile_fail
+//! use fava_bookmarks::BookmarkList;
+//! ```
+//!
+//! ```compile_fail
+//! use fava_bookmarks::Target;
+//! ```
+//!
+//! ```compile_fail
+//! use fava_bookmarks::Change;
+//! ```
+//!
+//! ```compile_fail
+//! use fava_bookmarks::BookmarkMaterializer;
+//! ```
 
 use std::sync::Arc;
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    Event, EventBuildError, EventBuilder, EventId, Kind, PublicKey, ReplaceableEventEdit,
+    Event, EventBuilder, EventId, Kind, PublicKey, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
@@ -15,9 +33,11 @@ const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const EVENT: u8 = 1;
 const COORDINATE: u8 = 2;
-const MAX_TAGS: usize = 2_000;
-const MAX_EVENT_BYTES: usize = 131_072;
 const MAX_IDENTIFIER_BYTES: usize = 4_096;
+
+mod bounds;
+
+use bounds::MAX_TAGS;
 
 /// Produce a bounded edit that adds one public event bookmark.
 ///
@@ -271,7 +291,7 @@ fn validate_target_coordinate(coordinate: &EventCoordinate) -> Result<(), WriteI
     }
     let valid = match identifier {
         None => kind.is_replaceable(),
-        Some(value) => kind.is_addressable() && !value.is_empty(),
+        Some(_) => kind.is_addressable(),
     };
     if valid {
         Ok(())
@@ -314,6 +334,7 @@ fn qualified_source<'a>(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
+    bounds::validate_source(source)?;
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
@@ -327,50 +348,40 @@ fn qualified_source<'a>(
             "bookmark materialization timestamp must succeed its source".to_owned(),
         ));
     }
-    validate_source_bound(source)?;
     Ok((&source.content, source.tags.as_slice()))
 }
 
-fn validate_source_bound(source: &Event) -> Result<(), WriteIntentError> {
-    if source.tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: source.tags.len(),
-            maximum: MAX_TAGS,
+fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
+    let mut matching = 0usize;
+    let mut retained = None;
+    for tag in source.iter().filter(|tag| tag_targets(tag, &change.target)) {
+        matching = matching
+            .checked_add(1)
+            .ok_or_else(|| codec_refusal("bookmark target count overflow"))?;
+        retained = Some(match retained {
+            None => tag,
+            Some(current) => canonical_tag(current, tag),
         });
     }
-    let mut bytes = source.content.len();
-    for value in source.tags.iter().flat_map(Tag::as_slice) {
-        bytes = bytes
-            .checked_add(value.len())
-            .ok_or_else(|| codec_refusal("bookmark source byte count overflow"))?;
-        if bytes > MAX_EVENT_BYTES {
-            return Err(WriteIntentError::TooLarge {
-                bytes,
-                maximum: MAX_EVENT_BYTES,
-            });
-        }
-    }
-    Ok(())
-}
-
-fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
-    let additional = usize::from(change.operation == Operation::Add);
     let capacity = source
         .len()
-        .checked_add(additional)
+        .checked_sub(matching)
+        .and_then(|without_matches| {
+            without_matches.checked_add(usize::from(change.operation == Operation::Add))
+        })
         .ok_or_else(|| codec_refusal("bookmark output tag count overflow"))?;
-    if capacity > MAX_TAGS + 1 {
+    if capacity > MAX_TAGS {
         return Err(WriteIntentError::TooLarge {
             bytes: capacity,
             maximum: MAX_TAGS,
         });
     }
     let mut found = false;
-    let mut tags = Vec::with_capacity(capacity.min(MAX_TAGS));
+    let mut tags = Vec::with_capacity(capacity);
     for tag in source {
         if tag_targets(tag, &change.target) {
             if change.operation == Operation::Add && !found {
-                tags.push(tag.clone());
+                tags.push(retained.expect("matching target was retained").clone());
                 found = true;
             }
         } else {
@@ -380,13 +391,16 @@ fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> 
     if change.operation == Operation::Add && !found {
         tags.push(target_tag(&change.target)?);
     }
-    if tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: tags.len(),
-            maximum: MAX_TAGS,
-        });
-    }
+    debug_assert_eq!(tags.len(), capacity);
     Ok(tags)
+}
+
+fn canonical_tag<'a>(left: &'a Tag, right: &'a Tag) -> &'a Tag {
+    match left.as_slice().len().cmp(&right.as_slice().len()) {
+        std::cmp::Ordering::Greater => left,
+        std::cmp::Ordering::Equal if left <= right => left,
+        std::cmp::Ordering::Less | std::cmp::Ordering::Equal => right,
+    }
 }
 
 fn tag_targets(tag: &Tag, target: &Target) -> bool {
@@ -442,7 +456,7 @@ fn build(
     for tag in tags {
         builder = builder.tag(tag);
     }
-    builder.build().map_err(map_build_error)
+    builder.build().map_err(bounds::map_build_error)
 }
 
 fn validate_output(
@@ -461,19 +475,6 @@ fn validate_output(
     event
         .verify_id()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
-}
-
-fn map_build_error(error: EventBuildError) -> WriteIntentError {
-    match error {
-        EventBuildError::TooManyTags { actual, maximum } => WriteIntentError::TooLarge {
-            bytes: actual,
-            maximum,
-        },
-        EventBuildError::TooLarge { bytes, maximum } => {
-            WriteIntentError::TooLarge { bytes, maximum }
-        }
-        EventBuildError::Encoding(reason) => WriteIntentError::Encoding(reason),
-    }
 }
 
 fn bookmark_kind() -> Kind {

@@ -1,4 +1,18 @@
 //! Pure NIP-02 follow-list semantic edits.
+//!
+//! The compile-fail examples are external privacy checks for protocol nouns.
+//!
+//! ```compile_fail
+//! use fava_nip02::ContactList;
+//! ```
+//!
+//! ```compile_fail
+//! use fava_nip02::Change;
+//! ```
+//!
+//! ```compile_fail
+//! use fava_nip02::Nip02Materializer;
+//! ```
 
 use std::sync::Arc;
 
@@ -13,8 +27,9 @@ const CODEC_VERSION: u8 = 1;
 const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const CODEC_LEN: usize = 34;
-const MAX_TAGS: usize = 2_000;
-const MAX_EVENT_BYTES: usize = 131_072;
+mod bounds;
+
+use bounds::MAX_TAGS;
 
 /// Produce one bounded edit that follows `target` in the actor's kind-3 list.
 ///
@@ -180,6 +195,7 @@ fn qualified_source<'a>(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
+    bounds::validate_source(source)?;
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
@@ -193,46 +209,28 @@ fn qualified_source<'a>(
             "NIP-02 materialization timestamp must succeed its source".to_owned(),
         ));
     }
-    validate_source_bound(source)?;
     Ok((&source.content, source.tags.as_slice()))
 }
 
-fn validate_source_bound(source: &Event) -> Result<(), WriteIntentError> {
-    if source.tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: source.tags.len(),
-            maximum: MAX_TAGS,
-        });
-    }
-    let mut bytes = source.content.len();
-    for value in source.tags.iter().flat_map(Tag::as_slice) {
-        bytes = bytes
-            .checked_add(value.len())
-            .ok_or_else(|| codec_refusal("NIP-02 source byte count overflow"))?;
-        if bytes > MAX_EVENT_BYTES {
-            return Err(WriteIntentError::TooLarge {
-                bytes,
-                maximum: MAX_EVENT_BYTES,
-            });
-        }
-    }
-    Ok(())
-}
-
 fn apply(source: &[Tag], change: Change) -> Result<Vec<Tag>, WriteIntentError> {
-    let additional = usize::from(change.operation == Operation::Add);
+    let matching = source
+        .iter()
+        .filter(|tag| tag_targets(tag, change.target))
+        .count();
+    let retained = usize::from(change.operation == Operation::Add);
     let capacity = source
         .len()
-        .checked_add(additional)
+        .checked_sub(matching)
+        .and_then(|without_matches| without_matches.checked_add(retained))
         .ok_or_else(|| codec_refusal("NIP-02 output tag count overflow"))?;
-    if capacity > MAX_TAGS + 1 {
+    if capacity > MAX_TAGS {
         return Err(WriteIntentError::TooLarge {
             bytes: capacity,
             maximum: MAX_TAGS,
         });
     }
     let mut found = false;
-    let mut tags = Vec::with_capacity(capacity.min(MAX_TAGS));
+    let mut tags = Vec::with_capacity(capacity);
     for tag in source {
         if tag_targets(tag, change.target) {
             if change.operation == Operation::Add && !found {
@@ -246,12 +244,7 @@ fn apply(source: &[Tag], change: Change) -> Result<Vec<Tag>, WriteIntentError> {
     if change.operation == Operation::Add && !found {
         tags.push(Tag::public_key(change.target));
     }
-    if tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: tags.len(),
-            maximum: MAX_TAGS,
-        });
-    }
+    debug_assert_eq!(tags.len(), capacity);
     Ok(tags)
 }
 
