@@ -7,12 +7,12 @@ use std::sync::{Arc, Barrier};
 
 use fava::{
     EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome, RelayDeliveryOutcome,
-    Timestamp,
+    Tag, Timestamp,
 };
 use fava_external_semantic_capability_proof::{
     decode_external_event, external_kind, insert, validate_external_event,
 };
-use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
+use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
 use support::{

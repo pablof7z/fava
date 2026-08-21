@@ -28,9 +28,10 @@ pub use fava_state::{EventCoordinate, RelayUrl};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
 pub use fava_write::{
-    Event, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt, ReceiptId,
-    ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Timestamp, UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    Event, EventBuildError, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntent,
+    WriteIntentError, WritePayload, WriteRouting,
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
