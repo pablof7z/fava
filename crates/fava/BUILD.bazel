@@ -119,7 +119,11 @@ rust_test(
 
 rust_test(
     name = "semantic_write_store",
-    srcs = ["tests/semantic_write_store.rs"],
+    srcs = [
+        "tests/semantic_write_store.rs",
+        "tests/semantic_write_store/author.rs",
+        "tests/semantic_write_store/current_guard.rs",
+    ],
     crate_name = "semantic_write_store",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
