@@ -17,12 +17,14 @@ pub(super) fn write_failure_bundle(
     failure: &str,
 ) -> CanaryResult<PathBuf> {
     let failure = bounded_failure(failure);
+    let repository = repository_root()?;
     artifacts.record("scenario_failed", json!({"scenario": id, "error": failure}))?;
     artifacts.write_json("failure.json", &json!({"scenario": id, "error": failure}))?;
     artifacts.write_json(
         "replay.json",
         &json!({
             "program": "cargo",
+            "current_directory": repository.to_string_lossy(),
             "args": [
                 "run", "--manifest-path", "apps/canary/Cargo.toml", "--", "run", id,
                 "--seed", options.seed,
@@ -31,9 +33,8 @@ pub(super) fn write_failure_bundle(
         }),
     )?;
     artifacts.write_report(&format!("{id} failed: {failure}\n"))?;
-    let root = repository_root()?;
-    let revision = command_output(&root, "git", &["rev-parse", "HEAD"])?;
-    let dirty = !command_output(&root, "git", &["status", "--porcelain"])?.is_empty();
+    let revision = command_output(&repository, "git", &["rev-parse", "HEAD"])?;
+    let dirty = !command_output(&repository, "git", &["status", "--porcelain"])?.is_empty();
     let artifact_hashes = artifacts.artifact_hashes()?;
     artifacts.write_json(
         "manifest.json",
@@ -102,6 +103,7 @@ mod tests {
         )
         .expect("valid replay evidence");
         assert_eq!(replay["program"], "cargo");
+        assert!(replay["current_directory"].as_str().is_some());
         assert!(
             replay["args"]
                 .as_array()
