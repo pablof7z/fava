@@ -5,7 +5,7 @@ status: verified
 threats_open: 0
 asvs_level: 1
 created: 2026-08-21
-verified_head: 0e87083dcd46acb0609100ccdc870d376b581433
+verified_head: f97ecd8c0f8fd3793860cce95380ddcae9521aa3
 ---
 
 # Phase 07 — Security
@@ -81,7 +81,7 @@ verified_head: 0e87083dcd46acb0609100ccdc870d376b581433
 
 - [x] All threats have a disposition.
 - [x] The single accepted low risk is documented.
-- [x] `threats_open: 0` confirmed at `0e87083dcd46acb0609100ccdc870d376b581433`.
+- [x] `threats_open: 0` confirmed at `f97ecd8c0f8fd3793860cce95380ddcae9521aa3`.
 - [x] `status: verified` set.
 
 **Approval:** verified 2026-08-21

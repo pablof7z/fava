@@ -5,7 +5,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 validated: 2026-08-21T17:25:04Z
-validated_head: 0e87083dcd46acb0609100ccdc870d376b581433
+validated_head: f97ecd8c0f8fd3793860cce95380ddcae9521aa3
 phase_base: 6fe21f745297b4af414e52269c3ae1c813cbf28f
 ---
 
@@ -24,7 +24,7 @@ state.
 | `DELIBERATE_BREAK_M7_STALE_COMPLETION` | Removing the sole current `MaterializationId` predicate left the first-value tracer green but made the exact retired-completion test accept generation-one mutation against the successor event identity. | `fava-write-store/src/lib.rs` returned byte-identically; current publication target 19/19. | PASS |
 | `DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` | Adding one `fava_signer` import to NIP-02 failed `cargo check -p fava-nip02 --lib` with E0432, `no external crate fava_signer`. | `fava-nip02/src/lib.rs` returned to SHA-256 `deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2`; NIP-02 7+1. | PASS |
 | `DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` | Raising only `MAX_TAGS` from 2000 to 2001 made the exact hostile test accept 2001 raw tags instead of the typed refusal. | `fava-write/src/builder.rs` returned to SHA-256 `abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9`; raw builder target 2/2. | PASS |
-| `DELIBERATE_BREAK_M7_ROUTE_READ_REVISION` | Discarding the successful route mutation result recreated the transient-read race: the queued second destination timed out. | Causal RED `1f901de`; GREEN `0e87083`; focused race test passed 10/10 repeated. | PASS |
+| `DELIBERATE_BREAK_M7_ROUTE_READ_REVISION` | Disabling durable read reconciliation while dropping receipt notifications stranded generation two at the exact rematerialization route boundary. | Causal RED `2b53b62`; GREEN `f97ecd8`; timing-free barrier test passed 95 repeated runs across executor and final verification. | PASS |
 
 No broken source state was committed. All three restored source files have
 zero diff from their pre-experiment bytes. Full transcripts and counterexamples are
@@ -158,7 +158,7 @@ outside the repository. Restored deliberate-break files have zero diff.
 | CAP-03 | no-source first value; write-store visibility; first-value CLI | PASS |
 | CAP-04 | qualified source successor; unrelated state preserved; equal-time lower-ID winner; rematerialization CLI | PASS |
 | CAP-05 | stable write/receipt; redb recovery and 3 semantic SIGKILL cases | PASS |
-| CAP-06 | exact stale signer/route/delivery refusal; committed route revision survives transient reads | PASS |
+| CAP-06 | exact stale signer/route/delivery refusal; durable custody reconciles dropped notifications and transient reads | PASS |
 | CAP-07 | NIP-02 and bookmarks share one neutral public-Fava corpus | PASS |
 | CAP-08 | independent public-only N+1 workspace; dependency-negative break and graphs | PASS |
 | CAP-09 | raw kind 50001 preserves caller `created_at = 42`, three arbitrary tags in exact order, content, and accepted/signed/published identity | PASS |
