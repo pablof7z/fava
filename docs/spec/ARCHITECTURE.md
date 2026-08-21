@@ -170,7 +170,6 @@ Before an event exists, a replaceable-event edit carries the coordinate it chang
 pub struct ReplaceableEventEdit {
     pub kind: Kind,
     pub identifier: Option<String>,
-    pub format: u32,
     pub change: Bytes,
 }
 
@@ -749,7 +748,9 @@ fava_bookmarks::add(target) -> ReplaceableEventEdit
 fava_bookmarks::remove(target) -> ReplaceableEventEdit
 ```
 
-Each protocol crate owns the meaning and durable format of its edit values.
+Each protocol crate owns the meaning and encoding of its edit values. An edit
+carries no encoding version: a protocol crate that cannot read an edit refuses
+it rather than interpreting it under an older encoding.
 The application assembly supplies the protocol crates required to recover its
 accepted edits. The write store owns durable custody, generations, receipts,
 and current materializations.
@@ -1110,7 +1111,7 @@ Persistent compatibility is local to the owner of the bytes:
 - an event-cache implementation owns its cache schema and migration policy;
 - a write-store implementation owns its write/receipt schema and migration policy;
 - a fetch-cache implementation owns its storage schema;
-- each protocol crate owns the format of its persisted replaceable-event edits;
+- each protocol crate owns the encoding of its persisted replaceable-event edits, and refuses an edit it cannot read rather than migrating it;
 - signer providers own their persisted credential/session formats.
 
 An application changing an implementation in a later release chooses the corresponding provider migration, parallel transition, or reset path as part of that application release.
@@ -2013,7 +2014,7 @@ The event already contains its pubkey. `WriteStore` commits the event and receip
 
 #### Replaceable-event edit
 
-The edit contains the coordinate it changes apart from the author, its durable protocol-owned change, and its format version; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
+The edit contains the coordinate it changes apart from the author and its durable protocol-owned change; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
 
 #### Pre-signed event
 
@@ -2414,8 +2415,7 @@ Examples:
 
 - `RedbEventCache` owns compatibility of its event-cache data;
 - `RedbWriteStore` owns compatibility of accepted write and receipt data;
-- NIP-05 and NIP-11 services own interpretation of cached service entries;
-- each protocol crate owns compatibility of its persisted replaceable-event edit format.
+- NIP-05 and NIP-11 services own interpretation of cached service entries.
 
 An application changing providers between releases explicitly chooses migration, parallel transition, reset, or continued use of the previous provider.
 
@@ -3079,7 +3079,7 @@ It must provide:
 
 - typed decode/validation;
 - one query fragment;
-- one replaceable-event edit and its inverse;
+- one replaceable-event edit;
 - edit application to current and empty source state;
 - optional route context.
 
@@ -3344,7 +3344,7 @@ Prove partial recipient routing under real router-owned explicit queries.
 
 Add one protocol crate such as NIP-02:
 
-- typed edit and inverse;
+- typed edit;
 - edit application;
 - source-state change and rematerialization;
 - stale signer/delivery result rejection;

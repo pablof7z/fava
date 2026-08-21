@@ -55,8 +55,8 @@ Twelve sites said the edit carries its actor. All twelve are amended; `grep -rn
 - `:900` — owned state: "actor for replaceable-event edits" becomes "resolved
   author for replaceable-event edits".
 - `:1997` — "The edit contains its actor, coordinate, durable protocol-owned
-  change, and format version" becomes the coordinate apart from the author, the
-  change, and the format, with the author carried by the accepted write.
+  change, and format version" becomes the coordinate apart from the author and
+  the change, with the author carried by the accepted write.
 - `:2080` — "a `ReplaceableEventEdit` whose `actor` is the resolved account"
   becomes "a `ReplaceableEventEdit`, whose accepted write records the resolved
   account as its author".
@@ -73,7 +73,7 @@ from the edit struct does not break registry closure.
 
 ## Architecture
 
-- **The edit.** `ReplaceableEventEdit { kind, identifier, format, change }`.
+- **The edit.** `ReplaceableEventEdit { kind, identifier, change }`.
   The `actor` goes; the coordinate stays, minus its author. Only the author half
   of the coordinate is redundant once the accepted write resolves it — `kind` and
   `identifier` are not. Dropping `identifier` too would bake in a limitation the
@@ -117,31 +117,42 @@ from the edit struct does not break registry closure.
   (`fava-publication/src/materialization.rs:367`) and qualification rejects a
   mismatched source (`fava-nip02/src/lib.rs:202`).
 
-## Open: is the inverse stored or derived?
+## The inverse and the encoding version are gone
 
-Not settled by this issue and deliberately not decided by the amendment. The spec
-requires edits to have inverses — `ARCHITECTURE.md:3065`, `:3330`,
-`GOALS:1223`, `FAVA_REWRITE_IMPLEMENTATION_PLAN.md:726` and its
-`replaceable-edit-inverse` scenario (`:752`) — but has never put an `inverse`
-field on the struct, and the illustrative struct here does not add one.
+Both were removed from the spec, and neither was ever a spec field — the earlier
+amendment introduced `inverse`, and `format` predated it.
 
-The m7 implementation stores it, and its own validation argues against that:
-`decode_edit` (`fava-nip02/src/lib.rs:141-148`) *derives* the inverse via the
-pure `Operation::inverse()` (`:80-85`) in order to check the stored one. If it can
-be derived to validate it, it can be derived instead of stored. The
-format-stability argument does not rescue it either, because `decode_edit`
-refuses on `edit.format() != FORMAT` (`:141`) before it reads the inverse at all,
-so an edit written under an older format is never decoded.
+**The inverse is derivable where it exists at all.** `decode_edit`
+(`fava-nip02/src/lib.rs:141-148`) derives the inverse through the pure
+`Operation::inverse()` (`:80-85`) in order to check the stored one; if it can be
+derived to validate it, it can be derived instead of stored. The
+format-stability argument does not rescue it either, since `decode_edit` refuses
+on an encoding mismatch before it reads the inverse at all. And the one case
+where an inverse genuinely is not derivable — an edit like "set the title to X",
+whose undo needs the previous title — is also the case where a stored inverse
+cannot be correct, because the edit is constructed before any source event is
+read (WRITE-006's offline edit) and is rematerialized against newer sources
+afterwards. Follow and unfollow are two edits, not an edit and an undo.
 
-The one case where an inverse genuinely is not derivable — an edit like "set the
-title to X", whose undo needs the previous title — is also the case where a
-stored inverse cannot be correct, because the edit is constructed before any
-source event is read (WRITE-006's offline edit) and is rematerialized against
-newer sources afterwards.
+**An edit carries no encoding version.** A protocol crate that cannot read one
+of its own edits refuses it rather than interpreting it under an older encoding,
+so the version byte has nothing to decide. `ARCHITECTURE.md:2401`'s bullet giving
+protocol crates ownership of persisted-edit-format *compatibility* is deleted
+with it; the provider bullets around it keep theirs, because redb caches and
+write stores have real schemas to migrate.
 
-That points at removing the field, which contradicts whiteboard decision D2 and
-changes shipped M7 code. It needs its own focused issue and Pablo's call; it does
-not block the author amendment either way.
+The `replaceable-edit-inverse` scenario survives under a truer name,
+`replaceable-edit-opposing-operations` (`FAVA_REWRITE_IMPLEMENTATION_PLAN.md:752`):
+follow-then-unfollow must still normalize to the right state without
+accumulating obsolete delivery. Only the framing was wrong.
+
+**The code still has all of it.** `format`, `CODEC_VERSION`, and `inverse` live
+on `milestone/m7-semantic-writes` — the fields and `inverse()`/`inverse_change()`
+in `fava-write/src/edit.rs`, `FORMAT`/`CODEC_VERSION`/`Operation::inverse` and
+both encode/decode halves in `fava-nip02` and `fava-bookmarks`, plus the
+`.inverse()` assertions in `semantic_write_contract.rs`, both crates' `tests.rs`,
+and `semantic_write_capability_protocol.rs`. That branch is being committed to by
+another agent, so the removal is routed there rather than made here.
 
 ## Blast radius — 13 non-test sites, 6 crates, mechanical
 
