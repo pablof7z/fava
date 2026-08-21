@@ -149,6 +149,7 @@ rust_test(
         "//crates/fava-event-cache-memory:lib",
         "//crates/fava-publisher:lib",
         "//crates/fava-query-standard:lib",
+        "//crates/fava-routing:lib",
         "//crates/fava-signer:lib",
         "//crates/fava-signer-local:lib",
         "//crates/fava-state:lib",
