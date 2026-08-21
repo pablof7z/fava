@@ -125,13 +125,6 @@ impl RedbWriteStore {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
         let selected_source = validate_materialization(&edit, &event, source, &receipt.routing)?;
-        if receipt.write_id == write_id
-            && receipt.current.event == EventValue::Unsigned(event.clone())
-            && receipt.current.publication.materialization_source
-                == selected_source.map(|(id, _)| id)
-        {
-            return Ok(receipt);
-        }
         require_current(
             &receipt,
             write_id,
@@ -139,6 +132,13 @@ impl RedbWriteStore {
             expected_source,
             current_source,
         )?;
+        if receipt.write_id == write_id
+            && receipt.current.event == EventValue::Unsigned(event.clone())
+            && receipt.current.publication.materialization_source
+                == selected_source.map(|(id, _)| id)
+        {
+            return Ok(receipt);
+        }
         require_qualified_source(current_source, selected_source)?;
         if event.created_at <= receipt.current.event.created_at() {
             return Err(WriteStoreError::Refused(

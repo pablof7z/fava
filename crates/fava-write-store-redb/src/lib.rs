@@ -22,6 +22,7 @@ mod lifecycle;
 mod ops;
 mod schema;
 mod semantic;
+mod validation;
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -91,6 +92,7 @@ impl RedbWriteStore {
             semantics,
         };
         let recovered = recover_ambiguous(&mut state);
+        lifecycle::validate_recovered_bounds(&state, active.get(), terminal.get())?;
         if !recovered.is_empty() {
             schema::persist_existing(&database, &state, &recovered)?;
         }

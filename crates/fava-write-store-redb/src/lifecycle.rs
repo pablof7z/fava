@@ -35,9 +35,9 @@ impl RedbWriteStore {
             .then(|| state.semantics.get(&receipt_id))
             .flatten();
         self.commit_update(Some(&receipt), semantic, &removals)?;
-        for id in removals {
-            crate::release_semantic(&mut state, id);
-            state.receipts.remove(&id);
+        for id in &removals {
+            crate::release_semantic(&mut state, *id);
+            state.receipts.remove(id);
         }
         if receipt.is_terminal() {
             crate::release_semantic(&mut state, receipt_id);
@@ -45,6 +45,9 @@ impl RedbWriteStore {
         state.receipts.insert(receipt_id, receipt.clone());
         state.revision = next_revision;
         self.publish_snapshot(&state);
+        for id in removals {
+            self.publish_receipt(None, id);
+        }
         self.publish_receipt(Some(receipt.clone()), receipt_id);
         Ok(receipt)
     }
@@ -75,12 +78,34 @@ fn terminal_evictions(state: &StoreState, updated: &Receipt, maximum: usize) -> 
         .filter(|receipt| receipt.is_terminal() && receipt.receipt_id != updated.receipt_id)
         .map(|receipt| receipt.receipt_id)
         .collect();
-    if updated.is_terminal() {
-        terminal.push(updated.receipt_id);
-    }
     terminal.sort_unstable();
-    let excess = terminal.len().saturating_sub(maximum);
+    let projected = terminal.len() + usize::from(updated.is_terminal());
+    let excess = projected.saturating_sub(maximum);
     terminal.into_iter().take(excess).collect()
+}
+
+pub(super) fn validate_recovered_bounds(
+    state: &StoreState,
+    active: usize,
+    terminal: usize,
+) -> Result<(), WriteStoreError> {
+    let active_count = active_count(state);
+    if active_count > active {
+        return Err(WriteStoreError::Refused(format!(
+            "recovered active write count exceeds bound: {active_count} > {active}"
+        )));
+    }
+    let terminal_count = state
+        .receipts
+        .values()
+        .filter(|receipt| receipt.is_terminal())
+        .count();
+    if terminal_count > terminal {
+        return Err(WriteStoreError::Refused(format!(
+            "recovered terminal receipt count exceeds bound: {terminal_count} > {terminal}"
+        )));
+    }
+    Ok(())
 }
 
 pub(super) fn next_revision(state: &StoreState) -> Result<u64, WriteStoreError> {

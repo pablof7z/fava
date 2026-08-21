@@ -324,6 +324,44 @@ fn schema_version_refusal_precedes_malformed_row_decode() {
     );
 }
 
+#[test]
+fn schema_v1_accepts_attributed_empty_source_failure() {
+    let path = unique_path("empty-source-failure");
+    let keys = Keys::generate();
+    let base = source(&keys, 10, "base");
+    let store = RedbWriteStore::open(&path).unwrap();
+    let accepted = accept(
+        &store,
+        edit(keys.public_key()),
+        materialization(keys.public_key(), 11, "current"),
+        Some(&base),
+    );
+    store
+        .record_materialization_failure(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            Some(base.id),
+            None,
+            "empty source failed".to_owned(),
+        )
+        .unwrap();
+    drop(store);
+
+    let reopened = RedbWriteStore::open(path).expect("attributed empty-source failure reopens");
+    let recovered = reopened.recover_materialized_edits().unwrap();
+    assert!(
+        recovered[0]
+            .0
+            .current
+            .publication
+            .materialization_failure
+            .as_deref()
+            .is_some_and(|reason| reason.contains("source empty state failed"))
+    );
+    assert_eq!(recovered[0].3, None);
+}
+
 fn settle_no_destination(store: &RedbWriteStore, accepted: &fava_write_store::AcceptedWrite) {
     store
         .apply_route(

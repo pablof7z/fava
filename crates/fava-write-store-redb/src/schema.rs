@@ -6,7 +6,7 @@ use fava_write_store::WriteStoreError;
 use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 
-use crate::{SemanticCustody, StoreState, refused};
+use crate::{SemanticCustody, StoreState, refused, validation};
 
 const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
@@ -139,6 +139,7 @@ pub(super) fn load(
             ));
         }
     }
+    validation::reconstructed(next_identity, &receipts, &semantics)?;
     Ok((next_identity, receipts, coordinates, semantics))
 }
 

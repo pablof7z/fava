@@ -30,7 +30,7 @@ impl WriteStore for RedbWriteStore {
             .values()
             .filter(|receipt| !receipt.is_terminal())
             .count();
-        if active == self.limits.active.get() {
+        if active >= self.limits.active.get() {
             return Err(WriteStoreError::Refused(format!(
                 "active write bound {} reached",
                 self.limits.active
