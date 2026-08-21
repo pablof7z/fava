@@ -195,6 +195,12 @@ async fn offline_time_spends_no_attempt_budget_and_the_write_stays_open() {
     })
     .await;
     assert!(!parked.is_terminal(), "an offline relay is not a failure");
+    let parked_generation = parked
+        .attempts
+        .get(&destination())
+        .copied()
+        .expect("the first unreachable attempt has exact identity");
+    assert_eq!(parked_generation, 1);
 
     // Stay offline long enough to cross the ceiling many times over.
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -206,6 +212,20 @@ async fn offline_time_spends_no_attempt_budget_and_the_write_stays_open() {
         still_parked.spent(&destination()),
         0,
         "no attempt was spent while no connection existed"
+    );
+    let delayed_generation = still_parked
+        .attempts
+        .get(&destination())
+        .copied()
+        .expect("the delayed retry has exact identity");
+    assert!(
+        delayed_generation > parked_generation,
+        "WaitFor must authorize a delayed store-revalidated generation"
+    );
+    assert_ne!(
+        delayed_generation,
+        still_parked.spent(&destination()),
+        "operation generation is not the spent-attempt policy budget"
     );
     assert!(
         matches!(
@@ -227,6 +247,18 @@ async fn offline_time_spends_no_attempt_budget_and_the_write_stays_open() {
         terminal.spent(&destination()),
         1,
         "exactly the real attempt was spent"
+    );
+    assert!(
+        terminal
+            .attempts
+            .get(&destination())
+            .is_some_and(|generation| *generation > delayed_generation),
+        "the real attempt advances the exact operation generation"
+    );
+    assert_eq!(
+        transport.connections.load(Ordering::SeqCst),
+        1,
+        "only the real reachable handoff opens a session"
     );
     assert!(matches!(
         terminal.destinations().get(&destination()),
