@@ -84,6 +84,7 @@ async fn replaceable_edit_rematerialization_records_retired_inertness() {
         evidence["attempt"]["created_at"]
     );
     assert_eq!(evidence["timestamp_exhaustion_preserved_current"], true);
+    assert_attempt_correlation(&evidence["first_attempt"], 1);
     assert_attempt_correlation(&evidence["attempt"], 2);
 }
 

@@ -13,6 +13,8 @@ use nostr::event::{EventBuilder, FinalizeEvent, Tag};
 use serde_json::{Value, json};
 
 use crate::artifacts::RunArtifacts;
+#[path = "semantic_delivery_support.rs"]
+mod semantic_delivery_support;
 use crate::semantic_failure::write_failure_bundle;
 use crate::semantic_n_plus_one;
 use crate::semantic_write_support::{
@@ -21,6 +23,10 @@ use crate::semantic_write_support::{
     target_count, wait_completion, wait_query_event, wait_terminal,
 };
 use crate::{CanaryError, CanaryResult, SmokeOptions, deterministic_keys};
+use semantic_delivery_support::{
+    GatePublisher, exact_receipt, next_delivery, require_exact_attempt_progress,
+    require_exact_terminal_progress, require_generation_two_pending,
+};
 
 pub(crate) fn has_executor(id: &str) -> bool {
     matches!(
@@ -128,8 +134,10 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     let keys = deterministic_keys(&format!("{seed}-actor"))?;
     let bob = deterministic_keys(&format!("{seed}-bob"))?.public_key();
     let carol = deterministic_keys(&format!("{seed}-carol"))?.public_key();
-    let source_one = contact_source(&keys, &[bob], 10)?;
-    let source_two = contact_source(&keys, &[bob, carol], 20)?;
+    let source_one = contact_source(&keys, &[], 10)?;
+    let source_two = contact_source(&keys, &[carol], 20)?;
+    let source_one_bob_count = target_count(&source_one, "p", &bob.to_hex());
+    let source_two_bob_count = target_count(&source_two, "p", &bob.to_hex());
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .admit(
@@ -139,7 +147,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         .map_err(error)?;
     let (gate, mut requests) = GateSigner::new(keys.public_key());
     let signer: Arc<dyn Signer> = Arc::new(gate);
-    let publisher = Arc::new(RecordingPublisher::default());
+    let (publisher, mut deliveries) = GatePublisher::new();
+    let publisher = Arc::new(publisher);
     let (fava, mut completions) = assembly(
         Arc::clone(&cache),
         signer,
@@ -152,6 +161,16 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         )?)
         .map_err(error)?;
     let first = next_sign(&mut requests).await?;
+    let first_created_at = first.event.created_at.as_secs();
+    let first_event = deterministic_finalize(first.event.clone(), &keys).map_err(error)?;
+    let first_id = first_event.id;
+    first.complete(first_event)?;
+    let first_installed = wait_completion(&mut completions, 1).await?;
+    require_completion(&first_installed, &accepted, 1, first_id, true, "first")?;
+    let first_delivery = next_delivery(&mut deliveries).await?;
+    let first_receipt = exact_receipt(&fava, accepted.receipt_id)?;
+    let first_attempt = attempt_evidence(&accepted, &first_receipt, &first_delivery.attempt)?;
+    let first_delivery_materialization_id = first_delivery.attempt.materialization_id.as_u64();
     cache
         .admit(
             CachedEvent::new(source_two.clone(), relay_evidence()),
@@ -159,33 +178,46 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         )
         .map_err(error)?;
     let current = next_sign(&mut requests).await?;
-    let first_created_at = first.event.created_at.as_secs();
     let current_created_at = current.event.created_at.as_secs();
     if current_created_at <= first_created_at {
         return Err(CanaryError::new(
             "rematerialization timestamp did not advance monotonically",
         ));
     }
-    let first_event = deterministic_finalize(first.event.clone(), &keys).map_err(error)?;
-    let first_id = first_event.id;
-    first.complete(first_event)?;
-    let retired = wait_completion(&mut completions, 1).await?;
-    require_completion(&retired, &accepted, 1, first_id, false, "retired")?;
-    require_retired_inert(&fava, accepted.receipt_id, &publisher)?;
     let current_event = deterministic_finalize(current.event.clone(), &keys).map_err(error)?;
     let current_id = current_event.id;
     current.complete(current_event)?;
     let installed = wait_completion(&mut completions, 2).await?;
     require_completion(&installed, &accepted, 2, current_id, true, "current")?;
+    let generation_two_pending = exact_receipt(&fava, accepted.receipt_id)?;
+    require_generation_two_pending(&generation_two_pending, current_id)?;
+    first_delivery.complete(fava_publisher::PublishOutcome::Acknowledged {
+        message: "retired generation acknowledgement".to_owned(),
+    })?;
+    // The sole session cannot open generation two until the held generation-one
+    // lane has processed its stale outcome and left the active-lane map.
+    let current_delivery = next_delivery(&mut deliveries).await?;
+    let generation_two_attempting = exact_receipt(&fava, accepted.receipt_id)?;
+    let generation_two_exact_after_retired_delivery = require_exact_attempt_progress(
+        &generation_two_pending,
+        &generation_two_attempting,
+        &current_delivery.attempt,
+    )?;
+    let current_attempt = attempt_evidence(
+        &accepted,
+        &generation_two_attempting,
+        &current_delivery.attempt,
+    )?;
+    current_delivery.complete(fava_publisher::PublishOutcome::Acknowledged {
+        message: "current generation acknowledgement".to_owned(),
+    })?;
     let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    require_exact_terminal_progress(&generation_two_attempting, &receipt)?;
     let event = published_event(&receipt)?;
-    let attempts = publisher.attempts();
-    let attempt = attempts
-        .first()
-        .ok_or_else(|| CanaryError::new("rematerialization publication attempt missing"))?;
-    let attempt = attempt_evidence(&accepted, &receipt, attempt)?;
-    let preserved = target_count(&event, "p", &bob.to_hex()) == 1
-        && target_count(&event, "p", &carol.to_hex()) == 1
+    let current_bob_count = target_count(&event, "p", &bob.to_hex());
+    let current_carol_count = target_count(&event, "p", &carol.to_hex());
+    let preserved = current_bob_count == 1
+        && current_carol_count == 1
         && event
             .tags
             .iter()
@@ -193,7 +225,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     if receipt.current.publication.materialization_id != MaterializationId::from_u64(2)
         || receipt.current.publication.materialization_source != Some(source_two.id)
         || receipt.current.publication.retired_materializations.len() != 1
-        || attempts.len() != 1
+        || source_one_bob_count != 0
+        || source_two_bob_count != 0
         || !preserved
     {
         return Err(CanaryError::new(
@@ -210,14 +243,22 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         "current_materialization_id": 2,
         "source_id": source_two.id.to_hex(),
         "retired_materializations": receipt.current.publication.retired_materializations.len(),
-        "publisher_attempts": attempts.len(),
+        "source_one_bob_count": source_one_bob_count,
+        "source_two_bob_count": source_two_bob_count,
+        "current_bob_count": current_bob_count,
+        "current_carol_count": current_carol_count,
+        "publisher_attempts": 2,
         "preserved_bob_carol_unrelated": preserved,
-        "retired_completion_processed": true,
-        "retired_stale_effects": 0,
+        "first_delivery_materialization_id": first_delivery_materialization_id,
+        "current_delivery_materialization_id": receipt.current.publication.materialization_id.as_u64(),
+        "retired_delivery_completion_processed": true,
+        "retired_delivery_installed": false,
+        "generation_two_unchanged_after_retired_delivery": generation_two_exact_after_retired_delivery,
         "first_created_at": first_created_at,
         "current_created_at": current_created_at,
         "timestamp_exhaustion_preserved_current": timestamp_exhaustion_preserved_current,
-        "attempt": attempt,
+        "first_attempt": first_attempt,
+        "attempt": current_attempt,
         "event_bytes": serde_json::to_string(&event).map_err(error)?,
     }))
 }
@@ -301,23 +342,6 @@ fn contact_source(
         .custom_created_at(Timestamp::from(created_at))
         .finalize(keys)
         .map_err(error)
-}
-
-fn require_retired_inert(
-    fava: &fava::Fava,
-    receipt_id: fava::ReceiptId,
-    publisher: &RecordingPublisher,
-) -> CanaryResult<()> {
-    let receipt = fava
-        .receipt(receipt_id)
-        .map_err(error)?
-        .ok_or_else(|| CanaryError::new("receipt disappeared after retired completion"))?;
-    if receipt.current.publication.materialization_id != MaterializationId::from_u64(2)
-        || !publisher.attempts().is_empty()
-    {
-        return Err(CanaryError::new("retired completion mutated receipt state"));
-    }
-    Ok(())
 }
 
 fn require_completion(

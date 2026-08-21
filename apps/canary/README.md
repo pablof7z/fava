@@ -50,10 +50,14 @@ a manifest with artifact hashes. Every publication record correlates its exact
 write, receipt, materialization, event, engine-owned timestamp, relay session,
 and attempt number. Semantic generations assert exact timestamp agreement with
 their accepted materialization and strict monotonicity across rematerialization.
-Rematerialization evidence includes the qualified source, explicit processing
-acknowledgements for current and stale successful signing completions, preserved
-fields, and zero stale effects. Inverse evidence includes both final events and
-all ten correlated attempts. N+1 evidence records canonical-package normal-edge
+Rematerialization starts from sources that both lack the followed target, adds
+one unrelated source participant, and proves the final event contains each
+exactly once. It holds a real generation-one delivery, installs generation two,
+releases the retired completion, and accepts the generation-two attempt only as
+the causal processing acknowledgement. The exact expected receipt transition
+proves the retired outcome cannot contaminate current event, route, attempt, or
+delivery evidence. Inverse evidence includes both final events and all ten
+correlated attempts. N+1 evidence records canonical-package normal-edge
 Cargo reachability, Bazel product reachability, owned-child reaping, and the raw
 future event's exact caller-owned `created_at = 42`, tags, content, and identity.
 A failed run retains bounded `failure.json`, `replay.json`, report, event log,

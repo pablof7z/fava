@@ -164,12 +164,15 @@ impl Signer for DeterministicSigner {
     }
 }
 
-pub(super) fn assembly(
+pub(super) fn assembly<P>(
     cache: Arc<MemoryEventCache>,
     signer: Arc<dyn Signer>,
     materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
-    publisher: Arc<RecordingPublisher>,
-) -> CanaryResult<(Fava, broadcast::Receiver<CompletionAck>)> {
+    publisher: Arc<P>,
+) -> CanaryResult<(Fava, broadcast::Receiver<CompletionAck>)>
+where
+    P: Publisher + 'static,
+{
     let (store, completions) = CompletionStore::new();
     let mut builder = Fava::builder()
         .event_cache(cache)
