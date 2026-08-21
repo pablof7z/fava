@@ -4,7 +4,7 @@ slug: semantic-writes-and-capability-composition
 status: complete
 nyquist_compliant: true
 wave_0_complete: true
-validated: 2026-08-21T16:05:00Z
+validated: 2026-08-21T14:49:00Z
 validated_head: f520d63c31790f6ed372c4b6b714e0d6773a77d7
 phase_base: 6fe21f745297b4af414e52269c3ae1c813cbf28f
 ---
@@ -25,8 +25,8 @@ state.
 | `DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` | Adding one `fava_signer` import to NIP-02 failed `cargo check -p fava-nip02 --lib` with E0432, `no external crate fava_signer`. | `fava-nip02/src/lib.rs` returned to SHA-256 `deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2`; NIP-02 7+1. | PASS |
 | `DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` | Raising only `MAX_TAGS` from 2000 to 2001 made the exact hostile test accept 2001 raw tags instead of the typed refusal. | `fava-write/src/builder.rs` returned to SHA-256 `abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9`; raw builder target 2/2. | PASS |
 
-Neither broken source state was committed. Both restored source files have zero
-diff from their pre-experiment bytes. Full transcripts and counterexamples are
+No broken source state was committed. All three restored source files have
+zero diff from their pre-experiment bytes. Full transcripts and counterexamples are
 in `docs/issues/0010-m7-semantic-writes-and-capability-composition.md`.
 
 ## Executable behavior matrix
@@ -171,7 +171,7 @@ outside the repository. Restored deliberate-break files have zero diff.
 | T-07-35 evidence/source growth | exact 2000-tag and 131,072-byte builder refusals, causal bound break, fixed seven-file bundles, all-file line gate | mitigated |
 | T-07-36 protocol privilege escalation | E0432 compile break, exact metadata, Cargo tree, Bazel paths | mitigated |
 | T-07-37 public vocabulary escalation | rustdoc allowlists, declaration/re-export scans, vocabulary checker | mitigated |
-| T-07-38 milestone repudiation | corrected CAP map, four canary paths, both breaks, phase-range gate | mitigated |
+| T-07-38 milestone repudiation | corrected CAP map, four canary paths, three breaks, phase-range gate | mitigated |
 | T-07-SC supply chain | no new third-party package; locked root/canary/external graphs pass | accepted low |
 
 ## Sign-off
