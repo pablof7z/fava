@@ -179,14 +179,25 @@ Plans:
 
 ### Phase 07.1: Universal publication vocabulary and typed NIP-02 reads (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** An application can read, discover, edit, publish, and await NIP-02 contact-list changes through the README-level typed Rust API, while the same universal `publish`/`by`/`to` vocabulary accepts every write payload without exposing `WriteIntent` ceremony.
+**Requirements**: R1, R2, R3, R4, R5, R6, R7, R8, R9
 **Depends on:** Phase 7
-**Plans:** 0 plans
+**Plans:** 12 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 07.1 to break down)
+- [ ] 07.1-01-PLAN.md — Trace universal synchronous publication from public payload to durable, query-visible `Write`
+- [ ] 07.1-02-PLAN.md — Add inert signer/relay scopes and ordered explicit-route custody
+- [ ] 07.1-03-PLAN.md — Add exact receipt summaries and bounded caller-selected settlement
+- [ ] 07.1-04-PLAN.md — Decode kind-3 events into conserving typed `ContactList` values
+- [ ] 07.1-05-PLAN.md — Add one/many contact reads, follower discovery, and pure projection
+- [ ] 07.1-06-PLAN.md — Complete lossless README-shaped NIP-02 edit helpers
+- [ ] 07.1-07-PLAN.md — Migrate primary facade publication regressions
+- [ ] 07.1-08-PLAN.md — Migrate store, lifecycle, signer, and fault harnesses
+- [ ] 07.1-09-PLAN.md — Remove the old facade compatibility surface and prove independent consumption
+- [ ] 07.1-10-PLAN.md — Migrate the existing downstream canary corpus
+- [ ] 07.1-11-PLAN.md — Replace authoritative specs, vocabulary, issues, validation, and README
+- [ ] 07.1-12-PLAN.md — Run the controlled Croissant canary twice and close all phase gates
 
 ### Phase 07.1.1: Multi-Relay Simple Groups (INSERTED)
 
