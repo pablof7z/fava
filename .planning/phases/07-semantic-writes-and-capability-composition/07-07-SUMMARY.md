@@ -13,9 +13,9 @@ provides:
   - unchanged raw future-kind publication and query evidence without materializer selection
 affects: [phase-07-verification, capability-composition, public-facade]
 actuals:
-  tokens: 16099
+  tokens: 19114
   tasks: 2
-  commits: 7
+  commits: 10
 tech-stack:
   added: []
   patterns:
@@ -26,17 +26,20 @@ key-files:
   created:
     - falsifiers/external-semantic-capability/Cargo.toml
     - falsifiers/external-semantic-capability/Cargo.lock
+    - falsifiers/external-semantic-capability/src/capability.rs
     - falsifiers/external-semantic-capability/src/lib.rs
     - falsifiers/external-semantic-capability/tests/public_capability.rs
     - falsifiers/external-semantic-capability/tests/support/mod.rs
+    - falsifiers/external-semantic-capability/tests/support/waits.rs
   modified: []
 key-decisions:
   - "The unrelated capability uses private deterministic set semantics over non-addressable replaceable kind 15001 and exports only functions plus approved Fava values and contracts."
   - "fava-subscriptions-standard is a dev-only dependency because a genuine outside-consumer source successor must cross Fava.observe(from_relays), not mutate the event cache directly."
   - "Raw custom kind 50001 follows WriteIntent::event unchanged even while an unrelated semantic materializer is selected."
 patterns-established:
-  - "External N+1 proof: separate workspace, fava-only normal edge, providers under dev-dependencies, no root member or product selection."
+  - "External N+1 proof: separate workspace, fava as the sole normal dependency, providers under dev-dependencies, no root member or product selection."
   - "Controlled completion proof: hold generation-one relay OK, install source-driven generation two, then release and observe exact currentness."
+  - "Every asynchronous witness wait has a deterministic deadline and reports its last receipt, query, diagnostic, or transport state."
 requirements-completed: [CAP-08, CAP-09]
 coverage:
   - id: D1
@@ -69,28 +72,31 @@ coverage:
         ref: "falsifiers/external-semantic-capability/tests/public_capability.rs#raw_future_event_kind_publishes_unchanged"
         status: pass
     human_judgment: false
-duration: 15min
+duration: 37min
 completed: 2026-08-21
 status: complete
 ---
 
 # Phase 07 Plan 07: External Semantic Capability Falsifier Summary
 
-**An independent Fava-only capability now rematerializes through the public facade under one stable receipt, rejects bounded hostile source state, and leaves raw future event kinds untouched.**
+**An independent capability using only the public Fava facade now rematerializes under one stable receipt, rejects bounded hostile source state, and leaves raw future event kinds untouched.**
 
 ## Performance
 
-- **Duration:** 15 min
+- **Duration:** 37 min
 - **Started:** 2026-08-21T09:58:36Z
-- **Completed:** 2026-08-21T10:13:34Z
+- **Completed:** 2026-08-21T10:35:32Z
 - **Tasks:** 2
-- **Files created:** 5 external-workspace artifacts
+- **Files created:** 7 external-workspace artifacts
 
 ## Accomplishments
 
 - Added a separate Cargo workspace whose sole normal dependency is `fava`; every concrete provider, standard implementation, Nostr fixture, and Tokio runtime edge is test-only.
 - Implemented a private external materializer for unrelated kind 15001 with bounded opaque edits, inverses, deterministic set composition, duplicate idempotence, unrelated content/tag preservation, and typed malformed/oversized refusal.
+- Exported the required query fragment plus typed validation/decode functions using only existing Fava and standard-library values; the outside-consumer tests use those functions directly.
+- Bounded source content, tag count, nested tag values, and combined content/tag bytes before cloning externally supplied state.
 - Proved preview/live parity, zero preview custody or effects, public relay-ingested source replacement, stable write/receipt identity, changing `MaterializationId`, retired completion inertness, duplicate-source inertness, and bounded failure preservation.
+- Proved exact preview/live destination and attempt keys, successor openness after the stale generation-one ACK, and barrier-controlled concurrent duplicate ingress.
 - Published and queried raw custom kind 50001 unchanged through `WriteIntent::event` while only the unrelated materializer was selected.
 - Kept the external capability and kind absent from root members, selected products, vocabulary, and universal owner source/manifests.
 
@@ -98,7 +104,9 @@ status: complete
 
 - **Task 1 RED:** the external library target failed with 16 unresolved capability helper/materializer references before implementation. Commit: `b378321`.
 - **Task 2 RED:** all three named public tests compiled and failed at their explicit RED assertions before the scripted outside-consumer witness existed. Commit: `58bd1c5`.
+- **Review RED:** the repaired targets failed to compile on the absent public query/decode/validation functions before production changes. Commit: `ddd851e`.
 - **Named deliberate break:** replacing qualified-source decoding with empty-source decoding made `external_capability_composes_through_public_fava` fail on exact preserved content (`alpha` instead of `alpha,omega` plus unrelated source body). Restoring the source application returned the named test green.
+- **Review deliberate break:** raising the source tag-count bound from 64 to 65 made `tests::external_bounds_and_malformed_source_refuse` fail on its hostile 65-tag source. Restoring 64 returned the named test green.
 
 ## Task Commits
 
@@ -107,22 +115,27 @@ status: complete
 3. **Task 2 RED: Add failing external public lifecycle proof** — `58bd1c5` (test)
 4. **Task 2 GREEN: Prove external public publication lifecycle** — `25da31d` (test)
 5. **Postflight: Remove manifest trailing whitespace** — `87cf4e8` (style)
+6. **Review RED: Expose external falsifier proof gaps** — `ddd851e` (test)
+7. **Review GREEN: Close external falsifier proof gaps** — `9378591` (fix)
 
-**Plan metadata:** `ff98c84` plus the final summary correction commit
+**Plan metadata:** `ff98c84`, `ca3e8a2`, plus this review postflight commit
 
 ## Files Created/Modified
 
 - `falsifiers/external-semantic-capability/Cargo.toml` — isolated workspace with one normal facade dependency and explicit test-only assembly dependencies.
 - `falsifiers/external-semantic-capability/Cargo.lock` — independent reproducible dependency lock.
-- `falsifiers/external-semantic-capability/src/lib.rs` — private bounded codec/materializer plus three pure public-contract tests.
+- `falsifiers/external-semantic-capability/src/lib.rs` — public function re-exports plus three pure public-contract tests.
+- `falsifiers/external-semantic-capability/src/capability.rs` — public function surface and private bounded materializer/codec implementation.
 - `falsifiers/external-semantic-capability/tests/public_capability.rs` — three public lifecycle, failure, and raw-future behavioral proofs.
 - `falsifiers/external-semantic-capability/tests/support/mod.rs` — private under-500-line scripted transport and public assembly harness.
+- `falsifiers/external-semantic-capability/tests/support/waits.rs` — deadline-owned receipt, observation, EOSE, and terminal-state wait helpers with last-state diagnostics.
 
 ## Decisions Made
 
 - Capability-owned state uses a private content prefix and sorted set while preserving every unrelated source tag and the remainder of source content verbatim.
 - The public integration uses `Fava::observe(Query::from_relays(...))` plus the standard subscription planner so the successor enters the canonical public ingest path.
 - Relay `OK`, session close, EOSE, receipt changes, and query watches are the schedule barriers; no sleep establishes correctness.
+- The capability validates source content and tag shape before cloning, with 64 tags, 16 nested values per tag, and 4096 combined bytes as private bounds.
 
 ## Deviations from Plan
 
@@ -151,9 +164,17 @@ status: complete
 - **Verification:** The base-to-HEAD diff check and all six external tests pass.
 - **Committed in:** `87cf4e8`
 
+**4. [Rule 1 - Review gaps] Completed the external protocol and lifecycle falsifier**
+- **Found during:** Post-plan review
+- **Issue:** The first proof omitted the public query/decode surface, hostile nested tag bounds, exact live-key comparison, pre-successor-ACK state, deterministic last-state deadlines, and genuine concurrent duplicate ingress.
+- **Fix:** Added RED evidence, the public function surface, pre-clone validation, exact receipt assertions, barrier-controlled duplicate threads, and deadline-owned wait helpers.
+- **Files modified:** External capability source and test/support files only.
+- **Verification:** Six external tests, strict Clippy, relevant semantic targets, full workspace, metadata, vocabulary, isolation, diff, and line gates pass.
+- **Committed in:** `ddd851e`, `9378591`
+
 ---
 
-**Total deviations:** 3 auto-fixed blocking, cohesion, and formatting adjustments. **Impact on plan:** Test-only dependencies, private support structure, and whitespace only; no core, facade, product, or vocabulary change.
+**Total deviations:** 4 auto-fixed blocking, cohesion, formatting, and review adjustments. **Impact on plan:** External capability/test code only; no core, facade, product, or vocabulary change.
 
 ## Issues Encountered
 
@@ -165,6 +186,8 @@ None unresolved.
 - `cargo test --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets` — 6 passed.
 - `cargo clippy --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets -- -D warnings` — passed.
 - Cargo metadata — exactly one normal dependency (`fava`); 12 explicit dev-dependencies including the public live-query planner.
+- Public capability surface — query fragment plus typed validation/decode functions are consumed by the external integration witness.
+- Hostile source proof — content, 65-tag, 17-value nested-tag, and combined-byte cases refuse before cloning.
 - Relevant public semantic targets — 4 contract, 6 failure, and 12 publication tests passed.
 - `cargo test --workspace --all-targets` — passed, including redb process-kill evidence.
 - `python3 tools/check_vocabulary.py` and four vocabulary unit tests — passed.
@@ -184,7 +207,7 @@ Plan 07-08 and final Phase 7 verification can consume the external N+1 and raw-f
 
 ## Self-Check: PASSED
 
-All five external artifacts and five implementation/evidence commits exist; every guarded, dependency, vocabulary, diff, line, relevant-public, and full-workspace verification passed.
+All seven external artifacts and seven implementation/evidence commits exist; every guarded, dependency, vocabulary, diff, line, relevant-public, and full-workspace verification passed.
 
 ---
 *Phase: 07-semantic-writes-and-capability-composition*
