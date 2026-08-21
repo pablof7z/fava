@@ -133,6 +133,49 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+    let accepted = store
+        .accept_materialized_edit(
+            intent(alice.public_key(), Kind::ContactList),
+            EventBuilder::new(alice.public_key(), Kind::ContactList)
+                .created_at(Timestamp::from(1))
+                .content("accepted as Alice")
+                .build()
+                .unwrap(),
+            None,
+        )
+        .expect("Alice's accepted edit is durable");
+    let bob_signer = Arc::new(CountingSigner::new(bob));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let fava = publication_builder(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&bob_signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("recovery starts with only Bob's signer selected");
+
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            signed_source(&alice, Kind::ContactList, 10, "Alice source", &[]),
+            relay_evidence(),
+        ))])
+        .expect("Alice's source enters after recovery");
+    let recovered = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+
+    assert_eq!(recovered.current.event.author(), alice.public_key());
+    assert_eq!(materializer.calls().len(), 1);
+    assert_eq!(materializer.calls()[0].author, alice.public_key());
+    assert_eq!(bob_signer.calls(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn addressable_edit_selects_only_its_exact_identifier() {
     let keys = Keys::generate();
     let kind = Kind::Custom(30_023);
