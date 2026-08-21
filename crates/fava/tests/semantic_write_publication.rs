@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome,
-    ReplaceableEventMaterializer, Timestamp,
+    EventBuilder, EventCoordinate, EventValue, Kind, MaterializationId, ReceiptOutcome,
+    ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, WriteIntent, WriteRouting,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -134,13 +134,11 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     assert!(overflow.is_err());
 
     let bounded_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
+    let bounded_materializer = Arc::new(TestMaterializer::new(Kind::ContactList, EDIT_FORMAT));
     let (bounded, _, bounded_store, bounded_signer, bounded_publisher) = assembly(
         bounded_store,
         keys.clone(),
-        vec![Arc::new(TestMaterializer::new(
-            Kind::ContactList,
-            EDIT_FORMAT,
-        ))],
+        vec![Arc::clone(&bounded_materializer)],
     );
     bounded
         .accept_event(EventValue::Unsigned(
@@ -156,6 +154,7 @@ async fn materializer_selection_bounds_refuse_before_custody() {
             .is_err()
     );
     assert_no_effects(&bounded_store, &bounded_signer, &bounded_publisher, 1);
+    assert!(bounded_materializer.calls().is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -440,6 +439,7 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     .build()
     .expect("semantic publication assembly");
     let intent = automatic_intent(keys.public_key(), Kind::ContactList, EDIT_FORMAT);
+    let mut receipt_changes = store.receipt_changes();
 
     let preview = fava
         .preview_write_routes(&intent)
@@ -449,6 +449,32 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     assert!(publisher.attempts().is_empty());
     assert_eq!(router.previews(), 1);
     assert_eq!(router.opens(), 0);
+    assert!(matches!(
+        receipt_changes.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+    assert!(
+        fava.preview_write_routes(&automatic_intent(
+            keys.public_key(),
+            Kind::ContactList,
+            EDIT_FORMAT + 1,
+        ))
+        .is_err()
+    );
+    let addressable = ReplaceableEventEdit::new(
+        keys.public_key(),
+        EventCoordinate::Replaceable {
+            author: keys.public_key(),
+            kind: Kind::Custom(30_001),
+            identifier: Some("addressable".to_owned()),
+        },
+        EDIT_FORMAT,
+        vec![1],
+        vec![2],
+    )
+    .expect("bounded addressable edit value");
+    assert!(WriteIntent::edit(addressable, WriteRouting::Automatic).is_err());
+    assert_eq!(store.len().expect("store readable"), 0);
 
     let accepted = fava.publish(intent).expect("same edit accepts");
     let receipt = wait_for_materialization(&fava, accepted.receipt_id, 1).await;

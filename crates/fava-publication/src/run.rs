@@ -6,40 +6,65 @@ use fava_publisher::{PublishAttempt, PublishOutcome};
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
 use fava_signer::{SignerAvailability, SignerError};
 use fava_state::RelaySessionKey;
-use fava_write::{EventValue, Receipt, ReceiptId, RelayDeliveryOutcome, WriteRouting};
+use fava_write::{EventValue, Receipt, ReceiptId, RelayDeliveryOutcome, WriteIntent, WriteRouting};
 use tokio::sync::{mpsc, watch};
 
 use super::Publication;
+use super::materialization::SemanticState;
 
 const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl Publication {
     pub(super) fn start(&self, receipt_id: ReceiptId) {
+        self.start_owned(receipt_id, None);
+    }
+
+    pub(super) fn start_semantic(&self, receipt_id: ReceiptId, semantic: SemanticState) {
+        self.start_owned(receipt_id, Some(semantic));
+    }
+
+    fn start_owned(&self, receipt_id: ReceiptId, mut semantic: Option<SemanticState>) {
         let (cancel, cancel_rx) = watch::channel(false);
         let mut cancellations = self
             .cancellations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if cancellations.contains_key(&receipt_id) {
+            if let Some(semantic) = &mut semantic {
+                semantic.close();
+            }
             return;
         }
         cancellations.insert(receipt_id, cancel);
         drop(cancellations);
         let publication = self.clone();
-        tokio::spawn(async move { publication.run(receipt_id, cancel_rx).await });
+        tokio::spawn(async move { publication.run(receipt_id, cancel_rx, semantic).await });
     }
 
-    async fn run(self, receipt_id: ReceiptId, mut cancel: watch::Receiver<bool>) {
+    async fn run(
+        self,
+        receipt_id: ReceiptId,
+        mut cancel: watch::Receiver<bool>,
+        mut semantic: Option<SemanticState>,
+    ) {
         let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
+            if let Some(semantic) = &mut semantic {
+                semantic.close();
+            }
             self.finished(receipt_id);
             return;
         };
         let mut routes = self.open_routes(&receipt);
         if matches!(receipt.routing, WriteRouting::Automatic) && routes.is_none() {
+            if let Some(semantic) = &mut semantic {
+                semantic.close();
+            }
             self.finished(receipt_id);
             return;
         }
-        self.start_signing(&receipt, cancel.clone());
+        let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
+        self.start_signing(&receipt, signing_cancel_rx);
+        let mut materialization_id = receipt.current.publication.materialization_id;
 
         let mut receipt_changes = self.store.receipt_changes();
         let (lane_finished, mut finished_lanes) = mpsc::unbounded_channel();
@@ -73,9 +98,34 @@ impl Publication {
                     let request = RouteRequest::Write(current.current.event.clone());
                     self.apply_route(receipt_id, route_revision, &request, &contribution);
                 }
+                source_open = next_semantic_source(&mut semantic), if semantic.is_some() => {
+                    if source_open {
+                        if let Some(state) = &mut semantic {
+                            self.rematerialize(&current, state);
+                        }
+                    } else if let Some(mut state) = semantic.take() {
+                        state.close();
+                    }
+                }
                 change = receipt_changes.recv() => {
                     match change {
                         Ok((changed, None)) if changed == receipt_id => break,
+                        Ok((changed, Some(latest))) if changed == receipt_id => {
+                            let next_materialization =
+                                latest.current.publication.materialization_id;
+                            if next_materialization != materialization_id {
+                                signing_cancel.send_replace(true);
+                                let (next_cancel, next_cancel_rx) = watch::channel(false);
+                                signing_cancel = next_cancel;
+                                self.start_signing(&latest, next_cancel_rx);
+                                if let Some(open) = &mut routes {
+                                    open.close();
+                                }
+                                routes = self.open_routes(&latest);
+                                route_revision = latest.route_revision;
+                                materialization_id = next_materialization;
+                            }
+                        }
                         Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
@@ -88,7 +138,64 @@ impl Publication {
         if let Some(mut routes) = routes {
             routes.close();
         }
+        signing_cancel.send_replace(true);
+        if let Some(mut semantic) = semantic {
+            semantic.close();
+        }
         self.finished(receipt_id);
+    }
+
+    fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
+        let expected = receipt.current.publication.materialization_id;
+        let expected_source = receipt.current.publication.materialization_source;
+        let Ok((true, successor)) = self.semantic_successor(state, receipt.receipt_id, expected)
+        else {
+            return;
+        };
+        let Ok(intent) = WriteIntent::edit(state.edit.clone(), receipt.routing.clone()) else {
+            return;
+        };
+        let (event, mut route) = match self.materialize_and_route(
+            &intent,
+            successor.as_ref(),
+            Some(&receipt.current.event),
+        ) {
+            Ok(materialized) => materialized,
+            Err(error) => {
+                let _ = self.store.record_materialization_failure(
+                    receipt.write_id,
+                    receipt.receipt_id,
+                    expected,
+                    expected_source,
+                    successor.as_ref(),
+                    error.to_string(),
+                );
+                state.failed_id = successor.as_ref().map(|event| event.id);
+                return;
+            }
+        };
+        let Ok(installed) = self.store.install_materialization(
+            receipt.write_id,
+            receipt.receipt_id,
+            expected,
+            expected_source,
+            event,
+            successor.as_ref(),
+        ) else {
+            return;
+        };
+        if matches!(receipt.routing, WriteRouting::Automatic) {
+            let Some(revision) = installed.route_revision.checked_add(1) else {
+                return;
+            };
+            route.revision = revision;
+            let _ = self.store.apply_route(receipt.receipt_id, &route);
+        }
+        state.selected_id = successor.as_ref().map(|event| event.id);
+        if let Some(source) = &successor {
+            state.source_floor = Some(source.created_at);
+        }
+        state.failed_id = None;
     }
 
     fn open_routes(&self, receipt: &Receipt) -> Option<Box<dyn RouterSession>> {
@@ -144,11 +251,13 @@ impl Publication {
         let publication = self.clone();
         let receipt_id = receipt.receipt_id;
         tokio::spawn(async move {
+            let expected = unsigned.clone();
             match signer.sign_event(unsigned, cancel).await {
                 Ok(event) => {
                     if publication.store.install_signed(receipt_id, event).is_err() {
-                        let _ = publication.store.record_signer_refusal(
+                        publication.record_current_signer_refusal(
                             receipt_id,
+                            &expected,
                             "signer returned an event that did not match the accepted body"
                                 .to_owned(),
                         );
@@ -156,12 +265,33 @@ impl Publication {
                 }
                 Err(SignerError::Cancelled) => {}
                 Err(error) => {
-                    let _ = publication
-                        .store
-                        .record_signer_refusal(receipt_id, error.to_string());
+                    publication.record_current_signer_refusal(
+                        receipt_id,
+                        &expected,
+                        error.to_string(),
+                    );
                 }
             }
         });
+    }
+
+    fn record_current_signer_refusal(
+        &self,
+        receipt_id: ReceiptId,
+        expected: &fava_write::UnsignedEvent,
+        reason: String,
+    ) {
+        let current_matches = self
+            .store
+            .receipt(receipt_id)
+            .ok()
+            .flatten()
+            .is_some_and(|receipt| {
+                matches!(receipt.current.event, EventValue::Unsigned(current) if current == *expected)
+            });
+        if current_matches {
+            let _ = self.store.record_signer_refusal(receipt_id, reason);
+        }
     }
 
     fn start_lanes(
@@ -261,6 +391,13 @@ async fn next_route(
 ) -> Result<fava_routing::RouteContribution, fava_routing::RouterError> {
     match routes {
         Some(routes) => routes.next_change().await,
+        None => std::future::pending().await,
+    }
+}
+
+async fn next_semantic_source(semantic: &mut Option<SemanticState>) -> bool {
+    match semantic {
+        Some(semantic) => semantic.sources.next_change().await,
         None => std::future::pending().await,
     }
 }

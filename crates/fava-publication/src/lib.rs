@@ -10,8 +10,8 @@ use fava_routing::Router;
 use fava_signer::Signer;
 use fava_transport::Transport;
 use fava_write::{
-    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
-    WritePayload, WriteRouting,
+    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, Timestamp,
+    WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
@@ -19,6 +19,8 @@ use tokio::sync::watch;
 
 mod materialization;
 mod run;
+
+use materialization::{PreparedSemantic, SemanticState};
 
 /// Live owner for accepted write signing and destination delivery.
 #[derive(Clone)]
@@ -83,21 +85,34 @@ impl Publication {
     /// after a failed acceptance commit.
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
-        let accepted = if matches!(intent.payload(), WritePayload::Edit(_)) {
-            let mut prepared = self.prepare_semantic(&intent, None, None)?;
-            let accepted = self.store.accept_materialized_edit(
-                intent.clone(),
-                prepared.event,
-                prepared.source.as_ref(),
-            )?;
+        if let WritePayload::Edit(edit) = intent.payload() {
+            let edit = edit.clone();
+            self.ensure_semantic_admission()?;
+            let PreparedSemantic {
+                event,
+                source,
+                route,
+                mut sources,
+            } = self.prepare_semantic(&intent, None, None)?;
+            let accepted =
+                match self
+                    .store
+                    .accept_materialized_edit(intent.clone(), event, source.as_ref())
+                {
+                    Ok(accepted) => accepted,
+                    Err(error) => {
+                        sources.close();
+                        return Err(error.into());
+                    }
+                };
             if matches!(intent.routing(), WriteRouting::Automatic) {
-                let _ = self.store.apply_route(accepted.receipt_id, &prepared.route);
+                let _ = self.store.apply_route(accepted.receipt_id, &route);
             }
-            prepared.sources.close();
-            accepted
-        } else {
-            self.store.accept(intent)?
-        };
+            let semantic = SemanticState::accepted(edit, source.as_ref(), sources);
+            self.start_semantic(accepted.receipt_id, semantic);
+            return Ok(accepted);
+        }
+        let accepted = self.store.accept(intent)?;
         self.start(accepted.receipt_id);
         Ok(accepted)
     }
@@ -111,10 +126,64 @@ impl Publication {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         let receipts = self.store.recover_open()?;
         let count = receipts.len();
+        let semantic = self.store.recover_materialized_edits()?;
+        for (_, edit, _, _) in &semantic {
+            self.materializer(edit)?;
+        }
+        let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
+        for (receipt, edit, selected_id, failed_id) in semantic {
+            let sources = match self.open_semantic_sources(&edit) {
+                Ok(sources) => sources,
+                Err(error) => {
+                    for (_, state) in &mut prepared {
+                        state.close();
+                    }
+                    return Err(error);
+                }
+            };
+            let selected = selected_id.and_then(|id| Self::source_event(&sources, id));
+            let source_floor = selected.as_ref().map(|event| event.created_at).or_else(|| {
+                selected_id.map(|_| {
+                    Timestamp::from(
+                        receipt
+                            .current
+                            .event
+                            .created_at()
+                            .as_secs()
+                            .saturating_sub(1),
+                    )
+                })
+            });
+            prepared.push((
+                receipt.receipt_id,
+                SemanticState::recovered(edit, selected_id, source_floor, failed_id, sources),
+            ));
+        }
+        let semantic_ids: std::collections::BTreeSet<_> =
+            prepared.iter().map(|(receipt_id, _)| *receipt_id).collect();
+        for (receipt_id, state) in prepared {
+            self.start_semantic(receipt_id, state);
+        }
         for receipt in receipts {
-            self.start(receipt.receipt_id);
+            if !semantic_ids.contains(&receipt.receipt_id) {
+                self.start(receipt.receipt_id);
+            }
         }
         Ok(count)
+    }
+
+    /// Preview the exact current semantic materialization route without custody.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when selection, materialization, or routing refuses.
+    pub fn preview_semantic_routes(
+        &self,
+        intent: &WriteIntent,
+    ) -> Result<fava_routing::RoutePlan, PublicationError> {
+        let mut prepared = self.prepare_semantic(intent, None, None)?;
+        prepared.sources.close();
+        Ok(prepared.route)
     }
 
     /// Cancel while every selected destination is definitely pre-handoff.

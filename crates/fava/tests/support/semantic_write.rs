@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -335,15 +335,15 @@ impl CountingRouter {
                 request.targets(),
                 "semantic test route",
             )],
-            coverage: Default::default(),
-            unresolved: Default::default(),
+            coverage: BTreeMap::default(),
+            unresolved: BTreeSet::default(),
             shortfalls: Vec::new(),
         }
     }
 }
 
 impl Router for CountingRouter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "semantic-test"
     }
 

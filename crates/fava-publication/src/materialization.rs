@@ -16,11 +16,41 @@ pub(super) const MAX_MATERIALIZERS: usize = 64;
 pub(super) struct OpenedSemanticSources {
     pub(super) cache: OpenedQuerySource,
     pub(super) writes: OpenedQuerySource,
+    snapshots: [SourceSnapshot; 2],
 }
 
 impl OpenedSemanticSources {
-    pub(super) fn snapshots(&self) -> [SourceSnapshot; 2] {
-        [self.cache.initial.clone(), self.writes.initial.clone()]
+    fn new(cache: OpenedQuerySource, writes: OpenedQuerySource) -> Self {
+        let snapshots = [cache.initial.clone(), writes.initial.clone()];
+        Self {
+            cache,
+            writes,
+            snapshots,
+        }
+    }
+
+    pub(super) fn snapshots(&self) -> &[SourceSnapshot; 2] {
+        &self.snapshots
+    }
+
+    pub(super) async fn next_change(&mut self) -> bool {
+        tokio::select! {
+            biased;
+            changed = self.cache.changes.next_change() => match changed {
+                Ok(snapshot) => {
+                    self.snapshots[0] = snapshot;
+                    true
+                }
+                Err(_) => false,
+            },
+            changed = self.writes.changes.next_change() => match changed {
+                Ok(snapshot) => {
+                    self.snapshots[1] = snapshot;
+                    true
+                }
+                Err(_) => false,
+            },
+        }
     }
 
     pub(super) fn close(&mut self) {
@@ -34,6 +64,52 @@ pub(super) struct PreparedSemantic {
     pub(super) source: Option<Event>,
     pub(super) route: RoutePlan,
     pub(super) sources: OpenedSemanticSources,
+}
+
+pub(super) struct SemanticState {
+    pub(super) edit: ReplaceableEventEdit,
+    pub(super) selected_id: Option<fava_write::EventId>,
+    pub(super) source_floor: Option<Timestamp>,
+    pub(super) failed_id: Option<fava_write::EventId>,
+    pub(super) sources: OpenedSemanticSources,
+}
+
+impl SemanticState {
+    pub(super) fn accepted(
+        edit: ReplaceableEventEdit,
+        selected: Option<&Event>,
+        sources: OpenedSemanticSources,
+    ) -> Self {
+        let selected_id = selected.map(|event| event.id);
+        let source_floor = selected.map(|event| event.created_at);
+        Self {
+            edit,
+            selected_id,
+            source_floor,
+            failed_id: None,
+            sources,
+        }
+    }
+
+    pub(super) fn recovered(
+        edit: ReplaceableEventEdit,
+        selected_id: Option<fava_write::EventId>,
+        source_floor: Option<Timestamp>,
+        failed_id: Option<fava_write::EventId>,
+        sources: OpenedSemanticSources,
+    ) -> Self {
+        Self {
+            edit,
+            selected_id,
+            source_floor,
+            failed_id,
+            sources,
+        }
+    }
+
+    pub(super) fn close(&mut self) {
+        self.sources.close();
+    }
 }
 
 impl Publication {
@@ -65,43 +141,22 @@ impl Publication {
         exclude: Option<(ReceiptId, fava_write::MaterializationId)>,
         current: Option<&EventValue>,
     ) -> Result<PreparedSemantic, PublicationError> {
-        if self.store.active_capacity() == 0 {
-            return Err(fava_write_store::WriteStoreError::Refused(
-                "write store does not support replaceable-event edits".to_owned(),
-            )
-            .into());
-        }
         let WritePayload::Edit(edit) = intent.payload() else {
             return Err(PublicationError::Routing(
                 "semantic preparation requires a replaceable-event edit".to_owned(),
             ));
         };
-        let materializer = self.materializer(edit)?;
+        self.materializer(edit)?;
         let mut sources = self.open_semantic_sources(edit)?;
-        let snapshots = sources.snapshots();
-        let source = match self.select_source(edit, &snapshots, exclude) {
+        let source = match self.select_source(edit, sources.snapshots(), exclude) {
             Ok(source) => source,
             Err(error) => {
                 sources.close();
                 return Err(error);
             }
         };
-        let created_at = injected_timestamp(source.as_ref(), current)?;
-        let event = match materializer.materialize(edit, source.as_ref(), created_at) {
-            Ok(event) => event,
-            Err(error) => {
-                sources.close();
-                return Err(PublicationError::Routing(format!(
-                    "semantic materialization refused: {error}"
-                )));
-            }
-        };
-        if let Err(error) = validate_materialization(edit, &event, intent.routing()) {
-            sources.close();
-            return Err(error);
-        }
-        let route = match self.route_for(&event, intent.routing()) {
-            Ok(route) => route,
+        let (event, route) = match self.materialize_and_route(intent, source.as_ref(), current) {
+            Ok(prepared) => prepared,
             Err(error) => {
                 sources.close();
                 return Err(error);
@@ -113,6 +168,49 @@ impl Publication {
             route,
             sources,
         })
+    }
+
+    pub(super) fn ensure_semantic_admission(&self) -> Result<(), PublicationError> {
+        let capacity = self.store.active_capacity();
+        if capacity == 0 {
+            return Err(fava_write_store::WriteStoreError::Refused(
+                "write store does not support replaceable-event edits".to_owned(),
+            )
+            .into());
+        }
+        if self.store.recover_open()?.len() >= capacity {
+            return Err(fava_write_store::WriteStoreError::Refused(format!(
+                "bounded write-store capacity {capacity} reached"
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn materialize_and_route(
+        &self,
+        intent: &WriteIntent,
+        source: Option<&Event>,
+        current: Option<&EventValue>,
+    ) -> Result<(UnsignedEvent, RoutePlan), PublicationError> {
+        let WritePayload::Edit(edit) = intent.payload() else {
+            return Err(PublicationError::Routing(
+                "semantic preparation requires a replaceable-event edit".to_owned(),
+            ));
+        };
+        let materializer = self.materializer(edit)?;
+        let created_at = injected_timestamp(source, current)?;
+        let event = match materializer.materialize(edit, source, created_at) {
+            Ok(event) => event,
+            Err(error) => {
+                return Err(PublicationError::Routing(format!(
+                    "semantic materialization refused: {error}"
+                )));
+            }
+        };
+        validate_materialization(edit, &event, intent.routing())?;
+        let route = self.route_for(&event, intent.routing())?;
+        Ok((event, route))
     }
 
     pub(super) fn materializer(
@@ -153,7 +251,7 @@ impl Publication {
                 return Err(PublicationError::Routing(error.to_string()));
             }
         };
-        Ok(OpenedSemanticSources { cache, writes })
+        Ok(OpenedSemanticSources::new(cache, writes))
     }
 
     pub(super) fn select_source(
@@ -205,6 +303,69 @@ impl Publication {
                 .map_err(|error| PublicationError::Routing(error.to_string())),
         }
     }
+
+    pub(super) fn semantic_successor(
+        &self,
+        state: &SemanticState,
+        receipt_id: ReceiptId,
+        materialization_id: fava_write::MaterializationId,
+    ) -> Result<(bool, Option<Event>), PublicationError> {
+        let candidate = self.select_source(
+            &state.edit,
+            state.sources.snapshots(),
+            Some((receipt_id, materialization_id)),
+        )?;
+        if candidate.as_ref().map(|event| event.id) == state.selected_id {
+            return Ok((false, None));
+        }
+        if candidate.as_ref().map(|event| event.id) == state.failed_id {
+            return Ok((false, None));
+        }
+        let selected_still_present = state
+            .selected_id
+            .is_some_and(|selected_id| source_is_present(state.sources.snapshots(), selected_id));
+        match candidate {
+            Some(candidate)
+                if state
+                    .source_floor
+                    .is_none_or(|floor| candidate.created_at > floor) =>
+            {
+                Ok((true, Some(candidate)))
+            }
+            Some(_) if state.selected_id.is_some() && !selected_still_present => Ok((true, None)),
+            None if state.selected_id.is_some() => Ok((true, None)),
+            Some(_) | None => Ok((false, None)),
+        }
+    }
+
+    pub(super) fn source_event(
+        sources: &OpenedSemanticSources,
+        event_id: fava_write::EventId,
+    ) -> Option<Event> {
+        sources.snapshots().iter().find_map(|source| {
+            source.events.iter().find_map(|event| match event {
+                SourceEvent::Cached(cached) if cached.event.id == event_id => {
+                    Some(cached.event.clone())
+                }
+                SourceEvent::Local(local) => match &local.event {
+                    EventValue::Signed(event) if event.id == event_id => Some(event.clone()),
+                    EventValue::Signed(_) | EventValue::Unsigned(_) => None,
+                },
+                SourceEvent::Cached(_) => None,
+            })
+        })
+    }
+}
+
+fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventId) -> bool {
+    sources.iter().any(|source| {
+        source.events.iter().any(|event| match event {
+            SourceEvent::Cached(cached) => cached.event.id == selected_id,
+            SourceEvent::Local(local) => {
+                matches!(&local.event, EventValue::Signed(event) if event.id == selected_id)
+            }
+        })
+    })
 }
 
 pub(super) fn edit_kind(edit: &ReplaceableEventEdit) -> Result<Kind, PublicationError> {

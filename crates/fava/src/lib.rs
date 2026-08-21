@@ -214,9 +214,11 @@ impl Fava {
         let event = match intent.payload() {
             fava_write::WritePayload::Event(event) => EventValue::Unsigned(event.clone()),
             fava_write::WritePayload::Edit(_) => {
-                return Err(PublicationError::Routing(
-                    "replaceable-event edit requires a selected materializer".to_owned(),
-                ));
+                return self
+                    .publication
+                    .as_ref()
+                    .ok_or(PublicationError::NotConfigured)?
+                    .preview_semantic_routes(intent);
             }
             fava_write::WritePayload::Presigned(event) => EventValue::Signed(event.clone()),
         };
