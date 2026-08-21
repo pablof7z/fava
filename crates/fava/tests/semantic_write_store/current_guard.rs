@@ -7,7 +7,8 @@ fn memory_exact_current_guard_precedes_idempotence() {
     let base = source(&keys, 10, "base");
     let accepted = accept(
         &store,
-        edit(keys.public_key()),
+        edit(),
+        keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
         Some(&base),
     );
