@@ -39,6 +39,7 @@ impl RedbWriteStore {
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock()?;
+        let reserved = reservation.is_some();
         if reservation.is_some_and(|reservation| !state.reservations.remove(&reservation)) {
             return Err(WriteStoreError::Refused(
                 "active reservation is not current".to_owned(),
@@ -75,7 +76,11 @@ impl RedbWriteStore {
                 "replaceable-event coordinate already has a live edit".to_owned(),
             ));
         }
-        if active_count(&state) >= self.limits.active.get() {
+        if !reserved
+            && active_count(&state)
+                .checked_add(state.reservations.len())
+                .is_none_or(|used| used >= self.limits.active.get())
+        {
             return Err(WriteStoreError::Refused(format!(
                 "active write bound {} reached",
                 self.limits.active
@@ -465,7 +470,8 @@ fn require_qualified_source(
     let qualified = match (current, candidate) {
         (None, Some(_)) | (Some(_), None) => true,
         (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_id != current_id && candidate_time > current_time
+            candidate_time > current_time
+                || (candidate_time == current_time && candidate_id < current_id)
         }
         (None, None) => false,
     };

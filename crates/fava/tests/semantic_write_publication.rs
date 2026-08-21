@@ -25,6 +25,8 @@ mod route_revision;
 mod shared_capacity;
 #[path = "support/semantic_write.rs"]
 mod support;
+#[path = "semantic_write_publication/winner_order.rs"]
+mod winner_order;
 
 use support::*;
 #[tokio::test(flavor = "current_thread")]
@@ -312,66 +314,6 @@ async fn own_local_materialization_does_not_create_a_second_generation() {
     );
     assert_eq!(materializer.calls().len(), 1);
     assert_eq!(signer.calls(), 1);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn equal_older_unqualified_and_duplicate_sources_are_inert() {
-    let keys = Keys::generate();
-    let other = Keys::generate();
-    let cache = Arc::new(MemoryEventCache::default());
-    let store = Arc::new(MemoryWriteStore::default());
-    let left = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "left", &[]);
-    let right = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "right", &[]);
-    let (base, equal) = if left.id > right.id {
-        (left, right)
-    } else {
-        (right, left)
-    };
-    cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
-            base.clone(),
-            relay_evidence(),
-        ))])
-        .expect("base source enters cache");
-    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
-    let fava = publication_builder(
-        Arc::clone(&cache),
-        Arc::clone(&store),
-        Arc::clone(&signer),
-        Arc::new(RecordingPublisher::default()),
-    )
-    .materializer(Arc::clone(&materializer))
-    .build()
-    .expect("semantic publication assembly");
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
-        .expect("edit accepts");
-    wait_for_signer(&signer, 1).await;
-
-    let older = signed_source(&keys, Kind::ContactList, u64::MAX - 3, "older", &[]);
-    let wrong_actor = signed_source(&other, Kind::ContactList, u64::MAX - 1, "wrong actor", &[]);
-    let wrong_kind = signed_source(&keys, Kind::TextNote, u64::MAX - 1, "wrong kind", &[]);
-    cache
-        .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(equal, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(wrong_actor, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(wrong_kind, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(base, relay_evidence())),
-        ])
-        .expect("inert source facts enter cache");
-    assert_no_receipt_change(&store).await;
-
-    let receipt = fava
-        .receipt(accepted.receipt_id)
-        .expect("receipt read")
-        .expect("receipt exists");
-    assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
-    );
-    assert_eq!(materializer.calls().len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]

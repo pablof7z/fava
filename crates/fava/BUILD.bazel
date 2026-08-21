@@ -146,6 +146,7 @@ rust_test(
         "tests/semantic_write_publication/interleavings.rs",
         "tests/semantic_write_publication/route_revision.rs",
         "tests/semantic_write_publication/shared_capacity.rs",
+        "tests/semantic_write_publication/winner_order.rs",
         "tests/support/semantic_write.rs",
     ],
     crate_name = "semantic_write_publication",

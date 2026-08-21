@@ -364,9 +364,13 @@ impl Publication {
             .is_some_and(|selected_id| source_is_present(state.sources.snapshots(), selected_id));
         match candidate {
             Some(candidate)
-                if state
-                    .source_floor
-                    .is_none_or(|floor| candidate.created_at > floor) =>
+                if state.source_floor.is_none_or(|floor| {
+                    candidate.created_at > floor
+                        || (candidate.created_at == floor
+                            && state
+                                .selected_id
+                                .is_some_and(|selected_id| candidate.id < selected_id))
+                }) =>
             {
                 Ok((true, Some(candidate)))
             }

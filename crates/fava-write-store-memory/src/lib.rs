@@ -25,7 +25,7 @@ mod state;
 
 use model::destinations;
 use semantic::WriteState;
-use state::{active_count, next_revision, release_semantic};
+use state::{capacity_reached, next_revision, release_semantic};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -90,7 +90,7 @@ impl WriteStore for MemoryWriteStore {
 
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
         let mut guard = self.lock_state()?;
-        if active_count(&guard) >= self.capacity.get() {
+        if capacity_reached(&guard, self.capacity.get()) {
             return Err(WriteStoreError::Refused(format!(
                 "bounded write-store capacity {} reached",
                 self.capacity

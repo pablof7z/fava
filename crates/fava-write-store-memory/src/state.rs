@@ -48,6 +48,12 @@ pub(super) fn active_count(state: &WriteState) -> usize {
         .count()
 }
 
+pub(super) fn capacity_reached(state: &WriteState, capacity: usize) -> bool {
+    active_count(state)
+        .checked_add(state.reservations.len())
+        .is_none_or(|used| used >= capacity)
+}
+
 pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
     if let Some((edit, author, _, _)) = state.edits.remove(&receipt_id) {
         state.coordinates.remove(&edit_coordinate(&edit, author));
@@ -61,7 +67,8 @@ pub(super) fn require_qualified_source(
     let qualified = match (current, candidate) {
         (None, Some(_)) | (Some(_), None) => true,
         (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_id != current_id && candidate_time > current_time
+            candidate_time > current_time
+                || (candidate_time == current_time && candidate_id < current_id)
         }
         (None, None) => false,
     };

@@ -13,8 +13,8 @@ use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capa
 use super::MemoryWriteStore;
 use super::model::destinations;
 use super::state::{
-    active_count, attributed_failure, edit_coordinate, next_revision, require_failure_source,
-    require_qualified_source,
+    active_count, attributed_failure, capacity_reached, edit_coordinate, next_revision,
+    require_failure_source, require_qualified_source,
 };
 
 #[derive(Clone, Debug)]
@@ -97,6 +97,7 @@ impl MemoryWriteStore {
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock_state()?;
+        let reserved = reservation.is_some();
         if reservation.is_some_and(|reservation| !state.reservations.remove(&reservation)) {
             return Err(WriteStoreError::Refused(
                 "active reservation is not current".to_owned(),
@@ -135,7 +136,7 @@ impl MemoryWriteStore {
             ));
         }
 
-        if active_count(&state) >= self.capacity.get() {
+        if !reserved && capacity_reached(&state, self.capacity.get()) {
             return Err(WriteStoreError::Refused(format!(
                 "bounded write-store capacity {} reached",
                 self.capacity

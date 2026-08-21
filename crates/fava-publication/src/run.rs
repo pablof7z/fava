@@ -79,9 +79,7 @@ impl Publication {
                 }
                 route = next_route(&mut routes), if routes.is_some() => {
                     let Ok(contribution) = route else { routes = None; continue; };
-                    route_revision = route_revision.saturating_add(1);
-                    let request = RouteRequest::Write(current.current.event.clone());
-                    self.apply_route(&current, route_revision, &request, &contribution);
+                    route_revision = self.apply_route_change(&current, route_revision, &contribution);
                 }
                 source = next_semantic_source(&mut semantic), if semantic.is_some() => {
                     match source {
@@ -108,16 +106,14 @@ impl Publication {
                         Ok((changed, Some(latest))) if changed == receipt_id => {
                             let next_materialization =
                                 latest.current.publication.materialization_id;
-                            if next_materialization != materialization_id {
-                                signing_cancel.send_replace(true);
-                                let (next_cancel, next_cancel_rx) = watch::channel(false);
-                                signing_cancel = next_cancel;
-                                self.start_signing(&latest, next_cancel_rx);
-                                if let Some(open) = &mut routes {
-                                    open.close();
-                                }
-                                routes = self.open_routes(&latest);
-                                route_revision = latest.route_revision;
+                            if next_materialization == materialization_id {
+                                route_revision = route_revision.max(latest.route_revision);
+                            } else {
+                                route_revision = self.reopen_materialization(
+                                    &latest,
+                                    &mut routes,
+                                    &mut signing_cancel,
+                                );
                                 materialization_id = next_materialization;
                             }
                         }
@@ -171,7 +167,7 @@ impl Publication {
             };
             receipt = current;
         }
-        let routes = self.open_routes(&receipt);
+        let (routes, _) = self.open_routes(&receipt);
         if matches!(receipt.routing, WriteRouting::Automatic)
             && routes.is_none()
             && semantic.is_none()
@@ -304,16 +300,16 @@ impl Publication {
         state.failed_id = None;
     }
 
-    fn open_routes(&self, receipt: &Receipt) -> Option<Box<dyn RouterSession>> {
+    fn open_routes(&self, receipt: &Receipt) -> (Option<Box<dyn RouterSession>>, u64) {
         let WriteRouting::Automatic = receipt.routing else {
-            return None;
+            return (None, receipt.route_revision);
         };
         let request = RouteRequest::Write(receipt.current.event.clone());
         match fava_routing::open(self.routers.as_slice(), &request) {
             Ok(routes) => {
                 let revision = receipt.route_revision.saturating_add(1);
-                self.apply_route(receipt, revision, &request, &routes.current());
-                Some(routes)
+                let committed = self.apply_route(receipt, revision, &request, &routes.current());
+                (Some(routes), committed)
             }
             Err(error) => {
                 let plan = RoutePlan::shortfall(
@@ -328,9 +324,27 @@ impl Publication {
                     receipt.current.id(),
                     &plan,
                 );
-                None
+                (None, self.committed_route_revision(receipt))
             }
         }
+    }
+
+    fn reopen_materialization(
+        &self,
+        receipt: &Receipt,
+        routes: &mut Option<Box<dyn RouterSession>>,
+        signing_cancel: &mut watch::Sender<bool>,
+    ) -> u64 {
+        signing_cancel.send_replace(true);
+        let (next_cancel, next_cancel_rx) = watch::channel(false);
+        *signing_cancel = next_cancel;
+        self.start_signing(receipt, next_cancel_rx);
+        if let Some(open) = routes {
+            open.close();
+        }
+        let (opened, committed_revision) = self.open_routes(receipt);
+        *routes = opened;
+        committed_revision
     }
 
     fn apply_route(
@@ -339,7 +353,7 @@ impl Publication {
         revision: u64,
         request: &RouteRequest,
         contribution: &RouteContribution,
-    ) {
+    ) -> u64 {
         let plan = match RoutePlan::from_contribution(revision, contribution) {
             Ok(plan) => plan,
             Err(error) => RoutePlan::shortfall(revision, request, error.to_string()),
@@ -360,6 +374,29 @@ impl Publication {
                 &shortfall,
             );
         }
+        self.committed_route_revision(receipt)
+    }
+
+    fn apply_route_change(
+        &self,
+        receipt: &Receipt,
+        revision: u64,
+        contribution: &RouteContribution,
+    ) -> u64 {
+        let request = RouteRequest::Write(receipt.current.event.clone());
+        self.apply_route(receipt, revision.saturating_add(1), &request, contribution)
+    }
+
+    fn committed_route_revision(&self, receipt: &Receipt) -> u64 {
+        self.store
+            .receipt(receipt.receipt_id)
+            .ok()
+            .flatten()
+            .filter(|current| {
+                current.current.publication.materialization_id
+                    == receipt.current.publication.materialization_id
+            })
+            .map_or(receipt.route_revision, |current| current.route_revision)
     }
 
     fn start_signing(&self, receipt: &Receipt, cancel: watch::Receiver<bool>) {
