@@ -461,7 +461,9 @@ fn read_wire_requests(
     for line in std::fs::read_to_string(path)?.lines() {
         let entry: Value = serde_json::from_str(line)?;
         let payload = entry.get("payload").and_then(Value::as_str).unwrap_or("");
-        if entry.get("direction").and_then(Value::as_str) == Some("client_to_relay") {
+        let direction = entry.get("direction").and_then(Value::as_str);
+        let frame_type = entry.get("frame_type").and_then(Value::as_str);
+        if direction == Some("client_to_relay") && frame_type == Some("text") {
             let message: Value = serde_json::from_str(payload)?;
             let Some(parts) = message.as_array() else {
                 return Err(CanaryError::new("client wire payload was not a JSON array"));
@@ -483,9 +485,7 @@ fn read_wire_requests(
                 .ok_or_else(|| CanaryError::new("REQ omitted proxy connection"))?;
             reqs.entry(connection).or_default().push(parts[2].clone());
         }
-        if entry.get("direction").and_then(Value::as_str) == Some("relay_to_client")
-            && payload.contains(CAPACITY_REFUSAL_TEXT)
-        {
+        if direction == Some("relay_to_client") && payload.contains(CAPACITY_REFUSAL_TEXT) {
             capacity_refusals.push(payload.to_owned());
         }
     }

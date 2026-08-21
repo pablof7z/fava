@@ -25,6 +25,7 @@ fn write_wire(grouped_payload: &Value, separate_payloads: Vec<Value>) -> tempfil
     let mut lines = Vec::with_capacity(LOGICAL_QUERY_COUNT + 1);
     lines.push(json!({
         "direction": "client_to_relay",
+        "frame_type": "text",
         "connection": 1,
         "payload": serde_json::to_string(&json!(["REQ", "grouped", grouped_payload]))
             .expect("payload serializes"),
@@ -32,11 +33,24 @@ fn write_wire(grouped_payload: &Value, separate_payloads: Vec<Value>) -> tempfil
     for (index, filter) in separate_payloads.into_iter().enumerate() {
         lines.push(json!({
             "direction": "client_to_relay",
+            "frame_type": "text",
             "connection": 2,
             "payload": serde_json::to_string(&json!(["REQ", format!("separate-{index}"), filter]))
                 .expect("payload serializes"),
         }));
     }
+    lines.push(json!({
+        "direction": "client_to_relay",
+        "frame_type": "close",
+        "connection": 1,
+        "payload": "None",
+    }));
+    lines.push(json!({
+        "direction": "client_to_relay",
+        "frame_type": "binary",
+        "connection": 2,
+        "payload": "non-json binary frame",
+    }));
     let contents = lines
         .into_iter()
         .map(|line| serde_json::to_string(&line).expect("wire entry serializes"))
