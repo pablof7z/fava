@@ -27,8 +27,6 @@ use fava_write::{
 };
 
 const BOOKMARK_KIND: u16 = 10_003;
-const FORMAT: u32 = 1;
-const CODEC_VERSION: u8 = 1;
 const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const EVENT: u8 = 1;
@@ -45,11 +43,8 @@ use bounds::MAX_TAGS;
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
 /// private versioned codec.
-pub fn bookmark_event(
-    actor: PublicKey,
-    target: EventId,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, Target::Event(target), Operation::Add)
+pub fn bookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(Target::Event(target), Operation::Add)
 }
 
 /// Produce a bounded edit that removes one public event bookmark.
@@ -58,11 +53,8 @@ pub fn bookmark_event(
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
 /// private versioned codec.
-pub fn unbookmark_event(
-    actor: PublicKey,
-    target: EventId,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(actor, Target::Event(target), Operation::Remove)
+pub fn unbookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    edit(Target::Event(target), Operation::Remove)
 }
 
 /// Produce a bounded edit that adds one public replaceable-event coordinate.
@@ -72,11 +64,10 @@ pub fn unbookmark_event(
 /// Returns an existing write-intent refusal for an ordinary event coordinate,
 /// an invalid replaceable coordinate, or an oversized identifier.
 pub fn bookmark_coordinate(
-    actor: PublicKey,
     target: EventCoordinate,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
-    edit(actor, Target::Coordinate(target), Operation::Add)
+    edit(Target::Coordinate(target), Operation::Add)
 }
 
 /// Produce a bounded edit that removes one public replaceable-event coordinate.
@@ -86,11 +77,10 @@ pub fn bookmark_coordinate(
 /// Returns an existing write-intent refusal for an ordinary event coordinate,
 /// an invalid replaceable coordinate, or an oversized identifier.
 pub fn unbookmark_coordinate(
-    actor: PublicKey,
     target: EventCoordinate,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
-    edit(actor, Target::Coordinate(target), Operation::Remove)
+    edit(Target::Coordinate(target), Operation::Remove)
 }
 
 /// Select the pure public-bookmark materializer for application assembly.
@@ -112,13 +102,6 @@ impl Operation {
             Self::Remove => REMOVE,
         }
     }
-
-    const fn inverse(self) -> Self {
-        match self {
-            Self::Add => Self::Remove,
-            Self::Remove => Self::Add,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,30 +116,14 @@ struct Change {
     target: Target,
 }
 
-fn edit(
-    actor: PublicKey,
-    target: Target,
-    operation: Operation,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    let coordinate = EventCoordinate::Replaceable {
-        author: actor,
-        kind: bookmark_kind(),
-        identifier: None,
-    };
-    let change = encode(&Change {
-        operation,
-        target: target.clone(),
-    })?;
-    let inverse = encode(&Change {
-        operation: operation.inverse(),
-        target,
-    })?;
-    ReplaceableEventEdit::new(actor, coordinate, FORMAT, change, inverse)
+fn edit(target: Target, operation: Operation) -> Result<ReplaceableEventEdit, WriteIntentError> {
+    let change = encode(&Change { operation, target })?;
+    ReplaceableEventEdit::new(bookmark_kind(), None, change)
 }
 
 fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(&[CODEC_VERSION, change.operation.code()]);
+    bytes.push(change.operation.code());
     match &change.target {
         Target::Event(id) => {
             bytes.push(EVENT);
@@ -198,20 +165,20 @@ fn encode_coordinate(
 }
 
 fn decode(bytes: &[u8]) -> Result<Change, WriteIntentError> {
-    if bytes.len() < 3 || bytes[0] != CODEC_VERSION {
-        return Err(codec_refusal("unsupported or malformed bookmark edit"));
+    if bytes.len() < 2 {
+        return Err(codec_refusal("malformed bookmark edit"));
     }
-    let operation = match bytes[1] {
+    let operation = match bytes[0] {
         ADD => Operation::Add,
         REMOVE => Operation::Remove,
         _ => return Err(codec_refusal("unknown bookmark edit operation")),
     };
-    let target = match bytes[2] {
-        EVENT if bytes.len() == 35 => Target::Event(
-            EventId::from_slice(&bytes[3..])
+    let target = match bytes[1] {
+        EVENT if bytes.len() == 34 => Target::Event(
+            EventId::from_slice(&bytes[2..])
                 .map_err(|_| codec_refusal("invalid bookmark event id"))?,
         ),
-        COORDINATE => Target::Coordinate(decode_coordinate(&bytes[3..])?),
+        COORDINATE => Target::Coordinate(decode_coordinate(&bytes[2..])?),
         EVENT => return Err(codec_refusal("malformed bookmark event target")),
         _ => return Err(codec_refusal("unknown bookmark target kind")),
     };
@@ -249,27 +216,16 @@ fn decode_coordinate(bytes: &[u8]) -> Result<EventCoordinate, WriteIntentError> 
 
 fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> {
     validate_edit_coordinate(edit)?;
-    if edit.format() != FORMAT {
-        return Err(codec_refusal("unsupported bookmark edit format"));
-    }
-    let change = decode(edit.change())?;
-    let inverse = decode(edit.inverse_change())?;
-    if inverse.target != change.target || inverse.operation != change.operation.inverse() {
-        return Err(codec_refusal("bookmark edit inverse does not match change"));
-    }
-    Ok(change)
+    decode(edit.change())
 }
 
 fn validate_edit_coordinate(edit: &ReplaceableEventEdit) -> Result<(), WriteIntentError> {
-    match edit.coordinate() {
-        EventCoordinate::Replaceable {
-            author,
-            kind,
-            identifier: None,
-        } if *author == edit.actor() && *kind == bookmark_kind() => Ok(()),
-        _ => Err(WriteIntentError::InvalidEvent(
-            "bookmark edit requires its actor's kind-10003 coordinate".to_owned(),
-        )),
+    if edit.kind() == bookmark_kind() && edit.identifier().is_none() {
+        Ok(())
+    } else {
+        Err(WriteIntentError::InvalidEvent(
+            "bookmark edit requires a non-addressable kind-10003 coordinate".to_owned(),
+        ))
     }
 }
 
@@ -314,23 +270,24 @@ impl ReplaceableEventMaterializer for BookmarkMaterializer {
     fn materialize(
         &self,
         edit: &ReplaceableEventEdit,
+        author: PublicKey,
         source: Option<&Event>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
-        let (content, source_tags) = qualified_source(edit, source, created_at)?;
+        let (content, source_tags) = qualified_source(author, source, created_at)?;
         let tags = apply(source_tags, &change)?;
-        let event = build(edit.actor(), content, tags, created_at)?;
-        validate_output(edit, &event, created_at)?;
+        let event = build(author, content, tags, created_at)?;
+        validate_output(author, &event, created_at)?;
         Ok(event)
     }
 }
 
-fn qualified_source<'a>(
-    edit: &ReplaceableEventEdit,
-    source: Option<&'a Event>,
+fn qualified_source(
+    author: PublicKey,
+    source: Option<&Event>,
     created_at: Timestamp,
-) -> Result<(&'a str, &'a [Tag]), WriteIntentError> {
+) -> Result<(&str, &[Tag]), WriteIntentError> {
     let Some(source) = source else {
         return Ok(("", &[]));
     };
@@ -338,9 +295,9 @@ fn qualified_source<'a>(
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-    if source.pubkey != edit.actor() || source.kind != bookmark_kind() {
+    if source.pubkey != author || source.kind != bookmark_kind() {
         return Err(WriteIntentError::InvalidEvent(
-            "bookmark source actor or kind does not match edit coordinate".to_owned(),
+            "bookmark source author or kind does not match accepted write".to_owned(),
         ));
     }
     if created_at <= source.created_at {
@@ -460,16 +417,13 @@ fn build(
 }
 
 fn validate_output(
-    edit: &ReplaceableEventEdit,
+    author: PublicKey,
     event: &UnsignedEvent,
     created_at: Timestamp,
 ) -> Result<(), WriteIntentError> {
-    if event.pubkey != edit.actor()
-        || event.kind != bookmark_kind()
-        || event.created_at != created_at
-    {
+    if event.pubkey != author || event.kind != bookmark_kind() || event.created_at != created_at {
         return Err(WriteIntentError::InvalidEvent(
-            "bookmark materializer produced the wrong actor, kind, or timestamp".to_owned(),
+            "bookmark materializer produced the wrong author, kind, or timestamp".to_owned(),
         ));
     }
     event
