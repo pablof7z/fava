@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 current_phase: 06.1
 current_phase_name: Literal Tag-Value Query Semantics Remediation
-status: planning
-stopped_at: M0-M6 reconciled; Phase 7 is ready for discussion and planning.
-last_updated: "2026-08-21T18:29:05.821Z"
+status: executing
+stopped_at: Completed 06.1-01-PLAN.md
+last_updated: "2026-08-21T18:46:43.727Z"
 last_activity: 2026-08-21
-last_activity_desc: Inserted urgent literal tag-value query semantics remediation after Phase 6.
-state_head: 4fee4e04758a4ab04b6b997fdc9f2f37e6205f5c
+last_activity_desc: Phase 06.1 execution started
+state_head: 22dc7fece03a023fae80130cc2cf58237a2d3518
 progress:
   total_phases: 12
   completed_phases: 6
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 06.1 — restore authoritative literal tag-value query semantics before continuing M7.
+**Current focus:** Phase 06.1 — Literal Tag-Value Query Semantics Remediation
 
 ## Current Position
 
-Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — READY TO EXECUTE
-Plan: 0 of TBD in current phase
-Status: Ready to discuss
-Last activity: 2026-08-21 — Inserted urgent literal tag-value query semantics remediation after Phase 6.
+Phase: 06.1 (Literal Tag-Value Query Semantics Remediation) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-08-21 — Phase 06.1 execution started
 
-Progress: [██████░░░░░░] 50%
+Progress: [███░░░░░░░] 33%
 
 Phase progress is 6/12. GSD plan metrics remain 0/0 because Phases 1-6 were
 executed before GSD and no retrospective plans or summaries were created.
@@ -56,6 +56,12 @@ executed before GSD and no retrospective plans or summaries were created.
 - Last 5 plans: None
 - Trend: Not established
 
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 06.1 P01 | 15min | 3 tasks | 7 files |
+
 ## Accumulated Context
 
 ### Decisions
@@ -68,6 +74,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Active phases correspond exactly and sequentially to authoritative M1 through M11.
 - Every phase uses MVP mode; milestone names require every authoritative exit gate and mapped requirement Definition of Done item to pass.
 - Windowing/resume tokens, outage backfill, partial-handoff cancellation, full attempt-history retention, and the recommended persistent event-cache profile remain explicitly unpromised pending their owning phase evidence.
+- [Phase 06.1]: Use nostr::filter::SingleLetterTag directly with no Fava wrapper or compatibility alias.
+- [Phase 06.1]: Canonical literal tag axes union exact values per case-sensitive key and preserve present-empty match-nothing semantics.
+- [Phase 06.1]: Evaluate exact tag cells locally without delegating Fava query meaning to the upstream whole-filter matcher.
 
 ### Pending Todos
 
@@ -94,6 +103,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21
-Stopped at: Phase 06.1 inserted and ready for autonomous discussion and planning.
+Last session: 2026-08-21T18:46:43.717Z
+Stopped at: Completed 06.1-01-PLAN.md
 Resume file: None

@@ -128,7 +128,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Mode:** mvp
 **Requirements:** LOCAL-09, ROUTE-10
 **Depends on:** Phase 6
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 **Success Criteria** (what must be TRUE):
 
@@ -140,7 +140,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 Plans:
 **Wave 1**
 
-- [ ] 06.1-01-PLAN.md — Restore canonical literal tag identity and exact signed/unsigned local observation through public Fava.
+- [x] 06.1-01-PLAN.md — Restore canonical literal tag identity and exact signed/unsigned local observation through public Fava.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -238,7 +238,7 @@ Plans:
 | 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
-| 06.1. Literal Tag-Value Query Semantics Remediation | 0/3 | Current | - |
+| 06.1. Literal Tag-Value Query Semantics Remediation | 1/3 | In Progress|  |
 | 7. Semantic Writes and Capability Composition | 0/TBD | Not started | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
