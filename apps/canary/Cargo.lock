@@ -135,9 +135,12 @@ dependencies = [
  "fava-event-cache-memory",
  "fava-ingest",
  "fava-publisher-nip01",
+ "fava-query",
  "fava-query-standard",
  "fava-router-app-relays",
  "fava-router-fallback-relays",
+ "fava-router-hints",
+ "fava-router-outbox",
  "fava-router-testkit",
  "fava-routing",
  "fava-signer",
@@ -413,6 +416,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip65"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+ "thiserror",
+]
+
+[[package]]
 name = "fava-observe"
 version = "0.1.0"
 dependencies = [
@@ -427,6 +439,7 @@ version = "0.1.0"
 dependencies = [
  "fava-delivery",
  "fava-publisher",
+ "fava-routing",
  "fava-signer",
  "fava-state",
  "fava-transport",
@@ -495,6 +508,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-router-hints"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-routing",
+ "fava-state",
+ "fava-write",
+ "tokio",
+]
+
+[[package]]
+name = "fava-router-outbox"
+version = "0.1.0"
+dependencies = [
+ "fava-nip65",
+ "fava-query",
+ "fava-routing",
+ "fava-state",
+ "fava-write",
+ "tokio",
+]
+
+[[package]]
 name = "fava-router-testkit"
 version = "0.1.0"
 dependencies = [
@@ -508,6 +544,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-write",
  "thiserror",
  "tokio",
 ]
@@ -613,6 +650,7 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-write",
  "thiserror",
@@ -624,6 +662,7 @@ name = "fava-write-store-memory"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-write",
  "fava-write-store",
@@ -636,6 +675,7 @@ name = "fava-write-store-redb"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-write",
  "fava-write-store",

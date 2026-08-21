@@ -29,14 +29,16 @@ pub fn preview(
 ) -> Result<RoutePlan, RouterError> {
     validate_names(routers)?;
     let mut contributions = Vec::with_capacity(routers.len());
+    let targets = request.targets();
     for router in routers {
-        let upstream = RoutePlan::from_contribution(1, &combine(&contributions))?;
+        let upstream =
+            RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))?;
         contributions.push(attribute(
             router.preview(request, &upstream)?,
             router.name(),
         )?);
     }
-    RoutePlan::from_contribution(1, &combine(&contributions))
+    RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))
 }
 
 /// Open the ordered router chain as one complete-contribution sequence.
@@ -49,11 +51,13 @@ pub fn open(
     request: &RouteRequest,
 ) -> Result<Box<dyn RouterSession>, RouterError> {
     validate_names(routers)?;
+    let targets = request.targets();
     let mut sessions = Vec::with_capacity(routers.len());
     let mut contributions = Vec::with_capacity(routers.len());
     let mut upstream = Vec::with_capacity(routers.len());
     for router in routers {
-        let plan = RoutePlan::from_contribution(1, &combine(&contributions))?;
+        let plan =
+            RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))?;
         let (upstream_tx, upstream_rx) = watch::channel(Arc::new(plan));
         let mut session = match router.open(request.clone(), upstream_rx) {
             Ok(session) => session,
@@ -74,7 +78,7 @@ pub fn open(
         upstream.push(upstream_tx);
         sessions.push((router.name().to_owned(), session));
     }
-    let initial = Arc::new(combine(&contributions));
+    let initial = Arc::new(complete_targets(combine(&contributions), &targets));
     let (latest_tx, latest) = watch::channel(initial);
     let (cancel, cancel_rx) = watch::channel(false);
     let (updates_tx, updates_rx) = mpsc::channel(routers.len().max(1));
@@ -94,6 +98,7 @@ pub fn open(
         updates_rx,
         latest_tx,
         cancel_rx,
+        targets,
     ));
     Ok(Box::new(OpenedChain {
         latest,
@@ -185,6 +190,7 @@ async fn compose_updates(
     mut updates: mpsc::Receiver<RouterUpdate>,
     latest: watch::Sender<Arc<RouteContribution>>,
     mut cancel: watch::Receiver<bool>,
+    targets: BTreeSet<crate::RouteTarget>,
 ) {
     let mut revision = 1_u64;
     loop {
@@ -204,11 +210,17 @@ async fn compose_updates(
         contributions[update.index] = live_contribution(update.contribution, &update.name);
         revision = revision.saturating_add(1);
         for index in (update.index + 1)..upstream.len() {
-            let plan = RoutePlan::from_contribution(revision, &combine(&contributions[..index]))
-                .expect("validated router contributions remain bounded when combined");
+            let plan = RoutePlan::from_contribution(
+                revision,
+                &complete_targets(combine(&contributions[..index]), &targets),
+            )
+            .expect("validated router contributions remain bounded when combined");
             upstream[index].send_replace(Arc::new(plan));
         }
-        latest.send_replace(Arc::new(combine(&contributions)));
+        latest.send_replace(Arc::new(complete_targets(
+            combine(&contributions),
+            &targets,
+        )));
     }
 }
 
@@ -252,6 +264,9 @@ fn combine(contributions: &[RouteContribution]) -> RouteContribution {
             .destinations
             .extend(contribution.destinations.iter().cloned());
         for (target, state) in &contribution.coverage {
+            if matches!(state, CoverageState::Unresolved) {
+                combined.unresolved.insert(target.clone());
+            }
             merge_coverage(
                 combined
                     .coverage
@@ -260,9 +275,31 @@ fn combine(contributions: &[RouteContribution]) -> RouteContribution {
                 state,
             );
         }
+        combined
+            .unresolved
+            .extend(contribution.unresolved.iter().cloned());
         combined.shortfalls.extend(contribution.shortfalls.clone());
     }
     combined
+}
+
+fn complete_targets(
+    mut contribution: RouteContribution,
+    targets: &BTreeSet<crate::RouteTarget>,
+) -> RouteContribution {
+    for target in targets {
+        contribution
+            .coverage
+            .entry(target.clone())
+            .or_insert_with(|| {
+                if contribution.unresolved.contains(target) {
+                    CoverageState::Unresolved
+                } else {
+                    CoverageState::SettledAbsent
+                }
+            });
+    }
+    contribution
 }
 
 pub(crate) fn validate_router_contribution(
@@ -288,6 +325,11 @@ fn validate_contribution(
         "route coverage targets",
         contribution.coverage.len(),
         MAX_COVERAGE * factor,
+    )?;
+    bounded(
+        "unresolved route targets",
+        contribution.unresolved.len(),
+        MAX_TARGETS * factor,
     )?;
     bounded(
         "route shortfalls",
@@ -388,5 +430,34 @@ mod tests {
             error,
             RouterError::Refused("route destinations exceed bound: 257 > 256".to_owned())
         );
+    }
+
+    #[test]
+    fn refuses_router_count_over_bound_with_exact_numbers() {
+        assert_eq!(
+            bounded("configured routers", MAX_ROUTERS + 1, MAX_ROUTERS),
+            Err(RouterError::Refused(
+                "configured routers exceed bound: 33 > 32".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn routing_core_does_not_name_concrete_router_crates_or_types() {
+        let cargo = include_str!("../Cargo.toml");
+        let public_source = include_str!("lib.rs");
+        for forbidden in [
+            "fava-router-outbox",
+            "fava-router-hints",
+            "fava-router-app-relays",
+            "fava-router-fallback-relays",
+            "OutboxRouter",
+            "HintRouter",
+            "AppRelayRouter",
+            "FallbackRelayRouter",
+        ] {
+            assert!(!cargo.contains(forbidden));
+            assert!(!public_source.contains(forbidden));
+        }
     }
 }

@@ -8,13 +8,15 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
     SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
 };
+use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
     RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, validate_delivery_outcome, validate_receipt_text,
+    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
+    validate_receipt_text,
 };
 use tokio::sync::{broadcast, watch};
 
@@ -117,6 +119,8 @@ impl WriteStore for MemoryWriteStore {
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
         let destinations = destinations(&routing);
+        let desired_destinations = destinations.keys().cloned().collect();
+        let explicit = matches!(routing, fava_write::WriteRouting::Explicit(_));
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
@@ -130,6 +134,10 @@ impl WriteStore for MemoryWriteStore {
             current: current.clone(),
             routing,
             outcome: ReceiptOutcome::Open,
+            route_revision: u64::from(explicit),
+            route_settled: explicit,
+            route_shortfalls: Vec::new(),
+            desired_destinations,
             attempts: BTreeMap::new(),
         };
 
@@ -216,6 +224,33 @@ impl WriteStore for MemoryWriteStore {
             .receipt_changes
             .send((receipt_id, Some(current.clone())));
         Ok(current)
+    }
+
+    fn apply_route(
+        &self,
+        receipt_id: ReceiptId,
+        plan: &RoutePlan,
+    ) -> Result<Receipt, WriteStoreError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|_| WriteStoreError::Refused("write state lock poisoned".to_owned()))?;
+        let next_revision = next_revision(&guard)?;
+        let receipt = guard
+            .writes
+            .get_mut(&receipt_id)
+            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        if receipt.is_terminal() {
+            return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
+        }
+        apply_route_to_receipt(receipt, plan)?;
+        let updated = receipt.clone();
+        guard.revision = next_revision;
+        self.publish_snapshot(&guard);
+        let _ = self
+            .receipt_changes
+            .send((receipt_id, Some(updated.clone())));
+        Ok(updated)
     }
 
     fn begin_attempt(

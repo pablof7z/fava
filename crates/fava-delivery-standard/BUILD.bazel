@@ -1,5 +1,5 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "lib",
@@ -14,4 +14,9 @@ rust_library(
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":lib",
 )

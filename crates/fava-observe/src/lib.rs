@@ -10,6 +10,7 @@ use thiserror::Error;
 use tokio::sync::watch;
 
 /// Configured local observation owner.
+#[derive(Clone)]
 pub struct Observer {
     event_cache: Arc<dyn QuerySource>,
     write_store: Arc<dyn QuerySource>,

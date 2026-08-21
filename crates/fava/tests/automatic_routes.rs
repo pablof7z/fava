@@ -273,6 +273,7 @@ fn contribution(values: &[(RelayUrl, RouteTarget)]) -> RouteContribution {
     RouteContribution {
         destinations,
         coverage,
+        unresolved: BTreeSet::new(),
         shortfalls: Vec::new(),
     }
 }

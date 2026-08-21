@@ -141,8 +141,8 @@ source = "nostr"
 protocol = "NIP-65"
 meaning = "A replaceable kind 10002 event declaring an author's read and write relays."
 owner = "fava-nip65"
-symbols = []
-crates = []
+symbols = ["fava_nip65::RelayList", "fava_nip65::RelayListError"]
+crates = ["fava-nip65"]
 spec_crates = ["fava-nip65"]
 
 [[term]]
@@ -486,12 +486,16 @@ symbols = [
     "fava_routing::RouterError",
     "fava_router_app_relays::AppRelayRouter",
     "fava_router_fallback_relays::FallbackRelayRouter",
+    "fava_router_hints::HintRouter",
+    "fava_router_outbox::OutboxRouter",
     "fava_router_testkit::DelayedRouter",
 ]
 crates = [
     "fava-routing",
     "fava-router-app-relays",
     "fava-router-fallback-relays",
+    "fava-router-hints",
+    "fava-router-outbox",
     "fava-router-testkit",
 ]
 spec_symbols = ["Router", "RouterSession"]

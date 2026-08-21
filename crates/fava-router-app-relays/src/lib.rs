@@ -16,6 +16,8 @@ use tokio::sync::watch;
 pub struct AppRelayRouter {
     name: String,
     relays: BTreeSet<RelayUrl>,
+    reads: bool,
+    writes: bool,
 }
 
 impl AppRelayRouter {
@@ -25,16 +27,35 @@ impl AppRelayRouter {
         Self {
             name: name.into(),
             relays: relays.into_iter().collect(),
+            reads: true,
+            writes: true,
         }
     }
 
+    /// Select whether this policy contributes to read routing.
+    #[must_use]
+    pub const fn reads(mut self, enabled: bool) -> Self {
+        self.reads = enabled;
+        self
+    }
+
+    /// Select whether this policy contributes to write routing.
+    #[must_use]
+    pub const fn writes(mut self, enabled: bool) -> Self {
+        self.writes = enabled;
+        self
+    }
+
     fn contribution(&self, request: &RouteRequest) -> RouteContribution {
+        if (request.is_read() && !self.reads) || (request.is_write() && !self.writes) {
+            return RouteContribution::default();
+        }
         let targets = request.targets();
         let sessions: BTreeSet<_> = self
             .relays
             .iter()
             .cloned()
-            .map(|relay| fava_state::RelaySessionKey::new(relay, request.access().clone()))
+            .map(|relay| fava_state::RelaySessionKey::new(relay, request.access()))
             .collect();
         let coverage = targets
             .iter()
@@ -50,6 +71,7 @@ impl AppRelayRouter {
         RouteContribution {
             destinations,
             coverage,
+            unresolved: BTreeSet::new(),
             shortfalls: Vec::new(),
         }
     }

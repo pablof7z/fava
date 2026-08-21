@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 
+use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey};
 use fava_write::{
     Event, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId, ReceiptOutcome,
     RelayDeliveryOutcome, SignatureState, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, validate_delivery_outcome, validate_receipt_text,
+    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_delivery_outcome,
+    validate_receipt_text,
 };
 use tokio::sync::broadcast;
 
@@ -41,13 +43,16 @@ impl WriteStore for RedbWriteStore {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
         };
+        let destinations = destinations(&routing);
+        let desired_destinations = destinations.keys().cloned().collect();
+        let explicit = matches!(routing, WriteRouting::Explicit(_));
         let current = LocalWriteEvent::new(
             event,
             PublicationEvidence {
                 receipt_id,
                 write_id,
                 signature,
-                destinations: destinations(&routing),
+                destinations,
             },
         )?;
         let receipt = Receipt {
@@ -56,6 +61,10 @@ impl WriteStore for RedbWriteStore {
             current: current.clone(),
             routing,
             outcome: ReceiptOutcome::Open,
+            route_revision: u64::from(explicit),
+            route_settled: explicit,
+            route_shortfalls: Vec::new(),
+            desired_destinations,
             attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
@@ -114,6 +123,19 @@ impl WriteStore for RedbWriteStore {
             }
             receipt.current.publication.signature = SignatureState::Refused(reason);
             Ok(())
+        })
+    }
+
+    fn apply_route(
+        &self,
+        receipt_id: ReceiptId,
+        plan: &RoutePlan,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.update(receipt_id, |receipt| {
+            if receipt.is_terminal() {
+                return Err(WriteStoreError::Refused("receipt is terminal".to_owned()));
+            }
+            apply_route_to_receipt(receipt, plan)
         })
     }
 
@@ -330,13 +352,17 @@ fn next_revision(state: &StoreState) -> Result<u64, WriteStoreError> {
 }
 
 pub(crate) fn settle(receipt: &mut Receipt) {
-    if !receipt.destinations().is_empty()
+    if receipt.route_settled
         && receipt
             .destinations()
             .values()
             .all(RelayDeliveryOutcome::is_terminal)
     {
-        receipt.outcome = ReceiptOutcome::Complete;
+        receipt.outcome = if receipt.desired_destinations.is_empty() {
+            ReceiptOutcome::NoDestination
+        } else {
+            ReceiptOutcome::Complete
+        };
     }
 }
 

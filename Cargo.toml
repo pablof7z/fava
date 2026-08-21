@@ -19,8 +19,11 @@ members = [
     "crates/fava-ingest",
     "crates/fava-diagnostics",
     "crates/fava-routing",
+    "crates/fava-nip65",
     "crates/fava-router-app-relays",
+    "crates/fava-router-outbox",
     "crates/fava-router-fallback-relays",
+    "crates/fava-router-hints",
     "crates/fava-router-testkit",
     "crates/fava-subscriptions-standard",
     "crates/fava-signer",
@@ -52,8 +55,11 @@ fava-transport-testkit = { path = "crates/fava-transport-testkit" }
 fava-ingest = { path = "crates/fava-ingest" }
 fava-diagnostics = { path = "crates/fava-diagnostics" }
 fava-routing = { path = "crates/fava-routing" }
+fava-nip65 = { path = "crates/fava-nip65" }
 fava-router-app-relays = { path = "crates/fava-router-app-relays" }
+fava-router-outbox = { path = "crates/fava-router-outbox" }
 fava-router-fallback-relays = { path = "crates/fava-router-fallback-relays" }
+fava-router-hints = { path = "crates/fava-router-hints" }
 fava-router-testkit = { path = "crates/fava-router-testkit" }
 fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
 fava-signer = { path = "crates/fava-signer" }

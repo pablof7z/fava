@@ -1,10 +1,11 @@
 //! Neutral contract for accepted local event materializations.
 
 use fava_query::QuerySource;
+use fava_routing::{CoverageState, RoutePlan};
 use fava_state::RelaySessionKey;
 use fava_write::{
-    EventValue, InvalidEventValue, LocalWriteEvent, Receipt, ReceiptId, RelayDeliveryOutcome,
-    WriteId, WriteIntent, WriteIntentError, WriteRouting,
+    EventValue, InvalidEventValue, LocalWriteEvent, Receipt, ReceiptId, ReceiptOutcome,
+    RelayDeliveryOutcome, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 use tokio::sync::broadcast;
@@ -74,6 +75,21 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         receipt_id: ReceiptId,
         reason: String,
+    ) -> Result<Receipt, WriteStoreError>;
+
+    /// Atomically apply one complete current automatic route plan.
+    ///
+    /// New destinations become pending lanes. Withdrawn destinations retire
+    /// only when no handoff may have occurred; exact historical facts remain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] for stale revisions, explicit receipts, or
+    /// a failed atomic mutation.
+    fn apply_route(
+        &self,
+        receipt_id: ReceiptId,
+        plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError>;
 
     /// Durably authorize one exact attempt before any transport effect.
@@ -207,5 +223,117 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
         RelayDeliveryOutcome::Pending
         | RelayDeliveryOutcome::Attempting
         | RelayDeliveryOutcome::CancelledBeforeHandoff => Ok(()),
+    }
+}
+
+/// Apply one newer complete route plan to a mutable receipt.
+///
+/// Provider implementations call this inside their own atomic mutation.
+///
+/// # Errors
+///
+/// Returns [`WriteStoreError`] when the plan is stale, too large, or belongs
+/// to an explicit-route receipt.
+pub fn apply_route_to_receipt(
+    receipt: &mut Receipt,
+    plan: &RoutePlan,
+) -> Result<(), WriteStoreError> {
+    const MAX_DESTINATIONS: usize = 256;
+    const MAX_SHORTFALLS: usize = 256;
+
+    if !matches!(receipt.routing, WriteRouting::Automatic) {
+        return Err(WriteStoreError::Refused(
+            "automatic route cannot mutate an explicit receipt".to_owned(),
+        ));
+    }
+    if plan.revision <= receipt.route_revision {
+        return Err(WriteStoreError::Refused(format!(
+            "route revision is not newer: {} <= {}",
+            plan.revision, receipt.route_revision
+        )));
+    }
+    if plan.destinations.len() > MAX_DESTINATIONS {
+        return Err(WriteStoreError::Refused(format!(
+            "route destination fan-out exceeds bound: {} > {MAX_DESTINATIONS}",
+            plan.destinations.len()
+        )));
+    }
+
+    let desired: std::collections::BTreeSet<_> = plan.destinations.keys().cloned().collect();
+    let mut shortfalls = plan.shortfalls.clone();
+    shortfalls.extend(
+        plan.coverage
+            .iter()
+            .filter(|(_, state)| matches!(state, CoverageState::SettledAbsent))
+            .map(|(target, _)| format!("no relay destination for {target:?}")),
+    );
+    if shortfalls.len() > MAX_SHORTFALLS {
+        return Err(WriteStoreError::Refused(format!(
+            "route shortfall count exceeds bound: {} > {MAX_SHORTFALLS}",
+            shortfalls.len()
+        )));
+    }
+    for shortfall in &shortfalls {
+        validate_receipt_text(shortfall)?;
+    }
+
+    let removed: Vec<_> = receipt
+        .desired_destinations
+        .difference(&desired)
+        .cloned()
+        .collect();
+    for session in removed {
+        match receipt.current.publication.destinations.get(&session) {
+            Some(RelayDeliveryOutcome::Pending) => {
+                receipt.current.publication.destinations.remove(&session);
+                receipt.attempts.remove(&session);
+            }
+            Some(RelayDeliveryOutcome::Retryable { .. }) => {
+                receipt
+                    .current
+                    .publication
+                    .destinations
+                    .insert(session, RelayDeliveryOutcome::CancelledBeforeHandoff);
+            }
+            Some(
+                RelayDeliveryOutcome::Attempting
+                | RelayDeliveryOutcome::Acknowledged { .. }
+                | RelayDeliveryOutcome::Rejected { .. }
+                | RelayDeliveryOutcome::GivenUp { .. }
+                | RelayDeliveryOutcome::Unknown { .. }
+                | RelayDeliveryOutcome::CancelledBeforeHandoff,
+            )
+            | None => {}
+        }
+    }
+    for session in &desired {
+        receipt
+            .current
+            .publication
+            .destinations
+            .entry(session.clone())
+            .or_insert(RelayDeliveryOutcome::Pending);
+    }
+
+    receipt.route_revision = plan.revision;
+    receipt.route_settled = plan.settled;
+    receipt.route_shortfalls = shortfalls;
+    receipt.desired_destinations = desired;
+    settle_route(receipt);
+    Ok(())
+}
+
+fn settle_route(receipt: &mut Receipt) {
+    if !receipt.route_settled
+        || receipt
+            .destinations()
+            .values()
+            .any(|outcome| !outcome.is_terminal())
+    {
+        receipt.outcome = ReceiptOutcome::Open;
+    } else if receipt.desired_destinations.is_empty() {
+        receipt.outcome = ReceiptOutcome::NoDestination;
+    } else {
+        receipt.outcome = ReceiptOutcome::Complete;
     }
 }

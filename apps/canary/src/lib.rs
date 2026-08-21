@@ -1,6 +1,8 @@
 //! Independent acceptance application and evidence lab for the Fava rewrite.
 
 mod artifacts;
+mod automatic_publication;
+mod automatic_support;
 mod grouping;
 mod hostile;
 mod live;
@@ -15,6 +17,7 @@ mod relay;
 mod routing;
 mod wire;
 
+pub use automatic_publication::run_automatic_publication_scenario;
 pub use grouping::run_grouping_scenario;
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
@@ -157,6 +160,10 @@ pub fn has_executor(id: &str) -> bool {
             | "mixed-relay-outcomes"
             | "cancel-pre-handoff"
             | "crash-after-acceptance"
+            | "async-recipient-routing"
+            | "hint-routing"
+            | "route-preview-parity"
+            | "app-relay-versus-fallback-profile"
     )
 }
 

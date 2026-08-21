@@ -113,6 +113,30 @@
       "milestone": "M5",
       "requirements": ["M5 process-kill recovery of one obligation and the same receipt"],
       "status": "enabled"
+    },
+    {
+      "id": "async-recipient-routing",
+      "milestone": "M6",
+      "requirements": ["M6 immediate partial delivery and later NIP-65 route expansion under one receipt"],
+      "status": "enabled"
+    },
+    {
+      "id": "hint-routing",
+      "milestone": "M6",
+      "requirements": ["M6 reference hint and admitted relay evidence routing"],
+      "status": "enabled"
+    },
+    {
+      "id": "route-preview-parity",
+      "milestone": "M6",
+      "requirements": ["M6 side-effect-free preview and initial publication route parity"],
+      "status": "enabled"
+    },
+    {
+      "id": "app-relay-versus-fallback-profile",
+      "milestone": "M6",
+      "requirements": ["M6 independently selected app-relay and fallback write profiles"],
+      "status": "enabled"
     }
   ]
 }

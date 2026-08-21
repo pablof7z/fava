@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use canary::{
-    ReconOptions, SmokeOptions, run_grouping_scenario, run_live_scenario, run_local_scenario,
-    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
-    run_routing_scenario, scenario_registry,
+    ReconOptions, SmokeOptions, run_automatic_publication_scenario, run_grouping_scenario,
+    run_live_scenario, run_local_scenario, run_m3_live_scenario, run_public_recon,
+    run_publication_scenario, run_real_relay_smoke, run_routing_scenario, scenario_registry,
 };
 
 #[tokio::main]
@@ -100,6 +100,16 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         | "crash-after-acceptance" => {
             run_publication_scenario(&scenario, smoke_options(&mut arguments, "publish-m5")?)
                 .await?
+        }
+        "async-recipient-routing"
+        | "hint-routing"
+        | "route-preview-parity"
+        | "app-relay-versus-fallback-profile" => {
+            run_automatic_publication_scenario(
+                &scenario,
+                smoke_options(&mut arguments, "routing-m6")?,
+            )
+            .await?
         }
         "explicit-read-eose" | "explicit-read-live-after-eose" | "explicit-read-cancel" => {
             run_live_scenario(&scenario, smoke_options(&mut arguments, "live-m2")?).await?

@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use fava_query::Query;
 use fava_state::{PublicKey, RelayAccess, RelaySessionKey, RelayUrl};
+use fava_write::{EventId, EventValue};
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -19,6 +20,8 @@ pub use chain::{open, preview};
 pub enum RouteRequest {
     /// Route one event query.
     Read(Query),
+    /// Route one event publication.
+    Write(EventValue),
 }
 
 impl RouteRequest {
@@ -32,18 +35,74 @@ impl RouteRequest {
                 .as_ref()
                 .filter(|authors| !authors.is_empty())
                 .map_or_else(
-                    || BTreeSet::from([RouteTarget::WholeRequest]),
+                    || {
+                        query
+                            .selection()
+                            .ids
+                            .as_ref()
+                            .filter(|ids| !ids.is_empty())
+                            .map_or_else(
+                                || BTreeSet::from([RouteTarget::WholeRequest]),
+                                |ids| {
+                                    ids.iter()
+                                        .copied()
+                                        .map(RouteTarget::ReferencedEvent)
+                                        .collect()
+                                },
+                            )
+                    },
                     |authors| authors.iter().copied().map(RouteTarget::Author).collect(),
                 ),
+            Self::Write(event) => {
+                let mut targets = BTreeSet::from([RouteTarget::Author(event.author())]);
+                for tag in event.tags() {
+                    let values = tag.as_slice();
+                    if values.first().map(String::as_str) == Some("p")
+                        && let Some(value) = values.get(1)
+                        && let Ok(public_key) = PublicKey::parse(value)
+                    {
+                        targets.insert(RouteTarget::Recipient(public_key));
+                    }
+                    if values.first().map(String::as_str) == Some("e")
+                        && let Some(value) = values.get(1)
+                        && let Ok(event_id) = EventId::parse(value)
+                    {
+                        targets.insert(RouteTarget::ReferencedEvent(event_id));
+                    }
+                }
+                targets
+            }
         }
     }
 
     /// Relay access under which selected destinations must execute.
     #[must_use]
-    pub fn access(&self) -> &RelayAccess {
+    pub fn access(&self) -> RelayAccess {
         match self {
-            Self::Read(query) => query.access(),
+            Self::Read(query) => query.access().clone(),
+            Self::Write(_) => RelayAccess::public(),
         }
+    }
+
+    /// Event facts for a write request.
+    #[must_use]
+    pub const fn event(&self) -> Option<&EventValue> {
+        match self {
+            Self::Read(_) => None,
+            Self::Write(event) => Some(event),
+        }
+    }
+
+    /// Whether this request routes a read.
+    #[must_use]
+    pub const fn is_read(&self) -> bool {
+        matches!(self, Self::Read(_))
+    }
+
+    /// Whether this request routes a write.
+    #[must_use]
+    pub const fn is_write(&self) -> bool {
+        matches!(self, Self::Write(_))
     }
 }
 
@@ -54,6 +113,10 @@ pub enum RouteTarget {
     WholeRequest,
     /// One event author selected by a read.
     Author(PublicKey),
+    /// One public key tagged as a recipient of a write.
+    Recipient(PublicKey),
+    /// One immutable event referenced by a write.
+    ReferencedEvent(EventId),
 }
 
 /// Current routing knowledge for one target.
@@ -114,6 +177,8 @@ pub struct RouteContribution {
     pub destinations: Vec<RouteDestination>,
     /// Current per-target coverage knowledge.
     pub coverage: BTreeMap<RouteTarget, CoverageState>,
+    /// Targets for which this router still owes a later answer.
+    pub unresolved: BTreeSet<RouteTarget>,
     /// Exact bounded failures or limits affecting this contribution.
     pub shortfalls: Vec<String>,
 }
@@ -138,6 +203,8 @@ pub struct RoutePlan {
     pub destinations: BTreeMap<RelaySessionKey, PlannedRelay>,
     /// Merged current target coverage.
     pub coverage: BTreeMap<RouteTarget, CoverageState>,
+    /// Targets for which at least one configured router still owes an answer.
+    pub unresolved: BTreeSet<RouteTarget>,
     /// Exact current bounded routing failures or limits.
     pub shortfalls: Vec<String>,
     /// Whether no target remains unresolved.
@@ -145,6 +212,23 @@ pub struct RoutePlan {
 }
 
 impl RoutePlan {
+    /// Build a bounded plan preserving one routing refusal as current evidence.
+    #[must_use]
+    pub fn shortfall(revision: u64, request: &RouteRequest, reason: String) -> Self {
+        Self {
+            revision,
+            destinations: BTreeMap::new(),
+            coverage: request
+                .targets()
+                .into_iter()
+                .map(|target| (target, CoverageState::Unresolved))
+                .collect(),
+            unresolved: request.targets(),
+            shortfalls: vec![reason],
+            settled: false,
+        }
+    }
+
     /// Build one plan from a complete merged contribution.
     ///
     /// # Errors
@@ -157,6 +241,14 @@ impl RoutePlan {
         chain::validate_combined(contribution)?;
         let mut destinations = BTreeMap::<RelaySessionKey, PlannedRelay>::new();
         let mut coverage = contribution.coverage.clone();
+        let mut unresolved = contribution.unresolved.clone();
+        unresolved.extend(
+            contribution
+                .coverage
+                .iter()
+                .filter(|(_, state)| matches!(state, CoverageState::Unresolved))
+                .map(|(target, _)| target.clone()),
+        );
         for destination in &contribution.destinations {
             let planned = destinations
                 .entry(destination.session.clone())
@@ -178,13 +270,12 @@ impl RoutePlan {
                 );
             }
         }
-        let settled = coverage
-            .values()
-            .all(|state| !matches!(state, CoverageState::Unresolved));
+        let settled = unresolved.is_empty();
         Ok(Self {
             revision,
             destinations,
             coverage,
+            unresolved,
             shortfalls: contribution.shortfalls.clone(),
             settled,
         })
@@ -214,6 +305,7 @@ impl RoutePlan {
                 })
                 .collect(),
             coverage: BTreeMap::new(),
+            unresolved: BTreeSet::new(),
             shortfalls: Vec::new(),
         };
         chain::validate_router_contribution(&contribution)?;

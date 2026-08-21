@@ -48,3 +48,47 @@ impl DeliveryPolicy for StandardDeliveryPolicy {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retries_only_definite_pre_handoff_failure_until_exact_ceiling() {
+        let policy = StandardDeliveryPolicy::new(NonZeroU32::new(2).unwrap());
+        let retryable = RelayDeliveryOutcome::Retryable {
+            reason: "offline".to_owned(),
+        };
+        assert_eq!(
+            policy.decide(DeliveryFacts {
+                attempts: 1,
+                outcome: &retryable,
+            }),
+            DeliveryDecision::AttemptNow
+        );
+        assert_eq!(
+            policy.decide(DeliveryFacts {
+                attempts: 2,
+                outcome: &retryable,
+            }),
+            DeliveryDecision::GiveUp {
+                reason: "attempt ceiling 2 reached after: offline".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn ambiguous_handoff_is_terminal_for_the_standard_policy() {
+        let policy = StandardDeliveryPolicy::default();
+        let unknown = RelayDeliveryOutcome::Unknown {
+            reason: "connection ended after handoff".to_owned(),
+        };
+        assert_eq!(
+            policy.decide(DeliveryFacts {
+                attempts: 1,
+                outcome: &unknown,
+            }),
+            DeliveryDecision::Settled
+        );
+    }
+}

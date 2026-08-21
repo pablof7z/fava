@@ -293,6 +293,7 @@ version = "0.1.0"
 dependencies = [
  "fava-delivery",
  "fava-publisher",
+ "fava-routing",
  "fava-signer",
  "fava-state",
  "fava-transport",
@@ -338,6 +339,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-write",
  "thiserror",
  "tokio",
 ]
@@ -402,6 +404,7 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-write",
  "thiserror",
@@ -413,6 +416,7 @@ name = "fava-write-store-memory"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-routing",
  "fava-state",
  "fava-write",
  "fava-write-store",

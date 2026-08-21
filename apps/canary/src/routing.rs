@@ -254,6 +254,7 @@ fn contribution(relay: &RelayUrl) -> RouteContribution {
             "delayed test coverage",
         )],
         coverage: BTreeMap::from([(target, CoverageState::Covered(BTreeSet::from([session])))]),
+        unresolved: BTreeSet::new(),
         shortfalls: Vec::new(),
     }
 }

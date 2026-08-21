@@ -22,13 +22,17 @@ pub(super) fn destinations(
 }
 
 pub(super) fn settle(receipt: &mut Receipt) {
-    if !receipt.destinations().is_empty()
+    if receipt.route_settled
         && receipt
             .destinations()
             .values()
             .all(RelayDeliveryOutcome::is_terminal)
     {
-        receipt.outcome = ReceiptOutcome::Complete;
+        receipt.outcome = if receipt.desired_destinations.is_empty() {
+            ReceiptOutcome::NoDestination
+        } else {
+            ReceiptOutcome::Complete
+        };
     }
 }
 

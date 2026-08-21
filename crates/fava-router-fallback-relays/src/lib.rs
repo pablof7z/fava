@@ -18,6 +18,8 @@ pub struct FallbackRelayRouter {
     name: String,
     relays: BTreeSet<RelayUrl>,
     minimum: NonZeroUsize,
+    reads: bool,
+    writes: bool,
 }
 
 impl FallbackRelayRouter {
@@ -32,10 +34,29 @@ impl FallbackRelayRouter {
             name: name.into(),
             relays: relays.into_iter().collect(),
             minimum,
+            reads: true,
+            writes: true,
         }
     }
 
+    /// Select whether this policy contributes to read routing.
+    #[must_use]
+    pub const fn reads(mut self, enabled: bool) -> Self {
+        self.reads = enabled;
+        self
+    }
+
+    /// Select whether this policy contributes to write routing.
+    #[must_use]
+    pub const fn writes(mut self, enabled: bool) -> Self {
+        self.writes = enabled;
+        self
+    }
+
     fn contribution(&self, request: &RouteRequest, upstream: &RoutePlan) -> RouteContribution {
+        if (request.is_read() && !self.reads) || (request.is_write() && !self.writes) {
+            return RouteContribution::default();
+        }
         let targets: BTreeSet<_> = request
             .targets()
             .into_iter()
@@ -48,7 +69,7 @@ impl FallbackRelayRouter {
             .relays
             .iter()
             .cloned()
-            .map(|relay| RelaySessionKey::new(relay, request.access().clone()))
+            .map(|relay| RelaySessionKey::new(relay, request.access()))
             .collect();
         let coverage = targets
             .iter()
@@ -74,6 +95,7 @@ impl FallbackRelayRouter {
                 })
                 .collect(),
             coverage,
+            unresolved: BTreeSet::new(),
             shortfalls: Vec::new(),
         }
     }
@@ -104,6 +126,8 @@ impl Router for FallbackRelayRouter {
             current,
             relays: self.relays.clone(),
             minimum: self.minimum,
+            reads: self.reads,
+            writes: self.writes,
         }))
     }
 }
@@ -114,6 +138,8 @@ struct FallbackSession {
     current: RouteContribution,
     relays: BTreeSet<RelayUrl>,
     minimum: NonZeroUsize,
+    reads: bool,
+    writes: bool,
 }
 
 impl RouterSession for FallbackSession {
@@ -133,6 +159,8 @@ impl RouterSession for FallbackSession {
                 name: String::new(),
                 relays: self.relays.clone(),
                 minimum: self.minimum,
+                reads: self.reads,
+                writes: self.writes,
             };
             self.current = router.contribution(&self.request, &self.upstream.borrow_and_update());
             Ok(self.current.clone())

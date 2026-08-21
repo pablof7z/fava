@@ -12,6 +12,7 @@ use thiserror::Error;
 mod attempt_map;
 mod builder;
 mod delivery_map;
+mod session_set;
 
 pub use builder::{EventBuildError, EventBuilder};
 
@@ -406,6 +407,8 @@ pub enum ReceiptOutcome {
     Cancelled,
     /// Every selected destination has an exact terminal fact.
     Complete,
+    /// Automatic routing settled without selecting a destination.
+    NoDestination,
 }
 
 /// Reattachable current facts for one accepted publication obligation.
@@ -421,6 +424,15 @@ pub struct Receipt {
     pub routing: WriteRouting,
     /// Aggregate current receipt result.
     pub outcome: ReceiptOutcome,
+    /// Last route revision atomically applied to this receipt.
+    pub route_revision: u64,
+    /// Whether the current route has no unresolved target.
+    pub route_settled: bool,
+    /// Exact bounded shortfalls and settled-absence reasons for the current route.
+    pub route_shortfalls: Vec<String>,
+    /// Current destinations still required by the live route.
+    #[serde(with = "session_set")]
+    pub desired_destinations: BTreeSet<RelaySessionKey>,
     /// Number of durably authorized attempts per destination.
     #[serde(with = "attempt_map")]
     pub attempts: BTreeMap<RelaySessionKey, u32>,
@@ -437,6 +449,12 @@ impl Receipt {
     #[must_use]
     pub fn destinations(&self) -> &BTreeMap<RelaySessionKey, RelayDeliveryOutcome> {
         &self.current.publication.destinations
+    }
+
+    /// Whether the current live route still requires this destination.
+    #[must_use]
+    pub fn desires(&self, session: &RelaySessionKey) -> bool {
+        self.desired_destinations.contains(session)
     }
 }
 

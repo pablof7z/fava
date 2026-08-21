@@ -1,0 +1,20 @@
+[package]
+name = "fava-router-outbox"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-nip65.workspace = true
+fava-query.workspace = true
+fava-routing.workspace = true
+fava-state.workspace = true
+fava-write.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+fava-write.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
+
+[lints]
+workspace = true

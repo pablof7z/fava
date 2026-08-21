@@ -1,23 +1,19 @@
-//! Accepted-write signing and explicit-route delivery lifecycle.
+//! Accepted-write signing, live routing, and delivery lifecycle.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use fava_delivery::{DeliveryDecision, DeliveryFacts, DeliveryPolicy};
-use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
-use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_state::RelaySessionKey;
+use fava_delivery::DeliveryPolicy;
+use fava_publisher::Publisher;
+use fava_routing::Router;
+use fava_signer::Signer;
 use fava_transport::Transport;
-use fava_write::{
-    EventValue, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, WriteIntent,
-    WriteRouting,
-};
+use fava_write::{PublicKey, Receipt, ReceiptId, ReceiptOutcome, WriteIntent};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
 use tokio::sync::watch;
 
-const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
+mod run;
 
 /// Live owner for accepted write signing and destination delivery.
 #[derive(Clone)]
@@ -27,6 +23,7 @@ pub struct Publication {
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
     transport: Arc<dyn Transport>,
+    routers: Arc<Vec<Arc<dyn Router>>>,
     cancellations: Arc<Mutex<BTreeMap<ReceiptId, watch::Sender<bool>>>>,
 }
 
@@ -42,6 +39,7 @@ impl Publication {
         publisher: Arc<dyn Publisher>,
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
+        routers: Vec<Arc<dyn Router>>,
     ) -> Result<Self, PublicationError> {
         let mut indexed = BTreeMap::new();
         for signer in signers {
@@ -56,20 +54,18 @@ impl Publication {
             publisher,
             delivery,
             transport,
+            routers: Arc::new(routers),
             cancellations: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
-    /// Durably accept one explicit-route write, then begin remaining work.
+    /// Durably accept one checked write, then begin remaining work.
     ///
     /// # Errors
     ///
-    /// Returns [`PublicationError`] before custody for unsupported routing or
-    /// no runtime, or after a failed acceptance commit.
+    /// Returns [`PublicationError`] before custody when no runtime exists, or
+    /// after a failed acceptance commit.
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
-        if matches!(intent.routing(), WriteRouting::Automatic) {
-            return Err(PublicationError::AutomaticRoutingUnavailable);
-        }
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         let accepted = self.store.accept(intent)?;
         self.start(accepted.receipt_id);
@@ -156,146 +152,6 @@ impl Publication {
             }
         }
     }
-
-    fn start(&self, receipt_id: ReceiptId) {
-        let (cancel, cancel_rx) = watch::channel(false);
-        let mut cancellations = self
-            .cancellations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if cancellations.contains_key(&receipt_id) {
-            return;
-        }
-        cancellations.insert(receipt_id, cancel);
-        drop(cancellations);
-        let publication = self.clone();
-        tokio::spawn(async move { publication.run(receipt_id, cancel_rx).await });
-    }
-
-    async fn run(self, receipt_id: ReceiptId, cancel: watch::Receiver<bool>) {
-        let Some(mut receipt) = self.store.receipt(receipt_id).ok().flatten() else {
-            self.finished(receipt_id);
-            return;
-        };
-        if let EventValue::Unsigned(unsigned) = receipt.current.event.clone() {
-            let Some(signer) = self.signers.get(&unsigned.pubkey) else {
-                self.finished(receipt_id);
-                return;
-            };
-            if !matches!(signer.availability(), SignerAvailability::Available) {
-                self.finished(receipt_id);
-                return;
-            }
-            match signer.sign_event(unsigned, cancel).await {
-                Ok(event) => {
-                    let Ok(updated) = self.store.install_signed(receipt_id, event) else {
-                        let _ = self.store.record_signer_refusal(
-                            receipt_id,
-                            "signer returned an event that did not match the accepted body"
-                                .to_owned(),
-                        );
-                        self.finished(receipt_id);
-                        return;
-                    };
-                    receipt = updated;
-                }
-                Err(SignerError::Cancelled) => {
-                    self.finished(receipt_id);
-                    return;
-                }
-                Err(error) => {
-                    let _ = self
-                        .store
-                        .record_signer_refusal(receipt_id, error.to_string());
-                    self.finished(receipt_id);
-                    return;
-                }
-            }
-        }
-        for session in receipt.destinations().keys().cloned().collect::<Vec<_>>() {
-            let publication = self.clone();
-            tokio::spawn(async move { publication.run_destination(receipt_id, session).await });
-        }
-    }
-
-    async fn run_destination(self, receipt_id: ReceiptId, session: RelaySessionKey) {
-        loop {
-            let Some(receipt) = self.store.receipt(receipt_id).ok().flatten() else {
-                return;
-            };
-            let Some(outcome) = receipt.destinations().get(&session) else {
-                return;
-            };
-            let attempts = receipt.attempts.get(&session).copied().unwrap_or(0);
-            match self.delivery.decide(DeliveryFacts { attempts, outcome }) {
-                DeliveryDecision::Settled => break,
-                DeliveryDecision::GiveUp { reason } => {
-                    let _ = self.store.record_outcome(
-                        receipt_id,
-                        &session,
-                        RelayDeliveryOutcome::GivenUp { reason },
-                    );
-                    break;
-                }
-                DeliveryDecision::AttemptNow => {
-                    let Ok(receipt) = self.store.begin_attempt(receipt_id, &session) else {
-                        break;
-                    };
-                    let EventValue::Signed(event) = receipt.current.event.clone() else {
-                        break;
-                    };
-                    let attempt = PublishAttempt {
-                        write_id: receipt.write_id,
-                        receipt_id,
-                        number: receipt.attempts.get(&session).copied().unwrap_or(0),
-                        session: session.clone(),
-                        event,
-                        timeout: ATTEMPT_TIMEOUT,
-                    };
-                    let outcome = self
-                        .publisher
-                        .publish(attempt, self.transport.as_ref())
-                        .await;
-                    let outcome = delivery_outcome(outcome);
-                    if self
-                        .store
-                        .record_outcome(receipt_id, &session, outcome)
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
-        }
-        if self
-            .store
-            .receipt(receipt_id)
-            .ok()
-            .flatten()
-            .is_some_and(|receipt| receipt.is_terminal())
-        {
-            self.finished(receipt_id);
-        }
-    }
-
-    fn finished(&self, receipt_id: ReceiptId) {
-        self.cancellations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&receipt_id);
-    }
-}
-
-fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
-    match outcome {
-        PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
-        PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::GivenUp {
-            reason: "relay authentication required".to_owned(),
-        },
-        PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
-        PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },
-    }
 }
 
 /// Publication lifecycle refusal.
@@ -304,9 +160,6 @@ pub enum PublicationError {
     /// This Fava assembly did not select publication providers.
     #[error("publication is not configured")]
     NotConfigured,
-    /// Automatic write routing begins in the next milestone.
-    #[error("automatic write routing is not available in this assembly")]
-    AutomaticRoutingUnavailable,
     /// Publication work requires a running Tokio runtime.
     #[error("publication requires a running Tokio runtime")]
     RuntimeUnavailable,
@@ -319,6 +172,9 @@ pub enum PublicationError {
     /// The write store ended receipt-change delivery.
     #[error("receipt change delivery closed")]
     ReceiptChangesClosed,
+    /// Current routing facts or configuration were refused.
+    #[error("publication routing refused: {0}")]
+    Routing(String),
     /// Durable write-store operation failed.
     #[error(transparent)]
     Store(#[from] WriteStoreError),

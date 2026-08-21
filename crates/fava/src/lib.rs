@@ -1,6 +1,7 @@
 //! Thin Rust facade over the selected Fava provider assembly.
 
 mod live;
+mod query_source;
 mod relay;
 mod routes;
 
@@ -35,6 +36,7 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 
 /// Built engine instance for the selected local-source assembly.
+#[derive(Clone)]
 pub struct Fava {
     observer: Observer,
     event_cache: Arc<dyn EventCache>,
@@ -196,6 +198,33 @@ impl Fava {
             }
         }
     }
+
+    /// Evaluate current routing facts for a prospective write without custody,
+    /// signing, router acquisition, or relay work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when routing refuses the current facts.
+    pub fn preview_write_routes(
+        &self,
+        intent: &WriteIntent,
+    ) -> Result<RoutePlan, PublicationError> {
+        let event = match intent.payload() {
+            fava_write::WritePayload::Event(event) => EventValue::Unsigned(event.clone()),
+            fava_write::WritePayload::Presigned(event) => EventValue::Signed(event.clone()),
+        };
+        let request = RouteRequest::Write(event);
+        match intent.routing() {
+            WriteRouting::Explicit(relays) => RoutePlan::explicit(
+                relays.iter().cloned(),
+                &fava_state::RelayAccess::public(),
+                &request.targets(),
+            )
+            .map_err(|error| PublicationError::Routing(error.to_string())),
+            WriteRouting::Automatic => fava_routing::preview(&self.routers, &request)
+                .map_err(|error| PublicationError::Routing(error.to_string())),
+        }
+    }
 }
 
 /// Static assembly builder. No provider is silently selected.
@@ -273,6 +302,13 @@ impl FavaBuilder {
         self
     }
 
+    /// Append already-erased automatic routers in application-selected order.
+    #[must_use]
+    pub fn routers(mut self, routers: impl IntoIterator<Item = Arc<dyn Router>>) -> Self {
+        self.routers.extend(routers);
+        self
+    }
+
     /// Register one signer for its exact public key.
     #[must_use]
     pub fn signer<T>(mut self, signer: Arc<T>) -> Self
@@ -280,6 +316,13 @@ impl FavaBuilder {
         T: Signer + 'static,
     {
         self.signers.push(signer);
+        self
+    }
+
+    /// Register already-erased signers for their exact public keys.
+    #[must_use]
+    pub fn signers(mut self, signers: impl IntoIterator<Item = Arc<dyn Signer>>) -> Self {
+        self.signers.extend(signers);
         self
     }
 
@@ -335,6 +378,7 @@ impl FavaBuilder {
                 publisher,
                 delivery,
                 transport,
+                self.routers.clone(),
             )
             .map_err(|error| BuildError::Publication(error.to_string()))?;
             publication

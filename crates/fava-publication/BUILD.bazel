@@ -10,6 +10,7 @@ rust_library(
     deps = all_crate_deps(normal = True) + [
         "//crates/fava-delivery:lib",
         "//crates/fava-publisher:lib",
+        "//crates/fava-routing:lib",
         "//crates/fava-signer:lib",
         "//crates/fava-state:lib",
         "//crates/fava-transport:lib",
