@@ -66,6 +66,59 @@ class SemanticWriteFeatureMappingTests(unittest.TestCase):
                 self.assertGreaterEqual(len(scenario["steps"]), 3)
                 self.assertFalse(any(placeholder.search(step) for step in scenario["steps"]))
 
+    def test_current_source_and_retired_mappings_are_exact(self):
+        mappings = {
+            scenario["name"]: scenario["mapping"] for scenario in self.scenarios
+        }
+        self.assertEqual(
+            mappings["source-v2 rematerialization"]["test"],
+            "newer_source_rematerializes_once_and_preserves_unrelated_fields",
+        )
+        self.assertEqual(
+            mappings["retired completion"]["test"],
+            "interleavings::retired_completion_is_attributable_and_inert",
+        )
+
+    def test_module_qualified_names_parse_and_malformed_names_refuse(self):
+        valid = (
+            "  # fava:rust=fava/semantic_write_publication#"
+            "interleavings::retired_completion_is_attributable_and_inert\n"
+            "  Scenario: retired completion\n"
+            "    Given a current write\n"
+            "    When retired work completes\n"
+            "    Then it is inert\n"
+        )
+        scenarios, malformed, trailing = parse_feature(valid)
+        self.assertEqual(malformed, [])
+        self.assertIsNone(trailing)
+        self.assertEqual(
+            scenarios[0]["mapping"]["test"],
+            "interleavings::retired_completion_is_attributable_and_inert",
+        )
+        for broken in ("::leading", "trailing::", "double::::component"):
+            text = valid.replace(
+                "interleavings::retired_completion_is_attributable_and_inert", broken
+            )
+            _, malformed, _ = parse_feature(text)
+            self.assertEqual(len(malformed), 1)
+
+    def test_target_and_list_validation_fail_closed(self):
+        target = {"name": "semantic", "kind": ["test"]}
+        self.assertEqual(
+            validate_mapping_target(target, ["module::case: test"], "module::case"),
+            "module::case",
+        )
+        for target_value, listed, name in (
+            (None, ["case: test"], "case"),
+            ({"name": "semantic", "kind": ["bin"]}, ["case: test"], "case"),
+            (target, [], "case"),
+            (target, ["0 tests"], "case"),
+            (target, ["case: test", "case: test"], "case"),
+        ):
+            with self.subTest(target=target_value, listed=listed, name=name):
+                with self.assertRaises(ValueError):
+                    validate_mapping_target(target_value, listed, name)
+
 
 if __name__ == "__main__":
     unittest.main()
