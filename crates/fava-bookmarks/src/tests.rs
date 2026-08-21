@@ -101,12 +101,7 @@ fn bookmark_preserves_unrelated_state_and_orders_deterministically() {
     let event_id = EventId::from_byte_array([8; 32]);
     let other_id = EventId::from_byte_array([9; 32]);
     let coordinate = article_coordinate();
-    let target = tag(&[
-        "e",
-        &event_id.to_hex(),
-        "wss://hint.example",
-        "bookmark",
-    ]);
+    let target = tag(&["e", &event_id.to_hex(), "wss://hint.example", "bookmark"]);
     let tags = vec![
         tag(&["t", "first"]),
         target.clone(),
@@ -159,13 +154,7 @@ fn bookmark_duplicate_and_adjacent_edits_are_idempotent() {
         tag(&["a", &coordinate_string, "last"]),
         tag(&["e", &event_hex, "last"]),
     ];
-    let original = source(
-        &actor,
-        Kind::from_u16(BOOKMARK_KIND),
-        20,
-        "opaque",
-        tags,
-    );
+    let original = source(&actor, Kind::from_u16(BOOKMARK_KIND), 20, "opaque", tags);
     let add = bookmark_event(actor.public_key(), event_id).expect("bookmark edit");
     let once = materialize(&add, Some(&original), 21).expect("event deduplicates");
     assert_eq!(
@@ -209,9 +198,15 @@ fn bookmark_duplicate_and_adjacent_edits_are_idempotent() {
 #[test]
 fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
     let actor = Keys::generate();
-    let other_actor = Keys::generate();
     let event_id = EventId::from_byte_array([11; 32]);
     let edit = bookmark_event(actor.public_key(), event_id).expect("bookmark edit");
+    assert_source_refusals(&actor, &edit);
+    assert_codec_and_target_refusals(&actor, event_id, &edit);
+    assert_size_and_timestamp_refusals(&actor, &edit);
+}
+
+fn assert_source_refusals(actor: &Keys, edit: &ReplaceableEventEdit) {
+    let other_actor = Keys::generate();
     let wrong_actor = source(
         &other_actor,
         Kind::from_u16(BOOKMARK_KIND),
@@ -219,20 +214,31 @@ fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
         "private",
         Vec::new(),
     );
-    let wrong_kind = source(&actor, Kind::ContactList, 1, "private", Vec::new());
-    assert!(matches!(materialize(&edit, Some(&wrong_actor), 2), Err(WriteIntentError::InvalidEvent(_))));
-    assert!(matches!(materialize(&edit, Some(&wrong_kind), 2), Err(WriteIntentError::InvalidEvent(_))));
+    let wrong_kind = source(actor, Kind::ContactList, 1, "private", Vec::new());
+    assert!(matches!(
+        materialize(edit, Some(&wrong_actor), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
+    assert!(matches!(
+        materialize(edit, Some(&wrong_kind), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
 
     let mut tampered = source(
-        &actor,
+        actor,
         Kind::from_u16(BOOKMARK_KIND),
         1,
         "ciphertext",
         Vec::new(),
     );
     tampered.content = "tampered-private-content".to_owned();
-    assert!(matches!(materialize(&edit, Some(&tampered), 2), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        materialize(edit, Some(&tampered), 2),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
+}
 
+fn assert_codec_and_target_refusals(actor: &Keys, event_id: EventId, edit: &ReplaceableEventEdit) {
     let wrong_format = ReplaceableEventEdit::new(
         actor.public_key(),
         edit.coordinate().clone(),
@@ -252,39 +258,61 @@ fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
     )
     .expect("bounded malformed edit");
     assert!(!materializer().supports(&malformed));
-    assert!(matches!(materialize(&malformed, None, 1), Err(WriteIntentError::Encoding(_))));
+    assert!(matches!(
+        materialize(&malformed, None, 1),
+        Err(WriteIntentError::Encoding(_))
+    ));
 
     let invalid_coordinate = EventCoordinate::Event(event_id);
-    assert!(matches!(bookmark_coordinate(actor.public_key(), invalid_coordinate), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        bookmark_coordinate(actor.public_key(), invalid_coordinate),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
     let oversized_coordinate = EventCoordinate::Replaceable {
         author: actor.public_key(),
         kind: Kind::from_u16(30_023),
         identifier: Some("x".repeat(70_000)),
     };
-    assert!(matches!(bookmark_coordinate(actor.public_key(), oversized_coordinate), Err(WriteIntentError::TooLarge { .. })));
+    assert!(matches!(
+        bookmark_coordinate(actor.public_key(), oversized_coordinate),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
+}
 
+fn assert_size_and_timestamp_refusals(actor: &Keys, edit: &ReplaceableEventEdit) {
     let too_many = source(
-        &actor,
+        actor,
         Kind::from_u16(BOOKMARK_KIND),
         1,
         "opaque",
-        (0..2_001).map(|index| tag(&["x", &index.to_string()])).collect(),
+        (0..2_001)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
     );
-    assert!(matches!(materialize(&edit, Some(&too_many), 2), Err(WriteIntentError::TooLarge { .. })));
+    assert!(matches!(
+        materialize(edit, Some(&too_many), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
     let too_large = source(
-        &actor,
+        actor,
         Kind::from_u16(BOOKMARK_KIND),
         1,
         &"x".repeat(140_000),
         Vec::new(),
     );
-    assert!(matches!(materialize(&edit, Some(&too_large), 2), Err(WriteIntentError::TooLarge { .. })));
+    assert!(matches!(
+        materialize(edit, Some(&too_large), 2),
+        Err(WriteIntentError::TooLarge { .. })
+    ));
     let latest = source(
-        &actor,
+        actor,
         Kind::from_u16(BOOKMARK_KIND),
         u64::MAX,
         "opaque",
         Vec::new(),
     );
-    assert!(matches!(materialize(&edit, Some(&latest), u64::MAX), Err(WriteIntentError::InvalidEvent(_))));
+    assert!(matches!(
+        materialize(edit, Some(&latest), u64::MAX),
+        Err(WriteIntentError::InvalidEvent(_))
+    ));
 }
