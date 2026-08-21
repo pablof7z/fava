@@ -2,7 +2,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     Kind, MAX_EVENT_BYTES, PublicKey, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
-    validate_routing,
 };
 
 const MAX_IDENTIFIER_BYTES: usize = 4_096;
@@ -73,7 +72,7 @@ impl WriteIntent {
         routing: WriteRouting,
     ) -> Result<Self, WriteIntentError> {
         edit.validate_for_intent()?;
-        validate_routing(&routing)?;
+        routing.validate()?;
         Ok(Self {
             payload: WritePayload::Edit { edit, author },
             routing,

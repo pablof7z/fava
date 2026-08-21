@@ -53,16 +53,21 @@ impl Default for WriteState {
 
 impl MemoryWriteStore {
     pub(super) fn snapshot(state: &WriteState) -> SourceSnapshot {
+        let mut seen_event_ids = BTreeSet::new();
+        let mut events: Vec<_> = state
+            .writes
+            .values()
+            .rev()
+            .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
+            .filter(|receipt| seen_event_ids.insert(receipt.current.id()))
+            .map(|receipt| SourceEvent::Local(receipt.current.clone()))
+            .collect();
+        events.reverse();
         SourceSnapshot {
             kind: SourceKind::WriteStore,
             revision: SourceRevision(state.revision),
             status: SourceStatus::Open,
-            events: state
-                .writes
-                .values()
-                .filter(|receipt| !matches!(receipt.outcome, ReceiptOutcome::Cancelled))
-                .map(|receipt| SourceEvent::Local(receipt.current.clone()))
-                .collect(),
+            events,
         }
     }
 

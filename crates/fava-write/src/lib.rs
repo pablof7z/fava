@@ -14,14 +14,15 @@ mod builder;
 mod delivery_map;
 mod edit;
 mod materialization;
+mod routing;
 mod session_set;
 
 pub use builder::{EventBuildError, EventBuilder};
 pub use edit::ReplaceableEventEdit;
 pub use materialization::{MaterializationId, ReplaceableEventMaterializer};
+pub use routing::WriteRouting;
 
 pub(crate) const MAX_EVENT_BYTES: usize = 131_072;
-const MAX_EXPLICIT_RELAYS: usize = 256;
 
 /// Stable identity of one accepted write.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -61,15 +62,6 @@ pub enum WritePayload {
     Presigned(Event),
 }
 
-/// Relay selection for one publication obligation.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum WriteRouting {
-    /// Use the configured ordered router chain.
-    Automatic,
-    /// Use exactly this relay set and open no automatic router.
-    Explicit(BTreeSet<RelayUrl>),
-}
-
 /// Application request to accept responsibility for publishing one event.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct WriteIntent {
@@ -91,7 +83,7 @@ impl WriteIntent {
         event
             .verify_id()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-        validate_routing(&routing)?;
+        routing.validate()?;
         validate_event_size(&event)?;
         if event
             .tags
@@ -115,7 +107,7 @@ impl WriteIntent {
         event
             .verify()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-        validate_routing(&routing)?;
+        routing.validate()?;
         validate_event_size(&event)?;
         if event
             .tags
@@ -173,6 +165,12 @@ pub enum WriteIntentError {
         /// Declared maximum.
         maximum: usize,
     },
+    /// A deserialized or reconstructed explicit route contains a duplicate.
+    #[error("explicit publication route repeats relay identity {relay}")]
+    DuplicateExplicitRelay {
+        /// Repeated exact relay identity.
+        relay: RelayUrl,
+    },
     /// Event id or signature is invalid.
     #[error("event verification failed: {0}")]
     InvalidEvent(String),
@@ -190,21 +188,6 @@ pub enum WriteIntentError {
     /// Exact serialization failed.
     #[error("event encoding failed: {0}")]
     Encoding(String),
-}
-
-fn validate_routing(routing: &WriteRouting) -> Result<(), WriteIntentError> {
-    if let WriteRouting::Explicit(relays) = routing {
-        if relays.is_empty() {
-            return Err(WriteIntentError::EmptyExplicitRelays);
-        }
-        if relays.len() > MAX_EXPLICIT_RELAYS {
-            return Err(WriteIntentError::TooManyExplicitRelays {
-                actual: relays.len(),
-                maximum: MAX_EXPLICIT_RELAYS,
-            });
-        }
-    }
-    Ok(())
 }
 
 fn validate_event_size(event: &impl Serialize) -> Result<(), WriteIntentError> {

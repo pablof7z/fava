@@ -1,3 +1,5 @@
+//! Neutral ordered explicit-route evidence.
+
 use fava_state::RelayUrl;
 use fava_write::{WriteIntentError, WriteRouting};
 
@@ -6,7 +8,7 @@ fn explicit_route_preserves_first_occurrences() {
     let first = relay("first");
     let second = relay("second");
 
-    let routing = WriteRouting::explicit([first.clone(), second.clone(), first])
+    let routing = WriteRouting::explicit([first.clone(), second.clone(), first.clone()])
         .expect("duplicate identities normalize");
 
     assert_eq!(routing, WriteRouting::Explicit(vec![first, second]));

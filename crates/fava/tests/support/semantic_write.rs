@@ -33,7 +33,7 @@ pub fn intent(author: PublicKey, kind: Kind) -> WriteIntent {
     WriteIntent::edit_as(
         edit,
         author,
-        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
+        WriteRouting::explicit([relay_url()]).expect("explicit route validates"),
     )
     .expect("semantic intent validates")
 }

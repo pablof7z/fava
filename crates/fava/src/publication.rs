@@ -1,6 +1,5 @@
 //! Application-facing synchronous publication vocabulary.
 
-use std::collections::BTreeSet;
 use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
@@ -257,18 +256,7 @@ pub(crate) fn to(
 fn explicit_routing(
     relays: impl IntoIterator<Item = RelayUrl>,
 ) -> Result<WriteRouting, PublishError> {
-    let relays = relays.into_iter().collect::<BTreeSet<_>>();
-    if relays.is_empty() {
-        return Err(WriteIntentError::EmptyExplicitRelays.into());
-    }
-    if relays.len() > 256 {
-        return Err(WriteIntentError::TooManyExplicitRelays {
-            actual: relays.len(),
-            maximum: 256,
-        }
-        .into());
-    }
-    Ok(WriteRouting::Explicit(relays))
+    Ok(WriteRouting::explicit(relays)?)
 }
 
 fn publish_scoped<P>(
