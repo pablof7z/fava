@@ -57,7 +57,7 @@ impl EventBuilder {
 
     /// Append already-validated Nostr tags in their exact input order.
     #[must_use]
-    pub fn tags(mut self, tags: Vec<Tag>) -> Self {
+    pub fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
         self.tags.extend(tags);
         self
     }
@@ -65,7 +65,7 @@ impl EventBuilder {
     /// Append one already-validated Nostr tag.
     #[must_use]
     pub fn tag(self, tag: Tag) -> Self {
-        self.tags(vec![tag])
+        self.tags([tag])
     }
 
     /// Produce the exact unsigned body and deterministic event id.

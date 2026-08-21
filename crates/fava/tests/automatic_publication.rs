@@ -112,19 +112,6 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     assert!(publisher.all_once_under(accepted.receipt_id));
 }
 
-trait BuilderTags {
-    fn tags(self, tags: impl IntoIterator<Item = Tag>) -> Self;
-}
-
-impl BuilderTags for EventBuilder {
-    fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
-        for tag in tags {
-            self = self.tag(tag);
-        }
-        self
-    }
-}
-
 fn contribution(
     values: &[(RelayUrl, RouteTarget)],
     unresolved: impl IntoIterator<Item = RouteTarget>,
