@@ -23,7 +23,7 @@ impl MaterializationId {
 
 /// Pure protocol-provider contract for one replaceable-event change encoding.
 pub trait ReplaceableEventMaterializer: Send + Sync {
-    /// Exact non-addressable replaceable kind owned by this provider.
+    /// Exact replaceable or addressable event kind owned by this provider.
     fn kind(&self) -> Kind;
 
     /// Whether this provider owns the edit's coordinate and change encoding.
