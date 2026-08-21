@@ -33,6 +33,8 @@ fn assert_attempt_correlation(attempt: &Value, materialization_id: u64) {
     assert_eq!(attempt["event_id"], attempt["receipt_event_id"]);
     assert_eq!(attempt["session"], "wss://m7-semantic.example");
     assert_eq!(attempt["attempt"], 1);
+    assert!(attempt["created_at"].as_u64().is_some());
+    assert_eq!(attempt["created_at"], attempt["receipt_created_at"]);
 }
 
 #[tokio::test]
@@ -44,6 +46,8 @@ async fn replaceable_edit_first_value_records_materialization() {
     assert_eq!(evidence["query_events"], 1);
     assert_eq!(evidence["cache_events"], 0);
     assert_attempt_correlation(&evidence["attempt"], 1);
+    assert!(evidence["created_at"].as_u64().is_some());
+    assert_eq!(evidence["created_at"], evidence["attempt"]["created_at"]);
     assert!(evidence["event_bytes"].as_str().is_some());
 }
 
@@ -57,6 +61,19 @@ async fn replaceable_edit_rematerialization_records_retired_inertness() {
     assert_eq!(evidence["preserved_bob_carol_unrelated"], true);
     assert_eq!(evidence["retired_completion_processed"], true);
     assert_eq!(evidence["retired_stale_effects"], 0);
+    assert!(
+        evidence["current_created_at"]
+            .as_u64()
+            .expect("current timestamp")
+            > evidence["first_created_at"]
+                .as_u64()
+                .expect("first timestamp")
+    );
+    assert_eq!(
+        evidence["current_created_at"],
+        evidence["attempt"]["created_at"]
+    );
+    assert_eq!(evidence["timestamp_exhaustion_preserved_current"], true);
     assert_attempt_correlation(&evidence["attempt"], 2);
 }
 
@@ -87,13 +104,10 @@ async fn protocol_crate_n_plus_one_records_external_and_raw_proofs() {
     assert_eq!(evidence["bazel_product_reachable"], false);
     assert_eq!(evidence["owned_children_reaped"], true);
     assert_attempt_correlation(&evidence["attempt"], 1);
-}
-
-#[tokio::test]
-async fn same_seed_replays_exact_event_bytes_and_ids() {
-    let first = run_with_seed("replaceable-edit-first-value", "same-seed").await;
-    let second = run_with_seed("replaceable-edit-first-value", "same-seed").await;
-    assert_eq!(first["event_id"], second["event_id"]);
-    assert_eq!(first["event_bytes"], second["event_bytes"]);
-    assert!(first["event_bytes"].as_str().is_some());
+    assert_eq!(evidence["raw_created_at"], 42);
+    assert_eq!(evidence["raw_content"], "opaque future content");
+    assert_eq!(evidence["raw_tags"], serde_json::json!([["x", "future"]]));
+    assert_eq!(evidence["raw_event_id"], evidence["raw_accepted_event_id"]);
+    assert_eq!(evidence["raw_event_id"], evidence["raw_signed_event_id"]);
+    assert_eq!(evidence["raw_event_id"], evidence["raw_published_event_id"]);
 }

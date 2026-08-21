@@ -104,11 +104,16 @@ mod tests {
         .expect("valid replay evidence");
         assert_eq!(replay["program"], "cargo");
         assert!(replay["current_directory"].as_str().is_some());
-        assert!(
-            replay["args"]
-                .as_array()
-                .expect("bounded arguments")
-                .contains(&Value::String("failure-seed".to_owned()))
+        let bundle = ["failure.json", "replay.json", "report.md", "manifest.json"]
+            .into_iter()
+            .map(|file| std::fs::read(root.join(file)).expect("failure evidence"))
+            .flatten()
+            .collect::<Vec<_>>();
+        assert!(!String::from_utf8_lossy(&bundle).contains("failure-seed"));
+        assert_eq!(replay["redacted_inputs"], serde_json::json!(["seed"]));
+        assert_eq!(
+            replay["scenario_seed_sha256"],
+            crate::semantic_write_support::seed_hash("failure-seed")
         );
         assert!(
             replay["args"]

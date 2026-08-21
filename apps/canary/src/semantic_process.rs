@@ -146,4 +146,18 @@ mod tests {
         let state = String::from_utf8_lossy(&status.stdout);
         assert!(state.trim().is_empty() || state.trim_start().starts_with('Z'));
     }
+
+    #[tokio::test]
+    async fn owner_exit_does_not_escape_deadline_through_inherited_pipes() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "sleep 2 & echo DESCENDANT_PID=$!"]);
+        let started = tokio::time::Instant::now();
+        let failure = run_owned(command, Duration::from_millis(75))
+            .await
+            .expect_err("inherited descendant pipe must remain deadline-bound");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        let message = failure.to_string();
+        assert!(message.contains("process group"));
+        assert!(message.contains("owner reaped"));
+    }
 }

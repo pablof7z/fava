@@ -192,3 +192,30 @@ fn selected_materializers() -> Vec<Arc<dyn ReplaceableEventMaterializer>> {
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::cargo_reaches_external;
+
+    #[test]
+    fn actual_external_package_is_reachable_over_a_normal_product_edge() {
+        let metadata = json!({
+            "workspace_members": ["root 0.1.0 (path+file:///repo/root)"],
+            "packages": [{
+                "id": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0",
+                "name": "fava-external-semantic-capability-proof",
+                "manifest_path": "/repo/falsifiers/external-semantic-capability/Cargo.toml"
+            }],
+            "resolve": {"nodes": [
+                {"id": "root 0.1.0 (path+file:///repo/root)", "deps": [{
+                    "pkg": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0",
+                    "dep_kinds": [{"kind": null, "target": null}]
+                }]},
+                {"id": "path+file:///repo/falsifiers/external-semantic-capability#fava-external-semantic-capability-proof@0.1.0", "deps": []}
+            ]}
+        });
+        assert!(cargo_reaches_external(&metadata).expect("valid fixture metadata"));
+    }
+}
