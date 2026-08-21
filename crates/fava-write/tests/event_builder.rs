@@ -1,3 +1,5 @@
+//! Public raw event builder field, order, identity, and bound proofs.
+
 use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp};
 use nostr::key::Keys;
 

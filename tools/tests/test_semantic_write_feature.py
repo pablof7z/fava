@@ -23,6 +23,8 @@ STANDALONE_MANIFESTS = {
 def parse_feature(text: str):
     scenarios = []
     pending_mapping = None
+    pending_mapping_line = None
+    mapping_conflict = False
     current = None
     malformed_mappings = []
     for line in text.splitlines():
@@ -31,10 +33,25 @@ def parse_feature(text: str):
             if match is None:
                 malformed_mappings.append(line)
             else:
-                pending_mapping = match.groupdict()
+                if pending_mapping is not None:
+                    malformed_mappings.extend([pending_mapping_line, line])
+                    pending_mapping = None
+                    pending_mapping_line = None
+                    mapping_conflict = True
+                elif mapping_conflict:
+                    malformed_mappings.append(line)
+                else:
+                    pending_mapping = match.groupdict()
+                    pending_mapping_line = line
             continue
         scenario = SCENARIO.fullmatch(line)
         if scenario is not None:
+            if mapping_conflict:
+                pending_mapping = None
+                pending_mapping_line = None
+                mapping_conflict = False
+                current = None
+                continue
             current = {
                 "name": scenario.group("name"),
                 "mapping": pending_mapping,
@@ -42,6 +59,7 @@ def parse_feature(text: str):
             }
             scenarios.append(current)
             pending_mapping = None
+            pending_mapping_line = None
             continue
         step = STEP.fullmatch(line)
         if step is not None and current is not None:
