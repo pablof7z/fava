@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07
 current_phase_name: Semantic Writes and Capability Composition
 status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-08-21T11:36:36.172Z"
+stopped_at: Completed 07-08-PLAN.md
+last_updated: "2026-08-21T14:14:41.112Z"
 last_activity: 2026-08-21
 last_activity_desc: Phase 07 execution started
-state_head: 49d71860b3c6da463e5cd299d169bbb74799b472
+state_head: ccdc27fff5960e51236faff5f476c45c9b2c3ee3
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 55
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07 (Semantic Writes and Capability Composition) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-08-21 — Phase 07 execution started
 
@@ -67,6 +67,7 @@ executed before GSD and no retrospective plans or summaries were created.
 | Phase 07 P05 | 40min | 2 tasks | 21 files |
 | Phase 07 P06 | 39min | 3 tasks | 17 files |
 | Phase 07 P07 | 37min | 2 tasks | 8 files |
+| Phase 07 P08 | 134min | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Active phases correspond exactly and sequentially to authoritative M1 through M11.
 - Every phase uses MVP mode; milestone names require every authoritative exit gate and mapped requirement Definition of Done item to pass.
 - Windowing/resume tokens, outage backfill, partial-handoff cancellation, full attempt-history retention, and the recommended persistent event-cache profile remain explicitly unpromised pending their owning phase evidence.
+- [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic rematerialization time. — Raw events are complete caller-authored values, while semantic edits must be rematerializable against changing sources without a hidden clock override.
 
 ### Pending Todos
 
@@ -101,6 +103,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T11:36:36.160Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-08-21T14:14:41.099Z
+Stopped at: Completed 07-08-PLAN.md
 Resume file: None
