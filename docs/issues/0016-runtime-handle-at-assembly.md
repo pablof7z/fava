@@ -23,7 +23,9 @@ pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationEr
 }
 ```
 
-`recover` (`:81`) opens identically. The guard order is correct and deliberate:
+`recover` (`:81`) opens identically, and there is a third site on the query side
+— `crates/fava/src/query_source.rs:15` — so this is an engine-wide pattern rather
+than a publication quirk. The guard order is correct and deliberate:
 `accept` commits durably and then starts delivery, so discovering a missing
 runtime after custody would leave a durable obligation nothing can drive.
 Refusing first is the same "refuse before custody, zero residue" discipline

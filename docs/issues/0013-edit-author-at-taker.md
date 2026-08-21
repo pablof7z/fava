@@ -42,19 +42,21 @@ Twelve sites said the edit carries its actor. All twelve are amended; `grep -rn
 **`ARCHITECTURE.md` (authority #2):**
 
 - `:167-178` — the prose and the illustrative struct. `ReplaceableEventEdit`
-  loses `actor` and `coordinate` and gains `kind` and `inverse`; materialization
+  loses `actor` and the author half of its coordinate, keeping `kind` and
+  `identifier`; materialization
   now produces an event whose `pubkey` is "the accepted write's resolved author".
 - `:714-716` — prose, not an illustrative signature, so AGENTS.md's
   "preserve the behavior and ownership rule" escape does not cover it. "It
   identifies the actor and event coordinate" becomes "It identifies the
-  replaceable kind it changes … It carries no author."
+  coordinate it changes apart from the author — the replaceable kind, and the
+  identifier when that coordinate is addressable … It carries no author."
 - `:726-730` — illustrative signatures: `follow(actor, bob)` → `follow(bob)`,
   `fava_bookmarks::add(actor, target)` → `add(target)`.
 - `:900` — owned state: "actor for replaceable-event edits" becomes "resolved
   author for replaceable-event edits".
 - `:1997` — "The edit contains its actor, coordinate, durable protocol-owned
-  change, and format version" becomes the kind, change, inverse, and format, with
-  the author carried by the accepted write.
+  change, and format version" becomes the coordinate apart from the author, the
+  change, and the format, with the author carried by the accepted write.
 - `:2080` — "a `ReplaceableEventEdit` whose `actor` is the resolved account"
   becomes "a `ReplaceableEventEdit`, whose accepted write records the resolved
   account as its author".
@@ -71,12 +73,18 @@ from the edit struct does not break registry closure.
 
 ## Architecture
 
-- **The edit.** `ReplaceableEventEdit { kind, format, change, inverse }`. No
-  `actor`, no `coordinate` — the coordinate was only ever
-  `{author, kind, identifier: None}` and addressable is already refused
-  (`fava-write/src/edit.rs:107-112`), so `kind` is the whole of it. Both
-  redundant author checks vanish (`edit.rs:106`, `fava-nip02/src/lib.rs:157`)
-  because there is no second author field to disagree with.
+- **The edit.** `ReplaceableEventEdit { kind, identifier, format, change }`.
+  The `actor` goes; the coordinate stays, minus its author. Only the author half
+  of the coordinate is redundant once the accepted write resolves it — `kind` and
+  `identifier` are not. Dropping `identifier` too would bake in a limitation the
+  spec does not have: `GOALS:528` and `ARCHITECTURE.md:411` both put
+  "replaceable-event coordinates, including addressable coordinates" in scope,
+  and the `identifier: None` requirement in `fava-nip02`
+  (`fava-nip02/src/lib.rs:151-162`) is correct *for kind 3*, which is not
+  addressable — it is not a global refusal of addressable coordinates. An edit to
+  a kind-30023 article must be able to say which article. Both redundant author
+  checks vanish (`edit.rs:106`, `fava-nip02/src/lib.rs:157`) because there is no
+  second author field to disagree with.
 - **nip02.** `follow(target)` — one argument, engine-free, no `fava-signer`
   dependency, no coordinate construction.
 - **Where the author enters.** At the door, per `0014`: `fava.publish(edit)?`
@@ -109,6 +117,32 @@ from the edit struct does not break registry closure.
   (`fava-publication/src/materialization.rs:367`) and qualification rejects a
   mismatched source (`fava-nip02/src/lib.rs:202`).
 
+## Open: is the inverse stored or derived?
+
+Not settled by this issue and deliberately not decided by the amendment. The spec
+requires edits to have inverses — `ARCHITECTURE.md:3065`, `:3330`,
+`GOALS:1223`, `FAVA_REWRITE_IMPLEMENTATION_PLAN.md:726` and its
+`replaceable-edit-inverse` scenario (`:752`) — but has never put an `inverse`
+field on the struct, and the illustrative struct here does not add one.
+
+The m7 implementation stores it, and its own validation argues against that:
+`decode_edit` (`fava-nip02/src/lib.rs:141-148`) *derives* the inverse via the
+pure `Operation::inverse()` (`:80-85`) in order to check the stored one. If it can
+be derived to validate it, it can be derived instead of stored. The
+format-stability argument does not rescue it either, because `decode_edit`
+refuses on `edit.format() != FORMAT` (`:141`) before it reads the inverse at all,
+so an edit written under an older format is never decoded.
+
+The one case where an inverse genuinely is not derivable — an edit like "set the
+title to X", whose undo needs the previous title — is also the case where a
+stored inverse cannot be correct, because the edit is constructed before any
+source event is read (WRITE-006's offline edit) and is rematerialized against
+newer sources afterwards.
+
+That points at removing the field, which contradicts whiteboard decision D2 and
+changes shipped M7 code. It needs its own focused issue and Pablo's call; it does
+not block the author amendment either way.
+
 ## Blast radius — 13 non-test sites, 6 crates, mechanical
 
 | crate | sites |
@@ -134,7 +168,7 @@ from the edit struct does not break registry closure.
 ## Vocabulary delta
 
 `docs/internals/vocabulary.toml` `ReplaceableEventEdit` term (`:411-420`): the
-persisted entity (no `actor`/`coordinate`; `kind` is the coordinate) and the
+persisted entity (no `actor`; the coordinate keeps `kind` and `identifier`) and the
 provider contract (`ReplaceableEventMaterializer::materialize` gains `author`)
 both change. `WriteIntent` gains `edit`/`edit_as`. Run
 `python3 tools/check_vocabulary.py` (and its unit tests) after the edit.
