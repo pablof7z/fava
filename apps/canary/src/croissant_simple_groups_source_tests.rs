@@ -241,4 +241,3 @@
         pinned.retain(&retained).expect("retain opened original image");
         assert_eq!(fs::read(retained).unwrap(), b"reviewed canary bytes");
     }
-
