@@ -125,6 +125,7 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
     let unique = exact_strings(manifest, "unique_event_ids", 2)?;
     let relay_signer = required_string(manifest, "relay_signer_public_key")?;
     let shared = required_string(manifest, "shared_event_id")?;
+    let custom = required_string(manifest, "custom_event_id")?;
     if relay_urls != evidence
         || owners[0] == owners[1]
         || metadata[0] == metadata[1]
@@ -133,6 +134,8 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
         || admin_authors != [relay_signer, relay_signer]
         || unique[0] == unique[1]
         || unique.iter().any(|id| id == shared)
+        || custom == shared
+        || unique.iter().any(|id| id == custom)
         || exact_u64s(manifest, "handoffs", 2)? != [1, 1]
         || manifest.get("custom_destinations").and_then(Value::as_u64) != Some(2)
         || manifest.get("custom_acknowledged").and_then(Value::as_u64) != Some(2)
@@ -257,8 +260,6 @@ fn verify_pair_identity(runs: &[(PathBuf, Value)]) -> CanaryResult<()> {
         "scenario_seed_sha256",
         "author_public_key",
         "group_id",
-        "shared_event_id",
-        "custom_event_id",
         "write_id",
         "receipt_id",
     ] {
@@ -267,6 +268,13 @@ fn verify_pair_identity(runs: &[(PathBuf, Value)]) -> CanaryResult<()> {
                 "simple-groups pair reused {field}"
             )));
         }
+    }
+    let first_events = event_identities(&runs[0].1)?;
+    let second_events = event_identities(&runs[1].1)?;
+    if !first_events.is_disjoint(&second_events) {
+        return Err(CanaryError::new(
+            "simple-groups pair reused an event identity",
+        ));
     }
     let mut pids = BTreeSet::new();
     let mut endpoints = BTreeSet::new();
@@ -287,16 +295,48 @@ fn verify_pair_identity(runs: &[(PathBuf, Value)]) -> CanaryResult<()> {
 }
 
 fn reject_cross_run_data(first: &(PathBuf, Value), second: &(PathBuf, Value)) -> CanaryResult<()> {
-    for field in ["group_id", "shared_event_id", "custom_event_id"] {
-        let a = required_string(&first.1, field)?.as_bytes();
-        let b = required_string(&second.1, field)?.as_bytes();
-        if tree_contains(&first.0, b, true)? || tree_contains(&second.0, a, true)? {
-            return Err(CanaryError::new(format!(
-                "simple-groups run retained the other run's {field}"
-            )));
+    let first_group = required_string(&first.1, "group_id")?.to_owned();
+    let second_group = required_string(&second.1, "group_id")?.to_owned();
+    let first_identities = event_identities(&first.1)?;
+    let second_identities = event_identities(&second.1)?;
+    if tree_contains(&first.0, second_group.as_bytes(), true)?
+        || tree_contains(&second.0, first_group.as_bytes(), true)?
+    {
+        return Err(CanaryError::new(
+            "simple-groups run retained the other run's group_id",
+        ));
+    }
+    for identity in &second_identities {
+        if tree_contains(&first.0, identity.as_bytes(), true)? {
+            return Err(CanaryError::new(
+                "simple-groups run retained the other run's event identity",
+            ));
+        }
+    }
+    for identity in &first_identities {
+        if tree_contains(&second.0, identity.as_bytes(), true)? {
+            return Err(CanaryError::new(
+                "simple-groups run retained the other run's event identity",
+            ));
         }
     }
     Ok(())
+}
+
+fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
+    let mut identities = BTreeSet::from([
+        required_string(manifest, "shared_event_id")?.to_owned(),
+        required_string(manifest, "custom_event_id")?.to_owned(),
+    ]);
+    for identity in exact_strings(manifest, "unique_event_ids", 2)? {
+        identities.insert(identity);
+    }
+    if identities.len() != 4 {
+        return Err(CanaryError::new(
+            "simple-groups run reused an event identity",
+        ));
+    }
+    Ok(identities)
 }
 
 fn verify_hashes(root: &Path, manifest: &Value) -> CanaryResult<()> {

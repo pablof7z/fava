@@ -142,7 +142,9 @@ fn pair_verifier_rejects_unsafe_evidence() {
         UnsafePairCase::IncompleteCleanup,
         UnsafePairCase::UnsignedClaim,
         UnsafePairCase::ReusedIdentity,
+        UnsafePairCase::ReusedUniqueIdentity,
         UnsafePairCase::CrossRunData,
+        UnsafePairCase::CrossRunUniqueData,
         UnsafePairCase::ExtraManifest,
         UnsafePairCase::MissingManifest,
         UnsafePairCase::StagingResidue,
@@ -162,7 +164,9 @@ enum UnsafePairCase {
     IncompleteCleanup,
     UnsignedClaim,
     ReusedIdentity,
+    ReusedUniqueIdentity,
     CrossRunData,
+    CrossRunUniqueData,
     ExtraManifest,
     MissingManifest,
     StagingResidue,
@@ -222,6 +226,13 @@ impl PairEvidenceFixture {
                     manifest["teardown"][0]["pid"] = pid;
                 });
             }
+            UnsafePairCase::ReusedUniqueIdentity => {
+                let first = read_manifest(&self.roots[0]);
+                let unique = first["unique_event_ids"][1].clone();
+                self.mutate(1, true, |manifest| {
+                    manifest["unique_event_ids"][0] = unique;
+                });
+            }
             UnsafePairCase::CrossRunData => {
                 let second = read_manifest(&self.roots[1]);
                 fs::write(
@@ -229,6 +240,17 @@ impl PairEvidenceFixture {
                     second["group_id"].as_str().expect("group id"),
                 )
                 .expect("cross-run artifact");
+                self.mutate(0, true, |_| {});
+            }
+            UnsafePairCase::CrossRunUniqueData => {
+                let second = read_manifest(&self.roots[1]);
+                fs::write(
+                    self.roots[0].join("cross-run-unique.txt"),
+                    second["unique_event_ids"][0]
+                        .as_str()
+                        .expect("unique event id"),
+                )
+                .expect("cross-run unique artifact");
                 self.mutate(0, true, |_| {});
             }
             UnsafePairCase::ExtraManifest => {
