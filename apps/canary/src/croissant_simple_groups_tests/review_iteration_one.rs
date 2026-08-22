@@ -44,6 +44,7 @@ pub(super) fn verify_fixture_pair(root: &Path) -> CanaryResult<()> {
         root,
         FIXTURE_FAVA_REVISION,
         FIXTURE_FAVA_TREE,
+        FIXTURE_FAVA_EXECUTABLE,
         FIXTURE_CROISSANT_REVISION,
         FIXTURE_CROISSANT_EXECUTABLE,
     )

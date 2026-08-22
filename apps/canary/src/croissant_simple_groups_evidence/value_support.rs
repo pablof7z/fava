@@ -1,3 +1,40 @@
+fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
+    run_roots_with(root, |_| {})
+}
+
+fn run_roots_with(
+    root: &Path,
+    mut visited: impl FnMut(&Path),
+) -> CanaryResult<Vec<std::path::PathBuf>> {
+    let mut roots = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        visited(&entry.path());
+        if roots.len() == 2 {
+            return Err(CanaryError::new(
+                "simple-groups pair must contain exactly two manifests",
+            ));
+        }
+        let name = entry.file_name();
+        let name = name
+            .to_str()
+            .ok_or_else(|| CanaryError::new("simple-groups pair entry was not UTF-8"))?;
+        if !entry.file_type()?.is_dir() || name.starts_with(".fava-canary-staging-") {
+            return Err(CanaryError::new(
+                "simple-groups pair root contained staging or non-run residue",
+            ));
+        }
+        roots.push(entry.path());
+    }
+    if roots.len() != 2 {
+        return Err(CanaryError::new(
+            "simple-groups pair must contain exactly two manifests",
+        ));
+    }
+    roots.sort_unstable();
+    Ok(roots)
+}
+
 fn tree_contains(
     snapshot: &EvidenceSnapshot,
     needle: &[u8],
@@ -84,6 +121,7 @@ fn verify_source_provenance(snapshot: &EvidenceSnapshot, manifest: &Value) -> Ca
         "fava_revision",
         "fava_source_tree_sha256",
         "fava_source_clean",
+        "fava_canary_executable_sha256",
     ] {
         if source.get(field) != manifest.get(field) {
             return Err(CanaryError::new(

@@ -10,10 +10,6 @@ use super::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
 };
 use crate::CanaryResult;
-const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
-const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
-const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
-const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
 include!("croissant_simple_groups_tests/public_flow.rs");
 include!("croissant_simple_groups_tests/review_iteration_one.rs");
 include!("croissant_simple_groups_tests/review_iteration_two.rs");
@@ -259,6 +255,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             "fava_revision": FIXTURE_FAVA_REVISION,
             "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
             "fava_source_clean": true,
+            "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
         }))
         .expect("source fixture bytes"),
     )
@@ -322,6 +319,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "fava_revision": FIXTURE_FAVA_REVISION,
         "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
         "fava_source_clean": true,
+        "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
     });
     manifest["artifact_seal"] =
         serde_json::to_value(artifact_seal(author, &manifest).expect("fixture seal"))

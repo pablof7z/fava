@@ -26,11 +26,13 @@ pub fn verify_croissant_simple_groups_pair(
     runs_directory: impl AsRef<Path>,
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
+    expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
     if !is_lower_hex(expected_fava_revision, 40)
         || !is_lower_hex(expected_fava_source_tree_sha256, 64)
+        || !is_lower_hex(expected_fava_canary_executable_sha256, 64)
         || !is_lower_hex(expected_croissant_revision, 40)
         || !is_lower_hex(expected_croissant_executable_sha256, 64)
     {
@@ -59,6 +61,7 @@ pub fn verify_croissant_simple_groups_pair(
             directory_run_id,
             expected_fava_revision,
             expected_fava_source_tree_sha256,
+            expected_fava_canary_executable_sha256,
             expected_croissant_revision,
             expected_croissant_executable_sha256,
         )?;
@@ -68,49 +71,17 @@ pub fn verify_croissant_simple_groups_pair(
     reject_cross_run_data(&runs[0], &runs[1])
 }
 
-fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
-    run_roots_with(root, |_| {})
-}
-
-fn run_roots_with(
-    root: &Path,
-    mut visited: impl FnMut(&Path),
-) -> CanaryResult<Vec<std::path::PathBuf>> {
-    let mut roots = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        visited(&entry.path());
-        if roots.len() == 2 {
-            return Err(CanaryError::new(
-                "simple-groups pair must contain exactly two manifests",
-            ));
-        }
-        let name = entry.file_name();
-        let name = name
-            .to_str()
-            .ok_or_else(|| CanaryError::new("simple-groups pair entry was not UTF-8"))?;
-        if !entry.file_type()?.is_dir() || name.starts_with(".fava-canary-staging-") {
-            return Err(CanaryError::new(
-                "simple-groups pair root contained staging or non-run residue",
-            ));
-        }
-        roots.push(entry.path());
-    }
-    if roots.len() != 2 {
-        return Err(CanaryError::new(
-            "simple-groups pair must contain exactly two manifests",
-        ));
-    }
-    roots.sort_unstable();
-    Ok(roots)
-}
-
+#[allow(
+    clippy::too_many_arguments,
+    reason = "all four exact source identities remain explicit verifier inputs"
+)]
 fn validate_manifest(
     snapshot: &EvidenceSnapshot,
     manifest: &Value,
     directory_run_id: &str,
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
+    expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
@@ -164,6 +135,8 @@ fn validate_manifest(
     if required_string(manifest, "run_id")? != directory_run_id
         || required_string(manifest, "fava_revision")? != expected_fava_revision
         || required_string(manifest, "fava_source_tree_sha256")? != expected_fava_source_tree_sha256
+        || required_string(manifest, "fava_canary_executable_sha256")?
+            != expected_fava_canary_executable_sha256
         || manifest.get("fava_source_clean").and_then(Value::as_bool) != Some(true)
     {
         return Err(CanaryError::new(

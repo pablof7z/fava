@@ -52,3 +52,17 @@ fn verifier_refuses_extra_metadata_and_admin_command_effects() {
         assert!(verify_fixture_pair(fixture.root()).is_err());
     }
 }
+
+#[test]
+fn verifier_refuses_resealed_wrong_fava_canary_executable() {
+    let fixture = PairEvidenceFixture::new();
+    let hostile = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let source_path = fixture.roots[0].join("source/fava.json");
+    let mut source: Value = serde_json::from_slice(&fs::read(&source_path).unwrap()).unwrap();
+    source["fava_canary_executable_sha256"] = json!(hostile);
+    fs::write(&source_path, serde_json::to_vec_pretty(&source).unwrap()).unwrap();
+    fixture.mutate(0, true, |manifest| {
+        manifest["fava_canary_executable_sha256"] = json!(hostile);
+    });
+    assert!(verify_fixture_pair(fixture.root()).is_err());
+}

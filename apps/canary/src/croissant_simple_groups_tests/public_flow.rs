@@ -6,6 +6,12 @@ use super::croissant_simple_groups::{
 };
 use super::croissant_simple_groups_flow::execute_public_flow;
 
+const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
+const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+const FIXTURE_FAVA_EXECUTABLE: &str = "5555555555555555555555555555555555555555555555555555555555555555";
+const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
+const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn croissant_simple_groups_public_flow() {
     let temporary = TempDir::new().expect("public-flow fixture root");
@@ -17,6 +23,7 @@ async fn croissant_simple_groups_public_flow() {
         source_checkout: source,
         scenario_seed: seed.to_owned(),
         runs_directory: temporary.path().join("unused-retained-root"),
+        expected_canary_executable_sha256: FIXTURE_FAVA_EXECUTABLE.to_owned(),
     };
     let relay_keys = Keys::generate();
     let owner_a = Keys::generate().public_key().to_hex();

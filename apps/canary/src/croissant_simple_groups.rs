@@ -35,6 +35,8 @@ pub struct CroissantSimpleGroupsOptions {
     pub scenario_seed: String,
     /// Parent directory for one fresh durable evidence bundle.
     pub runs_directory: PathBuf,
+    /// SHA-256 of the owner-staged canary executable being invoked.
+    pub expected_canary_executable_sha256: String,
 }
 
 /// Durable location produced by one completed controlled run.
@@ -125,7 +127,10 @@ pub async fn run_croissant_simple_groups_scenario(
     options: CroissantSimpleGroupsOptions,
 ) -> CanaryResult<CroissantSimpleGroupsOutcome> {
     let repository = repository_root()?;
-    let fava_source = clean_fava_source(&repository)?;
+    let fava_source = clean_fava_source(
+        &repository,
+        &options.expected_canary_executable_sha256,
+    )?;
     let seed = &options.scenario_seed;
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let relay = deterministic_keys(&format!("simple-groups-relay\0{seed}"))?;
@@ -186,7 +191,7 @@ pub async fn run_croissant_simple_groups_scenario(
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .sum::<u64>();
-    if clean_fava_source(&repository)? != fava_source {
+    if clean_fava_source(&repository, &options.expected_canary_executable_sha256)? != fava_source {
         return Err(CanaryError::new(
             "simple-groups Fava source provenance changed during the live proof",
         ));
@@ -234,6 +239,7 @@ pub async fn run_croissant_simple_groups_scenario(
         "fava_revision": fava_source.revision,
         "fava_source_tree_sha256": fava_source.tree_sha256,
         "fava_source_clean": fava_source.clean,
+        "fava_canary_executable_sha256": fava_source.canary_executable_sha256,
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
     });
