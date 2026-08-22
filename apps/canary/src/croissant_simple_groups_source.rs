@@ -12,9 +12,12 @@ const SOURCE_PATHS: [&str; 4] = ["Cargo.toml", "Cargo.lock", "apps/canary", "cra
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct FavaSourceProvenance {
-    pub(crate) fava_revision: String,
-    pub(crate) fava_source_tree_sha256: String,
-    pub(crate) fava_source_clean: bool,
+    #[serde(rename = "fava_revision")]
+    pub(crate) revision: String,
+    #[serde(rename = "fava_source_tree_sha256")]
+    pub(crate) tree_sha256: String,
+    #[serde(rename = "fava_source_clean")]
+    pub(crate) clean: bool,
 }
 
 pub(crate) fn clean_fava_source(root: &Path) -> CanaryResult<FavaSourceProvenance> {
@@ -40,9 +43,9 @@ pub(crate) fn clean_fava_source(root: &Path) -> CanaryResult<FavaSourceProvenanc
         ));
     }
     Ok(FavaSourceProvenance {
-        fava_revision: revision,
-        fava_source_tree_sha256: hex::encode(Sha256::digest(tree)),
-        fava_source_clean: true,
+        revision,
+        tree_sha256: hex::encode(Sha256::digest(tree)),
+        clean: true,
     })
 }
 

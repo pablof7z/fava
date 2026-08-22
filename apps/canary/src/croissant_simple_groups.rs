@@ -231,9 +231,9 @@ pub async fn run_croissant_simple_groups_scenario(
             "teardown_ms": CroissantLimits::default().teardown_ms,
         },
         "artifact_sha256": artifacts.artifact_hashes()?,
-        "fava_revision": fava_source.fava_revision,
-        "fava_source_tree_sha256": fava_source.fava_source_tree_sha256,
-        "fava_source_clean": fava_source.fava_source_clean,
+        "fava_revision": fava_source.revision,
+        "fava_source_tree_sha256": fava_source.tree_sha256,
+        "fava_source_clean": fava_source.clean,
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
     });

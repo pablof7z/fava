@@ -188,7 +188,7 @@ fn verify_one_wire(
         &content_events,
         metadata_winner.as_ref(),
         admin_winner.as_ref(),
-        [
+        &[
             content_subscription,
             records_subscription,
             bootstrap_subscription,
@@ -450,7 +450,7 @@ fn verify_complete_wire(
     content_events: &BTreeSet<String>,
     metadata_winner: Option<&Event>,
     admin_winner: Option<&Event>,
-    subscriptions: [Option<String>; 3],
+    subscriptions: &[Option<String>; 3],
 ) -> CanaryResult<()> {
     let roles = BTreeSet::from([
         PublicationRole::Bootstrap,
