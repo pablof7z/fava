@@ -12,9 +12,9 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
-use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
+use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
-use nostr::event::{EventBuilder, FinalizeEvent, Kind};
+use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
 use tokio::sync::Notify;
 
@@ -277,6 +277,106 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     assert_eq!(cache.len().expect("cache readable"), 1);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn multi_relay_replaceable_authority_survives_public_facade() {
+    let relays = relay_urls(2);
+    let transport = Arc::new(ScriptedTransport::default());
+    let cache = Arc::new(MemoryEventCache::default());
+    let fava = assembly(Arc::clone(&cache), Arc::clone(&transport));
+    let keys = Keys::generate();
+    let kind = Kind::from_u16(30_001);
+    let winner_a = addressable_event(&keys, 20, "winner A", "same");
+    let winner_b = addressable_event(&keys, 30, "winner B", "same");
+    let shared = addressable_event(&keys, 10, "shared", "shared");
+    let mut observation = fava
+        .observe(
+            Query::events()
+                .kind(kind)
+                .only_from_relays(relays.clone())
+                .expect("explicit relays are valid"),
+        )
+        .await
+        .expect("query opens");
+    let first = transport.session(&relays[0], 0).await;
+    let second = transport.session(&relays[1], 0).await;
+    let first_subscription = first.subscription();
+    let second_subscription = second.subscription();
+
+    first.receive(&RelayMessage::event(
+        first_subscription.clone(),
+        winner_a.clone(),
+    ));
+    second.receive(&RelayMessage::event(
+        second_subscription.clone(),
+        winner_b.clone(),
+    ));
+    first.receive(&RelayMessage::event(
+        first_subscription.clone(),
+        shared.clone(),
+    ));
+    second.receive(&RelayMessage::event(
+        second_subscription.clone(),
+        shared.clone(),
+    ));
+
+    let latest = wait_for_snapshot(&mut observation, |snapshot| {
+        snapshot.events.len() >= 2
+            && snapshot
+                .events
+                .iter()
+                .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
+    })
+    .await;
+    assert!(
+        latest
+            .events
+            .iter()
+            .any(|record| record.id() == winner_a.id)
+    );
+    assert!(
+        latest
+            .events
+            .iter()
+            .any(|record| record.id() == winner_b.id)
+    );
+    let shared_record = latest
+        .events
+        .iter()
+        .find(|record| record.id() == shared.id)
+        .expect("shared event remains visible once");
+    assert_eq!(shared_record.relay_evidence.len(), 2);
+    assert_eq!(
+        latest
+            .events
+            .iter()
+            .filter(|record| record.id() == shared.id)
+            .count(),
+        1
+    );
+    assert_eq!(cache.len().expect("cache readable"), 3);
+
+    observation.close();
+    observation.close();
+    wait_until(|| {
+        let first_close = encode_client(&ClientMessage::close(first_subscription.clone()))
+            .expect("CLOSE encodes");
+        let second_close = encode_client(&ClientMessage::close(second_subscription.clone()))
+            .expect("CLOSE encodes");
+        first
+            .sent
+            .lock()
+            .expect("session lock")
+            .contains(&first_close)
+            && second
+                .sent
+                .lock()
+                .expect("session lock")
+                .contains(&second_close)
+    })
+    .await;
+    assert!(observation.changed().await.is_err());
+}
+
 fn assembly(cache: Arc<MemoryEventCache>, transport: Arc<ScriptedTransport>) -> Fava {
     Fava::builder()
         .event_cache(cache)
@@ -295,6 +395,14 @@ fn relay_urls(count: usize) -> Vec<RelayUrl> {
             RelayUrl::parse(&url).expect("relay URL parses")
         })
         .collect()
+}
+
+fn addressable_event(keys: &Keys, created_at: u64, content: &str, identifier: &str) -> Event {
+    EventBuilder::new(Kind::from_u16(30_001), content)
+        .tags([Tag::identifier(identifier)])
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize(keys)
+        .expect("event signs")
 }
 
 async fn wait_until(predicate: impl Fn() -> bool) {
