@@ -37,6 +37,10 @@ const CROISSANT_SOURCE: &str = "/Users/pablofernandez/Work/croissant";
 const OPERATION_MS: u64 = 30_000;
 const WIRE_BYTES: u64 = 1_048_576;
 const LEGACY_CONTENT: &str = "legacy shared contact-list content";
+#[allow(
+    clippy::unicode_not_nfc,
+    reason = "the NIP-02 proof preserves decomposed petname UTF-8 without normalization"
+)]
 const PETNAME: &str = "alíce";
 
 /// Process-memory input for one controlled Croissant NIP-02 proof.
@@ -129,6 +133,10 @@ pub async fn run_croissant_nip02_scenario(
     finish_run(artifacts, &options, started, &ready, &teardown, &facts)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one linear function keeps the exact cross-boundary evidence chronology auditable"
+)]
 async fn execute_flow(
     artifacts: &RunArtifacts,
     seed: &str,
@@ -362,6 +370,10 @@ fn event_content(event: &EventValue) -> &str {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one finalizer owns the bounded artifact scan, manifest seal, and teardown proof"
+)]
 fn finish_run(
     mut artifacts: RunArtifacts,
     options: &CroissantNip02Options,

@@ -11,15 +11,15 @@ const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_unique_public_flows_pass_exact_pair_verification() {
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = run(
+    let first = Box::pin(run(
         temporary.path().to_path_buf(),
         "pair-first-private-sentinel",
-    )
+    ))
     .await;
-    let second = run(
+    let second = Box::pin(run(
         temporary.path().to_path_buf(),
         "pair-second-private-sentinel",
-    )
+    ))
     .await;
 
     assert_ne!(first.run_directory, second.run_directory);
@@ -35,15 +35,15 @@ async fn two_unique_public_flows_pass_exact_pair_verification() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secret_fields() {
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = run(
+    let first = Box::pin(run(
         temporary.path().to_path_buf(),
         "negative-first-private-sentinel",
-    )
+    ))
     .await;
-    let second = run(
+    let second = Box::pin(run(
         temporary.path().to_path_buf(),
         "negative-second-private-sentinel",
-    )
+    ))
     .await;
     verify_croissant_run_pair(temporary.path()).expect("control pair verifies");
 
@@ -92,11 +92,11 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
 }
 
 async fn run(root: PathBuf, seed: &str) -> super::CroissantNip02Outcome {
-    run_croissant_nip02_scenario(CroissantNip02Options {
+    Box::pin(run_croissant_nip02_scenario(CroissantNip02Options {
         relay_binary: PathBuf::from(CROISSANT),
         scenario_seed: seed.to_owned(),
         runs_directory: root,
-    })
+    }))
     .await
     .expect("controlled Croissant flow")
 }

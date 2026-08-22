@@ -31,6 +31,39 @@ cargo run --manifest-path apps/canary/Cargo.toml -- \
 
 Evidence is preserved under `apps/canary/runs/` and excluded from Git.
 
+## Controlled Croissant NIP-02 proof
+
+`croissant-nip02-public-flow` starts the exact Croissant executable on a fresh
+loopback port and data path. It publishes a kind-9007 group create and then the
+README NIP-02 baseline/edit flow through the same public `Fava::to(...).publish`
+lifecycle. The retained manifest correlates local observation before signing,
+the exact relay echo, typed lossless decode, write/receipt/materialization/event
+identities, executable SHA-256, Croissant source HEAD, declared bounds, and
+completed PID/port teardown.
+
+Run it twice beneath one fresh pair root, then verify the pair:
+
+```sh
+pair_root="$(mktemp -d apps/canary/runs/phase-07.1-pair.XXXXXX)"
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run croissant-nip02-public-flow \
+  --relay-bin /Users/pablofernandez/Work/croissant/croissant \
+  --seed "$first_private_seed" --runs-dir "$pair_root"
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  run croissant-nip02-public-flow \
+  --relay-bin /Users/pablofernandez/Work/croissant/croissant \
+  --seed "$second_private_seed" --runs-dir "$pair_root"
+cargo run --manifest-path apps/canary/Cargo.toml -- \
+  verify-croissant-pair --runs-dir "$pair_root"
+```
+
+Seeds are process-memory inputs. Never place literal seeds in shell history,
+reports, or retained files. The scenario scans every pre-manifest artifact for
+the raw input and retains only its SHA-256 plus public coordinates. The pair
+verifier requires exactly two manifests, distinct seed/group/event/write/receipt
+identities, no cross-run group data, complete artifact hashes and bounds, exact
+foreign kind-3 tags/content, and closed child processes and ports.
+
 The four M7 semantic-write canaries are deterministic, memory-backed public
 Fava executions. They do not start a relay or use timing sleeps:
 
