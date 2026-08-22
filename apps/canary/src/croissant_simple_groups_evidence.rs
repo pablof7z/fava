@@ -105,29 +105,6 @@ fn run_roots_with(
     Ok(roots)
 }
 
-#[cfg(test)]
-mod pair_root_tests {
-    use std::cell::Cell;
-    use std::fs;
-
-    use tempfile::TempDir;
-
-    use super::run_roots_with;
-
-    #[test]
-    fn pair_root_refuses_on_third_entry_without_enumerating_the_remainder() {
-        let root = TempDir::new().expect("pair root");
-        for index in 0..64 {
-            fs::create_dir(root.path().join(format!("run-{index:02}"))).expect("run directory");
-        }
-        let visited = Cell::new(0_usize);
-        let error = run_roots_with(root.path(), |_| visited.set(visited.get() + 1))
-            .expect_err("third entry exceeds the exact pair bound");
-        assert!(error.to_string().contains("exactly two"));
-        assert_eq!(visited.get(), 3, "hostile remainder was enumerated");
-    }
-}
-
 fn validate_manifest(
     snapshot: &EvidenceSnapshot,
     manifest: &Value,
@@ -521,3 +498,26 @@ fn reject_secret_fields(value: &Value) -> CanaryResult<()> {
 }
 
 include!("croissant_simple_groups_evidence/value_support.rs");
+
+#[cfg(test)]
+mod pair_root_tests {
+    use std::cell::Cell;
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::run_roots_with;
+
+    #[test]
+    fn pair_root_refuses_on_third_entry_without_enumerating_the_remainder() {
+        let root = TempDir::new().expect("pair root");
+        for index in 0..64 {
+            fs::create_dir(root.path().join(format!("run-{index:02}"))).expect("run directory");
+        }
+        let visited = Cell::new(0_usize);
+        let error = run_roots_with(root.path(), |_| visited.set(visited.get() + 1))
+            .expect_err("third entry exceeds the exact pair bound");
+        assert!(error.to_string().contains("exactly two"));
+        assert_eq!(visited.get(), 3, "hostile remainder was enumerated");
+    }
+}
