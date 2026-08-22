@@ -10,6 +10,7 @@ mod croissant_simple_groups;
 mod croissant_simple_groups_evidence;
 mod croissant_simple_groups_evidence_support;
 mod croissant_simple_groups_flow;
+mod environment;
 mod grouping;
 mod hostile;
 mod live;
