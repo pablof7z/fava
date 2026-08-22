@@ -18,6 +18,7 @@ mod croissant_simple_groups_source;
 mod croissant_simple_groups_source_tests;
 #[cfg(test)]
 mod croissant_simple_groups_supervision_tests;
+mod croissant_simple_groups_wire;
 mod environment;
 mod grouping;
 mod hostile;

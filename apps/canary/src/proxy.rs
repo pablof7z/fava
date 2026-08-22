@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -17,6 +18,8 @@ use tokio_tungstenite::{WebSocketStream, accept_async, connect_async};
 
 use crate::artifacts::unix_ms;
 use crate::{CanaryError, CanaryResult};
+
+const CONNECTION_DRAIN_DEADLINE: Duration = Duration::from_secs(2);
 
 pub(crate) struct WireProxy {
     address: SocketAddr,
@@ -65,8 +68,7 @@ impl WireProxy {
                     }
                 }
             }
-            connections.abort_all();
-            while connections.join_next().await.is_some() {}
+            drain_connections(&mut connections).await?;
             Ok(())
         });
         Ok(Self {
@@ -95,6 +97,26 @@ impl WireProxy {
                 .map_err(|error| CanaryError::new(format!("proxy task failed: {error}")))??;
         }
         Ok(())
+    }
+}
+
+async fn drain_connections(connections: &mut JoinSet<()>) -> CanaryResult<()> {
+    let drain = async {
+        while let Some(joined) = connections.join_next().await {
+            joined.map_err(|error| {
+                CanaryError::new(format!(
+                    "proxy connection task failed during drain: {error}"
+                ))
+            })?;
+        }
+        Ok::<(), CanaryError>(())
+    };
+    if let Ok(result) = tokio::time::timeout(CONNECTION_DRAIN_DEADLINE, drain).await {
+        result
+    } else {
+        connections.abort_all();
+        while connections.join_next().await.is_some() {}
+        Err(CanaryError::new("proxy connection drain deadline elapsed"))
     }
 }
 
@@ -221,4 +243,31 @@ fn describe(message: &Message) -> (&'static str, String) {
 
 fn log_proxy_error(connection: u64, error: &dyn std::error::Error) {
     eprintln!("proxy connection {connection} failed: {error}");
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::pending;
+
+    use tokio::task::JoinSet;
+
+    use super::drain_connections;
+
+    #[tokio::test]
+    async fn drain_finishes_completed_bridges_and_reaps_timed_out_bridges() {
+        let mut completed = JoinSet::new();
+        completed.spawn(async {});
+        drain_connections(&mut completed)
+            .await
+            .expect("completed bridge drains");
+        assert!(completed.is_empty());
+
+        let mut stalled = JoinSet::new();
+        stalled.spawn(pending());
+        let error = drain_connections(&mut stalled)
+            .await
+            .expect_err("stalled bridge is refused");
+        assert_eq!(error.to_string(), "proxy connection drain deadline elapsed");
+        assert!(stalled.is_empty());
+    }
 }

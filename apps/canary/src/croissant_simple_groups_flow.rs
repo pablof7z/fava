@@ -17,21 +17,22 @@ use fava_signer_local::LocalSigner;
 use fava_simple_groups::{Group, GroupRecords};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
-use fava_write::{Event, EventId, ReceiptOutcome};
+use fava_write::{Event, ReceiptOutcome};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use serde::Serialize;
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::croissant::CroissantReadyFact;
+use crate::croissant_simple_groups_wire::{
+    exact_event_handoffs, verify_query_completion, wait_for_query_completion,
+};
 use crate::publication_support::wait_terminal;
 use crate::{CanaryError, CanaryResult, WireProxy, deterministic_keys, wire};
 
 const OPERATION_MS: u64 = 30_000;
 const CUSTOM_KIND: u16 = 50_029;
-const REQUIRED_CLOSE_SUBSCRIPTIONS: usize = 3;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SimpleGroupsFlowFacts {
@@ -70,11 +71,16 @@ pub(crate) async fn execute_public_flow(
     )
     .await
     .map_err(|_| CanaryError::new("simple-groups public-flow deadline elapsed"));
-    let stop_a = proxy_a.shutdown().await;
-    let stop_b = proxy_b.shutdown().await;
+    let (stop_a, stop_b) = tokio::join!(proxy_a.shutdown(), proxy_b.shutdown());
     stop_a?;
     stop_b?;
-    result?
+    let (facts, bootstrap_event_id) = result??;
+    verify_query_completion(
+        &[root.join("wire/a.jsonl"), root.join("wire/b.jsonl")],
+        &facts.group_id,
+        &bootstrap_event_id,
+    )?;
+    Ok(facts)
 }
 
 #[allow(
@@ -85,7 +91,7 @@ async fn execute_with_proxies(
     root: &Path,
     seed: &str,
     urls: &[String; 2],
-) -> CanaryResult<SimpleGroupsFlowFacts> {
+) -> CanaryResult<(SimpleGroupsFlowFacts, String)> {
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let target_a = deterministic_keys(&format!("simple-groups-admin-a\0{seed}"))?.public_key();
     let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?.public_key();
@@ -341,30 +347,36 @@ async fn execute_with_proxies(
     records.close();
     records.close();
     let observation_closed = content.changed().await.is_err() && records.changed().await.is_err();
-    wait_for_query_closes(&root.join("wire/a.jsonl")).await?;
-    if selected_hosts == 2 {
-        wait_for_query_closes(&root.join("wire/b.jsonl")).await?;
-    }
+    wait_for_query_completion(
+        &[root.join("wire/a.jsonl"), root.join("wire/b.jsonl")],
+        &group_id,
+        &create.id.to_hex(),
+    )
+    .await?;
 
-    Ok(SimpleGroupsFlowFacts {
-        group_id,
-        relay_urls: [relays[0].to_string(), relays[1].to_string()],
-        shared_event_id: shared.id.to_hex(),
-        unique_event_ids: [unique_a.id.to_hex(), unique_b.id.to_hex()],
-        shared_evidence,
-        metadata_names: [metadata[0].0.clone(), metadata[1].0.clone()],
-        metadata_authors: [metadata[0].1.clone(), metadata[1].1.clone()],
-        admin_targets: [admins[0].0.clone(), admins[1].0.clone()],
-        admin_authors: [admins[0].1.clone(), admins[1].1.clone()],
-        custom_event_id: custom_id.to_hex(),
-        write_id: custom_receipt.write_id.as_u64(),
-        receipt_id: custom_receipt.receipt_id.as_u64(),
-        custom_destinations: custom_receipt.desired_destinations.len(),
-        custom_acknowledged: custom_receipt.acknowledged(),
-        handoffs,
-        signed_refusals,
-        observation_closed,
-    })
+    let bootstrap_event_id = create.id.to_hex();
+    Ok((
+        SimpleGroupsFlowFacts {
+            group_id,
+            relay_urls: [relays[0].to_string(), relays[1].to_string()],
+            shared_event_id: shared.id.to_hex(),
+            unique_event_ids: [unique_a.id.to_hex(), unique_b.id.to_hex()],
+            shared_evidence,
+            metadata_names: [metadata[0].0.clone(), metadata[1].0.clone()],
+            metadata_authors: [metadata[0].1.clone(), metadata[1].1.clone()],
+            admin_targets: [admins[0].0.clone(), admins[1].0.clone()],
+            admin_authors: [admins[0].1.clone(), admins[1].1.clone()],
+            custom_event_id: custom_id.to_hex(),
+            write_id: custom_receipt.write_id.as_u64(),
+            receipt_id: custom_receipt.receipt_id.as_u64(),
+            custom_destinations: custom_receipt.desired_destinations.len(),
+            custom_acknowledged: custom_receipt.acknowledged(),
+            handoffs,
+            signed_refusals,
+            observation_closed,
+        },
+        bootstrap_event_id,
+    ))
 }
 
 fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
@@ -468,118 +480,10 @@ async fn wait_observation(
     .map_err(|_| CanaryError::new("simple-groups observation deadline elapsed"))?
 }
 
-fn exact_event_handoffs(path: &Path, id: EventId) -> CanaryResult<usize> {
-    let id = id.to_hex();
-    let wire = fs::read_to_string(path)?;
-    wire.split_inclusive('\n')
-        .filter(|line| line.ends_with('\n'))
-        .map(|line| serde_json::from_str::<Value>(line.trim_end()).map_err(error))
-        .collect::<CanaryResult<Vec<_>>>()
-        .map(|entries| {
-            entries
-                .iter()
-                .filter(|entry| {
-                    entry.get("direction").and_then(Value::as_str) == Some("client_to_relay")
-                        && entry
-                            .get("payload")
-                            .and_then(Value::as_str)
-                            .is_some_and(|payload| {
-                                payload.contains("\"EVENT\"") && payload.contains(&id)
-                            })
-                })
-                .count()
-        })
-}
-
-async fn wait_for_query_closes(path: &Path) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let count = complete_query_closes(&fs::read_to_string(path)?)?;
-            if count == REQUIRED_CLOSE_SUBSCRIPTIONS {
-                return Ok(());
-            }
-            if count > REQUIRED_CLOSE_SUBSCRIPTIONS {
-                return Err(CanaryError::new(
-                    "observation emitted unexpected duplicate CLOSE frames",
-                ));
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("observation CLOSE frame deadline elapsed"))?
-}
-
-fn complete_query_closes(wire: &str) -> CanaryResult<usize> {
-    let mut subscriptions = std::collections::BTreeSet::new();
-    for line in wire
-        .split_inclusive('\n')
-        .filter(|line| line.ends_with('\n'))
-    {
-        let frame: Value = serde_json::from_str(line.trim_end()).map_err(error)?;
-        if frame.get("direction").and_then(Value::as_str) != Some("client_to_relay")
-            || frame.get("frame_type").and_then(Value::as_str) != Some("text")
-        {
-            continue;
-        }
-        let Some(payload) = frame.get("payload").and_then(Value::as_str) else {
-            return Err(CanaryError::new("wire text frame omitted its payload"));
-        };
-        let decoded: Value = serde_json::from_str(payload).map_err(error)?;
-        if decoded.get(0).and_then(Value::as_str) == Some("CLOSE") {
-            let subscription = decoded
-                .get(1)
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| CanaryError::new("wire CLOSE omitted its subscription"))?;
-            if !subscriptions.insert(subscription.to_owned()) {
-                return Err(CanaryError::new(
-                    "observation repeated a wire CLOSE subscription",
-                ));
-            }
-        }
-    }
-    Ok(subscriptions.len())
-}
-
 fn tag(values: &[&str]) -> CanaryResult<Tag> {
     Tag::parse(values.iter().copied()).map_err(error)
 }
 
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
-}
-
-#[cfg(test)]
-mod close_tests {
-    use super::{REQUIRED_CLOSE_SUBSCRIPTIONS, complete_query_closes};
-
-    fn frame(sequence: u64, connection: u64, subscription: &str) -> String {
-        let payload = serde_json::to_string(&serde_json::json!(["CLOSE", subscription]))
-            .expect("CLOSE payload");
-        serde_json::to_string(&serde_json::json!({
-            "sequence": sequence,
-            "connection": connection,
-            "direction": "client_to_relay",
-            "frame_type": "text",
-            "payload": payload,
-        }))
-        .expect("wire frame")
-            + "\n"
-    }
-
-    #[test]
-    fn bootstrap_close_cannot_release_evidence_before_both_observations_close() {
-        let bootstrap_only = frame(1, 1, "group-create-0");
-        assert!(
-            complete_query_closes(&bootstrap_only).expect("one CLOSE")
-                < REQUIRED_CLOSE_SUBSCRIPTIONS
-        );
-
-        let complete = bootstrap_only + &frame(2, 7, "content") + &frame(3, 8, "records");
-        assert_eq!(
-            complete_query_closes(&complete).expect("three CLOSEs"),
-            REQUIRED_CLOSE_SUBSCRIPTIONS
-        );
-    }
 }
