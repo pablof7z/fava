@@ -165,7 +165,7 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
                 .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
     })
     .await;
-    let projected = group.project(&current);
+    let projected = group.project(&current).expect("bounded projection");
 
     assert_eq!(
         projected
@@ -217,10 +217,12 @@ async fn single_host_group_is_explicit_fork_choice() {
     let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 2).await;
     let a = Group::on([host("a")], "group-29")
         .expect("A group")
-        .project(&current);
+        .project(&current)
+        .expect("bounded A projection");
     let b = Group::on([host("b")], "group-29")
         .expect("B group")
-        .project(&current);
+        .project(&current)
+        .expect("bounded B projection");
 
     assert_eq!(
         a.metadata().next().and_then(|(_, value)| value.name()),
@@ -255,7 +257,8 @@ async fn single_host_empty_is_no_positive_evidence() {
     let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 1).await;
     let empty = Group::on([host("contacted-but-not-serving")], "group-29")
         .expect("single host")
-        .project(&current);
+        .project(&current)
+        .expect("bounded empty projection");
 
     assert!(empty.metadata().next().is_none());
     assert!(empty.admins().next().is_none());

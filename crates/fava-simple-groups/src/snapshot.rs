@@ -4,8 +4,10 @@ use fava_query::{EventRecord, QuerySnapshot};
 use fava_state::RelayUrl;
 use fava_write::{EventId, EventValue, PublicKey, Timestamp};
 
+use crate::bounds::{MAX_GROUP_QUERY_RESULTS, collect_at_most};
 use crate::{
-    Group, GroupAdmins, GroupMembers, GroupMetadata, GroupParticipants, GroupPins, GroupRoles,
+    Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins,
+    GroupRoles,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -84,8 +86,15 @@ pub struct GroupSnapshot {
 }
 
 impl GroupSnapshot {
-    pub(crate) fn project(group: &Group, snapshot: &QuerySnapshot) -> Self {
-        let events = deduplicate_events(snapshot);
+    pub(crate) fn project(group: &Group, snapshot: &QuerySnapshot) -> Result<Self, GroupError> {
+        let input =
+            collect_at_most(snapshot.events.iter(), MAX_GROUP_QUERY_RESULTS).map_err(|actual| {
+                GroupError::TooManyDiscoveryItems {
+                    actual,
+                    maximum: MAX_GROUP_QUERY_RESULTS,
+                }
+            })?;
+        let events = deduplicate_events(input);
         let mut hosts: Vec<_> = group.hosts().map(HostRecords::empty).collect();
         for event in &events {
             let Some(parsed) = parse_record(&event.event, group.id()) else {
@@ -103,7 +112,7 @@ impl GroupSnapshot {
                 host.consider(event.id(), event.created_at(), parsed.clone());
             }
         }
-        Self { events, hosts }
+        Ok(Self { events, hosts })
     }
 
     /// Deduplicated query events in deterministic snapshot order.
@@ -271,10 +280,10 @@ impl GroupSnapshot {
     }
 }
 
-fn deduplicate_events(snapshot: &QuerySnapshot) -> Vec<EventRecord> {
+fn deduplicate_events(input: Vec<&EventRecord>) -> Vec<EventRecord> {
     let mut positions = BTreeMap::<EventId, usize>::new();
     let mut events: Vec<EventRecord> = Vec::new();
-    for event in snapshot.events.iter() {
+    for event in input {
         if let Some(position) = positions.get(&event.id()).copied() {
             let retained = &mut events[position];
             retained.relay_evidence.merge(&event.relay_evidence);

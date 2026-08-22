@@ -153,7 +153,7 @@ fn group_snapshot_signatures_compile_externally() {
     let host = relay("wss://groups.example");
     let group = group(host.clone(), "photos").expect("one host");
     let input = QuerySnapshot::evaluated(Vec::new(), &[]);
-    let snapshot: GroupSnapshot = group.project(&input);
+    let snapshot: GroupSnapshot = group.project(&input).expect("bounded projection");
 
     let mut hosts = snapshot.hosts();
     assert_eq!(hosts.next(), Some(&host));

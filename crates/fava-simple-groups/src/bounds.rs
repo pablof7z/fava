@@ -1,6 +1,6 @@
 pub(super) const MAX_GROUP_HOST_INPUT_ITEMS: usize = 256;
 pub(super) const MAX_GROUP_ID_BYTES: usize = 4_096;
-pub(super) const MAX_GROUP_CONTENT_RESULTS: usize = 4_096;
+pub(super) const MAX_GROUP_QUERY_RESULTS: usize = 4_096;
 pub(super) const MAX_GROUP_CONTEXT_INPUT_ITEMS: usize = 2_000;
 pub(super) const MAX_DISCOVERY_INPUT_ITEMS: usize = 256;
 

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use fava_query::{
-    Freshness, Kind, PublicKey, Query, QueryAcquisition, QueryOrdering, RelayUrl,
-    ResultAuthority, SingleLetterTag,
+    Freshness, Kind, PublicKey, Query, QueryAcquisition, QueryOrdering, RelayUrl, ResultAuthority,
+    SingleLetterTag,
 };
 
 use crate::{Group, GroupError, GroupRecords, SimpleGroups};

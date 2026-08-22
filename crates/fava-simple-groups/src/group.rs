@@ -246,7 +246,7 @@ impl fmt::Display for GroupError {
             }
             Self::TooManyDiscoveryItems { actual, maximum } => write!(
                 formatter,
-                "simple-group discovery item count exceeds bound: {actual} > {maximum}"
+                "simple-group input or snapshot item count exceeds bound: {actual} > {maximum}"
             ),
         }
     }
@@ -364,8 +364,11 @@ impl Group {
     }
 
     /// Project one immutable ordinary query snapshot into this group's exact host views.
-    #[must_use]
-    pub fn project(&self, snapshot: &QuerySnapshot) -> crate::GroupSnapshot {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] when the snapshot exceeds the projection bound.
+    pub fn project(&self, snapshot: &QuerySnapshot) -> Result<crate::GroupSnapshot, GroupError> {
         crate::GroupSnapshot::project(self, snapshot)
     }
 }

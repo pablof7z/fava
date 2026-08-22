@@ -9,7 +9,8 @@ publication, delivery, cancellation, and receipts.
 ## Feed and publication
 
 Content reads retain local write-store visibility and request every selected host.
-They require an explicit positive result bound.
+They require an explicit positive result bound of at most 4,096 rows. Record
+and discovery helpers carry the same explicit whole-query bound.
 
 ```rust
 use fava::{EventBuilder, Kind, Query, Timestamp, Write};
@@ -51,7 +52,7 @@ use fava_simple_groups::GroupRecords;
 
 let records = photos.records(GroupRecords::all())?;
 let observation = fava.observe(records).await?;
-let snapshot = photos.project(&observation.current());
+let snapshot = photos.project(&observation.current())?;
 
 for (host, metadata) in snapshot.metadata() {
     println!("{}: {:?}", host, metadata.name());
@@ -72,7 +73,9 @@ if snapshot.metadata_differ() {
 
 `GroupSnapshot::at` is an explicit application choice. An empty host view is
 only an empty positive-evidence view; it is not an absence or completeness
-claim. Disagreement compares complete optional host-local records.
+claim. Disagreement compares complete optional host-local records. Projection
+refuses a 4,097th input row after examining at most the bound plus one; it never
+silently truncates a snapshot.
 
 ## Discovery and saved lists
 

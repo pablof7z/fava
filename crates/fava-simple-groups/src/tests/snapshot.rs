@@ -58,9 +58,7 @@ impl ProjectionOutcome for GroupSnapshot {
 impl ProjectionOutcome for Result<GroupSnapshot, GroupError> {
     fn bounded_refusal(self) -> Option<(usize, usize)> {
         match self {
-            Err(GroupError::TooManyDiscoveryItems { actual, maximum }) => {
-                Some((actual, maximum))
-            }
+            Err(GroupError::TooManyDiscoveryItems { actual, maximum }) => Some((actual, maximum)),
             Ok(_) | Err(_) => None,
         }
     }
@@ -91,7 +89,9 @@ fn snapshot_projection_refuses_bound_plus_one() {
 #[test]
 fn empty_snapshot_is_empty_positive_evidence() {
     let group = group(&["b", "a"]);
-    let projected = group.project(&snapshot(Vec::new()));
+    let projected = group
+        .project(&snapshot(Vec::new()))
+        .expect("empty input is bounded");
 
     assert!(projected.events().is_empty());
     assert_eq!(
@@ -130,8 +130,8 @@ fn snapshot_projection_is_deterministic() {
     ]);
     let group = group(&["b", "a"]);
 
-    let first = group.project(&input);
-    let second = group.project(&input);
+    let first = group.project(&input).expect("input is bounded");
+    let second = group.project(&input).expect("input is bounded");
     assert_eq!(first, second);
     assert_eq!(
         first
@@ -178,10 +178,12 @@ fn snapshot_preserves_same_signer_per_host_forks() {
         ],
         "",
     );
-    let projected = group(&["a", "b"]).project(&snapshot(vec![
-        record(left, std::slice::from_ref(&a)),
-        record(right, std::slice::from_ref(&b)),
-    ]));
+    let projected = group(&["a", "b"])
+        .project(&snapshot(vec![
+            record(left, std::slice::from_ref(&a)),
+            record(right, std::slice::from_ref(&b)),
+        ]))
+        .expect("input is bounded");
 
     let values = projected
         .metadata()
@@ -241,10 +243,12 @@ fn snapshot_attribution_uses_actual_relay_evidence() {
         vec![tag(&["d", "photos"]), tag(&["p", &listed_hex])],
         "",
     );
-    let projected = group(&["a", "b", "contacted-but-not-serving"]).project(&snapshot(vec![
-        record(admins, std::slice::from_ref(&a)),
-        record(members, std::slice::from_ref(&a)),
-    ]));
+    let projected = group(&["a", "b", "contacted-but-not-serving"])
+        .project(&snapshot(vec![
+            record(admins, std::slice::from_ref(&a)),
+            record(members, std::slice::from_ref(&a)),
+        ]))
+        .expect("input is bounded");
 
     assert_eq!(
         projected
@@ -408,7 +412,9 @@ fn snapshot_disagreement_compares_complete_values() {
             ]
         })
         .collect();
-    let projected = group(&["b", "a"]).project(&snapshot(records));
+    let projected = group(&["b", "a"])
+        .project(&snapshot(records))
+        .expect("input is bounded");
 
     assert!(projected.metadata_differ());
     assert!(projected.admins_differ());

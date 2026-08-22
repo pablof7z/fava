@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use fava_query::{Kind, PublicKey, Query, QuerySnapshot, SingleLetterTag};
 
-use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_GROUP_CONTENT_RESULTS, collect_at_most};
+use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_GROUP_QUERY_RESULTS, collect_at_most};
 use crate::{Group, GroupError};
 
 const RECORD_KINDS: [u16; 6] = [39_000, 39_001, 39_002, 39_003, 39_004, 39_005];
@@ -96,9 +96,11 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        Ok(Query::events()
-            .kind(Kind::from_u16(10_009))
-            .authors(bounded_keys(authors)?))
+        bounded_query(
+            Query::events()
+                .kind(Kind::from_u16(10_009))
+                .authors(bounded_keys(authors)?),
+        )
     }
 
     /// Query kind-10009 saved-relay rows by exact saving authors.
@@ -111,9 +113,11 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        Ok(Query::events()
-            .kind(Kind::from_u16(10_009))
-            .authors(bounded_keys(authors)?))
+        bounded_query(
+            Query::events()
+                .kind(Kind::from_u16(10_009))
+                .authors(bounded_keys(authors)?),
+        )
     }
 
     /// Query kind-39001 records containing exact lowercase-p subjects.
@@ -126,7 +130,7 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        Ok(discovery_by_subject(39_001, bounded_keys(subjects)?))
+        bounded_query(discovery_by_subject(39_001, bounded_keys(subjects)?))
     }
 
     /// Query kind-39002 records containing exact lowercase-p subjects.
@@ -139,7 +143,7 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        Ok(discovery_by_subject(39_002, bounded_keys(subjects)?))
+        bounded_query(discovery_by_subject(39_002, bounded_keys(subjects)?))
     }
 
     /// Project exact saving authors for one group's selected id-host pairs.
@@ -193,20 +197,28 @@ fn discovery_by_subject(kind: u16, subjects: Vec<PublicKey>) -> Query {
     )
 }
 
+fn bounded_query(query: Query) -> Result<Query, GroupError> {
+    query.limit(MAX_GROUP_QUERY_RESULTS).map_err(Into::into)
+}
+
 pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupError> {
     let limit = selection.result_limit().ok_or_else(|| {
         GroupError::Query("group content requires an explicit result bound".to_owned())
     })?;
-    if limit.get() > MAX_GROUP_CONTENT_RESULTS {
+    if limit.get() > MAX_GROUP_QUERY_RESULTS {
         return Err(GroupError::Query(format!(
-            "group content result bound exceeds limit: {} > {MAX_GROUP_CONTENT_RESULTS}",
+            "group content result bound exceeds limit: {} > {MAX_GROUP_QUERY_RESULTS}",
             limit.get()
         )));
     }
     let h = SingleLetterTag::from_char('h').expect("lowercase h is a valid tag key");
-    Ok(selection
-        .tag_values(h, [group.id()])
-        .from_relays(group.hosts())?)
+    let selection = match selection.selection().tag_values.get(&h) {
+        None => selection.tag_values(h, [group.id()]),
+        Some(values) if values.is_empty() => return Err(GroupError::EmptyGroupContext),
+        Some(values) if values.len() == 1 && values.contains(group.id()) => selection,
+        Some(_) => return Err(GroupError::ConflictingGroupContext),
+    };
+    Ok(selection.from_relays(group.hosts())?)
 }
 
 pub(crate) fn records(group: &Group, records: GroupRecords) -> Result<Query, GroupError> {
@@ -214,7 +226,9 @@ pub(crate) fn records(group: &Group, records: GroupRecords) -> Result<Query, Gro
     let query = records.kinds().iter().fold(Query::events(), |query, kind| {
         query.kind(Kind::from_u16(*kind))
     });
-    Ok(query
-        .tag_values(d, [group.id()])
-        .only_from_relays(group.hosts())?)
+    bounded_query(
+        query
+            .tag_values(d, [group.id()])
+            .only_from_relays(group.hosts())?,
+    )
 }

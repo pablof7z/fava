@@ -206,12 +206,14 @@ async fn execute_with_proxies(
     })
     .await?;
     let record_snapshot = wait_observation(&mut records, |current| {
-        let projected = group.project(current);
+        let Ok(projected) = group.project(current) else {
+            return false;
+        };
         projected.metadata().count() == selected_hosts
             && projected.admin_records().count() == selected_hosts
     })
     .await?;
-    let projected = group.project(&record_snapshot);
+    let projected = group.project(&record_snapshot).map_err(error)?;
     if selected_hosts == 2 && (!projected.metadata_differ() || !projected.admins_differ()) {
         return Err(CanaryError::new(
             "host-local metadata/admin forks did not disagree",
@@ -263,7 +265,8 @@ async fn execute_with_proxies(
     {
         let selected = Group::on([relay.clone()], &group_id)
             .map_err(error)?
-            .project(&record_snapshot);
+            .project(&record_snapshot)
+            .map_err(error)?;
         if selected
             .metadata()
             .next()
