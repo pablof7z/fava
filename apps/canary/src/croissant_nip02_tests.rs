@@ -4,12 +4,15 @@ use std::path::PathBuf;
 use serde_json::Value;
 use sha2::Digest;
 use tempfile::TempDir;
+use nostr::nips::nip19::ToBech32;
 
 use super::{
     CroissantNip02Options, reject_cross_run_data, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
 };
-use crate::croissant_nip02_evidence::{artifact_seal, verify_artifact_seal};
+use crate::croissant_nip02_evidence::{
+    artifact_seal, assert_secrets_absent, secret_needles, verify_artifact_seal,
+};
 
 const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
 
@@ -246,6 +249,45 @@ fn signed_evidence_rejects_mutated_verification_claims() {
         assert!(
             error.to_string().contains("signed manifest claims"),
             "wrong refusal for {pointer}: {error}"
+        );
+    }
+}
+
+#[test]
+fn secret_scanner_refuses_every_supported_derived_encoding_directly() {
+    let temporary = TempDir::new().expect("secret scan root");
+    let author = nostr::key::Keys::generate();
+    let target = nostr::key::Keys::generate();
+    let needles = secret_needles(b"direct-secret-seed", [&author, &target])
+        .expect("derived scanner inventory");
+    let mut expected = vec![b"direct-secret-seed".to_vec()];
+    for keys in [&author, &target] {
+        let secret = keys.secret_key();
+        let hex = secret.to_secret_hex();
+        let nsec = secret.to_bech32().expect("nsec encoding");
+        let upper_nsec = nsec.to_ascii_uppercase();
+        expected.extend([
+            secret.to_secret_bytes().to_vec(),
+            hex.as_bytes().to_vec(),
+            hex.to_ascii_uppercase().into_bytes(),
+            nsec.as_bytes().to_vec(),
+            upper_nsec.as_bytes().to_vec(),
+            format!("nostr:{nsec}").into_bytes(),
+            format!("nostr:{upper_nsec}").into_bytes(),
+            format!("NOSTR:{nsec}").into_bytes(),
+            format!("NOSTR:{upper_nsec}").into_bytes(),
+        ]);
+    }
+    assert_eq!(needles, expected, "scanner variant inventory drifted");
+
+    let retained = temporary.path().join("retained.bin");
+    for needle in needles {
+        fs::write(&retained, &needle).expect("inject direct scanner needle");
+        let error = assert_secrets_absent(temporary.path(), std::slice::from_ref(&needle))
+            .expect_err("scanner must reject every supported secret representation");
+        assert_eq!(
+            error.to_string(),
+            "retained Croissant evidence contained secret material"
         );
     }
 }

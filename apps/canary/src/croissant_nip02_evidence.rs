@@ -12,16 +12,26 @@ use sha2::{Digest, Sha256};
 
 use crate::{CanaryError, CanaryResult};
 
-pub(super) const SECRET_SCAN_CLASSES: [&str; 9] = [
+pub(super) const SECRET_SCAN_CLASSES: [&str; 19] = [
     "scenario_seed_utf8",
     "author_secret_raw",
     "author_secret_hex",
     "author_secret_upper_hex",
-    "author_secret_nsec",
+    "author_secret_nsec_lower",
+    "author_secret_nsec_upper",
+    "author_secret_nip21_lower",
+    "author_secret_nip21_upper_payload",
+    "author_secret_nip21_upper_scheme",
+    "author_secret_nip21_upper",
     "target_secret_raw",
     "target_secret_hex",
     "target_secret_upper_hex",
-    "target_secret_nsec",
+    "target_secret_nsec_lower",
+    "target_secret_nsec_upper",
+    "target_secret_nip21_lower",
+    "target_secret_nip21_upper_payload",
+    "target_secret_nip21_upper_scheme",
+    "target_secret_nip21_upper",
 ];
 
 pub(super) fn secret_needles(
@@ -35,10 +45,17 @@ pub(super) fn secret_needles(
     for keys in keys {
         let secret = keys.secret_key();
         let hex = secret.to_secret_hex();
+        let nsec = secret.to_bech32().map_err(error)?;
+        let upper_nsec = nsec.to_ascii_uppercase();
         needles.push(secret.to_secret_bytes().to_vec());
         needles.push(hex.as_bytes().to_vec());
         needles.push(hex.to_ascii_uppercase().into_bytes());
-        needles.push(secret.to_bech32().map_err(error)?.into_bytes());
+        needles.push(nsec.as_bytes().to_vec());
+        needles.push(upper_nsec.as_bytes().to_vec());
+        needles.push(format!("nostr:{nsec}").into_bytes());
+        needles.push(format!("nostr:{upper_nsec}").into_bytes());
+        needles.push(format!("NOSTR:{nsec}").into_bytes());
+        needles.push(format!("NOSTR:{upper_nsec}").into_bytes());
     }
     Ok(needles)
 }
