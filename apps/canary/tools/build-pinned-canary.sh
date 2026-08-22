@@ -7,6 +7,7 @@ build_command='cargo build --frozen --offline --release --manifest-path apps/can
 build_command_sha256=8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08
 rust_image_tag=rust:1.90-bookworm
 registry_image_ref='registry:2@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373'
+registry_image_sha256=${registry_image_ref##*@sha256:}
 green_target_maximum_bytes=4294967296
 docker_deadline_seconds=1200
 docker_output_maximum_bytes=8388608
@@ -24,6 +25,10 @@ registry_image_was_present=1
 break_volume_name=
 break_volume_owner=
 break_volume_options=
+
+case "$registry_image_sha256" in *[!0-9a-f]*|'') exit 75 ;; esac
+[ "${#registry_image_sha256}" -eq 64 ] \
+  || { echo "registry image digest was not canonical raw SHA-256" >&2; exit 75; }
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -766,7 +771,7 @@ cat > "$staging/pinned-build.json" <<EOF
   "target_maximum_bytes": $green_target_maximum_bytes,
   "subject_digest_origin": "engine-image",
   "source_transport": "owned-loopback-registry",
-  "source_transport_image_sha256": "${registry_image_ref##*@}"
+  "source_transport_image_sha256": "$registry_image_sha256"
 }
 EOF
 chmod 0500 "$staging/canary"
