@@ -11,8 +11,7 @@ use std::time::Duration;
 
 use fava::{
     Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WriteIntentError,
-    WriteRouting,
+    ReplaceableEventMaterializer, Timestamp, UnsignedEvent,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -22,7 +21,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
 use fava_state::{CacheMutation, CachedEvent, RelayEvidence};
 use fava_transport::{RelaySession, Transport, TransportError};
-use fava_write::{Receipt, ReceiptId};
+use fava_write::{Receipt, ReceiptId, WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
@@ -174,10 +173,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
         resumed.current.publication.materialization_source,
         Some(newer_source_id)
     );
-    successor_fava
-        .wait_terminal(ReceiptId::from_u64(1))
-        .await
-        .expect("successor recovery settles");
+    wait_terminal(&successor_fava, ReceiptId::from_u64(1)).await;
     assert_eq!(successor_materializer.calls(), 1);
     let inert_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let _inert = publication_builder(
@@ -227,9 +223,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
             .materialization_failure
             .is_none()
     );
-    fava.wait_terminal(ReceiptId::from_u64(1))
-        .await
-        .expect("recovered publication settles");
+    wait_terminal(&fava, ReceiptId::from_u64(1)).await;
     assert_eq!(materializer.calls(), 1);
 
     let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -326,7 +320,7 @@ fn edit_intent() -> WriteIntent {
     WriteIntent::edit_as(
         edit(),
         keys().public_key(),
-        WriteRouting::Explicit(BTreeSet::from([relay()])),
+        WriteRouting::explicit([relay()]).expect("explicit route validates"),
     )
     .expect("semantic intent")
 }
@@ -462,4 +456,29 @@ async fn wait_for_generation(fava: &Fava, receipt_id: ReceiptId, generation: u64
     })
     .await
     .expect("recovery advances once")
+}
+
+async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId) -> Receipt {
+    let mut changes = fava.receipt_changes();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let Some(receipt) = fava.receipt(receipt_id).expect("receipt read")
+                && receipt.is_terminal()
+            {
+                return receipt;
+            }
+            match changes.recv().await {
+                Ok((changed, Some(receipt))) if changed == receipt_id && receipt.is_terminal() => {
+                    return receipt;
+                }
+                Ok((changed, None)) if changed == receipt_id => {
+                    panic!("recovered receipt removed before terminal state")
+                }
+                Ok(_) => {}
+                Err(error) => panic!("receipt change delivery failed: {error}"),
+            }
+        }
+    })
+    .await
+    .expect("recovered publication settles")
 }

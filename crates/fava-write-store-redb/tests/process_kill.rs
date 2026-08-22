@@ -1,6 +1,5 @@
 //! Actual process-kill evidence for every M5 durable commit/effect boundary.
 
-use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -171,7 +170,7 @@ fn assert_boundary(boundary: &str, receipt: Option<&fava_write::Receipt>) {
 fn intent() -> WriteIntent {
     WriteIntent::event(
         unsigned(),
-        WriteRouting::Explicit(BTreeSet::from([relay()])),
+        WriteRouting::explicit([relay()]).expect("explicit route validates"),
     )
     .expect("intent validates")
 }
