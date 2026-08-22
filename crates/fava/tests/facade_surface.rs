@@ -62,6 +62,15 @@ fn facade_has_no_write_intent_compatibility_door() {
     }
 }
 
+#[test]
+fn facade_root_stays_below_the_repository_soft_limit() {
+    let lines = include_str!("../src/lib.rs").lines().count();
+    assert!(
+        lines < 500,
+        "facade root grew to {lines} lines; split the new cohesive owner before merging"
+    );
+}
+
 fn public_use_block<'a>(source: &'a str, start: &str) -> &'a str {
     let remainder = source
         .split_once(start)
