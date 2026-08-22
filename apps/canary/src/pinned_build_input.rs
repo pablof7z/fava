@@ -8,6 +8,7 @@ pub(crate) const MAX_BUILD_ATTESTATION_BYTES: u64 = 4_096;
 pub(crate) const MAX_SOURCE_MANIFEST_BYTES: u64 = 1_048_576;
 pub(crate) const MAX_SOURCE_FILES: u64 = 4_096;
 pub(crate) const MAX_SOURCE_TOTAL_BYTES: u64 = 67_108_864;
+pub(crate) const PINNED_TARGET_MAXIMUM_BYTES: u64 = 4_294_967_296;
 const MAX_SOURCE_FILE_BYTES: u64 = 8_388_608;
 pub(crate) const BUILD_COMMAND_SHA256: &str =
     "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08";
@@ -33,6 +34,9 @@ pub(crate) struct BuildAttestation {
     pub(crate) network: String,
     pub(crate) root_filesystem: String,
     pub(crate) capabilities: String,
+    pub(crate) target_storage: String,
+    pub(crate) target_maximum_bytes: u64,
+    pub(crate) subject_digest_origin: String,
 }
 
 pub(crate) struct SourceManifestClaim {
@@ -75,6 +79,9 @@ pub(crate) fn parse_build_attestation(
         || claim.network != "none"
         || claim.root_filesystem != "read-only"
         || claim.capabilities != "none"
+        || claim.target_storage != "bounded-container-tmpfs"
+        || claim.target_maximum_bytes != PINNED_TARGET_MAXIMUM_BYTES
+        || claim.subject_digest_origin != "container"
     {
         return Err("pinned build attestation did not match immutable compiler inputs".to_owned());
     }

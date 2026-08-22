@@ -317,6 +317,9 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             "network": "none",
             "root_filesystem": "read-only",
             "capabilities": "none",
+            "target_storage": "bounded-container-tmpfs",
+            "target_maximum_bytes": 4_294_967_296_u64,
+            "subject_digest_origin": "container",
         }))
         .expect("build attestation fixture bytes"),
     )
@@ -391,6 +394,9 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "fava_build_source_image_sha256": FIXTURE_FAVA_BUILD_IMAGE,
         "fava_build_rust_base_image_sha256": FIXTURE_FAVA_RUST_BASE_IMAGE,
         "fava_build_command_sha256": FIXTURE_FAVA_BUILD_COMMAND,
+        "fava_build_target_storage": "bounded-container-tmpfs",
+        "fava_build_target_maximum_bytes": 4_294_967_296_u64,
+        "fava_build_subject_digest_origin": "container",
         "fava_build_source_immutable": true,
         "fava_source_clean": true,
         "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,

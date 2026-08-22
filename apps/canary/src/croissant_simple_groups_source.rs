@@ -201,6 +201,18 @@ impl PinnedBuildAttestation {
         &self.claim.build_command_sha256
     }
 
+    pub(crate) fn target_storage(&self) -> &str {
+        &self.claim.target_storage
+    }
+
+    pub(crate) fn target_maximum_bytes(&self) -> u64 {
+        self.claim.target_maximum_bytes
+    }
+
+    pub(crate) fn subject_digest_origin(&self) -> &str {
+        &self.claim.subject_digest_origin
+    }
+
     pub(crate) fn retain(&self, destination: &Path) -> CanaryResult<()> {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true).mode(0o400);

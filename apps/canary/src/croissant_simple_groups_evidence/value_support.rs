@@ -183,7 +183,7 @@ fn verify_build_attestation(
         4_096,
         "Fava build attestation",
     )?)?;
-    if build.as_object().map(Map::len) != Some(18)
+    if build.as_object().map(Map::len) != Some(21)
         || required_string(&build, "schema")? != "fava-pinned-build-v1"
     {
         return Err(CanaryError::new(
@@ -210,6 +210,8 @@ fn verify_build_attestation(
             "fava_build_rust_base_image_sha256",
         ),
         ("build_command_sha256", "fava_build_command_sha256"),
+        ("target_storage", "fava_build_target_storage"),
+        ("subject_digest_origin", "fava_build_subject_digest_origin"),
         (
             "fava_canary_executable_sha256",
             "fava_canary_executable_sha256",
@@ -231,6 +233,14 @@ fn verify_build_attestation(
         || required_string(&build, "network")? != "none"
         || required_string(&build, "root_filesystem")? != "read-only"
         || required_string(&build, "capabilities")? != "none"
+        || required_string(&build, "target_storage")? != "bounded-container-tmpfs"
+        || build
+            .get("target_maximum_bytes")
+            .and_then(Value::as_u64)
+            != Some(4_294_967_296)
+        || build.get("target_maximum_bytes")
+            != manifest.get("fava_build_target_maximum_bytes")
+        || required_string(&build, "subject_digest_origin")? != "container"
     {
         return Err(CanaryError::new(
             "simple-groups retained Fava build attestation did not prove immutable execution",

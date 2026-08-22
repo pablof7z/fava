@@ -7,6 +7,7 @@ archive_paths='Cargo.toml Cargo.lock rust-toolchain.toml apps/canary crates'
 build_command='cargo build --frozen --offline --release --manifest-path apps/canary/Cargo.toml --bin canary'
 build_command_sha256=8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08
 rust_image_tag=rust:1.90-bookworm
+green_target_maximum_bytes=4294967296
 temporary=
 image_tag=
 container_prefix=
@@ -112,91 +113,177 @@ manifest=$temporary/control/source.manifest
 
 # Parse the NUL-delimited object inventory so hostile Git path bytes cannot
 # change manifest rows. Hash the exact blob objects before materialization.
-python3 - "$source_checkout" "$revision" "$tree" "$manifest" <<'PY'
+tree_digest_file=$temporary/control/source-tree.sha256
+python3 - "$source_checkout" "$revision" "$tree" "$manifest" "$tree_digest_file" <<'PY'
 import hashlib
 import os
 import re
 import subprocess
 import sys
+import tempfile
 
-repository, revision, tree, destination = sys.argv[1:]
+repository, revision, tree, destination, tree_digest_destination = sys.argv[1:]
 scopes = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo", "apps/canary", "crates")
-listing = subprocess.run(
+listing = subprocess.Popen(
     ["git", "-C", repository, "ls-tree", "-r", "-z", "--full-tree", revision, "--", *scopes],
-    check=True,
     stdout=subprocess.PIPE,
-).stdout
-rows = []
+)
+assert listing.stdout is not None
+row_spool = tempfile.TemporaryFile()
 total = 0
-for record in listing.split(b"\0"):
-    if not record:
-        continue
-    try:
-        identity, raw_path = record.split(b"\t", 1)
-        mode, kind, object_id = identity.decode("ascii").split(" ")
-        path = raw_path.decode("ascii")
-    except (UnicodeDecodeError, ValueError) as error:
-        raise SystemExit(f"noncanonical pinned Git tree row: {error}")
-    if kind != "blob" or mode not in {"100644", "100755"}:
-        raise SystemExit(f"unsupported pinned compiler input mode/type: {path}")
-    if len(path) > 512 or not re.fullmatch(r"[A-Za-z0-9._/+@=-]+", path):
-        raise SystemExit(f"unsafe pinned compiler input path: {path!r}")
-    parts = path.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        raise SystemExit(f"noncanonical pinned compiler input path: {path}")
-    if not (
-        path in scopes[:3]
-        or path.startswith(".cargo/")
-        or path.startswith("apps/canary/")
-        or path.startswith("crates/")
-    ):
-        raise SystemExit(f"out-of-scope pinned compiler input: {path}")
-    content = subprocess.run(
-        ["git", "-C", repository, "cat-file", "blob", object_id],
-        check=True,
-        stdout=subprocess.PIPE,
-    ).stdout
-    size = len(content)
-    if size > 8_388_608:
-        raise SystemExit(f"pinned compiler input exceeded 8 MiB: {path}")
-    total += size
-    if total > 67_108_864:
-        raise SystemExit("pinned compiler inputs exceeded 64 MiB")
-    rows.append((path, mode, hashlib.sha256(content).hexdigest(), size))
-
-rows.sort(key=lambda row: row[0].encode("ascii"))
-if not rows or len(rows) > 4_096 or len({row[0] for row in rows}) != len(rows):
-    raise SystemExit("pinned compiler-input inventory count was invalid")
-lines = [
-    "format=fava-pinned-source-v1",
-    f"revision={revision}",
-    f"tree={tree}",
-    f"file_count={len(rows)}",
-    f"total_bytes={total}",
-]
-lines.extend(f"file={mode}\t{digest}\t{size}\t{path}" for path, mode, digest, size in rows)
-payload = ("\n".join(lines) + "\n").encode("ascii")
-if len(payload) > 1_048_576:
+file_count = 0
+previous_path = None
+buffer = b""
+while True:
+    chunk = listing.stdout.read(4_096)
+    if not chunk:
+        break
+    buffer += chunk
+    while b"\0" in buffer:
+        record, buffer = buffer.split(b"\0", 1)
+        if not record or len(record) > 1_024:
+            raise SystemExit("pinned Git tree row exceeded its bound")
+        file_count += 1
+        if file_count > 4_096:
+            raise SystemExit("pinned compiler-input inventory exceeded 4096 files")
+        try:
+            identity, raw_path = record.split(b"\t", 1)
+            mode, kind, object_id = identity.decode("ascii").split(" ")
+            path = raw_path.decode("ascii")
+        except (UnicodeDecodeError, ValueError) as error:
+            raise SystemExit(f"noncanonical pinned Git tree row: {error}")
+        if kind != "blob" or mode not in {"100644", "100755"}:
+            raise SystemExit(f"unsupported pinned compiler input mode/type: {path}")
+        if not re.fullmatch(r"[0-9a-f]{40}", object_id):
+            raise SystemExit(f"noncanonical pinned Git object identity: {path}")
+        if len(path) > 512 or not re.fullmatch(r"[A-Za-z0-9._/+@=-]+", path):
+            raise SystemExit(f"unsafe pinned compiler input path: {path!r}")
+        parts = path.split("/")
+        if any(part in {"", ".", ".."} for part in parts):
+            raise SystemExit(f"noncanonical pinned compiler input path: {path}")
+        if not (
+            path in scopes[:3]
+            or path.startswith(".cargo/")
+            or path.startswith("apps/canary/")
+            or path.startswith("crates/")
+        ):
+            raise SystemExit(f"out-of-scope pinned compiler input: {path}")
+        encoded_path = path.encode("ascii")
+        if previous_path is not None and encoded_path <= previous_path:
+            raise SystemExit("pinned compiler-input paths were not strictly ordered")
+        previous_path = encoded_path
+        size_output = subprocess.run(
+            ["git", "-C", repository, "cat-file", "-s", object_id],
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        if len(size_output) > 32 or not re.fullmatch(rb"[0-9]+\n", size_output):
+            raise SystemExit(f"noncanonical pinned compiler input size: {path}")
+        size = int(size_output)
+        if size > 8_388_608:
+            raise SystemExit(f"pinned compiler input exceeded 8 MiB: {path}")
+        total += size
+        if total > 67_108_864:
+            raise SystemExit("pinned compiler inputs exceeded 64 MiB")
+        blob = subprocess.Popen(
+            ["git", "-C", repository, "cat-file", "blob", object_id],
+            stdout=subprocess.PIPE,
+        )
+        assert blob.stdout is not None
+        digest = hashlib.sha256()
+        observed_size = 0
+        while True:
+            content = blob.stdout.read(65_536)
+            if not content:
+                break
+            observed_size += len(content)
+            if observed_size > size:
+                blob.kill()
+                raise SystemExit(f"pinned compiler input exceeded declared size: {path}")
+            digest.update(content)
+        if blob.wait() != 0 or observed_size != size:
+            raise SystemExit(f"pinned compiler input blob read failed: {path}")
+        row_spool.write(
+            f"file={mode}\t{digest.hexdigest()}\t{size}\t{path}\n".encode("ascii")
+        )
+        if row_spool.tell() > 1_048_576:
+            raise SystemExit("pinned source manifest rows exceeded 1 MiB")
+    if len(buffer) > 1_024:
+        listing.kill()
+        raise SystemExit("unterminated pinned Git tree row exceeded its bound")
+if buffer or listing.wait() != 0:
+    raise SystemExit("pinned Git tree listing was incomplete")
+if file_count == 0:
+    raise SystemExit("pinned compiler-input inventory was empty")
+header = (
+    "format=fava-pinned-source-v1\n"
+    f"revision={revision}\n"
+    f"tree={tree}\n"
+    f"file_count={file_count}\n"
+    f"total_bytes={total}\n"
+).encode("ascii")
+if len(header) + row_spool.tell() > 1_048_576:
     raise SystemExit("pinned source manifest exceeded 1 MiB")
 descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(descriptor, "wb") as output:
-    output.write(payload)
+    output.write(header)
+    row_spool.seek(0)
+    while True:
+        chunk = row_spool.read(65_536)
+        if not chunk:
+            break
+        output.write(chunk)
+    output.flush()
+    os.fsync(output.fileno())
+
+tree_listing = subprocess.Popen(
+    ["git", "-C", repository, "ls-tree", "-r", "--full-tree", revision, "--", *scopes],
+    stdout=subprocess.PIPE,
+)
+assert tree_listing.stdout is not None
+tree_digest = hashlib.sha256()
+tree_listing_bytes = 0
+while True:
+    chunk = tree_listing.stdout.read(65_536)
+    if not chunk:
+        break
+    tree_listing_bytes += len(chunk)
+    if tree_listing_bytes > 1_048_576:
+        tree_listing.kill()
+        raise SystemExit("pinned source tree listing exceeded 1 MiB")
+    tree_digest.update(chunk)
+if tree_listing.wait() != 0:
+    raise SystemExit("pinned source tree listing failed")
+descriptor = os.open(tree_digest_destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(descriptor, "w", encoding="ascii", newline="\n") as output:
+    output.write(tree_digest.hexdigest() + "\n")
     output.flush()
     os.fsync(output.fileno())
 PY
 
 manifest_sha256=$(sha256_file "$manifest")
-tree_listing=$temporary/control/source-tree.list
-git -C "$source_checkout" ls-tree -r --full-tree "$revision" -- $readonly_paths > "$tree_listing"
-source_tree_sha256=$(sha256_file "$tree_listing")
+source_tree_sha256=$(tr -d '\r\n' < "$tree_digest_file")
+case "$source_tree_sha256" in *[!0-9a-f]*|'') exit 69 ;; esac
+if [ "${#source_tree_sha256}" -ne 64 ]; then
+  echo "pinned source tree digest was not canonical" >&2
+  exit 69
+fi
 
 archive=$temporary/control/source.tar
 if git -C "$source_checkout" cat-file -e "$revision:.cargo" 2>/dev/null; then
   archive_paths="$archive_paths .cargo"
 fi
 git -C "$source_checkout" archive --format=tar --output="$archive" "$revision" -- $archive_paths
+source_file_count=$(sed -n '4s/^file_count=//p' "$manifest")
+source_total_bytes=$(sed -n '5s/^total_bytes=//p' "$manifest")
+archive_maximum_bytes=$((source_total_bytes + source_file_count * 2048 + 1048576))
+archive_bytes=$(wc -c < "$archive" | tr -d ' ')
+if [ "$archive_bytes" -gt "$archive_maximum_bytes" ]; then
+  echo "pinned Git archive exceeded its derived bound" >&2
+  exit 69
+fi
 tar -xf "$archive" -C "$temporary/source"
-find "$archive" "$tree_listing" -type f -delete
+find "$archive" "$tree_digest_file" -type f -delete
 find "$temporary/source" ! -type f ! -type d -print -quit | grep -q . && {
   echo "pinned Git archive contained a non-regular compiler input" >&2
   exit 69
@@ -347,22 +434,84 @@ if [ ! -f "$break_result" ] \
   exit 74
 fi
 
-green_target=$temporary/target-green
-common_run "$container_prefix-green" "$green_target" --read-only
-green_binary=$green_target/release/canary
-if [ ! -f "$green_binary" ] || [ ! -x "$green_binary" ] \
-  || ! grep -a -q 'canary failed:' "$green_binary" \
-  || grep -a -q 'canary forged:' "$green_binary"; then
-  echo "final pinned canary binary did not contain exact clean source bytes" >&2
-  exit 75
-fi
-binary_sha256=$(sha256_file "$green_binary")
-source_file_count=$(sed -n '4s/^file_count=//p' "$manifest")
-source_total_bytes=$(sed -n '5s/^total_bytes=//p' "$manifest")
-
 staging=$output_directory/.fava-pinned-build-staging-$unique
 mkdir "$staging"
-cp "$green_binary" "$staging/canary"
+
+# The authoritative GREEN subject never occupies a host bind. It is compiled
+# into one bounded container-owned tmpfs, measured there, copied while that
+# exact container remains alive, then measured again before promotion.
+green_name=$container_prefix-green
+docker run --detach --name "$green_name" \
+  --network none \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --read-only \
+  --tmpfs "/target:rw,exec,nosuid,nodev,size=$green_target_maximum_bytes" \
+  --env CARGO_INCREMENTAL=0 \
+  --env CARGO_TARGET_DIR=/target \
+  --env TMPDIR=/target/tmp \
+  --env FAVA_CANARY_PINNED_BUILD=1 \
+  --env "FAVA_BUILD_REVISION=$revision" \
+  --env "FAVA_BUILD_TREE=$tree" \
+  --env "FAVA_BUILD_SOURCE_TREE_SHA256=$source_tree_sha256" \
+  --env "FAVA_BUILD_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
+  --env "FAVA_BUILD_SOURCE_IMAGE_SHA256=$source_image_sha256" \
+  --env "FAVA_BUILD_RUST_BASE_IMAGE_SHA256=$base_image_sha256" \
+  "$source_image_id" /bin/sh -c \
+  "mkdir -p /target/tmp && $build_command && chmod 0500 /target/release/canary && printf '%s\\n' ready > /target/green-ready && exec tail -f /dev/null" \
+  >/dev/null
+green_ready=0
+green_waits=0
+while [ "$green_waits" -lt 1200 ]; do
+  if docker exec "$green_name" test -f /target/green-ready >/dev/null 2>&1; then
+    green_ready=1
+    break
+  fi
+  if [ "$(docker container inspect "$green_name" --format '{{.State.Running}}')" != true ]; then
+    docker logs "$green_name" >&2 || true
+    echo "final pinned canary build exited before readiness" >&2
+    exit 75
+  fi
+  green_waits=$((green_waits + 1))
+  sleep 1
+done
+if [ "$green_ready" -ne 1 ]; then
+  echo "final pinned canary build exceeded its readiness bound" >&2
+  exit 75
+fi
+green_identity_before=$(docker exec "$green_name" /bin/sh -c '
+  set -eu
+  candidate=/target/release/canary
+  test -f "$candidate" && test -x "$candidate" && test ! -L "$candidate"
+  grep -a -q "canary failed:" "$candidate"
+  ! grep -a -q "canary forged:" "$candidate"
+  printf "bytes=%s\n" "$(wc -c < "$candidate" | tr -d " ")"
+  printf "sha256=%s\n" "$(sha256sum "$candidate" | sed "s/ .*//")"
+')
+binary_bytes=$(printf '%s\n' "$green_identity_before" | sed -n '1s/^bytes=//p')
+binary_sha256=$(printf '%s\n' "$green_identity_before" | sed -n '2s/^sha256=//p')
+case "$binary_bytes" in *[!0-9]*|'') exit 75 ;; esac
+case "$binary_sha256" in *[!0-9a-f]*|'') exit 75 ;; esac
+if [ "$binary_bytes" -le 0 ] || [ "$binary_bytes" -gt 134217728 ] \
+  || [ "${#binary_sha256}" -ne 64 ]; then
+  echo "container-owned pinned canary identity exceeded its bound" >&2
+  exit 75
+fi
+docker cp "$green_name:/target/release/canary" "$staging/canary"
+green_identity_after=$(docker exec "$green_name" /bin/sh -c '
+  set -eu
+  candidate=/target/release/canary
+  printf "bytes=%s\n" "$(wc -c < "$candidate" | tr -d " ")"
+  printf "sha256=%s\n" "$(sha256sum "$candidate" | sed "s/ .*//")"
+')
+if [ "$green_identity_after" != "$green_identity_before" ] \
+  || [ "$(wc -c < "$staging/canary" | tr -d ' ')" != "$binary_bytes" ] \
+  || [ "$(sha256_file "$staging/canary")" != "$binary_sha256" ]; then
+  echo "copied pinned canary disagreed with its stable container subject" >&2
+  exit 75
+fi
+remove_container "$green_name"
+
 cp "$manifest" "$staging/pinned-source.manifest"
 cat > "$staging/pinned-build.json" <<EOF
 {
@@ -383,7 +532,10 @@ cat > "$staging/pinned-build.json" <<EOF
   "target_root": "/target",
   "network": "none",
   "root_filesystem": "read-only",
-  "capabilities": "none"
+  "capabilities": "none",
+  "target_storage": "bounded-container-tmpfs",
+  "target_maximum_bytes": $green_target_maximum_bytes,
+  "subject_digest_origin": "container"
 }
 EOF
 chmod 0500 "$staging/canary"

@@ -182,6 +182,8 @@ fn validate_manifest(
         "fava_build_source_image_sha256",
         "fava_build_rust_base_image_sha256",
         "fava_build_command_sha256",
+        "fava_build_target_storage",
+        "fava_build_subject_digest_origin",
     ] {
         if required_string(manifest, field)?.is_empty() {
             return Err(CanaryError::new(format!(
@@ -206,6 +208,12 @@ fn validate_manifest(
             != expected_fava_rust_base_image_sha256
         || required_string(manifest, "fava_build_command_sha256")?
             != "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08"
+        || required_string(manifest, "fava_build_target_storage")? != "bounded-container-tmpfs"
+        || manifest
+            .get("fava_build_target_maximum_bytes")
+            .and_then(Value::as_u64)
+            != Some(4_294_967_296)
+        || required_string(manifest, "fava_build_subject_digest_origin")? != "container"
         || manifest
             .get("fava_build_source_immutable")
             .and_then(Value::as_bool)
