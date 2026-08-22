@@ -1,22 +1,63 @@
 //! Fail-closed resolution of machine-local canary prerequisites.
 
-use std::path::PathBuf;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 use crate::{CanaryError, CanaryResult};
 
-const CROISSANT_BINARY: &str = "/Users/pablofernandez/Work/croissant/target/release/croissant";
-const CROISSANT_SOURCE: &str = "/Users/pablofernandez/Work/croissant";
+const CROISSANT_BINARY: &str = "/Users/pablo/.local/bin/croissant";
+const CROISSANT_SOURCE: &str = "/Users/pablo/Work/croissant";
+const LOCAL_BAZELISK: &str = "/Users/pablo/.local/bin/bazelisk";
 
 pub(crate) fn croissant_fixture_binary() -> CanaryResult<PathBuf> {
-    Ok(PathBuf::from(CROISSANT_BINARY))
+    require_executable(Path::new(CROISSANT_BINARY), "Croissant fixture")
 }
 
 pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
-    Ok(PathBuf::from(CROISSANT_SOURCE))
+    let source = PathBuf::from(CROISSANT_SOURCE);
+    if source.is_dir() && source.join(".git").exists() {
+        return Ok(source);
+    }
+    Err(CanaryError::new(
+        "Croissant source checkout is unavailable",
+    ))
 }
 
 pub(crate) fn bazel_program() -> CanaryResult<PathBuf> {
-    Err(CanaryError::new("Bazel executable is unavailable"))
+    for name in ["bazel", "bazelisk"] {
+        if let Some(path) = executable_on_path(name) {
+            return Ok(path);
+        }
+    }
+    require_executable(Path::new(LOCAL_BAZELISK), "Bazelisk").map_err(|_| {
+        CanaryError::new("neither Bazel nor Bazelisk is available for the product graph probe")
+    })
+}
+
+fn executable_on_path(name: &str) -> Option<PathBuf> {
+    let search_path = env::var_os("PATH")?;
+    env::split_paths(&search_path)
+        .map(|directory| directory.join(name))
+        .find_map(|candidate| require_executable(&candidate, name).ok())
+}
+
+fn require_executable(path: &Path, label: &str) -> CanaryResult<PathBuf> {
+    let metadata = fs::metadata(path)
+        .map_err(|_| CanaryError::new(format!("{label} executable is unavailable")))?;
+    #[cfg(unix)]
+    let executable = metadata.permissions().mode() & 0o111 != 0;
+    #[cfg(not(unix))]
+    let executable = true;
+    if metadata.is_file() && executable {
+        return Ok(path.to_path_buf());
+    }
+    Err(CanaryError::new(format!(
+        "{label} path is not an executable file"
+    )))
 }
 
 #[cfg(test)]

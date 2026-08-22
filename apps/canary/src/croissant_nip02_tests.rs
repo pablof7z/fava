@@ -12,8 +12,7 @@ use super::{
 use crate::croissant_nip02_evidence::{
     artifact_seal, assert_secrets_absent, secret_needles, verify_artifact_seal,
 };
-
-const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
+use crate::environment::croissant_fixture_binary;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_unique_public_flows_pass_exact_pair_verification() {
@@ -118,7 +117,7 @@ async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
         });
         let error = Box::pin(run_croissant_nip02_scenario_inner(
             CroissantNip02Options {
-                relay_binary: PathBuf::from(CROISSANT),
+                relay_binary: croissant_fixture_binary().expect("Croissant fixture binary"),
                 scenario_seed: seed.to_owned(),
                 runs_directory: runs_directory.clone(),
             },
@@ -353,7 +352,7 @@ fn identity_manifest(group: &str, group_event: &str, baseline: &str, event: &str
 
 async fn run(root: PathBuf, seed: &str) -> super::CroissantNip02Outcome {
     Box::pin(run_croissant_nip02_scenario(CroissantNip02Options {
-        relay_binary: PathBuf::from(CROISSANT),
+        relay_binary: croissant_fixture_binary().expect("Croissant fixture binary"),
         scenario_seed: seed.to_owned(),
         runs_directory: root,
     }))

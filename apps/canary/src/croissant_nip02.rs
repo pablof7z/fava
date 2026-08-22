@@ -34,6 +34,7 @@ use crate::croissant_nip02_evidence::{
     SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, directory_contains, manifest_roots,
     secret_needles, verify_artifact_seal, verify_hashes,
 };
+use crate::environment::croissant_fixture_source;
 use crate::publication_support::{wait_record, wait_terminal};
 use crate::semantic_write_support::{GateSigner, PendingSign, deterministic_finalize, next_sign};
 use crate::{
@@ -41,7 +42,6 @@ use crate::{
 };
 
 const SCENARIO: &str = "croissant-nip02-public-flow";
-const CROISSANT_SOURCE: &str = "/Users/pablofernandez/Work/croissant";
 const OPERATION_MS: u64 = 30_000;
 const WIRE_BYTES: u64 = 1_048_576;
 const LEGACY_CONTENT: &str = "legacy shared contact-list content";
@@ -119,9 +119,10 @@ async fn run_croissant_nip02_scenario_inner(
         }),
     )?;
     let relay_root = artifacts.root().join("relays/croissant");
+    let croissant_source = croissant_fixture_source()?;
     let supervisor = CroissantSupervisor::prepare(
         &options.relay_binary,
-        Path::new(CROISSANT_SOURCE),
+        &croissant_source,
         &relay_root,
         &keys.public_key().to_hex(),
         &seed_hash,

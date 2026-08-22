@@ -47,11 +47,11 @@ Run it twice beneath one fresh pair root, then verify the pair:
 pair_root="$(mktemp -d apps/canary/runs/phase-07.1-pair.XXXXXX)"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
-  --relay-bin /Users/pablofernandez/Work/croissant/croissant \
+  --relay-bin /Users/pablo/.local/bin/croissant \
   --seed "$first_private_seed" --runs-dir "$pair_root"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
-  --relay-bin /Users/pablofernandez/Work/croissant/croissant \
+  --relay-bin /Users/pablo/.local/bin/croissant \
   --seed "$second_private_seed" --runs-dir "$pair_root"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   verify-croissant-pair --runs-dir "$pair_root"

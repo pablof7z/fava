@@ -18,6 +18,7 @@ use crate::semantic_write_support::{
     wait_terminal,
 };
 use crate::{CanaryError, CanaryResult, deterministic_keys, repository_root};
+use crate::environment::bazel_program;
 
 pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     let root = repository_root()?;
@@ -63,7 +64,7 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     let metadata: Value = serde_json::from_slice(&cargo_output.stdout)?;
     let cargo_product_reachable = cargo_reaches_external(&metadata, &external_package_id)?;
 
-    let mut bazel = Command::new("bazel");
+    let mut bazel = Command::new(bazel_program()?);
     bazel
         .args(["query", "deps(//...)", "--noshow_progress"])
         .current_dir(&root);
