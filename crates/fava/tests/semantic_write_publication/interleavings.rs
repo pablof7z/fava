@@ -2,12 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
-use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, Timestamp,
-    WriteRouting,
-};
+use fava::{EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, Timestamp};
 use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey};
+use fava_write::{WriteIntent, WritePayload, WriteRouting};
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
@@ -260,11 +258,9 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
             .into_parts()
             .0
         {
-            fava::WritePayload::Edit { edit, author } => fava::WriteIntent::edit_as(
-                edit,
-                author,
-                WriteRouting::Explicit(BTreeSet::from([relay_url()])),
-            ),
+            WritePayload::Edit { edit, author } => {
+                WriteIntent::edit_as(edit, author, WriteRouting::Explicit(vec![relay_url()]))
+            }
             _ => unreachable!(),
         }
         .unwrap(),
@@ -281,7 +277,7 @@ fn active_reservation_excludes_unreserved_memory_admission() {
     let semantic_keys = Keys::generate();
     let raw_keys = Keys::generate();
     let reservation = store.reserve_active().expect("semantic slot reserves");
-    let raw = fava::WriteIntent::event(
+    let raw = WriteIntent::event(
         EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
             .created_at(Timestamp::from(1))
             .content("unreserved")

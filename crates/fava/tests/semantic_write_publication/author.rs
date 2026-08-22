@@ -20,11 +20,17 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
     .build()
     .expect("two-signer semantic assembly");
 
-    let accepted = fava
-        .publish(intent(alice.public_key(), Kind::ContactList))
+    let write = fava
+        .by(alice.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("Alice's edit accepts");
     wait_for_signer(&alice_signer, 1).await;
-    assert_eq!(accepted.current.event.author(), alice.public_key());
+    assert_eq!(
+        write.receipt().unwrap().current.event.author(),
+        alice.public_key()
+    );
     assert_eq!(materializer.calls()[0].author, alice.public_key());
     assert_eq!(bob_signer.calls(), 0);
 
@@ -43,7 +49,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
             relay_evidence(),
         ))])
         .expect("Alice's successor enters cache");
-    let successor = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let successor = wait_for_materialization(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&alice_signer, 2).await;
     assert_eq!(successor.current.event.author(), alice.public_key());
     assert!(
@@ -127,17 +133,13 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
         vec![Arc::clone(&materializer)],
     );
     let edit = ReplaceableEventEdit::new(kind, Some("wanted".to_owned()), vec![1]).unwrap();
-    let accepted = fava
-        .publish(
-            WriteIntent::edit_as(
-                edit,
-                keys.public_key(),
-                WriteRouting::Explicit(std::collections::BTreeSet::from([relay_url()])),
-            )
-            .unwrap(),
-        )
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit)
         .expect("addressable edit accepts");
-    let receipt = fava.wait_terminal(accepted.receipt_id).await.unwrap();
+    let receipt = write.settled(all()).await.unwrap();
 
     assert_eq!(receipt.current.event.author(), keys.public_key());
     assert_eq!(materializer.calls().len(), 1);

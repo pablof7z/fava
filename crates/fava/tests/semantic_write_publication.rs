@@ -5,11 +5,12 @@ use std::time::Duration;
 
 use fava::{
     EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, WriteIntent, WriteRouting,
+    ReplaceableEventMaterializer, Tag, Timestamp, all,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::{CacheMutation, CachedEvent};
+use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
@@ -29,6 +30,11 @@ mod support;
 mod winner_order;
 
 use support::*;
+
+fn edit(kind: Kind) -> ReplaceableEventEdit {
+    ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit")
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn first_value_edit_publishes_through_public_fava() {
     let keys = Keys::generate();
@@ -48,20 +54,23 @@ async fn first_value_edit_publishes_through_public_fava() {
         .await
         .expect("semantic query opens");
 
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("first semantic value accepts");
     let visible = tokio::time::timeout(Duration::from_secs(1), observation.changed())
         .await
         .expect("local materialization arrives")
         .expect("observation stays open");
-    let receipt = fava
-        .wait_terminal(accepted.receipt_id)
+    let receipt = write
+        .settled(all())
         .await
         .expect("ordinary receipt settles");
 
-    assert_eq!(accepted.write_id, receipt.write_id);
-    assert_eq!(accepted.receipt_id, receipt.receipt_id);
+    assert_eq!(write.write_id(), receipt.write_id);
+    assert_eq!(write.receipt_id(), receipt.receipt_id);
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert_eq!(
         receipt.current.publication.materialization_id,
@@ -74,10 +83,10 @@ async fn first_value_edit_publishes_through_public_fava() {
     assert!(materializer.calls()[0].source.is_none());
     assert_eq!(signer.calls(), 1);
     assert_eq!(publisher.attempts().len(), 1);
-    assert_eq!(publisher.attempts()[0].receipt_id, accepted.receipt_id);
+    assert_eq!(publisher.attempts()[0].receipt_id, write.receipt_id());
     assert_eq!(
         publisher.attempts()[0].materialization_id,
-        accepted.current.publication.materialization_id
+        receipt.current.publication.materialization_id
     );
     assert!(cache.is_empty().expect("cache remains readable"));
     assert_eq!(store.len().expect("store remains readable"), 1);
@@ -94,7 +103,10 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     );
     assert!(
         empty
-            .publish(intent(keys.public_key(), Kind::ContactList))
+            .by(keys.public_key())
+            .to([relay_url()])
+            .expect("route validates")
+            .publish(edit(Kind::ContactList))
             .is_err()
     );
     assert_no_effects(&empty_store, &empty_signer, &empty_publisher, 0);
@@ -107,7 +119,10 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     );
     assert!(
         unsupported
-            .publish(intent(keys.public_key(), Kind::Custom(10_003)))
+            .by(keys.public_key())
+            .to([relay_url()])
+            .expect("route validates")
+            .publish(edit(Kind::Custom(10_003)))
             .is_err()
     );
     assert_no_effects(
@@ -160,7 +175,10 @@ async fn materializer_selection_bounds_refuse_before_custody() {
         .expect("one existing active write occupies capacity");
     assert!(
         bounded
-            .publish(intent(keys.public_key(), Kind::ContactList))
+            .by(keys.public_key())
+            .to([relay_url()])
+            .expect("route validates")
+            .publish(edit(Kind::ContactList))
             .is_err()
     );
     assert_no_effects(&bounded_store, &bounded_signer, &bounded_publisher, 1);
@@ -196,13 +214,13 @@ async fn first_value_receives_exact_injected_timestamp() {
         vec![materializer.clone()],
     );
 
-    let accepted = fava
-        .publish(intent(source.pubkey, Kind::ContactList))
+    let write = fava
+        .by(source.pubkey)
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("source-backed edit accepts");
-    let receipt = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("publication settles");
+    let receipt = write.settled(all()).await.expect("publication settles");
     let calls = materializer.calls();
 
     assert_eq!(calls.len(), 1);
@@ -245,8 +263,11 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
     .build()
     .expect("semantic publication assembly");
 
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("edit accepts");
     wait_for_signer(&signer, 1).await;
     let newer = signed_source(
@@ -263,7 +284,7 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         ))])
         .expect("newer source enters cache");
 
-    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
     let EventValue::Unsigned(current) = receipt.current.event else {
         panic!("blocked signer keeps current materialization unsigned");
@@ -298,16 +319,16 @@ async fn own_local_materialization_does_not_create_a_second_generation() {
     .build()
     .expect("semantic publication assembly");
 
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("edit accepts");
     wait_for_signer(&signer, 1).await;
     assert_no_receipt_change(&store).await;
 
-    let receipt = fava
-        .receipt(accepted.receipt_id)
-        .expect("receipt read")
-        .expect("receipt exists");
+    let receipt = write.receipt().expect("receipt exists");
     assert_eq!(
         receipt.current.publication.materialization_id,
         MaterializationId::from_u64(1)
@@ -340,15 +361,18 @@ async fn source_removal_selects_next_or_empty_once() {
     .materializer(Arc::clone(&materializer))
     .build()
     .expect("semantic publication assembly");
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
         .expect("edit accepts");
     wait_for_signer(&signer, 1).await;
 
     cache
         .commit(vec![CacheMutation::Retract(current.id)])
         .expect("current source retracts");
-    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
     assert!(receipt.current.publication.materialization_source.is_none());
     assert!(materializer.calls()[1].source.is_none());
@@ -421,8 +445,11 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     assert!(WriteIntent::edit_as(addressable, keys.public_key(), WriteRouting::Automatic).is_ok());
     assert_eq!(store.len().expect("store readable"), 0);
 
-    let accepted = fava.publish(intent).expect("same edit accepts");
-    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 1).await;
+    let write = fava
+        .by(keys.public_key())
+        .publish(edit(Kind::ContactList))
+        .expect("same edit accepts");
+    let receipt = wait_for_materialization(&fava, write.receipt_id(), 1).await;
     assert_eq!(
         receipt.desired_destinations,
         preview.destinations.keys().cloned().collect()
