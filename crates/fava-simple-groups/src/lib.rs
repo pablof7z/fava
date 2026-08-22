@@ -17,6 +17,6 @@ pub use group::{Group, GroupError};
 pub use metadata::GroupMetadata;
 pub use people::{GroupAdmins, GroupMembers, GroupParticipants, GroupRoles};
 pub use pins::{GroupPins, PinnedItem};
-pub use query::GroupRecords;
+pub use query::{GroupRecords, SimpleGroups};
 pub use saved::{SavedGroup, SavedRelay};
 pub use snapshot::GroupSnapshot;

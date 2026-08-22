@@ -1,0 +1,165 @@
+use std::cell::Cell;
+use std::collections::BTreeSet;
+use std::rc::Rc;
+
+use fava_query::{EventRecord, QuerySnapshot, SingleLetterTag};
+use fava_state::{RelayEvidence, RelayUrl};
+use fava_write::{EventValue, Kind, PublicKey, Tag, Timestamp};
+use nostr::event::{EventBuilder, FinalizeEvent};
+use nostr::key::Keys;
+
+use crate::{Group, GroupError, SimpleGroups};
+
+fn relay(url: &str) -> RelayUrl {
+    RelayUrl::parse(url).expect("test relay")
+}
+
+fn tag(values: &[&str]) -> Tag {
+    Tag::parse(values.iter().copied()).expect("test tag")
+}
+
+fn saved_event(keys: &Keys, created_at: u64, tags: Vec<Tag>) -> EventValue {
+    EventValue::Signed(
+        EventBuilder::new(Kind::from_u16(10_009), "opaque encrypted content")
+            .tags(tags)
+            .custom_created_at(Timestamp::from(created_at))
+            .finalize(keys)
+            .expect("test event signs"),
+    )
+}
+
+fn record(event: EventValue) -> EventRecord {
+    EventRecord::new(event, RelayEvidence::default(), None).expect("stable event id")
+}
+
+#[test]
+fn discovery_queries_are_ordinary_canonical_queries() {
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let canonical = BTreeSet::from([alice, bob]);
+    let p = SingleLetterTag::LOWERCASE_P;
+
+    let saved = SimpleGroups::saved_groups([bob, alice, bob]).expect("bounded authors");
+    let reordered = SimpleGroups::saved_groups([alice, bob]).expect("bounded authors");
+    let relays = SimpleGroups::saved_relays([alice, bob]).expect("bounded authors");
+    assert_eq!(saved, reordered);
+    assert_eq!(
+        saved.selection().kinds,
+        Some(BTreeSet::from([Kind::from_u16(10_009)]))
+    );
+    assert_eq!(saved.selection().authors.as_ref(), Some(&canonical));
+    assert_eq!(relays, saved);
+
+    let admins = SimpleGroups::groups_where_admin([bob, alice, bob]).expect("bounded subjects");
+    let members = SimpleGroups::groups_where_member([alice, bob]).expect("bounded subjects");
+    assert_eq!(
+        admins.selection().kinds,
+        Some(BTreeSet::from([Kind::from_u16(39_001)]))
+    );
+    assert_eq!(
+        members.selection().kinds,
+        Some(BTreeSet::from([Kind::from_u16(39_002)]))
+    );
+    let subject_hex = canonical.iter().map(PublicKey::to_hex).collect();
+    assert_eq!(admins.selection().tag_values.get(&p), Some(&subject_hex));
+    assert_eq!(members.selection().tag_values.get(&p), Some(&subject_hex));
+
+    let empty_saved = SimpleGroups::saved_groups(Vec::<PublicKey>::new()).expect("empty is valid");
+    let empty_admins =
+        SimpleGroups::groups_where_admin(Vec::<PublicKey>::new()).expect("empty is valid");
+    assert_eq!(empty_saved.selection().authors, Some(BTreeSet::new()));
+    assert_eq!(
+        empty_admins.selection().tag_values.get(&p),
+        Some(&BTreeSet::new())
+    );
+    assert_eq!(
+        SimpleGroups::saved_groups([alice]).unwrap(),
+        SimpleGroups::saved_groups([alice]).unwrap()
+    );
+}
+
+struct PanicAfter {
+    value: PublicKey,
+    pulls: Rc<Cell<usize>>,
+}
+
+impl Iterator for PanicAfter {
+    type Item = PublicKey;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.pulls.get() + 1;
+        assert!(next <= 257, "discovery consumed beyond bound+1");
+        self.pulls.set(next);
+        Some(self.value)
+    }
+}
+
+#[test]
+fn discovery_refuses_oversized_and_infinite_inputs() {
+    let key = Keys::generate().public_key();
+    assert!(SimpleGroups::saved_groups(std::iter::repeat_n(key, 256)).is_ok());
+    assert_eq!(
+        SimpleGroups::saved_groups(std::iter::repeat_n(key, 257)),
+        Err(GroupError::TooManyDiscoveryItems {
+            actual: 257,
+            maximum: 256
+        })
+    );
+
+    let pulls = Rc::new(Cell::new(0));
+    assert_eq!(
+        SimpleGroups::groups_where_member(PanicAfter {
+            value: key,
+            pulls: Rc::clone(&pulls)
+        }),
+        Err(GroupError::TooManyDiscoveryItems {
+            actual: 257,
+            maximum: 256
+        })
+    );
+    assert_eq!(pulls.get(), 257);
+}
+
+#[test]
+fn groups_saved_by_is_bounded_pure_projection() {
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let other = Keys::generate();
+    let group = Group::on(
+        [relay("wss://a.example"), relay("wss://b.example")],
+        "photos",
+    )
+    .expect("group");
+    let snapshot = QuerySnapshot::evaluated(
+        vec![
+            record(saved_event(
+                &alice,
+                1,
+                vec![tag(&["group", "photos", "wss://a.example"])],
+            )),
+            record(saved_event(
+                &bob,
+                2,
+                vec![
+                    tag(&["group", "photos", "wss://c.example"]),
+                    tag(&["group", "photos", "wss://b.example"]),
+                    tag(&["group", "photos", "wss://b.example", "duplicate"]),
+                ],
+            )),
+            record(saved_event(
+                &other,
+                3,
+                vec![tag(&["group", "other", "wss://a.example"])],
+            )),
+        ],
+        &[],
+    );
+    let expected = BTreeSet::from([alice.public_key(), bob.public_key()])
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    let first = SimpleGroups::groups_saved_by(&snapshot, &group).expect("bounded projection");
+    let second = SimpleGroups::groups_saved_by(&snapshot, &group).expect("pure repeat");
+    assert_eq!(first, expected);
+    assert_eq!(second, first);
+}

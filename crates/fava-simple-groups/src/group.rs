@@ -135,6 +135,13 @@ pub enum GroupError {
         /// Source tag index.
         tag_index: usize,
     },
+    /// Discovery input or snapshot size exceeds its pure-operation bound.
+    TooManyDiscoveryItems {
+        /// Total items observed before refusal.
+        actual: usize,
+        /// Maximum accepted item count.
+        maximum: usize,
+    },
 }
 
 impl fmt::Display for GroupError {
@@ -236,6 +243,10 @@ impl fmt::Display for GroupError {
                     "group record row {tag_index} repeats an accepted target"
                 )
             }
+            Self::TooManyDiscoveryItems { actual, maximum } => write!(
+                formatter,
+                "simple-group discovery item count exceeds bound: {actual} > {maximum}"
+            ),
         }
     }
 }

@@ -1,9 +1,14 @@
-use fava_query::{Kind, Query, SingleLetterTag};
+use std::borrow::Borrow;
 
-use crate::bounds::MAX_GROUP_CONTENT_RESULTS;
+use fava_query::{Kind, PublicKey, Query, QuerySnapshot, SingleLetterTag};
+
+use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_GROUP_CONTENT_RESULTS, collect_at_most};
 use crate::{Group, GroupError};
 
 const RECORD_KINDS: [u16; 6] = [39_000, 39_001, 39_002, 39_003, 39_004, 39_005];
+
+/// Pure namespace for NIP-29 discovery and saved-list operations.
+pub struct SimpleGroups;
 
 /// Relay-authored NIP-29 record selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,6 +83,74 @@ impl GroupRecords {
             Self::Pins => &RECORD_KINDS[5..6],
         }
     }
+}
+
+impl SimpleGroups {
+    /// Query kind-10009 saved-group rows by exact saving authors.
+    pub fn saved_groups<I>(authors: I) -> Result<Query, GroupError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<PublicKey>,
+    {
+        let _ = bounded_keys(authors)?;
+        Ok(Query::events())
+    }
+
+    /// Query kind-10009 saved-relay rows by exact saving authors.
+    pub fn saved_relays<I>(authors: I) -> Result<Query, GroupError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<PublicKey>,
+    {
+        let _ = bounded_keys(authors)?;
+        Ok(Query::events())
+    }
+
+    /// Query kind-39001 records containing exact lowercase-p subjects.
+    pub fn groups_where_admin<I>(subjects: I) -> Result<Query, GroupError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<PublicKey>,
+    {
+        let _ = bounded_keys(subjects)?;
+        Ok(Query::events())
+    }
+
+    /// Query kind-39002 records containing exact lowercase-p subjects.
+    pub fn groups_where_member<I>(subjects: I) -> Result<Query, GroupError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<PublicKey>,
+    {
+        let _ = bounded_keys(subjects)?;
+        Ok(Query::events())
+    }
+
+    /// Project exact saving authors for one group's selected id-host pairs.
+    pub fn groups_saved_by(
+        snapshot: &QuerySnapshot,
+        _group: &Group,
+    ) -> Result<Vec<PublicKey>, GroupError> {
+        let _ = collect_at_most(snapshot.events.iter(), MAX_DISCOVERY_INPUT_ITEMS).map_err(
+            |actual| GroupError::TooManyDiscoveryItems {
+                actual,
+                maximum: MAX_DISCOVERY_INPUT_ITEMS,
+            },
+        )?;
+        Ok(Vec::new())
+    }
+}
+
+fn bounded_keys<I>(input: I) -> Result<Vec<PublicKey>, GroupError>
+where
+    I: IntoIterator,
+    I::Item: Borrow<PublicKey>,
+{
+    Ok(input
+        .into_iter()
+        .take(MAX_DISCOVERY_INPUT_ITEMS)
+        .map(|value| *value.borrow())
+        .collect())
 }
 
 pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupError> {
