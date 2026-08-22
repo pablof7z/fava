@@ -1,7 +1,7 @@
 use fava_state::RelayUrl;
 use fava_write::{Kind, ReplaceableEventEdit, WriteIntentError};
 
-use super::{materialize, tag};
+use super::{materialize, source, tag, target_tags};
 use crate::{follow, follow_with, materializer, unfollow};
 
 #[test]
@@ -84,4 +84,205 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
         .expect_err("invalid encoded relay refuses");
     assert!(matches!(error, WriteIntentError::Encoding(_)));
     assert!(!error.to_string().contains(raw_relay));
+}
+
+#[test]
+fn nip02_preserves_foreign_kind3_bytes() {
+    let actor = nostr::key::Keys::generate();
+    let target = nostr::key::Keys::generate().public_key();
+    let other = nostr::key::Keys::generate().public_key();
+    let target_hex = target.to_hex();
+    let original = vec![
+        tag(&["something-something"]),
+        tag(&[
+            "p",
+            &target_hex,
+            "wss://original.example",
+            "original-name",
+            "foreign-extra-column",
+        ]),
+        tag(&["t", "nostr"]),
+        tag(&["p", "not-a-public-key", "raw-malformed-row"]),
+        tag(&["x", "between", "bytes"]),
+        tag(&["p", &target_hex, "wss://duplicate.example", "duplicate"]),
+        tag(&["p", &other.to_hex(), "wss://other.example"]),
+        tag(&["p", &target_hex, "not-a-relay", "still-a-duplicate"]),
+        tag(&["tail"]),
+    ];
+    let legacy_content = "{\"wss://legacy.example\":{\"read\":true}}\nopaque-π";
+    let base = source(
+        &actor,
+        Kind::ContactList,
+        10,
+        legacy_content,
+        original.clone(),
+    );
+
+    let followed = materialize(
+        actor.public_key(),
+        &follow_with(
+            target,
+            Some(RelayUrl::parse("wss://ignored.example").expect("relay")),
+            Some("ignored-name"),
+        )
+        .expect("follow edit"),
+        Some(&base),
+        11,
+    )
+    .expect("follow applies losslessly");
+    assert_eq!(followed.content.as_bytes(), legacy_content.as_bytes());
+    assert_eq!(
+        followed.tags.as_slice(),
+        &[
+            original[0].clone(),
+            original[1].clone(),
+            original[2].clone(),
+            original[3].clone(),
+            original[4].clone(),
+            original[6].clone(),
+            original[8].clone(),
+        ]
+    );
+
+    let unfollowed = materialize(
+        actor.public_key(),
+        &unfollow(target).expect("unfollow edit"),
+        Some(&base),
+        11,
+    )
+    .expect("unfollow applies losslessly");
+    assert_eq!(unfollowed.content.as_bytes(), legacy_content.as_bytes());
+    assert_eq!(
+        unfollowed.tags.as_slice(),
+        &[
+            original[0].clone(),
+            original[2].clone(),
+            original[3].clone(),
+            original[4].clone(),
+            original[6].clone(),
+            original[8].clone(),
+        ]
+    );
+}
+
+#[test]
+fn follow_edits_are_stable_over_empty_and_newer_qualified_sources() {
+    let actor = nostr::key::Keys::generate();
+    let target = nostr::key::Keys::generate().public_key();
+    let concurrent = nostr::key::Keys::generate().public_key();
+    let edit = follow_with(
+        target,
+        Some(RelayUrl::parse("wss://requested.example").expect("relay")),
+        Some("requested"),
+    )
+    .expect("metadata edit");
+
+    let empty = materialize(actor.public_key(), &edit, None, 1).expect("empty source");
+    assert_eq!(
+        empty.tags.as_slice(),
+        &[tag(&[
+            "p",
+            &target.to_hex(),
+            "wss://requested.example",
+            "requested",
+        ])]
+    );
+
+    let newer_tags = vec![
+        tag(&["something-something"]),
+        tag(&[
+            "p",
+            &target.to_hex(),
+            "wss://newer.example",
+            "newer-name",
+            "newer-extra",
+        ]),
+        tag(&["t", "nostr"]),
+        tag(&["p", &concurrent.to_hex(), "wss://concurrent.example"]),
+    ];
+    let newer = source(
+        &actor,
+        Kind::ContactList,
+        20,
+        "newer-legacy-content",
+        newer_tags.clone(),
+    );
+    let rebased = materialize(actor.public_key(), &edit, Some(&newer), 21).expect("rebase");
+    assert_eq!(rebased.content, "newer-legacy-content");
+    assert_eq!(rebased.tags.as_slice(), newer_tags.as_slice());
+
+    let signed_rebased = source(
+        &actor,
+        Kind::ContactList,
+        21,
+        &rebased.content,
+        rebased.tags.clone().to_vec(),
+    );
+    let repeated =
+        materialize(actor.public_key(), &edit, Some(&signed_rebased), 22).expect("repeated add");
+    assert_eq!(repeated.tags, rebased.tags);
+    assert_eq!(target_tags(&repeated, target), 1);
+
+    let remove = unfollow(target).expect("remove");
+    let removed =
+        materialize(actor.public_key(), &remove, Some(&signed_rebased), 22).expect("remove once");
+    let signed_removed = source(
+        &actor,
+        Kind::ContactList,
+        22,
+        &removed.content,
+        removed.tags.clone().to_vec(),
+    );
+    let removed_again =
+        materialize(actor.public_key(), &remove, Some(&signed_removed), 23).expect("remove twice");
+    assert_eq!(removed_again.tags, removed.tags);
+}
+
+#[test]
+fn nip02_errors_and_sources_do_not_log_raw_inputs() {
+    let actor = nostr::key::Keys::generate();
+    let target = nostr::key::Keys::generate().public_key();
+    let raw_content = "raw-secret-contact-content";
+    let mut tampered = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        raw_content,
+        vec![tag(&["raw-secret-tag"])],
+    );
+    tampered.content.push('!');
+    let error = materialize(
+        actor.public_key(),
+        &follow(target).expect("edit"),
+        Some(&tampered),
+        2,
+    )
+    .expect_err("tampered source refuses");
+    assert!(!error.to_string().contains(raw_content));
+    assert!(!error.to_string().contains("raw-secret-tag"));
+
+    let manifest = include_str!("../../Cargo.toml");
+    for dependency in ["log =", "log.", "tracing =", "tracing."] {
+        assert!(
+            !manifest.lines().any(|line| {
+                let line = line.trim_start();
+                !line.starts_with('#') && line.starts_with(dependency)
+            }),
+            "fava-nip02 must not declare logging dependency {dependency}"
+        );
+    }
+    for source_text in [
+        include_str!("../lib.rs"),
+        include_str!("../edit.rs"),
+        include_str!("../bounds.rs"),
+        include_str!("../contact_list.rs"),
+        include_str!("../query.rs"),
+    ] {
+        for logging_macro in ["tracing::", "log::", "println!(", "eprintln!(", "dbg!("] {
+            assert!(
+                !source_text.contains(logging_macro),
+                "fava-nip02 source must not use {logging_macro}"
+            );
+        }
+    }
 }
