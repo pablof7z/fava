@@ -23,7 +23,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 5: Durable Explicit-Route Publication** - Complete M5's durable write, local visibility, exact explicit delivery, receipt, cancellation, and recovery spine.
 - [x] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
 - [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
-- [ ] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work.
+- [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
 - [ ] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
@@ -182,7 +182,7 @@ Plans:
 **Goal:** An application can read, discover, edit, publish, and await NIP-02 contact-list changes through the README-level typed Rust API, while the same universal `publish`/`by`/`to` vocabulary accepts every write payload without exposing `WriteIntent` ceremony.
 **Requirements**: R1, R2, R3, R4, R5, R6, R7, R8, R9
 **Depends on:** Phase 7
-**Plans:** 12/12 plans executed
+**Plans:** 12/12 plans complete
 
 Plans:
 **Wave 1**
@@ -316,7 +316,7 @@ Plans:
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
-| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | In Progress|  |
+| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete    | 2026-08-22 |
 | 07.1.1. Multi-Relay Simple Groups | 0/TBD | Ready to plan after 07.1 | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
