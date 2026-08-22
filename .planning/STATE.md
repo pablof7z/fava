@@ -4,7 +4,7 @@ current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: planning
 stopped_at: Phase 07.1 complete, ready to plan Phase 07.1.1
-last_updated: "2026-08-22T05:44:04.202Z"
+last_updated: "2026-08-22T06:09:31.145Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1 complete, transitioned to Phase 07.1.1
 state_head: a15a6fc8a62ac29302e2b088502941ff6b9fae50
@@ -23,7 +23,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 07.1 — Universal publication vocabulary and typed NIP-02 reads
+**Current focus:** Phase 07.1.1 — Multi-Relay Simple Groups
 
 ## Current Position
 
@@ -161,6 +161,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T03:12:33.115Z
-Stopped at: Phase 07.1 complete, ready to plan Phase 07.1.1
-Resume file: None
+Last session: 2026-08-22T06:09:31.145Z
+Stopped at: Structured handoff resumed; regenerating Phase 07.1.1 research and patterns before checked planning
+Resume file: `.planning/phases/07.1.1-deliver-fava-simple-groups-as-the-multi-relay-nip-29-capabil/.continue-here.md`
