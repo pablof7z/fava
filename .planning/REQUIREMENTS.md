@@ -112,9 +112,9 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 - [ ] **GROUP-01**: `fava-simple-groups::Group` represents one opaque NIP-29 group id over an application-selected non-empty bounded host-relay set, with one-host and multi-host use sharing one public value.
 - [ ] **GROUP-02**: Group content helpers return ordinary queries with the exact `h` value and explicit acquisition from every selected host while preserving accepted local write visibility.
 - [x] **GROUP-03**: Group-record helpers return ordinary queries for kinds 39000–39005 with the exact `d` value and require actual evidence from the selected host set.
-- [ ] **GROUP-04**: A duplicate event served by several hosts appears once with every actual serving-relay contribution, while unique events from each host remain visible.
-- [ ] **GROUP-05**: Typed group projections retain independent per-host record authority, expose exact disagreement and member/admin attribution, and never field-merge metadata or silently select a host.
-- [ ] **GROUP-06**: Applications choose one fork through a single-host `Group`; the capability makes no canonical-host, migration, existence, completeness, or negative-membership claim.
+- [x] **GROUP-04**: A duplicate event served by several hosts appears once with every actual serving-relay contribution, while unique events from each host remain visible.
+- [x] **GROUP-05**: Typed group projections retain independent per-host record authority, expose exact disagreement and member/admin attribution, and never field-merge metadata or silently select a host.
+- [x] **GROUP-06**: Applications choose one fork through a single-host `Group`; the capability makes no canonical-host, migration, existence, completeness, or negative-membership claim.
 - [ ] **GROUP-07**: Group publication is kind-blind, adds or validates exactly one group context, and uses one exact explicit write route over the complete selected host set.
 - [ ] **GROUP-08**: Pre-signed group events remain byte-for-byte unchanged and are refused before custody when their existing group context is missing, duplicate, or contradictory.
 - [ ] **GROUP-09**: NIP-29 records, pins, saved groups, and saved relays have typed bounded parsers/projections so applications do not decode raw protocol tags.
@@ -296,9 +296,9 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | GROUP-01 | Phase 07.1.1 | Pending |
 | GROUP-02 | Phase 07.1.1 | Pending |
 | GROUP-03 | Phase 07.1.1 | Complete |
-| GROUP-04 | Phase 07.1.1 | Pending |
-| GROUP-05 | Phase 07.1.1 | Pending |
-| GROUP-06 | Phase 07.1.1 | Pending |
+| GROUP-04 | Phase 07.1.1 | Complete |
+| GROUP-05 | Phase 07.1.1 | Complete |
+| GROUP-06 | Phase 07.1.1 | Complete |
 | GROUP-07 | Phase 07.1.1 | Pending |
 | GROUP-08 | Phase 07.1.1 | Pending |
 | GROUP-09 | Phase 07.1.1 | Pending |

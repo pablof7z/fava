@@ -1,0 +1,3 @@
+# Deferred Items
+
+- `cargo clippy -p fava-state -p fava-query-standard -p fava --all-targets -- -D warnings` reaches pre-existing warnings in untouched Fava publication/test code: `clippy::struct_field_names` at `crates/fava/src/publication.rs:21`, `clippy::similar_names` at `crates/fava/tests/write_settlement.rs:369`, and `clippy::needless_pass_by_value` at `crates/fava/tests/semantic_write_store.rs:129-130`. Plan 02 does not modify those owners; the state/query-standard subsets and the focused `fava` `multi_relay` target pass strict Clippy (the focused target allows only the unrelated library-level `struct_field_names` lint).
