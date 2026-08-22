@@ -31,6 +31,7 @@ use crate::{CanaryError, CanaryResult, WireProxy, deterministic_keys, wire};
 
 const OPERATION_MS: u64 = 30_000;
 const CUSTOM_KIND: u16 = 50_029;
+const REQUIRED_CLOSE_SUBSCRIPTIONS: usize = 3;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SimpleGroupsFlowFacts {
@@ -340,9 +341,9 @@ async fn execute_with_proxies(
     records.close();
     records.close();
     let observation_closed = content.changed().await.is_err() && records.changed().await.is_err();
-    wait_for_close(&root.join("wire/a.jsonl")).await?;
+    wait_for_query_closes(&root.join("wire/a.jsonl")).await?;
     if selected_hosts == 2 {
-        wait_for_close(&root.join("wire/b.jsonl")).await?;
+        wait_for_query_closes(&root.join("wire/b.jsonl")).await?;
     }
 
     Ok(SimpleGroupsFlowFacts {
@@ -490,17 +491,55 @@ fn exact_event_handoffs(path: &Path, id: EventId) -> CanaryResult<usize> {
         })
 }
 
-async fn wait_for_close(path: &Path) -> CanaryResult<()> {
+async fn wait_for_query_closes(path: &Path) -> CanaryResult<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if fs::read_to_string(path).is_ok_and(|wire| wire.contains("\\\"CLOSE\\\"")) {
-                return;
+            let count = complete_query_closes(&fs::read_to_string(path)?)?;
+            if count == REQUIRED_CLOSE_SUBSCRIPTIONS {
+                return Ok(());
+            }
+            if count > REQUIRED_CLOSE_SUBSCRIPTIONS {
+                return Err(CanaryError::new(
+                    "observation emitted unexpected duplicate CLOSE frames",
+                ));
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
-    .map_err(|_| CanaryError::new("observation CLOSE frame deadline elapsed"))
+    .map_err(|_| CanaryError::new("observation CLOSE frame deadline elapsed"))?
+}
+
+fn complete_query_closes(wire: &str) -> CanaryResult<usize> {
+    let mut subscriptions = std::collections::BTreeSet::new();
+    for line in wire
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+    {
+        let frame: Value = serde_json::from_str(line.trim_end()).map_err(error)?;
+        if frame.get("direction").and_then(Value::as_str) != Some("client_to_relay")
+            || frame.get("frame_type").and_then(Value::as_str) != Some("text")
+        {
+            continue;
+        }
+        let Some(payload) = frame.get("payload").and_then(Value::as_str) else {
+            return Err(CanaryError::new("wire text frame omitted its payload"));
+        };
+        let decoded: Value = serde_json::from_str(payload).map_err(error)?;
+        if decoded.get(0).and_then(Value::as_str) == Some("CLOSE") {
+            let subscription = decoded
+                .get(1)
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| CanaryError::new("wire CLOSE omitted its subscription"))?;
+            if !subscriptions.insert(subscription.to_owned()) {
+                return Err(CanaryError::new(
+                    "observation repeated a wire CLOSE subscription",
+                ));
+            }
+        }
+    }
+    Ok(subscriptions.len())
 }
 
 fn tag(values: &[&str]) -> CanaryResult<Tag> {
@@ -509,4 +548,38 @@ fn tag(values: &[&str]) -> CanaryResult<Tag> {
 
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
+}
+
+#[cfg(test)]
+mod close_tests {
+    use super::{REQUIRED_CLOSE_SUBSCRIPTIONS, complete_query_closes};
+
+    fn frame(sequence: u64, connection: u64, subscription: &str) -> String {
+        let payload = serde_json::to_string(&serde_json::json!(["CLOSE", subscription]))
+            .expect("CLOSE payload");
+        serde_json::to_string(&serde_json::json!({
+            "sequence": sequence,
+            "connection": connection,
+            "direction": "client_to_relay",
+            "frame_type": "text",
+            "payload": payload,
+        }))
+        .expect("wire frame")
+            + "\n"
+    }
+
+    #[test]
+    fn bootstrap_close_cannot_release_evidence_before_both_observations_close() {
+        let bootstrap_only = frame(1, 1, "group-create-0");
+        assert!(
+            complete_query_closes(&bootstrap_only).expect("one CLOSE")
+                < REQUIRED_CLOSE_SUBSCRIPTIONS
+        );
+
+        let complete = bootstrap_only + &frame(2, 7, "content") + &frame(3, 8, "records");
+        assert_eq!(
+            complete_query_closes(&complete).expect("three CLOSEs"),
+            REQUIRED_CLOSE_SUBSCRIPTIONS
+        );
+    }
 }
