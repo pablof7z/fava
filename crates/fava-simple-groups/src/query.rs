@@ -215,7 +215,6 @@ pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupErr
     let selection = match selection.selection().tag_values.get(&h) {
         None => selection.tag_values(h, [group.id()]),
         Some(values) if values.is_empty() => return Err(GroupError::EmptyGroupContext),
-        Some(values) if values.len() == 1 && values.contains(group.id()) => selection,
         Some(_) => return Err(GroupError::ConflictingGroupContext),
     };
     Ok(selection.from_relays(group.hosts())?)

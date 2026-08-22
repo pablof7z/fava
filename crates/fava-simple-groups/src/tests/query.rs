@@ -94,17 +94,15 @@ fn content_query_preserves_any_local_visibility() {
 }
 
 #[test]
-fn content_query_unions_conflicting_group_context() {
+fn content_query_refuses_every_preexisting_group_context() {
     let group = group();
     let h = SingleLetterTag::from_char('h').expect("tag key");
     let bounded = || Query::events().limit(16).expect("positive limit");
 
-    let exact = group
-        .events(bounded().tag_values(h, ["photos"]))
-        .expect("one exact existing context remains valid");
     assert_eq!(
-        exact.selection().tag_values.get(&h),
-        Some(&BTreeSet::from(["photos".to_owned()]))
+        group.events(bounded().tag_values(h, ["photos"])),
+        Err(GroupError::ConflictingGroupContext),
+        "the capability alone owns insertion of the exact h axis"
     );
     assert_eq!(
         group.events(bounded().tag_values(h, ["photos", "elsewhere"])),
