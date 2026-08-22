@@ -4,6 +4,8 @@ use nostr::key::{Keys, PublicKey};
 
 use super::{follow, materializer, unfollow};
 
+mod contact_list;
+
 fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("nonempty test tag")
 }
