@@ -10,7 +10,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, Fava, Kind, Query, ReceiptOutcome, Tag, Timestamp, WriteRouting};
+use fava::{
+    EventBuilder, Fava, Kind, MaterializationId, Query, ReceiptOutcome, Tag, Timestamp,
+    WriteRouting,
+};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -20,7 +23,7 @@ use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_simple_groups::{Group, GroupRecords};
+use fava_simple_groups::{Group, GroupRecords, SavedRelay, SimpleGroups};
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
 };
@@ -31,6 +34,8 @@ use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use tokio::sync::watch;
+
+include!("simple_groups/saved.rs");
 
 #[tokio::test(flavor = "current_thread")]
 async fn simple_group_content_preserves_local_visibility() {
@@ -596,6 +601,13 @@ struct Harness {
 
 impl Harness {
     fn new(signer: Arc<dyn Signer>) -> Self {
+        Self::new_with_materializers(signer, [])
+    }
+
+    fn new_with_materializers(
+        signer: Arc<dyn Signer>,
+        _materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
+    ) -> Self {
         let cache = Arc::new(MemoryEventCache::default());
         let store = Arc::new(MemoryWriteStore::default());
         let publisher = Arc::new(SpyPublisher::default());
@@ -778,14 +790,4 @@ impl Transport for SpyTransport {
             ))
         })
     }
-}
-
-async fn wait_until(predicate: impl Fn() -> bool) {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while !predicate() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("condition deadline");
 }

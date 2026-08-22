@@ -3,6 +3,7 @@
 mod bounds;
 mod edit;
 mod group;
+mod management;
 mod metadata;
 mod people;
 mod pins;

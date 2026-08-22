@@ -173,3 +173,11 @@ fn saved_edit_signatures_compile_externally() {
     let _: fn() -> std::sync::Arc<dyn fava_write::ReplaceableEventMaterializer> =
         SimpleGroups::materializer;
 }
+
+#[test]
+fn management_event_signatures_compile_externally() {
+    let _: fn(&Group, fava_write::UnsignedEvent) -> Result<fava_write::UnsignedEvent, GroupError> =
+        Group::edit_metadata;
+    let _: fn(&Group, fava_write::UnsignedEvent) -> Result<fava_write::UnsignedEvent, GroupError> =
+        Group::set_pins;
+}
