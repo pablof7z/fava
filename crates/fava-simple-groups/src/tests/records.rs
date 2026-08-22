@@ -89,6 +89,7 @@ fn metadata_parser_conserves_complete_record() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // One hostile boundary matrix keeps E25 causality explicit.
 fn record_boundary_refuses_ambiguous_or_oversized_input() {
     let keys = Keys::generate();
     let minimal = source(&keys, 39_000, vec![tag(&["d", "g"])], "");

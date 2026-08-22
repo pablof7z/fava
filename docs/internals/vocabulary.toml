@@ -195,8 +195,17 @@ meaning = "A relay-based Nostr group; Fava's Group value aggregates one opaque g
 owner = "fava-simple-groups"
 symbols = [
     "fava_simple_groups::Group",
+    "fava_simple_groups::GroupAdmins",
     "fava_simple_groups::GroupError",
+    "fava_simple_groups::GroupMembers",
+    "fava_simple_groups::GroupMetadata",
+    "fava_simple_groups::GroupParticipants",
+    "fava_simple_groups::GroupPins",
     "fava_simple_groups::GroupRecords",
+    "fava_simple_groups::GroupRoles",
+    "fava_simple_groups::PinnedItem",
+    "fava_simple_groups::SavedGroup",
+    "fava_simple_groups::SavedRelay",
 ]
 crates = ["fava-simple-groups"]
 spec_symbols = [

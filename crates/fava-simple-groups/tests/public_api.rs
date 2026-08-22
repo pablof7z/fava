@@ -14,6 +14,11 @@ fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String
     GroupMetadata::from_event(event).map(|metadata| metadata.id().to_owned())
 }
 
+fn saved_signatures_are_public(event: &fava_write::EventValue) {
+    drop(SavedGroup::from_event(event));
+    drop(SavedRelay::from_event(event));
+}
+
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
 }
@@ -129,10 +134,7 @@ fn people_parser_signatures_compile_externally() {
 #[test]
 fn pin_and_saved_parser_signatures_compile_externally() {
     let _: fn(&fava_write::EventValue) -> Result<GroupPins, GroupError> = GroupPins::from_event;
-    let _: fn(&fava_write::EventValue) -> Result<Vec<Result<SavedGroup, GroupError>>, GroupError> =
-        SavedGroup::from_event;
-    let _: fn(&fava_write::EventValue) -> Result<Vec<Result<SavedRelay, GroupError>>, GroupError> =
-        SavedRelay::from_event;
+    let _: fn(&fava_write::EventValue) = saved_signatures_are_public;
     let target: Option<PinnedItem> = None;
     assert!(target.is_none());
 }

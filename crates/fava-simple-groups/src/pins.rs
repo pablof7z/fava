@@ -34,7 +34,7 @@ impl GroupPins {
             .tags()
             .iter()
             .enumerate()
-            .find_map(|(tag_index, tag)| {
+            .filter_map(|(tag_index, tag)| {
                 let values = tag.as_slice();
                 match values.first().map(String::as_str) {
                     Some("e") => Some(parse_event(tag_index, values)),
@@ -42,7 +42,6 @@ impl GroupPins {
                     _ => None,
                 }
             })
-            .into_iter()
             .collect();
         Ok(Self {
             id: boundary.id,
