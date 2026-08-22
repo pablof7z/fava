@@ -437,6 +437,8 @@ impl PreparePayload for UnsignedEvent {
 
 impl PreparePayload for Event {
     fn prepare_for(self, group: &Group) -> Result<Self, GroupError> {
+        self.verify()
+            .map_err(|error| GroupError::Event(error.to_string()))?;
         validate_context_input_bound(self.tags.iter())?;
         let mut contexts = 0usize;
         for tag in self.tags.iter().filter(|tag| is_group_context(tag)) {

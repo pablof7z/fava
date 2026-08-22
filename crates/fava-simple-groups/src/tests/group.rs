@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use fava_state::RelayUrl;
 use fava_write::{Event, EventBuilder, Kind, PublicKey, Tag, Timestamp, UnsignedEvent};
+use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+use nostr::key::Keys;
 
 use crate::{Group, GroupError};
 
@@ -32,25 +34,13 @@ fn unsigned(tags: Vec<Tag>) -> UnsignedEvent {
 }
 
 fn signed(tags: Vec<Tag>) -> Event {
-    let mut source = UnsignedEvent::new(
-        author(),
-        Timestamp::from(11),
-        Kind::from_u16(9_008),
-        tags,
-        "signed opaque content",
-    );
-    source.ensure_id();
-    Event::new(
-        source.id.expect("ensured id"),
-        source.pubkey,
-        source.created_at,
-        source.kind,
-        source.tags,
-        source.content,
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-            .parse()
-            .expect("shape-valid test signature"),
-    )
+    let keys = Keys::parse("0000000000000000000000000000000000000000000000000000000000000001")
+        .expect("deterministic test key");
+    NostrEventBuilder::new(Kind::from_u16(9_008), "signed opaque content")
+        .tags(tags)
+        .custom_created_at(Timestamp::from(11))
+        .finalize(&keys)
+        .expect("test event signs")
 }
 
 fn contexts(event: &UnsignedEvent) -> Vec<Vec<String>> {
@@ -265,6 +255,18 @@ fn group_prepare_signed_is_byte_exact_or_refuses() {
             actual: 2_001,
             maximum: 2_000,
         })
+    );
+}
+
+#[test]
+fn group_prepare_signed_verifies_before_acceptance() {
+    let group = Group::on([relay("wss://groups.example")], "photos").expect("group");
+    let mut tampered = signed(vec![tag(&["h", "photos"])]);
+    tampered.content.push_str(" after signing");
+
+    assert!(
+        group.prepare(tampered).is_err(),
+        "a context-valid but cryptographically invalid event must be refused"
     );
 }
 
