@@ -26,6 +26,7 @@ fn wire_frames(snapshot: &EvidenceSnapshot, label: &str) -> CanaryResult<(Vec<Va
     if frames.is_empty() {
         return Err(CanaryError::new("simple-groups wire log was empty"));
     }
+    frames.sort_by_key(|frame| frame.get("sequence").and_then(Value::as_u64));
     Ok((frames, u64::try_from(bytes.len()).map_err(error)?))
 }
 
