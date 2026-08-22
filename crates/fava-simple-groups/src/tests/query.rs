@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
 
 use fava_query::{
-    Freshness, Kind, Query, QueryAcquisition, QueryOrdering, RelayUrl, ResultAuthority,
-    SingleLetterTag,
+    Freshness, Kind, PublicKey, Query, QueryAcquisition, QueryOrdering, RelayUrl,
+    ResultAuthority, SingleLetterTag,
 };
 
-use crate::{Group, GroupError, GroupRecords};
+use crate::{Group, GroupError, GroupRecords, SimpleGroups};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
@@ -94,6 +94,33 @@ fn content_query_preserves_any_local_visibility() {
 }
 
 #[test]
+fn content_query_unions_conflicting_group_context() {
+    let group = group();
+    let h = SingleLetterTag::from_char('h').expect("tag key");
+    let bounded = || Query::events().limit(16).expect("positive limit");
+
+    let exact = group
+        .events(bounded().tag_values(h, ["photos"]))
+        .expect("one exact existing context remains valid");
+    assert_eq!(
+        exact.selection().tag_values.get(&h),
+        Some(&BTreeSet::from(["photos".to_owned()]))
+    );
+    assert_eq!(
+        group.events(bounded().tag_values(h, ["photos", "elsewhere"])),
+        Err(GroupError::ConflictingGroupContext)
+    );
+    assert_eq!(
+        group.events(bounded().tag_values(h, ["elsewhere"])),
+        Err(GroupError::ConflictingGroupContext)
+    );
+    assert_eq!(
+        group.events(bounded().tag_values(h, std::iter::empty::<String>())),
+        Err(GroupError::EmptyGroupContext)
+    );
+}
+
+#[test]
 fn record_query_uses_exact_relay_authority() {
     let group = group();
     let hosts = BTreeSet::from([relay("wss://z.example"), relay("wss://a.example")]);
@@ -107,4 +134,24 @@ fn record_query_uses_exact_relay_authority() {
         records.source().authority(),
         &ResultAuthority::OnlyRelays(hosts)
     );
+}
+
+#[test]
+fn group_queries_have_explicit_result_bounds() {
+    let group = group();
+    let queries = [
+        group.records(GroupRecords::all()).expect("record query"),
+        SimpleGroups::saved_groups(Vec::<PublicKey>::new()).expect("saved-group query"),
+        SimpleGroups::saved_relays(Vec::<PublicKey>::new()).expect("saved-relay query"),
+        SimpleGroups::groups_where_admin(Vec::<PublicKey>::new()).expect("admin query"),
+        SimpleGroups::groups_where_member(Vec::<PublicKey>::new()).expect("member query"),
+    ];
+
+    for query in queries {
+        assert_eq!(
+            query.result_limit().map(std::num::NonZeroUsize::get),
+            Some(4_096),
+            "every capability-owned query must declare its whole-result bound"
+        );
+    }
 }

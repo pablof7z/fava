@@ -4,7 +4,7 @@ use fava_write::{Event, EventValue, Kind, Tag, Timestamp};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::Group;
+use crate::{Group, GroupError, GroupSnapshot};
 
 fn host(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
@@ -43,6 +43,49 @@ fn record(event: Event, relays: &[RelayUrl]) -> EventRecord {
 
 fn snapshot(events: Vec<EventRecord>) -> QuerySnapshot {
     QuerySnapshot::evaluated(events, &[])
+}
+
+trait ProjectionOutcome {
+    fn bounded_refusal(self) -> Option<(usize, usize)>;
+}
+
+impl ProjectionOutcome for GroupSnapshot {
+    fn bounded_refusal(self) -> Option<(usize, usize)> {
+        None
+    }
+}
+
+impl ProjectionOutcome for Result<GroupSnapshot, GroupError> {
+    fn bounded_refusal(self) -> Option<(usize, usize)> {
+        match self {
+            Err(GroupError::TooManyDiscoveryItems { actual, maximum }) => {
+                Some((actual, maximum))
+            }
+            Ok(_) | Err(_) => None,
+        }
+    }
+}
+
+#[test]
+fn snapshot_projection_refuses_bound_plus_one() {
+    let keys = Keys::generate();
+    let a = host("a");
+    let event = record(
+        signed(
+            &keys,
+            39_000,
+            1,
+            vec![tag(&["d", "photos"]), tag(&["name", "bounded"])],
+            "",
+        ),
+        std::slice::from_ref(&a),
+    );
+    let input = snapshot(vec![event; 4_097]);
+
+    assert_eq!(
+        group(&["a"]).project(&input).bounded_refusal(),
+        Some((4_097, 4_096))
+    );
 }
 
 #[test]
