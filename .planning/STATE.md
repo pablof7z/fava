@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-07-PLAN.md
-last_updated: "2026-08-22T11:02:47.428Z"
+stopped_at: Completed 07.1.1-08-PLAN.md
+last_updated: "2026-08-22T11:25:30.591Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: 7ff076b1365c59545778f77b05d7bb61ff842ed4
+state_head: 0ea48a654b899b2ce4e8fc306babff16bb92a30e
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 31
+  completed_plans: 32
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -89,6 +89,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P05 | 14min | 3 tasks | 8 files |
 | Phase 07.1.1 P06 | 14min | 3 tasks | 4 files |
 | Phase 07.1.1 P07 | 21min | 3 tasks | 13 files |
+| Phase 07.1.1 P08 | 19min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Relay-authored records accept signed EventValue only and distinguish invalid id from invalid signature before typed decoding.
 - [Phase 07.1.1]: Recognized multi-row inputs expose bounded source-ordered Result values; only a successfully parsed row reserves its exact duplicate key.
 - [Phase 07.1.1]: Pinned addresses reuse EventCoordinate, saved hosts reuse RelayUrl, and people rows reuse PublicKey/String tuples without new row or attribution vocabulary.
+- [Phase 07.1.1]: GroupSnapshot retains configured first-occurrence host order and selects one complete newest-valid typed record independently for each exact RelayUrl.
+- [Phase 07.1.1]: Disagreement compares complete optional typed records, so observed versus unobserved differs without turning an empty view into a negative claim.
+- [Phase 07.1.1]: Content keeps QuerySnapshot order, deduplicates repeated ids defensively, and merges every actual RelayEvidence observation.
 
 ### Pending Todos
 
@@ -183,6 +187,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T11:02:47.344Z
-Stopped at: Completed 07.1.1-07-PLAN.md
+Last session: 2026-08-22T11:25:30.504Z
+Stopped at: Completed 07.1.1-08-PLAN.md
 Resume file: None
