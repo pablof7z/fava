@@ -274,13 +274,15 @@ fi
 registry_image_id=$(docker image inspect "$registry_image_ref" --format '{{.Id}}')
 case "$registry_image_id" in sha256:*) ;; *) exit 70 ;; esac
 registry_cidfile=$temporary/control/registry.cid
-registry_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$container_prefix-registry" --cidfile "$registry_cidfile" \
     --network bridge --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 128 --memory 512m --cpus 1 --read-only \
     --tmpfs "/var/lib/registry:rw,nosuid,nodev,size=$green_target_maximum_bytes" \
     --log-driver local --log-opt max-size=1m --log-opt max-file=1 \
-    --publish 127.0.0.1::5000 "$registry_image_id")
+    --log-opt compress=false \
+    --publish 127.0.0.1::5000 "$registry_image_id" >/dev/null
+registry_container_id=$(tr -d '\r\n' < "$registry_cidfile")
 case "$registry_container_id" in *[!0-9a-f]*|'') exit 70 ;; esac
 if [ "${#registry_container_id}" -ne 64 ] \
   || [ "$(tr -d '\r\n' < "$registry_cidfile")" != "$registry_container_id" ] \
@@ -431,6 +433,7 @@ common_run() {
     --log-driver local \
     --log-opt max-size=1m \
     --log-opt max-file=1 \
+    --log-opt compress=false \
     --volume "$target:/target" \
     --tmpfs /target/tmp:rw,nosuid,nodev,size=67108864 \
     --env CARGO_INCREMENTAL=0 \
@@ -450,7 +453,7 @@ common_run() {
 
 readonly_name=$container_prefix-readonly
 readonly_cidfile=$temporary/control/readonly.cid
-readonly_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$readonly_name" --cidfile "$readonly_cidfile" \
   --user 0:0 \
   --network none \
@@ -462,6 +465,7 @@ readonly_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --byt
   --log-driver local \
   --log-opt max-size=1m \
   --log-opt max-file=1 \
+  --log-opt compress=false \
   --read-only \
   --tmpfs "/target:rw,exec,nosuid,nodev,size=$green_target_maximum_bytes" \
   --env CARGO_INCREMENTAL=0 \
@@ -478,7 +482,8 @@ readonly_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --byt
   --env FAVA_PINNED_TOCTOU_MODE=readonly \
   "$source_image_reference" /bin/sh -c \
   "mkdir -p /target/tmp; $build_command; status=\$?; printf '%s\\n' \"\$status\" > /target/readonly-status; printf '%s\\n' complete > /target/readonly-complete; exec tail -f /dev/null" \
-)
+  >/dev/null
+readonly_container_id=$(tr -d '\r\n' < "$readonly_cidfile")
 case "$readonly_container_id" in *[!0-9a-f]*|'') exit 73 ;; esac
 if [ "${#readonly_container_id}" -ne 64 ] \
   || [ "$(tr -d '\r\n' < "$readonly_cidfile")" != "$readonly_container_id" ] \
