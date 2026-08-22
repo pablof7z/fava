@@ -731,14 +731,14 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 
 - Protocol crates expose replaceable-event edits, such as follow and unfollow.
 - Protocol-crate code produces replaceable-event edits or ordinary event values; it does not sign, route, publish, or own receipts.
-- `fava-nip02` exposes `contact_list(author)` as an ordinary query and typed
-  `follows_of(author)` / `followers_of(subject)` snapshot projections.
+- `fava-nip02` exposes `contact_list(authors)` and `followers_of(subject)` as
+  ordinary queries, plus `follows_of(snapshot)` as a typed pure projection.
 - Contact-list parsing treats an empty kind-3 event as valid and retains ordered
   typed evidence for malformed pubkeys and relay hints. Petnames preserve UTF-8
   bytes without normalization.
 - Follow-list edits preserve content, unknown and extension tags, malformed
-  rows, unrelated valid rows, and first-occurrence order while changing only
-  the targeted relationship.
+  unrelated rows, unrelated valid rows, and first-occurrence order while
+  changing only the targeted relationship.
 - The author is resolved when the write is accepted, before materialization; the resulting unsigned event carries it in `pubkey`.
 - First-value operation materializes against no prior event.
 - A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
