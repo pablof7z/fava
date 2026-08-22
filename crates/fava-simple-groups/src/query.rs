@@ -1,5 +1,6 @@
 use fava_query::{Kind, Query, SingleLetterTag};
 
+use crate::bounds::MAX_GROUP_CONTENT_RESULTS;
 use crate::{Group, GroupError};
 
 const RECORD_KINDS: [u16; 6] = [39_000, 39_001, 39_002, 39_003, 39_004, 39_005];
@@ -80,6 +81,15 @@ impl GroupRecords {
 }
 
 pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupError> {
+    let limit = selection.result_limit().ok_or_else(|| {
+        GroupError::Query("group content requires an explicit result bound".to_owned())
+    })?;
+    if limit.get() > MAX_GROUP_CONTENT_RESULTS {
+        return Err(GroupError::Query(format!(
+            "group content result bound exceeds limit: {} > {MAX_GROUP_CONTENT_RESULTS}",
+            limit.get()
+        )));
+    }
     let h = SingleLetterTag::from_char('h').expect("lowercase h is a valid tag key");
     Ok(selection
         .tag_values(h, [group.id()])
