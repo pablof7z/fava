@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-04-PLAN.md
-last_updated: "2026-08-22T10:01:15.145Z"
+stopped_at: Completed 07.1.1-05-PLAN.md
+last_updated: "2026-08-22T10:19:38.693Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: d65f4019a265efeee01ba2387bbcdac7c854725a
+state_head: cc6a92bc491d9429c6301e038b08f8713a53fdbc
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 28
+  completed_plans: 29
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -86,6 +86,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P03 | 8min | 2 tasks | 2 files |
 | Phase 07.1.1 P02 | 13min | 3 tasks | 6 files |
 | Phase 07.1.1 P04 | 15min | 2 tasks | 10 files |
+| Phase 07.1.1 P05 | 14min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: OnlyRelays selects per requested RelayUrl while preserving the accepted-local replacement overlay; AnyLocal remains globally replaceable.
 - [Phase 07.1.1]: Group::on is the sole one/many constructor; a private conversion bound accepts RelayUrl and string inputs without adding public host vocabulary.
 - [Phase 07.1.1]: GroupRecords lowers its fixed all-record selection through six repeated approved Query::kind calls; content and records retain distinct AnyLocal and OnlyRelays authority.
+- [Phase 07.1.1]: Group host bounds count every supplied item before duplicate normalization, so duplicate and infinite inputs cannot evade the universal route ceiling.
+- [Phase 07.1.1]: Content helpers require an existing positive limit no greater than 4096 while retaining every unrelated Query field and AnyLocal authority.
+- [Phase 07.1.1]: Unsigned preparation normalizes one exact h row losslessly; signed preparation validates and returns the original Event object.
 
 ### Pending Todos
 
@@ -171,6 +175,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T10:01:15.067Z
-Stopped at: Completed 07.1.1-04-PLAN.md
+Last session: 2026-08-22T10:19:38.611Z
+Stopped at: Completed 07.1.1-05-PLAN.md
 Resume file: None
