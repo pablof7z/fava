@@ -289,11 +289,20 @@ common_run "$container_prefix-readonly" "$readonly_target" \
   --env FAVA_PINNED_TOCTOU_MODE=readonly
 readonly_status=$?
 set -e
-if [ "$readonly_status" -eq 0 ] \
-  || [ ! -f "$readonly_target/toctou-readonly/result" ] \
-  || [ "$(sed -n '1p' "$readonly_target/toctou-readonly/result")" != outcome=EROFS ] \
-  || [ -e "$readonly_target/release/canary" ]; then
-  echo "read-only post-build.rs mutation proof was not causally refused" >&2
+if [ "$readonly_status" -eq 0 ]; then
+  echo "read-only post-build.rs mutation unexpectedly compiled" >&2
+  exit 73
+fi
+if [ ! -f "$readonly_target/toctou-readonly/result" ]; then
+  echo "read-only post-build.rs mutation did not retain its result" >&2
+  exit 73
+fi
+if [ "$(sed -n '1p' "$readonly_target/toctou-readonly/result")" != outcome=EROFS ]; then
+  echo "read-only post-build.rs mutation did not record EROFS" >&2
+  exit 73
+fi
+if [ -e "$readonly_target/release/canary" ]; then
+  echo "read-only post-build.rs mutation left a promoted executable" >&2
   exit 73
 fi
 
