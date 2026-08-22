@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-05-PLAN.md
-last_updated: "2026-08-22T00:54:30.154Z"
+stopped_at: Completed 07.1-06-PLAN.md
+last_updated: "2026-08-22T01:10:42.875Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-05 completed; typed NIP-02 reads and pure follow projection delivered
-state_head: d602f1dbe1c7d426b19f200e31adee472d808e31
+last_activity_desc: Plan 07.1-06 completed; lossless fallible NIP-02 edit helpers delivered
+state_head: 6ae2cec18d44ced91790038e655d6ded2a6ebf79
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 17
+  completed_plans: 18
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-05 completed; typed NIP-02 reads and pure follow projection delivered
+Last activity: 2026-08-22 — Plan 07.1-06 completed; lossless fallible NIP-02 edit helpers delivered
 
 Progress: [██████░░░░] 57%
 
@@ -79,6 +79,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P03 | 11min | 2 tasks | 7 files |
 | Phase 07.1 P04 | 16min | 2 tasks | 12 files |
 | Phase 07.1 P05 | 10min | 2 tasks | 11 files |
+| Phase 07.1 P06 | 11min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: IntoContactAuthors is sealed and supports exact owned or borrowed one/many key shapes; every shape feeds the same present author axis.
 - [Phase 07.1]: contact_list applies no global limit because ordinary replacement evaluation selects one newest kind-3 event independently for every author coordinate.
 - [Phase 07.1]: followers_of uses exact lowercase p with canonical subject hex; follows_of owns no mutable state and preserves snapshot then row order.
+- [Phase 07.1]: follow and unfollow accept standard ToString inputs parsed by upstream PublicKey::parse, avoiding new target vocabulary.
+- [Phase 07.1]: NIP-02 metadata add uses distinct opcode 3 while original 33-byte add/remove meanings remain unchanged.
+- [Phase 07.1]: Kind-3 edits preserve every nonmatching row and content byte; only exact valid-key target matches are retained once or removed.
 
 ### Pending Todos
 
@@ -142,6 +146,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T00:54:30.069Z
-Stopped at: Completed 07.1-05-PLAN.md
+Last session: 2026-08-22T01:10:42.786Z
+Stopped at: Completed 07.1-06-PLAN.md
 Resume file: None
