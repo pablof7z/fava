@@ -19,7 +19,10 @@ use crate::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, secret_needles,
 };
 use crate::croissant_simple_groups_flow::execute_public_flow;
-use crate::croissant_simple_groups_source::{PinnedFavaExecutable, clean_fava_source};
+use crate::croissant_simple_groups_source::{
+    PinnedFavaExecutable, clean_fava_source, load_pinned_build_attestation,
+    load_pinned_source_manifest,
+};
 use crate::{
     CanaryError, CanaryResult, RunArtifacts, deterministic_keys, repository_root, unix_ms,
 };
@@ -31,6 +34,10 @@ pub struct CroissantSimpleGroupsOptions {
     pub relay_binary: PathBuf,
     /// Croissant source checkout used for exact source-revision evidence.
     pub source_checkout: PathBuf,
+    /// Bounded immutable-build attestation whose subject is the exact Fava executable.
+    pub fava_build_attestation: PathBuf,
+    /// Canonical bounded manifest of every immutable compiler input.
+    pub fava_build_source_manifest: PathBuf,
     /// Disposable identity seed, never retained outside process memory.
     pub scenario_seed: String,
     /// Parent directory for one fresh durable evidence bundle.
@@ -126,6 +133,12 @@ pub async fn run_croissant_simple_groups_scenario(
 ) -> CanaryResult<CroissantSimpleGroupsOutcome> {
     let repository = repository_root()?;
     let pinned_fava_executable = PinnedFavaExecutable::inherited()?;
+    let build_attestation = load_pinned_build_attestation(
+        &options.fava_build_attestation,
+        pinned_fava_executable.sha256(),
+    )?;
+    let source_manifest =
+        load_pinned_source_manifest(&options.fava_build_source_manifest, &build_attestation)?;
     let fava_source = clean_fava_source(&repository, &pinned_fava_executable)?;
     let seed = &options.scenario_seed;
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
@@ -137,6 +150,12 @@ pub async fn run_croissant_simple_groups_scenario(
     let mut artifacts = RunArtifacts::create_staged(&options.runs_directory, SCENARIO, seed)?;
     fs::create_dir_all(artifacts.root().join("source"))?;
     pinned_fava_executable.retain(&artifacts.root().join("source/fava-canary"))?;
+    build_attestation.retain(&artifacts.root().join("source/fava-build.json"))?;
+    source_manifest.retain(
+        &artifacts
+            .root()
+            .join("source/fava-build-source.manifest"),
+    )?;
     artifacts.write_json("source/fava.json", &fava_source)?;
     let started = unix_ms()?;
     artifacts.record(
@@ -241,6 +260,12 @@ pub async fn run_croissant_simple_groups_scenario(
         "fava_source_tree_sha256": fava_source.tree_sha256,
         "fava_build_revision": fava_source.build_revision,
         "fava_build_tree": fava_source.build_tree,
+        "fava_build_source_tree_sha256": fava_source.build_source_tree_sha256,
+        "fava_build_source_manifest_sha256": source_manifest.sha256(),
+        "fava_build_source_image_sha256": fava_source.build_source_image_sha256,
+        "fava_build_rust_base_image_sha256": build_attestation.rust_base_image_sha256(),
+        "fava_build_command_sha256": build_attestation.build_command_sha256(),
+        "fava_build_source_immutable": fava_source.build_source_immutable,
         "fava_source_clean": fava_source.clean,
         "fava_canary_executable_sha256": fava_source.canary_executable_sha256,
         "fava_canary_executable_bytes": fava_source.canary_executable_bytes,

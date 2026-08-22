@@ -9,6 +9,14 @@ use super::croissant_simple_groups_flow::execute_public_flow;
 const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
 const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 const FIXTURE_FAVA_BUILD_TREE: &str = "6666666666666666666666666666666666666666";
+const FIXTURE_FAVA_BUILD_IMAGE: &str =
+    "7777777777777777777777777777777777777777777777777777777777777777";
+const FIXTURE_FAVA_RUST_BASE_IMAGE: &str =
+    "8888888888888888888888888888888888888888888888888888888888888888";
+const FIXTURE_FAVA_BUILD_COMMAND: &str =
+    "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08";
+const FIXTURE_FAVA_SOURCE_MANIFEST: &str =
+    "73b83ce204d2d4c69ec95a8750b0c2f25483f18d6235f357d7d50a950d9dde96";
 const FIXTURE_FAVA_EXECUTABLE: &str = "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
 const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
 const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
@@ -22,6 +30,8 @@ async fn croissant_simple_groups_public_flow() {
     let options = CroissantSimpleGroupsOptions {
         relay_binary: binary,
         source_checkout: source,
+        fava_build_attestation: temporary.path().join("unused-build-attestation.json"),
+        fava_build_source_manifest: temporary.path().join("unused-build-source.manifest"),
         scenario_seed: seed.to_owned(),
         runs_directory: temporary.path().join("unused-retained-root"),
     };

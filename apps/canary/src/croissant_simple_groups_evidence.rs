@@ -26,11 +26,18 @@ pub(crate) const SCENARIO: &str = "croissant-simple-groups-public-flow";
 /// # Errors
 ///
 /// Returns a redacted refusal for unsafe, incomplete, reused, or tampered evidence.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "independent callers must supply every exact Fava and Croissant identity"
+)]
 pub fn verify_croissant_simple_groups_pair(
     runs_directory: impl AsRef<Path>,
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
     expected_fava_build_tree: &str,
+    expected_fava_build_source_image_sha256: &str,
+    expected_fava_build_source_manifest_sha256: &str,
+    expected_fava_rust_base_image_sha256: &str,
     expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
@@ -38,6 +45,18 @@ pub fn verify_croissant_simple_groups_pair(
     if !is_lower_hex(expected_fava_revision, 40)
         || !is_lower_hex(expected_fava_source_tree_sha256, 64)
         || !is_lower_hex(expected_fava_build_tree, 40)
+        || !is_lower_hex(expected_fava_build_source_image_sha256, 64)
+        || expected_fava_build_source_image_sha256
+            .bytes()
+            .all(|byte| byte == b'0')
+        || !is_lower_hex(expected_fava_build_source_manifest_sha256, 64)
+        || expected_fava_build_source_manifest_sha256
+            .bytes()
+            .all(|byte| byte == b'0')
+        || !is_lower_hex(expected_fava_rust_base_image_sha256, 64)
+        || expected_fava_rust_base_image_sha256
+            .bytes()
+            .all(|byte| byte == b'0')
         || !is_lower_hex(expected_fava_canary_executable_sha256, 64)
         || !is_lower_hex(expected_croissant_revision, 40)
         || !is_lower_hex(expected_croissant_executable_sha256, 64)
@@ -69,6 +88,9 @@ pub fn verify_croissant_simple_groups_pair(
             expected_fava_revision,
             expected_fava_source_tree_sha256,
             expected_fava_build_tree,
+            expected_fava_build_source_image_sha256,
+            expected_fava_build_source_manifest_sha256,
+            expected_fava_rust_base_image_sha256,
             expected_fava_canary_executable_sha256,
             expected_croissant_revision,
             expected_croissant_executable_sha256,
@@ -106,6 +128,9 @@ fn validate_manifest(
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
     expected_fava_build_tree: &str,
+    expected_fava_build_source_image_sha256: &str,
+    expected_fava_build_source_manifest_sha256: &str,
+    expected_fava_rust_base_image_sha256: &str,
     expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
@@ -152,6 +177,11 @@ fn validate_manifest(
         "fava_source_tree_sha256",
         "fava_build_revision",
         "fava_build_tree",
+        "fava_build_source_tree_sha256",
+        "fava_build_source_manifest_sha256",
+        "fava_build_source_image_sha256",
+        "fava_build_rust_base_image_sha256",
+        "fava_build_command_sha256",
     ] {
         if required_string(manifest, field)?.is_empty() {
             return Err(CanaryError::new(format!(
@@ -166,6 +196,20 @@ fn validate_manifest(
             != expected_fava_canary_executable_sha256
         || required_string(manifest, "fava_build_revision")? != expected_fava_revision
         || required_string(manifest, "fava_build_tree")? != expected_fava_build_tree
+        || required_string(manifest, "fava_build_source_tree_sha256")?
+            != expected_fava_source_tree_sha256
+        || required_string(manifest, "fava_build_source_image_sha256")?
+            != expected_fava_build_source_image_sha256
+        || required_string(manifest, "fava_build_source_manifest_sha256")?
+            != expected_fava_build_source_manifest_sha256
+        || required_string(manifest, "fava_build_rust_base_image_sha256")?
+            != expected_fava_rust_base_image_sha256
+        || required_string(manifest, "fava_build_command_sha256")?
+            != "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08"
+        || manifest
+            .get("fava_build_source_immutable")
+            .and_then(Value::as_bool)
+            != Some(true)
         || manifest.get("fava_source_clean").and_then(Value::as_bool) != Some(true)
         || required_string(manifest, "fava_execution_platform")?
             != "linux-sealed-memfd-proc-fd"

@@ -1,18 +1,13 @@
 //! Command-line entry point for the Fava end-to-end canary.
 
-use std::fs;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
-#[cfg(target_os = "linux")]
-use std::process::Stdio;
-
-#[cfg(target_os = "linux")]
-use tokio::process::Command;
+use std::path::PathBuf;
 
 #[cfg(target_os = "linux")]
 mod sealed_executable;
 #[cfg(target_os = "linux")]
-use sealed_executable::SealedExecutable;
+mod pinned_build_input;
+#[cfg(target_os = "linux")]
+mod pinned_launcher;
 
 use canary::{
     CroissantNip02Options, CroissantSimpleGroupsOptions, ReconOptions, SmokeOptions,
@@ -31,6 +26,10 @@ async fn main() {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one command dispatcher keeps each CLI grammar adjacent to its exact scenario call"
+)]
 async fn run() -> canary::CanaryResult<()> {
     let mut arguments = std::env::args().skip(1);
     let Some(command) = arguments.next() else {
@@ -67,6 +66,12 @@ async fn run() -> canary::CanaryResult<()> {
             let fava_tree = arguments.next().ok_or_else(usage)?;
             let fava_build_tree_flag = arguments.next().ok_or_else(usage)?;
             let fava_build_tree = arguments.next().ok_or_else(usage)?;
+            let fava_build_image_flag = arguments.next().ok_or_else(usage)?;
+            let fava_build_image = arguments.next().ok_or_else(usage)?;
+            let fava_build_manifest_flag = arguments.next().ok_or_else(usage)?;
+            let fava_build_manifest = arguments.next().ok_or_else(usage)?;
+            let fava_rust_base_flag = arguments.next().ok_or_else(usage)?;
+            let fava_rust_base = arguments.next().ok_or_else(usage)?;
             let fava_executable_flag = arguments.next().ok_or_else(usage)?;
             let fava_executable = arguments.next().ok_or_else(usage)?;
             let croissant_revision_flag = arguments.next().ok_or_else(usage)?;
@@ -77,6 +82,9 @@ async fn run() -> canary::CanaryResult<()> {
                 || fava_revision_flag != "--expected-fava-revision"
                 || fava_tree_flag != "--expected-fava-tree-sha256"
                 || fava_build_tree_flag != "--expected-fava-build-tree"
+                || fava_build_image_flag != "--expected-fava-build-source-image-sha256"
+                || fava_build_manifest_flag != "--expected-fava-build-source-manifest-sha256"
+                || fava_rust_base_flag != "--expected-fava-rust-base-image-sha256"
                 || fava_executable_flag != "--expected-fava-canary-executable-sha256"
                 || croissant_revision_flag != "--expected-croissant-revision"
                 || croissant_executable_flag != "--expected-croissant-executable-sha256"
@@ -89,6 +97,9 @@ async fn run() -> canary::CanaryResult<()> {
                 &fava_revision,
                 &fava_tree,
                 &fava_build_tree,
+                &fava_build_image,
+                &fava_build_manifest,
+                &fava_rust_base,
                 &fava_executable,
                 &croissant_revision,
                 &croissant_executable,
@@ -229,6 +240,8 @@ fn simple_groups_options(
 ) -> canary::CanaryResult<CroissantSimpleGroupsOptions> {
     let mut relay_binary = None;
     let mut source_checkout = None;
+    let mut fava_build_attestation = None;
+    let mut fava_build_source_manifest = None;
     let mut scenario_seed = String::from("croissant-simple-groups");
     let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
     while let Some(flag) = arguments.next() {
@@ -236,6 +249,10 @@ fn simple_groups_options(
         match flag.as_str() {
             "--relay-bin" => relay_binary = Some(PathBuf::from(value)),
             "--relay-source" => source_checkout = Some(PathBuf::from(value)),
+            "--fava-build-attestation" => fava_build_attestation = Some(PathBuf::from(value)),
+            "--fava-build-source-manifest" => {
+                fava_build_source_manifest = Some(PathBuf::from(value));
+            }
             "--seed" => scenario_seed = value,
             "--runs-dir" => runs_directory = PathBuf::from(value),
             _ => return Err(usage()),
@@ -244,6 +261,8 @@ fn simple_groups_options(
     Ok(CroissantSimpleGroupsOptions {
         relay_binary: relay_binary.ok_or_else(usage)?,
         source_checkout: source_checkout.ok_or_else(usage)?,
+        fava_build_attestation: fava_build_attestation.ok_or_else(usage)?,
+        fava_build_source_manifest: fava_build_source_manifest.ok_or_else(usage)?,
         scenario_seed,
         runs_directory,
     })
@@ -260,89 +279,34 @@ async fn launch_croissant_simple_groups(
     let binary = PathBuf::from(arguments.next().ok_or_else(usage)?);
     let source_flag = arguments.next().ok_or_else(usage)?;
     let source = PathBuf::from(arguments.next().ok_or_else(usage)?);
-    if binary_flag != "--canary-bin" || source_flag != "--fava-source" {
+    let attestation_flag = arguments.next().ok_or_else(usage)?;
+    let attestation = PathBuf::from(arguments.next().ok_or_else(usage)?);
+    let source_manifest_flag = arguments.next().ok_or_else(usage)?;
+    let source_manifest = PathBuf::from(arguments.next().ok_or_else(usage)?);
+    if binary_flag != "--canary-bin"
+        || source_flag != "--fava-source"
+        || attestation_flag != "--fava-build-attestation"
+        || source_manifest_flag != "--fava-build-source-manifest"
+    {
         return Err(usage());
     }
-    ensure_clean_fava_build_source(&source)?;
-    let mut open = fs::OpenOptions::new();
-    open.read(true).custom_flags(libc::O_NOFOLLOW);
-    let executable = open.open(&binary)?;
-    let metadata = executable.metadata()?;
-    if !metadata.is_file()
-        || metadata.permissions().mode() & 0o222 != 0
-        || metadata.len() == 0
-        || metadata.len() > 134_217_728
-    {
-        return Err(std::io::Error::other("pinned canary executable exceeded its bound").into());
-    }
     #[cfg(target_os = "linux")]
-    let sealed = SealedExecutable::copy_from(&executable, 134_217_728)?;
-    #[cfg(target_os = "linux")]
-    let pinned_digest = sealed.sha256().to_owned();
-    #[cfg(target_os = "linux")]
-    let mut child = opened_canary_command(
-        &sealed,
-        std::iter::once("run".to_owned())
-            .chain(std::iter::once(
-                "croissant-simple-groups-public-flow".to_owned(),
-            ))
-            .chain(arguments),
-    )?;
-    #[cfg(not(target_os = "linux"))]
-    return Err(std::io::Error::other(
-        "descriptor-pinned Fava execution is unsupported on this host",
+    return pinned_launcher::launch(
+        &binary,
+        &source,
+        &attestation,
+        &source_manifest,
+        arguments,
     )
-    .into());
-    #[cfg(target_os = "linux")]
+    .await;
+    #[cfg(not(target_os = "linux"))]
     {
-        child.current_dir(&source).kill_on_drop(true);
-        let status = child.status().await?;
-        if !status.success() {
-            return Err(std::io::Error::other(format!(
-                "pinned canary child failed with {status}"
-            ))
-            .into());
-        }
-        println!("pinned_fava_canary_executable_sha256: {pinned_digest}");
-        Ok(())
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn opened_canary_command(
-    executable: &SealedExecutable,
-    arguments: impl IntoIterator<Item = String>,
-) -> canary::CanaryResult<Command> {
-    let mut command = Command::new("/proc/self/fd/0");
-    command
-        .args(arguments)
-        .stdin(Stdio::from(executable.try_clone()?));
-    Ok(command)
-}
-
-fn ensure_clean_fava_build_source(root: &Path) -> canary::CanaryResult<()> {
-    let status = std::process::Command::new("git")
-        .args([
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "--",
-            "Cargo.toml",
-            "Cargo.lock",
-            "rust-toolchain.toml",
-            ".cargo",
-            "apps/canary",
-            "crates",
-        ])
-        .current_dir(root)
-        .output()?;
-    if !status.status.success() || !status.stdout.is_empty() {
-        return Err(std::io::Error::other(
-            "pinned canary source/build inputs were not clean committed files",
+        let _ = (binary, source, attestation, source_manifest, arguments);
+        Err(std::io::Error::other(
+            "descriptor-pinned Fava execution is unsupported on this host",
         )
-        .into());
+        .into())
     }
-    Ok(())
 }
 
 fn smoke_options(
@@ -370,7 +334,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-canary-executable-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --fava-build-attestation PATH --fava-build-source-manifest PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> --fava-build-attestation-fd PATH --fava-build-source-manifest-fd PATH [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-build-source-image-sha256 SHA256 --expected-fava-build-source-manifest-sha256 SHA256 --expected-fava-rust-base-image-sha256 SHA256 --expected-fava-canary-executable-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }
@@ -378,10 +342,6 @@ fn usage() -> canary::CanaryError {
 #[cfg(test)]
 mod tests {
     use super::simple_groups_options;
-    #[cfg(target_os = "linux")]
-    use super::opened_canary_command;
-    #[cfg(target_os = "linux")]
-    use super::SealedExecutable;
 
     #[test]
     fn producer_options_refuse_circular_expected_digest_input() {
@@ -396,40 +356,5 @@ mod tests {
         .into_iter()
         .map(str::to_owned);
         assert!(simple_groups_options(&mut arguments).is_err());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test]
-    async fn opened_launcher_executes_original_after_candidate_path_replacement() {
-        use std::fs;
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-        use tempfile::TempDir;
-
-        let fixture = TempDir::new().expect("launcher fixture");
-        let candidate = fixture.path().join("canary");
-        fs::write(&candidate, b"#!/bin/sh\nexit 0\n").expect("candidate");
-        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o500)).expect("permissions");
-        let mut open = fs::OpenOptions::new();
-        open.read(true).custom_flags(libc::O_NOFOLLOW);
-        let opened = open.open(&candidate).expect("opened candidate");
-        let sealed = SealedExecutable::copy_from(&opened, 1024).expect("sealed candidate");
-        let marker = fixture.path().join("replacement-executed");
-        let replacement = fixture.path().join("replacement");
-        fs::write(
-            &replacement,
-            format!("#!/bin/sh\ntouch {}\nexit 72\n", marker.display()),
-        )
-        .expect("replacement");
-        fs::set_permissions(&replacement, fs::Permissions::from_mode(0o500))
-            .expect("replacement permissions");
-        fs::rename(replacement, candidate).expect("replace candidate after open/hash");
-        let status = opened_canary_command(&sealed, Vec::new())
-            .expect("descriptor command")
-            .status()
-            .await
-            .expect("descriptor launch");
-        assert!(status.success());
-        assert!(!marker.exists(), "replacement exited 72");
     }
 }

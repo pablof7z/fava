@@ -15,6 +15,8 @@ mod croissant_simple_groups_evidence_support;
 mod croissant_simple_groups_flow;
 mod croissant_simple_groups_source;
 #[cfg(test)]
+mod croissant_simple_groups_source_tests;
+#[cfg(test)]
 mod croissant_simple_groups_supervision_tests;
 mod environment;
 mod grouping;
@@ -26,6 +28,7 @@ mod proxy;
 mod publication;
 mod publication_child;
 mod publication_support;
+mod pinned_build_input;
 mod recon;
 mod relay;
 mod routing;

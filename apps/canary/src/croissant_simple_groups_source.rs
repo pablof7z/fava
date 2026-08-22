@@ -1,19 +1,21 @@
 //! Exact committed-source provenance for the simple-groups live proof.
 
 use std::fs;
-use std::io::Write;
-use std::os::unix::fs::{FileExt, MetadataExt, OpenOptionsExt};
-#[cfg(any(target_os = "linux", test))]
-use std::os::unix::fs::PermissionsExt;
+use std::io::{Read, Write};
+use std::os::unix::fs::{FileExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::pinned_build_input::{
+    BuildAttestation, MAX_BUILD_ATTESTATION_BYTES, MAX_SOURCE_MANIFEST_BYTES,
+    parse_build_attestation, parse_source_manifest,
+};
 use crate::{CanaryError, CanaryResult};
 
-const SOURCE_PATHS: [&str; 6] = [
+pub(crate) const SOURCE_PATHS: [&str; 6] = [
     "Cargo.toml",
     "Cargo.lock",
     "rust-toolchain.toml",
@@ -23,6 +25,18 @@ const SOURCE_PATHS: [&str; 6] = [
 ];
 
 pub(crate) const MAX_PINNED_FAVA_EXECUTABLE_BYTES: u64 = 134_217_728;
+
+/// Bounded compiler-input and executable subject emitted by the immutable build pipeline.
+pub(crate) struct PinnedBuildAttestation {
+    claim: BuildAttestation,
+    raw: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub(crate) struct PinnedSourceManifest {
+    raw: Vec<u8>,
+    sha256: String,
+}
 
 #[derive(Debug)]
 pub(crate) struct PinnedFavaExecutable {
@@ -43,6 +57,14 @@ pub(crate) struct FavaSourceProvenance {
     pub(crate) build_revision: String,
     #[serde(rename = "fava_build_tree")]
     pub(crate) build_tree: String,
+    #[serde(rename = "fava_build_source_tree_sha256")]
+    pub(crate) build_source_tree_sha256: String,
+    #[serde(rename = "fava_build_source_manifest_sha256")]
+    pub(crate) build_source_manifest_sha256: String,
+    #[serde(rename = "fava_build_source_image_sha256")]
+    pub(crate) build_source_image_sha256: String,
+    #[serde(rename = "fava_build_source_immutable")]
+    pub(crate) build_source_immutable: bool,
     #[serde(rename = "fava_source_clean")]
     pub(crate) clean: bool,
     #[serde(rename = "fava_canary_executable_sha256")]
@@ -70,7 +92,7 @@ impl PinnedFavaExecutable {
     }
 
     #[cfg(test)]
-    fn open_for_test(path: &Path) -> CanaryResult<Self> {
+    pub(crate) fn open_for_test(path: &Path) -> CanaryResult<Self> {
         Self::open(path, true)
     }
 
@@ -140,6 +162,138 @@ impl PinnedFavaExecutable {
             && metadata.len() == self.bytes
             && descriptor_sha256(&self.file, &metadata)? == self.sha256)
     }
+
+    pub(crate) fn sha256(&self) -> &str {
+        &self.sha256
+    }
+}
+
+pub(crate) fn load_pinned_build_attestation(
+    path: &Path,
+    expected_executable_sha256: &str,
+) -> CanaryResult<PinnedBuildAttestation> {
+    let bytes = read_bounded_read_only(
+        path,
+        MAX_BUILD_ATTESTATION_BYTES,
+        "build attestation",
+    )?;
+    let claim = parse_build_attestation(&bytes, expected_executable_sha256)
+        .map_err(CanaryError::new)?;
+    Ok(PinnedBuildAttestation { claim, raw: bytes })
+}
+
+impl PinnedBuildAttestation {
+    fn source_manifest_sha256(&self) -> &str {
+        &self.claim.fava_build_source_manifest_sha256
+    }
+
+    fn source_file_count(&self) -> u64 {
+        self.claim.source_file_count
+    }
+
+    fn source_total_bytes(&self) -> u64 {
+        self.claim.source_total_bytes
+    }
+
+    pub(crate) fn rust_base_image_sha256(&self) -> &str {
+        &self.claim.rust_base_image_sha256
+    }
+
+    pub(crate) fn build_command_sha256(&self) -> &str {
+        &self.claim.build_command_sha256
+    }
+
+    pub(crate) fn retain(&self, destination: &Path) -> CanaryResult<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true).mode(0o400);
+        let mut destination = options.open(destination)?;
+        destination.write_all(&self.raw)?;
+        destination.sync_all()?;
+        Ok(())
+    }
+}
+
+pub(crate) fn load_pinned_source_manifest(
+    path: &Path,
+    attestation: &PinnedBuildAttestation,
+) -> CanaryResult<PinnedSourceManifest> {
+    let raw = read_bounded_read_only(path, MAX_SOURCE_MANIFEST_BYTES, "source manifest")?;
+    let sha256 = hex::encode(Sha256::digest(&raw));
+    if sha256 != attestation.source_manifest_sha256()
+        || sha256 != env!("FAVA_BUILD_SOURCE_MANIFEST_SHA256")
+    {
+        return Err(CanaryError::new(
+            "pinned Fava source manifest digest disagreed with its immutable build",
+        ));
+    }
+    let source = parse_source_manifest(&raw).map_err(CanaryError::new)?;
+    if source.revision != env!("FAVA_BUILD_REVISION")
+        || source.tree != env!("FAVA_BUILD_TREE")
+        || source.file_count != attestation.source_file_count()
+        || source.total_bytes != attestation.source_total_bytes()
+    {
+        return Err(CanaryError::new(
+            "pinned Fava source manifest disagreed with its immutable build",
+        ));
+    }
+    Ok(PinnedSourceManifest {
+        raw,
+        sha256,
+    })
+}
+
+impl PinnedSourceManifest {
+    pub(crate) fn retain(&self, destination: &Path) -> CanaryResult<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true).mode(0o400);
+        let mut destination = options.open(destination)?;
+        destination.write_all(&self.raw)?;
+        destination.sync_all()?;
+        Ok(())
+    }
+
+    pub(crate) fn sha256(&self) -> &str {
+        &self.sha256
+    }
+}
+
+fn read_bounded_read_only(path: &Path, maximum: u64, label: &str) -> CanaryResult<Vec<u8>> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    let inherited = path.parent() == Some(Path::new("/proc/self/fd"))
+        && path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()));
+    if !inherited {
+        return Err(CanaryError::new(format!(
+            "pinned Fava {label} was not an inherited exact descriptor"
+        )));
+    }
+    let mut file = options.open(path)?;
+    let before = file.metadata()?;
+    if !before.is_file()
+        || before.permissions().mode() & 0o222 != 0
+        || before.len() == 0
+        || before.len() > maximum
+    {
+        return Err(CanaryError::new(format!(
+            "pinned Fava {label} was not a bounded read-only regular file"
+        )));
+    }
+    let mut bytes = Vec::with_capacity(usize::try_from(before.len()).map_err(error)?);
+    file.read_to_end(&mut bytes)?;
+    let after = file.metadata()?;
+    if before.dev() != after.dev()
+        || before.ino() != after.ino()
+        || before.len() != after.len()
+        || u64::try_from(bytes.len()).map_err(error)? != before.len()
+    {
+        return Err(CanaryError::new(format!(
+            "pinned Fava {label} changed while reading"
+        )));
+    }
+    Ok(bytes)
 }
 
 pub(crate) fn clean_fava_source(
@@ -151,16 +305,28 @@ pub(crate) fn clean_fava_source(
         executable,
         env!("FAVA_BUILD_REVISION"),
         env!("FAVA_BUILD_TREE"),
+        env!("FAVA_BUILD_SOURCE_TREE_SHA256"),
+        env!("FAVA_BUILD_SOURCE_MANIFEST_SHA256"),
         env!("FAVA_BUILD_SOURCE_CLEAN") == "true",
+        env!("FAVA_BUILD_SOURCE_IMMUTABLE") == "true",
+        env!("FAVA_BUILD_SOURCE_IMAGE_SHA256"),
     )
 }
 
-fn clean_fava_source_against(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "every independently expected compiler-input identity remains explicit"
+)]
+pub(crate) fn clean_fava_source_against(
     root: &Path,
     executable: &PinnedFavaExecutable,
     build_revision: &str,
     build_tree: &str,
+    build_source_tree_sha256: &str,
+    build_source_manifest_sha256: &str,
     build_source_clean: bool,
+    build_source_immutable: bool,
+    build_source_image_sha256: &str,
 ) -> CanaryResult<FavaSourceProvenance> {
     let mut status_arguments = vec!["status", "--porcelain=v1", "--untracked-files=all", "--"];
     status_arguments.extend(SOURCE_PATHS);
@@ -185,9 +351,19 @@ fn clean_fava_source_against(
         ));
     }
     let tree_sha256 = hex::encode(Sha256::digest(tree));
-    if !build_source_clean || revision != build_revision || source_tree != build_tree {
+    if !build_source_clean
+        || !build_source_immutable
+        || !is_lower_hex(build_source_manifest_sha256, 64)
+        || build_source_manifest_sha256
+            .bytes()
+            .all(|byte| byte == b'0')
+        || !is_lower_hex(build_source_image_sha256, 64)
+        || revision != build_revision
+        || source_tree != build_tree
+        || tree_sha256 != build_source_tree_sha256
+    {
         return Err(CanaryError::new(
-            "simple-groups executing Fava build did not match the clean source revision",
+            "simple-groups executing Fava build did not match immutable committed inputs",
         ));
     }
     if !executable.unchanged()? {
@@ -200,6 +376,10 @@ fn clean_fava_source_against(
         tree_sha256,
         build_revision: build_revision.to_owned(),
         build_tree: build_tree.to_owned(),
+        build_source_tree_sha256: build_source_tree_sha256.to_owned(),
+        build_source_manifest_sha256: build_source_manifest_sha256.to_owned(),
+        build_source_image_sha256: build_source_image_sha256.to_owned(),
+        build_source_immutable,
         clean: true,
         canary_executable_sha256: executable.sha256.clone(),
         canary_executable_bytes: executable.bytes,
@@ -235,7 +415,7 @@ fn descriptor_sha256(file: &fs::File, before: &fs::Metadata) -> CanaryResult<Str
     Ok(hex::encode(digest.finalize()))
 }
 
-fn git(root: &Path, arguments: &[&str]) -> CanaryResult<Vec<u8>> {
+pub(crate) fn git(root: &Path, arguments: &[&str]) -> CanaryResult<Vec<u8>> {
     let output = Command::new("git")
         .args(arguments)
         .current_dir(root)
@@ -249,7 +429,7 @@ fn git(root: &Path, arguments: &[&str]) -> CanaryResult<Vec<u8>> {
     Ok(output.stdout)
 }
 
-fn text(bytes: Vec<u8>) -> CanaryResult<String> {
+pub(crate) fn text(bytes: Vec<u8>) -> CanaryResult<String> {
     String::from_utf8(bytes)
         .map(|value| value.trim().to_owned())
         .map_err(error)
@@ -264,169 +444,4 @@ pub(crate) fn is_lower_hex(value: &str, length: usize) -> bool {
 
 fn error(error: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(error.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::process::Command;
-
-    use tempfile::TempDir;
-
-    use super::{PinnedFavaExecutable, clean_fava_source_against, git, text};
-
-    #[test]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one committed fixture exercises every tracked, untracked, stale, and dirty build input"
-    )]
-    fn production_source_gate_refuses_tracked_and_relevant_untracked_changes() {
-        let executable_file = TempDir::new().expect("pinned executable");
-        let executable_path = executable_file.path().join("canary");
-        fs::write(&executable_path, b"pinned canary bytes").expect("pinned bytes");
-        fs::set_permissions(&executable_path, fs::Permissions::from_mode(0o500))
-            .expect("pin permissions");
-        let executable = PinnedFavaExecutable::open_for_test(&executable_path).expect("pin");
-        let repository = TempDir::new().expect("source repository");
-        fs::create_dir_all(repository.path().join("apps/canary/src")).expect("canary source");
-        fs::create_dir_all(repository.path().join("crates/example/src")).expect("crate source");
-        fs::create_dir_all(repository.path().join(".cargo")).expect("Cargo config directory");
-        fs::write(repository.path().join("Cargo.toml"), "[workspace]\n").expect("manifest");
-        fs::write(repository.path().join("Cargo.lock"), "version = 4\n").expect("lock");
-        fs::write(repository.path().join("rust-toolchain.toml"), "[toolchain]\nchannel='stable'\n")
-            .expect("toolchain");
-        fs::write(repository.path().join(".cargo/config.toml"), "[build]\n")
-            .expect("Cargo config");
-        fs::write(
-            repository.path().join("apps/canary/src/lib.rs"),
-            "pub fn proof() {}\n",
-        )
-        .expect("canary file");
-        fs::write(
-            repository.path().join("crates/example/src/lib.rs"),
-            "pub fn value() {}\n",
-        )
-        .expect("crate file");
-        for arguments in [
-            vec!["init"],
-            vec!["config", "user.email", "canary@example.invalid"],
-            vec!["config", "user.name", "Canary"],
-            vec!["add", "."],
-            vec!["commit", "-m", "fixture"],
-        ] {
-            assert!(
-                Command::new("git")
-                    .args(arguments)
-                    .current_dir(repository.path())
-                    .status()
-                    .expect("git subprocess")
-                    .success()
-            );
-        }
-        let revision = text(git(repository.path(), &["rev-parse", "HEAD"]).unwrap()).unwrap();
-        let build_tree =
-            text(git(repository.path(), &["rev-parse", "HEAD^{tree}"]).unwrap()).unwrap();
-        clean_fava_source_against(repository.path(), &executable, &revision, &build_tree, true)
-            .expect("committed inputs are clean");
-        fs::write(
-            repository.path().join("apps/canary/src/lib.rs"),
-            "pub fn changed() {}\n",
-        )
-        .expect("tracked mutation");
-        assert!(
-            clean_fava_source_against(repository.path(), &executable, &revision, &build_tree, true)
-                .is_err()
-        );
-        assert!(
-            Command::new("git")
-                .args(["checkout", "--", "apps/canary/src/lib.rs"])
-                .current_dir(repository.path())
-                .status()
-                .expect("git restore")
-                .success()
-        );
-        fs::write(repository.path().join("rust-toolchain.toml"), "[toolchain]\nchannel='beta'\n")
-            .expect("toolchain mutation");
-        assert!(
-            clean_fava_source_against(repository.path(), &executable, &revision, &build_tree, true)
-                .is_err()
-        );
-        assert!(
-            Command::new("git")
-                .args(["checkout", "--", "rust-toolchain.toml"])
-                .current_dir(repository.path())
-                .status()
-                .expect("git restore")
-                .success()
-        );
-        fs::write(repository.path().join(".cargo/config"), "[net]\noffline=true\n")
-            .expect("hostile alternate Cargo config");
-        assert!(
-            clean_fava_source_against(repository.path(), &executable, &revision, &build_tree, true)
-                .is_err()
-        );
-        fs::remove_file(repository.path().join(".cargo/config")).expect("config cleanup");
-        fs::write(
-            repository.path().join("apps/canary/src/untracked.rs"),
-            "hostile\n",
-        )
-        .expect("untracked mutation");
-        assert!(
-            clean_fava_source_against(repository.path(), &executable, &revision, &build_tree, true)
-                .is_err()
-        );
-        fs::remove_file(repository.path().join("apps/canary/src/untracked.rs"))
-            .expect("untracked cleanup");
-        assert!(
-            clean_fava_source_against(
-                repository.path(),
-                &executable,
-                "0000000000000000000000000000000000000000",
-                &build_tree,
-                true,
-            )
-            .is_err(),
-            "stale build revision was accepted"
-        );
-        assert!(
-            clean_fava_source_against(
-                repository.path(),
-                &executable,
-                &revision,
-                "0000000000000000000000000000000000000000",
-                true,
-            )
-            .is_err(),
-            "stale build tree was accepted"
-        );
-        assert!(
-            clean_fava_source_against(
-                repository.path(),
-                &executable,
-                &revision,
-                &build_tree,
-                false,
-            )
-            .is_err(),
-            "dirty build provenance was accepted"
-        );
-    }
-
-    #[test]
-    fn opened_executable_retains_original_after_path_replacement_and_deletion() {
-        let directory = TempDir::new().expect("target fixture");
-        let executable = directory.path().join("canary");
-        fs::write(&executable, b"reviewed canary bytes").expect("reviewed target");
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o500))
-            .expect("reviewed permissions");
-        let pinned = PinnedFavaExecutable::open_for_test(&executable).expect("open exact image");
-        let replacement = directory.path().join("replacement");
-        fs::write(&replacement, b"replaced reusable target").expect("replacement bytes");
-        fs::rename(&replacement, &executable).expect("replace target path");
-        fs::remove_file(&executable).expect("delete replacement path");
-        let retained = directory.path().join("retained-canary");
-        pinned.retain(&retained).expect("retain opened original image");
-        assert_eq!(fs::read(retained).unwrap(), b"reviewed canary bytes");
-    }
 }

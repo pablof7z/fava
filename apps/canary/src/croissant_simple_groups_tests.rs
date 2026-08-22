@@ -9,6 +9,7 @@ use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
 use nostr::types::Timestamp;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 use super::croissant_simple_groups_evidence::{SCENARIO, verify_croissant_simple_groups_pair};
 use super::croissant_simple_groups_evidence_support::{
@@ -21,6 +22,7 @@ include!("croissant_simple_groups_tests/review_iteration_two.rs");
 include!("croissant_simple_groups_tests/review_iteration_three.rs");
 include!("croissant_simple_groups_tests/review_iteration_four.rs");
 include!("croissant_simple_groups_tests/review_iteration_five.rs");
+include!("croissant_simple_groups_tests/review_iteration_six.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
@@ -176,6 +178,10 @@ impl PairEvidenceFixture {
     reason = "one fixture builder keeps causal wire, flow, process, hash, and seal facts aligned"
 )]
 fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Keys) {
+    let source_manifest = format!(
+        "format=fava-pinned-source-v1\nrevision={FIXTURE_FAVA_REVISION}\ntree={FIXTURE_FAVA_BUILD_TREE}\nfile_count=1\ntotal_bytes=27\nfile=100644\t{FIXTURE_FAVA_TREE}\t27\tapps/canary/src/main.rs\n"
+    );
+    let source_manifest_sha256 = hex::encode(Sha256::digest(source_manifest.as_bytes()));
     let base_pid = 4_000_100 + (index as u64 * 2);
     let port = 49_000 + (u16::try_from(index).expect("fixture index fits u16") * 10);
     let relay_urls = [
@@ -277,6 +283,10 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
             "fava_build_revision": FIXTURE_FAVA_REVISION,
             "fava_build_tree": "6666666666666666666666666666666666666666",
+            "fava_build_source_tree_sha256": FIXTURE_FAVA_TREE,
+            "fava_build_source_manifest_sha256": source_manifest_sha256,
+            "fava_build_source_image_sha256": FIXTURE_FAVA_BUILD_IMAGE,
+            "fava_build_source_immutable": true,
             "fava_source_clean": true,
             "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
             "fava_canary_executable_bytes": 27,
@@ -286,6 +296,36 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         .expect("source fixture bytes"),
     )
     .expect("source fixture");
+    fs::write(
+        root.join("source/fava-build.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema": "fava-pinned-build-v1",
+            "fava_revision": FIXTURE_FAVA_REVISION,
+            "fava_build_tree": FIXTURE_FAVA_BUILD_TREE,
+            "fava_build_source_tree_sha256": FIXTURE_FAVA_TREE,
+            "fava_build_source_manifest_sha256": source_manifest_sha256,
+            "fava_build_source_image_sha256": FIXTURE_FAVA_BUILD_IMAGE,
+            "rust_base_image_sha256": FIXTURE_FAVA_RUST_BASE_IMAGE,
+            "build_command_sha256": FIXTURE_FAVA_BUILD_COMMAND,
+            "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
+            "source_file_count": 1,
+            "source_total_bytes": 27,
+            "toctou_read_only_attempt": "EROFS",
+            "toctou_deliberate_break": "compiled-hostile-bytes",
+            "source_root": "/source",
+            "target_root": "/target",
+            "network": "none",
+            "root_filesystem": "read-only",
+            "capabilities": "none",
+        }))
+        .expect("build attestation fixture bytes"),
+    )
+    .expect("build attestation fixture");
+    fs::write(
+        root.join("source/fava-build-source.manifest"),
+        source_manifest,
+    )
+    .expect("source manifest fixture");
     for label in 0..2 {
         write_wire_fixture(
             root,
@@ -346,6 +386,12 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
         "fava_build_revision": FIXTURE_FAVA_REVISION,
         "fava_build_tree": "6666666666666666666666666666666666666666",
+        "fava_build_source_tree_sha256": FIXTURE_FAVA_TREE,
+        "fava_build_source_manifest_sha256": source_manifest_sha256,
+        "fava_build_source_image_sha256": FIXTURE_FAVA_BUILD_IMAGE,
+        "fava_build_rust_base_image_sha256": FIXTURE_FAVA_RUST_BASE_IMAGE,
+        "fava_build_command_sha256": FIXTURE_FAVA_BUILD_COMMAND,
+        "fava_build_source_immutable": true,
         "fava_source_clean": true,
         "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
         "fava_canary_executable_bytes": 27,
