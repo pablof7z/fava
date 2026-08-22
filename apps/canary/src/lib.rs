@@ -24,22 +24,22 @@ mod hostile;
 mod live;
 mod local;
 mod multi;
+mod pinned_build_input;
 mod proxy;
 mod publication;
 mod publication_child;
 mod publication_support;
-mod pinned_build_input;
 mod recon;
 mod relay;
 mod routing;
+#[cfg(target_os = "linux")]
+mod sealed_executable;
 mod semantic_failure;
 mod semantic_n_plus_one;
 mod semantic_process;
 mod semantic_write_store;
 mod semantic_write_support;
 mod semantic_writes;
-#[cfg(target_os = "linux")]
-mod sealed_executable;
 mod wire;
 
 pub use automatic_publication::run_automatic_publication_scenario;

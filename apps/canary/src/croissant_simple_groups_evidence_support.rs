@@ -389,16 +389,10 @@ fn visit_files(
             let relative = path.strip_prefix(root)?;
             if enforce_retained_schema
                 && !matches!(
-                relative.to_str(),
-                Some(
-                    "children"
-                        | "source"
-                        | "wire"
-                        | "relays"
-                        | "relays/a"
-                        | "relays/b"
+                    relative.to_str(),
+                    Some("children" | "source" | "wire" | "relays" | "relays/a" | "relays/b")
                 )
-            ) {
+            {
                 return Err(CanaryError::new(
                     "simple-groups evidence contained an unowned directory",
                 ));

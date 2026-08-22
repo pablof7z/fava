@@ -71,7 +71,9 @@ impl SealedExecutable {
         fchmod(&file, Mode::RUSR | Mode::XUSR)?;
         fcntl_add_seals(&file, REQUIRED_SEALS)?;
         if !fcntl_get_seals(&file)?.contains(REQUIRED_SEALS) {
-            return Err(io::Error::other("executable memory object was not fully sealed"));
+            return Err(io::Error::other(
+                "executable memory object was not fully sealed",
+            ));
         }
         let metadata = file.metadata()?;
         let sha256 = descriptor_sha256(&file, metadata.len())?;
@@ -123,8 +125,8 @@ fn descriptor_sha256(file: &File, bytes: u64) -> io::Result<String> {
     let mut offset = 0_u64;
     let mut buffer = [0_u8; 16_384];
     while offset < bytes {
-        let wanted = usize::try_from((bytes - offset).min(buffer.len() as u64))
-            .map_err(io::Error::other)?;
+        let wanted =
+            usize::try_from((bytes - offset).min(buffer.len() as u64)).map_err(io::Error::other)?;
         let read = file.read_at(&mut buffer[..wanted], offset)?;
         if read == 0 {
             return Err(io::Error::new(
@@ -163,6 +165,9 @@ mod tests {
             sealed.try_overwrite(&replacement).is_err(),
             "same-size in-place mutation crossed the executable seal"
         );
-        assert_eq!(sealed.sha256(), hex::encode(sha2::Sha256::digest(b"reviewed executable bytes")));
+        assert_eq!(
+            sealed.sha256(),
+            hex::encode(sha2::Sha256::digest(b"reviewed executable bytes"))
+        );
     }
 }

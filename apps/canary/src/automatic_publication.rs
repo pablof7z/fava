@@ -120,10 +120,7 @@ async fn async_recipients(
     )?;
     let event = tagged_event(&author, &recipients, format!("Fava M6 async {seed}"))?;
     let event_id = event.id.expect("checked event id");
-    let preview = preview_write_routes(
-        &preview_routers,
-        EventValue::Unsigned(event.clone()),
-    )?;
+    let preview = preview_write_routes(&preview_routers, EventValue::Unsigned(event.clone()))?;
     if preview.destinations.len() != 3 || preview.settled {
         return Err(CanaryError::new(format!(
             "initial preview was not partial: {preview:?}"
@@ -313,14 +310,9 @@ async fn profile_selection(
         fallback_routers,
         None,
     )?;
-    let app_plan = preview_write_routes(
-        &app_preview_routers,
-        EventValue::Signed(event.clone()),
-    )?;
-    let fallback_plan = preview_write_routes(
-        &fallback_preview_routers,
-        EventValue::Signed(event.clone()),
-    )?;
+    let app_plan = preview_write_routes(&app_preview_routers, EventValue::Signed(event.clone()))?;
+    let fallback_plan =
+        preview_write_routes(&fallback_preview_routers, EventValue::Signed(event.clone()))?;
     if app_plan
         .destinations
         .keys()
@@ -347,10 +339,7 @@ async fn profile_selection(
     })
 }
 
-fn preview_write_routes(
-    routers: &[Arc<dyn Router>],
-    event: EventValue,
-) -> CanaryResult<RoutePlan> {
+fn preview_write_routes(routers: &[Arc<dyn Router>], event: EventValue) -> CanaryResult<RoutePlan> {
     fava_routing::preview(routers, &RouteRequest::Write(event)).map_err(error)
 }
 

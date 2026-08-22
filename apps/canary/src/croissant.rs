@@ -523,9 +523,7 @@ impl StagedExecutable {
                 .map_err(|_| CroissantError::InvalidContract("Croissant read did not fit u64"))?;
         }
         let after = self.file.metadata()?;
-        if before.dev() != after.dev()
-            || before.ino() != after.ino()
-            || before.len() != after.len()
+        if before.dev() != after.dev() || before.ino() != after.ino() || before.len() != after.len()
         {
             return Err(CroissantError::InvalidContract(
                 "Croissant executable changed during descriptor hashing",

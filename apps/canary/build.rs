@@ -122,7 +122,10 @@ fn pinned_claim(root: &Path) -> BuildClaim {
         let observed = actual.get(&path).expect("manifest path");
         assert_eq!(observed.mode, expected.mode, "pinned source mode changed");
         assert_eq!(observed.bytes, expected.bytes, "pinned source size changed");
-        assert_eq!(observed.sha256, expected.sha256, "pinned source bytes changed");
+        assert_eq!(
+            observed.sha256, expected.sha256,
+            "pinned source bytes changed"
+        );
         assert!(
             write_open_is_read_only(&root.join(&path)),
             "pinned Fava compiler input was not on a read-only filesystem"
@@ -165,11 +168,20 @@ fn development_claim(root: &Path) -> BuildClaim {
 }
 
 fn parse_manifest(bytes: &[u8], revision: &str, tree: &str) -> BTreeMap<PathBuf, SourceRow> {
-    assert!(bytes.ends_with(b"\n"), "pinned source manifest lacked final LF");
-    assert!(!bytes.contains(&b'\r'), "pinned source manifest contained CR");
+    assert!(
+        bytes.ends_with(b"\n"),
+        "pinned source manifest lacked final LF"
+    );
+    assert!(
+        !bytes.contains(&b'\r'),
+        "pinned source manifest contained CR"
+    );
     let text = std::str::from_utf8(bytes).expect("pinned source manifest UTF-8");
     let lines = text.lines().collect::<Vec<_>>();
-    assert!(lines.len() >= 5, "pinned source manifest headers were incomplete");
+    assert!(
+        lines.len() >= 5,
+        "pinned source manifest headers were incomplete"
+    );
     assert_eq!(lines[0], "format=fava-pinned-source-v1");
     assert_eq!(lines[1], format!("revision={revision}"));
     assert_eq!(lines[2], format!("tree={tree}"));
@@ -214,7 +226,9 @@ fn parse_manifest(bytes: &[u8], revision: &str, tree: &str) -> BTreeMap<PathBuf,
             .is_none(),
             "duplicate source manifest path"
         );
-        observed_total = observed_total.checked_add(size).expect("source bytes overflow");
+        observed_total = observed_total
+            .checked_add(size)
+            .expect("source bytes overflow");
     }
     assert_eq!(observed_total, total_bytes);
     rows
@@ -245,7 +259,9 @@ fn actual_source_rows(root: &Path) -> BTreeMap<PathBuf, SourceRow> {
         };
         let bytes = fs::read(&path).expect("compiler input bytes");
         assert_eq!(bytes.len() as u64, metadata.len());
-        total = total.checked_add(metadata.len()).expect("compiler bytes overflow");
+        total = total
+            .checked_add(metadata.len())
+            .expect("compiler bytes overflow");
         assert!(total <= MAX_TOTAL_BYTES);
         rows.insert(
             relative,
@@ -261,9 +277,16 @@ fn actual_source_rows(root: &Path) -> BTreeMap<PathBuf, SourceRow> {
 
 fn collect_files(root: &Path, path: &Path, files: &mut Vec<PathBuf>) {
     let metadata = path.symlink_metadata().expect("source inventory metadata");
-    assert!(!metadata.file_type().is_symlink(), "source inventory symlink");
+    assert!(
+        !metadata.file_type().is_symlink(),
+        "source inventory symlink"
+    );
     if metadata.is_file() {
-        files.push(path.strip_prefix(root).expect("source relative path").to_owned());
+        files.push(
+            path.strip_prefix(root)
+                .expect("source relative path")
+                .to_owned(),
+        );
         return;
     }
     assert!(metadata.is_dir(), "source inventory special file");
@@ -280,16 +303,15 @@ fn collect_files(root: &Path, path: &Path, files: &mut Vec<PathBuf>) {
 fn canonical_path(value: &str) -> PathBuf {
     assert!(!value.is_empty() && value.len() <= 512 && !value.starts_with('/'));
     assert!(
-        value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || b"._/+@=-".contains(&byte)
-        }),
+        value
+            .bytes()
+            .all(|byte| { byte.is_ascii_alphanumeric() || b"._/+@=-".contains(&byte) }),
         "source manifest path characters"
     );
     let path = PathBuf::from(value);
     assert!(
-        path.components().all(|component| {
-            matches!(component, std::path::Component::Normal(_))
-        }),
+        path.components()
+            .all(|component| { matches!(component, std::path::Component::Normal(_)) }),
         "source manifest path traversal"
     );
     path
@@ -334,6 +356,9 @@ fn git_bytes(root: &Path, arguments: &[&str]) -> Vec<u8> {
         .current_dir(root)
         .output()
         .expect("Git source identity command launched");
-    assert!(output.status.success(), "Git source identity command failed");
+    assert!(
+        output.status.success(),
+        "Git source identity command failed"
+    );
     output.stdout
 }

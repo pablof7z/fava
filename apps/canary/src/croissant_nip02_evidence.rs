@@ -34,10 +34,7 @@ pub(super) const SECRET_SCAN_CLASSES: [&str; 19] = [
     "target_secret_nip21_upper",
 ];
 
-pub(super) fn secret_needles(
-    seed: &[u8],
-    keys: [&Keys; 2],
-) -> CanaryResult<Vec<Vec<u8>>> {
+pub(super) fn secret_needles(seed: &[u8], keys: [&Keys; 2]) -> CanaryResult<Vec<Vec<u8>>> {
     if seed.is_empty() {
         return Err(CanaryError::new("Croissant scenario seed was empty"));
     }
@@ -71,10 +68,7 @@ pub(super) fn assert_secrets_absent(root: &Path, secrets: &[Vec<u8>]) -> CanaryR
     Ok(())
 }
 
-pub(super) fn artifact_seal(
-    keys: &Keys,
-    manifest: &Value,
-) -> CanaryResult<Event> {
+pub(super) fn artifact_seal(keys: &Keys, manifest: &Value) -> CanaryResult<Event> {
     let digest = signed_manifest_digest(manifest)?;
     EventBuilder::new(Kind::TextNote, digest)
         .custom_created_at(Timestamp::from(0))

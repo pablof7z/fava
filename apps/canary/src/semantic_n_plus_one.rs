@@ -12,13 +12,13 @@ use fava_signer::Signer;
 use nostr::event::Tag;
 use serde_json::{Value, json};
 
+use crate::environment::bazel_program;
 use crate::semantic_process::{OwnedOutput, run_owned};
 use crate::semantic_write_support::{
     DeterministicSigner, RecordingPublisher, assembly, attempt_evidence, publish_event,
     wait_terminal,
 };
 use crate::{CanaryError, CanaryResult, deterministic_keys, repository_root};
-use crate::environment::bazel_program;
 
 pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
     let root = repository_root()?;

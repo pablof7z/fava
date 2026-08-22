@@ -86,8 +86,13 @@ impl WriteStore for CompletionStore {
         source: Option<&Event>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner
-            .accept_reserved_materialized_edit(reservation, intent, event, source, initial_route)
+        self.inner.accept_reserved_materialized_edit(
+            reservation,
+            intent,
+            event,
+            source,
+            initial_route,
+        )
     }
 
     fn install_materialization(

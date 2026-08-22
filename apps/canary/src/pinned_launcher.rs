@@ -37,12 +37,18 @@ pub(crate) async fn launch(
     }
     let sealed = SealedExecutable::copy_from(&executable, 134_217_728)?;
     let pinned_digest = sealed.sha256().to_owned();
-    let (attestation_file, attestation_bytes) =
-        open_input(attestation, MAX_BUILD_ATTESTATION_BYTES, "build attestation")?;
+    let (attestation_file, attestation_bytes) = open_input(
+        attestation,
+        MAX_BUILD_ATTESTATION_BYTES,
+        "build attestation",
+    )?;
     let claim = parse_build_attestation(&attestation_bytes, &pinned_digest)
         .map_err(std::io::Error::other)?;
-    let (source_manifest_file, source_manifest_bytes) =
-        open_input(source_manifest, MAX_SOURCE_MANIFEST_BYTES, "source manifest")?;
+    let (source_manifest_file, source_manifest_bytes) = open_input(
+        source_manifest,
+        MAX_SOURCE_MANIFEST_BYTES,
+        "source manifest",
+    )?;
     verify_source_manifest(&source_manifest_bytes, &claim)?;
     let mut child = opened_child(
         &sealed,
@@ -53,7 +59,9 @@ pub(crate) async fn launch(
     )?;
     let status = child.wait().await?;
     if !status.success() {
-        return Err(std::io::Error::other(format!("pinned canary child failed with {status}")).into());
+        return Err(
+            std::io::Error::other(format!("pinned canary child failed with {status}")).into(),
+        );
     }
     println!("pinned_fava_canary_executable_sha256: {pinned_digest}");
     Ok(())
@@ -77,9 +85,12 @@ fn open_input(
     }
     let sealed = SealedExecutable::copy_from(&file, maximum)?;
     let sealed_file = sealed.try_clone()?;
-    let mut bytes = vec![0_u8; usize::try_from(before.len()).map_err(|error| {
-        std::io::Error::other(format!("pinned {label} byte count was invalid: {error}"))
-    })?];
+    let mut bytes = vec![
+        0_u8;
+        usize::try_from(before.len()).map_err(|error| {
+            std::io::Error::other(format!("pinned {label} byte count was invalid: {error}"))
+        })?
+    ];
     let read = sealed_file.read_at(&mut bytes, 0)?;
     if read != bytes.len() {
         return Err(std::io::Error::other(format!("sealed {label} ended early")).into());

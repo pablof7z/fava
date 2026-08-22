@@ -3,11 +3,11 @@
 use std::path::PathBuf;
 
 #[cfg(target_os = "linux")]
-mod sealed_executable;
-#[cfg(target_os = "linux")]
 mod pinned_build_input;
 #[cfg(target_os = "linux")]
 mod pinned_launcher;
+#[cfg(target_os = "linux")]
+mod sealed_executable;
 
 use canary::{
     CroissantNip02Options, CroissantSimpleGroupsOptions, ReconOptions, SmokeOptions,
@@ -291,21 +291,15 @@ async fn launch_croissant_simple_groups(
         return Err(usage());
     }
     #[cfg(target_os = "linux")]
-    return pinned_launcher::launch(
-        &binary,
-        &source,
-        &attestation,
-        &source_manifest,
-        arguments,
-    )
-    .await;
+    return pinned_launcher::launch(&binary, &source, &attestation, &source_manifest, arguments)
+        .await;
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (binary, source, attestation, source_manifest, arguments);
-        Err(std::io::Error::other(
-            "descriptor-pinned Fava execution is unsupported on this host",
+        Err(
+            std::io::Error::other("descriptor-pinned Fava execution is unsupported on this host")
+                .into(),
         )
-        .into())
     }
 }
 

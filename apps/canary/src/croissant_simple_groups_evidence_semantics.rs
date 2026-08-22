@@ -69,7 +69,12 @@ mod marker_tests {
         fs::write(&executable, bytes).expect("small executable fixture");
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o500))
             .expect("executable mode");
-        assert!(Command::new(&executable).status().expect("execute fixture").success());
+        assert!(
+            Command::new(&executable)
+                .status()
+                .expect("execute fixture")
+                .success()
+        );
         let snapshot = EvidenceSnapshot::capture(fixture.path()).expect("binary snapshot");
         rescan_secret_markers(&snapshot).expect("embedded verifier literals are not secrets");
 

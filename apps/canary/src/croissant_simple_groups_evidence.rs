@@ -211,10 +211,8 @@ fn validate_manifest(
             .and_then(Value::as_bool)
             != Some(true)
         || manifest.get("fava_source_clean").and_then(Value::as_bool) != Some(true)
-        || required_string(manifest, "fava_execution_platform")?
-            != "linux-sealed-memfd-proc-fd"
-        || required_string(manifest, "execution_platform")?
-            != "linux-sealed-memfd-container"
+        || required_string(manifest, "fava_execution_platform")? != "linux-sealed-memfd-proc-fd"
+        || required_string(manifest, "execution_platform")? != "linux-sealed-memfd-container"
     {
         return Err(CanaryError::new(
             "simple-groups evidence run/source provenance did not match its exact expectation",
@@ -381,9 +379,7 @@ fn verify_children(
                 "simple-groups Croissant child provenance did not match exact expectations",
             ));
         }
-        if object_string(ready[index], "execution_platform")?
-            != "linux-sealed-memfd-proc-fd"
-        {
+        if object_string(ready[index], "execution_platform")? != "linux-sealed-memfd-proc-fd" {
             return Err(CanaryError::new(
                 "simple-groups Croissant child did not use descriptor execution",
             ));

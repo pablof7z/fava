@@ -131,8 +131,8 @@ impl PinnedFavaExecutable {
         let mut offset = 0_u64;
         let mut buffer = [0_u8; 16_384];
         while offset < self.bytes {
-            let wanted = usize::try_from((self.bytes - offset).min(buffer.len() as u64))
-                .map_err(error)?;
+            let wanted =
+                usize::try_from((self.bytes - offset).min(buffer.len() as u64)).map_err(error)?;
             let read = self.file.read_at(&mut buffer[..wanted], offset)?;
             if read == 0 {
                 return Err(CanaryError::new(
@@ -140,9 +140,11 @@ impl PinnedFavaExecutable {
                 ));
             }
             destination_file.write_all(&buffer[..read])?;
-            offset = offset.checked_add(u64::try_from(read).map_err(error)?).ok_or_else(|| {
-                CanaryError::new("simple-groups pinned executable byte count overflow")
-            })?;
+            offset = offset
+                .checked_add(u64::try_from(read).map_err(error)?)
+                .ok_or_else(|| {
+                    CanaryError::new("simple-groups pinned executable byte count overflow")
+                })?;
         }
         destination_file.sync_all()?;
         if destination_file.metadata()?.len() != self.bytes
@@ -172,13 +174,9 @@ pub(crate) fn load_pinned_build_attestation(
     path: &Path,
     expected_executable_sha256: &str,
 ) -> CanaryResult<PinnedBuildAttestation> {
-    let bytes = read_bounded_read_only(
-        path,
-        MAX_BUILD_ATTESTATION_BYTES,
-        "build attestation",
-    )?;
-    let claim = parse_build_attestation(&bytes, expected_executable_sha256)
-        .map_err(CanaryError::new)?;
+    let bytes = read_bounded_read_only(path, MAX_BUILD_ATTESTATION_BYTES, "build attestation")?;
+    let claim =
+        parse_build_attestation(&bytes, expected_executable_sha256).map_err(CanaryError::new)?;
     Ok(PinnedBuildAttestation { claim, raw: bytes })
 }
 
@@ -236,10 +234,7 @@ pub(crate) fn load_pinned_source_manifest(
             "pinned Fava source manifest disagreed with its immutable build",
         ));
     }
-    Ok(PinnedSourceManifest {
-        raw,
-        sha256,
-    })
+    Ok(PinnedSourceManifest { raw, sha256 })
 }
 
 impl PinnedSourceManifest {
@@ -264,7 +259,9 @@ fn read_bounded_read_only(path: &Path, maximum: u64, label: &str) -> CanaryResul
         && path
             .file_name()
             .and_then(|value| value.to_str())
-            .is_some_and(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()));
+            .is_some_and(|value| {
+                !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+            });
     if !inherited {
         return Err(CanaryError::new(format!(
             "pinned Fava {label} was not an inherited exact descriptor"
@@ -393,8 +390,8 @@ fn descriptor_sha256(file: &fs::File, before: &fs::Metadata) -> CanaryResult<Str
     let mut buffer = [0_u8; 16_384];
     let mut offset = 0_u64;
     while offset < before.len() {
-        let wanted = usize::try_from((before.len() - offset).min(buffer.len() as u64))
-            .map_err(error)?;
+        let wanted =
+            usize::try_from((before.len() - offset).min(buffer.len() as u64)).map_err(error)?;
         let read = file.read_at(&mut buffer[..wanted], offset)?;
         if read == 0 {
             return Err(CanaryError::new(

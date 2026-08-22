@@ -151,11 +151,7 @@ pub async fn run_croissant_simple_groups_scenario(
     fs::create_dir_all(artifacts.root().join("source"))?;
     pinned_fava_executable.retain(&artifacts.root().join("source/fava-canary"))?;
     build_attestation.retain(&artifacts.root().join("source/fava-build.json"))?;
-    source_manifest.retain(
-        &artifacts
-            .root()
-            .join("source/fava-build-source.manifest"),
-    )?;
+    source_manifest.retain(&artifacts.root().join("source/fava-build-source.manifest"))?;
     artifacts.write_json("source/fava.json", &fava_source)?;
     let started = unix_ms()?;
     artifacts.record(

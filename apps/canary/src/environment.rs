@@ -24,9 +24,7 @@ pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
     if source.is_dir() && source.join(".git").exists() {
         return Ok(source);
     }
-    Err(CanaryError::new(
-        "Croissant source checkout is unavailable",
-    ))
+    Err(CanaryError::new("Croissant source checkout is unavailable"))
 }
 
 pub(crate) fn bazel_program() -> CanaryResult<PathBuf> {

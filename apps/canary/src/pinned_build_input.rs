@@ -46,7 +46,8 @@ pub(crate) fn parse_build_attestation(
     bytes: &[u8],
     expected_executable_sha256: &str,
 ) -> Result<BuildAttestation, String> {
-    let claim: BuildAttestation = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
+    let claim: BuildAttestation =
+        serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
     if claim.schema != "fava-pinned-build-v1"
         || !is_lower_hex(&claim.fava_revision, 40)
         || !is_lower_hex(&claim.fava_build_tree, 40)
@@ -60,8 +61,7 @@ pub(crate) fn parse_build_attestation(
         || claim.fava_revision != env!("FAVA_BUILD_REVISION")
         || claim.fava_build_tree != env!("FAVA_BUILD_TREE")
         || claim.fava_build_source_tree_sha256 != env!("FAVA_BUILD_SOURCE_TREE_SHA256")
-        || claim.fava_build_source_manifest_sha256
-            != env!("FAVA_BUILD_SOURCE_MANIFEST_SHA256")
+        || claim.fava_build_source_manifest_sha256 != env!("FAVA_BUILD_SOURCE_MANIFEST_SHA256")
         || claim.fava_build_source_image_sha256 != env!("FAVA_BUILD_SOURCE_IMAGE_SHA256")
         || claim.rust_base_image_sha256 != env!("FAVA_BUILD_RUST_BASE_IMAGE_SHA256")
         || env!("FAVA_BUILD_SOURCE_IMMUTABLE") != "true"
@@ -97,8 +97,7 @@ pub(crate) fn parse_source_manifest(bytes: &[u8]) -> Result<SourceManifestClaim,
     if file_count == 0
         || file_count > MAX_SOURCE_FILES
         || total_bytes > MAX_SOURCE_TOTAL_BYTES
-        || lines.len()
-            != 5 + usize::try_from(file_count).map_err(|error| error.to_string())?
+        || lines.len() != 5 + usize::try_from(file_count).map_err(|error| error.to_string())?
     {
         return Err("pinned source manifest bounds were invalid".to_owned());
     }

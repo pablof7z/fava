@@ -7,8 +7,8 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 use tokio::net::TcpStream;
 
-use crate::croissant_test_support::committed_source_checkout;
 use super::{CroissantError, CroissantLimits, CroissantSupervisor, process_is_alive};
+use crate::croissant_test_support::committed_source_checkout;
 
 fn executable(directory: &Path, name: &str, body: &str) -> PathBuf {
     let path = directory.join(name);
@@ -193,8 +193,11 @@ async fn prepared_executable_is_immune_to_caller_path_replacement() {
         CroissantLimits::test(),
     )
     .expect("prepare stages exact bytes");
-    fs::write(&binary, format!("#!/bin/sh\ntouch {}\nexit 72\n", marker.display()))
-        .expect("replace caller path");
+    fs::write(
+        &binary,
+        format!("#!/bin/sh\ntouch {}\nexit 72\n", marker.display()),
+    )
+    .expect("replace caller path");
     let process = supervisor
         .start()
         .await
@@ -203,7 +206,11 @@ async fn prepared_executable_is_immune_to_caller_path_replacement() {
     assert_ne!(ready.executable, binary);
     assert_eq!(ready.executable_sha256, original_hash);
     assert_eq!(
-        fs::metadata(&ready.executable).unwrap().permissions().mode() & 0o222,
+        fs::metadata(&ready.executable)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o222,
         0
     );
     assert!(!marker.exists(), "replacement bytes executed");
@@ -277,8 +284,12 @@ async fn sealed_execution_image_refuses_same_length_in_place_mutation() {
     .expect("prepare sealed image");
     let same_length = vec![
         b'x';
-        usize::try_from(fs::metadata(run.join("executable/croissant")).unwrap().len())
-            .unwrap()
+        usize::try_from(
+            fs::metadata(run.join("executable/croissant"))
+                .unwrap()
+                .len()
+        )
+        .unwrap()
     ];
     assert!(
         supervisor
@@ -376,7 +387,10 @@ async fn terminal_log_overflow_still_removes_the_staged_executable() {
         CroissantLimits::test(),
     )
     .expect("prepare");
-    let process = supervisor.start().await.expect("ready before late overflow");
+    let process = supervisor
+        .start()
+        .await
+        .expect("ready before late overflow");
     let staged = process.ready_fact().executable;
     tokio::time::sleep(Duration::from_millis(400)).await;
     let error = process
@@ -384,5 +398,8 @@ async fn terminal_log_overflow_still_removes_the_staged_executable() {
         .await
         .expect_err("late overflow remains terminal");
     assert!(matches!(error, CroissantError::LogOverflow { .. }));
-    assert!(!staged.exists(), "terminal failure retained staged executable");
+    assert!(
+        !staged.exists(),
+        "terminal failure retained staged executable"
+    );
 }

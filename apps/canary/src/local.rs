@@ -8,8 +8,8 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
-use fava_write_store_memory::MemoryWriteStore;
 use fava_write_store::WriteStore;
+use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag};
 use nostr::key::Keys;
 
@@ -43,11 +43,7 @@ pub async fn run_local_scenario(id: &str, seed: &str) -> CanaryResult<usize> {
     Ok(count)
 }
 
-async fn slow_consumer(
-    fava: &Fava,
-    writes: &MemoryWriteStore,
-    keys: &Keys,
-) -> CanaryResult<usize> {
+async fn slow_consumer(fava: &Fava, writes: &MemoryWriteStore, keys: &Keys) -> CanaryResult<usize> {
     let mut observation = fava
         .observe(Query::events().cache_only())
         .await
@@ -67,7 +63,8 @@ async fn slow_consumer(
             .custom_created_at(Timestamp::from(index + 1))
             .finalize(keys)
             .map_err(error)?;
-        writes.accept_materialized(EventValue::Signed(event))
+        writes
+            .accept_materialized(EventValue::Signed(event))
             .map_err(error)?;
     }
     tokio::time::timeout(Duration::from_secs(2), async {
