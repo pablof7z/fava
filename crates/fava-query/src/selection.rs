@@ -27,9 +27,12 @@ impl Query {
     }
 
     /// Match one event kind.
+    ///
+    /// One call selects a singleton. Repeated calls union canonical kind
+    /// values, so duplicates and call order do not change query identity.
     #[must_use]
     pub fn kind(mut self, kind: Kind) -> Self {
-        self.selection.kinds = Some(BTreeSet::from([kind]));
+        self.selection.kinds.get_or_insert_default().insert(kind);
         self
     }
 
