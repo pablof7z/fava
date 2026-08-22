@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-01-PLAN.md
-last_updated: "2026-08-21T23:38:27.285Z"
+stopped_at: Completed 07.1-02-PLAN.md
+last_updated: "2026-08-22T00:05:33.817Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-01 completed; synchronous publication door delivered
-state_head: 756fc20b0b0dbe7354e76b5334faeda6e0b06722
+last_activity_desc: Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
+state_head: 2dd48665fc11ea3a18edd82a0e67cf45df39b2b7
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 13
-  percent: 54
+  completed_plans: 14
+  percent: 57
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-01 completed; synchronous publication door delivered
+Last activity: 2026-08-22 — Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
 
-Progress: [█████░░░░░] 54%
+Progress: [██████░░░░] 57%
 
 Phase progress is 8/14. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
 all authored plans and their review and verification gates.
@@ -75,6 +75,7 @@ all authored plans and their review and verification gates.
 | Phase 06.1 P02 | 9min | 2 tasks | 8 files |
 | Phase 06.1 P03 | 18min | 2 tasks | 9 files |
 | Phase 07.1 P01 | 6min | 2 tasks | 9 files |
+| Phase 07.1 P02 | 21min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: One group id may be aggregated over a non-empty host set while each relay's records remain independently authoritative; reads/writes reuse ordinary Fava lifecycles.
 - [Phase 07.1]: Unscoped publish(edit) compiles but refuses MissingAuthor before custody until by(author) supplies the frozen author; a sole registered signer is never selected implicitly.
 - [Phase 07.1]: Facade Write holds stable identities and reads current receipt facts through Publication; neutral owners retain custody and receipt authority.
+- [Phase 07.1]: PublishAs is a borrowed edit-only handle and PublishTo is a borrowed sealed-payload handle; neither owns providers or performs work until publish receives a valid payload.
+- [Phase 07.1]: WriteRouting remains publicly re-exported from fava-write, while Explicit stores a first-occurrence sequence and keyed destination maps remain derived lane facts.
+- [Phase 07.1]: Equivalent exact event contributions expose the newest receipt local evidence to semantic queries while every WriteId and ReceiptId remains independently readable.
 
 ### Pending Todos
 
@@ -127,6 +131,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-21T23:38:27.207Z
-Stopped at: Completed 07.1-01-PLAN.md
+Last session: 2026-08-22T00:05:33.736Z
+Stopped at: Completed 07.1-02-PLAN.md
 Resume file: None
