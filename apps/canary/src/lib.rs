@@ -6,6 +6,7 @@ mod automatic_support;
 mod croissant;
 mod croissant_nip02;
 mod croissant_nip02_evidence;
+mod croissant_simple_groups;
 mod grouping;
 mod hostile;
 mod live;
@@ -31,6 +32,7 @@ pub use croissant_nip02::{
     CroissantNip02Options, CroissantNip02Outcome, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
 };
+pub use croissant_simple_groups::{CroissantSimpleGroupsOptions, CroissantSimpleGroupsOutcome};
 pub use grouping::run_grouping_scenario;
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
@@ -470,6 +472,9 @@ pub(crate) fn command_output(
     }
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
+
+#[cfg(test)]
+mod croissant_simple_groups_tests;
 
 #[cfg(test)]
 mod lib_tests;

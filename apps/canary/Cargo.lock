@@ -148,6 +148,7 @@ dependencies = [
  "fava-routing",
  "fava-signer",
  "fava-signer-local",
+ "fava-simple-groups",
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
@@ -588,6 +589,15 @@ dependencies = [
  "fava-write",
  "nostr",
  "tokio",
+]
+
+[[package]]
+name = "fava-simple-groups"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "fava-write",
 ]
 
 [[package]]
