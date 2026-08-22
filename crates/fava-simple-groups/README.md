@@ -1,173 +1,173 @@
 # fava-simple-groups
 
-NIP-29 groups for Fava, as plain values you hand to `Fava`. A `Group` is one opaque id over a non-empty set of host relays; it mints ordinary `Query` reads and `WriteIntent` writes — no socket, store, signer, or observation lifecycle of its own. The crate also builds discovery queries and parses every NIP-29 record into a typed value.
+Pure multi-relay NIP-29 values for Fava. A `Group` is one opaque group id over
+an application-selected, non-empty host set. Each host remains independently
+authoritative for the records it served. The crate prepares ordinary queries,
+events, and saved-list edits; Fava owns observation, signing, routing,
+publication, delivery, cancellation, and receipts.
 
-## The group's feed
+## Feed and publication
 
-Here the app wants to show the user a chat feed from their photography group on `wss://groups.com`.
+Content reads retain local write-store visibility and request every selected host.
+They require an explicit positive result bound.
 
 ```rust
+use fava::{EventBuilder, Kind, Query, Timestamp, Write};
 use fava_simple_groups::Group;
 
-let photos = Group::on(["wss://groups.com"], "photos")?;
-
-let obs = fava.observe(photos.events(Query::events().kind(Kind::from(9)).limit(50)?))?;
-for ev in obs.current().events() {
-    println!("{}", ev.event.content());
+let photos = Group::on(
+    ["wss://bob.groups.example", "wss://alice.groups.example"],
+    "photos",
+)?;
+let query = photos.events(
+    Query::events()
+        .kind(Kind::from_u16(9))
+        .limit(50)?,
+)?;
+let observation = fava.observe(query).await?;
+for record in &observation.current().events {
+    println!("{}", record.event.content());
 }
 
-let accepted = fava.publish(photos.publish(draft)?)?;
+let draft = EventBuilder::new(me, Kind::from_u16(9))
+    .created_at(Timestamp::from(42))
+    .content("hello from both hosts")
+    .build()?;
+let prepared = photos.prepare(draft)?;
+let write: Write = fava.to(photos.hosts())?.publish(prepared)?;
 ```
 
-## Who's in the group
+`prepare` is pure and kind-blind. `to` is an inert exact-route scope, and only
+`publish` opens ordinary Fava work. `Group` has no publication method.
 
-Now the app wants to show the member list, and the group's name and about, for that same photography group.
+## Records and fork visibility
 
-```rust
-use fava_simple_groups::{Group, GroupRecords};
-
-let photos = Group::on(["wss://groups.com"], "photos")?;
-
-let obs = fava.observe(photos.records(GroupRecords::members()))?;
-for m in photos.project(obs.current()).members() { /* a pubkey the relay listed */ }
-
-let obs = fava.observe(photos.records(GroupRecords::metadata()))?;
-let meta = photos.project(obs.current()).metadata();
-println!("{} — {}", meta.name(), meta.about());
-```
-
-## Discovery
-
-Discovery is how the app finds groups you don't already have an address for — the groups you've bookmarked, or the groups the people you follow are in or help run — so it can suggest groups to join.
-
-### Groups I've saved
-
-The app wants to show the user the NIP-29 groups they've bookmarked.
+Relay-authored kinds 39000 through 39005 use exact `d` selection and
+`OnlyRelays` authority for the configured hosts. Projection never invents a
+record for an unobserved host and never lets one host speak for another.
 
 ```rust
-use fava_simple_groups::{SimpleGroups, SavedGroup};
+use fava_simple_groups::GroupRecords;
 
-let q = SimpleGroups::saved_groups([me]);          // kind 10009, author = me
-let obs = fava.observe(q)?;
-for ev in obs.current().events() {
-    for g in SavedGroup::from_event(&ev.event) {    // each saved row, typed
-        println!("{}  @ {}  {}", g.id(), g.relay(), g.name().unwrap_or(""));
+let records = photos.records(GroupRecords::all())?;
+let observation = fava.observe(records).await?;
+let snapshot = photos.project(&observation.current());
+
+for (host, metadata) in snapshot.metadata() {
+    println!("{}: {:?}", host, metadata.name());
+}
+for (host, member) in snapshot.members() {
+    println!("member {} was listed by {}", member, host);
+}
+
+if snapshot.metadata_differ() {
+    let bob = fava::RelayUrl::parse("wss://bob.groups.example")?;
+    if let Some(bob_view) = snapshot.at(&bob) {
+        for (_, metadata) in bob_view.metadata() {
+            println!("Bob host: {:?}", metadata.about());
+        }
     }
 }
 ```
 
-### Groups the people I follow have bookmarked
+`GroupSnapshot::at` is an explicit application choice. An empty host view is
+only an empty positive-evidence view; it is not an absence or completeness
+claim. Disagreement compares complete optional host-local records.
 
-Let's say the app wants to show you the list of groups the people you follow have bookmarked. Simple:
+## Discovery and saved lists
 
-```rust
-let follows = my_contacts.followed();
-let q = SimpleGroups::saved_groups(&follows);      // same builder, more authors
-let obs = fava.observe(q)?;
-// results key by (host, id); the same id at two relays is two entries, and each
-// carries which follow saved it (N29-LIST-006).
-```
-
-### Which groups are the people I follow an admin of?
-
-You can even ask, very simply: which groups are the people I follow an admin of?
+Discovery is an ordinary bounded `Query`. Saved rows retain their author and
+exact relay URL.
 
 ```rust
-use fava_simple_groups::{SimpleGroups, GroupAdmins, Group, GroupRecords};
+use fava_simple_groups::{SavedGroup, SimpleGroups};
 
-let follows: BTreeSet<PublicKey> = my_contacts.followed();
-let q = SimpleGroups::groups_where_admin(&follows);   // kind 39001, #p ∈ follows
-let obs = fava.observe(q)?;
-
-let discovered: Vec<Group> = obs.current().events().filter_map(|ev| {
-    let admins = GroupAdmins::from_event(&ev.event).ok()?;
-    let host   = RelayUrl::from(ev.relay_evidence.source());
-    Group::on([host], admins.id()).ok()
-}).collect();
-
-for g in &discovered {
-    let obs = fava.observe(g.records(GroupRecords::metadata()))?;
-    let meta = g.project(obs.current()).metadata();
-    println!("{}  {}", g.id(), meta.name());
+let query = SimpleGroups::saved_groups([me])?;
+let observation = fava.observe(query).await?;
+for record in &observation.current().events {
+    for row in SavedGroup::from_event(&record.event)? {
+        let saved = row?;
+        println!("{} @ {} {:?}", saved.id(), saved.relay(), saved.name());
+    }
 }
+
+let admin_query = SimpleGroups::groups_where_admin([me])?;
+let member_query = SimpleGroups::groups_where_member([me])?;
+let saving_authors = SimpleGroups::groups_saved_by(
+    &observation.current(),
+    &photos,
+)?;
 ```
 
-Discovery is always an ordinary `Query` — no “list all groups” door, no hidden completeness (N29-READ-009, N29-OWN-003).
-
-## Forks
-
-You've been in “photos” for a long time. Then its maintainers, Alice and Bob, have a fight, so Alice forks off into a new relay — Bob keeps `wss://bob.relay.com`, Alice opens `wss://alice.relay.com`. NIP-29 now sees two independent groups: their member lists and “about” text drift apart, and posts land on one relay or the other. You still like both, so in your app you decide to treat them as one — one “photos” feed showing everything from both, with a small note when the two relays disagree about who's an admin or what the group is called. When you post, you pick which side it goes to.
+Saved group and relay changes are pure kind-10009 semantic edits. The
+application supplies the author with `by`, the complete destination set with
+`to`, and receives an ordinary `Write` from `publish`.
 
 ```rust
-use fava_simple_groups::{Group, GroupRecords};
+use fava::Write;
+use fava_simple_groups::SimpleGroups;
 
-let photos = Group::on(["wss://bob.relay.com", "wss://alice.relay.com"], "photos")?;
+let edit = SimpleGroups::save_group(&photos, Some("Photography"))?;
+let write: Write = fava
+    .by(me)
+    .to(photos.hosts())?
+    .publish(edit)?;
 
-// everything else stays the same — one feed, posts from both relays, deduped by event id.
-let obs = fava.observe(photos.events(Query::events().kind(Kind::from(9)).limit(50)?))?;
-for ev in obs.current().events() {
-    println!("{}", ev.event.content());
-}
-
-// and the app can choose how to resolve metadata conflicts or anything like that:
-let obs = fava.observe(photos.records(GroupRecords::metadata()))?;
-let snap = photos.project(obs.current());
-if snap.metadata_differ() {
-    let bob = snap.at("wss://bob.relay.com");   // pick a side — the crate won't choose for you
-    println!("about (bob's side): {}", bob.metadata().about());
-}
+let relay = fava::RelayUrl::parse("wss://bob.groups.example")?;
+let edit = SimpleGroups::save_relay(relay)?;
+let write: Write = fava
+    .by(me)
+    .to(photos.hosts())?
+    .publish(edit)?;
 ```
 
-## API
+Save, remove, and rename preserve opaque content, foreign rows, malformed rows,
+and unrelated source order. A parsed saved relay is evidence only; it does not
+select acquisition or publication policy.
 
-### `Group` — one group id over a host set
-`Group::on(hosts, id) -> Result<Group, GroupError>` — non-empty host set + opaque id; refuses empty. Each host is a `RelayUrl` **or a `&str` literal** (parsed internally via `TryInto<RelayUrl>`); parse and empty-set errors fold into `GroupError` (one `?`). The group carries host set + id privately; the write door is the only thing that yields both into a `WriteIntent`.
-`Group::on_many(hosts, ids)` — same host set over several group ids for one write (added when that case is real).
+## Arbitrary and signed events
 
-Reads (return ordinary `Query`):
-- `group.events(selection) -> Query` — content; `#h = id`, sourced from all hosts. Refuses a `selection` that already sets `#h`.
-- `group.records(which: GroupRecords) -> Query` — relay-signed records (39000–39005); `#d = id`, `only_from_relays(hosts)`.
-- `group.project(&QuerySnapshot) -> GroupSnapshot` — pure projection: merged view + `per_host` + per-kind `*_differ()` + `at(host)`.
+Unsigned preparation preserves the payload and normalizes exactly one matching
+`h` row. Kinds 9002 and 9010 remain ordinary author-bearing events:
 
-Writes (return ordinary `WriteIntent`, routed `Explicit({hosts})`, kind-blind, one `#h` row):
-- `group.publish(draft)` / `publish_signed(event)` — app content.
-- `group.join()` / `leave()` / `create()` / `delete()` / `create_invite()` / `delete_event(e)`.
-- `group.put_users(&[...])` / `remove_users(&[...])` — kind 9000/9001, `p` rows + roles.
+```rust
+let metadata = photos.edit_metadata(metadata_draft)?;
+let metadata_write: Write = fava.to(photos.hosts())?.publish(metadata)?;
 
-### Discovery builders (return ordinary `Query`)
-- `SimpleGroups::saved_groups(authors)` — kind `10009` group rows `["group", id, relay, name?"]` by those authors (N29-LIST-006). Keys results by `(host, id)`; keeps same id at another relay separate; retains every author who saved it.
-- `SimpleGroups::saved_relays(authors)` — kind `10009` relay-in-use rows `["r", relay-url]` by those authors (N29-LIST-002). Keys by relay-url; retains every author who saved it. Owned here — not `fava-nip65`.
-- `SimpleGroups::groups_saved_by(relation)` — dynamic: every author whose `10009` named that exact group, as inputs change.
-- `SimpleGroups::groups_where_admin(subjects)` — kind `39001`, `#p ∈ subjects`.
-- `SimpleGroups::groups_where_member(subjects)` — kind `39002`, `#p ∈ subjects`. Caveat (N29): member lists can be absent/partial — inclusion is evidence of membership, omission is not.
-- (NIP-65 kind `10002` relay lists are a different capability — they remain in `fava-nip65`.)
+let pins = photos.set_pins(pins_draft)?;
+let pins_write: Write = fava.to(photos.hosts())?.publish(pins)?;
+```
 
-### Saved-list ops (semantic kind-10009; rebase over the actor's latest `10009`; need `ReplaceableEventEdit`)
-- `SimpleGroups::save_group(group, name?)` / `remove_group(group)` / `rename_saved_group(group, name)`.
-- `SimpleGroups::save_relay(relay)` / `remove_relay(relay)` — add/remove a relay-in-use row (N29-LIST-004).
+Any other event kind uses the same path. Signed preparation either returns the
+exact original event or refuses before Fava custody:
 
-### Rebase verbs (need `ReplaceableEventEdit`)
-- `group.edit_metadata(latest, action)` (9002), `group.set_pins(items)` (9010).
+```rust
+let prepared = photos.prepare(signed.clone())?;
+assert_eq!(prepared, signed);
+let write: Write = fava.to(photos.hosts())?.publish(prepared)?;
+```
 
-### Values & parsers — pure, `from_event` (the crate parses, apps don't)
-`GroupMetadata` (39000: `.name()`/`.about()`/`.picture()`/`.livekit()`), `GroupAdmins` (39001: `.id()`/`.admins()`/roles), `GroupMembers` (39002), `GroupRoles` (39003), `GroupParticipants` (39004), `GroupPins` (39005: ordered `PinnedItem`s), `SavedGroup` (10009 `["group",…]`), `SavedRelay` (10009 `["r",…]`) — each `from_event(&EventValue)`; the crate owns `GroupError` and the `h`/`d`/`p`/`e`/`a`/`r`/`participant` tag vocabulary. `GroupSnapshot` exposes the record projections typed. Depends only on `fava-state` + `fava-write`.
+## Cancellation and close
 
-## Design notes
+Publication and observation keep their ordinary Fava lifecycles:
 
-- **Per-relay authority, surfaced not merged.** Same id at two relays is two independent groups; `Group` aggregates their evidence. Member/admin lists union with per-entry host attribution; metadata is latest-`created_at`-wins per record, never field-merged. `*_differ()` / `at(host)` expose the raw per-host truth so a fork stays visible. No `group_exists` / `is_member` / `all_groups` — the crate never claims completeness.
-- **Spec deviation (D2/D3).** The NIP-29 spec's `Group` is single-host (§11 “exactly one host relay”, §12.1 “no multi-host identity”). Fava adopts a multi-host `Group::on(hosts, id)` over per-relay authority — relaxing N29-ID-003 / N29-WRITE-002 — because an app legitimately wants “groupA = relayA + relayB under groupA.” Per-relay authority (N29-ID-002/004) is unchanged; forks are surfaced, never merged.
-- **The crate parses; apps don't.** Every NIP-29 record decodes to a typed value (`GroupMetadata::from_event`, `GroupAdmins::from_event`, …); `GroupSnapshot` exposes them typed. Apps build queries and read typed fields, never raw tags.
-- **Fork resolution is the app's (N29-LIST-008).** The crate surfaces disagreement; it never auto-picks a winning relay, declares a migration, or rewrites the user's saved list.
-- **Saved relays are network-derived (N29-LIST-007).** A relay URL found in someone else's `10009` goes through Fava's ordinary relay-admission policy; the crate never auto-trusts or auto-routes to it.
-- **Engine-free.** `Group` and every helper are constructible with no engine, store, signer, or runtime handle. Reads return `Query`; writes return `WriteIntent`; you drive them through `Fava::observe` / `Fava::publish`. No second observation or receipt lifecycle.
-- **Kind-blind publication.** `publish` appends exactly one `#h` row and does not inspect or approve the kind. Writes route `WriteRouting::Explicit({hosts})`, bypassing the router chain.
-- **Records vs content.** Content reads use `#h`; records use `#d`; helpers refuse the wrong axis.
-- **Optional, non-invasive.** Adding or removing this crate needs no source change to generic Fava crates; no NIP-29 kind table or `#h` branch lives in the engine.
+```rust
+let cancelled = fava.cancel_publication(write.receipt_id())?;
+observation.close();
+```
 
-## Prerequisites
+Closing an observation is idempotent. Cancellation remains scoped to the exact
+ordinary receipt and its current publication phase.
 
-- A **generic tag axis on `Query`** (`#h` / `#d` / `#p` …) lands in `fava-query` first; `fava-simple-groups` ships only after it exists. NIP-29 forbids a group-specific predicate when an ordinary tag filter suffices.
+## Public values
 
-## Status
+- `Group`, `GroupRecords`, `GroupSnapshot`, `SimpleGroups`, and `GroupError`.
+- `GroupMetadata`, `GroupAdmins`, `GroupMembers`, `GroupRoles`,
+  `GroupParticipants`, and `GroupPins` for exact relay-authored records.
+- `PinnedItem`, `SavedGroup`, and `SavedRelay` for bounded typed rows.
 
-Not built — this is the target surface. Open sequencing (rebase verbs / `ReplaceableEventEdit` home, spec revision for multi-host routing, FFI parity) is tracked below.
+The crate's normal dependencies are exactly `fava-query`, `fava-state`, and
+`fava-write`. It owns no engine, provider, signer, router, store, publisher,
+transport, runtime, observation, delivery, cancellation, or receipt state.
+Universal Fava owners contain no NIP-29 kind switch, group-id branch, or
+production dependency on this capability.

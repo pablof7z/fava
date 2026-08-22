@@ -1,7 +1,9 @@
 //! External compile and behavior tracer for the simple-groups capability.
 
 use std::collections::BTreeSet;
+use std::error::Error;
 
+use fava::{Fava, Observation, Write};
 use fava_query::{
     Kind, Query, QueryAcquisition, QuerySnapshot, RelayUrl, ResultAuthority, SingleLetterTag,
 };
@@ -182,16 +184,51 @@ fn management_event_signatures_compile_externally() {
         Group::set_pins;
 }
 
-#[test]
-fn stale_readme_publication_surface_does_not_compile() {
-    let group = group(relay("wss://groups.example"), "photos").expect("one host");
-    let author =
-        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
-            .expect("generator public key");
-    let draft = EventBuilder::new(author, Kind::from_u16(9))
-        .created_at(Timestamp::from(7))
-        .build()
-        .expect("bounded draft");
+fn readme_publishes_prepared_unsigned(
+    fava: &Fava,
+    group: &Group,
+    draft: fava_write::UnsignedEvent,
+) -> Result<Write, Box<dyn Error>> {
+    let prepared = group.prepare(draft)?;
+    Ok(fava.to(group.hosts())?.publish(prepared)?)
+}
 
-    let _stale_intent = group.publish(draft).expect("stale group-owned publication");
+fn readme_publishes_prepared_signed(
+    fava: &Fava,
+    group: &Group,
+    signed: fava_write::Event,
+) -> Result<Write, Box<dyn Error>> {
+    let prepared = group.prepare(signed)?;
+    Ok(fava.to(group.hosts())?.publish(prepared)?)
+}
+
+fn readme_publishes_saved_edit(
+    fava: &Fava,
+    group: &Group,
+    author: PublicKey,
+) -> Result<Write, Box<dyn Error>> {
+    let edit = SimpleGroups::save_group(group, Some("Photography"))?;
+    Ok(fava.by(author).to(group.hosts())?.publish(edit)?)
+}
+
+fn readme_cancels_and_closes(
+    fava: &Fava,
+    observation: &Observation,
+    write: &Write,
+) -> Result<(), fava::PublicationError> {
+    let _cancelled = fava.cancel_publication(write.receipt_id())?;
+    observation.close();
+    Ok(())
+}
+
+#[test]
+fn readme_facade_flow_compiles_externally() {
+    let _: fn(&Fava, &Group, fava_write::UnsignedEvent) -> Result<Write, Box<dyn Error>> =
+        readme_publishes_prepared_unsigned;
+    let _: fn(&Fava, &Group, fava_write::Event) -> Result<Write, Box<dyn Error>> =
+        readme_publishes_prepared_signed;
+    let _: fn(&Fava, &Group, PublicKey) -> Result<Write, Box<dyn Error>> =
+        readme_publishes_saved_edit;
+    let _: fn(&Fava, &Observation, &Write) -> Result<(), fava::PublicationError> =
+        readme_cancels_and_closes;
 }
