@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-22T05:48:41.633Z",
+  "phase": "08",
+  "phase_name": "Authentication, Hostile Boundaries, and Boundedness",
+  "phase_dir": ".planning/phases/08-authentication-hostile-boundaries-and-boundedness",
+  "plan": 3,
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Adopt the exact inbound boundary from real WebSocket bytes to public state",
+      "status": "done",
+      "commit": "ffeb622"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 2,
+      "name": "Complete scripted hostile-class matrix",
+      "status": "not_started"
+    },
+    {
+      "id": 3,
+      "name": "Prove admission sensitivity and register focused build targets",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Plan 08-03 is paused at its mandatory post-tracer human verification gate.",
+      "type": "human_action",
+      "workaround": "Review the recorded 1024-byte/max+1 evidence and reply approved to the continuation executor."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Approve the verified Plan 08-03 tracer",
+      "context": "Task 1 passed public hostile ingress 2/2, transport conformance 6/6, and all extracted files are below 500 lines.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Use Go only for the checked-in Khatru second-relay fixture.",
+      "rationale": "The product remains Rust; Go 1.25.14 is a real-process canary prerequisite for authentication and relay-limit evidence.",
+      "phase": "08"
+    },
+    {
+      "decision": "Serialize Plans 08-03 and 08-04 in the original M8 checkout.",
+      "rationale": "Their authoritative input included uncommitted bytes that isolated worktrees would omit; serialization prevents one executor from staging the other plan's WIP.",
+      "phase": "08"
+    },
+    {
+      "decision": "Commit the four Plan 08-04 store files as a non-completion handoff snapshot.",
+      "rationale": "Git cannot publish dirty bytes; commit f3ce04d preserves them remotely without claiming Plan 08-04 behavior is complete.",
+      "phase": "08"
+    }
+  ],
+  "uncommitted_files": [
+    ".gsd/ (local generated state, intentionally not published)",
+    ".planning/milestone.lock (local execution lock, intentionally not published)"
+  ],
+  "next_action": "Fetch origin/handoff/m8-phase8-plan03-checkpoint, create a local worktree-agent-* continuation branch, run $gsd-resume-work, acknowledge the two blocking constraints, approve the Plan 08-03 tracer, and continue Tasks 2-3 sequentially before Plan 08-04.",
+  "context_notes": "Plans 08-01 and 08-02 are complete. Plan 08-03 Task 1 is commit ffeb622. Commit f3ce04d is only a remote snapshot of pre-existing Plan 08-04 store WIP and must not be treated as Plan 08-04 completion. stash backup 5faecf42 is published separately under refs/heads/backup/m8-pre-rebase-autostash. No background process or async job is running."
+}
