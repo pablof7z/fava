@@ -35,6 +35,7 @@ struct WireClaims<'a> {
     unique: String,
     custom: &'a str,
     metadata_name: String,
+    metadata_about: &'static str,
     admin_target: String,
     relay_signer: &'a str,
     author: &'a str,
@@ -57,6 +58,11 @@ fn verify_one_wire(
         unique: strings(manifest, "unique_event_ids", 2)?[index].clone(),
         custom: string(manifest, "custom_event_id")?,
         metadata_name: strings(manifest, "metadata_names", 2)?[index].clone(),
+        metadata_about: if index == 0 {
+            "A-only metadata"
+        } else {
+            "B-only metadata"
+        },
         admin_target: strings(manifest, "admin_targets", 2)?[index].clone(),
         relay_signer: string(manifest, "relay_signer_public_key")?,
         author: string(manifest, "author_public_key")?,
@@ -279,12 +285,25 @@ fn publication_role(event: &Event, claims: &WireClaims<'_>) -> CanaryResult<Publ
         PublicationRole::Bootstrap
     } else if kind == 9002
         && event.content.is_empty()
-        && has_exact_tag(event, "name", &claims.metadata_name)
+        && has_exact_command_tags(
+            event,
+            &[
+                ["about", claims.metadata_about, ""],
+                ["h", claims.group, ""],
+                ["name", &claims.metadata_name, ""],
+            ],
+        )
     {
         PublicationRole::Metadata
     } else if kind == 9000
         && event.content.is_empty()
-        && has_exact_admin_tag(event, &claims.admin_target)
+        && has_exact_command_tags(
+            event,
+            &[
+                ["h", claims.group, ""],
+                ["p", &claims.admin_target, "admin"],
+            ],
+        )
     {
         PublicationRole::Admin
     } else {
@@ -369,16 +388,6 @@ fn verify_response(
         }
     }
     Ok(())
-}
-
-fn select_current(current: &mut Option<Event>, candidate: Event) {
-    let replace = current.as_ref().is_none_or(|existing| {
-        candidate.created_at > existing.created_at
-            || (candidate.created_at == existing.created_at && candidate.id < existing.id)
-    });
-    if replace {
-        *current = Some(candidate);
-    }
 }
 
 fn update_query_terminal(
@@ -487,14 +496,4 @@ fn verify_complete_wire(
         ));
     }
     Ok(())
-}
-
-fn has_exact_admin_tag(event: &Event, target: &str) -> bool {
-    let matches = event
-        .tags
-        .iter()
-        .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
-        .filter(|tag| tag.as_slice().get(1).map(String::as_str) == Some(target))
-        .collect::<Vec<_>>();
-    matches.len() == 1 && matches[0].as_slice().get(2).map(String::as_str) == Some("admin")
 }

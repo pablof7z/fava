@@ -62,6 +62,16 @@ fn event_at(payload: &Value, index: usize) -> CanaryResult<Event> {
     .map_err(Into::into)
 }
 
+fn select_current(current: &mut Option<Event>, candidate: Event) {
+    let replace = current.as_ref().is_none_or(|existing| {
+        candidate.created_at > existing.created_at
+            || (candidate.created_at == existing.created_at && candidate.id < existing.id)
+    });
+    if replace {
+        *current = Some(candidate);
+    }
+}
+
 fn has_exact_tag(event: &Event, name: &str, value: &str) -> bool {
     let matches = event
         .tags
@@ -69,6 +79,27 @@ fn has_exact_tag(event: &Event, name: &str, value: &str) -> bool {
         .filter(|tag| tag.as_slice().first().map(String::as_str) == Some(name))
         .collect::<Vec<_>>();
     matches.len() == 1 && matches[0].as_slice().get(1).map(String::as_str) == Some(value)
+}
+
+fn has_exact_command_tags(event: &Event, expected: &[[&str; 3]]) -> bool {
+    let mut actual = event
+        .tags
+        .iter()
+        .map(|tag| tag.as_slice().to_vec())
+        .collect::<Vec<_>>();
+    let mut expected = expected
+        .iter()
+        .map(|tag| {
+            let mut values = vec![tag[0].to_owned(), tag[1].to_owned()];
+            if !tag[2].is_empty() {
+                values.push(tag[2].to_owned());
+            }
+            values
+        })
+        .collect::<Vec<_>>();
+    actual.sort_unstable();
+    expected.sort_unstable();
+    actual == expected
 }
 
 fn has_tag_value(event: &Event, name: &str, value: &str) -> bool {

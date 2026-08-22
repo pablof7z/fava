@@ -1,12 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
 use nostr::types::Timestamp;
 use serde_json::{Value, json};
 use tempfile::TempDir;
-
 use super::croissant_simple_groups_evidence::{SCENARIO, verify_croissant_simple_groups_pair};
 use super::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
@@ -15,12 +13,12 @@ use crate::CanaryResult;
 const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
 const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
 const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
-const FIXTURE_CROISSANT_EXECUTABLE: &str =
-    "4444444444444444444444444444444444444444444444444444444444444444";
+const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
 include!("croissant_simple_groups_tests/public_flow.rs");
 include!("croissant_simple_groups_tests/review_iteration_one.rs");
 include!("croissant_simple_groups_tests/review_iteration_two.rs");
 include!("croissant_simple_groups_tests/review_iteration_three.rs");
+include!("croissant_simple_groups_tests/review_iteration_four.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
@@ -355,6 +353,8 @@ fn write_wire_fixture(
     let metadata_seed = EventBuilder::new(Kind::from(9002), "")
         .tags([
             Tag::parse(["name", metadata_name]).expect("name tag"),
+            Tag::parse(["about", if index == 0 { "A-only metadata" } else { "B-only metadata" }])
+                .expect("about tag"),
             Tag::parse(["h", group]).expect("h tag"),
         ])
         .custom_created_at(Timestamp::from(9_003))
