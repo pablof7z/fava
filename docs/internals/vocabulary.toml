@@ -193,7 +193,11 @@ source = "nostr"
 protocol = "NIP-29"
 meaning = "A relay-based Nostr group; Fava's Group value aggregates one opaque group id over an application-selected non-empty host-relay set while preserving each relay's independent authority."
 owner = "fava-simple-groups"
-symbols = []
+symbols = [
+    "fava_simple_groups::Group",
+    "fava_simple_groups::GroupError",
+    "fava_simple_groups::GroupRecords",
+]
 crates = ["fava-simple-groups"]
 spec_symbols = [
     "Group",

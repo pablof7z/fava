@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-autolib = false
 
 [dependencies]
 fava-query.workspace = true
