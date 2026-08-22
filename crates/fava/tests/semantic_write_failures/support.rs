@@ -1,15 +1,12 @@
-use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{
-    Event, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntent,
-    WriteRouting,
-};
+use fava::{Event, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, Write};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{CacheMutation, CachedEvent};
+use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 
@@ -19,13 +16,25 @@ use super::support::{
 };
 
 pub(super) fn edit_intent(author: fava::PublicKey, kind: Kind) -> WriteIntent {
-    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).unwrap();
+    let edit = edit(kind);
     WriteIntent::edit_as(
         edit,
         author,
-        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
+        WriteRouting::explicit([relay_url()]).expect("neutral explicit route validates"),
     )
     .unwrap()
+}
+
+pub(super) fn edit(kind: Kind) -> ReplaceableEventEdit {
+    ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit")
+}
+
+pub(super) fn publish_edit(fava: &Fava, author: fava::PublicKey, kind: Kind) -> Write {
+    fava.by(author)
+        .to([relay_url()])
+        .expect("public explicit route validates")
+        .publish(edit(kind))
+        .expect("semantic edit accepts")
 }
 
 pub(super) fn assembly(

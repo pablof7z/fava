@@ -17,19 +17,17 @@ use nostr::event::{EventId, Tag};
 use nostr::key::Keys;
 
 use super::support::{CountingSigner, RecordingPublisher, publication_builder, relay_evidence};
-use super::{EditResult, signed, target_count};
+use super::{EditResult, explicit_intent, signed, target_count};
 
 pub fn assert_source_removal(
     accepted: &Write,
+    accepted_receipt: &Receipt,
     removed: &Receipt,
     selected_source: EventId,
     kind: Kind,
     actor: PublicKey,
     target: (&str, &str),
 ) {
-    let accepted_receipt = accepted
-        .receipt()
-        .expect("accepted receipt remains readable");
     assert_eq!(
         accepted_receipt.current.publication.materialization_source,
         Some(selected_source)
@@ -302,6 +300,12 @@ fn prove_public_refusals<Add>(
     assert!(matches!(
         WriteIntent::edit_as(add().unwrap(), actor, WriteRouting::Explicit(Vec::new()),),
         Err(WriteIntentError::EmptyExplicitRelays)
+    ));
+    let neutral_fixture = explicit_intent(add().unwrap(), actor);
+    assert_eq!(neutral_fixture.author(), actor);
+    assert!(matches!(
+        neutral_fixture.routing(),
+        WriteRouting::Explicit(relays) if relays.as_slice() == [super::support::relay_url()]
     ));
     assert!(matches!(
         ReplaceableEventEdit::new(kind, Some("addressable".to_owned()), vec![1]),

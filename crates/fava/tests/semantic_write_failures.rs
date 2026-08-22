@@ -31,7 +31,9 @@ mod transient_reads;
 #[path = "semantic_write_failures/validation.rs"]
 mod validation;
 
-use failure_support::{assembly, edit_intent, save_source, wait_failure, wait_public_failure};
+use failure_support::{
+    assembly, edit_intent, publish_edit, save_source, wait_failure, wait_public_failure,
+};
 use support::signed_source;
 
 const VALID: u8 = 0;
@@ -140,9 +142,8 @@ async fn materializer_error_is_bounded_and_preserves_current() {
         )
         .await
         .expect("semantic query opens");
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .unwrap();
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted_event_id = accepted.receipt().unwrap().current.id();
     observation
         .changed()
         .await
@@ -153,8 +154,8 @@ async fn materializer_error_is_bounded_and_preserves_current() {
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
     );
 
-    let failed = wait_failure(&fava, accepted.receipt_id).await;
-    assert_eq!(failed.current.id(), accepted.current.id());
+    let failed = wait_failure(&fava, accepted.receipt_id()).await;
+    assert_eq!(failed.current.id(), accepted_event_id);
     let evidence = failed.current.publication.materialization_failure.unwrap();
     assert!(evidence.len() <= 4_096);
     assert!(evidence.contains("materialization 1"));
@@ -173,17 +174,16 @@ async fn materializer_panic_is_scoped_and_attributed() {
         Arc::new(MemoryWriteStore::default()),
         vec![Arc::clone(&materializer), Arc::clone(&healthy)],
     );
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .unwrap();
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted_event_id = accepted.receipt().unwrap().current.id();
     materializer.set(PANIC);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
     );
 
-    let failed = wait_failure(&fava, accepted.receipt_id).await;
-    assert_eq!(failed.current.id(), accepted.current.id());
+    let failed = wait_failure(&fava, accepted.receipt_id()).await;
+    assert_eq!(failed.current.id(), accepted_event_id);
     assert!(
         failed
             .current
@@ -193,14 +193,12 @@ async fn materializer_panic_is_scoped_and_attributed() {
             .contains("panicked")
     );
 
-    let unaffected = fava
-        .publish(edit_intent(keys.public_key(), Kind::MuteList))
-        .expect("unrelated receipt accepts");
+    let unaffected = publish_edit(&fava, keys.public_key(), Kind::MuteList);
     save_source(
         &cache,
         signed_source(&keys, Kind::MuteList, 20, "healthy source", &[]),
     );
-    let progressed = support::wait_for_materialization(&fava, unaffected.receipt_id, 2).await;
+    let progressed = support::wait_for_materialization(&fava, unaffected.receipt_id(), 2).await;
     assert_eq!(
         progressed.current.publication.materialization_id,
         MaterializationId::from_u64(2)
@@ -219,16 +217,15 @@ async fn malformed_and_oversize_outputs_preserve_current() {
             Arc::new(MemoryWriteStore::default()),
             vec![Arc::clone(&materializer)],
         );
-        let accepted = fava
-            .publish(edit_intent(keys.public_key(), Kind::ContactList))
-            .unwrap();
+        let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+        let accepted_event_id = accepted.receipt().unwrap().current.id();
         materializer.set(mode);
         save_source(
             &cache,
             signed_source(&keys, Kind::ContactList, 10, "source", &[]),
         );
-        let failed = wait_failure(&fava, accepted.receipt_id).await;
-        assert_eq!(failed.current.id(), accepted.current.id());
+        let failed = wait_failure(&fava, accepted.receipt_id()).await;
+        assert_eq!(failed.current.id(), accepted_event_id);
     }
 }
 
@@ -254,15 +251,14 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
         Arc::new(MemoryWriteStore::default()),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .unwrap();
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted_event_id = accepted.receipt().unwrap().current.id();
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, u64::MAX, "last source", &[]),
     );
-    let failed = wait_failure(&fava, accepted.receipt_id).await;
-    assert_eq!(failed.current.id(), accepted.current.id());
+    let failed = wait_failure(&fava, accepted.receipt_id()).await;
+    assert_eq!(failed.current.id(), accepted_event_id);
     assert!(
         failed
             .current
@@ -369,15 +365,13 @@ async fn recovery_retries_failed_source_once() {
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = first
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .unwrap();
+    let accepted = publish_edit(&first, keys.public_key(), Kind::ContactList);
     materializer.set(ERROR);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
     );
-    wait_failure(&first, accepted.receipt_id).await;
+    wait_failure(&first, accepted.receipt_id()).await;
     materializer.set(VALID);
 
     let calls_before_recovery = materializer.calls();
@@ -387,7 +381,7 @@ async fn recovery_retries_failed_source_once() {
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let receipt = support::wait_for_materialization(&recovered, accepted.receipt_id, 2).await;
+    let receipt = support::wait_for_materialization(&recovered, accepted.receipt_id(), 2).await;
     assert!(
         receipt
             .current
@@ -424,17 +418,15 @@ async fn successful_retry_clears_failure_without_duplicate_effect() {
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .unwrap();
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
     materializer.set(ERROR);
     let failed_source = signed_source(&keys, Kind::ContactList, 10, "failed", &[]);
     save_source(&cache, failed_source);
-    wait_failure(&fava, accepted.receipt_id).await;
+    wait_failure(&fava, accepted.receipt_id()).await;
     materializer.set(VALID);
     let changed = signed_source(&keys, Kind::ContactList, 20, "changed", &[]);
     save_source(&cache, changed);
-    let receipt = support::wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let receipt = support::wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
     assert!(
         receipt
             .current
@@ -444,12 +436,5 @@ async fn successful_retry_clears_failure_without_duplicate_effect() {
     );
     let id = receipt.current.id();
     tokio::task::yield_now().await;
-    assert_eq!(
-        fava.receipt(accepted.receipt_id)
-            .unwrap()
-            .unwrap()
-            .current
-            .id(),
-        id
-    );
+    assert_eq!(accepted.receipt().unwrap().current.id(), id);
 }

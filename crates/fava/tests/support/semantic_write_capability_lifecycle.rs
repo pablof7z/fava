@@ -1,16 +1,17 @@
 use std::sync::{Arc, Barrier, Mutex};
+use std::time::Duration;
 
 use fava::{
     Event, EventValue, Kind, MaterializationId, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
     RelayDeliveryOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
-    UnsignedEvent, WriteId, WriteIntent, WriteIntentError,
+    UnsignedEvent, Write, WriteId, WriteIntentError, all,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, Query, QuerySource, QuerySourceError};
 use fava_routing::RoutePlan;
 use fava_state::{CacheMutation, CachedEvent, RelaySessionKey};
-use fava_write::{EventId, LocalWriteEvent};
+use fava_write::{EventId, LocalWriteEvent, WriteIntent};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
@@ -19,9 +20,8 @@ use tokio::sync::broadcast;
 
 use super::capability_protocol::assert_source_removal;
 use super::capability_signer::GatedSigner;
-use super::explicit_intent;
 use super::support::{
-    BlockingSigner, RecordingPublisher, publication_builder, relay_evidence,
+    BlockingSigner, RecordingPublisher, publication_builder, relay_evidence, relay_url,
     wait_for_materialization, wait_for_signer,
 };
 
@@ -78,15 +78,24 @@ async fn prove_source_removal<Add>(
     .materializers([materializer])
     .build()
     .unwrap();
-    let accepted = fava
-        .publish(explicit_intent(add().unwrap(), actor))
-        .unwrap();
+    let accepted = publish_edit(&fava, add().unwrap(), actor);
+    let accepted_receipt = accepted
+        .receipt()
+        .expect("accepted receipt remains readable");
     wait_for_signer(&signer, 1).await;
     cache
         .commit(vec![CacheMutation::Retract(current.id)])
         .unwrap();
-    let removed = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
-    assert_source_removal(&accepted, &removed, current.id, kind, actor, target);
+    let removed = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
+    assert_source_removal(
+        &accepted,
+        &accepted_receipt,
+        &removed,
+        current.id,
+        kind,
+        actor,
+        target,
+    );
     assert!(publisher.attempts().is_empty());
 }
 
@@ -130,9 +139,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     .materializers([Arc::clone(&materializer)])
     .build()
     .unwrap();
-    let accepted = fava
-        .publish(explicit_intent(add().unwrap(), actor))
-        .unwrap();
+    let accepted = publish_edit(&fava, add().unwrap(), actor);
     let (first, first_completion) = signatures.recv().await.unwrap();
     let successor = materializer
         .materialize(
@@ -145,7 +152,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         .finalize(&keys)
         .unwrap();
     admit_twice(&cache, &successor);
-    let current = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let current = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
     let (second, second_completion) = signatures.recv().await.unwrap();
     let first = first.finalize(&keys).unwrap();
     let first_id = first.id;
@@ -157,7 +164,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         first_id,
         false,
     );
-    let after_stale = fava.receipt(accepted.receipt_id).unwrap().unwrap();
+    let after_stale = accepted.receipt().unwrap();
     assert_eq!(after_stale, current);
     assert_eq!(
         after_stale.current.publication.materialization_source,
@@ -175,11 +182,14 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         second_id,
         true,
     );
-    let terminal = fava.wait_terminal(accepted.receipt_id).await.unwrap();
+    let terminal = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all()))
+        .await
+        .expect("terminal receipt wait is bounded")
+        .unwrap();
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.current.event.kind(), kind);
-    assert_eq!(terminal.write_id, accepted.write_id);
-    assert_eq!(terminal.receipt_id, accepted.receipt_id);
+    assert_eq!(terminal.write_id, accepted.write_id());
+    assert_eq!(terminal.receipt_id, accepted.receipt_id());
     let attempts = publisher.attempts();
     assert_eq!(attempts.len(), 1);
     assert_eq!(
@@ -193,6 +203,14 @@ async fn prove_processed_stale_success<Add, Adjacent>(
                 message: "stored".to_owned(),
             }
     }));
+}
+
+fn publish_edit(fava: &fava::Fava, edit: ReplaceableEventEdit, actor: PublicKey) -> Write {
+    fava.by(actor)
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit)
+        .expect("semantic edit accepts")
 }
 
 fn admit_twice(cache: &Arc<MemoryEventCache>, successor: &Event) {
@@ -233,13 +251,13 @@ struct CompletionAck {
 
 fn assert_completion(
     ack: &CompletionAck,
-    accepted: &AcceptedWrite,
+    accepted: &Write,
     materialization_id: MaterializationId,
     event_id: EventId,
     installed: bool,
 ) {
-    assert_eq!(ack.write_id, accepted.write_id);
-    assert_eq!(ack.receipt_id, accepted.receipt_id);
+    assert_eq!(ack.write_id, accepted.write_id());
+    assert_eq!(ack.receipt_id, accepted.receipt_id());
     assert_eq!(ack.materialization_id, materialization_id);
     assert_eq!(ack.event_id, event_id);
     assert_eq!(ack.installed, installed);
