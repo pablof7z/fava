@@ -14,7 +14,8 @@ use super::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, process_is_alive,
 };
 use super::croissant_simple_groups::supervise_owned_pair;
-use super::{CanaryError, CanaryResult, repository_root};
+use super::croissant_test_support::committed_source_checkout;
+use super::{CanaryError, CanaryResult};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn normal_and_flow_failure_reap_both_exact_children() {
@@ -178,13 +179,19 @@ async fn ports_are_closed(ready: &[CroissantReadyFact; 2]) -> bool {
 struct PairFixture {
     temporary: TempDir,
     binary: PathBuf,
+    source: PathBuf,
 }
 
 impl PairFixture {
     fn new() -> Self {
         let temporary = TempDir::new().expect("pair fixture root");
         let binary = executable(temporary.path());
-        Self { temporary, binary }
+        let source = committed_source_checkout(temporary.path());
+        Self {
+            temporary,
+            binary,
+            source,
+        }
     }
 
     fn supervisors(&self) -> [CroissantSupervisor; 2] {
@@ -196,12 +203,11 @@ impl PairFixture {
     }
 
     fn supervisors_with_failing_b(&self) -> [CroissantSupervisor; 2] {
-        let source = repository_root().expect("source checkout");
         [
             self.supervisor("startup-relay-a"),
             CroissantSupervisor::prepare(
                 &failing_executable(self.temporary.path()),
-                &source,
+                &self.source,
                 &self.temporary.path().join("startup-relay-b"),
                 &owner("startup-relay-b"),
                 &seed_hash(b"startup-relay-b"),
@@ -212,11 +218,10 @@ impl PairFixture {
     }
 
     fn supervisor(&self, label: &str) -> CroissantSupervisor {
-        let source = repository_root().expect("source checkout");
         let root = self.temporary.path().join(label);
         CroissantSupervisor::prepare(
             &self.binary,
-            &source,
+            &self.source,
             &root,
             &owner(label),
             &seed_hash(label.as_bytes()),

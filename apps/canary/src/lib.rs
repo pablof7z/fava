@@ -490,6 +490,8 @@ pub(crate) fn command_output(
 mod croissant_simple_groups_evidence_bounds_tests;
 #[cfg(test)]
 mod croissant_simple_groups_tests;
+#[cfg(test)]
+mod croissant_test_support;
 
 #[cfg(test)]
 mod lib_tests;

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 use tokio::net::TcpStream;
 
+use crate::croissant_test_support::committed_source_checkout;
 use super::{CroissantError, CroissantLimits, CroissantSupervisor, process_is_alive};
 
 fn executable(directory: &Path, name: &str, body: &str) -> PathBuf {
@@ -16,14 +17,6 @@ fn executable(directory: &Path, name: &str, body: &str) -> PathBuf {
     permissions.set_mode(0o700);
     fs::set_permissions(&path, permissions).expect("make fake executable");
     path
-}
-
-fn source_checkout() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("canary is under repository root")
-        .to_owned()
 }
 
 fn owner() -> &'static str {
@@ -40,7 +33,7 @@ async fn supervisor_attributes_exit_before_readiness() {
     let binary = executable(fixture.path(), "early-exit", "echo early >&2\nexit 23");
     let supervisor = CroissantSupervisor::prepare(
         &binary,
-        &source_checkout(),
+        &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
         &seed_hash(b"early-exit-seed"),
@@ -62,7 +55,7 @@ async fn supervisor_refuses_port_that_opens_then_exits_during_readiness() {
     );
     let supervisor = CroissantSupervisor::prepare(
         &binary,
-        &source_checkout(),
+        &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
         &seed_hash(b"open-then-exit-seed"),
@@ -87,7 +80,7 @@ async fn supervisor_refuses_log_overflow_without_echoing_secret_environment() {
     );
     let supervisor = CroissantSupervisor::prepare(
         &binary,
-        &source_checkout(),
+        &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
         &seed_hash(sentinel.as_bytes()),
@@ -119,7 +112,7 @@ async fn supervisor_records_provenance_and_completes_bounded_teardown() {
     let expected_binary_hash = hex::encode(Sha256::digest(fs::read(&binary).expect("binary")));
     let supervisor = CroissantSupervisor::prepare(
         &binary,
-        &source_checkout(),
+        &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
         &seed_hash(b"bounded-teardown-seed"),
@@ -162,7 +155,7 @@ async fn dropping_a_live_process_starts_kill_on_drop() {
     );
     let supervisor = CroissantSupervisor::prepare(
         &binary,
-        &source_checkout(),
+        &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
         &seed_hash(b"kill-on-drop-seed"),
