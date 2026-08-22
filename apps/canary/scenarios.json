@@ -167,6 +167,12 @@
       "milestone": "M7.1",
       "requirements": ["R1-R9 universal kind-9007 publication and typed lossless NIP-02 flow against controlled Croissant"],
       "status": "enabled"
+    },
+    {
+      "id": "croissant-simple-groups-public-flow",
+      "milestone": "M7.1.1",
+      "requirements": ["GROUP-04/05/06/07/08/12 public multi-relay fork, publication, refusal, cancellation, and cleanup proof against two controlled Croissant children"],
+      "status": "enabled"
     }
   ]
 }

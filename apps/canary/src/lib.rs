@@ -7,6 +7,7 @@ mod croissant;
 mod croissant_nip02;
 mod croissant_nip02_evidence;
 mod croissant_simple_groups;
+mod croissant_simple_groups_flow;
 mod grouping;
 mod hostile;
 mod live;
@@ -181,6 +182,7 @@ pub fn has_executor(id: &str) -> bool {
             | "route-preview-parity"
             | "app-relay-versus-fallback-profile"
             | "croissant-nip02-public-flow"
+            | "croissant-simple-groups-public-flow"
     ) || semantic_writes::has_executor(id)
 }
 

@@ -1,10 +1,17 @@
 //! Controlled two-Croissant proof for the public multi-relay simple-groups flow.
 
+use std::fs;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::CanaryResult;
-use crate::croissant::{CroissantReadyFact, CroissantSupervisor, CroissantTeardown};
+use nostr::key::Keys;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+
+use crate::croissant::{
+    CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown,
+};
+use crate::{CanaryError, CanaryResult};
 
 /// Process-memory input for one controlled two-relay simple-groups proof.
 #[derive(Clone, Debug)]
@@ -52,6 +59,44 @@ impl std::fmt::Display for OwnedPairFailure {
 }
 
 impl std::error::Error for OwnedPairFailure {}
+
+pub(crate) fn prepare_owned_supervisors(
+    options: &CroissantSimpleGroupsOptions,
+    root: &Path,
+    relay_keys: &Keys,
+    owner_public_keys: [&str; 2],
+    limits: CroissantLimits,
+) -> CanaryResult<[CroissantSupervisor; 2]> {
+    let seed_hash = hex::encode(Sha256::digest(options.scenario_seed.as_bytes()));
+    let relay_roots = [root.join("relays/a"), root.join("relays/b")];
+    let supervisors = [
+        CroissantSupervisor::prepare(
+            &options.relay_binary,
+            &options.source_checkout,
+            &relay_roots[0],
+            owner_public_keys[0],
+            &seed_hash,
+            limits,
+        )
+        .map_err(error)?,
+        CroissantSupervisor::prepare(
+            &options.relay_binary,
+            &options.source_checkout,
+            &relay_roots[1],
+            owner_public_keys[1],
+            &seed_hash,
+            limits,
+        )
+        .map_err(error)?,
+    ];
+    let settings = serde_json::to_vec_pretty(&json!({
+        "relay_secret_key": relay_keys.secret_key().to_secret_hex(),
+    }))?;
+    for relay_root in relay_roots {
+        fs::write(relay_root.join("data/settings.json"), &settings)?;
+    }
+    Ok(supervisors)
+}
 
 pub(crate) async fn supervise_owned_pair<T, F, Fut>(
     supervisors: [CroissantSupervisor; 2],
@@ -106,4 +151,8 @@ where
             startup_error: None,
         }),
     }
+}
+
+fn error(value: impl std::fmt::Display) -> CanaryError {
+    CanaryError::new(value.to_string())
 }
