@@ -74,6 +74,26 @@ pub(crate) fn record_boundary(
     })
 }
 
+pub(crate) fn saved_boundary(event: &EventValue) -> Result<&Event, GroupError> {
+    if event.kind().as_u16() != 10_009 {
+        return Err(GroupError::WrongRecordKind {
+            expected: 10_009,
+            actual: event.kind().as_u16(),
+        });
+    }
+    let EventValue::Signed(event) = event else {
+        return Err(GroupError::UnsignedRecord);
+    };
+    validate_structure(event)?;
+    if !event.verify_id() {
+        return Err(GroupError::InvalidRecordId);
+    }
+    if !event.verify_signature() {
+        return Err(GroupError::InvalidRecordSignature);
+    }
+    Ok(event)
+}
+
 fn validate_structure(event: &Event) -> Result<(), GroupError> {
     if event.tags.len() > MAX_RECORD_TAGS {
         return Err(GroupError::TooManyRecordTags {

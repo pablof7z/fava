@@ -4,8 +4,10 @@ mod bounds;
 mod group;
 mod metadata;
 mod people;
+mod pins;
 mod query;
 mod records;
+mod saved;
 
 #[cfg(test)]
 mod tests;
@@ -13,4 +15,6 @@ mod tests;
 pub use group::{Group, GroupError};
 pub use metadata::GroupMetadata;
 pub use people::{GroupAdmins, GroupMembers, GroupParticipants, GroupRoles};
+pub use pins::{GroupPins, PinnedItem};
 pub use query::GroupRecords;
+pub use saved::{SavedGroup, SavedRelay};

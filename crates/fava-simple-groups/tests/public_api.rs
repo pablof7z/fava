@@ -6,8 +6,8 @@ use fava_query::{Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, Singl
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 use fava_simple_groups::{
-    Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupRecords,
-    GroupRoles,
+    Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins,
+    GroupRecords, GroupRoles, PinnedItem, SavedGroup, SavedRelay,
 };
 
 fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
@@ -124,4 +124,15 @@ fn people_parser_signatures_compile_externally() {
     let _: fn(&fava_write::EventValue) -> Result<GroupRoles, GroupError> = GroupRoles::from_event;
     let _: fn(&fava_write::EventValue) -> Result<GroupParticipants, GroupError> =
         GroupParticipants::from_event;
+}
+
+#[test]
+fn pin_and_saved_parser_signatures_compile_externally() {
+    let _: fn(&fava_write::EventValue) -> Result<GroupPins, GroupError> = GroupPins::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<Vec<Result<SavedGroup, GroupError>>, GroupError> =
+        SavedGroup::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<Vec<Result<SavedRelay, GroupError>>, GroupError> =
+        SavedRelay::from_event;
+    let target: Option<PinnedItem> = None;
+    assert!(target.is_none());
 }

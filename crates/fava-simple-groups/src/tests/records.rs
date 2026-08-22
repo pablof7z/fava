@@ -2,7 +2,10 @@ use fava_write::{Event, EventBuilder as FavaEventBuilder, EventValue, Kind, Tag,
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::{GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupRoles};
+use crate::{
+    GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins, GroupRoles,
+    PinnedItem, SavedGroup, SavedRelay,
+};
 
 fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("test tag")
@@ -463,5 +466,168 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
     assert_eq!(
         roles.roles()[2],
         Err(GroupError::DuplicateRecordRow { tag_index: 3 })
+    );
+}
+
+#[test]
+fn pin_and_saved_parser_signatures_accept_one_valid_row() {
+    let keys = Keys::generate();
+    let pinned_id = source(&keys, 1, vec![], "").id.to_hex();
+    let pins = source(
+        &keys,
+        39_005,
+        vec![tag(&["d", "g"]), tag(&["e", &pinned_id])],
+        "",
+    );
+    let groups = source(
+        &keys,
+        10_009,
+        vec![tag(&["group", "g", "wss://a.example", "name"])],
+        "",
+    );
+    let relays = source(&keys, 10_009, vec![tag(&["r", "wss://a.example"])], "");
+
+    assert!(matches!(
+        GroupPins::from_event(&EventValue::Signed(pins))
+            .expect("pins")
+            .items(),
+        [Ok(PinnedItem::Event(_))]
+    ));
+    assert_eq!(
+        SavedGroup::from_event(&EventValue::Signed(groups)).expect("saved groups")[0]
+            .as_ref()
+            .expect("valid group")
+            .id(),
+        "g"
+    );
+    assert_eq!(
+        SavedRelay::from_event(&EventValue::Signed(relays)).expect("saved relays")[0]
+            .as_ref()
+            .expect("valid relay")
+            .relay()
+            .to_string(),
+        "wss://a.example"
+    );
+}
+
+#[test]
+fn pins_preserve_interleaved_source_order() {
+    let keys = Keys::generate();
+    let first = source(&keys, 1, vec![], "first").id;
+    let second = source(&keys, 1, vec![], "second").id;
+    let address_author = Keys::generate().public_key();
+    let address = format!("30023:{}:article:one", address_author.to_hex());
+    let event = source(
+        &keys,
+        39_005,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["e", &first.to_hex()]),
+            tag(&["a", &address]),
+            tag(&["e", "invalid"]),
+            tag(&["e", &second.to_hex()]),
+        ],
+        "",
+    );
+    let pins = GroupPins::from_event(&EventValue::Signed(event.clone())).expect("pins");
+
+    assert_eq!(pins.id(), "g");
+    assert_eq!(pins.author(), keys.public_key());
+    assert_eq!(pins.items()[0], Ok(PinnedItem::Event(first)));
+    assert_eq!(
+        pins.items()[1],
+        Ok(PinnedItem::Address(
+            fava_state::EventCoordinate::Replaceable {
+                author: address_author,
+                kind: Kind::from_u16(30_023),
+                identifier: Some("article:one".to_owned()),
+            }
+        ))
+    );
+    assert!(matches!(
+        &pins.items()[2],
+        Err(GroupError::MalformedRecordRow { tag_index: 3, .. })
+    ));
+    assert_eq!(pins.items()[3], Ok(PinnedItem::Event(second)));
+    assert_eq!(
+        GroupPins::from_event(&EventValue::Signed(event)).expect("repeated parse"),
+        pins
+    );
+}
+
+#[test]
+fn saved_rows_preserve_host_and_author_evidence() {
+    let keys = Keys::generate();
+    let event = source(
+        &keys,
+        10_009,
+        vec![
+            tag(&["x", "foreign"]),
+            tag(&["group", "photos", "wss://a.example"]),
+            tag(&["group", "photos", "wss://b.example", "", "extra"]),
+            tag(&["group", "photos", "wss://b.example", ""]),
+            tag(&["group", "photos", "wss://b.example", "duplicate"]),
+            tag(&["group", "", "wss://c.example"]),
+            tag(&["group", "broken", "not-a-relay"]),
+            tag(&["group"]),
+            tag(&["r"]),
+            tag(&["r", ""]),
+            tag(&["r", "wss://relay.example", "extra"]),
+            tag(&["r", "not-a-relay"]),
+            tag(&["r", "wss://relay.example"]),
+            tag(&["r", "wss://relay.example"]),
+        ],
+        "opaque encrypted content",
+    );
+    let value = EventValue::Signed(event.clone());
+    let groups = SavedGroup::from_event(&value).expect("saved groups");
+    let relays = SavedRelay::from_event(&value).expect("saved relays");
+
+    let first = groups[0].as_ref().expect("first host");
+    assert_eq!(first.id(), "photos");
+    assert_eq!(first.relay().to_string(), "wss://a.example");
+    assert_eq!(first.name(), None);
+    assert_eq!(first.author(), keys.public_key());
+    assert!(matches!(
+        &groups[1],
+        Err(GroupError::MalformedRecordRow { tag_index: 2, .. })
+    ));
+    let second = groups[2].as_ref().expect("second host after invalid row");
+    assert_eq!(second.id(), "photos");
+    assert_eq!(second.relay().to_string(), "wss://b.example");
+    assert_eq!(second.name(), Some(""));
+    assert_eq!(second.author(), keys.public_key());
+    assert_eq!(
+        groups[3],
+        Err(GroupError::DuplicateRecordRow { tag_index: 4 })
+    );
+    assert!(groups[4..].iter().all(Result::is_err));
+
+    assert!(matches!(
+        &relays[0],
+        Err(GroupError::MalformedRecordRow { tag_index: 8, .. })
+    ));
+    assert!(matches!(
+        &relays[1],
+        Err(GroupError::MalformedRecordRow { tag_index: 9, .. })
+    ));
+    assert!(matches!(
+        &relays[2],
+        Err(GroupError::MalformedRecordRow { tag_index: 10, .. })
+    ));
+    assert!(matches!(
+        &relays[3],
+        Err(GroupError::MalformedRecordRow { tag_index: 11, .. })
+    ));
+    let relay = relays[4].as_ref().expect("valid relay after invalid rows");
+    assert_eq!(relay.relay().to_string(), "wss://relay.example");
+    assert_eq!(relay.author(), keys.public_key());
+    assert_eq!(
+        relays[5],
+        Err(GroupError::DuplicateRecordRow { tag_index: 13 })
+    );
+    assert_eq!(
+        SavedGroup::from_event(&EventValue::Signed(event)).expect("repeated parse"),
+        groups
     );
 }
