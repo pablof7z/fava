@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-07-PLAN.md
-last_updated: "2026-08-22T01:28:22.604Z"
+stopped_at: Completed 07.1-08-PLAN.md
+last_updated: "2026-08-22T01:39:36.822Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-07 completed; primary facade publication regressions migrated
-state_head: ff54ba9d49af5a8a82f89fbd397ce6eb9afc4558
+last_activity_desc: Plan 07.1-08 completed; shared capability and owned failure harnesses migrated
+state_head: 40f2f8d7b9b0e4868f22c613fa804307cec645ce
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 19
+  completed_plans: 20
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-07 completed; primary facade publication regressions migrated
+Last activity: 2026-08-22 — Plan 07.1-08 completed; shared capability and owned failure harnesses migrated
 
 Progress: [██████░░░░] 57%
 
@@ -76,6 +76,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P05 | 10min | 2 tasks | 11 files |
 | Phase 07.1 P06 | 11min | 2 tasks | 6 files |
 | Phase 07.1 P07 | 18min | 3 tasks | 10 files |
+| Phase 07.1 P08 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: NIP-02 metadata add uses distinct opcode 3 while original 33-byte add/remove meanings remain unchanged.
 - [Phase 07.1]: Kind-3 edits preserve every nonmatching row and content byte; only exact valid-key target matches are retained once or removed.
 - [Phase 07.1]: Facade callers use publish/by/to; neutral intents stay in fava-write preview/store fixtures, and Plan 08 owns shared capability support without a compatibility adapter.
+- [Phase 07.1]: Application harnesses publish through by and to and consume Write; embedded providers import WriteIntent only from fava-write.
 
 ### Pending Todos
 
@@ -143,6 +145,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T01:28:22.516Z
-Stopped at: Completed 07.1-07-PLAN.md
+Last session: 2026-08-22T01:39:36.732Z
+Stopped at: Completed 07.1-08-PLAN.md
 Resume file: None
