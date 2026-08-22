@@ -1,5 +1,6 @@
 //! Bounded NIP-02 change encoding and lossless materialization.
 
+use std::fmt;
 use std::sync::Arc;
 
 use fava_state::RelayUrl;
@@ -13,6 +14,7 @@ const REMOVE: u8 = 2;
 const ADD_WITH_METADATA: u8 = 3;
 const CODEC_LEN: usize = 33;
 const MAX_EDIT_BYTES: usize = 131_072;
+const MAX_TARGET_TEXT_BYTES: usize = 69;
 
 use crate::bounds::{self, MAX_TAGS};
 
@@ -23,7 +25,7 @@ use crate::bounds::{self, MAX_TAGS};
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
 #[allow(clippy::needless_pass_by_value)]
-pub fn follow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn follow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, WriteIntentError> {
     edit(parse_target(&target)?, Operation::Add)
 }
 
@@ -34,7 +36,7 @@ pub fn follow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntent
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
 #[allow(clippy::needless_pass_by_value)]
-pub fn unfollow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn unfollow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, WriteIntentError> {
     edit(parse_target(&target)?, Operation::Remove)
 }
 
@@ -49,7 +51,7 @@ pub fn unfollow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteInte
 /// invalid or exceeds its neutral edit bound.
 #[allow(clippy::needless_pass_by_value)]
 pub fn follow_with(
-    target: impl ToString,
+    target: impl fmt::Display,
     relay: Option<RelayUrl>,
     petname: Option<&str>,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
@@ -57,6 +59,7 @@ pub fn follow_with(
     if relay.is_none() && petname.is_none() {
         return edit(target, Operation::Add);
     }
+    metadata_encoded_len(relay.as_ref(), petname)?;
     edit(
         target,
         Operation::AddWithMetadata {
@@ -113,6 +116,7 @@ fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
         bytes.extend_from_slice(change.target.as_bytes());
         return Ok(bytes);
     };
+    let encoded_len = metadata_encoded_len(relay, petname)?;
     let relay = relay.map_or("", RelayUrl::as_str);
     let relay_len = u32::try_from(relay.len()).map_err(|_| edit_too_large(relay.len()))?;
     let petname_len = petname
@@ -120,16 +124,6 @@ fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
         .map(u32::try_from)
         .transpose()
         .map_err(|_| edit_too_large(petname.map_or(0, str::len)))?;
-    let encoded_len = CODEC_LEN
-        .checked_add(4)
-        .and_then(|len| len.checked_add(relay.len()))
-        .and_then(|len| len.checked_add(1))
-        .and_then(|len| len.checked_add(petname_len.map_or(0, |_| 4)))
-        .and_then(|len| len.checked_add(petname.map_or(0, str::len)))
-        .ok_or_else(|| codec_refusal("NIP-02 edit size overflow"))?;
-    if encoded_len > MAX_EDIT_BYTES {
-        return Err(edit_too_large(encoded_len));
-    }
     let mut bytes = Vec::with_capacity(encoded_len);
     bytes.push(change.operation.code());
     bytes.extend_from_slice(change.target.as_bytes());
@@ -145,6 +139,25 @@ fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
         _ => unreachable!("petname length follows petname presence"),
     }
     Ok(bytes)
+}
+
+fn metadata_encoded_len(
+    relay: Option<&RelayUrl>,
+    petname: Option<&str>,
+) -> Result<usize, WriteIntentError> {
+    let relay_len = relay.map_or(0, |relay| relay.as_str().len());
+    let petname_len = petname.map_or(0, str::len);
+    let encoded_len = CODEC_LEN
+        .checked_add(4)
+        .and_then(|len| len.checked_add(relay_len))
+        .and_then(|len| len.checked_add(1))
+        .and_then(|len| len.checked_add(usize::from(petname.is_some()) * 4))
+        .and_then(|len| len.checked_add(petname_len))
+        .ok_or_else(|| codec_refusal("NIP-02 edit size overflow"))?;
+    if encoded_len > MAX_EDIT_BYTES {
+        return Err(edit_too_large(encoded_len));
+    }
+    Ok(encoded_len)
 }
 
 fn decode(bytes: &[u8]) -> Result<Change, WriteIntentError> {
@@ -209,9 +222,48 @@ fn take_length_prefixed(bytes: &[u8]) -> Result<(&[u8], &[u8]), WriteIntentError
     Ok((value, &bytes[end..]))
 }
 
-fn parse_target(target: &impl ToString) -> Result<PublicKey, WriteIntentError> {
-    PublicKey::parse(&target.to_string())
+fn parse_target(target: &impl fmt::Display) -> Result<PublicKey, WriteIntentError> {
+    let mut text = BoundedTargetText::new();
+    if fmt::write(&mut text, format_args!("{target}")).is_err() {
+        if text.exceeded {
+            return Err(WriteIntentError::TooLarge {
+                bytes: text.attempted,
+                maximum: MAX_TARGET_TEXT_BYTES,
+            });
+        }
+        return Err(WriteIntentError::InvalidEvent(
+            "invalid NIP-02 target public key".to_owned(),
+        ));
+    }
+    PublicKey::parse(&text.value)
         .map_err(|_| WriteIntentError::InvalidEvent("invalid NIP-02 target public key".to_owned()))
+}
+
+struct BoundedTargetText {
+    value: String,
+    attempted: usize,
+    exceeded: bool,
+}
+
+impl BoundedTargetText {
+    fn new() -> Self {
+        Self {
+            value: String::with_capacity(MAX_TARGET_TEXT_BYTES),
+            attempted: 0,
+            exceeded: false,
+        }
+    }
+}
+
+impl fmt::Write for BoundedTargetText {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        self.attempted = self.value.len().saturating_add(value.len());
+        if self.attempted > MAX_TARGET_TEXT_BYTES {
+            self.exceeded = true;
+            return Err(fmt::Error);
+        }
+        self.value.write_str(value)
+    }
 }
 
 fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> {

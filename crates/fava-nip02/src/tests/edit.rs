@@ -1,5 +1,10 @@
+use std::cell::Cell;
+use std::fmt;
+
 use fava_state::RelayUrl;
 use fava_write::{Kind, ReplaceableEventEdit, WriteIntentError};
+use nostr::nips::nip19::ToBech32;
+use nostr::nips::nip21::ToNostrUri;
 
 use super::{materialize, source, tag, target_tags};
 use crate::{follow, follow_with, materializer, unfollow};
@@ -9,6 +14,8 @@ fn edit_codec_accepts_keys_and_supported_key_strings() {
     let actor = nostr::key::Keys::generate();
     let target = nostr::key::Keys::generate().public_key();
     let hex = target.to_hex();
+    let npub = target.to_bech32().expect("npub");
+    let nip21 = target.to_nostr_uri().expect("NIP-21 URI");
 
     assert_eq!(
         follow(target).expect("key"),
@@ -17,6 +24,11 @@ fn edit_codec_accepts_keys_and_supported_key_strings() {
     assert_eq!(
         unfollow(target).expect("key"),
         unfollow(hex).expect("owned hex")
+    );
+    assert_eq!(follow(target).expect("key"), follow(npub).expect("npub"));
+    assert_eq!(
+        follow(target).expect("key"),
+        follow(nip21).expect("NIP-21 URI")
     );
 
     let refused = follow("raw-secret-invalid-key").expect_err("invalid key refuses");
@@ -69,7 +81,13 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
     let target = nostr::key::Keys::generate().public_key();
     let refused = follow_with(target, None, Some(&"x".repeat(140_000)))
         .expect_err("over-bound petname refuses");
-    assert!(matches!(refused, WriteIntentError::TooLarge { .. }));
+    assert!(matches!(
+        refused,
+        WriteIntentError::TooLarge {
+            bytes: 140_042,
+            maximum: 131_072
+        }
+    ));
 
     let raw_relay = "raw-secret-not-a-relay";
     let mut malformed = vec![3];
@@ -88,6 +106,36 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
         .expect_err("invalid encoded relay refuses");
     assert!(matches!(error, WriteIntentError::Encoding(_)));
     assert!(!error.to_string().contains(raw_relay));
+}
+
+#[test]
+fn edit_codec_stops_hostile_target_formatting_at_the_public_key_bound() {
+    struct HostileTarget<'a>(&'a Cell<usize>);
+
+    impl fmt::Display for HostileTarget<'_> {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for _ in 0..1_000_000 {
+                self.0.set(self.0.get() + 1);
+                formatter.write_str("a")?;
+            }
+            Ok(())
+        }
+    }
+
+    let writes = Cell::new(0);
+    let refused = follow(HostileTarget(&writes)).expect_err("over-bound target refuses");
+    assert_eq!(
+        writes.get(),
+        70,
+        "formatting must stop at the first excess byte"
+    );
+    assert_eq!(
+        refused,
+        WriteIntentError::TooLarge {
+            bytes: 70,
+            maximum: 69,
+        }
+    );
 }
 
 #[test]
