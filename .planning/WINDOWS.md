@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 12
 waived_count: 0
 fixed_count: 0
-total_count: 8
-last_updated: 2026-08-22T11:02:34.003Z
+total_count: 12
+last_updated: 2026-08-22T11:51:14.603Z
 ---
 
 # Broken Windows Ledger
@@ -23,6 +23,10 @@ last_updated: 2026-08-22T11:02:34.003Z
 | 6 | 07.1.1 | unrun-verify | crates/fava/BUILD.bazel |  | Bazel simple_groups target could not run because neither bazelisk nor bazel is installed; Cargo target and manifest boundary checks passed | open |  | 2026-08-22T10:35:46.242Z |  |
 | 7 | 07.1.1 | deviation | crates/fava-simple-groups/Cargo.toml |  | Added existing workspace nostr as a test-only dependency to finalize signed parser fixtures | open |  | 2026-08-22T11:02:33.912Z |  |
 | 8 | 07.1.1 | deviation | docs/internals/vocabulary.toml |  | Promoted the nine issue-0019-approved parser symbols required by the live vocabulary gate | open |  | 2026-08-22T11:02:34.003Z |  |
+| 9 | 07.1.1 | deviation | docs/internals/vocabulary.toml |  | Promoted the issue-0019-approved SimpleGroups symbol required by the live vocabulary gate | open |  | 2026-08-22T11:51:14.325Z |  |
+| 10 | 07.1.1 | deviation | crates/fava-simple-groups/src/records.rs |  | Exposed bound-first source validation privately for lossless saved-list materialization | open |  | 2026-08-22T11:51:14.417Z |  |
+| 11 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Split root-exact facade evidence to remain below the 800-line hard limit | open |  | 2026-08-22T11:51:14.508Z |  |
+| 12 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Used distinct author coordinates for concurrent edit isolation evidence | open |  | 2026-08-22T11:51:14.603Z |  |
 
 ````json
 [
@@ -120,6 +124,54 @@ last_updated: 2026-08-22T11:02:34.003Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T11:02:34.003Z",
+    "resolved_at": null
+  },
+  {
+    "id": 9,
+    "kind": "deviation",
+    "phase": "07.1.1",
+    "file": "docs/internals/vocabulary.toml",
+    "line": null,
+    "description": "Promoted the issue-0019-approved SimpleGroups symbol required by the live vocabulary gate",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T11:51:14.325Z",
+    "resolved_at": null
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "07.1.1",
+    "file": "crates/fava-simple-groups/src/records.rs",
+    "line": null,
+    "description": "Exposed bound-first source validation privately for lossless saved-list materialization",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T11:51:14.417Z",
+    "resolved_at": null
+  },
+  {
+    "id": 11,
+    "kind": "deviation",
+    "phase": "07.1.1",
+    "file": "crates/fava/tests/simple_groups/saved.rs",
+    "line": null,
+    "description": "Split root-exact facade evidence to remain below the 800-line hard limit",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T11:51:14.508Z",
+    "resolved_at": null
+  },
+  {
+    "id": 12,
+    "kind": "deviation",
+    "phase": "07.1.1",
+    "file": "crates/fava/tests/simple_groups/saved.rs",
+    "line": null,
+    "description": "Used distinct author coordinates for concurrent edit isolation evidence",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T11:51:14.603Z",
     "resolved_at": null
   }
 ]

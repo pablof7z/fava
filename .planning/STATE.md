@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-08-PLAN.md
-last_updated: "2026-08-22T11:25:30.591Z"
+stopped_at: Completed 07.1.1-09-PLAN.md
+last_updated: "2026-08-22T11:51:36.119Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: 0ea48a654b899b2ce4e8fc306babff16bb92a30e
+state_head: 534fc6db455421fc5705fa298cbbfb956cd7d328
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 32
+  completed_plans: 33
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -90,6 +90,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P06 | 14min | 3 tasks | 4 files |
 | Phase 07.1.1 P07 | 21min | 3 tasks | 13 files |
 | Phase 07.1.1 P08 | 19min | 2 tasks | 8 files |
+| Phase 07.1.1 P09 | 24min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: GroupSnapshot retains configured first-occurrence host order and selects one complete newest-valid typed record independently for each exact RelayUrl.
 - [Phase 07.1.1]: Disagreement compares complete optional typed records, so observed versus unobserved differs without turning an empty view into a negative claim.
 - [Phase 07.1.1]: Content keeps QuerySnapshot order, deduplicates repeated ids defensively, and merges every actual RelayEvidence observation.
+- [Phase 07.1.1]: Discovery counts total author or subject inputs before Query canonicalization and refuses exactly at bound plus one.
+- [Phase 07.1.1]: groups_saved_by projects canonical authors from exact group-id and selected-host pairs without ValueSet or lifecycle state.
+- [Phase 07.1.1]: Kind-10009 saved-list edits preserve opaque content and foreign order through target-local surgery.
+- [Phase 07.1.1]: Kinds 9002 and 9010 remain ordinary author-bearing events; only kind 10009 uses ReplaceableEventEdit.
 
 ### Pending Todos
 
@@ -187,6 +192,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T11:25:30.504Z
-Stopped at: Completed 07.1.1-08-PLAN.md
+Last session: 2026-08-22T11:51:36.030Z
+Stopped at: Completed 07.1.1-09-PLAN.md
 Resume file: None
