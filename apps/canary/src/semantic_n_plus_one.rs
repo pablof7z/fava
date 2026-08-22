@@ -66,7 +66,12 @@ pub(super) async fn execute(seed: &str) -> CanaryResult<Value> {
 
     let mut bazel = Command::new(bazel_program()?);
     bazel
-        .args(["query", "deps(//...)", "--noshow_progress"])
+        .args([
+            "query",
+            "deps(//...)",
+            "--noshow_progress",
+            "--lockfile_mode=off",
+        ])
         .current_dir(&root);
     let bazel_output = run_owned(bazel, Duration::from_secs(60)).await?;
     owners_reaped &= bazel_output.owner_reaped;
