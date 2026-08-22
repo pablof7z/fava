@@ -48,9 +48,24 @@ fn validate_receipt(
         return incoherent("durable current event identity disagrees with its body");
     }
     validate_event_and_signature(receipt)?;
+    validate_routing(receipt)?;
     validate_bounds_and_text(receipt)?;
     validate_outcome(receipt)?;
     validate_materializations(receipt, semantic)
+}
+
+fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
+    let WriteRouting::Explicit(relays) = &receipt.routing else {
+        return Ok(());
+    };
+    if relays.is_empty() {
+        return incoherent("durable explicit route is empty");
+    }
+    let mut seen = BTreeSet::new();
+    if relays.iter().any(|relay| !seen.insert(relay)) {
+        return incoherent("durable explicit route repeats a relay identity");
+    }
+    Ok(())
 }
 
 fn validate_event_and_signature(receipt: &Receipt) -> Result<(), WriteStoreError> {
