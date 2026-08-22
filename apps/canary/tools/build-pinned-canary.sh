@@ -3,6 +3,7 @@ set -eu
 export LC_ALL=C
 
 readonly_paths='Cargo.toml Cargo.lock rust-toolchain.toml .cargo apps/canary crates'
+archive_paths='Cargo.toml Cargo.lock rust-toolchain.toml apps/canary crates'
 build_command='cargo build --frozen --offline --release --manifest-path apps/canary/Cargo.toml --bin canary'
 build_command_sha256=8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08
 rust_image_tag=rust:1.90-bookworm
@@ -190,7 +191,10 @@ git -C "$source_checkout" ls-tree -r --full-tree "$revision" -- $readonly_paths 
 source_tree_sha256=$(sha256_file "$tree_listing")
 
 archive=$temporary/control/source.tar
-git -C "$source_checkout" archive --format=tar --output="$archive" "$revision" -- $readonly_paths
+if git -C "$source_checkout" cat-file -e "$revision:.cargo" 2>/dev/null; then
+  archive_paths="$archive_paths .cargo"
+fi
+git -C "$source_checkout" archive --format=tar --output="$archive" "$revision" -- $archive_paths
 tar -xf "$archive" -C "$temporary/source"
 find "$archive" "$tree_listing" -type f -delete
 find "$temporary/source" ! -type f ! -type d -print -quit | grep -q . && {
