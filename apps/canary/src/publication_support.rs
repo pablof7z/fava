@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use fava::{Fava, Observation, Receipt, ReceiptId};
+use fava::{Fava, Observation, Receipt, ReceiptId, Write, all};
 use serde_json::{Value, json};
 use tokio::process::{Child, Command};
 use tokio::sync::broadcast;
@@ -14,11 +14,45 @@ use crate::artifacts::{RunArtifacts, unix_ms};
 use crate::relay::ProcessFact;
 use crate::{CanaryError, CanaryResult, SmokeOptions, command_output, repository_root};
 
-pub(crate) async fn wait_terminal(fava: &Fava, receipt: ReceiptId) -> CanaryResult<Receipt> {
-    tokio::time::timeout(Duration::from_secs(10), fava.wait_terminal(receipt))
+pub(crate) async fn wait_terminal(write: &Write) -> CanaryResult<Receipt> {
+    tokio::time::timeout(Duration::from_secs(10), write.settled(all()))
         .await
         .map_err(|_| CanaryError::new("terminal receipt deadline elapsed"))?
         .map_err(error)
+}
+
+pub(crate) async fn wait_recovered_terminal(
+    fava: &Fava,
+    receipt_id: ReceiptId,
+) -> CanaryResult<Receipt> {
+    let mut changes = fava.receipt_changes();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(receipt) = fava.receipt(receipt_id).map_err(error)?
+                && receipt.is_terminal()
+            {
+                return Ok(receipt);
+            }
+            match changes.recv().await {
+                Ok((changed, Some(receipt))) if changed == receipt_id && receipt.is_terminal() => {
+                    return Ok(receipt);
+                }
+                Ok((changed, None)) if changed == receipt_id => {
+                    return Err(CanaryError::new(
+                        "recovered receipt removed before terminal state",
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(CanaryError::new(format!(
+                        "recovered receipt change delivery failed explicitly: {error}"
+                    )));
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|_| CanaryError::new("recovered terminal receipt deadline elapsed"))?
 }
 
 pub(crate) async fn next_receipt(

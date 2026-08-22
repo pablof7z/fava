@@ -1,15 +1,11 @@
 //! Real-relay M5 publication, cancellation, and process-recovery scenarios.
 
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{
-    Fava, Query, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, WriteIntent,
-    WriteRouting,
-};
+use fava::{Fava, Query, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -29,7 +25,7 @@ use crate::artifacts::{RunArtifacts, unix_ms};
 use crate::publication_child::GatedSigner;
 use crate::publication_support::{
     finish, next_receipt, spawn_crash_child, wait_child_marker, wait_empty, wait_record,
-    wait_terminal, wait_until, wait_wire, wire_count,
+    wait_recovered_terminal, wait_terminal, wait_until, wait_wire, wire_count,
 };
 use crate::relay::{ProcessFact, RelayProcess, RelaySupervisor};
 use crate::{
@@ -184,12 +180,11 @@ async fn optimistic(
         .map_err(error)?;
     let event_id = event.id.expect("checked builder installs id");
     let accepted = fava
-        .publish(
-            WriteIntent::event(event, WriteRouting::Explicit(BTreeSet::from([relay_url])))
-                .map_err(error)?,
-        )
+        .to([relay_url])
+        .map_err(error)?
+        .publish(event)
         .map_err(error)?;
-    let accepted_receipt = next_receipt(&mut receipt_changes, accepted.receipt_id).await?;
+    let accepted_receipt = next_receipt(&mut receipt_changes, accepted.receipt_id()).await?;
     if !matches!(
         accepted_receipt.current.event,
         fava::EventValue::Unsigned(_)
@@ -207,11 +202,11 @@ async fn optimistic(
         ));
     }
     signer.release();
-    let signed_receipt = next_receipt(&mut receipt_changes, accepted.receipt_id).await?;
+    let signed_receipt = next_receipt(&mut receipt_changes, accepted.receipt_id()).await?;
     if !matches!(signed_receipt.current.event, fava::EventValue::Signed(_)) {
         return Err(CanaryError::new("second receipt change was not signed"));
     }
-    let attempting = next_receipt(&mut receipt_changes, accepted.receipt_id).await?;
+    let attempting = next_receipt(&mut receipt_changes, accepted.receipt_id()).await?;
     if !attempting
         .destinations()
         .values()
@@ -219,7 +214,7 @@ async fn optimistic(
     {
         return Err(CanaryError::new("third receipt change was not attempting"));
     }
-    let outcome = next_receipt(&mut receipt_changes, accepted.receipt_id).await?;
+    let outcome = next_receipt(&mut receipt_changes, accepted.receipt_id()).await?;
     if !outcome
         .destinations()
         .values()
@@ -229,7 +224,7 @@ async fn optimistic(
             "fourth receipt change was not acknowledged",
         ));
     }
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let receipt = wait_terminal(&accepted).await?;
     wait_record(&mut observation, event_id, 1).await?;
     if cache.event(event_id).map_err(error)?.is_none() {
         return Err(CanaryError::new("signed relay echo did not enter cache"));
@@ -237,7 +232,7 @@ async fn optimistic(
     observation.close();
     Ok(Completed {
         event_id: event_id.to_hex(),
-        receipt_id: accepted.receipt_id.as_u64(),
+        receipt_id: accepted.receipt_id().as_u64(),
         details: json!({
             "outcome": receipt.outcome,
             "destinations": receipt.destinations().iter().collect::<Vec<_>>(),
@@ -258,27 +253,27 @@ async fn mixed(
     let event_id = event.id;
     let unreachable =
         RelayUrl::parse(&format!("ws://127.0.0.1:{}", reserve_port().await?)).map_err(error)?;
-    let destinations = BTreeSet::from([
+    let destinations = [
         RelayUrl::parse(&relays[0].url).map_err(error)?,
         RelayUrl::parse(&relays[1].url).map_err(error)?,
         unreachable,
-    ]);
+    ];
     let store = Arc::new(
         RedbWriteStore::open(artifacts.root().join("children/mixed.redb")).map_err(error)?,
     );
     let fava = assembly(Arc::new(MemoryEventCache::default()), store, None)?;
     let accepted = fava
-        .publish(
-            WriteIntent::presigned(event, WriteRouting::Explicit(destinations)).map_err(error)?,
-        )
+        .to(destinations)
+        .map_err(error)?
+        .publish(event)
         .map_err(error)?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let receipt = wait_terminal(&accepted).await?;
     require_mixed(&receipt)?;
     wait_wire(&relays[0].log, "EVENT", 1).await?;
     wait_wire(&relays[1].log, "EVENT", 1).await?;
     Ok(Completed {
         event_id: event_id.to_hex(),
-        receipt_id: accepted.receipt_id.as_u64(),
+        receipt_id: accepted.receipt_id().as_u64(),
         details: json!({
             "outcome": receipt.outcome,
             "destinations": receipt.destinations().iter().collect::<Vec<_>>(),
@@ -308,15 +303,14 @@ async fn cancel(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canar
         .map_err(error)?;
     let event_id = event.id.expect("checked builder installs id");
     let accepted = fava
-        .publish(
-            WriteIntent::event(event, WriteRouting::Explicit(BTreeSet::from([relay_url])))
-                .map_err(error)?,
-        )
+        .to([relay_url])
+        .map_err(error)?
+        .publish(event)
         .map_err(error)?;
     wait_record(&mut observation, event_id, 0).await?;
     wait_until(|| signer.calls() == 1).await?;
     let cancelled = fava
-        .cancel_publication(accepted.receipt_id)
+        .cancel_publication(accepted.receipt_id())
         .map_err(error)?
         .ok_or_else(|| CanaryError::new("accepted receipt disappeared"))?;
     wait_empty(&mut observation).await?;
@@ -325,10 +319,10 @@ async fn cancel(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canar
         return Err(CanaryError::new("cancelled event crossed handoff boundary"));
     }
     let repeated = fava
-        .cancel_publication(accepted.receipt_id)
+        .cancel_publication(accepted.receipt_id())
         .map_err(error)?
         .ok_or_else(|| CanaryError::new("cancelled receipt disappeared"))?;
-    if cancelled != repeated || !fava.remove_receipt(accepted.receipt_id).map_err(error)? {
+    if cancelled != repeated || !fava.remove_receipt(accepted.receipt_id()).map_err(error)? {
         return Err(CanaryError::new(
             "cancellation idempotence or receipt removal failed",
         ));
@@ -336,7 +330,7 @@ async fn cancel(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canar
     observation.close();
     Ok(Completed {
         event_id: event_id.to_hex(),
-        receipt_id: accepted.receipt_id.as_u64(),
+        receipt_id: accepted.receipt_id().as_u64(),
         details: json!({ "outcome": ReceiptOutcome::Cancelled, "event_frames": 0 }),
     })
 }
@@ -375,7 +369,7 @@ async fn crash(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canary
             "recovered write was not query-visible without resubmission",
         ));
     }
-    let receipt = wait_terminal(&fava, ReceiptId::from_u64(marker.receipt_id)).await?;
+    let receipt = wait_recovered_terminal(&fava, ReceiptId::from_u64(marker.receipt_id)).await?;
     let witness =
         wire::query_exact(&relay.url, recovered.current.id(), "m5-crash-recovery").await?;
     if !witness.found_event || !witness.saw_eose {

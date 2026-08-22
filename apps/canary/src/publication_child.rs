@@ -1,13 +1,12 @@
 //! Crash-child entry point and controllable exact signer for M5 canaries.
 
-use std::collections::BTreeSet;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use fava::{EventBuilder, Fava, WriteIntent, WriteRouting};
+use fava::{EventBuilder, Fava};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher_nip01::Nip01Publisher;
@@ -58,17 +57,16 @@ pub async fn run_crash_child(arguments: Vec<String>) -> CanaryResult<()> {
         .id
         .ok_or_else(|| CanaryError::new("checked builder produced no event id"))?;
     let accepted = fava
-        .publish(
-            WriteIntent::event(event, WriteRouting::Explicit(BTreeSet::from([relay])))
-                .map_err(error)?,
-        )
+        .to([relay])
+        .map_err(error)?
+        .publish(event)
         .map_err(error)?;
     let marker = PathBuf::from(marker);
     let marker_temporary = marker.with_extension("json.tmp");
     std::fs::write(
         &marker_temporary,
         serde_json::to_vec(&AcceptedMarker {
-            receipt_id: accepted.receipt_id.as_u64(),
+            receipt_id: accepted.receipt_id().as_u64(),
             event_id: event_id.to_hex(),
         })?,
     )?;

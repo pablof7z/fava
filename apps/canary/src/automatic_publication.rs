@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fava::{EventBuilder, EventValue, Query, ReceiptOutcome, WriteIntent, WriteRouting};
+use fava::{EventBuilder, EventValue, Query, ReceiptOutcome};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::QuerySource;
 use fava_router_app_relays::AppRelayRouter;
@@ -15,7 +15,7 @@ use fava_routing::Router;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayUrl, Timestamp};
-use fava_write::{Event, Kind, Tag};
+use fava_write::{Event, Kind, Tag, WriteIntent, WriteRouting};
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 use serde_json::{Value, json};
@@ -119,7 +119,7 @@ async fn async_recipients(
     )?;
     let event = tagged_event(&author, &recipients, format!("Fava M6 async {seed}"))?;
     let event_id = event.id.expect("checked event id");
-    let intent = WriteIntent::event(event, WriteRouting::Automatic).map_err(error)?;
+    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).map_err(error)?;
     let preview = fava.preview_write_routes(&intent).map_err(error)?;
     if preview.destinations.len() != 3 || preview.settled {
         return Err(CanaryError::new(format!(
@@ -134,7 +134,7 @@ async fn async_recipients(
             return Err(CanaryError::new("route preview performed publication work"));
         }
     }
-    let accepted = fava.publish(intent).map_err(error)?;
+    let accepted = fava.publish(event).map_err(error)?;
     wait_wire(&relays[0].log, "EVENT", 1).await?;
     wait_wire(&relays[1].log, "EVENT", 1).await?;
     wait_wire(&relays[2].log, "EVENT", 1).await?;
@@ -149,14 +149,14 @@ async fn async_recipients(
     wire::publish(&relays[4].url, &later_list).await?;
     let discovery_seeded = unix_ms()?;
     wait_wire(&relays[3].log, "EVENT", 1).await?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let receipt = wait_terminal(&accepted).await?;
     for relay in &relays[..4] {
         if wire_count(&relay.log, "EVENT")? != 1 {
             return Err(CanaryError::new("route expansion duplicated an EVENT send"));
         }
     }
     if first_handoff > discovery_seeded
-        || receipt.receipt_id != accepted.receipt_id
+        || receipt.receipt_id != accepted.receipt_id()
         || receipt.destinations().len() != 4
         || receipt.outcome != ReceiptOutcome::Complete
     {
@@ -222,10 +222,8 @@ async fn hint_routing(
         .build()
         .map_err(error)?;
     let reply_id = reply.id.expect("checked event id");
-    let accepted = fava
-        .publish(WriteIntent::event(reply, WriteRouting::Automatic).map_err(error)?)
-        .map_err(error)?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let accepted = fava.publish(reply).map_err(error)?;
+    let receipt = wait_terminal(&accepted).await?;
     wait_wire(&relays[0].log, "EVENT", 2).await?;
     let witness = wire::query_exact(&relays[0].url, reply_id, "m6-hint-reply").await?;
     if !witness.found_event || receipt.destinations().len() != 1 {
@@ -260,14 +258,14 @@ async fn preview_parity(
         .build()
         .map_err(error)?;
     let event_id = event.id.expect("checked event id");
-    let intent = WriteIntent::event(event, WriteRouting::Automatic).map_err(error)?;
+    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).map_err(error)?;
     let preview = fava.preview_write_routes(&intent).map_err(error)?;
     if !fava.open_receipts().map_err(error)?.is_empty() || wire_count(&relays[0].log, "EVENT")? != 0
     {
         return Err(CanaryError::new("preview created custody or relay work"));
     }
-    let accepted = fava.publish(intent).map_err(error)?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let accepted = fava.publish(event).map_err(error)?;
+    let receipt = wait_terminal(&accepted).await?;
     if receipt.desired_destinations != preview.destinations.keys().cloned().collect() {
         return Err(CanaryError::new("preview and initial real route differed"));
     }
@@ -327,10 +325,10 @@ async fn profile_selection(
             "app and fallback profiles produced one plan",
         ));
     }
-    let app_write = app.publish(app_intent).map_err(error)?;
-    let fallback_write = fallback.publish(fallback_intent).map_err(error)?;
-    let app_receipt = wait_terminal(&app, app_write.receipt_id).await?;
-    let fallback_receipt = wait_terminal(&fallback, fallback_write.receipt_id).await?;
+    let app_write = app.publish(event.clone()).map_err(error)?;
+    let fallback_write = fallback.publish(event.clone()).map_err(error)?;
+    let app_receipt = wait_terminal(&app_write).await?;
+    let fallback_receipt = wait_terminal(&fallback_write).await?;
     wait_wire(&relays[0].log, "EVENT", 1).await?;
     wait_wire(&relays[1].log, "EVENT", 1).await?;
     Ok(Completed {
