@@ -161,6 +161,12 @@
       "milestone": "M7",
       "requirements": ["M7 external capability and raw future-kind proof"],
       "status": "enabled"
+    },
+    {
+      "id": "croissant-nip02-public-flow",
+      "milestone": "M7.1",
+      "requirements": ["R1-R9 universal kind-9007 publication and typed lossless NIP-02 flow against controlled Croissant"],
+      "status": "enabled"
     }
   ]
 }

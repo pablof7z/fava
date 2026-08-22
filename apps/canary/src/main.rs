@@ -3,10 +3,11 @@
 use std::path::PathBuf;
 
 use canary::{
-    ReconOptions, SmokeOptions, run_automatic_publication_scenario, run_grouping_scenario,
-    run_live_scenario, run_local_scenario, run_m3_live_scenario, run_public_recon,
-    run_publication_scenario, run_real_relay_smoke, run_routing_scenario,
-    run_semantic_write_scenario, scenario_registry,
+    CroissantNip02Options, ReconOptions, SmokeOptions, run_automatic_publication_scenario,
+    run_croissant_nip02_scenario, run_grouping_scenario, run_live_scenario, run_local_scenario,
+    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
+    run_routing_scenario, run_semantic_write_scenario, scenario_registry,
+    verify_croissant_run_pair,
 };
 
 #[tokio::main]
@@ -33,6 +34,16 @@ async fn run() -> canary::CanaryResult<()> {
             Ok(())
         }
         "run" => run_scenario(arguments).await,
+        "verify-croissant-pair" => {
+            let flag = arguments.next().ok_or_else(usage)?;
+            let root = arguments.next().ok_or_else(usage)?;
+            if flag != "--runs-dir" || arguments.next().is_some() {
+                return Err(usage());
+            }
+            verify_croissant_run_pair(PathBuf::from(root))?;
+            println!("verified Croissant NIP-02 pair");
+            Ok(())
+        }
         "recon" => {
             let mut relay_url = None;
             let mut seed = String::from("public-recon");
@@ -65,6 +76,18 @@ async fn run() -> canary::CanaryResult<()> {
 
 async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::CanaryResult<()> {
     let scenario = arguments.next().ok_or_else(usage)?;
+    if scenario == "croissant-nip02-public-flow" {
+        let options = smoke_options(&mut arguments, "croissant-nip02")?;
+        let outcome = run_croissant_nip02_scenario(CroissantNip02Options {
+            relay_binary: options.relay_binary,
+            scenario_seed: options.seed,
+            runs_directory: options.runs_directory,
+        })
+        .await?;
+        println!("passed croissant-nip02-public-flow");
+        println!("evidence: {}", outcome.run_directory.display());
+        return Ok(());
+    }
     if matches!(
         scenario.as_str(),
         "local-source-merge"
@@ -167,7 +190,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

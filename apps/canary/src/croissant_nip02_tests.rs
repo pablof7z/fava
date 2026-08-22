@@ -11,8 +11,16 @@ const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_unique_public_flows_pass_exact_pair_verification() {
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = run(temporary.path().to_path_buf(), "pair-first-private-sentinel").await;
-    let second = run(temporary.path().to_path_buf(), "pair-second-private-sentinel").await;
+    let first = run(
+        temporary.path().to_path_buf(),
+        "pair-first-private-sentinel",
+    )
+    .await;
+    let second = run(
+        temporary.path().to_path_buf(),
+        "pair-second-private-sentinel",
+    )
+    .await;
 
     assert_ne!(first.run_directory, second.run_directory);
     verify_croissant_run_pair(temporary.path()).expect("exact pair verifies");
@@ -27,8 +35,16 @@ async fn two_unique_public_flows_pass_exact_pair_verification() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secret_fields() {
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = run(temporary.path().to_path_buf(), "negative-first-private-sentinel").await;
-    let second = run(temporary.path().to_path_buf(), "negative-second-private-sentinel").await;
+    let first = run(
+        temporary.path().to_path_buf(),
+        "negative-first-private-sentinel",
+    )
+    .await;
+    let second = run(
+        temporary.path().to_path_buf(),
+        "negative-second-private-sentinel",
+    )
+    .await;
     verify_croissant_run_pair(temporary.path()).expect("control pair verifies");
 
     let manifest_path = second.run_directory.join("manifest.json");
@@ -36,7 +52,10 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
     let first_manifest = manifest(&first.run_directory);
 
     for mutation in [
-        ("scenario_seed_sha256", first_manifest["scenario_seed_sha256"].clone()),
+        (
+            "scenario_seed_sha256",
+            first_manifest["scenario_seed_sha256"].clone(),
+        ),
         ("group_id", first_manifest["group_id"].clone()),
         ("event_id", first_manifest["event_id"].clone()),
         ("write_id", first_manifest["write_id"].clone()),
@@ -44,7 +63,10 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
         ("artifact_sha256", Value::Null),
         ("bounds", Value::Null),
         ("teardown", serde_json::json!({ "completed": false })),
-        ("scenario_seed", Value::String("forbidden-private-value".to_owned())),
+        (
+            "scenario_seed",
+            Value::String("forbidden-private-value".to_owned()),
+        ),
     ] {
         let mut changed: Value = serde_json::from_slice(&original).expect("manifest JSON");
         changed[mutation.0] = mutation.1;

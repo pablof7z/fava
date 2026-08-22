@@ -177,6 +177,7 @@ pub fn has_executor(id: &str) -> bool {
             | "hint-routing"
             | "route-preview-parity"
             | "app-relay-versus-fallback-profile"
+            | "croissant-nip02-public-flow"
     ) || semantic_writes::has_executor(id)
 }
 
