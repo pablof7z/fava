@@ -11,13 +11,21 @@ use super::croissant_simple_groups_evidence::{SCENARIO, verify_croissant_simple_
 use super::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
 };
+use crate::CanaryResult;
+const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
+const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
+const FIXTURE_CROISSANT_EXECUTABLE: &str =
+    "4444444444444444444444444444444444444444444444444444444444444444";
 include!("croissant_simple_groups_tests/public_flow.rs");
 include!("croissant_simple_groups_tests/review_iteration_one.rs");
 include!("croissant_simple_groups_tests/review_iteration_two.rs");
+include!("croissant_simple_groups_tests/review_iteration_three.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
     authors: [Keys; 2],
+    relays: [Keys; 2],
     roots: [PathBuf; 2],
 }
 
@@ -25,17 +33,19 @@ impl PairEvidenceFixture {
     fn new() -> Self {
         let temporary = TempDir::new().expect("pair evidence root");
         let authors = [Keys::generate(), Keys::generate()];
+        let relays = [Keys::generate(), Keys::generate()];
         let roots = [
-            temporary.path().join("run-a"),
-            temporary.path().join("run-b"),
+            temporary.path().join("run-0"),
+            temporary.path().join("run-1"),
         ];
         for (index, root) in roots.iter().enumerate() {
             fs::create_dir(root).expect("run fixture root");
-            write_pair_manifest(root, index, &authors[index]);
+            write_pair_manifest(root, index, &authors[index], &relays[index]);
         }
         Self {
             temporary,
             authors,
+            relays,
             roots,
         }
     }
@@ -154,68 +164,18 @@ impl PairEvidenceFixture {
         fs::write(&path, update(&wire)).expect("wire fixture mutation");
         self.mutate(index, true, |_| {});
     }
-
-    fn reverse_shared_evidence(&self, index: usize) {
-        let flow_path = self.roots[index].join("flow.json");
-        let mut flow: Value =
-            serde_json::from_slice(&fs::read(&flow_path).expect("flow read")).expect("flow json");
-        flow["shared_evidence"]
-            .as_array_mut()
-            .expect("shared evidence array")
-            .reverse();
-        fs::write(
-            &flow_path,
-            serde_json::to_vec_pretty(&flow).expect("flow bytes"),
-        )
-        .expect("flow rewrite");
-        self.mutate(index, true, |manifest| {
-            manifest["shared_evidence"]
-                .as_array_mut()
-                .expect("shared evidence array")
-                .reverse();
-        });
-    }
-
-    fn mutate(&self, index: usize, reseal: bool, update: impl FnOnce(&mut Value)) {
-        let mut manifest = read_manifest(&self.roots[index]);
-        update(&mut manifest);
-        if reseal {
-            manifest["bounds"]["wire_bytes_observed"] = json!(
-                ["a", "b"]
-                    .into_iter()
-                    .map(|label| fs::metadata(
-                        self.roots[index].join(format!("wire/{label}.jsonl"))
-                    )
-                    .expect("wire metadata")
-                    .len())
-                    .sum::<u64>()
-            );
-            manifest["artifact_sha256"] =
-                serde_json::to_value(artifact_hashes(&self.roots[index]).expect("fixture hashes"))
-                    .expect("hash value");
-            let seal = artifact_seal(&self.authors[index], &manifest).expect("fixture reseal");
-            manifest["artifact_seal"] = serde_json::to_value(seal).expect("seal value");
-        }
-        fs::write(
-            self.roots[index].join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest).expect("manifest bytes"),
-        )
-        .expect("mutated manifest");
-    }
 }
-
 #[allow(
     clippy::too_many_lines,
     reason = "one fixture builder keeps causal wire, flow, process, hash, and seal facts aligned"
 )]
-fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
+fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Keys) {
     let base_pid = 4_000_100 + (index as u64 * 2);
     let port = 49_000 + (u16::try_from(index).expect("fixture index fits u16") * 10);
     let relay_urls = [
         format!("ws://127.0.0.1:{port}"),
         format!("ws://127.0.0.1:{}", port + 1),
     ];
-    let relay_keys = Keys::generate();
     let relay_signer = relay_keys.public_key().to_hex();
     let group_id = format!("group-{index}");
     let shared = signed_fixture_event(author, 9, &group_id, "shared");
@@ -237,9 +197,9 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             "stdout_path": format!("/discarded/run-{index}/relay-{child}.stdout"),
             "stderr_path": format!("/discarded/run-{index}/relay-{child}.stderr"),
             "executable": format!("/controlled/croissant-{index}"),
-            "executable_sha256": format!("executable-{index}"),
+            "executable_sha256": FIXTURE_CROISSANT_EXECUTABLE,
             "source_checkout": format!("/controlled/source-{index}"),
-            "source_head": format!("source-{index}"),
+            "source_head": FIXTURE_CROISSANT_REVISION,
             "scenario_seed_sha256": format!("seed-{index}"),
             "readiness_completed": true,
             "limits": {"log_bytes": 1_048_576, "readiness_ms": 10_000,
@@ -278,6 +238,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
     });
     let processes = json!({"ready": ready, "teardown": teardown});
     fs::create_dir_all(root.join("children")).expect("children fixture directory");
+    fs::create_dir_all(root.join("source")).expect("source fixture directory");
     fs::create_dir_all(root.join("wire")).expect("wire fixture directory");
     for label in ["a", "b"] {
         fs::create_dir_all(root.join(format!("relays/{label}"))).expect("relay fixture directory");
@@ -294,12 +255,22 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
         serde_json::to_vec_pretty(&processes).expect("process fixture bytes"),
     )
     .expect("process fixture");
+    fs::write(
+        root.join("source/fava.json"),
+        serde_json::to_vec_pretty(&json!({
+            "fava_revision": FIXTURE_FAVA_REVISION,
+            "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
+            "fava_source_clean": true,
+        }))
+        .expect("source fixture bytes"),
+    )
+    .expect("source fixture");
     for label in 0..2 {
         write_wire_fixture(
             root,
             label,
             author,
-            &relay_keys,
+            relay_keys,
             &group_id,
             &shared,
             &unique_events[label],
@@ -350,7 +321,9 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             "log_bytes": 1_048_576, "readiness_ms": 10_000, "readiness_stability_ms": 100,
             "teardown_ms": 5000},
         "artifact_sha256": artifact_hashes(root).expect("fixture hashes"),
-        "fava_revision": "fixture-revision",
+        "fava_revision": FIXTURE_FAVA_REVISION,
+        "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
+        "fava_source_clean": true,
     });
     manifest["artifact_seal"] =
         serde_json::to_value(artifact_seal(author, &manifest).expect("fixture seal"))
@@ -360,14 +333,6 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
         serde_json::to_vec_pretty(&manifest).expect("manifest bytes"),
     )
     .expect("manifest fixture");
-}
-
-fn signed_fixture_event(keys: &Keys, kind: u16, group: &str, content: &str) -> Event {
-    EventBuilder::new(Kind::from(kind), content)
-        .tags([Tag::parse(["h", group]).expect("h tag")])
-        .custom_created_at(Timestamp::from(u64::from(kind) + 1))
-        .finalize(keys)
-        .expect("signed fixture event")
 }
 
 #[allow(
@@ -387,9 +352,23 @@ fn write_wire_fixture(
     metadata_name: &str,
     admin_target: &str,
 ) {
-    let metadata_seed = signed_fixture_event(author, 9002, group, metadata_name);
-    let admin_seed = signed_fixture_event(author, 9000, group, admin_target);
-    let bootstrap = signed_fixture_event(author, 9007, group, "bootstrap");
+    let metadata_seed = EventBuilder::new(Kind::from(9002), "")
+        .tags([
+            Tag::parse(["name", metadata_name]).expect("name tag"),
+            Tag::parse(["h", group]).expect("h tag"),
+        ])
+        .custom_created_at(Timestamp::from(9_003))
+        .finalize(author)
+        .expect("metadata command");
+    let admin_seed = EventBuilder::new(Kind::from(9000), "")
+        .tags([
+            Tag::parse(["p", admin_target, "admin"]).expect("admin tag"),
+            Tag::parse(["h", group]).expect("h tag"),
+        ])
+        .custom_created_at(Timestamp::from(9_001))
+        .finalize(author)
+        .expect("admin command");
+    let bootstrap = signed_fixture_event(author, 9007, group, "controlled group bootstrap");
     let metadata = EventBuilder::new(Kind::from(39000), "")
         .tags([
             Tag::parse(["d", group]).expect("d tag"),
@@ -408,6 +387,7 @@ fn write_wire_fixture(
         .expect("admin fixture event");
     let content_subscription = format!("content-{index}");
     let records_subscription = format!("records-{index}");
+    let bootstrap_subscription = format!("bootstrap-{index}");
     let exchanges = [
         (1, "client_to_relay", json!(["EVENT", bootstrap])),
         (
@@ -415,33 +395,53 @@ fn write_wire_fixture(
             "relay_to_client",
             json!(["OK", bootstrap.id.to_hex(), true, ""]),
         ),
-        (2, "client_to_relay", json!(["EVENT", metadata_seed])),
+        (
+            2,
+            "client_to_relay",
+            json!(["REQ", bootstrap_subscription, {"ids": [bootstrap.id.to_hex()]}]),
+        ),
         (
             2,
             "relay_to_client",
-            json!(["OK", metadata_seed.id.to_hex(), true, ""]),
+            json!(["EVENT", bootstrap_subscription, bootstrap]),
         ),
-        (3, "client_to_relay", json!(["EVENT", admin_seed])),
+        (
+            2,
+            "relay_to_client",
+            json!(["EOSE", bootstrap_subscription]),
+        ),
+        (
+            2,
+            "client_to_relay",
+            json!(["CLOSE", bootstrap_subscription]),
+        ),
+        (3, "client_to_relay", json!(["EVENT", metadata_seed])),
         (
             3,
             "relay_to_client",
-            json!(["OK", admin_seed.id.to_hex(), true, ""]),
+            json!(["OK", metadata_seed.id.to_hex(), true, ""]),
         ),
-        (4, "client_to_relay", json!(["EVENT", shared])),
+        (4, "client_to_relay", json!(["EVENT", admin_seed])),
         (
             4,
             "relay_to_client",
-            json!(["OK", shared.id.to_hex(), true, ""]),
+            json!(["OK", admin_seed.id.to_hex(), true, ""]),
         ),
-        (5, "client_to_relay", json!(["EVENT", unique])),
+        (5, "client_to_relay", json!(["EVENT", shared])),
         (
             5,
             "relay_to_client",
-            json!(["OK", unique.id.to_hex(), true, ""]),
+            json!(["OK", shared.id.to_hex(), true, ""]),
         ),
-        (6, "client_to_relay", json!(["EVENT", custom])),
+        (6, "client_to_relay", json!(["EVENT", unique])),
         (
             6,
+            "relay_to_client",
+            json!(["OK", unique.id.to_hex(), true, ""]),
+        ),
+        (9, "client_to_relay", json!(["EVENT", custom])),
+        (
+            9,
             "relay_to_client",
             json!(["OK", custom.id.to_hex(), true, ""]),
         ),

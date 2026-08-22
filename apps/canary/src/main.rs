@@ -46,17 +46,32 @@ async fn run() -> canary::CanaryResult<()> {
             Ok(())
         }
         "verify-croissant-simple-groups-pair" => {
-            let flag = arguments.next().ok_or_else(usage)?;
+            let runs_flag = arguments.next().ok_or_else(usage)?;
             let root = arguments.next().ok_or_else(usage)?;
-            let revision_flag = arguments.next().ok_or_else(usage)?;
-            let expected_revision = arguments.next().ok_or_else(usage)?;
-            if flag != "--runs-dir"
-                || revision_flag != "--expected-revision"
+            let fava_revision_flag = arguments.next().ok_or_else(usage)?;
+            let fava_revision = arguments.next().ok_or_else(usage)?;
+            let fava_tree_flag = arguments.next().ok_or_else(usage)?;
+            let fava_tree = arguments.next().ok_or_else(usage)?;
+            let croissant_revision_flag = arguments.next().ok_or_else(usage)?;
+            let croissant_revision = arguments.next().ok_or_else(usage)?;
+            let croissant_executable_flag = arguments.next().ok_or_else(usage)?;
+            let croissant_executable = arguments.next().ok_or_else(usage)?;
+            if runs_flag != "--runs-dir"
+                || fava_revision_flag != "--expected-fava-revision"
+                || fava_tree_flag != "--expected-fava-tree-sha256"
+                || croissant_revision_flag != "--expected-croissant-revision"
+                || croissant_executable_flag != "--expected-croissant-executable-sha256"
                 || arguments.next().is_some()
             {
                 return Err(usage());
             }
-            verify_croissant_simple_groups_pair(PathBuf::from(root), &expected_revision)?;
+            verify_croissant_simple_groups_pair(
+                PathBuf::from(root),
+                &fava_revision,
+                &fava_tree,
+                &croissant_revision,
+                &croissant_executable,
+            )?;
             println!("verified Croissant simple-groups pair");
             Ok(())
         }
@@ -238,7 +253,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-revision SHA | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

@@ -18,7 +18,7 @@ fn pair_verifier_rejects_noncausal_wire_mutations() {
         frames.insert(close + 1, event);
     });
     assert!(
-        verify_croissant_simple_groups_pair(after_close.root(), "fixture-revision").is_err(),
+        verify_fixture_pair(after_close.root()).is_err(),
         "response EVENT after CLOSE must be refused"
     );
 
@@ -42,7 +42,7 @@ fn pair_verifier_rejects_noncausal_wire_mutations() {
         custom["connection"] = json!(99);
     });
     assert!(
-        verify_croissant_simple_groups_pair(wrong_connection.root(), "fixture-revision").is_err(),
+        verify_fixture_pair(wrong_connection.root()).is_err(),
         "OK on another connection must be refused"
     );
 }
@@ -68,7 +68,7 @@ fn pair_verifier_rejects_wrong_author_and_unready_children() {
         frame["payload"] = json!(serde_json::to_string(&frame["decoded"]).expect("payload"));
     });
     assert!(
-        verify_croissant_simple_groups_pair(wrong_author.root(), "fixture-revision").is_err(),
+        verify_fixture_pair(wrong_author.root()).is_err(),
         "valid signature from the wrong author must be refused"
     );
 
@@ -91,7 +91,7 @@ fn pair_verifier_rejects_wrong_author_and_unready_children() {
             manifest["ready"] = processes["ready"].clone();
         });
         assert!(
-            verify_croissant_simple_groups_pair(fixture.root(), "fixture-revision").is_err(),
+            verify_fixture_pair(fixture.root()).is_err(),
             "hostile child {field} claim must be refused"
         );
     }
@@ -116,13 +116,20 @@ fn pair_verifier_rejects_duplicate_routes_and_wrong_revision() {
         manifest["shared_evidence"] = flow["shared_evidence"].clone();
     });
     assert!(
-        verify_croissant_simple_groups_pair(duplicate.root(), "fixture-revision").is_err(),
+        verify_fixture_pair(duplicate.root()).is_err(),
         "two entries for one route must not prove two relays"
     );
 
     let revision = PairEvidenceFixture::new();
     assert!(
-        verify_croissant_simple_groups_pair(revision.root(), "different-revision").is_err(),
+        verify_croissant_simple_groups_pair(
+            revision.root(),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            FIXTURE_FAVA_TREE,
+            FIXTURE_CROISSANT_REVISION,
+            FIXTURE_CROISSANT_EXECUTABLE,
+        )
+        .is_err(),
         "both manifests must match the explicitly expected revision"
     );
 }

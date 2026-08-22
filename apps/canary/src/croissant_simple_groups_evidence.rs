@@ -12,6 +12,7 @@ use crate::croissant_simple_groups_evidence_semantics::verify_semantic_artifacts
 use crate::croissant_simple_groups_evidence_support::{
     EvidenceSnapshot, MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, signed_digest,
 };
+use crate::croissant_simple_groups_source::is_lower_hex;
 use crate::{CanaryError, CanaryResult};
 
 pub(crate) const SCENARIO: &str = "croissant-simple-groups-public-flow";
@@ -23,11 +24,18 @@ pub(crate) const SCENARIO: &str = "croissant-simple-groups-public-flow";
 /// Returns a redacted refusal for unsafe, incomplete, reused, or tampered evidence.
 pub fn verify_croissant_simple_groups_pair(
     runs_directory: impl AsRef<Path>,
-    expected_revision: &str,
+    expected_fava_revision: &str,
+    expected_fava_source_tree_sha256: &str,
+    expected_croissant_revision: &str,
+    expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
-    if expected_revision.is_empty() {
+    if !is_lower_hex(expected_fava_revision, 40)
+        || !is_lower_hex(expected_fava_source_tree_sha256, 64)
+        || !is_lower_hex(expected_croissant_revision, 40)
+        || !is_lower_hex(expected_croissant_executable_sha256, 64)
+    {
         return Err(CanaryError::new(
-            "simple-groups expected Fava revision was empty",
+            "simple-groups expected source provenance was not exact lowercase hex",
         ));
     }
     let root = runs_directory.as_ref();
@@ -39,6 +47,10 @@ pub fn verify_croissant_simple_groups_pair(
     }
     let mut runs = Vec::new();
     for run_root in roots {
+        let directory_run_id = run_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| CanaryError::new("simple-groups run directory was not UTF-8"))?;
         let snapshot = EvidenceSnapshot::capture(&run_root)?;
         let manifest: Value = serde_json::from_slice(snapshot.read(
             Path::new("manifest.json"),
@@ -46,7 +58,15 @@ pub fn verify_croissant_simple_groups_pair(
             "manifest",
         )?)?;
         reject_secret_fields(&manifest)?;
-        validate_manifest(&snapshot, &manifest, expected_revision)?;
+        validate_manifest(
+            &snapshot,
+            &manifest,
+            directory_run_id,
+            expected_fava_revision,
+            expected_fava_source_tree_sha256,
+            expected_croissant_revision,
+            expected_croissant_executable_sha256,
+        )?;
         runs.push((snapshot, manifest));
     }
     verify_pair_identity(&runs)?;
@@ -73,7 +93,11 @@ fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
 fn validate_manifest(
     snapshot: &EvidenceSnapshot,
     manifest: &Value,
-    expected_revision: &str,
+    directory_run_id: &str,
+    expected_fava_revision: &str,
+    expected_fava_source_tree_sha256: &str,
+    expected_croissant_revision: &str,
+    expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
     verify_hashes(snapshot, manifest)?;
     verify_seal(manifest)?;
@@ -114,6 +138,7 @@ fn validate_manifest(
         "write_id",
         "receipt_id",
         "fava_revision",
+        "fava_source_tree_sha256",
     ] {
         if required_string(manifest, field)?.is_empty() {
             return Err(CanaryError::new(format!(
@@ -121,14 +146,23 @@ fn validate_manifest(
             )));
         }
     }
-    if required_string(manifest, "fava_revision")? != expected_revision {
+    if required_string(manifest, "run_id")? != directory_run_id
+        || required_string(manifest, "fava_revision")? != expected_fava_revision
+        || required_string(manifest, "fava_source_tree_sha256")? != expected_fava_source_tree_sha256
+        || manifest.get("fava_source_clean").and_then(Value::as_bool) != Some(true)
+    {
         return Err(CanaryError::new(
-            "simple-groups evidence revision did not match the expected revision",
+            "simple-groups evidence run/source provenance did not match its exact expectation",
         ));
     }
+    verify_source_provenance(snapshot, manifest)?;
     verify_flow_claims(manifest)?;
     verify_bounds(manifest)?;
-    verify_children(manifest)?;
+    verify_children(
+        manifest,
+        expected_croissant_revision,
+        expected_croissant_executable_sha256,
+    )?;
     verify_semantic_artifacts(snapshot, manifest)
 }
 
@@ -205,7 +239,11 @@ fn verify_bounds(manifest: &Value) -> CanaryResult<()> {
     Ok(())
 }
 
-fn verify_children(manifest: &Value) -> CanaryResult<()> {
+fn verify_children(
+    manifest: &Value,
+    expected_croissant_revision: &str,
+    expected_croissant_executable_sha256: &str,
+) -> CanaryResult<()> {
     let ready = exact_objects(manifest, "ready", 2)?;
     let teardown = exact_objects(manifest, "teardown", 2)?;
     let mut pids = BTreeSet::new();
@@ -253,6 +291,14 @@ fn verify_children(manifest: &Value) -> CanaryResult<()> {
                     "simple-groups child limits disagreed with manifest bounds",
                 ));
             }
+        }
+        if object_string(ready[index], "source_head")? != expected_croissant_revision
+            || object_string(ready[index], "executable_sha256")?
+                != expected_croissant_executable_sha256
+        {
+            return Err(CanaryError::new(
+                "simple-groups Croissant child provenance did not match exact expectations",
+            ));
         }
         for field in [
             "executable",
@@ -302,6 +348,7 @@ fn verify_children(manifest: &Value) -> CanaryResult<()> {
 
 fn verify_pair_identity(runs: &[(EvidenceSnapshot, Value)]) -> CanaryResult<()> {
     for field in [
+        "run_id",
         "scenario_seed_sha256",
         "author_public_key",
         "group_id",
@@ -345,10 +392,14 @@ fn reject_cross_run_data(
 ) -> CanaryResult<()> {
     let first_group = required_string(&first.1, "group_id")?.to_owned();
     let second_group = required_string(&second.1, "group_id")?.to_owned();
+    let first_run = required_string(&first.1, "run_id")?.to_owned();
+    let second_run = required_string(&second.1, "run_id")?.to_owned();
     let first_identities = event_identities(&first.1)?;
     let second_identities = event_identities(&second.1)?;
     if tree_contains(&first.0, second_group.as_bytes(), true)?
         || tree_contains(&second.0, first_group.as_bytes(), true)?
+        || tree_contains(&first.0, second_run.as_bytes(), true)?
+        || tree_contains(&second.0, first_run.as_bytes(), true)?
     {
         return Err(CanaryError::new(
             "simple-groups run retained the other run's group_id",
@@ -369,22 +420,6 @@ fn reject_cross_run_data(
         }
     }
     Ok(())
-}
-
-fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
-    let mut identities = BTreeSet::from([
-        required_string(manifest, "shared_event_id")?.to_owned(),
-        required_string(manifest, "custom_event_id")?.to_owned(),
-    ]);
-    for identity in exact_strings(manifest, "unique_event_ids", 2)? {
-        identities.insert(identity);
-    }
-    if identities.len() != 4 {
-        return Err(CanaryError::new(
-            "simple-groups run reused an event identity",
-        ));
-    }
-    Ok(identities)
 }
 
 fn verify_hashes(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
@@ -418,23 +453,6 @@ fn verify_seal(manifest: &Value) -> CanaryResult<()> {
     {
         return Err(CanaryError::new(
             "simple-groups artifact seal did not verify",
-        ));
-    }
-    Ok(())
-}
-
-fn verify_scan_classes(manifest: &Value) -> CanaryResult<()> {
-    let values = manifest
-        .get("secret_scan_classes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| CanaryError::new("simple-groups manifest omitted scan classes"))?;
-    if !values
-        .iter()
-        .map(Value::as_str)
-        .eq(SECRET_SCAN_CLASSES.iter().copied().map(Some))
-    {
-        return Err(CanaryError::new(
-            "simple-groups secret scan classes were incomplete",
         ));
     }
     Ok(())

@@ -1,8 +1,7 @@
 #[test]
 fn pair_verifier_rejects_unsafe_evidence() {
     let control = PairEvidenceFixture::new();
-    verify_croissant_simple_groups_pair(control.root(), "fixture-revision")
-        .expect("narrow safe pair verifies");
+    verify_fixture_pair(control.root()).expect("narrow safe pair verifies");
 
     for case in [
         UnsafePairCase::PersistentParentSecret,
@@ -24,7 +23,7 @@ fn pair_verifier_rejects_unsafe_evidence() {
         let fixture = PairEvidenceFixture::new();
         fixture.apply(case);
         assert!(
-            verify_croissant_simple_groups_pair(fixture.root(), "fixture-revision").is_err(),
+            verify_fixture_pair(fixture.root()).is_err(),
             "pair verifier accepted unsafe fixture {case:?}"
         );
     }
@@ -35,9 +34,19 @@ fn pair_verifier_requires_shared_evidence_route_order() {
     let fixture = PairEvidenceFixture::new();
     fixture.reverse_shared_evidence(0);
     assert!(
-        verify_croissant_simple_groups_pair(fixture.root(), "fixture-revision").is_err(),
+        verify_fixture_pair(fixture.root()).is_err(),
         "shared evidence must stay bound to each exact relay route"
     );
+}
+
+pub(super) fn verify_fixture_pair(root: &Path) -> CanaryResult<()> {
+    verify_croissant_simple_groups_pair(
+        root,
+        FIXTURE_FAVA_REVISION,
+        FIXTURE_FAVA_TREE,
+        FIXTURE_CROISSANT_REVISION,
+        FIXTURE_CROISSANT_EXECUTABLE,
+    )
 }
 
 #[derive(Clone, Copy, Debug)]

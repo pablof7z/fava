@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
-use super::croissant_simple_groups_evidence::verify_croissant_simple_groups_pair;
 use super::croissant_simple_groups_evidence_support::{SnapshotTestPoint, capture_with_test_hook};
 
 const MAX_FILE_BYTES: u64 = 2_097_152;
@@ -12,7 +11,7 @@ const MAX_AGGREGATE_BYTES: u64 = 8_388_608;
 const MAX_MANIFEST_BYTES: u64 = 262_144;
 
 fn refusal(root: &Path) -> String {
-    verify_croissant_simple_groups_pair(root, "fixture-revision")
+    super::croissant_simple_groups_tests::verify_fixture_pair(root)
         .expect_err("hostile evidence must be refused")
         .to_string()
 }

@@ -185,6 +185,17 @@ impl CroissantSupervisor {
         }
         let binary = fs::canonicalize(binary)?;
         let source_checkout = fs::canonicalize(source_checkout)?;
+        let source_status = command_output(
+            &source_checkout,
+            "git",
+            &["status", "--porcelain=v1", "--untracked-files=all"],
+        )
+        .map_err(|_| CroissantError::InvalidContract("Croissant source status is unavailable"))?;
+        if !source_status.is_empty() {
+            return Err(CroissantError::InvalidContract(
+                "Croissant source checkout must be clean",
+            ));
+        }
         let data_path = root.join("data");
         fs::create_dir_all(&data_path)?;
         let stdout_path = root.join("stdout.log");

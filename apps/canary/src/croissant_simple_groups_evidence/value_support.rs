@@ -74,6 +74,59 @@ fn required_string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
         .ok_or_else(|| CanaryError::new(format!("simple-groups manifest omitted {field}")))
 }
 
+fn verify_source_provenance(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
+    let source: Value = serde_json::from_slice(snapshot.read(
+        Path::new("source/fava.json"),
+        4_096,
+        "Fava source provenance",
+    )?)?;
+    for field in [
+        "fava_revision",
+        "fava_source_tree_sha256",
+        "fava_source_clean",
+    ] {
+        if source.get(field) != manifest.get(field) {
+            return Err(CanaryError::new(
+                "simple-groups retained Fava source proof disagreed with the manifest",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
+    let mut identities = BTreeSet::from([
+        required_string(manifest, "shared_event_id")?.to_owned(),
+        required_string(manifest, "custom_event_id")?.to_owned(),
+    ]);
+    for identity in exact_strings(manifest, "unique_event_ids", 2)? {
+        identities.insert(identity);
+    }
+    if identities.len() != 4 {
+        return Err(CanaryError::new(
+            "simple-groups run reused an event identity",
+        ));
+    }
+    Ok(identities)
+}
+
+fn verify_scan_classes(manifest: &Value) -> CanaryResult<()> {
+    let values = manifest
+        .get("secret_scan_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CanaryError::new("simple-groups manifest omitted scan classes"))?;
+    if !values
+        .iter()
+        .map(Value::as_str)
+        .eq(SECRET_SCAN_CLASSES.iter().copied().map(Some))
+    {
+        return Err(CanaryError::new(
+            "simple-groups secret scan classes were incomplete",
+        ));
+    }
+    Ok(())
+}
+
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
 }
