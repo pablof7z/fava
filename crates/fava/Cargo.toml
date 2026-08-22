@@ -34,6 +34,7 @@ fava-signer.workspace = true
 fava-signer-local.workspace = true
 fava-query-standard.workspace = true
 fava-nip02.workspace = true
+fava-simple-groups.workspace = true
 fava-router-app-relays.workspace = true
 fava-router-fallback-relays.workspace = true
 fava-router-testkit.workspace = true

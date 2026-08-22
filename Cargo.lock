@@ -294,6 +294,7 @@ dependencies = [
  "fava-routing",
  "fava-signer",
  "fava-signer-local",
+ "fava-simple-groups",
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
