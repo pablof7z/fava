@@ -2,11 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava::{EventBuilder, WriteIntent, WriteRouting};
+use fava::EventBuilder;
 use fava_routing::{RouteContribution, RouteDestination, RoutePlan, RouteRequest};
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
-    EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntentError,
+    EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
+    WriteIntentError, WriteRouting,
 };
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -62,9 +63,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .unwrap();
     let store = MemoryWriteStore::default();
     let accepted = store
-        .accept(
-            WriteIntent::event(unsigned, WriteRouting::Explicit(BTreeSet::from([relay]))).unwrap(),
-        )
+        .accept(WriteIntent::event(unsigned, WriteRouting::Explicit(vec![relay])).unwrap())
         .unwrap();
     assert!(
         store

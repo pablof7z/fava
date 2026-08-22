@@ -1,16 +1,16 @@
 //! Shared public-facade evidence for independently selected semantic capabilities.
 
-use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use fava::{
     BuildError, Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, WriteIntent, WriteIntentError,
-    WriteRouting, WriteStoreError,
+    PublishError, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, WriteIntentError,
+    WriteStoreError,
 };
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
+use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, EventId, FinalizeEvent, Tag};
@@ -42,12 +42,8 @@ fn signed(keys: &Keys, kind: Kind, created_at: u64, content: &str, tags: Vec<Tag
 }
 
 fn explicit_intent(edit: ReplaceableEventEdit, author: PublicKey) -> WriteIntent {
-    WriteIntent::edit_as(
-        edit,
-        author,
-        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
-    )
-    .expect("corpus edit validates")
+    WriteIntent::edit_as(edit, author, WriteRouting::Explicit(vec![relay_url()]))
+        .expect("corpus edit validates")
 }
 
 fn automatic_intent(edit: ReplaceableEventEdit, author: PublicKey) -> WriteIntent {
@@ -92,8 +88,11 @@ async fn shared_preview_bounds_and_failure<Add>(
     assert_eq!(store.len().unwrap(), 0);
     assert_eq!(router.previews(), 1);
     assert_eq!(router.opens(), 0);
-    let accepted = fava.publish(intent).expect("live write accepts");
-    let receipt = wait_for_materialization(&fava, accepted.receipt_id, 1).await;
+    let write = fava
+        .by(actor)
+        .publish(edit.clone())
+        .expect("live write accepts");
+    let receipt = wait_for_materialization(&fava, write.receipt_id(), 1).await;
     assert_eq!(
         receipt.desired_destinations,
         preview.destinations.keys().cloned().collect()
@@ -116,8 +115,12 @@ fn assert_selection_and_capacity_refusals(
     .build()
     .expect("publication without materializers is valid");
     assert!(matches!(
-        empty.publish(explicit_intent(edit.clone(), actor)),
-        Err(PublicationError::Routing(_))
+        empty
+            .by(actor)
+            .to([relay_url()])
+            .expect("route validates")
+            .publish(edit.clone()),
+        Err(PublishError::Publication(PublicationError::Routing(_)))
     ));
     let duplicate = publication_builder(
         Arc::new(MemoryEventCache::default()),
@@ -161,8 +164,14 @@ fn assert_selection_and_capacity_refusals(
         ))
         .expect("one active write fills capacity");
     assert!(matches!(
-        bounded.publish(explicit_intent(edit, actor)),
-        Err(PublicationError::Store(WriteStoreError::Refused(_)))
+        bounded
+            .by(actor)
+            .to([relay_url()])
+            .expect("route validates")
+            .publish(edit),
+        Err(PublishError::Publication(PublicationError::Store(
+            WriteStoreError::Refused(_)
+        )))
     ));
 }
 

@@ -1,16 +1,12 @@
 //! Public-facade evidence for durable explicit-route publication behavior.
 
-use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{
-    EventBuilder, EventValue, Fava, Query, ReceiptOutcome, RelayDeliveryOutcome, WriteIntent,
-    WriteRouting,
-};
+use fava::{EventBuilder, EventValue, Fava, Query, ReceiptOutcome, RelayDeliveryOutcome, all};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -49,17 +45,16 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
         .expect("event builds");
     let event_id = event.id.expect("event id");
 
-    let accepted = fava
-        .publish(
-            WriteIntent::event(
-                event,
-                WriteRouting::Explicit(BTreeSet::from([relay.clone()])),
-            )
-            .expect("intent validates"),
-        )
+    let write = fava
+        .to([relay.clone()])
+        .expect("route validates")
+        .publish(event)
         .expect("acceptance commits");
 
-    assert!(matches!(accepted.current.event, EventValue::Unsigned(_)));
+    assert!(matches!(
+        write.receipt().expect("accepted receipt").current.event,
+        EventValue::Unsigned(_)
+    ));
     let accepted_receipt = receipt_changes
         .recv()
         .await
@@ -101,10 +96,7 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
         .expect("outcome transition delivered")
         .1
         .expect("outcome is not removal");
-    let receipt = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("receipt settles");
+    let receipt = write.settled(all()).await.expect("receipt settles");
     assert_eq!(committed, receipt);
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert_eq!(
@@ -127,15 +119,14 @@ async fn mixed_relay_results_remain_exact_under_one_terminal_receipt() {
     let event = NostrEventBuilder::new(Kind::TextNote, "mixed")
         .finalize(&keys)
         .expect("event signs");
-    let relays = BTreeSet::from([relay("accept"), relay("reject"), relay("unreachable")]);
-    let accepted = fava
-        .publish(WriteIntent::presigned(event, WriteRouting::Explicit(relays)).unwrap())
+    let relays = [relay("accept"), relay("reject"), relay("unreachable")];
+    let write = fava
+        .to(relays)
+        .expect("route validates")
+        .publish(event)
         .expect("acceptance commits");
 
-    let receipt = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("mixed receipt settles");
+    let receipt = write.settled(all()).await.expect("mixed receipt settles");
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert!(receipt.destinations().values().any(|outcome| matches!(
         outcome,
@@ -170,45 +161,41 @@ async fn pre_handoff_cancel_retracts_query_and_is_idempotent_and_removable() {
         .content("cancel")
         .build()
         .unwrap();
-    let accepted = fava
-        .publish(
-            WriteIntent::event(
-                event,
-                WriteRouting::Explicit(BTreeSet::from([relay("blocked")])),
-            )
-            .unwrap(),
-        )
+    let write = fava
+        .to([relay("blocked")])
+        .expect("route validates")
+        .publish(event)
         .expect("acceptance commits");
-    assert_eq!(receipt_changes.recv().await.unwrap().0, accepted.receipt_id);
+    assert_eq!(receipt_changes.recv().await.unwrap().0, write.receipt_id());
     assert_eq!(observation.changed().await.unwrap().events.len(), 1);
     wait_until(|| signer.calls() == 1).await;
 
     let cancelled = fava
-        .cancel_publication(accepted.receipt_id)
+        .cancel_publication(write.receipt_id())
         .expect("cancellation commits")
         .expect("receipt exists");
     assert_eq!(cancelled.outcome, ReceiptOutcome::Cancelled);
     assert_eq!(
         receipt_changes.recv().await.unwrap(),
-        (accepted.receipt_id, Some(cancelled.clone()))
+        (write.receipt_id(), Some(cancelled.clone()))
     );
     assert!(observation.changed().await.unwrap().events.is_empty());
     assert_eq!(publisher.calls(), 0);
     assert_eq!(
-        fava.cancel_publication(accepted.receipt_id)
+        fava.cancel_publication(write.receipt_id())
             .unwrap()
             .unwrap()
             .outcome,
         ReceiptOutcome::Cancelled
     );
-    assert!(fava.remove_receipt(accepted.receipt_id).unwrap());
+    assert!(fava.remove_receipt(write.receipt_id()).unwrap());
     assert_eq!(
         receipt_changes.recv().await.unwrap(),
-        (accepted.receipt_id, None)
+        (write.receipt_id(), None)
     );
-    assert!(fava.receipt(accepted.receipt_id).unwrap().is_none());
+    assert!(fava.receipt(write.receipt_id()).unwrap().is_none());
     assert!(
-        fava.cancel_publication(accepted.receipt_id)
+        fava.cancel_publication(write.receipt_id())
             .unwrap()
             .is_none()
     );
@@ -229,20 +216,16 @@ async fn unsigned_write_without_its_author_signer_remains_inspectable() {
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
         .build()
         .unwrap();
-    let accepted = fava
-        .publish(
-            WriteIntent::event(
-                event,
-                WriteRouting::Explicit(BTreeSet::from([relay("missing-signer")])),
-            )
-            .unwrap(),
-        )
+    let write = fava
+        .to([relay("missing-signer")])
+        .expect("route validates")
+        .publish(event)
         .unwrap();
     tokio::task::yield_now().await;
 
     let open = fava.open_receipts().unwrap();
     assert_eq!(open.len(), 1);
-    assert_eq!(open[0].receipt_id, accepted.receipt_id);
+    assert_eq!(open[0].receipt_id, write.receipt_id());
     assert!(matches!(open[0].current.event, EventValue::Unsigned(_)));
 }
 

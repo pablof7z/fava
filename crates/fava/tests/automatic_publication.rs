@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, Fava, ReceiptId, ReceiptOutcome, WriteIntent, WriteRouting};
+use fava::{EventBuilder, Fava, ReceiptId, ReceiptOutcome, all};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
@@ -17,7 +17,7 @@ use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarg
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{RelaySession, Transport, TransportError};
-use fava_write::{Kind, Tag};
+use fava_write::{Kind, Tag, WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
@@ -67,7 +67,7 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         )
         .build()
         .expect("event");
-    let intent = WriteIntent::event(event, WriteRouting::Automatic).expect("intent");
+    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).expect("intent");
 
     let preview = fava.preview_write_routes(&intent).expect("preview");
     assert!(!preview.settled);
@@ -76,13 +76,10 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     assert_eq!(publisher.count(), 0);
     assert!(store.is_empty().expect("store readable"));
 
-    let accepted = fava.publish(intent).expect("accepted");
+    let write = fava.publish(event).expect("accepted");
     wait_until(|| publisher.count() == 3).await;
-    let partial = fava
-        .receipt(accepted.receipt_id)
-        .expect("receipt read")
-        .expect("receipt exists");
-    assert_eq!(partial.receipt_id, accepted.receipt_id);
+    let partial = write.receipt().expect("receipt exists");
+    assert_eq!(partial.receipt_id, write.receipt_id());
     assert_eq!(partial.outcome, ReceiptOutcome::Open);
     assert!(!partial.route_settled);
     assert_eq!(partial.route_revision, 1);
@@ -100,21 +97,18 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         ],
         [],
     ));
-    let terminal = tokio::time::timeout(
-        Duration::from_secs(1),
-        fava.wait_terminal(accepted.receipt_id),
-    )
-    .await
-    .expect("terminal deadline elapsed")
-    .expect("receipt settles");
+    let terminal = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+        .await
+        .expect("terminal deadline elapsed")
+        .expect("receipt settles");
 
-    assert_eq!(terminal.receipt_id, accepted.receipt_id);
+    assert_eq!(terminal.receipt_id, write.receipt_id());
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert!(terminal.route_settled);
     assert_eq!(terminal.route_revision, 2);
     assert_eq!(terminal.destinations().len(), 4);
     assert_eq!(publisher.count(), 4);
-    assert!(publisher.all_once_under(accepted.receipt_id));
+    assert!(publisher.all_once_under(write.receipt_id()));
 }
 
 fn contribution(
