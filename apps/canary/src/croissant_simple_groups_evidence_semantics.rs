@@ -326,15 +326,15 @@ fn verify_one_wire(
                 let Some(ConnectionState::Query {
                     subscription: expected,
                     kind,
-                    eose,
                     closed,
+                    ..
                 }) = connections.get(&connection)
                 else {
                     return Err(CanaryError::new(
                         "simple-groups response EVENT preceded its REQ",
                     ));
                 };
-                if subscription != expected || *eose || *closed {
+                if subscription != expected || *closed {
                     return Err(CanaryError::new(
                         "simple-groups response EVENT escaped its open REQ",
                     ));
