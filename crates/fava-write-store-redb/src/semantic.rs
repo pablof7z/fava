@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 
 use fava_routing::RoutePlan;
-use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
@@ -12,7 +11,13 @@ use fava_write_store::{
 };
 
 use crate::lifecycle::{active_count, destinations, next_revision, terminal_evictions};
+use crate::semantic_acceptance::{
+    attributed_failure, require_current, require_failure_source, require_qualified_source,
+    route_matches, validate_materialization, validate_source,
+};
 use crate::{RedbWriteStore, SemanticCustody};
+
+pub(super) use crate::semantic_acceptance::edit_coordinate;
 
 impl RedbWriteStore {
     pub(super) fn accept_semantic(
@@ -35,6 +40,10 @@ impl RedbWriteStore {
         self.accept_semantic_inner(Some(reservation), intent, event, source, initial_route)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one lock and one durable commit keep semantic admission atomic"
+    )]
     fn accept_semantic_inner(
         &self,
         reservation: Option<u64>,
@@ -373,163 +382,5 @@ impl RedbWriteStore {
                 })
             })
             .collect())
-    }
-}
-
-fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
-    let mut candidate = receipt.clone();
-    candidate.outcome = ReceiptOutcome::Open;
-    candidate.route_revision = 0;
-    candidate.route_settled = false;
-    candidate.route_shortfalls.clear();
-    candidate.desired_destinations.clear();
-    candidate.attempts.clear();
-    candidate.current.publication.destinations.clear();
-    apply_route_to_receipt(&mut candidate, plan).is_ok()
-        && candidate.outcome == receipt.outcome
-        && candidate.route_revision == receipt.route_revision
-        && candidate.route_settled == receipt.route_settled
-        && candidate.route_shortfalls == receipt.route_shortfalls
-        && candidate.desired_destinations == receipt.desired_destinations
-        && candidate.attempts == receipt.attempts
-        && candidate.current.publication.destinations == receipt.current.publication.destinations
-}
-
-fn validate_materialization(
-    edit: &ReplaceableEventEdit,
-    author: PublicKey,
-    event: &UnsignedEvent,
-    source: Option<&Event>,
-    routing: &WriteRouting,
-) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
-    WriteIntent::event(event.clone(), routing.clone())?;
-    if event.pubkey != author
-        || event_coordinate_of_unsigned(event)? != edit_coordinate(edit, author)
-    {
-        return Err(WriteStoreError::Refused(
-            "materialization actor or coordinate does not match edit".to_owned(),
-        ));
-    }
-    let selected = validate_source(edit, author, source)?;
-    if selected.is_some_and(|(_, source_time)| source_time >= event.created_at) {
-        return Err(WriteStoreError::Refused(
-            "materialization is not newer than its selected source".to_owned(),
-        ));
-    }
-    Ok(selected)
-}
-
-fn validate_source(
-    edit: &ReplaceableEventEdit,
-    author: PublicKey,
-    source: Option<&Event>,
-) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
-    let Some(source) = source else {
-        return Ok(None);
-    };
-    source
-        .verify()
-        .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
-    if event_coordinate(
-        source.id,
-        source.pubkey,
-        source.kind,
-        source.tags.as_slice(),
-    ) != edit_coordinate(edit, author)
-    {
-        return Err(WriteStoreError::Refused(
-            "materialization source does not match edit coordinate".to_owned(),
-        ));
-    }
-    Ok(Some((source.id, source.created_at)))
-}
-
-pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
-    EventCoordinate::Replaceable {
-        author,
-        kind: edit.kind(),
-        identifier: edit.identifier().map(str::to_owned),
-    }
-}
-
-fn attributed_failure(
-    materialization_id: MaterializationId,
-    source: Option<EventId>,
-    reason: String,
-) -> String {
-    let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
-    let prefix = format!(
-        "materialization {} from source {source} failed",
-        materialization_id.as_u64()
-    );
-    let attributed = format!("{prefix}: {reason}");
-    drop(reason);
-    if fava_write_store::validate_receipt_text(&attributed).is_ok() {
-        attributed
-    } else {
-        prefix
-    }
-}
-
-fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
-    let id = event
-        .id
-        .ok_or_else(|| WriteStoreError::Refused("materialization has no event id".to_owned()))?;
-    Ok(event_coordinate(
-        id,
-        event.pubkey,
-        event.kind,
-        event.tags.as_slice(),
-    ))
-}
-
-fn require_current(
-    receipt: &Receipt,
-    write_id: WriteId,
-    expected: MaterializationId,
-    expected_source: Option<EventId>,
-    current_source: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    if receipt.is_terminal()
-        || receipt.write_id != write_id
-        || receipt.current.publication.materialization_id != expected
-        || current_source.map(|(id, _)| id) != expected_source
-    {
-        return Err(WriteStoreError::Refused(
-            "semantic materialization is not current".to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn require_qualified_source(
-    current: Option<(EventId, Timestamp)>,
-    candidate: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    let qualified = match (current, candidate) {
-        (None, Some(_)) | (Some(_), None) => true,
-        (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_time > current_time
-                || (candidate_time == current_time && candidate_id < current_id)
-        }
-        (None, None) => false,
-    };
-    if qualified {
-        Ok(())
-    } else {
-        Err(WriteStoreError::Refused(
-            "source event is equal, older, or already consumed".to_owned(),
-        ))
-    }
-}
-
-fn require_failure_source(
-    current: Option<(EventId, Timestamp)>,
-    failed: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    if current == failed {
-        Ok(())
-    } else {
-        require_qualified_source(current, failed)
     }
 }

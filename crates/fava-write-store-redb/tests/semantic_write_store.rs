@@ -25,6 +25,23 @@ mod admission;
 #[path = "semantic_write_store/recovery.rs"]
 mod recovery;
 
+#[test]
+fn redb_semantic_owners_stay_below_the_code_soft_limit() {
+    for (owner, source) in [
+        ("semantic", include_str!("../src/semantic.rs")),
+        (
+            "semantic acceptance",
+            include_str!("../src/semantic_acceptance.rs"),
+        ),
+    ] {
+        let lines = source.lines().count();
+        assert!(
+            lines < 500,
+            "{owner} owner has {lines} lines; split the next cohesive responsibility"
+        );
+    }
+}
+
 fn edit() -> ReplaceableEventEdit {
     ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }

@@ -38,7 +38,11 @@ rust_test(
         "//crates/fava-write-store:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
-    compile_data = ["Cargo.toml"],
+    compile_data = [
+        "Cargo.toml",
+        "src/semantic.rs",
+        "src/semantic_acceptance.rs",
+    ],
 )
 
 rust_test(

@@ -22,6 +22,7 @@ mod lifecycle;
 mod ops;
 mod schema;
 mod semantic;
+mod semantic_acceptance;
 mod validation;
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
