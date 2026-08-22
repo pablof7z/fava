@@ -44,10 +44,26 @@ pub enum GroupError {
     Event(String),
     /// A contextual `h` tag is missing its value.
     EmptyGroupContext,
+    /// A signed event has no contextual `h` tag.
+    MissingGroupContext,
     /// More than one contextual `h` tag was supplied.
     DuplicateGroupContext,
     /// The supplied contextual `h` value names another group.
     ConflictingGroupContext,
+    /// A contextual `h` value exceeds the opaque id byte bound.
+    GroupContextTooLong {
+        /// Actual context length in bytes.
+        bytes: usize,
+        /// Maximum supported context length in bytes.
+        maximum: usize,
+    },
+    /// Event tag input exceeds the preparation bound.
+    TooManyContextTags {
+        /// Total tags observed before refusal.
+        actual: usize,
+        /// Maximum supported tag count.
+        maximum: usize,
+    },
 }
 
 impl fmt::Display for GroupError {
@@ -71,9 +87,22 @@ impl fmt::Display for GroupError {
             Self::Query(error) => write!(formatter, "group query refused: {error}"),
             Self::Event(error) => write!(formatter, "group event refused: {error}"),
             Self::EmptyGroupContext => formatter.write_str("group context has no value"),
+            Self::MissingGroupContext => formatter.write_str("signed event has no group context"),
             Self::DuplicateGroupContext => formatter.write_str("group context is duplicated"),
             Self::ConflictingGroupContext => {
                 formatter.write_str("group context names another group")
+            }
+            Self::GroupContextTooLong { bytes, maximum } => {
+                write!(
+                    formatter,
+                    "group context bytes exceed bound: {bytes} > {maximum}"
+                )
+            }
+            Self::TooManyContextTags { actual, maximum } => {
+                write!(
+                    formatter,
+                    "group event tag count exceeds bound: {actual} > {maximum}"
+                )
             }
         }
     }

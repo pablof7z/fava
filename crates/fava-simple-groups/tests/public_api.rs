@@ -29,6 +29,9 @@ fn one_host_group_traces_pure_preparation_and_queries() {
         .build()
         .expect("bounded draft");
     let prepared = group.prepare(draft).expect("pure preparation");
+    let repeated = group
+        .prepare(prepared.clone())
+        .expect("repeated preparation is inert");
     let content = group
         .events(
             Query::events()
@@ -63,6 +66,7 @@ fn one_host_group_traces_pure_preparation_and_queries() {
             &ResultAuthority::AnyLocal,
         )
     );
+    assert_eq!(repeated, prepared);
 }
 
 #[test]
