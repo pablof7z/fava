@@ -49,11 +49,11 @@ cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
   --relay-bin /Users/pablofernandez/Work/croissant/croissant \
   --seed "$first_private_seed" --runs-dir "$pair_root"
-cargo run --manifest-path apps/canary/Cargo.toml -- \
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
   --relay-bin /Users/pablofernandez/Work/croissant/croissant \
   --seed "$second_private_seed" --runs-dir "$pair_root"
-cargo run --manifest-path apps/canary/Cargo.toml -- \
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   verify-croissant-pair --runs-dir "$pair_root"
 ```
 
