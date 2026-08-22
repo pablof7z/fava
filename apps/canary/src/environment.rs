@@ -9,10 +9,12 @@ use std::os::unix::fs::PermissionsExt;
 
 use crate::{CanaryError, CanaryResult};
 
+#[cfg(test)]
 const CROISSANT_BINARY: &str = "/Users/pablo/.local/bin/croissant";
 const CROISSANT_SOURCE: &str = "/Users/pablo/Work/croissant";
 const LOCAL_BAZELISK: &str = "/Users/pablo/.local/bin/bazelisk";
 
+#[cfg(test)]
 pub(crate) fn croissant_fixture_binary() -> CanaryResult<PathBuf> {
     require_executable(Path::new(CROISSANT_BINARY), "Croissant fixture")
 }
