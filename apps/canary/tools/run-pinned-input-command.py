@@ -107,6 +107,12 @@ def committed_archive(arguments: argparse.Namespace) -> bytes:
             if count > 4_096 or member.name == arguments.extra_name:
                 raise SystemExit("committed archive inventory was invalid")
             member.pax_headers = {}
+            if member.isfile():
+                member.mode = 0o755 if member.mode & 0o111 else 0o644
+            elif member.isdir():
+                member.mode = 0o755
+            else:
+                raise SystemExit("committed archive contained a non-regular input")
             stream = source.extractfile(member) if member.isfile() else None
             if member.name == arguments.archive_prefix + arguments.path:
                 if stream is None or member.size <= 0 or member.size > 1_048_576:
