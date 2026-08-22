@@ -5,6 +5,7 @@ mod automatic_publication;
 mod automatic_support;
 mod croissant;
 mod croissant_nip02;
+mod croissant_nip02_evidence;
 mod grouping;
 mod hostile;
 mod live;

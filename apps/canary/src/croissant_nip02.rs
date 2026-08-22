@@ -1,4 +1,8 @@
 //! Controlled Croissant proof for universal publication and typed NIP-02 reads.
+//!
+//! This file stays above the 500-line soft limit because one owner must keep the launched
+//! process lifecycle, public flow, teardown facts, and pair-level evidence checks causally
+//! connected. Reusable evidence hashing and secret scanning live in the adjacent helper module.
 
 use std::fs;
 use std::net::{SocketAddr, TcpStream};
@@ -18,13 +22,17 @@ use fava_transport_websocket::WebSocketTransport;
 use fava_write::{EventId, ReceiptOutcome};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 use crate::artifacts::{RunArtifacts, unix_ms};
 use crate::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown, process_is_alive,
+};
+use crate::croissant_nip02_evidence::{
+    SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, directory_contains,
+    manifest_roots, secret_needles, verify_artifact_seal, verify_hashes,
 };
 use crate::publication_support::{wait_record, wait_terminal};
 use crate::semantic_write_support::{GateSigner, PendingSign, deterministic_finalize, next_sign};
@@ -434,10 +442,23 @@ fn finish_run(
         "# Controlled Croissant NIP-02 proof\n\n- Result: passed\n- Group: {}\n- Author: {}\n- Event: {}\n- Local revision: {}\n- Relay revision: {}\n",
         facts.group_id, facts.author, edit_id, facts.local_revision, facts.relay_revision,
     ))?;
-    assert_secret_absent(artifacts.root(), options.scenario_seed.as_bytes())?;
+    let author_keys = deterministic_keys(&format!(
+        "croissant-author\0{}",
+        options.scenario_seed
+    ))?;
+    let target_keys = deterministic_keys(&format!(
+        "croissant-target\0{}",
+        options.scenario_seed
+    ))?;
+    let secret_needles = secret_needles(
+        options.scenario_seed.as_bytes(),
+        [&author_keys, &target_keys],
+    )?;
+    assert_secrets_absent(artifacts.root(), &secret_needles)?;
     let repository = repository_root()?;
     let revision = command_output(&repository, "git", &["rev-parse", "HEAD"])?;
     let hashes = artifacts.artifact_hashes()?;
+    let seal = artifact_seal(&author_keys, &hashes)?;
     artifacts.write_json("manifest.json", &json!({
         "run_id": run_id,
         "scenario": SCENARIO,
@@ -460,6 +481,8 @@ fn finish_run(
         "foreign_content_preserved": true,
         "typed_decode_exact": true,
         "secret_scan_passed": true,
+        "secret_scan_classes": SECRET_SCAN_CLASSES,
+        "artifact_seal": seal,
         "executable_sha256": ready.executable_sha256,
         "source_head": ready.source_head,
         "ready": ready,
@@ -482,6 +505,7 @@ fn finish_run(
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
     }))?;
+    assert_secrets_absent(artifacts.root(), &secret_needles)?;
     Ok(CroissantNip02Outcome {
         run_directory: artifacts.root().to_owned(),
     })
@@ -563,6 +587,19 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
             "Croissant manifest completion facts are incomplete",
         ));
     }
+    let classes = manifest
+        .get("secret_scan_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CanaryError::new("Croissant manifest omitted secret scan classes"))?;
+    if !classes
+        .iter()
+        .map(|value| value.as_str())
+        .eq(SECRET_SCAN_CLASSES.iter().copied().map(Some))
+    {
+        return Err(CanaryError::new(
+            "Croissant manifest secret scan classes were incomplete",
+        ));
+    }
     for field in [
         "scenario_seed_sha256",
         "group_id",
@@ -634,33 +671,8 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     if TcpStream::connect_timeout(&endpoint, Duration::from_millis(25)).is_ok() {
         return Err(CanaryError::new("Croissant teardown port remains open"));
     }
-    verify_hashes(root, manifest)
-}
-
-fn verify_hashes(root: &Path, manifest: &Value) -> CanaryResult<()> {
-    let expected = manifest
-        .get("artifact_sha256")
-        .and_then(Value::as_object)
-        .ok_or_else(|| CanaryError::new("Croissant manifest omitted artifact hashes"))?;
-    if expected.is_empty() {
-        return Err(CanaryError::new("Croissant artifact hashes were empty"));
-    }
-    let mut files = Vec::new();
-    collect_files(root, root, &mut files)?;
-    let actual = files
-        .into_iter()
-        .filter(|relative| relative != Path::new("manifest.json"))
-        .map(|relative| {
-            let hash = hex::encode(Sha256::digest(fs::read(root.join(&relative))?));
-            Ok((relative.to_string_lossy().into_owned(), Value::String(hash)))
-        })
-        .collect::<CanaryResult<Map<String, Value>>>()?;
-    if &actual != expected {
-        return Err(CanaryError::new(
-            "Croissant artifact hash set did not verify",
-        ));
-    }
-    Ok(())
+    verify_hashes(root, manifest)?;
+    verify_artifact_seal(manifest)
 }
 
 fn required_string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
@@ -690,63 +702,6 @@ fn reject_secret_fields(value: &Value) -> CanaryResult<()> {
         }
         _ => {}
     }
-    Ok(())
-}
-
-fn assert_secret_absent(root: &Path, secret: &[u8]) -> CanaryResult<()> {
-    if secret.is_empty() || directory_contains(root, secret, false)? {
-        return Err(CanaryError::new(
-            "retained Croissant evidence contained secret input",
-        ));
-    }
-    Ok(())
-}
-
-fn directory_contains(root: &Path, needle: &[u8], skip_manifest: bool) -> CanaryResult<bool> {
-    let mut files = Vec::new();
-    collect_files(root, root, &mut files)?;
-    for relative in files {
-        if skip_manifest && relative == Path::new("manifest.json") {
-            continue;
-        }
-        if fs::read(root.join(relative))?
-            .windows(needle.len())
-            .any(|window| window == needle)
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn manifest_roots(root: &Path) -> CanaryResult<Vec<PathBuf>> {
-    let mut manifests = Vec::new();
-    let mut files = Vec::new();
-    collect_files(root, root, &mut files)?;
-    for relative in files {
-        if relative.file_name().and_then(|name| name.to_str()) == Some("manifest.json") {
-            manifests.push(
-                root.join(relative)
-                    .parent()
-                    .ok_or_else(|| CanaryError::new("manifest had no parent"))?
-                    .to_owned(),
-            );
-        }
-    }
-    manifests.sort();
-    Ok(manifests)
-}
-
-fn collect_files(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> CanaryResult<()> {
-    for entry in fs::read_dir(directory)? {
-        let path = entry?.path();
-        if path.is_dir() {
-            collect_files(root, &path, files)?;
-        } else if path.is_file() {
-            files.push(path.strip_prefix(root)?.to_owned());
-        }
-    }
-    files.sort();
     Ok(())
 }
 

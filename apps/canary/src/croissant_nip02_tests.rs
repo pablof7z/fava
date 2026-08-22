@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::Value;
+use sha2::Digest;
 use tempfile::TempDir;
 
 use super::{CroissantNip02Options, run_croissant_nip02_scenario, verify_croissant_run_pair};
@@ -30,6 +31,13 @@ async fn two_unique_public_flows_pass_exact_pair_verification() {
         assert!(!retained.contains("pair-first-private-sentinel"));
         assert!(!retained.contains("pair-second-private-sentinel"));
     }
+    let first_secret = crate::deterministic_keys(
+        "croissant-author\0pair-first-private-sentinel",
+    )
+    .expect("derived author")
+    .secret_key()
+    .to_secret_hex();
+    assert!(!retained_bytes(&first.run_directory).contains(&first_secret));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -81,7 +89,21 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
             mutation.0
         );
     }
-    fs::write(&manifest_path, original).expect("restore manifest");
+    fs::write(&manifest_path, &original).expect("restore manifest");
+
+    let derived_secret = crate::deterministic_keys(
+        "croissant-author\0negative-second-private-sentinel",
+    )
+    .expect("derived author")
+    .secret_key()
+    .to_secret_hex();
+    let injected = second.run_directory.join("app.stdout.log");
+    let original_artifact = fs::read(&injected).expect("original artifact");
+    fs::write(&injected, &derived_secret).expect("inject derived secret");
+    refresh_hashes(&second.run_directory);
+    assert!(verify_croissant_run_pair(temporary.path()).is_err());
+    fs::write(&injected, original_artifact).expect("restore artifact");
+    fs::write(&manifest_path, &original).expect("restore sealed manifest");
 
     fs::write(
         second.run_directory.join("old-data-sentinel.txt"),
@@ -89,6 +111,40 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
     )
     .expect("inject old data");
     assert!(verify_croissant_run_pair(temporary.path()).is_err());
+}
+
+fn refresh_hashes(root: &std::path::Path) {
+    let mut manifest = manifest(root);
+    let mut hashes = serde_json::Map::new();
+    let mut files = Vec::new();
+    collect_files(root, root, &mut files);
+    files.sort();
+    for relative in files {
+        if relative == std::path::Path::new("manifest.json") {
+            continue;
+        }
+        let hash = hex::encode(sha2::Sha256::digest(
+            fs::read(root.join(&relative)).expect("artifact bytes"),
+        ));
+        hashes.insert(relative.to_string_lossy().into_owned(), Value::String(hash));
+    }
+    manifest["artifact_sha256"] = Value::Object(hashes);
+    fs::write(
+        root.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).expect("manifest JSON"),
+    )
+    .expect("refresh artifact hashes");
+}
+
+fn collect_files(root: &std::path::Path, directory: &std::path::Path, files: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(directory).expect("artifact directory") {
+        let path = entry.expect("artifact entry").path();
+        if path.is_dir() {
+            collect_files(root, &path, files);
+        } else {
+            files.push(path.strip_prefix(root).expect("relative artifact").to_owned());
+        }
+    }
 }
 
 async fn run(root: PathBuf, seed: &str) -> super::CroissantNip02Outcome {
