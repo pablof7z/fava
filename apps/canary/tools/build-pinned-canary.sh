@@ -467,8 +467,8 @@ common_run() {
     "$@" "$source_image_reference" \
     cargo build --frozen --offline --release \
       --manifest-path apps/canary/Cargo.toml --bin canary
+  remove_cidfile_container "$cidfile" && find "$cidfile" -type f -delete
 }
-
 readonly_name=$container_prefix-readonly
 readonly_cidfile=$temporary/control/readonly.cid
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
