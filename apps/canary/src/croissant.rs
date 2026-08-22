@@ -6,6 +6,7 @@
 use std::fmt;
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr, TcpListener as StdTcpListener};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -132,7 +133,7 @@ pub(crate) struct CroissantTeardown {
 /// Prepared, inert Croissant child configuration.
 #[derive(Debug)]
 pub(crate) struct CroissantSupervisor {
-    binary: PathBuf,
+    binary: Arc<StagedExecutable>,
     source_checkout: PathBuf,
     data_path: PathBuf,
     stdout_path: PathBuf,
@@ -196,13 +197,22 @@ impl CroissantSupervisor {
                 "Croissant source checkout must be clean",
             ));
         }
+        fs::create_dir(root)?;
+        fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
+        let executable_directory = root.join("executable");
+        fs::create_dir(&executable_directory)?;
+        fs::set_permissions(&executable_directory, fs::Permissions::from_mode(0o700))?;
+        let staged_path = executable_directory.join("croissant");
+        fs::copy(&binary, &staged_path)?;
+        fs::set_permissions(&staged_path, fs::Permissions::from_mode(0o500))?;
+        let binary = Arc::new(StagedExecutable { path: staged_path });
         let data_path = root.join("data");
         fs::create_dir_all(&data_path)?;
         let stdout_path = root.join("stdout.log");
         let stderr_path = root.join("stderr.log");
         fs::File::create(&stdout_path)?;
         fs::File::create(&stderr_path)?;
-        let executable_sha256 = hex::encode(Sha256::digest(fs::read(&binary)?));
+        let executable_sha256 = hex::encode(Sha256::digest(fs::read(&binary.path)?));
         let source_head = command_output(&source_checkout, "git", &["rev-parse", "HEAD"])
             .map_err(|_| CroissantError::InvalidContract("Croissant source HEAD is unavailable"))?;
         let endpoint = SocketAddr::from((Ipv4Addr::LOCALHOST, reserve_port()?));
@@ -230,7 +240,7 @@ impl CroissantSupervisor {
     }
 
     pub(crate) async fn start(&self) -> Result<CroissantProcess, CroissantError> {
-        let mut child = Command::new(&self.binary)
+        let mut child = Command::new(&self.binary.path)
             .env_clear()
             .env("HOST", Ipv4Addr::LOCALHOST.to_string())
             .env("PORT", self.endpoint.port().to_string())
@@ -313,6 +323,7 @@ impl CroissantSupervisor {
                         ready: self.ready_fact(pid),
                         stdout_log,
                         stderr_log,
+                        _staged_executable: Arc::clone(&self.binary),
                     });
                 }
             }
@@ -328,7 +339,7 @@ impl CroissantSupervisor {
 
     fn ready_fact(&self, pid: u32) -> CroissantReadyFact {
         CroissantReadyFact {
-            executable: self.binary.clone(),
+            executable: self.binary.path.clone(),
             executable_sha256: self.executable_sha256.clone(),
             source_checkout: self.source_checkout.clone(),
             source_head: self.source_head.clone(),
@@ -361,6 +372,21 @@ pub(crate) struct CroissantProcess {
     ready: CroissantReadyFact,
     stdout_log: BoundedLog,
     stderr_log: BoundedLog,
+    _staged_executable: Arc<StagedExecutable>,
+}
+
+#[derive(Debug)]
+struct StagedExecutable {
+    path: PathBuf,
+}
+
+impl Drop for StagedExecutable {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+        if let Some(parent) = self.path.parent() {
+            let _ = fs::remove_dir(parent);
+        }
+    }
 }
 
 impl CroissantProcess {

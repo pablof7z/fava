@@ -173,3 +173,41 @@ async fn dropping_a_live_process_starts_kill_on_drop() {
     .await
     .expect("kill-on-drop reaps child");
 }
+
+#[tokio::test]
+async fn prepared_executable_is_immune_to_caller_path_replacement() {
+    let fixture = TempDir::new().expect("fixture");
+    let marker = fixture.path().join("replacement-executed");
+    let binary = executable(
+        fixture.path(),
+        "replaceable",
+        "exec python3 -c 'import os,socket,time; s=socket.socket(); s.bind((\"127.0.0.1\",int(os.environ[\"PORT\"]))); s.listen(); time.sleep(30)'",
+    );
+    let original_hash = hex::encode(Sha256::digest(fs::read(&binary).expect("original")));
+    let supervisor = CroissantSupervisor::prepare(
+        &binary,
+        &committed_source_checkout(fixture.path()),
+        &fixture.path().join("run"),
+        owner(),
+        &seed_hash(b"replacement-seed"),
+        CroissantLimits::test(),
+    )
+    .expect("prepare stages exact bytes");
+    fs::write(&binary, format!("#!/bin/sh\ntouch {}\nexit 72\n", marker.display()))
+        .expect("replace caller path");
+    let process = supervisor
+        .start()
+        .await
+        .expect("staged original reaches readiness");
+    let ready = process.ready_fact();
+    assert_ne!(ready.executable, binary);
+    assert_eq!(ready.executable_sha256, original_hash);
+    assert_eq!(
+        fs::metadata(&ready.executable).unwrap().permissions().mode() & 0o222,
+        0
+    );
+    assert!(!marker.exists(), "replacement bytes executed");
+    process.stop().await.expect("staged child cleanup");
+    drop(supervisor);
+    assert!(!ready.executable.exists(), "staged executable was retained");
+}
