@@ -5,6 +5,7 @@ use crate::records::record_boundary;
 
 /// Complete typed kind-39000 group metadata from one relay-authored event.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(clippy::struct_excessive_bools)] // NIP-29 defines five independent presence flags.
 pub struct GroupMetadata {
     id: String,
     author: PublicKey,
@@ -31,21 +32,82 @@ impl GroupMetadata {
     pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
         let boundary = record_boundary(event, 39_000)?;
         let author = boundary.author();
+        let mut name = None;
+        let mut picture = None;
+        let mut banner = None;
+        let mut about = None;
+        let mut private = false;
+        let mut restricted = false;
+        let mut hidden = false;
+        let mut closed = false;
+        let mut livekit = false;
+        let mut supported_kinds = None;
+        let mut parent = None;
+        let mut children = Vec::new();
+
+        for (tag_index, tag) in boundary.tags().iter().enumerate() {
+            let values = tag.as_slice();
+            let Some(key) = values.first().map(String::as_str) else {
+                continue;
+            };
+            match key {
+                "name" => set_scalar(&mut name, values, tag_index, "name")?,
+                "picture" => set_scalar(&mut picture, values, tag_index, "picture")?,
+                "banner" => set_scalar(&mut banner, values, tag_index, "banner")?,
+                "about" => set_scalar(&mut about, values, tag_index, "about")?,
+                "private" => set_flag(&mut private, values, tag_index, "private")?,
+                "restricted" => {
+                    set_flag(&mut restricted, values, tag_index, "restricted")?;
+                }
+                "hidden" => set_flag(&mut hidden, values, tag_index, "hidden")?,
+                "closed" => set_flag(&mut closed, values, tag_index, "closed")?,
+                "livekit" => set_flag(&mut livekit, values, tag_index, "livekit")?,
+                "supported_kinds" => {
+                    if supported_kinds.is_some() {
+                        return Err(GroupError::AmbiguousRecordField("supported_kinds"));
+                    }
+                    let kinds = values[1..]
+                        .iter()
+                        .map(|value| {
+                            value.parse::<u16>().map(Kind::from_u16).map_err(|_| {
+                                GroupError::MalformedRecordRow {
+                                    tag_index,
+                                    reason: "supported kind is not a decimal u16",
+                                }
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    supported_kinds = Some(kinds);
+                }
+                "parent" => set_scalar(&mut parent, values, tag_index, "parent")?,
+                "child" => {
+                    if values.len() != 2 {
+                        return Err(GroupError::MalformedRecordRow {
+                            tag_index,
+                            reason: "child row must contain exactly one value",
+                        });
+                    }
+                    children.push(values[1].clone());
+                }
+                _ => {}
+            }
+        }
+
         Ok(Self {
             id: boundary.id,
             author,
-            name: None,
-            picture: None,
-            banner: None,
-            about: None,
-            private: false,
-            restricted: false,
-            hidden: false,
-            closed: false,
-            livekit: false,
-            supported_kinds: None,
-            parent: None,
-            children: Vec::new(),
+            name,
+            picture,
+            banner,
+            about,
+            private,
+            restricted,
+            hidden,
+            closed,
+            livekit,
+            supported_kinds,
+            parent,
+            children,
         })
     }
 
@@ -132,4 +194,42 @@ impl GroupMetadata {
     pub fn children(&self) -> &[String] {
         &self.children
     }
+}
+
+fn set_scalar(
+    field: &mut Option<String>,
+    values: &[String],
+    tag_index: usize,
+    name: &'static str,
+) -> Result<(), GroupError> {
+    if field.is_some() {
+        return Err(GroupError::AmbiguousRecordField(name));
+    }
+    if values.len() != 2 {
+        return Err(GroupError::MalformedRecordRow {
+            tag_index,
+            reason: "scalar row must contain exactly one value",
+        });
+    }
+    *field = Some(values[1].clone());
+    Ok(())
+}
+
+fn set_flag(
+    field: &mut bool,
+    values: &[String],
+    tag_index: usize,
+    name: &'static str,
+) -> Result<(), GroupError> {
+    if *field {
+        return Err(GroupError::AmbiguousRecordField(name));
+    }
+    if values.len() != 1 {
+        return Err(GroupError::MalformedRecordRow {
+            tag_index,
+            reason: "flag row must not contain values",
+        });
+    }
+    *field = true;
+    Ok(())
 }

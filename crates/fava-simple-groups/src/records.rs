@@ -35,6 +35,7 @@ pub(crate) fn record_boundary(
     let EventValue::Signed(event) = event else {
         return Err(GroupError::UnsignedRecord);
     };
+    validate_structure(event)?;
     if !event.verify_id() {
         return Err(GroupError::InvalidRecordId);
     }
@@ -43,7 +44,7 @@ pub(crate) fn record_boundary(
     }
 
     let mut id = None;
-    for tag in event.tags.iter() {
+    for (tag_index, tag) in event.tags.iter().enumerate() {
         let values = tag.as_slice();
         if values.first().map(String::as_str) != Some("d") {
             continue;
@@ -53,6 +54,12 @@ pub(crate) fn record_boundary(
         };
         if value.is_empty() {
             return Err(GroupError::EmptyRecordId);
+        }
+        if values.len() != 2 {
+            return Err(GroupError::MalformedRecordRow {
+                tag_index,
+                reason: "d row must contain exactly one value",
+            });
         }
         match id.as_deref() {
             None => id = Some(value.clone()),
@@ -65,4 +72,55 @@ pub(crate) fn record_boundary(
         event,
         id: id.ok_or(GroupError::MissingRecordId)?,
     })
+}
+
+fn validate_structure(event: &Event) -> Result<(), GroupError> {
+    if event.tags.len() > MAX_RECORD_TAGS {
+        return Err(GroupError::TooManyRecordTags {
+            actual: event.tags.len().min(MAX_RECORD_TAGS.saturating_add(1)),
+            maximum: MAX_RECORD_TAGS,
+        });
+    }
+
+    let mut bytes = 0usize;
+    add_bytes(&mut bytes, event.content.len())?;
+    for (tag_index, tag) in event.tags.iter().enumerate() {
+        let values = tag.as_slice();
+        if values.len() > MAX_RECORD_TAG_VALUES {
+            return Err(GroupError::TooManyRecordTagValues {
+                tag_index,
+                actual: values.len().min(MAX_RECORD_TAG_VALUES.saturating_add(1)),
+                maximum: MAX_RECORD_TAG_VALUES,
+            });
+        }
+        for (value_index, value) in values.iter().enumerate() {
+            if value.len() > MAX_RECORD_VALUE_BYTES {
+                return Err(GroupError::RecordValueTooLong {
+                    tag_index,
+                    value_index,
+                    bytes: value.len(),
+                    maximum: MAX_RECORD_VALUE_BYTES,
+                });
+            }
+            add_bytes(&mut bytes, value.len())?;
+            add_bytes(&mut bytes, 1)?;
+        }
+    }
+    Ok(())
+}
+
+fn add_bytes(bytes: &mut usize, amount: usize) -> Result<(), GroupError> {
+    *bytes = bytes
+        .checked_add(amount)
+        .ok_or(GroupError::RecordTooLarge {
+            bytes: MAX_RECORD_BYTES.saturating_add(1),
+            maximum: MAX_RECORD_BYTES,
+        })?;
+    if *bytes > MAX_RECORD_BYTES {
+        return Err(GroupError::RecordTooLarge {
+            bytes: (*bytes).min(MAX_RECORD_BYTES.saturating_add(1)),
+            maximum: MAX_RECORD_BYTES,
+        });
+    }
+    Ok(())
 }
