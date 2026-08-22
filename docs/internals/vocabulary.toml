@@ -164,6 +164,20 @@ symbols = ["fava_nip02::ContactListError"]
 crates = []
 
 [[term]]
+name = "IntoContactAuthors"
+source = "fava"
+meaning = "The sealed one-or-many public-key input accepted by the NIP-02 contact-list query builder."
+owner = "fava-nip02"
+nearest_nostr = "NIP-02 contact-list author"
+distinction = "Nostr identifies one event author; IntoContactAuthors permits the same ordinary kind-3 query builder to retain a concrete author axis for either one key or a finite caller-owned key collection."
+counterexample = "An unconstrained kind-3 query or an application-defined conversion that can erase an empty author axis is not IntoContactAuthors."
+lifecycle = "The caller supplies one supported owned or borrowed key shape; contact_list consumes its finite iterator immediately into Query selection and retains no conversion or observation state."
+forcing_requirement = "Applications must compose both first-hop and two-hop contact-list reads without synonym functions, while empty author input must remain a present-empty match-nothing axis."
+falsifier = "The one_many_and_empty_contact_list_queries_keep_a_concrete_author_axis and external public_api tests must fail if one and borrowed-many inputs do not reach the same builder or empty input becomes unconstrained."
+symbols = ["fava_nip02::IntoContactAuthors"]
+crates = []
+
+[[term]]
 name = "BookmarkList"
 source = "nostr"
 protocol = "NIP-51"

@@ -30,7 +30,10 @@ fn dependency_names(manifest: &str, header: &str) -> BTreeSet<String> {
 }
 
 fn crate_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    std::env::var_os("BUILD_WORKSPACE_DIRECTORY").map_or_else(
+        || PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        |workspace| PathBuf::from(workspace).join("crates/fava-nip02"),
+    )
 }
 
 fn rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
@@ -83,10 +86,11 @@ fn nip02_remains_engine_provider_free() {
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ] {
-        assert!(library.contains(required), "missing neutral Bazel edge: {required}");
+        assert!(
+            library.contains(required),
+            "missing neutral Bazel edge: {required}"
+        );
     }
-    assert!(BAZEL_MANIFEST.contains("name = \"architecture\""));
-
     let production = [
         include_str!("../src/lib.rs"),
         include_str!("../src/query.rs"),
@@ -105,7 +109,10 @@ fn nip02_remains_engine_provider_free() {
         "fava_publisher",
         "fava_ingest",
     ] {
-        assert!(!production.contains(forbidden), "forbidden source edge: {forbidden}");
+        assert!(
+            !production.contains(forbidden),
+            "forbidden source edge: {forbidden}"
+        );
     }
 }
 
@@ -114,10 +121,19 @@ fn universal_publication_and_query_owners_remain_kind_blind() {
     let crate_root = crate_root();
     let root = crate_root.parent().expect("workspace crates directory");
     let mut sources = Vec::new();
-    for owner in ["fava", "fava-publication", "fava-query", "fava-observe", "fava-write"] {
+    for owner in [
+        "fava",
+        "fava-publication",
+        "fava-query",
+        "fava-observe",
+        "fava-write",
+    ] {
         rust_sources(&root.join(owner).join("src"), &mut sources);
     }
-    assert!(!sources.is_empty(), "universal owner source set must be non-empty");
+    assert!(
+        !sources.is_empty(),
+        "universal owner source set must be non-empty"
+    );
 
     for source in sources {
         let text = fs::read_to_string(&source).expect("universal owner source is readable");

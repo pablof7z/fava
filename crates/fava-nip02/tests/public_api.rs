@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use fava_state::RelayUrl;
 use fava_query::{Query, QuerySnapshot};
+use fava_state::RelayUrl;
 use fava_write::{
     EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
     Tag, Timestamp, WriteIntentError,

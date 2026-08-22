@@ -6,7 +6,7 @@ use crate::ContactList;
 mod sealed {
     use fava_query::PublicKey;
 
-    pub trait Sealed {}
+    pub(crate) trait Sealed {}
 
     impl Sealed for PublicKey {}
     impl Sealed for &PublicKey {}
@@ -21,6 +21,7 @@ mod sealed {
 ///
 /// This trait is sealed so the query builder retains one exact meaning for
 /// every supported input shape.
+#[allow(private_bounds)]
 pub trait IntoContactAuthors: sealed::Sealed {
     /// Concrete public-key iterator consumed by the ordinary query builder.
     #[doc(hidden)]

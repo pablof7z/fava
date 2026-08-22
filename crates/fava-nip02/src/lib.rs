@@ -12,6 +12,20 @@
 //! ```compile_fail
 //! use fava_nip02::Nip02Materializer;
 //! ```
+//!
+//! ```compile_fail
+//! use fava_nip02::IntoContactAuthors;
+//!
+//! struct ForeignAuthors;
+//!
+//! impl IntoContactAuthors for ForeignAuthors {
+//!     type IntoIter = std::iter::Empty<fava_write::PublicKey>;
+//!
+//!     fn into_contact_authors(self) -> Self::IntoIter {
+//!         std::iter::empty()
+//!     }
+//! }
+//! ```
 
 use std::sync::Arc;
 
