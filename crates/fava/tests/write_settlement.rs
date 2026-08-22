@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use fava::{Kind, Receipt, RelayDeliveryOutcome};
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
-    EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId,
-    ReceiptOutcome, SignatureState, WriteId, WriteRouting,
+    EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, ReceiptOutcome,
+    SignatureState, WriteId, WriteRouting,
 };
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
@@ -23,10 +23,12 @@ fn receipt_counts_preserve_complete_mixed_destination_evidence() {
         outcome,
         RelayDeliveryOutcome::Unknown { reason } if reason == "handoff ambiguous"
     )));
-    assert!(receipt.destinations().values().any(|outcome| matches!(
-        outcome,
-        RelayDeliveryOutcome::Pending
-    )));
+    assert!(
+        receipt
+            .destinations()
+            .values()
+            .any(|outcome| matches!(outcome, RelayDeliveryOutcome::Pending))
+    );
 }
 
 fn mixed_receipt() -> Receipt {
