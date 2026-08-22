@@ -242,22 +242,52 @@ impl Publication {
     ///
     /// Returns [`PublicationError`] when the receipt disappears or cannot be read.
     pub async fn wait_terminal(&self, receipt_id: ReceiptId) -> Result<Receipt, PublicationError> {
+        self.wait_until(receipt_id, Receipt::is_terminal)
+            .await
+            .map(|(receipt, _)| receipt)
+    }
+
+    /// Await a caller-selected receipt predicate or bounded receipt terminality.
+    ///
+    /// The returned boolean is true when the predicate accepted the returned
+    /// complete durable receipt and false when terminality ended the wait first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError`] when the receipt disappears, storage
+    /// cannot be read, or the receipt-change stream closes.
+    pub async fn wait_until<F>(
+        &self,
+        receipt_id: ReceiptId,
+        predicate: F,
+    ) -> Result<(Receipt, bool), PublicationError>
+    where
+        F: Fn(&Receipt) -> bool,
+    {
         let mut changes = self.store.receipt_changes();
         loop {
             let receipt = self
                 .store
                 .receipt(receipt_id)?
                 .ok_or(PublicationError::ReceiptMissing(receipt_id))?;
-            if receipt.is_terminal() {
-                return Ok(receipt);
+            if predicate(&receipt) {
+                return Ok((receipt, true));
             }
-            match changes.recv().await {
-                Ok((changed_id, None)) if changed_id == receipt_id => {
-                    return Err(PublicationError::ReceiptMissing(receipt_id));
-                }
-                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                    return Err(PublicationError::ReceiptChangesClosed);
+            if receipt.is_terminal() {
+                return Ok((receipt, false));
+            }
+
+            loop {
+                match changes.recv().await {
+                    Ok((changed_id, None)) if changed_id == receipt_id => {
+                        return Err(PublicationError::ReceiptMissing(receipt_id));
+                    }
+                    Ok((changed_id, Some(_))) if changed_id == receipt_id => break,
+                    Ok(_) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        return Err(PublicationError::ReceiptChangesClosed);
+                    }
                 }
             }
         }

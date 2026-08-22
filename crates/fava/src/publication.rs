@@ -5,8 +5,8 @@ use std::fmt;
 use fava_publication::{Publication, PublicationError};
 use fava_state::RelayUrl;
 use fava_write::{
-    Event, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, UnsignedEvent, WriteId,
-    WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    Event, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
+    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use thiserror::Error;
 
@@ -40,6 +40,28 @@ impl Write {
         self.publication
             .receipt(self.receipt_id)?
             .ok_or_else(|| PublicationError::ReceiptMissing(self.receipt_id).into())
+    }
+
+    /// Await caller-selected delivery sufficiency or bounded terminality.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublishError::NotReached`] with the complete terminal receipt
+    /// when terminality arrives before the predicate succeeds. Storage and
+    /// receipt-stream failures remain attributable through [`PublishError`].
+    pub async fn settled<F>(&self, predicate: F) -> Result<Receipt, PublishError>
+    where
+        F: Fn(&Receipt) -> bool,
+    {
+        let (receipt, reached) = self
+            .publication
+            .wait_until(self.receipt_id, predicate)
+            .await?;
+        if reached {
+            Ok(receipt)
+        } else {
+            Err(PublishError::NotReached { receipt })
+        }
     }
 }
 
@@ -151,12 +173,47 @@ pub enum PublishError {
     /// An authorless edit has no selected current account or explicit signer scope.
     #[error("replaceable edit publication requires an author selection")]
     MissingAuthor,
+    /// A zero acknowledgement threshold cannot express delivery sufficiency.
+    #[error("settlement acknowledgement threshold must be positive")]
+    InvalidSettlementThreshold,
+    /// The receipt became terminal before the selected predicate succeeded.
+    #[error("publication became terminal before settlement predicate was reached")]
+    NotReached {
+        /// Complete terminal receipt, including every destination fact.
+        receipt: Receipt,
+    },
     /// Payload validation refused before durable custody.
     #[error(transparent)]
     Intent(#[from] WriteIntentError),
     /// The neutral publication owner refused or failed.
     #[error(transparent)]
     Publication(#[from] PublicationError),
+}
+
+/// Match a receipt only after routing has settled and every currently desired
+/// destination has an exact terminal fact.
+pub fn all() -> impl Fn(&Receipt) -> bool + Copy {
+    |receipt| {
+        receipt.route_settled
+            && receipt.desired_destinations.iter().all(|session| {
+                receipt
+                    .destinations()
+                    .get(session)
+                    .is_some_and(RelayDeliveryOutcome::is_terminal)
+            })
+    }
+}
+
+/// Match a receipt after at least `minimum` relay acknowledgements.
+///
+/// # Errors
+///
+/// Returns [`PublishError::InvalidSettlementThreshold`] when `minimum` is zero.
+pub fn at_least(minimum: usize) -> Result<impl Fn(&Receipt) -> bool + Copy, PublishError> {
+    if minimum == 0 {
+        return Err(PublishError::InvalidSettlementThreshold);
+    }
+    Ok(move |receipt: &Receipt| receipt.acknowledged() >= minimum)
 }
 
 pub(crate) trait PublishPayload {

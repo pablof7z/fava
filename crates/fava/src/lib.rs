@@ -36,7 +36,7 @@ pub use fava_write::{
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::{AcceptedWrite, WriteStoreError};
-pub use publication::{PublishAs, PublishError, PublishTo, Write};
+pub use publication::{PublishAs, PublishError, PublishTo, Write, all, at_least};
 use thiserror::Error;
 use tokio::sync::broadcast;
 

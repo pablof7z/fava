@@ -92,6 +92,28 @@ rust_test(
 )
 
 rust_test(
+    name = "write_settlement",
+    srcs = ["tests/write_settlement.rs"],
+    crate_name = "write_settlement",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-delivery-standard:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-publisher:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-transport:lib",
+        "//crates/fava-write:lib",
+        "//crates/fava-write-store:lib",
+        "//crates/fava-write-store-memory:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "explicit_publication",
     srcs = ["tests/explicit_publication.rs"],
     crate_name = "explicit_publication",
