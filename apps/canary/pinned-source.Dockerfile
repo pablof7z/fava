@@ -14,6 +14,7 @@ LABEL org.opencontainers.image.revision="${FAVA_REVISION}" \
 
 WORKDIR /source
 COPY --chown=65532:65532 source/ /source/
+RUN install -d -m 0755 -o 65532 -g 65532 /attestation
 COPY --chown=65532:65532 --chmod=0644 control/source.manifest /attestation/source.manifest
 
 RUN mkdir -p /home/fava \
