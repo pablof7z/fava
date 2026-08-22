@@ -197,7 +197,7 @@ impl CroissantSupervisor {
                 "Croissant source checkout must be clean",
             ));
         }
-        fs::create_dir(root)?;
+        fs::create_dir_all(root)?;
         fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
         let executable_directory = root.join("executable");
         fs::create_dir(&executable_directory)?;
