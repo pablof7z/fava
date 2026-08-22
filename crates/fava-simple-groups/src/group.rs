@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use fava_query::{Query, QueryError};
+use fava_query::{Query, QueryError, QuerySnapshot};
 use fava_state::RelayUrl;
 use fava_write::{Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError};
 
@@ -349,6 +349,12 @@ impl Group {
     /// Returns [`GroupError`] when exact host authority cannot be represented.
     pub fn records(&self, records: GroupRecords) -> Result<Query, GroupError> {
         crate::query::records(self, records)
+    }
+
+    /// Project one immutable ordinary query snapshot into this group's exact host views.
+    #[must_use]
+    pub fn project(&self, snapshot: &QuerySnapshot) -> crate::GroupSnapshot {
+        crate::GroupSnapshot::project(self, snapshot)
     }
 }
 

@@ -8,6 +8,7 @@ mod pins;
 mod query;
 mod records;
 mod saved;
+mod snapshot;
 
 #[cfg(test)]
 mod tests;
@@ -18,3 +19,4 @@ pub use people::{GroupAdmins, GroupMembers, GroupParticipants, GroupRoles};
 pub use pins::{GroupPins, PinnedItem};
 pub use query::GroupRecords;
 pub use saved::{SavedGroup, SavedRelay};
+pub use snapshot::GroupSnapshot;

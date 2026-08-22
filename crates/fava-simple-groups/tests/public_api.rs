@@ -2,12 +2,14 @@
 
 use std::collections::BTreeSet;
 
-use fava_query::{Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, SingleLetterTag};
+use fava_query::{
+    Kind, Query, QueryAcquisition, QuerySnapshot, RelayUrl, ResultAuthority, SingleLetterTag,
+};
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 use fava_simple_groups::{
     Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins,
-    GroupRecords, GroupRoles, PinnedItem, SavedGroup, SavedRelay,
+    GroupRecords, GroupRoles, GroupSnapshot, PinnedItem, SavedGroup, SavedRelay,
 };
 
 fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
@@ -137,4 +139,22 @@ fn pin_and_saved_parser_signatures_compile_externally() {
     let _: fn(&fava_write::EventValue) = saved_signatures_are_public;
     let target: Option<PinnedItem> = None;
     assert!(target.is_none());
+}
+
+#[test]
+fn group_snapshot_signatures_compile_externally() {
+    let host = relay("wss://groups.example");
+    let group = group(host.clone(), "photos").expect("one host");
+    let input = QuerySnapshot::evaluated(Vec::new(), &[]);
+    let snapshot: GroupSnapshot = group.project(&input);
+
+    assert_eq!(
+        snapshot.hosts().cloned().collect::<Vec<_>>(),
+        [host.clone()]
+    );
+    assert!(snapshot.at(&host).is_some());
+    assert!(snapshot.events().is_empty());
+    assert!(snapshot.metadata().next().is_none());
+    assert!(snapshot.admins().next().is_none());
+    assert!(snapshot.members().next().is_none());
 }
