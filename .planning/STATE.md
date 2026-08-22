@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-02-PLAN.md
-last_updated: "2026-08-22T09:44:34.944Z"
+stopped_at: Completed 07.1.1-04-PLAN.md
+last_updated: "2026-08-22T10:01:15.145Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: 7cb98fb79f4e20603f09078fa805f128efb6386e
+state_head: d65f4019a265efeee01ba2387bbcdac7c854725a
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 27
+  completed_plans: 28
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -85,6 +85,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P01 | 5min | 2 tasks | 6 files |
 | Phase 07.1.1 P03 | 8min | 2 tasks | 2 files |
 | Phase 07.1.1 P02 | 13min | 3 tasks | 6 files |
+| Phase 07.1.1 P04 | 15min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Vocabulary metadata exclusions apply to exact candidate spans; neighboring prose and path crate references remain enforced.
 - [Phase 07.1.1]: Relay-observed replaceable state retains the union of newest event ids selected independently for each exact RelayUrl.
 - [Phase 07.1.1]: OnlyRelays selects per requested RelayUrl while preserving the accepted-local replacement overlay; AnyLocal remains globally replaceable.
+- [Phase 07.1.1]: Group::on is the sole one/many constructor; a private conversion bound accepts RelayUrl and string inputs without adding public host vocabulary.
+- [Phase 07.1.1]: GroupRecords lowers its fixed all-record selection through six repeated approved Query::kind calls; content and records retain distinct AnyLocal and OnlyRelays authority.
 
 ### Pending Todos
 
@@ -168,6 +171,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T09:44:34.861Z
-Stopped at: Completed 07.1.1-02-PLAN.md
+Last session: 2026-08-22T10:01:15.067Z
+Stopped at: Completed 07.1.1-04-PLAN.md
 Resume file: None
