@@ -14,11 +14,8 @@ use fava_nip02::{
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type PublicKeyEdit = fn(PublicKey) -> EditResult;
 type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
 
-const FOLLOW: PublicKeyEdit = fava_nip02::follow;
-const UNFOLLOW: PublicKeyEdit = fava_nip02::unfollow;
 const MATERIALIZER: Selection = fava_nip02::materializer;
 const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
 const FOLLOWERS_OF: fn(PublicKey) -> Query = fava_nip02::followers_of;
@@ -42,13 +39,22 @@ fn inspect_row(row: &ContactListRowEvidence) -> (usize, &[String]) {
 
 #[test]
 fn external_surface_uses_only_approved_functions_and_types() {
-    let approved_functions: [PublicKeyEdit; 2] = [FOLLOW, UNFOLLOW];
-    assert_eq!(approved_functions.len(), 2);
     assert_eq!(MATERIALIZER().kind(), Kind::ContactList);
 
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
             .expect("generator public key");
+    let edit_from_key: EditResult = fava_nip02::follow(author);
+    let edit_from_hex: EditResult = fava_nip02::follow(author.to_hex().as_str());
+    let edit_from_owned_hex: EditResult = fava_nip02::unfollow(author.to_hex());
+    let edit_with_metadata: EditResult = fava_nip02::follow_with(
+        author,
+        Some(RelayUrl::parse("wss://relay.example").expect("relay")),
+        Some("alice"),
+    );
+    assert_eq!(edit_from_key, edit_from_hex);
+    assert!(edit_from_owned_hex.is_ok());
+    assert!(edit_with_metadata.is_ok());
     let event = EventBuilder::new(author, Kind::ContactList)
         .created_at(Timestamp::from(7))
         .tag(Tag::parse(["p", &author.to_hex()]).expect("valid follow row"))

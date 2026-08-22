@@ -5,6 +5,7 @@ use nostr::key::{Keys, PublicKey};
 use super::{follow, materializer, unfollow};
 
 mod contact_list;
+mod edit;
 mod query;
 
 fn tag(values: &[&str]) -> Tag {
