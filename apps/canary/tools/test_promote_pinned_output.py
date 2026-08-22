@@ -3,6 +3,8 @@
 
 import importlib.util
 import pathlib
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -54,6 +56,61 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "inventory was not exact"):
             MODULE.promote(staging, destination)
         self.assertEqual(list(destination.iterdir()), [])
+
+    def test_leaf_symlinks_never_redirect_publication(self) -> None:
+        temporary, staging, destination = self.fixture()
+        self.addCleanup(temporary.cleanup)
+        victim = destination.parent / "victim"
+        victim.mkdir()
+        destination.rmdir()
+        destination.symlink_to(victim, target_is_directory=True)
+        result = subprocess.run(
+            [sys.executable, str(PATH), str(staging), str(destination)],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(destination.is_symlink())
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(list(victim.iterdir()), [])
+
+        real_staging = staging.parent / "real-staging"
+        staging.rename(real_staging)
+        staging.symlink_to(real_staging, target_is_directory=True)
+        with self.assertRaises(OSError):
+            MODULE.promote(staging, destination)
+        self.assertEqual(list(destination.iterdir()), [])
+
+    def test_post_sample_staging_substitution_refuses_and_restores_destination(self) -> None:
+        temporary, staging, destination = self.fixture()
+        self.addCleanup(temporary.cleanup)
+        sampled = staging.parent / "sampled-staging"
+
+        def substitute() -> None:
+            staging.rename(sampled)
+            staging.symlink_to(sampled, target_is_directory=True)
+
+        with self.assertRaisesRegex(RuntimeError, "staging changed"):
+            MODULE.promote(staging, destination, before_rename=substitute)
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(list(destination.iterdir()), [])
+
+    def test_post_sample_destination_substitution_refuses_and_restores_exact_leaf(self) -> None:
+        temporary, staging, destination = self.fixture()
+        self.addCleanup(temporary.cleanup)
+        victim = destination.parent / "victim"
+        victim.mkdir()
+
+        def substitute() -> None:
+            destination.symlink_to(victim, target_is_directory=True)
+
+        with self.assertRaisesRegex(RuntimeError, "destination reappeared"):
+            MODULE.promote(staging, destination, before_rename=substitute)
+        self.assertFalse(destination.is_symlink())
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(list(destination.iterdir()), [])
+        self.assertEqual(list(victim.iterdir()), [])
 
 
 if __name__ == "__main__":
