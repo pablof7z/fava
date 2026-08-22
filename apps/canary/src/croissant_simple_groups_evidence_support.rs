@@ -142,7 +142,7 @@ impl EvidenceSnapshot {
         let mut files = BTreeMap::new();
         let mut actual_bytes = 0_u64;
         for expected in &inventory {
-            hook(CapturePoint::AfterInventory, &expected.relative);
+            hook(CapturePoint::Inventory, &expected.relative);
             let path = canonical_root.join(&expected.relative);
             let mut options = fs::OpenOptions::new();
             options.read(true).custom_flags(libc::O_NOFOLLOW);
@@ -157,7 +157,7 @@ impl EvidenceSnapshot {
                     "simple-groups evidence changed before bounded capture",
                 ));
             }
-            hook(CapturePoint::AfterOpen, &expected.relative);
+            hook(CapturePoint::Opened, &expected.relative);
             let mut bytes = Vec::with_capacity(usize::try_from(before.len()).map_err(error)?);
             file.by_ref()
                 .take(MAX_EVIDENCE_FILE_BYTES.saturating_add(1))
@@ -167,7 +167,7 @@ impl EvidenceSnapshot {
                     "simple-groups evidence file bytes exceeded bound",
                 ));
             }
-            hook(CapturePoint::AfterRead, &expected.relative);
+            hook(CapturePoint::Read, &expected.relative);
             let after = file.metadata()?;
             let path_after = fs::symlink_metadata(&path)?;
             if after.dev() != before.dev()
@@ -251,17 +251,17 @@ impl EvidenceSnapshot {
 
 #[derive(Clone, Copy)]
 enum CapturePoint {
-    AfterInventory,
-    AfterOpen,
-    AfterRead,
+    Inventory,
+    Opened,
+    Read,
 }
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SnapshotTestPoint {
-    AfterInventory,
-    AfterOpen,
-    AfterRead,
+    Inventory,
+    Opened,
+    Read,
 }
 
 #[cfg(test)]
@@ -271,9 +271,9 @@ pub(crate) fn capture_with_test_hook(
 ) -> CanaryResult<EvidenceSnapshot> {
     EvidenceSnapshot::capture_inner(root, &mut |point, relative| {
         let point = match point {
-            CapturePoint::AfterInventory => SnapshotTestPoint::AfterInventory,
-            CapturePoint::AfterOpen => SnapshotTestPoint::AfterOpen,
-            CapturePoint::AfterRead => SnapshotTestPoint::AfterRead,
+            CapturePoint::Inventory => SnapshotTestPoint::Inventory,
+            CapturePoint::Opened => SnapshotTestPoint::Opened,
+            CapturePoint::Read => SnapshotTestPoint::Read,
         };
         hook(point, relative);
     })

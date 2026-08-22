@@ -106,10 +106,7 @@ fn evidence_snapshot_refuses_replacement_after_inventory() {
     fs::write(&target, b"first").expect("artifact");
     let mut changed = false;
     let result = capture_with_test_hook(temporary.path(), |point, relative| {
-        if !changed
-            && point == SnapshotTestPoint::AfterInventory
-            && relative == Path::new("artifact")
-        {
+        if !changed && point == SnapshotTestPoint::Inventory && relative == Path::new("artifact") {
             let old = temporary.path().join("old");
             fs::rename(&target, &old).expect("preserve old inode");
             fs::write(&target, b"second").expect("replacement inode");
@@ -131,7 +128,7 @@ fn evidence_snapshot_refuses_append_after_open() {
     fs::write(&target, b"first").expect("artifact");
     let mut changed = false;
     let result = capture_with_test_hook(temporary.path(), |point, relative| {
-        if !changed && point == SnapshotTestPoint::AfterOpen && relative == Path::new("artifact") {
+        if !changed && point == SnapshotTestPoint::Opened && relative == Path::new("artifact") {
             fs::OpenOptions::new()
                 .append(true)
                 .open(&target)
@@ -151,7 +148,7 @@ fn evidence_snapshot_refuses_path_swap_after_hash_bytes() {
     fs::write(&target, b"first").expect("artifact");
     let mut changed = false;
     let result = capture_with_test_hook(temporary.path(), |point, relative| {
-        if !changed && point == SnapshotTestPoint::AfterRead && relative == Path::new("artifact") {
+        if !changed && point == SnapshotTestPoint::Read && relative == Path::new("artifact") {
             let old = temporary.path().join("old");
             fs::rename(&target, &old).expect("preserve hashed inode");
             fs::write(&target, b"first").expect("same-byte replacement inode");

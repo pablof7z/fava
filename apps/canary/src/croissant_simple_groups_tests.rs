@@ -372,6 +372,7 @@ fn signed_fixture_event(keys: &Keys, kind: u16, group: &str, content: &str) -> E
 
 #[allow(
     clippy::too_many_arguments,
+    clippy::too_many_lines,
     reason = "fixture writes one complete causal relay transcript"
 )]
 fn write_wire_fixture(
