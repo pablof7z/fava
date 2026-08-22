@@ -81,6 +81,16 @@ struct FlowFacts {
     relay_hint: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SecretScanStage {
+    BeforeSeal,
+    AfterManifest,
+}
+
+type SecretScanHook = Arc<
+    dyn Fn(SecretScanStage, &Path, &[Vec<u8>]) -> CanaryResult<()> + Send + Sync,
+>;
+
 /// Run the kind-9007 control and README NIP-02 flow through one public Fava assembly.
 ///
 /// # Errors
@@ -88,6 +98,13 @@ struct FlowFacts {
 /// Returns an attributed process, publication, observation, wire, bound, or evidence failure.
 pub async fn run_croissant_nip02_scenario(
     options: CroissantNip02Options,
+) -> CanaryResult<CroissantNip02Outcome> {
+    run_croissant_nip02_scenario_inner(options, None).await
+}
+
+async fn run_croissant_nip02_scenario_inner(
+    options: CroissantNip02Options,
+    secret_scan_hook: Option<SecretScanHook>,
 ) -> CanaryResult<CroissantNip02Outcome> {
     let seed_hash = hex::encode(Sha256::digest(options.scenario_seed.as_bytes()));
     let keys = deterministic_keys(&format!("croissant-author\0{}", options.scenario_seed))?;
@@ -138,7 +155,15 @@ pub async fn run_croissant_nip02_scenario(
     let teardown = teardown?;
     artifacts.record("croissant_teardown", &teardown)?;
     let facts = flow??;
-    finish_run(artifacts, &options, started, &ready, &teardown, &facts)
+    finish_run(
+        artifacts,
+        &options,
+        started,
+        &ready,
+        &teardown,
+        &facts,
+        secret_scan_hook.as_ref(),
+    )
 }
 
 #[allow(
@@ -389,6 +414,7 @@ fn finish_run(
     ready: &CroissantReadyFact,
     teardown: &CroissantTeardown,
     facts: &FlowFacts,
+    secret_scan_hook: Option<&SecretScanHook>,
 ) -> CanaryResult<CroissantNip02Outcome> {
     let run_id = artifacts.run_id()?;
     let wire_bytes = fs::metadata(artifacts.wire_log())?.len();
@@ -454,6 +480,12 @@ fn finish_run(
         options.scenario_seed.as_bytes(),
         [&author_keys, &target_keys],
     )?;
+    run_secret_scan_hook(
+        secret_scan_hook,
+        SecretScanStage::BeforeSeal,
+        artifacts.root(),
+        &secret_needles,
+    )?;
     assert_secrets_absent(artifacts.root(), &secret_needles)?;
     let repository = repository_root()?;
     let revision = command_output(&repository, "git", &["rev-parse", "HEAD"])?;
@@ -509,10 +541,25 @@ fn finish_run(
         .ok_or_else(|| CanaryError::new("Croissant manifest was not an object"))?
         .insert("artifact_seal".to_owned(), serde_json::to_value(seal)?);
     artifacts.write_json("manifest.json", &manifest)?;
+    run_secret_scan_hook(
+        secret_scan_hook,
+        SecretScanStage::AfterManifest,
+        artifacts.root(),
+        &secret_needles,
+    )?;
     assert_secrets_absent(artifacts.root(), &secret_needles)?;
     Ok(CroissantNip02Outcome {
         run_directory: artifacts.root().to_owned(),
     })
+}
+
+fn run_secret_scan_hook(
+    hook: Option<&SecretScanHook>,
+    stage: SecretScanStage,
+    root: &Path,
+    needles: &[Vec<u8>],
+) -> CanaryResult<()> {
+    hook.map_or(Ok(()), |hook| hook(stage, root, needles))
 }
 
 /// Verify exactly two completed, independent, bounded Croissant scenario manifests.
