@@ -22,6 +22,7 @@ staging=
 readonly_container_id=
 registry_container_id=
 registry_image_was_present=1
+break_volume_name=
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -73,6 +74,18 @@ remove_image_reference() {
   case "$image_inspect" in *'No such image'*) return 0 ;; *) return 1 ;; esac
 }
 
+remove_volume_name() {
+  if [ -z "$1" ]; then return 0; fi
+  if volume_inspect=$(docker volume inspect "$1" --format '{{.Name}}' 2>&1); then
+    [ "$volume_inspect" = "$1" ] || return 1
+    docker volume rm "$1" >/dev/null 2>&1 || return 1
+  else
+    case "$volume_inspect" in *'no such volume'*) return 0 ;; *) return 1 ;; esac
+  fi
+  if volume_inspect=$(docker volume inspect "$1" --format '{{.Name}}' 2>&1); then return 1; fi
+  case "$volume_inspect" in *'no such volume'*) return 0 ;; *) return 1 ;; esac
+}
+
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
@@ -89,6 +102,9 @@ cleanup() {
         cleanup_failed=1
       fi
     done
+  fi
+  if ! remove_volume_name "$break_volume_name"; then
+    cleanup_failed=1
   fi
   for reference in "$subject_image_tag" "$subject_image_id" "$probe_image_tag" "$probe_image_id" "$image_tag"; do
     if ! remove_image_reference "$reference"; then
@@ -413,12 +429,9 @@ done
 
 common_run() {
   run_name=$1
-  target=$2
+  target_volume=$2
   cidfile=$temporary/control/$run_name.cid
   shift 2
-  if [ ! -d "$target" ]; then
-    mkdir "$target"
-  fi
   python3 -c "$bounded_runner_program" \
     --seconds "$docker_deadline_seconds" \
     --bytes "$docker_output_maximum_bytes" -- \
@@ -435,7 +448,7 @@ common_run() {
     --log-opt max-size=1m \
     --log-opt max-file=1 \
     --log-opt compress=false \
-    --volume "$target:/target" \
+    --volume "$target_volume:/target" \
     --tmpfs /target/tmp:rw,nosuid,nodev,size=67108864 \
     --env CARGO_INCREMENTAL=0 \
     --env CARGO_TARGET_DIR=/target \
@@ -552,46 +565,61 @@ docker logs --tail 8 "$readonly_container_id" >&2
 remove_container_id "$readonly_container_id"
 readonly_container_id=
 
-break_target=$temporary/target-break
+break_volume_name=$container_prefix-break-target
+break_volume_options="size=$green_target_maximum_bytes,uid=0,gid=0,mode=0700"
+break_volume_created=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
+  docker volume create --driver local --opt type=tmpfs --opt device=tmpfs \
+    --opt "o=$break_volume_options" --label org.fava.owner=phase-07.1.1 "$break_volume_name")
+if [ "$break_volume_created" != "$break_volume_name" ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "type"}}')" != tmpfs ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "device"}}')" != tmpfs ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "o"}}')" != "$break_volume_options" ]; then
+  echo "could not create the exact causal target volume" >&2
+  exit 74
+fi
 # Prime the target while the build-script sample is protected by EROFS. Then
 # discard only the canary binary fingerprint and recompile that binary against
 # the same cached build-script result with the rootfs protection removed. This
 # recreates the reviewed post-sample race without weakening build.rs itself.
-common_run "$container_prefix-break" "$break_target" --read-only
-bin_fingerprints=$(find "$break_target/release/.fingerprint" -type f -name bin-canary -print)
-if [ "$(printf '%s\n' "$bin_fingerprints" | sed '/^$/d' | wc -l | tr -d ' ')" -ne 1 ]; then
-  echo "could not resolve the one exact canary binary fingerprint" >&2
-  exit 74
-fi
-bin_fingerprint_directory=$(dirname "$bin_fingerprints")
-bin_fingerprint_name=$(basename "$bin_fingerprint_directory")
-bin_fingerprint_hash=${bin_fingerprint_name#canary-}
-case "$bin_fingerprint_hash" in *[!0-9a-f]*|'') exit 74 ;; esac
-if [ "$(dirname "$bin_fingerprint_directory")" != "$break_target/release/.fingerprint" ] \
-  || [ "${#bin_fingerprint_hash}" -ne 16 ]; then
-  echo "refusing unsafe canary fingerprint invalidation" >&2
-  exit 74
-fi
-find "$bin_fingerprint_directory" -depth -delete
-if [ ! -f "$break_target/release/canary" ] || [ -L "$break_target/release/canary" ]; then
-  echo "primed canary binary was absent" >&2
-  exit 74
-fi
-find "$break_target/release/canary" -type f -delete
-common_run "$container_prefix-break" "$break_target" \
+common_run "$container_prefix-break" "$break_volume_name" --read-only
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
+  docker run --rm --name "$container_prefix-break-prune" \
+    --cidfile "$temporary/control/break-prune.cid" --user 0:0 --network none \
+    --cap-drop ALL --cap-add DAC_OVERRIDE --security-opt no-new-privileges \
+    --pids-limit 32 --memory 128m --cpus 1 --read-only \
+    --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false \
+    --volume "$break_volume_name:/target" "$source_image_reference" /bin/sh -ceu '
+      matches=$(find /target/release/.fingerprint -type f -name bin-canary -print)
+      test "$(printf "%s\n" "$matches" | sed "/^$/d" | wc -l)" -eq 1
+      directory=$(dirname "$matches"); name=$(basename "$directory"); hash=${name#canary-}
+      test "$(dirname "$directory")" = /target/release/.fingerprint
+      test "${#hash}" -eq 16; case "$hash" in *[!0-9a-f]*) exit 74 ;; esac
+      find "$directory" -depth -delete
+      test -f /target/release/canary; test ! -L /target/release/canary
+      rm /target/release/canary'
+common_run "$container_prefix-break" "$break_volume_name" \
   --env RUSTC_WRAPPER=/source/apps/canary/tools/pinned-build-toctou-wrapper.sh \
   --env FAVA_PINNED_TOCTOU_MODE=writable-break
-break_result=$break_target/toctou-writable-break/result
-if [ ! -f "$break_result" ] \
-  || ! grep -qx 'outcome=compiled-hostile-bytes' "$break_result" \
-  || [ "$(sed -n '2s/^bytes=//p' "$break_result")" != "$(wc -c < "$temporary/source/apps/canary/src/main.rs" | tr -d ' ')" ] \
-  || [ "$(sed -n '3s/^original_sha256=//p' "$break_result")" != "$(sha256_file "$temporary/source/apps/canary/src/main.rs")" ] \
-  || [ "$(sed -n '5s/^restored_sha256=//p' "$break_result")" != "$(sha256_file "$temporary/source/apps/canary/src/main.rs")" ] \
-  || [ ! -x "$break_target/release/canary" ] \
-  || ! grep -a -q 'canary forged:' "$break_target/release/canary"; then
-  echo "writable-root named deliberate break did not compile restored hostile proof" >&2
-  exit 74
-fi
+break_expected_bytes=$(wc -c < "$temporary/source/apps/canary/src/main.rs" | tr -d ' ')
+break_expected_sha256=$(sha256_file "$temporary/source/apps/canary/src/main.rs")
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
+  docker run --rm --name "$container_prefix-break-check" \
+    --cidfile "$temporary/control/break-check.cid" --user 0:0 --network none \
+    --cap-drop ALL --cap-add DAC_OVERRIDE --security-opt no-new-privileges \
+    --pids-limit 32 --memory 128m --cpus 1 --read-only \
+    --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false \
+    --env "EXPECTED_BYTES=$break_expected_bytes" --env "EXPECTED_SHA=$break_expected_sha256" \
+    --volume "$break_volume_name:/target:ro" "$source_image_reference" /bin/sh -ceu '
+      result=/target/toctou-writable-break/result
+      test "$(wc -l < "$result")" -eq 6
+      test "$(sed -n "1p" "$result")" = outcome=hostile-bytes-installed
+      test "$(sed -n "2s/^bytes=//p" "$result")" = "$EXPECTED_BYTES"
+      test "$(sed -n "3s/^original_sha256=//p" "$result")" = "$EXPECTED_SHA"
+      test "$(sed -n "5s/^restored_sha256=//p" "$result")" = "$EXPECTED_SHA"
+      test "$(sed -n "6p" "$result")" = outcome=compiled-hostile-bytes
+      test -x /target/release/canary; grep -a -q "canary forged:" /target/release/canary'
+remove_volume_name "$break_volume_name"
+break_volume_name=
 
 output_parent=$(dirname "$output_directory")
 staging=$output_parent/.fava-pinned-build-staging-$unique
