@@ -81,6 +81,7 @@ except OSError as error:
         result.write("outcome=EROFS\n")
         result.write(f"bytes={len(original)}\n")
         result.write(f"original_sha256={hashlib.sha256(original).hexdigest()}\n")
+        result.write("wrapper_status=86\n")
         result.flush()
         os.fsync(result.fileno())
     raise SystemExit(86)

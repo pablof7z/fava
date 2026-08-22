@@ -368,30 +368,73 @@ common_run() {
       --manifest-path apps/canary/Cargo.toml --bin canary
 }
 
-readonly_target=$temporary/target-readonly
-set +e
-common_run "$container_prefix-readonly" "$readonly_target" \
+readonly_name=$container_prefix-readonly
+docker run --detach --name "$readonly_name" \
+  --network none \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
   --read-only \
+  --tmpfs "/target:rw,exec,nosuid,nodev,size=$green_target_maximum_bytes" \
+  --env CARGO_INCREMENTAL=0 \
+  --env CARGO_TARGET_DIR=/target \
+  --env TMPDIR=/target/tmp \
+  --env FAVA_CANARY_PINNED_BUILD=1 \
+  --env "FAVA_BUILD_REVISION=$revision" \
+  --env "FAVA_BUILD_TREE=$tree" \
+  --env "FAVA_BUILD_SOURCE_TREE_SHA256=$source_tree_sha256" \
+  --env "FAVA_BUILD_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
+  --env "FAVA_BUILD_SOURCE_IMAGE_SHA256=$source_image_sha256" \
+  --env "FAVA_BUILD_RUST_BASE_IMAGE_SHA256=$base_image_sha256" \
   --env RUSTC_WRAPPER=/source/apps/canary/tools/pinned-build-toctou-wrapper.sh \
-  --env FAVA_PINNED_TOCTOU_MODE=readonly
-readonly_status=$?
-set -e
+  --env FAVA_PINNED_TOCTOU_MODE=readonly \
+  "$source_image_id" /bin/sh -c \
+  "mkdir -p /target/tmp; $build_command; status=\$?; printf '%s\\n' \"\$status\" > /target/readonly-status; printf '%s\\n' complete > /target/readonly-complete; exec tail -f /dev/null" \
+  >/dev/null
+readonly_complete=0
+readonly_waits=0
+while [ "$readonly_waits" -lt 1200 ]; do
+  if docker exec "$readonly_name" test -f /target/readonly-complete >/dev/null 2>&1; then
+    readonly_complete=1
+    break
+  fi
+  if [ "$(docker container inspect "$readonly_name" --format '{{.State.Running}}')" != true ]; then
+    docker logs --tail 8 "$readonly_name" >&2 || true
+    echo "read-only post-build.rs mutation exited before recording its result" >&2
+    exit 73
+  fi
+  readonly_waits=$((readonly_waits + 1))
+  sleep 1
+done
+if [ "$readonly_complete" -ne 1 ]; then
+  echo "read-only post-build.rs mutation exceeded its readiness bound" >&2
+  exit 73
+fi
+readonly_status=$(docker exec "$readonly_name" sed -n '1p' /target/readonly-status)
+case "$readonly_status" in *[!0-9]*|'') exit 73 ;; esac
 if [ "$readonly_status" -eq 0 ]; then
   echo "read-only post-build.rs mutation unexpectedly compiled" >&2
   exit 73
 fi
-if [ ! -f "$readonly_target/toctou-readonly/result" ]; then
+if ! docker exec "$readonly_name" test -f /target/toctou-readonly/result; then
   echo "read-only post-build.rs mutation did not retain its result" >&2
   exit 73
 fi
-if [ "$(sed -n '1p' "$readonly_target/toctou-readonly/result")" != outcome=EROFS ]; then
+readonly_outcome=$(docker exec "$readonly_name" sed -n '1p' /target/toctou-readonly/result)
+if [ "$readonly_outcome" != outcome=EROFS ]; then
   echo "read-only post-build.rs mutation did not record EROFS" >&2
   exit 73
 fi
-if [ -e "$readonly_target/release/canary" ]; then
+readonly_wrapper_status=$(docker exec "$readonly_name" sed -n '4s/^wrapper_status=//p' /target/toctou-readonly/result)
+if [ "$readonly_wrapper_status" != 86 ]; then
+  echo "read-only post-build.rs mutation did not record wrapper exit 86" >&2
+  exit 73
+fi
+if docker exec "$readonly_name" test -e /target/release/canary; then
   echo "read-only post-build.rs mutation left a promoted executable" >&2
   exit 73
 fi
+docker logs --tail 8 "$readonly_name" >&2
+remove_container "$readonly_name"
 
 break_target=$temporary/target-break
 # Prime the target while the build-script sample is protected by EROFS. Then
