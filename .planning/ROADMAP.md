@@ -239,6 +239,19 @@ Plans:
 
 **Plans:** TBD
 
+- [x] 07.1.1-01-PLAN.md
+- [ ] 07.1.1-02-PLAN.md
+- [ ] 07.1.1-03-PLAN.md
+- [ ] 07.1.1-04-PLAN.md
+- [ ] 07.1.1-05-PLAN.md
+- [ ] 07.1.1-06-PLAN.md
+- [ ] 07.1.1-07-PLAN.md
+- [ ] 07.1.1-08-PLAN.md
+- [ ] 07.1.1-09-PLAN.md
+- [ ] 07.1.1-10-PLAN.md
+- [ ] 07.1.1-11-PLAN.md
+- [ ] 07.1.1-12-PLAN.md
+
 - [ ] Run GSD phase planning after Phase 07.1 inputs settle.
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
@@ -317,7 +330,7 @@ Plans:
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
 | 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete    | 2026-08-22 |
-| 07.1.1. Multi-Relay Simple Groups | 0/TBD | Ready to plan after 07.1 | - |
+| 07.1.1. Multi-Relay Simple Groups | 1/12 | In Progress|  |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |

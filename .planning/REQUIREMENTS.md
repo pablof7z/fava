@@ -111,7 +111,7 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 
 - [ ] **GROUP-01**: `fava-simple-groups::Group` represents one opaque NIP-29 group id over an application-selected non-empty bounded host-relay set, with one-host and multi-host use sharing one public value.
 - [ ] **GROUP-02**: Group content helpers return ordinary queries with the exact `h` value and explicit acquisition from every selected host while preserving accepted local write visibility.
-- [ ] **GROUP-03**: Group-record helpers return ordinary queries for kinds 39000–39005 with the exact `d` value and require actual evidence from the selected host set.
+- [x] **GROUP-03**: Group-record helpers return ordinary queries for kinds 39000–39005 with the exact `d` value and require actual evidence from the selected host set.
 - [ ] **GROUP-04**: A duplicate event served by several hosts appears once with every actual serving-relay contribution, while unique events from each host remain visible.
 - [ ] **GROUP-05**: Typed group projections retain independent per-host record authority, expose exact disagreement and member/admin attribution, and never field-merge metadata or silently select a host.
 - [ ] **GROUP-06**: Applications choose one fork through a single-host `Group`; the capability makes no canonical-host, migration, existence, completeness, or negative-membership claim.
@@ -295,7 +295,7 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | CAP-09 | Phase 7 | Complete |
 | GROUP-01 | Phase 07.1.1 | Pending |
 | GROUP-02 | Phase 07.1.1 | Pending |
-| GROUP-03 | Phase 07.1.1 | Pending |
+| GROUP-03 | Phase 07.1.1 | Complete |
 | GROUP-04 | Phase 07.1.1 | Pending |
 | GROUP-05 | Phase 07.1.1 | Pending |
 | GROUP-06 | Phase 07.1.1 | Pending |
@@ -342,6 +342,7 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | NATIVE-08 | Phase 11 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 122 total
 - Mapped to phases: 122 ✓
 - Unmapped: 0

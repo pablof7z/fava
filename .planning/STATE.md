@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
-status: planning
-stopped_at: Phase 07.1 complete, ready to plan Phase 07.1.1
-last_updated: "2026-08-22T05:44:04.202Z"
+status: executing
+stopped_at: Completed 07.1.1-01-PLAN.md
+last_updated: "2026-08-22T09:13:57.035Z"
 last_activity: 2026-08-22
-last_activity_desc: Phase 07.1 complete, transitioned to Phase 07.1.1
-state_head: a15a6fc8a62ac29302e2b088502941ff6b9fae50
+last_activity_desc: Phase 07.1.1 execution started
+state_head: a58a60034afb4afe89f0df35204ce69be37e00f9
 progress:
   total_phases: 14
   completed_phases: 9
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 36
+  completed_plans: 25
   percent: 64
 ---
 
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 07.1 — Universal publication vocabulary and typed NIP-02 reads
+**Current focus:** Phase 07.1.1 — Multi-Relay Simple Groups
 
 ## Current Position
 
-Phase: 07.1.1 — Multi-Relay Simple Groups
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-22 — Phase 07.1 complete, transitioned to Phase 07.1.1
+Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
+Plan: 2 of 12
+Status: Ready to execute
+Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
-Progress: [██████░░░░] 57%
+Progress: [██████░░░░] 64%
 
 Phase progress is 8/14. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
 all authored plans and their review and verification gates.
@@ -82,6 +82,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P10 | 11min | 2 tasks | 9 files |
 | Phase 07.1 P11 | 17min | 3 tasks | 9 files |
 | Phase 07.1 P12 | 34min | 3 tasks | 13 files |
+| Phase 07.1.1 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Kind 9007 and kind 3 cross the same public kind-blind publication lifecycle.
 - [Phase 07.1]: PublishError retains the complete terminal Receipt without boxing; narrow Clippy allowances document that evidence boundary.
 - [Phase 07.1]: Seed-bearing Cargo invocations use --quiet so Cargo cannot echo process-memory secrets in argv diagnostics.
+- [Phase 07.1.1]: Keep Query::kind as the sole singleton-input surface; repeated calls union in the existing canonical BTreeSet without new query vocabulary.
 
 ### Pending Todos
 
@@ -161,6 +163,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T03:12:33.115Z
-Stopped at: Phase 07.1 complete, ready to plan Phase 07.1.1
+Last session: 2026-08-22T09:13:56.961Z
+Stopped at: Completed 07.1.1-01-PLAN.md
 Resume file: None
