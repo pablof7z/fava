@@ -434,12 +434,7 @@ common_run() {
   cidfile=$temporary/control/$run_name.cid
   shift 2
   if [ "${FAVA_CAUSAL_DIRECT_RUSTC:-0}" -eq 1 ]; then
-    set -- "$@" "$source_image_reference" /usr/bin/python3 -c '
-import json, os
-with open("/target/toctou-prime/rustc.json", "rb") as source: raw = source.read(65_537)
-arguments = json.loads(raw)
-assert len(raw) <= 65_536 and isinstance(arguments, list) and all(isinstance(value, str) for value in arguments)
-os.execve("/source/apps/canary/tools/pinned-build-toctou-wrapper.sh", ["pinned-build-toctou-wrapper.sh", *arguments], os.environ)'
+    set -- "$@" "$source_image_reference" /source/apps/canary/tools/pinned-build-toctou-wrapper.sh --replay /target/toctou-prime/rustc.json
   else
     set -- "$@" "$source_image_reference" cargo build --frozen --offline --release --manifest-path apps/canary/Cargo.toml --bin canary
   fi

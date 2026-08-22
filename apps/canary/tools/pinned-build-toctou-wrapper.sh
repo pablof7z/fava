@@ -7,6 +7,40 @@ if [ "$#" -lt 1 ]; then
   exit 64
 fi
 
+if [ "$1" = --replay ]; then
+  if [ "$#" -ne 2 ] || [ "$0" != /source/apps/canary/tools/pinned-build-toctou-wrapper.sh ]; then exit 64; fi
+  exec /usr/bin/python3 - "$0" "$2" <<'PY'
+import json
+import os
+import re
+import sys
+
+wrapper, path = sys.argv[1:]
+with open(path, "rb") as source:
+    raw = source.read(65_537)
+claim = json.loads(raw)
+if len(raw) > 65_536 or set(claim) != {"argv", "cwd", "env"}:
+    raise SystemExit("sampled compiler claim was invalid")
+argv, cwd, environment = claim["argv"], claim["cwd"], claim["env"]
+if cwd != "/source/apps/canary" or not isinstance(argv, list) or not argv:
+    raise SystemExit("sampled compiler cwd/argv was invalid")
+if not all(isinstance(value, str) and "\0" not in value for value in argv):
+    raise SystemExit("sampled compiler argv was invalid")
+if not isinstance(environment, dict) or len(environment) > 128:
+    raise SystemExit("sampled compiler environment was invalid")
+allowed = re.compile(r"(?:CARGO_[A-Z0-9_]+|FAVA_BUILD_[A-Z0-9_]+|FAVA_CANARY_PINNED_BUILD|PATH|HOME|LD_LIBRARY_PATH|RUSTUP_HOME|RUSTUP_TOOLCHAIN|TMPDIR)")
+if any(not isinstance(key, str) or not allowed.fullmatch(key) or not isinstance(value, str) or len(value) > 4096 for key, value in environment.items()):
+    raise SystemExit("sampled compiler environment exceeded its allowlist")
+for key in ("FAVA_BUILD_REVISION", "FAVA_BUILD_TREE", "FAVA_BUILD_SOURCE_TREE_SHA256", "FAVA_BUILD_SOURCE_MANIFEST_SHA256", "FAVA_BUILD_SOURCE_IMAGE_SHA256", "FAVA_BUILD_RUST_BASE_IMAGE_SHA256"):
+    if environment.get(key) != os.environ.get(key): raise SystemExit("sampled compiler identity changed")
+if environment.get("CARGO_MANIFEST_DIR") != cwd or environment.get("FAVA_BUILD_SOURCE_CLEAN") != "true" or environment.get("FAVA_BUILD_SOURCE_IMMUTABLE") != "true":
+    raise SystemExit("sampled compiler source claim changed")
+environment["FAVA_PINNED_TOCTOU_MODE"] = "writable-break"
+os.chdir(cwd)
+os.execve(wrapper, [wrapper, *argv], environment)
+PY
+fi
+
 real_rustc=$1
 shift
 main=/source/apps/canary/src/main.rs
@@ -43,8 +77,10 @@ import os
 import sys
 
 path, *arguments = sys.argv[1:]
-encoded = (json.dumps(arguments, separators=(",", ":")) + "\n").encode("utf-8")
-if not arguments or len(encoded) > 65_536:
+allowed = {key: value for key, value in os.environ.items() if key.startswith("CARGO_") or key.startswith("FAVA_BUILD_") or key in {"FAVA_CANARY_PINNED_BUILD", "PATH", "HOME", "LD_LIBRARY_PATH", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN", "TMPDIR"}}
+claim = {"argv": arguments, "cwd": os.getcwd(), "env": allowed}
+encoded = (json.dumps(claim, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+if not arguments or len(allowed) > 128 or len(encoded) > 65_536:
     raise SystemExit("prime rustc invocation exceeded its bound")
 descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
 with os.fdopen(descriptor, "wb") as output:
