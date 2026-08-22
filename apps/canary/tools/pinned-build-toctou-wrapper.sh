@@ -21,6 +21,11 @@ for argument do
     /source/apps/canary/src/main.rs|apps/canary/src/main.rs)
       saw_main=1
       ;;
+    src/main.rs)
+      if [ "$(pwd -P)" = /source/apps/canary ]; then
+        saw_main=1
+      fi
+      ;;
   esac
   previous=$argument
 done
