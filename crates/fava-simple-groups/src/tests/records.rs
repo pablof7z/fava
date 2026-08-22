@@ -2,7 +2,7 @@ use fava_write::{Event, EventBuilder as FavaEventBuilder, EventValue, Kind, Tag,
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::{GroupError, GroupMetadata};
+use crate::{GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupRoles};
 
 fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("test tag")
@@ -240,4 +240,228 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
             maximum: 256
         })
     ));
+}
+
+#[test]
+fn people_parser_signatures_accept_one_valid_row() {
+    let keys = Keys::generate();
+    let subject = Keys::generate().public_key();
+    let key = subject.to_hex();
+    let admins = source(
+        &keys,
+        39_001,
+        vec![tag(&["d", "g"]), tag(&["p", &key, "admin"])],
+        "",
+    );
+    let members = source(&keys, 39_002, vec![tag(&["d", "g"]), tag(&["p", &key])], "");
+    let roles = source(
+        &keys,
+        39_003,
+        vec![tag(&["d", "g"]), tag(&["role", "admin", "all"])],
+        "",
+    );
+    let participants = source(
+        &keys,
+        39_004,
+        vec![tag(&["d", "g"]), tag(&["participant", &key])],
+        "",
+    );
+
+    assert_eq!(
+        GroupAdmins::from_event(&EventValue::Signed(admins))
+            .expect("admins")
+            .admins(),
+        [Ok((subject, vec!["admin".to_owned()]))]
+    );
+    assert_eq!(
+        GroupMembers::from_event(&EventValue::Signed(members))
+            .expect("members")
+            .members(),
+        [Ok(subject)]
+    );
+    assert_eq!(
+        GroupRoles::from_event(&EventValue::Signed(roles))
+            .expect("roles")
+            .roles(),
+        [Ok(("admin".to_owned(), Some("all".to_owned())))]
+    );
+    assert_eq!(
+        GroupParticipants::from_event(&EventValue::Signed(participants))
+            .expect("participants")
+            .participants(),
+        [Ok(subject)]
+    );
+}
+
+#[test]
+fn people_records_preserve_positive_order_and_attribution() {
+    let keys = Keys::generate();
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let alice_hex = alice.to_hex();
+    let bob_hex = bob.to_hex();
+
+    let admins_event = source(
+        &keys,
+        39_001,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["p", &bob_hex, "secretary", "gardener"]),
+            tag(&["x", "foreign"]),
+            tag(&["p", &alice_hex, "ceo"]),
+        ],
+        "",
+    );
+    let admins = GroupAdmins::from_event(&EventValue::Signed(admins_event)).expect("admins");
+    assert_eq!(admins.id(), "g");
+    assert_eq!(admins.author(), keys.public_key());
+    assert_eq!(
+        admins.admins(),
+        [
+            Ok((bob, vec!["secretary".to_owned(), "gardener".to_owned()])),
+            Ok((alice, vec!["ceo".to_owned()])),
+        ]
+    );
+
+    let members_event = source(
+        &keys,
+        39_002,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["p", &alice_hex]),
+            tag(&["p", &bob_hex]),
+        ],
+        "",
+    );
+    let members = GroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    assert_eq!(members.id(), "g");
+    assert_eq!(members.author(), keys.public_key());
+    assert_eq!(members.members(), [Ok(alice), Ok(bob)]);
+
+    let roles_event = source(
+        &keys,
+        39_003,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["role", "moderator", "delete messages"]),
+            tag(&["role", "member"]),
+            tag(&["role", "speaker", ""]),
+        ],
+        "",
+    );
+    let roles = GroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
+    assert_eq!(roles.id(), "g");
+    assert_eq!(roles.author(), keys.public_key());
+    assert_eq!(
+        roles.roles(),
+        [
+            Ok(("moderator".to_owned(), Some("delete messages".to_owned()))),
+            Ok(("member".to_owned(), None)),
+            Ok(("speaker".to_owned(), Some(String::new()))),
+        ]
+    );
+
+    let participants_event = source(
+        &keys,
+        39_004,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["participant", &bob_hex]),
+            tag(&["participant", &alice_hex]),
+        ],
+        "",
+    );
+    let participants =
+        GroupParticipants::from_event(&EventValue::Signed(participants_event.clone()))
+            .expect("participants");
+    assert_eq!(participants.id(), "g");
+    assert_eq!(participants.author(), keys.public_key());
+    assert_eq!(participants.participants(), [Ok(bob), Ok(alice)]);
+    assert_eq!(
+        GroupParticipants::from_event(&EventValue::Signed(participants_event))
+            .expect("repeated parsing is inert"),
+        participants
+    );
+
+    let empty = source(&keys, 39_002, vec![tag(&["d", "g"])], "");
+    assert!(
+        GroupMembers::from_event(&EventValue::Signed(empty))
+            .expect("empty positive evidence")
+            .members()
+            .is_empty()
+    );
+}
+
+#[test]
+fn invalid_people_rows_do_not_reserve_later_valid_rows() {
+    let keys = Keys::generate();
+    let member = Keys::generate().public_key();
+    let member_hex = member.to_hex();
+    let members_event = source(
+        &keys,
+        39_002,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["p", &member_hex, "extra"]),
+            tag(&["p", &member_hex]),
+            tag(&["p", &member_hex]),
+        ],
+        "",
+    );
+    let members = GroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    assert!(matches!(
+        &members.members()[0],
+        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+    ));
+    assert_eq!(members.members()[1], Ok(member));
+    assert_eq!(
+        members.members()[2],
+        Err(GroupError::DuplicateRecordRow { tag_index: 3 })
+    );
+
+    let participant = Keys::generate().public_key();
+    let lower = participant.to_hex();
+    let upper = lower.to_uppercase();
+    let participants_event = source(
+        &keys,
+        39_004,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["participant", &upper]),
+            tag(&["participant", &lower]),
+        ],
+        "",
+    );
+    let participants = GroupParticipants::from_event(&EventValue::Signed(participants_event))
+        .expect("participants");
+    assert!(matches!(
+        &participants.participants()[0],
+        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+    ));
+    assert_eq!(participants.participants()[1], Ok(participant));
+
+    let roles_event = source(
+        &keys,
+        39_003,
+        vec![
+            tag(&["d", "g"]),
+            tag(&["role", "admin", "one", "extra"]),
+            tag(&["role", "admin", "two"]),
+            tag(&["role", "admin", "three"]),
+        ],
+        "",
+    );
+    let roles = GroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
+    assert!(matches!(
+        &roles.roles()[0],
+        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+    ));
+    assert_eq!(
+        roles.roles()[1],
+        Ok(("admin".to_owned(), Some("two".to_owned())))
+    );
+    assert_eq!(
+        roles.roles()[2],
+        Err(GroupError::DuplicateRecordRow { tag_index: 3 })
+    );
 }

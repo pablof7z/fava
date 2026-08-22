@@ -5,7 +5,10 @@ use std::collections::BTreeSet;
 use fava_query::{Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, SingleLetterTag};
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
-use fava_simple_groups::{Group, GroupError, GroupMetadata, GroupRecords};
+use fava_simple_groups::{
+    Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupRecords,
+    GroupRoles,
+};
 
 fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
     GroupMetadata::from_event(event).map(|metadata| metadata.id().to_owned())
@@ -111,4 +114,14 @@ fn metadata_parser_accessors_compile_externally() {
     let parser: fn(&fava_write::EventValue) -> Result<String, GroupError> =
         metadata_signature_is_public;
     let _ = parser;
+}
+
+#[test]
+fn people_parser_signatures_compile_externally() {
+    let _: fn(&fava_write::EventValue) -> Result<GroupAdmins, GroupError> = GroupAdmins::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<GroupMembers, GroupError> =
+        GroupMembers::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<GroupRoles, GroupError> = GroupRoles::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<GroupParticipants, GroupError> =
+        GroupParticipants::from_event;
 }

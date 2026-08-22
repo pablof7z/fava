@@ -3,6 +3,7 @@
 mod bounds;
 mod group;
 mod metadata;
+mod people;
 mod query;
 mod records;
 
@@ -11,4 +12,5 @@ mod tests;
 
 pub use group::{Group, GroupError};
 pub use metadata::GroupMetadata;
+pub use people::{GroupAdmins, GroupMembers, GroupParticipants, GroupRoles};
 pub use query::GroupRecords;
