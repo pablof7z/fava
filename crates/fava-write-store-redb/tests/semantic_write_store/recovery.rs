@@ -5,7 +5,8 @@ use fava_query::{Query, QuerySource, SourceEvent};
 use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
-    MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState,
+    MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
+    WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
@@ -14,6 +15,74 @@ use redb::{Database, Durability, ReadableTable};
 use serde_json::{Value, json};
 
 use super::{META, RECEIPTS, accept, edit, materialization, source, unique_path};
+
+#[test]
+fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
+    let path = unique_path("ordered-explicit-route");
+    let keys = Keys::generate();
+    let first = RelayUrl::parse("wss://first.example").unwrap();
+    let second = RelayUrl::parse("wss://second.example").unwrap();
+    let routing = WriteRouting::explicit([first.clone(), second.clone(), first.clone()])
+        .expect("route normalizes");
+    let store = RedbWriteStore::open(&path).unwrap();
+    let accepted = store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(edit(), keys.public_key(), routing).unwrap(),
+            materialization(keys.public_key(), 10, "ordered"),
+            None,
+        )
+        .expect("semantic write accepts");
+    drop(store);
+
+    let reopened = RedbWriteStore::open(path).expect("ordered route reopens");
+    let receipt = reopened
+        .receipt(accepted.receipt_id)
+        .unwrap()
+        .expect("receipt persists");
+    assert_eq!(receipt.routing, WriteRouting::Explicit(vec![first, second]));
+    assert_eq!(receipt.destinations().len(), 2);
+    assert_eq!(receipt.desired_destinations.len(), 2);
+}
+
+#[test]
+fn schema_v2_refuses_unsound_ordered_route_shapes() {
+    let empty_path = terminal_no_destination_path("empty-explicit-route");
+    mutate_row(&empty_path, |row| {
+        set(
+            row,
+            "/receipt/routing",
+            serde_json::to_value(WriteRouting::Explicit(Vec::new())).unwrap(),
+        );
+    });
+    let empty_error = RedbWriteStore::open(empty_path)
+        .err()
+        .expect("empty explicit route refuses");
+    assert!(
+        empty_error
+            .to_string()
+            .contains("durable explicit route is empty"),
+        "unexpected empty-route refusal: {empty_error}"
+    );
+
+    let duplicate_path = terminal_no_destination_path("duplicate-explicit-route");
+    let relay = RelayUrl::parse("wss://duplicate.example").unwrap();
+    mutate_row(&duplicate_path, |row| {
+        set(
+            row,
+            "/receipt/routing",
+            serde_json::to_value(WriteRouting::Explicit(vec![relay.clone(), relay])).unwrap(),
+        );
+    });
+    let duplicate_error = RedbWriteStore::open(duplicate_path)
+        .err()
+        .expect("duplicate explicit route refuses");
+    assert!(
+        duplicate_error
+            .to_string()
+            .contains("durable explicit route repeats a relay identity"),
+        "unexpected duplicate-route refusal: {duplicate_error}"
+    );
+}
 
 #[test]
 fn exact_current_guard_precedes_idempotent_semantic_success() {
@@ -432,6 +501,22 @@ fn valid_source_path(label: &str) -> std::path::PathBuf {
         materialization(keys.public_key(), 11, "current"),
         Some(&base),
     );
+    drop(store);
+    path
+}
+
+fn terminal_no_destination_path(label: &str) -> std::path::PathBuf {
+    let path = unique_path(label);
+    let keys = Keys::generate();
+    let store = RedbWriteStore::open(&path).unwrap();
+    let accepted = accept(
+        &store,
+        edit(),
+        keys.public_key(),
+        materialization(keys.public_key(), 10, "terminal"),
+        None,
+    );
+    settle_no_destination(&store, &accepted);
     drop(store);
     path
 }
