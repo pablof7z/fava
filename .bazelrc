@@ -21,6 +21,11 @@ common --experimental_disk_cache_gc_max_size=50G
 build --symlink_prefix=bazel-
 test --symlink_prefix=bazel-
 
+# Rust 1.90.0 emits unloadable proc-macro dylibs on macOS 27 when optimized
+# exec actions strip debuginfo. Keep build tools in fastbuild until the pinned
+# compiler carries the upstream LINKEDIT-alignment fix.
+build --host_compilation_mode=fastbuild
+
 # Color output for terminal use.
 common --color=yes
 
