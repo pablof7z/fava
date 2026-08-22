@@ -455,7 +455,7 @@ readonly_name=$container_prefix-readonly
 readonly_cidfile=$temporary/control/readonly.cid
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$readonly_name" --cidfile "$readonly_cidfile" \
-  --user 0:0 \
+  --user 65532:65532 \
   --network none \
   --cap-drop ALL \
   --security-opt no-new-privileges \
@@ -467,7 +467,7 @@ python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   --log-opt max-file=1 \
   --log-opt compress=false \
   --read-only \
-  --tmpfs "/target:rw,exec,nosuid,nodev,size=$green_target_maximum_bytes" \
+  --tmpfs "/target:rw,exec,nosuid,nodev,size=$green_target_maximum_bytes,uid=65532,gid=65532,mode=0700" \
   --env CARGO_INCREMENTAL=0 \
   --env CARGO_TARGET_DIR=/target \
   --env TMPDIR=/target/tmp \
