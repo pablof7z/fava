@@ -1268,9 +1268,10 @@ The protocol crate owns how its edit applies to the event coordinate. The write 
 For NIP-02, `contact_list(authors)` and `followers_of(subject)` are ordinary
 kind-3 `Query` values, while `follows_of(snapshot)` is a typed snapshot
 projection.
-`ContactList` retains every ordered tag row. Valid `p` rows expose typed pubkey,
-relay-hint, and UTF-8 petname fields; malformed `p` rows expose typed row
-evidence. Empty lists are valid. Edits preserve first-occurrence order,
+`ContactList` accounts for every `p` row in source order. Valid rows expose
+typed pubkey, relay-hint, and UTF-8 petname fields; malformed, duplicate, or
+uninterpreted `p` rows expose exact typed row evidence. Empty lists are valid.
+Edits preserve first-occurrence order,
 malformed rows, unknown rows, and extensions such as `t` tags while changing
 only the targeted follow relationship. Invalid pubkeys or relay hints are
 evidence, not a reason to discard the containing event.

@@ -1912,13 +1912,13 @@ an exact lowercase `p` tag-value constraint. `follows_of(snapshot)` is a pure
 projection of the valid follows in the current `QuerySnapshot`. These helpers
 own no observation or relay lifecycle.
 
-`ContactList` retains the source event content and every tag row in order.
-`ContactListEntry` exposes a valid `p` row's typed public key, optional valid
-relay hint, and UTF-8 petname. `MalformedContactListRow` preserves invalid
-pubkey or relay-hint evidence. Empty contact lists are valid. Follow and
-unfollow edits change only the targeted valid `p` relationship: unrelated
-valid rows, malformed rows, unknown tags, extensions, content, and
-first-occurrence order survive rematerialization.
+`ContactList` accounts for every `p` row in source order. `Follow` exposes a
+valid first-occurrence row's typed public key, optional valid relay hint, and
+UTF-8 petname. `ContactListRowEvidence` preserves invalid pubkey or relay-hint
+rows and also accounts for duplicates and uninterpreted extra columns. Empty
+contact lists are valid. Follow and unfollow edits change only the
+targeted `p` relationship: unrelated valid rows, malformed rows, unknown tags,
+extensions, content, and first-occurrence order survive rematerialization.
 
 The application composes the result through the universal facade:
 

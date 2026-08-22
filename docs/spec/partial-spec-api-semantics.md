@@ -533,10 +533,11 @@ at each author coordinate. `followers_of(subject)` adds the exact lowercase
 `p` tag value. `follows_of(snapshot)` is a bounded, pure projection over the
 current `QuerySnapshot`, not another observation.
 
-`ContactList` retains ordered rows and event content. Valid rows expose typed
-pubkeys, relay hints, and UTF-8 petnames; malformed pubkeys and relay hints
-remain typed evidence. Follow/unfollow edits preserve unknown tags, extensions,
-malformed rows, unrelated valid rows, content, and first-occurrence order.
+`ContactList` accounts for every `p` row in source order. Valid rows expose
+typed pubkeys, relay hints, and UTF-8 petnames; malformed, duplicate, and
+uninterpreted rows remain typed evidence. Follow/unfollow edits preserve
+unknown tags, extensions, malformed unrelated rows, unrelated valid rows,
+content, and first-occurrence order.
 
 ### Composing protocol crates
 
