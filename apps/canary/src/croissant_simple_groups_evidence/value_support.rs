@@ -173,6 +173,10 @@ fn verify_source_provenance(snapshot: &EvidenceSnapshot, manifest: &Value) -> Ca
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one retained-attestation oracle binds its complete fixed schema and source manifest"
+)]
 fn verify_build_attestation(
     snapshot: &EvidenceSnapshot,
     manifest: &Value,
@@ -183,7 +187,7 @@ fn verify_build_attestation(
         4_096,
         "Fava build attestation",
     )?)?;
-    if build.as_object().map(Map::len) != Some(21)
+    if build.as_object().map(Map::len) != Some(24)
         || required_string(&build, "schema")? != "fava-pinned-build-v1"
     {
         return Err(CanaryError::new(
@@ -216,6 +220,15 @@ fn verify_build_attestation(
             "fava_canary_executable_sha256",
             "fava_canary_executable_sha256",
         ),
+        (
+            "fava_canary_subject_image_sha256",
+            "fava_canary_subject_image_sha256",
+        ),
+        ("source_transport", "fava_build_source_transport"),
+        (
+            "source_transport_image_sha256",
+            "fava_build_source_transport_image_sha256",
+        ),
     ] {
         if build.get(build_field) != manifest.get(manifest_field) {
             return Err(CanaryError::new(
@@ -233,14 +246,24 @@ fn verify_build_attestation(
         || required_string(&build, "network")? != "none"
         || required_string(&build, "root_filesystem")? != "read-only"
         || required_string(&build, "capabilities")? != "none"
-        || required_string(&build, "target_storage")? != "bounded-container-tmpfs"
+        || required_string(&build, "target_storage")? != "engine-content-addressed-image"
         || build
             .get("target_maximum_bytes")
             .and_then(Value::as_u64)
             != Some(4_294_967_296)
         || build.get("target_maximum_bytes")
             != manifest.get("fava_build_target_maximum_bytes")
-        || required_string(&build, "subject_digest_origin")? != "container"
+        || required_string(&build, "subject_digest_origin")? != "engine-image"
+        || required_string(&build, "source_transport")? != "owned-loopback-registry"
+        || required_string(&build, "source_transport_image_sha256")?
+            != crate::pinned_build_input::REGISTRY_IMAGE_SHA256
+        || !is_lower_hex(
+            required_string(&build, "fava_canary_subject_image_sha256")?,
+            64,
+        )
+        || required_string(&build, "fava_canary_subject_image_sha256")?
+            .bytes()
+            .all(|byte| byte == b'0')
     {
         return Err(CanaryError::new(
             "simple-groups retained Fava build attestation did not prove immutable execution",

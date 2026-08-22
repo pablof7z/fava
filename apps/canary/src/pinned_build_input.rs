@@ -12,6 +12,8 @@ pub(crate) const PINNED_TARGET_MAXIMUM_BYTES: u64 = 4_294_967_296;
 const MAX_SOURCE_FILE_BYTES: u64 = 8_388_608;
 pub(crate) const BUILD_COMMAND_SHA256: &str =
     "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08";
+pub(crate) const REGISTRY_IMAGE_SHA256: &str =
+    "a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +27,7 @@ pub(crate) struct BuildAttestation {
     pub(crate) rust_base_image_sha256: String,
     pub(crate) build_command_sha256: String,
     pub(crate) fava_canary_executable_sha256: String,
+    pub(crate) fava_canary_subject_image_sha256: String,
     pub(crate) source_file_count: u64,
     pub(crate) source_total_bytes: u64,
     pub(crate) toctou_read_only_attempt: String,
@@ -37,6 +40,8 @@ pub(crate) struct BuildAttestation {
     pub(crate) target_storage: String,
     pub(crate) target_maximum_bytes: u64,
     pub(crate) subject_digest_origin: String,
+    pub(crate) source_transport: String,
+    pub(crate) source_transport_image_sha256: String,
 }
 
 pub(crate) struct SourceManifestClaim {
@@ -61,6 +66,7 @@ pub(crate) fn parse_build_attestation(
         || !nonzero_lower_hex(&claim.rust_base_image_sha256)
         || claim.build_command_sha256 != BUILD_COMMAND_SHA256
         || !is_lower_hex(&claim.fava_canary_executable_sha256, 64)
+        || !nonzero_lower_hex(&claim.fava_canary_subject_image_sha256)
         || claim.fava_canary_executable_sha256 != expected_executable_sha256
         || claim.fava_revision != env!("FAVA_BUILD_REVISION")
         || claim.fava_build_tree != env!("FAVA_BUILD_TREE")
@@ -79,9 +85,11 @@ pub(crate) fn parse_build_attestation(
         || claim.network != "none"
         || claim.root_filesystem != "read-only"
         || claim.capabilities != "none"
-        || claim.target_storage != "bounded-container-tmpfs"
+        || claim.target_storage != "engine-content-addressed-image"
         || claim.target_maximum_bytes != PINNED_TARGET_MAXIMUM_BYTES
-        || claim.subject_digest_origin != "container"
+        || claim.subject_digest_origin != "engine-image"
+        || claim.source_transport != "owned-loopback-registry"
+        || claim.source_transport_image_sha256 != REGISTRY_IMAGE_SHA256
     {
         return Err("pinned build attestation did not match immutable compiler inputs".to_owned());
     }

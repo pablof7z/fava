@@ -65,6 +65,7 @@ fn verifier_refuses_resealed_unproven_build_image_identity() {
             FIXTURE_FAVA_SOURCE_MANIFEST,
             FIXTURE_FAVA_RUST_BASE_IMAGE,
             FIXTURE_FAVA_EXECUTABLE,
+            FIXTURE_FAVA_SUBJECT_IMAGE,
             FIXTURE_CROISSANT_REVISION,
             FIXTURE_CROISSANT_EXECUTABLE,
         )
@@ -95,5 +96,30 @@ fn verifier_refuses_resealed_host_bound_build_subject() {
     assert!(
         verify_fixture_pair(fixture.root()).is_err(),
         "host-bound subject claim was accepted after consistent resealing"
+    );
+}
+
+#[test]
+fn verifier_refuses_resealed_different_content_addressed_subject_image() {
+    let fixture = PairEvidenceFixture::new();
+    let different = "abababababababababababababababababababababababababababababababab";
+    for index in 0..2 {
+        let build_path = fixture.roots[index].join("source/fava-build.json");
+        let mut build: Value =
+            serde_json::from_slice(&fs::read(&build_path).expect("build attestation"))
+                .expect("build attestation JSON");
+        build["fava_canary_subject_image_sha256"] = json!(different);
+        fs::write(
+            build_path,
+            serde_json::to_vec_pretty(&build).expect("mutated build attestation"),
+        )
+        .expect("write mutated build attestation");
+        fixture.mutate(index, true, |manifest| {
+            manifest["fava_canary_subject_image_sha256"] = json!(different);
+        });
+    }
+    assert!(
+        verify_fixture_pair(fixture.root()).is_err(),
+        "different content-addressed subject was accepted after consistent resealing"
     );
 }

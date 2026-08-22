@@ -213,6 +213,18 @@ impl PinnedBuildAttestation {
         &self.claim.subject_digest_origin
     }
 
+    pub(crate) fn subject_image_sha256(&self) -> &str {
+        &self.claim.fava_canary_subject_image_sha256
+    }
+
+    pub(crate) fn source_transport(&self) -> &str {
+        &self.claim.source_transport
+    }
+
+    pub(crate) fn source_transport_image_sha256(&self) -> &str {
+        &self.claim.source_transport_image_sha256
+    }
+
     pub(crate) fn retain(&self, destination: &Path) -> CanaryResult<()> {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true).mode(0o400);

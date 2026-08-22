@@ -50,6 +50,7 @@ pub(super) fn verify_fixture_pair(root: &Path) -> CanaryResult<()> {
         FIXTURE_FAVA_SOURCE_MANIFEST,
         FIXTURE_FAVA_RUST_BASE_IMAGE,
         FIXTURE_FAVA_EXECUTABLE,
+        FIXTURE_FAVA_SUBJECT_IMAGE,
         FIXTURE_CROISSANT_REVISION,
         FIXTURE_CROISSANT_EXECUTABLE,
     )

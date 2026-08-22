@@ -131,6 +131,7 @@ fn pair_verifier_rejects_duplicate_routes_and_wrong_revision() {
             FIXTURE_FAVA_SOURCE_MANIFEST,
             FIXTURE_FAVA_RUST_BASE_IMAGE,
             FIXTURE_FAVA_EXECUTABLE,
+            FIXTURE_FAVA_SUBJECT_IMAGE,
             FIXTURE_CROISSANT_REVISION,
             FIXTURE_CROISSANT_EXECUTABLE,
         )

@@ -74,6 +74,8 @@ async fn run() -> canary::CanaryResult<()> {
             let fava_rust_base = arguments.next().ok_or_else(usage)?;
             let fava_executable_flag = arguments.next().ok_or_else(usage)?;
             let fava_executable = arguments.next().ok_or_else(usage)?;
+            let fava_subject_image_flag = arguments.next().ok_or_else(usage)?;
+            let fava_subject_image = arguments.next().ok_or_else(usage)?;
             let croissant_revision_flag = arguments.next().ok_or_else(usage)?;
             let croissant_revision = arguments.next().ok_or_else(usage)?;
             let croissant_executable_flag = arguments.next().ok_or_else(usage)?;
@@ -86,6 +88,7 @@ async fn run() -> canary::CanaryResult<()> {
                 || fava_build_manifest_flag != "--expected-fava-build-source-manifest-sha256"
                 || fava_rust_base_flag != "--expected-fava-rust-base-image-sha256"
                 || fava_executable_flag != "--expected-fava-canary-executable-sha256"
+                || fava_subject_image_flag != "--expected-fava-canary-subject-image-sha256"
                 || croissant_revision_flag != "--expected-croissant-revision"
                 || croissant_executable_flag != "--expected-croissant-executable-sha256"
                 || arguments.next().is_some()
@@ -101,6 +104,7 @@ async fn run() -> canary::CanaryResult<()> {
                 &fava_build_manifest,
                 &fava_rust_base,
                 &fava_executable,
+                &fava_subject_image,
                 &croissant_revision,
                 &croissant_executable,
             )?;
@@ -328,7 +332,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --fava-build-attestation PATH --fava-build-source-manifest PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> --fava-build-attestation-fd PATH --fava-build-source-manifest-fd PATH [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-build-source-image-sha256 SHA256 --expected-fava-build-source-manifest-sha256 SHA256 --expected-fava-rust-base-image-sha256 SHA256 --expected-fava-canary-executable-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --fava-build-attestation PATH --fava-build-source-manifest PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> --fava-build-attestation-fd PATH --fava-build-source-manifest-fd PATH [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-build-source-image-sha256 SHA256 --expected-fava-build-source-manifest-sha256 SHA256 --expected-fava-rust-base-image-sha256 SHA256 --expected-fava-canary-executable-sha256 SHA256 --expected-fava-canary-subject-image-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

@@ -39,6 +39,7 @@ pub fn verify_croissant_simple_groups_pair(
     expected_fava_build_source_manifest_sha256: &str,
     expected_fava_rust_base_image_sha256: &str,
     expected_fava_canary_executable_sha256: &str,
+    expected_fava_canary_subject_image_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
@@ -58,6 +59,10 @@ pub fn verify_croissant_simple_groups_pair(
             .bytes()
             .all(|byte| byte == b'0')
         || !is_lower_hex(expected_fava_canary_executable_sha256, 64)
+        || !is_lower_hex(expected_fava_canary_subject_image_sha256, 64)
+        || expected_fava_canary_subject_image_sha256
+            .bytes()
+            .all(|byte| byte == b'0')
         || !is_lower_hex(expected_croissant_revision, 40)
         || !is_lower_hex(expected_croissant_executable_sha256, 64)
     {
@@ -92,6 +97,7 @@ pub fn verify_croissant_simple_groups_pair(
             expected_fava_build_source_manifest_sha256,
             expected_fava_rust_base_image_sha256,
             expected_fava_canary_executable_sha256,
+            expected_fava_canary_subject_image_sha256,
             expected_croissant_revision,
             expected_croissant_executable_sha256,
         )?;
@@ -119,7 +125,8 @@ fn reject_relay_artifact_residue(snapshot: &EvidenceSnapshot) -> CanaryResult<()
 
 #[allow(
     clippy::too_many_arguments,
-    reason = "all four exact source identities remain explicit verifier inputs"
+    clippy::too_many_lines,
+    reason = "one manifest oracle binds all retained semantic and provenance claims"
 )]
 fn validate_manifest(
     snapshot: &EvidenceSnapshot,
@@ -132,6 +139,7 @@ fn validate_manifest(
     expected_fava_build_source_manifest_sha256: &str,
     expected_fava_rust_base_image_sha256: &str,
     expected_fava_canary_executable_sha256: &str,
+    expected_fava_canary_subject_image_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
@@ -184,6 +192,9 @@ fn validate_manifest(
         "fava_build_command_sha256",
         "fava_build_target_storage",
         "fava_build_subject_digest_origin",
+        "fava_canary_subject_image_sha256",
+        "fava_build_source_transport",
+        "fava_build_source_transport_image_sha256",
     ] {
         if required_string(manifest, field)?.is_empty() {
             return Err(CanaryError::new(format!(
@@ -196,6 +207,8 @@ fn validate_manifest(
         || required_string(manifest, "fava_source_tree_sha256")? != expected_fava_source_tree_sha256
         || required_string(manifest, "fava_canary_executable_sha256")?
             != expected_fava_canary_executable_sha256
+        || required_string(manifest, "fava_canary_subject_image_sha256")?
+            != expected_fava_canary_subject_image_sha256
         || required_string(manifest, "fava_build_revision")? != expected_fava_revision
         || required_string(manifest, "fava_build_tree")? != expected_fava_build_tree
         || required_string(manifest, "fava_build_source_tree_sha256")?
@@ -208,12 +221,16 @@ fn validate_manifest(
             != expected_fava_rust_base_image_sha256
         || required_string(manifest, "fava_build_command_sha256")?
             != "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08"
-        || required_string(manifest, "fava_build_target_storage")? != "bounded-container-tmpfs"
+        || required_string(manifest, "fava_build_target_storage")?
+            != "engine-content-addressed-image"
         || manifest
             .get("fava_build_target_maximum_bytes")
             .and_then(Value::as_u64)
             != Some(4_294_967_296)
-        || required_string(manifest, "fava_build_subject_digest_origin")? != "container"
+        || required_string(manifest, "fava_build_subject_digest_origin")? != "engine-image"
+        || required_string(manifest, "fava_build_source_transport")? != "owned-loopback-registry"
+        || required_string(manifest, "fava_build_source_transport_image_sha256")?
+            != crate::pinned_build_input::REGISTRY_IMAGE_SHA256
         || manifest
             .get("fava_build_source_immutable")
             .and_then(Value::as_bool)
