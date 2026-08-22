@@ -122,6 +122,143 @@ async fn simple_group_records_require_actual_host_evidence() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
+    let keys = Keys::generate();
+    let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
+    let group = group();
+    let query = group
+        .events(
+            Query::events()
+                .limit(16)
+                .expect("positive bound")
+                .cache_only(),
+        )
+        .expect("content query");
+    let mut observation = harness.fava.observe(query).await.expect("query opens");
+    let unique_a = signed_group_event(&keys, 9, 10, "unique A", vec![]);
+    let shared = signed_group_event(&keys, 9, 11, "shared", vec![]);
+    let unique_b = signed_group_event(&keys, 9, 12, "unique B", vec![]);
+    for (event, relay, observed_at) in [
+        (unique_a.clone(), host("a"), 20),
+        (shared.clone(), host("a"), 21),
+        (shared.clone(), host("b"), 22),
+        (unique_b.clone(), host("b"), 23),
+    ] {
+        harness
+            .cache
+            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+                event,
+                evidence(relay, observed_at),
+            ))])
+            .expect("event evidence commits");
+    }
+    let current = wait_for_snapshot(&mut observation, |snapshot| {
+        snapshot.events.len() == 3
+            && snapshot
+                .events
+                .iter()
+                .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
+    })
+    .await;
+    let projected = group.project(&current);
+
+    assert_eq!(
+        projected
+            .events()
+            .iter()
+            .map(fava::EventRecord::id)
+            .collect::<Vec<_>>(),
+        [unique_b.id, shared.id, unique_a.id]
+    );
+    let shared_record = projected
+        .events()
+        .iter()
+        .find(|record| record.id() == shared.id)
+        .expect("shared id retained once");
+    assert_eq!(
+        shared_record
+            .relay_evidence
+            .observations()
+            .map(|item| item.session.relay.clone())
+            .collect::<Vec<_>>(),
+        [host("a"), host("b")]
+    );
+    observation.close();
+    observation.close();
+    assert!(observation.changed().await.is_err());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_host_group_is_explicit_fork_choice() {
+    let keys = Keys::generate();
+    let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
+    let multi = group();
+    let query = multi
+        .records(GroupRecords::metadata())
+        .expect("record query")
+        .cache_only();
+    let mut observation = harness.fava.observe(query).await.expect("query opens");
+    let left = signed_group_event(&keys, 39_000, 20, "", vec![tag(&["name", "A"])]);
+    let right = signed_group_event(&keys, 39_000, 30, "", vec![tag(&["name", "B"])]);
+    for (event, relay, observed_at) in [(left, host("a"), 40), (right, host("b"), 41)] {
+        harness
+            .cache
+            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+                event,
+                evidence(relay, observed_at),
+            ))])
+            .expect("fork commits");
+    }
+    let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 2).await;
+    let a = Group::on([host("a")], "group-29")
+        .expect("A group")
+        .project(&current);
+    let b = Group::on([host("b")], "group-29")
+        .expect("B group")
+        .project(&current);
+
+    assert_eq!(
+        a.metadata().next().and_then(|(_, value)| value.name()),
+        Some("A")
+    );
+    assert_eq!(
+        b.metadata().next().and_then(|(_, value)| value.name()),
+        Some("B")
+    );
+    assert!(!a.metadata_differ());
+    assert!(!b.metadata_differ());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_host_empty_is_no_positive_evidence() {
+    let keys = Keys::generate();
+    let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
+    let multi = group();
+    let query = multi
+        .records(GroupRecords::metadata())
+        .expect("record query")
+        .cache_only();
+    let mut observation = harness.fava.observe(query).await.expect("query opens");
+    let metadata = signed_group_event(&keys, 39_000, 20, "", vec![tag(&["name", "A"])]);
+    harness
+        .cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            metadata,
+            evidence(host("a"), 30),
+        ))])
+        .expect("record commits");
+    let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 1).await;
+    let empty = Group::on([host("contacted-but-not-serving")], "group-29")
+        .expect("single host")
+        .project(&current);
+
+    assert!(empty.metadata().next().is_none());
+    assert!(empty.admins().next().is_none());
+    assert!(empty.members().next().is_none());
+    assert!(empty.at(&host("contacted-but-not-serving")).is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
     let keys = Keys::generate();
     let signer = Arc::new(ExactSigner::new(keys.clone()));
@@ -403,6 +540,22 @@ fn signed_record(keys: &Keys, kind: u16, created_at: u64, content: &str) -> Even
         .custom_created_at(Timestamp::from(created_at))
         .finalize(keys)
         .expect("record signs")
+}
+
+fn signed_group_event(
+    keys: &Keys,
+    kind: u16,
+    created_at: u64,
+    content: &str,
+    rows: Vec<Tag>,
+) -> Event {
+    NostrEventBuilder::new(Kind::from_u16(kind), content)
+        .tags(
+            std::iter::once(tag(&[if kind >= 39_000 { "d" } else { "h" }, "group-29"])).chain(rows),
+        )
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize(keys)
+        .expect("group event signs")
 }
 
 fn evidence(relay: RelayUrl, observed_at: u64) -> RelayEvidence {
