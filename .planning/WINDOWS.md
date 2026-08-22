@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 13
 waived_count: 0
 fixed_count: 0
-total_count: 12
-last_updated: 2026-08-22T11:51:14.603Z
+total_count: 13
+last_updated: 2026-08-22T13:04:27.770Z
 ---
 
 # Broken Windows Ledger
@@ -27,6 +27,7 @@ last_updated: 2026-08-22T11:51:14.603Z
 | 10 | 07.1.1 | deviation | crates/fava-simple-groups/src/records.rs |  | Exposed bound-first source validation privately for lossless saved-list materialization | open |  | 2026-08-22T11:51:14.417Z |  |
 | 11 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Split root-exact facade evidence to remain below the 800-line hard limit | open |  | 2026-08-22T11:51:14.508Z |  |
 | 12 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Used distinct author coordinates for concurrent edit isolation evidence | open |  | 2026-08-22T11:51:14.603Z |  |
+| 13 | 07.1.1 | unrun-verify | apps/canary/src/artifacts.rs | 241 | Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md | open |  | 2026-08-22T13:04:27.770Z |  |
 
 ````json
 [
@@ -172,6 +173,18 @@ last_updated: 2026-08-22T11:51:14.603Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T11:51:14.603Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "unrun-verify",
+    "phase": "07.1.1",
+    "file": "apps/canary/src/artifacts.rs",
+    "line": 241,
+    "description": "Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T13:04:27.770Z",
     "resolved_at": null
   }
 ]

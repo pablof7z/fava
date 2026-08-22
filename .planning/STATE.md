@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-10-PLAN.md
-last_updated: "2026-08-22T12:19:16.198Z"
+stopped_at: Completed 07.1.1-11-PLAN.md
+last_updated: "2026-08-22T13:04:41.496Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: ed0b26d2a69db34b7ce7c0b97273e22a9e18e700
+state_head: 76c69bef372faebc27102803c08171718adcb15c
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 34
+  completed_plans: 35
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -92,6 +92,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P08 | 19min | 2 tasks | 8 files |
 | Phase 07.1.1 P09 | 24min | 3 tasks | 13 files |
 | Phase 07.1.1 P10 | 21min | 3 tasks | 7 files |
+| Phase 07.1.1 P11 | 40min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: The public simple-groups North Star composes pure preparation with ordinary facade to/publish/Write; Group owns no lifecycle.
 - [Phase 07.1.1]: Capability production dependencies equal fava-query, fava-state, and fava-write; facade edges remain test/application-only and universal owners stay NIP-29 blind.
 - [Phase 07.1.1]: Closed vocabulary contains exactly the issue-0019-approved implemented crate and public nominal values, checking direct declarations and re-exports.
+- [Phase 07.1.1]: Two controlled Croissant children remain individually owned and both cleanup results are captured before failure propagation.
+- [Phase 07.1.1]: Public multi-relay group behavior retains relay-local record authority while ordinary Fava owners handle observation and publication.
+- [Phase 07.1.1]: Only twice-scanned complete author-sealed evidence is atomically promoted; pair verification requires exactly two runs and four distinct children.
 
 ### Pending Todos
 
@@ -196,6 +200,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T12:19:16.107Z
-Stopped at: Completed 07.1.1-10-PLAN.md
+Last session: 2026-08-22T13:04:41.399Z
+Stopped at: Completed 07.1.1-11-PLAN.md
 Resume file: None

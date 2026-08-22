@@ -120,7 +120,7 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 - [x] **GROUP-09**: NIP-29 records, pins, saved groups, and saved relays have typed bounded parsers/projections so applications do not decode raw protocol tags.
 - [x] **GROUP-10**: Saved/admin/member discovery returns ordinary `Query` or `ValueSet` expressions; kind-10009 saved-list changes use the ordinary semantic-edit lifecycle.
 - [x] **GROUP-11**: `fava-simple-groups` owns no observation, store, signer, router session, publisher, delivery, retry, receipt, runtime, or transport lifecycle, and universal owners contain no NIP-29 behavior switch.
-- [ ] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
+- [x] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
 
 ### Authentication, Hostility, and Bounds
 
@@ -304,7 +304,7 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | GROUP-09 | Phase 07.1.1 | Complete |
 | GROUP-10 | Phase 07.1.1 | Complete |
 | GROUP-11 | Phase 07.1.1 | Complete |
-| GROUP-12 | Phase 07.1.1 | Pending |
+| GROUP-12 | Phase 07.1.1 | Complete |
 | HARD-01 | Phase 8 | Pending |
 | HARD-02 | Phase 8 | Pending |
 | HARD-03 | Phase 8 | Pending |
