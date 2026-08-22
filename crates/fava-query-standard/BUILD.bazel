@@ -51,3 +51,19 @@ rust_test(
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )
+
+rust_test(
+    name = "relay_authority",
+    srcs = ["tests/relay_authority.rs"],
+    crate_name = "relay_authority",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
