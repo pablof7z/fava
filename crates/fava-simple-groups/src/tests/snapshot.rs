@@ -227,6 +227,7 @@ fn snapshot_attribution_uses_actual_relay_evidence() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // One six-family matrix keeps whole-value disagreement causally aligned.
 fn snapshot_disagreement_compares_complete_values() {
     let keys = Keys::generate();
     let first = Keys::generate().public_key();

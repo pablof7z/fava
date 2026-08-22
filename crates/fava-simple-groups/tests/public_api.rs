@@ -148,10 +148,9 @@ fn group_snapshot_signatures_compile_externally() {
     let input = QuerySnapshot::evaluated(Vec::new(), &[]);
     let snapshot: GroupSnapshot = group.project(&input);
 
-    assert_eq!(
-        snapshot.hosts().cloned().collect::<Vec<_>>(),
-        [host.clone()]
-    );
+    let mut hosts = snapshot.hosts();
+    assert_eq!(hosts.next(), Some(&host));
+    assert!(hosts.next().is_none());
     assert!(snapshot.at(&host).is_some());
     assert!(snapshot.events().is_empty());
     assert!(snapshot.metadata().next().is_none());
