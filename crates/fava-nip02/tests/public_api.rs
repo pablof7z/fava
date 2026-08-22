@@ -23,7 +23,7 @@ const MATERIALIZER: Selection = fava_nip02::materializer;
 const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
 const FOLLOWERS_OF: fn(PublicKey) -> Query = fava_nip02::followers_of;
 
-fn contact_lists(authors: impl IntoContactAuthors) -> Query {
+fn contact_lists<A: IntoContactAuthors>(authors: A) -> Query {
     fava_nip02::contact_list(authors)
 }
 
@@ -66,7 +66,8 @@ fn external_surface_uses_only_approved_functions_and_types() {
 
     let one = contact_lists(author);
     let many = contact_lists([author]);
-    let borrowed = contact_lists(&vec![author]);
+    let borrowed_authors = vec![author];
+    let borrowed = contact_lists::<&Vec<PublicKey>>(&borrowed_authors);
     assert_eq!(one, many);
     assert_eq!(many, borrowed);
     assert_eq!(FOLLOWERS_OF(author).selection().authors, None);
