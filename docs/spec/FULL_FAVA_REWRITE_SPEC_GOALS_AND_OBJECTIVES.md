@@ -156,7 +156,12 @@ Fava MAY provide platform-native reactive and lifecycle wrappers, content parsin
 
 ## GOAL-002 — The public surface remains conceptually small
 
-The primary application mental model MUST remain live queries and write intents.
+The primary application mental model MUST remain live queries and accepted
+publication obligations. Applications describe the payload and optional
+author/route scope, then receive one `Write` that follows the durable receipt.
+Neutral publication owners continue to use `WriteIntent`, `WritePayload`, and
+`AcceptedWrite` internally; those contract values are not a second application
+publication door.
 
 Supporting operations MUST reuse the same underlying primitives rather than creating parallel query, publication, routing, receipt, or lifecycle systems.
 
@@ -713,6 +718,22 @@ The publication lifecycle MUST accept:
 
 The accepted form determines the remaining work. It does not create separate publication or receipt systems.
 
+The `fava` facade MUST expose the one application publication door:
+
+```rust
+fava.publish(payload)
+fava.by(author).publish(edit)
+fava.to(relays)?.publish(payload)
+fava.by(author).to(relays)?.publish(edit)
+```
+
+`by(...)` and `to(...)` are inert scopes until `publish(...)` is called.
+Successful `publish(...)` returns only after synchronous durable acceptance and
+returns a `Write`. `Write` exposes stable write and receipt identity, current
+receipt inspection, and asynchronous settlement through `settled(all())` or
+`settled(at_least(n))`. Applications do not construct `WriteIntent`, receive
+`AcceptedWrite`, or call a separate facade wait function.
+
 ## WRITE-003 — Authorship is carried by the event or replaceable-event edit
 
 For an unsigned or signed event, the author is the event's `pubkey`.
@@ -725,9 +746,10 @@ No parallel author field may contradict the event or edit.
 
 **Acceptance:** accept an unsigned event for Alice, switch current account to Bob, and verify that only Alice's signer can satisfy it.
 
-## WRITE-004 — `Accepted` is a durable write-store fact
+## WRITE-004 — Acceptance is a durable write-store fact
 
-An assembly exposing the standard durable write-intent contract MUST NOT report `Accepted` until the write store has atomically committed:
+An assembly exposing the standard durable publication contract MUST NOT return
+the application `Write` until the write store has atomically committed:
 
 - stable write and receipt identity;
 - the accepted unsigned event, replaceable-event edit, or pre-signed event;
@@ -740,7 +762,12 @@ The accepted local materialization MUST be visible through the write-store query
 
 If commit fails, no receipt, local event record, signer request, route session, or delivery work may remain.
 
-**Acceptance:** crash immediately after the application receives `Accepted`; restart recovers one write and the same receipt without resubmission.
+The neutral owner records this boundary as `AcceptedWrite`; the facade projects
+that accepted identity into the application `Write` without weakening the
+boundary.
+
+**Acceptance:** crash immediately after the application receives `Write`;
+restart recovers one write and the same receipt without resubmission.
 
 ## WRITE-005 — Optimistic visibility comes from the write store
 
@@ -1238,6 +1265,16 @@ For replaceable events, a protocol crate SHOULD expose edits such as:
 
 The protocol crate owns how its edit applies to the event coordinate. The write store owns durable custody, materialization generations, signing, routing, delivery, and receipts.
 
+For NIP-02, `contact_list(authors)` and `followers_of(subject)` are ordinary
+kind-3 `Query` values, while `follows_of(snapshot)` is a typed snapshot
+projection.
+`ContactList` retains every ordered tag row. Valid `p` rows expose typed pubkey,
+relay-hint, and UTF-8 petname fields; malformed `p` rows expose typed row
+evidence. Empty lists are valid. Edits preserve first-occurrence order,
+malformed rows, unknown rows, and extensions such as `t` tags while changing
+only the targeted follow relationship. Invalid pubkeys or relay hints are
+evidence, not a reason to discard the containing event.
+
 ## PROTO-004 — Raw Nostr remains expressible
 
 Applications MUST be able to:
@@ -1270,13 +1307,15 @@ disagreement rather than field-merging it or silently selecting a winner. The
 same event id served by several selected hosts appears once with every actual
 serving-relay contribution.
 
-Group publication MUST add the exact group context and
-`WriteRouting::Explicit` route for the complete selected host set without
-restricting the carried event to a fixed set of event kinds. Custom event kinds
-MUST use the same path. A pre-signed event is verified unchanged and MUST
-already carry the exact group context; adding routing cannot rewrite its tags.
+Group publication MUST prepare the exact group context without restricting the
+carried event to a fixed set of event kinds. The application then publishes the
+prepared payload through `fava.to(group.hosts()).publish(payload)`, which gives
+the universal publication owner the complete selected host set as its exact
+explicit route. Custom event kinds MUST use the same path. A pre-signed event
+is verified unchanged and MUST already carry the exact group context; adding
+routing cannot rewrite its tags.
 
-The capability MUST return ordinary `Query`, event, `WriteIntent`, or
+The capability MUST return ordinary `Query`, event, or
 `ReplaceableEventEdit` values and MUST NOT own a socket, observation, signer,
 store, delivery, retry, or receipt lifecycle. It MUST provide typed bounded
 parsing/projection for NIP-29 records and saved rows so ordinary applications do
@@ -1526,7 +1565,8 @@ Accepted local writes remain visible through the write store independently of ev
 
 ## PROFILE-004 — Durable write custody remains the standard write contract
 
-A production profile exposing Fava write intents MUST select a write store that preserves accepted obligations and receipts across ordinary crash/restart.
+A production profile exposing Fava publication MUST select a write store that
+preserves accepted obligations and receipts across ordinary crash/restart.
 
 Memory write stores may exist for deterministic tests or deliberately non-production profiles, but they do not satisfy the standard durable-write product claim.
 

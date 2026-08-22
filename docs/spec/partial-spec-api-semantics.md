@@ -517,95 +517,43 @@ Those are Fava concerns.
 
 ## 10. Protocol-crate query combinators
 
-Protocol crates SHOULD expose the Nostr relationships applications commonly think in.
-
-Examples:
-
-```rust
-nip02::follows(author)
-    -> ValueSet<PublicKey>
-
-mutes::muted_pubkeys(authors)
-    -> ValueSet<PublicKey>
-
-bookmarks::event_ids(authors)
-    -> ValueSet<EventId>
-
-bookmarks::coordinates(authors)
-    -> ValueSet<Coordinate>
-
-bookmarks::bookmarked_events(authors)
-    -> Query
-
-reactions::to(events)
-    -> Query
-
-groups::members(group)
-    -> ValueSet<PublicKey>
-```
-
-These are conveniences over the same generic query primitives, not new query systems.
-
-For example, `nip02::follows(...)` may conceptually be little more than:
+Protocol crates expose the Nostr relationships applications commonly think in
+through ordinary queries and pure snapshot projections. NIP-02 provides the
+current concrete model:
 
 ```rust
-pub fn follows(
-    authors: impl Into<PubkeySet>,
-) -> ValueSet<PublicKey> {
-    events()
-        .kind(3)
-        .authors(authors)
-        .tag_pubkeys("p")
-}
+contact_list(authors) -> Query
+followers_of(subject) -> Query
+follows_of(snapshot) -> Vec<PublicKey>
 ```
 
-Its value is precise vocabulary and protocol correctness, not implementation complexity.
+`contact_list(authors)` asks for kind-3 replaceable events and does not apply a
+global result limit; the query evaluator selects the newest event independently
+at each author coordinate. `followers_of(subject)` adds the exact lowercase
+`p` tag value. `follows_of(snapshot)` is a bounded, pure projection over the
+current `QuerySnapshot`, not another observation.
+
+`ContactList` retains ordered rows and event content. Valid rows expose typed
+pubkeys, relay hints, and UTF-8 petnames; malformed pubkeys and relay hints
+remain typed evidence. Follow/unfollow edits preserve unknown tags, extensions,
+malformed rows, unrelated valid rows, content, and first-occurrence order.
 
 ### Composing protocol crates
 
-An application can naturally express:
+An application can express two-hop discovery without a protocol-specific
+observation:
 
 ```rust
-let bookmarked_by_people_i_follow =
-    bookmarks::bookmarked_events(
-        nip02::follows(CurrentAccount::pubkey())
-    );
-```
-
-or:
-
-```rust
-let friends_of_friends =
-    nip02::follows(
-        nip02::follows(CurrentAccount::pubkey())
-    );
+let first = fava.observe(contact_list(alice))?;
+let first_hop = follows_of(&first.snapshot());
+let second = fava.observe(contact_list(first_hop))?;
 ```
 
 Protocol crates MUST NOT depend on one another merely to enable this composition.
 
-Instead:
-
-```text
-fava-nip02
-    -> produces core ValueSet<PublicKey>
-
-fava-bookmarks
-    -> consumes core ValueSet<PublicKey>
-
-application
-    -> composes them
-```
-
-Both protocol crates depend on the generic query/value vocabulary, not on each other.
-
-A protocol crate SHOULD return generic core expressions such as:
-
-```text
-ValueSet<T>
-Query
-```
-
-rather than protocol-specific observation types such as:
+Protocol crates depend on generic query vocabulary, not on each other. They
+return `Query` and pure values rather than protocol-specific observation types
+such as:
 
 ```text
 Nip02FollowSubscription
@@ -613,6 +561,9 @@ BookmarkObservation
 ```
 
 The single observation lifecycle remains `fava.observe(...)`.
+
+Generic reactive `ValueSet<T>` composition is a separate unpromised boundary.
+No current NIP-02 or simple-groups API is documented as returning it.
 
 ### Multi-relay simple groups
 
@@ -641,22 +592,22 @@ pure `GroupSnapshot` projection exposes each host's records and explicit
 `metadata_differ`, member/admin attribution, and `at(host)` views. It never
 opens another observation or chooses the winning fork.
 
-Discovery helpers return ordinary core expressions:
+Discovery helpers return ordinary core queries and pure projections:
 
 ```text
 SimpleGroups::saved_groups(authors)          -> Query
 SimpleGroups::saved_relays(authors)          -> Query
 SimpleGroups::groups_where_admin(subjects)   -> Query
 SimpleGroups::groups_where_member(subjects)  -> Query
-SimpleGroups::groups_saved_by(group)         -> ValueSet<PublicKey>
+SimpleGroups::groups_saved_by(snapshot, group) -> Vec<PublicKey>
 ```
 
-Typed projections turn matching records and kind-10009 rows into protocol
-values. Reactive discovery composes through `ValueSet`; the application does
-not expand, diff, or reopen intermediate queries itself.
+Typed projections turn matching records and kind-10009 rows into bounded
+protocol values without opening private observations.
 
-Group publication similarly returns an ordinary write value with an exact
-explicit route over the selected hosts. The protocol helper supplies or
+Group publication produces an ordinary event or replaceable edit. The
+application supplies the selected hosts to the universal door with
+`fava.to(group.hosts()).publish(payload)`. The protocol helper supplies or
 validates the group tag but does not create a protocol-specific publication or
 receipt lifecycle.
 

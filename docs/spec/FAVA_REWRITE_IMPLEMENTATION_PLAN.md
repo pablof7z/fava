@@ -580,6 +580,10 @@ Build one complete durable publication path before automatic write routing: acce
 ### Required behavior
 
 - M5 accepts unsigned and verified pre-signed events; `ReplaceableEventEdit` acceptance begins in M7 through the same write lifecycle.
+- Applications call synchronous `publish(payload)`, optionally after inert
+  `by(author)` and/or `to(relays)` scopes, and receive `Write` only after the
+  write-store acceptance transaction commits. Receipt settlement is
+  `write.settled(all())` or `write.settled(at_least(n))`.
 - An unsigned event's `pubkey` selects the signer.
 - `Accepted` occurs only after write obligation, current materialization, and receipt are durably committed.
 - The write store supplies the unpublished event directly to matching queries.
@@ -618,7 +622,7 @@ Build one complete durable publication path before automatic write routing: acce
 
 `crash-after-acceptance`
 
-- Accept write.
+- Call `publish(payload)` and receive `Write`.
 - Supervisor SIGKILLs the canary child before delivery.
 - Restart against the same write store.
 - Same receipt and event materialization reappear; delivery resumes without app resubmission.
@@ -727,6 +731,14 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 
 - Protocol crates expose replaceable-event edits, such as follow and unfollow.
 - Protocol-crate code produces replaceable-event edits or ordinary event values; it does not sign, route, publish, or own receipts.
+- `fava-nip02` exposes `contact_list(author)` as an ordinary query and typed
+  `follows_of(author)` / `followers_of(subject)` snapshot projections.
+- Contact-list parsing treats an empty kind-3 event as valid and retains ordered
+  typed evidence for malformed pubkeys and relay hints. Petnames preserve UTF-8
+  bytes without normalization.
+- Follow-list edits preserve content, unknown and extension tags, malformed
+  rows, unrelated valid rows, and first-occurrence order while changing only
+  the targeted relationship.
 - The author is resolved when the write is accepted, before materialization; the resulting unsigned event carries it in `pubkey`.
 - First-value operation materializes against no prior event.
 - A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
@@ -788,7 +800,7 @@ or creating a second query/publication lifecycle.
 - `Group`, `GroupRecords`, and bounded pure `GroupSnapshot` projection
 - typed NIP-29 record and kind-10009 row parsing
 - ordinary query combinators over literal tag-value filters
-- reactive discovery combinators over generic `ValueSet`
+- ordinary discovery queries and bounded pure snapshot projections
 - kind-10009 replaceable-edit materializer
 - README-driven public conformance corpus
 - controlled two-relay canary flow
@@ -816,7 +828,7 @@ or creating a second query/publication lifecycle.
 - Group management operations create ordinary NIP-29 events. Saved-group and
   saved-relay list changes use one `ReplaceableEventEdit` materializer through
   the ordinary durable write lifecycle.
-- Discovery helpers return ordinary `Query` or `ValueSet` expressions and make
+- Discovery helpers return ordinary `Query` values or bounded pure projections and make
   no global completeness, existence, negative-membership, or canonical-fork
   claim.
 - Every NIP-29 relay record and saved row has a typed bounded parser so the

@@ -1901,6 +1901,40 @@ Protocol crates use:
 
 A new protocol crate is selected by the application profile and contributes through these ordinary contracts. The facade and universal owners remain unchanged.
 
+### `fava-nip02`
+
+**Responsibility:** provide typed NIP-02 contact-list reads and lossless
+follow-list edits over ordinary query and publication primitives.
+
+`contact_list(authors)` returns an ordinary kind-3 `Query` with replaceable
+event semantics. `followers_of(subject)` returns the corresponding query with
+an exact lowercase `p` tag-value constraint. `follows_of(snapshot)` is a pure
+projection of the valid follows in the current `QuerySnapshot`. These helpers
+own no observation or relay lifecycle.
+
+`ContactList` retains the source event content and every tag row in order.
+`ContactListEntry` exposes a valid `p` row's typed public key, optional valid
+relay hint, and UTF-8 petname. `MalformedContactListRow` preserves invalid
+pubkey or relay-hint evidence. Empty contact lists are valid. Follow and
+unfollow edits change only the targeted valid `p` relationship: unrelated
+valid rows, malformed rows, unknown tags, extensions, content, and
+first-occurrence order survive rematerialization.
+
+The application composes the result through the universal facade:
+
+```rust
+let edit = fava_nip02::follow_with(
+    bob,
+    Some(relay.clone()),
+    Some("bob"),
+)?;
+let write = fava.by(alice).to([relay])?.publish(edit)?;
+let receipt = write.settled(fava::all()).await?;
+```
+
+The crate constructs `ReplaceableEventEdit` values. It does not accept writes,
+resolve application authors, construct route sessions, or own receipts.
+
 ### `fava-simple-groups`
 
 **Responsibility:** provide the app-facing NIP-29 group capability described by
@@ -1922,7 +1956,7 @@ Group::on(hosts, id) -> Result<Group, GroupError>
 group.events(selection) -> Result<Query, GroupError>
 group.records(which) -> Result<Query, GroupError>
 group.project(snapshot) -> GroupSnapshot
-group.publish(draft) -> Result<WriteIntent, GroupError>
+group.prepare(draft) -> Result<UnsignedEvent, GroupError>
 ```
 
 The approved public nominal vocabulary is:
@@ -1962,19 +1996,20 @@ The signatures are illustrative; the observable contract is fixed:
   through hidden capability policy.
 
 `SimpleGroups` builds ordinary discovery queries for saved groups, saved relays,
-and groups where subjects are listed as administrators or members. Reactive
-discovery such as `groups_saved_by` composes through the generic `ValueSet`
-query vocabulary rather than opening a private observation. `SavedGroup` and
+and groups where subjects are listed as administrators or members. Discovery
+returns ordinary `Query` values and bounded pure projections rather than
+opening a private observation. `SavedGroup` and
 `SavedRelay` are typed projections of kind-10009 rows; the record parsers expose
 `GroupMetadata`, `GroupAdmins`, `GroupMembers`, `GroupRoles`,
 `GroupParticipants`, `GroupPins`, and ordered `PinnedItem` values without
 requiring applications to interpret raw tags.
 
 Publication is kind-blind. An unsigned author-bearing draft receives exactly
-one matching `h` group tag and `WriteRouting::Explicit(hosts)`. A pre-signed
-event is never mutated: the helper verifies its existing exact group tag and
-adds only the explicit route. Group management commands remain ordinary
-NIP-29 events. Kind-10009 saved-list changes use
+one matching `h` group tag, then the application calls
+`fava.to(group.hosts()).publish(payload)` to select the exact explicit route. A
+pre-signed event is never mutated: the helper verifies its existing exact group
+tag, and the application supplies only the explicit route. Group management
+commands remain ordinary NIP-29 events. Kind-10009 saved-list changes use
 `ReplaceableEventEdit` and the application-selected materializer through the
 one publication lifecycle.
 
@@ -2291,7 +2326,12 @@ Required ordering includes:
 
 - engine construction from selected providers and protocol crates;
 - open live query;
-- publish unsigned events, replaceable-event edits, or pre-signed events;
+- `publish(payload)` for unsigned events, replaceable-event edits, or
+  pre-signed events;
+- inert `by(author)` and `to(relays)` scopes, independently composable in
+  either order before `publish(payload)`;
+- `Write` inspection and asynchronous `settled(all())` or
+  `settled(at_least(n))` receipt settlement;
 - route preview;
 - receipt reattachment and write inspection;
 - session/account operations;
@@ -2647,7 +2687,11 @@ application or protocol crate constructs UnsignedEvent
         ↓
 pubkey is already part of the event
         ↓
-fava-publication validates event and WriteIntent
+application calls fava.publish(payload), optionally scoped by by(...) / to(...)
+        ↓
+fava facade validates the scopes and constructs neutral WriteIntent
+        ↓
+fava-publication validates the event and intent
         ↓
 WriteStore atomically commits:
     WriteId
@@ -2658,7 +2702,9 @@ WriteStore atomically commits:
         ↓
 write-source change is visible to fava-observe
         ↓
-application receives Accepted + ReceiptId
+neutral owner returns AcceptedWrite to the facade
+        ↓
+application receives Write
         ↓
 ┌───────────────────────────────┴───────────────────────────────┐
 │ signer for event.pubkey is requested                         │
@@ -2689,7 +2735,9 @@ application calls follow(target=bob)
         ↓
 fava-nip02 creates ReplaceableEventEdit
         ↓
-publication owner resolves the author (alice) at acceptance
+application calls fava.by(alice).publish(edit)
+        ↓
+publication owner resolves and commits the author (alice) at acceptance
         ↓
 publication owner reads current relevant EventRecord
         ↓
@@ -2700,6 +2748,8 @@ WriteStore commits operation, receipt, resolved author, and materialization
 materialization appears through WriteStore QuerySource
         ↓
 normal signing, routing, and delivery continue
+        ↓
+application may await write.settled(all())
 ```
 
 If a newer source kind-3 arrives before settlement:
