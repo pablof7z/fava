@@ -519,7 +519,7 @@
           "FILE:@@//crates/fava-ingest/Cargo.toml f0f6163c1ce57735f70452a38d6c3545ac7229d663e7706d6a2304b96718c236",
           "FILE:@@//crates/fava-diagnostics/Cargo.toml 345a2f31a4d650427f612b1e43a1e1da2d8c3f8e1043b5eb28ffd500054dd6e1",
           "FILE:@@//crates/fava-bookmarks/Cargo.toml 2485f519a67a469448b0241c4b5e79fd206af47b8de11a6b9eb89ba20b8b1547",
-          "FILE:@@//crates/fava-nip02/Cargo.toml 48d2d4835f5302bfcfb2ff30fea1ec9a76dafa669117dd9682182f671024a620",
+          "FILE:@@//crates/fava-nip02/Cargo.toml 348809060c50b30b3e2eaaedc1fbfe35cf09816c4558015375e3efcd6c51ab82",
           "FILE:@@//crates/fava-nip65/Cargo.toml 65c097551239bbbe2d83d0898b80830830d9a2ad094785a6ec72388fe808738b",
           "FILE:@@//crates/fava-router-app-relays/Cargo.toml f7d78641729ecafd5776dca96db4a621cc771e6b43300df3bfc6c9955940fc96",
           "FILE:@@//crates/fava-router-outbox/Cargo.toml f3ca922a32be2b75ca212bb71a584936c4ad3a23a726fb6b3ada54112f070268",
