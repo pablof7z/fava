@@ -1,6 +1,7 @@
 //! Pure NIP-29 group values over ordinary Fava query and write contracts.
 
 mod bounds;
+mod edit;
 mod group;
 mod metadata;
 mod people;

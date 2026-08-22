@@ -9,7 +9,7 @@ use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 use fava_simple_groups::{
     Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins,
-    GroupRecords, GroupRoles, GroupSnapshot, PinnedItem, SavedGroup, SavedRelay,
+    GroupRecords, GroupRoles, GroupSnapshot, PinnedItem, SavedGroup, SavedRelay, SimpleGroups,
 };
 
 fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
@@ -156,4 +156,20 @@ fn group_snapshot_signatures_compile_externally() {
     assert!(snapshot.metadata().next().is_none());
     assert!(snapshot.admins().next().is_none());
     assert!(snapshot.members().next().is_none());
+}
+
+#[test]
+fn saved_edit_signatures_compile_externally() {
+    let _: fn(&Group, Option<&str>) -> Result<fava_write::ReplaceableEventEdit, GroupError> =
+        SimpleGroups::save_group;
+    let _: fn(&Group) -> Result<fava_write::ReplaceableEventEdit, GroupError> =
+        SimpleGroups::remove_group;
+    let _: fn(&Group, &str) -> Result<fava_write::ReplaceableEventEdit, GroupError> =
+        SimpleGroups::rename_saved_group;
+    let _: fn(RelayUrl) -> Result<fava_write::ReplaceableEventEdit, GroupError> =
+        SimpleGroups::save_relay;
+    let _: fn(RelayUrl) -> Result<fava_write::ReplaceableEventEdit, GroupError> =
+        SimpleGroups::remove_relay;
+    let _: fn() -> std::sync::Arc<dyn fava_write::ReplaceableEventMaterializer> =
+        SimpleGroups::materializer;
 }
