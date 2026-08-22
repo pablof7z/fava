@@ -6,7 +6,7 @@ use fava_query::{
     EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator, QueryOrdering,
     QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
 };
-use fava_state::{EventCoordinate, RelayEvidence};
+use fava_state::{EventCoordinate, RelayEvidence, RelayUrl};
 use fava_write::EventValue;
 use nostr::event::EventId;
 
@@ -27,26 +27,8 @@ impl QueryEvaluator for StandardQueryEvaluator {
             }
         }
 
-        let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
-        for record in by_id.into_values() {
-            let coordinate = record
-                .event
-                .coordinate()
-                .map_err(|_| QueryEvaluationError::MissingEventId)?;
-            match by_coordinate.entry(coordinate) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(record);
-                }
-                std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    if record_is_newer(&record, entry.get()) {
-                        entry.insert(record);
-                    }
-                }
-            }
-        }
-
-        let mut events: Vec<_> = by_coordinate
-            .into_values()
+        let mut events: Vec<_> = coordinate_winners(query.source().authority(), by_id)?
+            .into_iter()
             .filter(|record| {
                 matches_selection(query.selection(), record)
                     && matches_authority(query.source().authority(), record)
@@ -66,6 +48,73 @@ impl QueryEvaluator for StandardQueryEvaluator {
             events.truncate(limit.get());
         }
         Ok(QuerySnapshot::evaluated(events, sources))
+    }
+}
+
+fn coordinate_winners(
+    authority: &ResultAuthority,
+    records: BTreeMap<EventId, EventRecord>,
+) -> Result<Vec<EventRecord>, QueryEvaluationError> {
+    match authority {
+        ResultAuthority::AnyLocal => {
+            let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
+            for record in records.into_values() {
+                let coordinate = record
+                    .event
+                    .coordinate()
+                    .map_err(|_| QueryEvaluationError::MissingEventId)?;
+                insert_newest(&mut by_coordinate, coordinate, record);
+            }
+            Ok(by_coordinate.into_values().collect())
+        }
+        ResultAuthority::OnlyRelays(relays) => {
+            let mut by_relay_coordinate =
+                BTreeMap::<(RelayUrl, EventCoordinate), EventRecord>::new();
+            let mut local_by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
+            for record in records.into_values() {
+                let coordinate = record
+                    .event
+                    .coordinate()
+                    .map_err(|_| QueryEvaluationError::MissingEventId)?;
+                if record.publication.is_some() {
+                    insert_newest(&mut local_by_coordinate, coordinate.clone(), record.clone());
+                }
+                for observation in record.relay_evidence.observations() {
+                    if relays.contains(&observation.session.relay) {
+                        insert_newest(
+                            &mut by_relay_coordinate,
+                            (observation.session.relay.clone(), coordinate.clone()),
+                            record.clone(),
+                        );
+                    }
+                }
+            }
+            for ((_, coordinate), record) in &mut by_relay_coordinate {
+                if let Some(local) = local_by_coordinate.get(coordinate)
+                    && record_is_newer(local, record)
+                {
+                    *record = local.clone();
+                }
+            }
+            let mut by_id = BTreeMap::new();
+            for record in by_relay_coordinate.into_values() {
+                by_id.entry(record.id()).or_insert(record);
+            }
+            Ok(by_id.into_values().collect())
+        }
+    }
+}
+
+fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, candidate: EventRecord) {
+    match records.entry(key) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(candidate);
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry) => {
+            if record_is_newer(&candidate, entry.get()) {
+                entry.insert(candidate);
+            }
+        }
     }
 }
 
