@@ -203,6 +203,7 @@ symbols = [
     "fava_simple_groups::GroupPins",
     "fava_simple_groups::GroupRecords",
     "fava_simple_groups::GroupRoles",
+    "fava_simple_groups::GroupSnapshot",
     "fava_simple_groups::PinnedItem",
     "fava_simple_groups::SavedGroup",
     "fava_simple_groups::SavedRelay",

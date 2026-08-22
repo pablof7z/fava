@@ -73,8 +73,13 @@ fn snapshot_projection_is_deterministic() {
     let keys = Keys::generate();
     let a = host("a");
     let b = host("b");
-    let shared = signed(&keys, 9, 20, vec![tag(&["h", "photos"])], "shared");
-    let unique = signed(&keys, 9, 10, vec![tag(&["h", "photos"])], "unique");
+    let first_candidate = signed(&keys, 9, 20, vec![tag(&["h", "photos"])], "shared");
+    let second_candidate = signed(&keys, 9, 10, vec![tag(&["h", "photos"])], "unique");
+    let (shared, unique) = if first_candidate.id > second_candidate.id {
+        (first_candidate, second_candidate)
+    } else {
+        (second_candidate, first_candidate)
+    };
     let input = snapshot(vec![
         record(shared.clone(), std::slice::from_ref(&b)),
         record(shared.clone(), std::slice::from_ref(&a)),
