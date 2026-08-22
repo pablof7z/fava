@@ -74,6 +74,45 @@ class VocabularyCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("undocumented specified architectural crate: fava-hidden", result.stderr)
 
+    def test_phase_slug_metadata_is_not_a_crate(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification="---\nslug: deliver-fava-example-capability-as-a-service\n---\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_linked_worktree_prefix_is_not_a_crate(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=(
+                "worktree: /var/work/fava-worktree-agent-example-resume/"
+                "crates/fava-simple-groups\n"
+            ),
+            specification_crates=["fava-simple-groups"],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_metadata_exclusion_does_not_hide_real_crate_reference(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=(
+                "slug: deliver-fava-example-capability-as-a-service "
+                "# uses fava-simple-groups and fava-unregistered\n"
+            ),
+            specification_crates=["fava-simple-groups"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "undocumented specified architectural crate: fava-unregistered",
+            result.stderr,
+        )
+
     def run_check(
         self,
         *,
@@ -81,6 +120,7 @@ class VocabularyCheckTest(unittest.TestCase):
         symbols: list[str],
         specification: str = "",
         specification_symbols: list[str] | None = None,
+        specification_crates: list[str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -99,6 +139,9 @@ class VocabularyCheckTest(unittest.TestCase):
             rendered_specification_symbols = ", ".join(
                 f'"{symbol}"' for symbol in specification_symbols or []
             )
+            rendered_specification_crates = ", ".join(
+                f'"{crate}"' for crate in specification_crates or []
+            )
             registry = textwrap.dedent(
                 f'''\
                 version = 1
@@ -113,6 +156,7 @@ class VocabularyCheckTest(unittest.TestCase):
                 symbols = [{rendered_symbols}]
                 crates = ["sample"]
                 spec_symbols = [{rendered_specification_symbols}]
+                spec_crates = [{rendered_specification_crates}]
                 '''
             )
             (root / "docs" / "internals" / "vocabulary.toml").write_text(
