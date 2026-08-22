@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 export LC_ALL=C
-
 readonly_paths='Cargo.toml Cargo.lock rust-toolchain.toml .cargo apps/canary crates'
 archive_paths='Cargo.toml Cargo.lock rust-toolchain.toml apps/canary crates'
 build_command='cargo build --frozen --offline --release --manifest-path apps/canary/Cargo.toml --bin canary'
@@ -415,7 +414,6 @@ if [ "$source_engine_id" != "$source_config_id" ] \
   echo "pulled source engine identity disagreed with manifest/config identities" >&2
   exit 71
 fi
-
 for label_and_expected in \
   "org.opencontainers.image.revision=$revision" \
   "org.fava.source-tree=$tree" \
@@ -430,12 +428,21 @@ do
     exit 72
   fi
 done
-
 common_run() {
   run_name=$1
   target_volume=$2
   cidfile=$temporary/control/$run_name.cid
   shift 2
+  if [ "${FAVA_CAUSAL_DIRECT_RUSTC:-0}" -eq 1 ]; then
+    set -- "$@" "$source_image_reference" /usr/bin/python3 -c '
+import json, os
+with open("/target/toctou-prime/rustc.json", "rb") as source: raw = source.read(65_537)
+arguments = json.loads(raw)
+assert len(raw) <= 65_536 and isinstance(arguments, list) and all(isinstance(value, str) for value in arguments)
+os.execve("/source/apps/canary/tools/pinned-build-toctou-wrapper.sh", ["pinned-build-toctou-wrapper.sh", *arguments], os.environ)'
+  else
+    set -- "$@" "$source_image_reference" cargo build --frozen --offline --release --manifest-path apps/canary/Cargo.toml --bin canary
+  fi
   python3 -c "$bounded_runner_program" \
     --seconds "$docker_deadline_seconds" \
     --bytes "$docker_output_maximum_bytes" -- \
@@ -464,9 +471,7 @@ common_run() {
     --env "FAVA_BUILD_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
     --env "FAVA_BUILD_SOURCE_IMAGE_SHA256=$source_image_sha256" \
     --env "FAVA_BUILD_RUST_BASE_IMAGE_SHA256=$base_image_sha256" \
-    "$@" "$source_image_reference" \
-    cargo build --frozen --offline --release \
-      --manifest-path apps/canary/Cargo.toml --bin canary
+    "$@"
   remove_cidfile_container "$cidfile" && find "$cidfile" -type f -delete
 }
 readonly_name=$container_prefix-readonly
@@ -608,15 +613,9 @@ python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
     --pids-limit 32 --memory 128m --cpus 1 --read-only \
     --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false \
     --volume "$break_volume_name:/target" "$source_image_reference" /bin/sh -ceu '
-      matches=$(find /target/release/.fingerprint -type f -name bin-canary -print)
-      test "$(printf "%s\n" "$matches" | sed "/^$/d" | wc -l)" -eq 1
-      directory=$(dirname "$matches"); name=$(basename "$directory"); hash=${name#canary-}
-      test "$(dirname "$directory")" = /target/release/.fingerprint
-      test "${#hash}" -eq 16; case "$hash" in *[!0-9a-f]*) exit 74 ;; esac
-      find "$directory" -depth -delete
-      test -f /target/release/canary; test ! -L /target/release/canary
-      rm /target/release/canary'
-common_run "$container_prefix-break" "$break_volume_name" \
+      test -s /target/toctou-prime/rustc.json
+      test -f /target/release/canary; test ! -L /target/release/canary; rm /target/release/canary'
+FAVA_CAUSAL_DIRECT_RUSTC=1 common_run "$container_prefix-break" "$break_volume_name" \
   --env RUSTC_WRAPPER=/source/apps/canary/tools/pinned-build-toctou-wrapper.sh \
   --env FAVA_PINNED_TOCTOU_MODE=writable-break
 break_expected_bytes=$(wc -c < "$temporary/source/apps/canary/src/main.rs" | tr -d ' ')
@@ -636,11 +635,12 @@ python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
       test "$(sed -n "3s/^original_sha256=//p" "$result")" = "$EXPECTED_SHA"
       test "$(sed -n "5s/^restored_sha256=//p" "$result")" = "$EXPECTED_SHA"
       test "$(sed -n "6p" "$result")" = outcome=compiled-hostile-bytes
-      test -x /target/release/canary; grep -a -q "canary forged:" /target/release/canary'
+      forged=$(find /target/release/deps -maxdepth 1 -type f -name "canary-*" -perm -100 -print)
+      test "$(printf "%s\n" "$forged" | sed "/^$/d" | wc -l)" -eq 1
+      grep -a -q "canary forged:" "$forged"; test ! -e /target/release/canary'
 remove_container_id "$break_holder_id"
 remove_volume_name "$break_volume_name"
 break_volume_name=
-
 output_parent=$(dirname "$output_directory")
 staging=$output_parent/.fava-pinned-build-staging-$unique
 mkdir -m 700 "$staging"

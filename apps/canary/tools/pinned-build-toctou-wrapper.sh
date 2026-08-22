@@ -35,7 +35,25 @@ if [ "$saw_canary" -ne 1 ] || [ "$saw_main" -ne 1 ]; then
 fi
 
 case "${FAVA_PINNED_TOCTOU_MODE:-}" in
-  prime) exec "$real_rustc" "$@" ;;
+  prime)
+    mkdir -p /target/toctou-prime
+    /usr/bin/python3 - /target/toctou-prime/rustc.json "$real_rustc" "$@" <<'PY'
+import json
+import os
+import sys
+
+path, *arguments = sys.argv[1:]
+encoded = (json.dumps(arguments, separators=(",", ":")) + "\n").encode("utf-8")
+if not arguments or len(encoded) > 65_536:
+    raise SystemExit("prime rustc invocation exceeded its bound")
+descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+with os.fdopen(descriptor, "wb") as output:
+    output.write(encoded)
+    output.flush()
+    os.fsync(output.fileno())
+PY
+    exec "$real_rustc" "$@"
+    ;;
   readonly|writable-break) mode=$FAVA_PINNED_TOCTOU_MODE ;;
   *)
     echo "pinned TOCTOU wrapper mode was absent or invalid" >&2
