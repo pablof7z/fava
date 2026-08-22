@@ -4,6 +4,7 @@ mod artifacts;
 mod automatic_publication;
 mod automatic_support;
 mod croissant;
+mod croissant_nip02;
 mod grouping;
 mod hostile;
 mod live;
@@ -25,6 +26,10 @@ mod semantic_writes;
 mod wire;
 
 pub use automatic_publication::run_automatic_publication_scenario;
+pub use croissant_nip02::{
+    CroissantNip02Options, CroissantNip02Outcome, run_croissant_nip02_scenario,
+    verify_croissant_run_pair,
+};
 pub use grouping::run_grouping_scenario;
 pub use live::run_live_scenario;
 pub use local::run_local_scenario;
