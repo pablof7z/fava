@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-10-PLAN.md
-last_updated: "2026-08-22T02:11:26.954Z"
+stopped_at: Completed 07.1-11-PLAN.md
+last_updated: "2026-08-22T02:32:00.218Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-10 completed; downstream canaries migrated and workspace compile debt cleared
-state_head: 7dea429fb8a2b94aff3bbc9b0daf4a460390b9c6
+last_activity_desc: Plan 07.1-11 completed; authoritative publication and NIP-02 documentation aligned
+state_head: 28130d400e290aa90d675bf4354dd08fe097d3ac
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-10 completed; downstream canaries migrated and workspace compile debt cleared
+Last activity: 2026-08-22 — Plan 07.1-11 completed; authoritative publication and NIP-02 documentation aligned
 
 Progress: [██████░░░░] 57%
 
@@ -79,6 +79,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P08 | 6min | 2 tasks | 4 files |
 | Phase 07.1 P09 | 13min | 3 tasks | 14 files |
 | Phase 07.1 P10 | 11min | 2 tasks | 9 files |
+| Phase 07.1 P11 | 17min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: WriteRouting remains facade-visible because Receipt::routing returns it; all other old intent and wait compatibility doors are removed.
 - [Phase 07.1]: Canary application flows publish payloads through publish, by, and to; only preview/store/provider boundaries construct neutral WriteIntent values.
 - [Phase 07.1]: Recovered durable obligations without their original Write handle reattach through subscribe-before-read receipt facts and an exact ReceiptId.
+- [Phase 07.1]: Applications publish payloads through optional inert by/to scopes and receive Write after synchronous durable acceptance; neutral WriteIntent and AcceptedWrite remain internal owner vocabulary.
+- [Phase 07.1]: ContactList accounts for every p row; NIP-02 edit materialization owns foreign tag and content preservation.
+- [Phase 07.1]: Simple-groups consumes the universal publication door without claiming Phase 07.1.1 delivery or a current ValueSet surface.
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T02:11:26.859Z
-Stopped at: Completed 07.1-10-PLAN.md
+Last session: 2026-08-22T02:32:00.127Z
+Stopped at: Completed 07.1-11-PLAN.md
 Resume file: None
