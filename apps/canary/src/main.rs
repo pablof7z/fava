@@ -3,11 +3,12 @@
 use std::path::PathBuf;
 
 use canary::{
-    CroissantNip02Options, ReconOptions, SmokeOptions, run_automatic_publication_scenario,
-    run_croissant_nip02_scenario, run_grouping_scenario, run_live_scenario, run_local_scenario,
-    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
-    run_routing_scenario, run_semantic_write_scenario, scenario_registry,
-    verify_croissant_run_pair,
+    CroissantNip02Options, CroissantSimpleGroupsOptions, ReconOptions, SmokeOptions,
+    run_automatic_publication_scenario, run_croissant_nip02_scenario,
+    run_croissant_simple_groups_scenario, run_grouping_scenario, run_live_scenario,
+    run_local_scenario, run_m3_live_scenario, run_public_recon, run_publication_scenario,
+    run_real_relay_smoke, run_routing_scenario, run_semantic_write_scenario, scenario_registry,
+    verify_croissant_run_pair, verify_croissant_simple_groups_pair,
 };
 
 #[tokio::main]
@@ -42,6 +43,16 @@ async fn run() -> canary::CanaryResult<()> {
             }
             verify_croissant_run_pair(PathBuf::from(root))?;
             println!("verified Croissant NIP-02 pair");
+            Ok(())
+        }
+        "verify-croissant-simple-groups-pair" => {
+            let flag = arguments.next().ok_or_else(usage)?;
+            let root = arguments.next().ok_or_else(usage)?;
+            if flag != "--runs-dir" || arguments.next().is_some() {
+                return Err(usage());
+            }
+            verify_croissant_simple_groups_pair(PathBuf::from(root))?;
+            println!("verified Croissant simple-groups pair");
             Ok(())
         }
         "recon" => {
@@ -85,6 +96,13 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         })
         .await?;
         println!("passed croissant-nip02-public-flow");
+        println!("evidence: {}", outcome.run_directory.display());
+        return Ok(());
+    }
+    if scenario == "croissant-simple-groups-public-flow" {
+        let options = simple_groups_options(&mut arguments)?;
+        let outcome = run_croissant_simple_groups_scenario(options).await?;
+        println!("passed croissant-simple-groups-public-flow");
         println!("evidence: {}", outcome.run_directory.display());
         return Ok(());
     }
@@ -165,6 +183,31 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
     Ok(())
 }
 
+fn simple_groups_options(
+    arguments: &mut impl Iterator<Item = String>,
+) -> canary::CanaryResult<CroissantSimpleGroupsOptions> {
+    let mut relay_binary = None;
+    let mut source_checkout = None;
+    let mut scenario_seed = String::from("croissant-simple-groups");
+    let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+    while let Some(flag) = arguments.next() {
+        let value = arguments.next().ok_or_else(usage)?;
+        match flag.as_str() {
+            "--relay-bin" => relay_binary = Some(PathBuf::from(value)),
+            "--relay-source" => source_checkout = Some(PathBuf::from(value)),
+            "--seed" => scenario_seed = value,
+            "--runs-dir" => runs_directory = PathBuf::from(value),
+            _ => return Err(usage()),
+        }
+    }
+    Ok(CroissantSimpleGroupsOptions {
+        relay_binary: relay_binary.ok_or_else(usage)?,
+        source_checkout: source_checkout.ok_or_else(usage)?,
+        scenario_seed,
+        runs_directory,
+    })
+}
+
 fn smoke_options(
     arguments: &mut impl Iterator<Item = String>,
     default_seed: &str,
@@ -190,7 +233,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

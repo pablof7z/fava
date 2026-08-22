@@ -19,6 +19,7 @@ use fava_write::{Event, EventId, ReceiptOutcome};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -29,7 +30,7 @@ use crate::{CanaryError, CanaryResult, WireProxy, deterministic_keys, wire};
 const OPERATION_MS: u64 = 30_000;
 const CUSTOM_KIND: u16 = 50_029;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct SimpleGroupsFlowFacts {
     pub(crate) group_id: String,
     pub(crate) relay_urls: [String; 2],
