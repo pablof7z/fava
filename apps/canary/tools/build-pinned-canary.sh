@@ -419,11 +419,12 @@ common_run() {
   if [ ! -d "$target" ]; then
     mkdir "$target"
   fi
+  chmod 0777 "$target"
   python3 -c "$bounded_runner_program" \
     --seconds "$docker_deadline_seconds" \
     --bytes "$docker_output_maximum_bytes" -- \
     docker run --rm --name "$run_name" --cidfile "$cidfile" \
-    --user 0:0 \
+    --user 65532:65532 \
     --network none \
     --cap-drop ALL \
     --security-opt no-new-privileges \
@@ -435,7 +436,7 @@ common_run() {
     --log-opt max-file=1 \
     --log-opt compress=false \
     --volume "$target:/target" \
-    --tmpfs /target/tmp:rw,nosuid,nodev,size=67108864 \
+    --tmpfs /target/tmp:rw,nosuid,nodev,size=67108864,uid=65532,gid=65532,mode=0700 \
     --env CARGO_INCREMENTAL=0 \
     --env CARGO_TARGET_DIR=/target \
     --env TMPDIR=/target/tmp \
@@ -449,6 +450,7 @@ common_run() {
     "$@" "$source_image_reference" \
     cargo build --frozen --offline --release \
       --manifest-path apps/canary/Cargo.toml --bin canary
+  chmod 0700 "$target"
 }
 
 readonly_name=$container_prefix-readonly
