@@ -10,6 +10,8 @@ fava-state.workspace = true
 fava-write.workspace = true
 
 [dev-dependencies]
+fava-query.workspace = true
+fava-query-standard.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]
