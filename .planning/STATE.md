@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-01-PLAN.md
-last_updated: "2026-08-22T09:13:57.035Z"
+stopped_at: Completed 07.1.1-03-PLAN.md
+last_updated: "2026-08-22T09:25:39.782Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: a58a60034afb4afe89f0df35204ce69be37e00f9
+state_head: efb522f93da903c5ed5fe9b25b9e8caf52f7eb8f
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 25
+  completed_plans: 26
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -83,6 +83,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P11 | 17min | 3 tasks | 9 files |
 | Phase 07.1 P12 | 34min | 3 tasks | 13 files |
 | Phase 07.1.1 P01 | 5min | 2 tasks | 6 files |
+| Phase 07.1.1 P03 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: PublishError retains the complete terminal Receipt without boxing; narrow Clippy allowances document that evidence boundary.
 - [Phase 07.1]: Seed-bearing Cargo invocations use --quiet so Cargo cannot echo process-memory secrets in argv diagnostics.
 - [Phase 07.1.1]: Keep Query::kind as the sole singleton-input surface; repeated calls union in the existing canonical BTreeSet without new query vocabulary.
+- [Phase 07.1.1]: Vocabulary metadata exclusions apply to exact candidate spans; neighboring prose and path crate references remain enforced.
 
 ### Pending Todos
 
@@ -163,6 +165,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T09:13:56.961Z
-Stopped at: Completed 07.1.1-01-PLAN.md
+Last session: 2026-08-22T09:25:39.707Z
+Stopped at: Completed 07.1.1-03-PLAN.md
 Resume file: None
