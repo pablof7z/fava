@@ -66,7 +66,7 @@ fn valid_empty_and_ordered_contact_lists_decode() {
     );
     assert_eq!(
         list.follows()[1].relay().map(ToString::to_string),
-        Some("wss://relay.example/".to_owned())
+        Some("wss://relay.example".to_owned())
     );
     assert_eq!(list.follows()[1].petname(), Some("bob"));
 
@@ -208,6 +208,7 @@ fn petname_presence_and_utf8_remain_exact() {
     assert_eq!(list.follows()[1].petname(), None);
     assert_eq!(list.follows()[2].petname(), Some(""));
     assert_eq!(list.follows()[3].petname(), Some(decomposed));
+    assert!(list.follows().iter().all(|follow| follow.relay().is_none()));
     assert_eq!(
         list.follows()[3].petname().unwrap().as_bytes(),
         decomposed.as_bytes()

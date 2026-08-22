@@ -111,9 +111,57 @@ source = "nostr"
 protocol = "NIP-02"
 meaning = "A replaceable kind 3 event describing an author's contacts and relay hints."
 owner = "fava-nip02"
-symbols = []
+nearest_nostr = "NIP-02 contact list"
+distinction = "The protocol event is raw; fava_nip02::ContactList is the immutable validated projection that exposes valid rows and complete typed row evidence without owning query or publication work."
+counterexample = "An arbitrary kind 3 tag walk that drops malformed p rows is not a ContactList projection, and a QuerySnapshot remains query-owned rather than protocol-owned."
+lifecycle = "Callers construct the value from one EventValue; it owns immutable decoded fields and is dropped without state, acquisition, observation, or publication effects."
+forcing_requirement = "NIP-02 applications must read one author-scoped list without raw tag walking while retaining every uninterpreted row and refusing invalid event boundaries."
+falsifier = "The contact_list tests must refuse wrong-kind or invalid events and must fail if valid empty kind-3 events do not decode."
+symbols = ["fava_nip02::ContactList"]
 crates = ["fava-nip02"]
 spec_crates = ["fava-nip02"]
+
+[[term]]
+name = "Follow"
+source = "fava"
+meaning = "One fully valid first-occurrence NIP-02 p row with its source index, public key, optional relay hint, and optional petname."
+owner = "fava-nip02"
+nearest_nostr = "NIP-02 p tag"
+distinction = "A p tag is an untyped ordered string row; Follow exists only after every understood column validates and preserves absent versus present-empty petname meaning."
+counterexample = "A malformed relay row or later valid duplicate is ContactListRowEvidence, not a Follow, and cannot reserve a target before validation completes."
+lifecycle = "ContactList::from_event creates immutable Follow values; they borrow no event storage and disappear with their owning ContactList."
+forcing_requirement = "Applications need ordered typed public keys, relay hints, and exact petnames without duplicating NIP-02 parsing or accepting partially valid rows."
+falsifier = "The invalid_contact_rows_do_not_reserve_duplicate_targets test must fail if an invalid earlier row becomes a Follow or poisons the later valid row."
+symbols = ["fava_nip02::Follow"]
+crates = []
+
+[[term]]
+name = "ContactListRowEvidence"
+source = "fava"
+meaning = "Exact owned evidence for one malformed, duplicate, or uninterpreted NIP-02 p row."
+owner = "fava-nip02"
+nearest_nostr = "NIP-02 p tag"
+distinction = "NIP-02 defines valid contact rows but not a typed conservation result for rows a client cannot safely interpret."
+counterexample = "A parser warning without source index and exact raw columns cannot prove that every p row was retained and is not ContactListRowEvidence."
+lifecycle = "ContactList::from_event creates one immutable evidence value for each non-valid p row; the ContactList owns it until dropped."
+forcing_requirement = "Shared kind-3 documents may contain malformed, duplicate, or future rows, and applications must not silently lose data another client may understand."
+falsifier = "The nip02_accounts_for_every_p_row test must fail when parsing uses filter_map to retain only valid rows."
+symbols = ["fava_nip02::ContactListRowEvidence"]
+crates = []
+
+[[term]]
+name = "ContactListError"
+source = "fava"
+meaning = "A typed refusal for an invalid event-level boundary before NIP-02 row decoding begins."
+owner = "fava-nip02"
+nearest_nostr = "NIP-02 kind 3 event"
+distinction = "Row evidence represents a valid document's uninterpretable contacts; ContactListError instead refuses a wrong-kind, unfinalized, unverifiable, or over-bound whole event."
+counterexample = "An invalid relay hint inside an otherwise valid kind 3 is row evidence and must not become ContactListError."
+lifecycle = "ContactList::from_event returns the value synchronously and retains no failure state after the caller drops it."
+forcing_requirement = "Invalid event identity, signature, kind, or bounds must be rejected once before any typed row result can be trusted."
+falsifier = "The invalid_contact_list_events_are_refused_before_rows test must fail if wrong-kind, missing-id, tampered, or over-bound events produce a ContactList."
+symbols = ["fava_nip02::ContactListError"]
+crates = []
 
 [[term]]
 name = "BookmarkList"

@@ -1,14 +1,9 @@
-//! Pure NIP-02 follow-list semantic edits.
+//! Pure NIP-02 contact-list values and semantic edits.
 //!
 //! The package README is the application-facing API and developer-experience
-//! North Star. Its Status section distinguishes the delivered M7 tracer from
-//! the broader typed read and publication surface that is still prospective.
+//! North Star.
 //!
 //! The compile-fail examples are external privacy checks for protocol nouns.
-//!
-//! ```compile_fail
-//! use fava_nip02::ContactList;
-//! ```
 //!
 //! ```compile_fail
 //! use fava_nip02::Change;
@@ -29,6 +24,9 @@ const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const CODEC_LEN: usize = 33;
 mod bounds;
+mod contact_list;
+
+pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
 
 use bounds::MAX_TAGS;
 

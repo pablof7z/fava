@@ -2,9 +2,13 @@
 
 use std::sync::Arc;
 
+use fava_state::RelayUrl;
 use fava_write::{
-    Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntentError,
+    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    Timestamp, WriteIntentError,
 };
+
+use fava_nip02::{ContactList, ContactListError, ContactListRowEvidence, Follow};
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
 type PublicKeyEdit = fn(PublicKey) -> EditResult;
@@ -14,9 +18,41 @@ const FOLLOW: PublicKeyEdit = fava_nip02::follow;
 const UNFOLLOW: PublicKeyEdit = fava_nip02::unfollow;
 const MATERIALIZER: Selection = fava_nip02::materializer;
 
+fn inspect_follow(follow: &Follow) -> (usize, PublicKey, Option<&RelayUrl>, Option<&str>) {
+    (
+        follow.source_index(),
+        follow.pubkey(),
+        follow.relay(),
+        follow.petname(),
+    )
+}
+
+fn inspect_row(row: &ContactListRowEvidence) -> (usize, &[String]) {
+    (row.source_index(), row.raw_row())
+}
+
 #[test]
 fn external_surface_uses_only_approved_functions_and_types() {
     let approved_functions: [PublicKeyEdit; 2] = [FOLLOW, UNFOLLOW];
     assert_eq!(approved_functions.len(), 2);
     assert_eq!(MATERIALIZER().kind(), Kind::ContactList);
+
+    let author =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .expect("generator public key");
+    let event = EventBuilder::new(author, Kind::ContactList)
+        .created_at(Timestamp::from(7))
+        .build()
+        .expect("bounded contact list");
+    let list: ContactList =
+        ContactList::from_event(&EventValue::Unsigned(event)).expect("external decoder surface");
+    let follows: &[Follow] = list.follows();
+    let evidence: &[ContactListRowEvidence] = list.evidence();
+    assert!(follows.is_empty());
+    assert!(evidence.is_empty());
+    let _follow_accessors: fn(&Follow) -> (usize, PublicKey, Option<&RelayUrl>, Option<&str>) =
+        inspect_follow;
+    let _evidence_accessors: fn(&ContactListRowEvidence) -> (usize, &[String]) = inspect_row;
+    let decode: fn(&EventValue) -> Result<ContactList, ContactListError> = ContactList::from_event;
+    assert!(decode as usize != 0);
 }
