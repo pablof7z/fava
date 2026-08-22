@@ -53,6 +53,30 @@ async fn supervisor_attributes_exit_before_readiness() {
 }
 
 #[tokio::test]
+async fn supervisor_refuses_port_that_opens_then_exits_during_readiness() {
+    let fixture = TempDir::new().expect("fixture");
+    let binary = executable(
+        fixture.path(),
+        "open-then-exit",
+        "exec python3 -c 'import os,socket; s=socket.socket(); s.bind((\"127.0.0.1\",int(os.environ[\"PORT\"]))); s.listen(); c,_=s.accept(); c.close(); s.close()'",
+    );
+    let supervisor = CroissantSupervisor::prepare(
+        &binary,
+        &source_checkout(),
+        &fixture.path().join("run"),
+        owner(),
+        &seed_hash(b"open-then-exit-seed"),
+        CroissantLimits::test(),
+    )
+    .expect("prepare");
+    let error = supervisor
+        .start()
+        .await
+        .expect_err("transient port acceptance must not publish readiness");
+    assert!(matches!(error, CroissantError::EarlyExit { .. }));
+}
+
+#[tokio::test]
 async fn supervisor_refuses_log_overflow_without_echoing_secret_environment() {
     let fixture = TempDir::new().expect("fixture");
     let sentinel = "sentinel-private-seed-never-retain";

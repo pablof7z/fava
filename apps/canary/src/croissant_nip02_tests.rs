@@ -247,6 +247,7 @@ fn signed_evidence_rejects_mutated_verification_claims() {
             "wire_bytes_observed": 12,
             "log_bytes": 1_048_576,
             "readiness_ms": 5_000,
+            "readiness_stability_ms": 100,
             "teardown_ms": 5_000
         },
         "terminal": {
@@ -283,6 +284,7 @@ fn signed_evidence_rejects_mutated_verification_claims() {
         ("/bounds/wire_bytes_observed", serde_json::json!(1)),
         ("/bounds/log_bytes", serde_json::json!(1)),
         ("/bounds/readiness_ms", serde_json::json!(1)),
+        ("/bounds/readiness_stability_ms", serde_json::json!(1)),
         ("/bounds/teardown_ms", serde_json::json!(1)),
         ("/teardown/completed", serde_json::json!(false)),
         ("/teardown/pid", serde_json::json!(1)),

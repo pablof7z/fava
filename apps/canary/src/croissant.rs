@@ -1,4 +1,7 @@
 //! Controlled Croissant process supervision for the Phase 07.1 canary.
+//!
+//! This file stays above the 500-line soft limit so launch, readiness stability, bounded logs,
+//! and teardown remain one process-lifecycle owner with no competing child-state authority.
 
 use std::fmt;
 use std::fs;
@@ -24,6 +27,7 @@ use crate::command_output;
 pub(crate) struct CroissantLimits {
     pub(crate) log_bytes: usize,
     pub(crate) readiness_ms: u64,
+    pub(crate) readiness_stability_ms: u64,
     pub(crate) teardown_ms: u64,
 }
 
@@ -32,6 +36,7 @@ impl Default for CroissantLimits {
         Self {
             log_bytes: 1_048_576,
             readiness_ms: 10_000,
+            readiness_stability_ms: 100,
             teardown_ms: 5_000,
         }
     }
@@ -43,6 +48,7 @@ impl CroissantLimits {
         Self {
             log_bytes: 4_096,
             readiness_ms: 2_000,
+            readiness_stability_ms: 50,
             teardown_ms: 2_000,
         }
     }
@@ -252,20 +258,52 @@ impl CroissantSupervisor {
                     limit: self.limits.log_bytes,
                 });
             }
-            if TcpStream::connect(self.endpoint).await.is_ok() {
-                return Ok(CroissantProcess {
-                    child,
-                    ready: self.ready_fact(pid),
+            if let Some(status) = child.try_wait()? {
+                return finish_early_exit(
+                    status.to_string(),
                     stdout_log,
                     stderr_log,
-                });
+                    self.limits.teardown_ms,
+                )
+                .await;
             }
-            if let Some(status) = child.try_wait()? {
-                stdout_log.finish(self.limits.teardown_ms).await?;
-                stderr_log.finish(self.limits.teardown_ms).await?;
-                return Err(CroissantError::EarlyExit {
-                    status: status.to_string(),
-                });
+            if TcpStream::connect(self.endpoint).await.is_ok() {
+                if let Some(status) = child.try_wait()? {
+                    return finish_early_exit(
+                        status.to_string(),
+                        stdout_log,
+                        stderr_log,
+                        self.limits.teardown_ms,
+                    )
+                    .await;
+                }
+                tokio::time::sleep(Duration::from_millis(self.limits.readiness_stability_ms)).await;
+                if let Some(status) = child.try_wait()? {
+                    return finish_early_exit(
+                        status.to_string(),
+                        stdout_log,
+                        stderr_log,
+                        self.limits.teardown_ms,
+                    )
+                    .await;
+                }
+                if TcpStream::connect(self.endpoint).await.is_ok() {
+                    if let Some(status) = child.try_wait()? {
+                        return finish_early_exit(
+                            status.to_string(),
+                            stdout_log,
+                            stderr_log,
+                            self.limits.teardown_ms,
+                        )
+                        .await;
+                    }
+                    return Ok(CroissantProcess {
+                        child,
+                        ready: self.ready_fact(pid),
+                        stdout_log,
+                        stderr_log,
+                    });
+                }
             }
             if Instant::now() >= deadline {
                 terminate(&mut child, self.limits.teardown_ms).await;
@@ -293,6 +331,17 @@ impl CroissantSupervisor {
             limits: self.limits,
         }
     }
+}
+
+async fn finish_early_exit(
+    status: String,
+    stdout_log: BoundedLog,
+    stderr_log: BoundedLog,
+    teardown_ms: u64,
+) -> Result<CroissantProcess, CroissantError> {
+    stdout_log.finish(teardown_ms).await?;
+    stderr_log.finish(teardown_ms).await?;
+    Err(CroissantError::EarlyExit { status })
 }
 
 #[derive(Debug)]

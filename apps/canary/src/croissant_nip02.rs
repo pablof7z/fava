@@ -516,6 +516,7 @@ fn finish_run(
             "wire_bytes_observed": wire_bytes,
             "log_bytes": ready.limits.log_bytes,
             "readiness_ms": ready.limits.readiness_ms,
+            "readiness_stability_ms": ready.limits.readiness_stability_ms,
             "teardown_ms": ready.limits.teardown_ms,
         },
         "terminal": {
@@ -670,6 +671,7 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
         "wire_bytes",
         "log_bytes",
         "readiness_ms",
+        "readiness_stability_ms",
         "teardown_ms",
     ] {
         if bounds.get(field).and_then(Value::as_u64).unwrap_or(0) == 0 {
