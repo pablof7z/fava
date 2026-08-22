@@ -242,27 +242,77 @@ pub fn admission_mutations(
         .iter()
         .filter(|known| coordinate_for_event(&known.event) == coordinate)
         .collect();
+    if matches!(coordinate, EventCoordinate::Replaceable { .. }) {
+        let mut candidates: Vec<_> = same_coordinate
+            .iter()
+            .map(|known| (*known).clone())
+            .collect();
+        let existing = candidates
+            .iter_mut()
+            .find(|known| known.event.id == incoming.event.id);
+        let evidence_changed = if let Some(existing) = existing {
+            if existing.event != incoming.event {
+                return vec![CacheMutation::Upsert(incoming)];
+            }
+            let previous = existing.evidence.clone();
+            existing.merge_evidence(&incoming.evidence);
+            existing.evidence != previous
+        } else {
+            candidates.push(incoming.clone());
+            true
+        };
+        let retained = relay_replaceable_winners(&candidates);
+        let mut mutations: Vec<_> = same_coordinate
+            .iter()
+            .filter(|known| !retained.contains(&known.event.id))
+            .map(|known| CacheMutation::Retract(known.event.id))
+            .collect();
+        if retained.contains(&incoming.event.id) && evidence_changed {
+            mutations.push(CacheMutation::Upsert(incoming));
+        }
+        return mutations;
+    }
     if same_coordinate
         .iter()
         .any(|known| known.event.id == incoming.event.id)
     {
         return vec![CacheMutation::Upsert(incoming)];
     }
-    if matches!(coordinate, EventCoordinate::Replaceable { .. }) {
-        if same_coordinate
-            .iter()
-            .any(|known| !candidate_is_newer(&incoming.event, &known.event))
-        {
-            return Vec::new();
-        }
-        let mut mutations: Vec<_> = same_coordinate
-            .iter()
-            .map(|known| CacheMutation::Retract(known.event.id))
-            .collect();
-        mutations.push(CacheMutation::Upsert(incoming));
-        return mutations;
-    }
     vec![CacheMutation::Upsert(incoming)]
+}
+
+fn relay_replaceable_winners(candidates: &[CachedEvent]) -> BTreeSet<EventId> {
+    let mut by_relay = BTreeMap::<RelayUrl, &CachedEvent>::new();
+    for candidate in candidates {
+        for observation in candidate.evidence.observations() {
+            by_relay
+                .entry(observation.session.relay.clone())
+                .and_modify(|current| {
+                    if candidate_is_newer(&candidate.event, &current.event) {
+                        *current = candidate;
+                    }
+                })
+                .or_insert(candidate);
+        }
+    }
+    if by_relay.is_empty() {
+        candidates
+            .iter()
+            .reduce(|current, candidate| {
+                if candidate_is_newer(&candidate.event, &current.event) {
+                    candidate
+                } else {
+                    current
+                }
+            })
+            .map(|winner| BTreeSet::from([winner.event.id]))
+            .unwrap_or_default()
+    } else {
+        by_relay
+            .into_values()
+            .map(|winner| winner.event.id)
+            .collect()
+    }
 }
 
 /// Decide retractions for events expired at an exact time.

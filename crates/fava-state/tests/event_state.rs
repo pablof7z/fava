@@ -181,30 +181,15 @@ fn replaceable_winners_are_independent_per_relay_url() {
             .collect::<std::collections::BTreeSet<_>>(),
         std::collections::BTreeSet::from([winner_b.id, new_a.id])
     );
-    assert!(!apply_admission(
-        &mut current,
-        cached_at(new_a, relay_a, 3)
-    ));
+    assert!(!apply_admission(&mut current, cached_at(new_a, relay_a, 3)));
 }
 
 #[test]
 fn duplicate_id_merges_exact_relay_evidence() {
     let keys = Keys::generate();
     let kind = Kind::from_u16(30_001);
-    let shared = event(
-        &keys,
-        kind,
-        20,
-        "shared",
-        vec![Tag::identifier("same")],
-    );
-    let newer = event(
-        &keys,
-        kind,
-        30,
-        "newer A",
-        vec![Tag::identifier("same")],
-    );
+    let shared = event(&keys, kind, 20, "shared", vec![Tag::identifier("same")]);
+    let newer = event(&keys, kind, 30, "newer A", vec![Tag::identifier("same")]);
     let relay_a = "wss://relay-a.example";
     let relay_b = "wss://relay-b.example";
     let mut current = Vec::new();
@@ -236,8 +221,5 @@ fn duplicate_id_merges_exact_relay_evidence() {
     assert_eq!(current.len(), 1);
     assert_eq!(current[0].event.id, newer.id);
     assert_eq!(current[0].evidence.len(), 2);
-    assert!(!apply_admission(
-        &mut current,
-        cached_at(newer, relay_b, 4)
-    ));
+    assert!(!apply_admission(&mut current, cached_at(newer, relay_b, 4)));
 }
