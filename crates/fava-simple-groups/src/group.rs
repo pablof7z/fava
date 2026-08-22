@@ -6,7 +6,9 @@ use fava_state::RelayUrl;
 use fava_write::{Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError};
 
 use crate::GroupRecords;
-use crate::bounds::{MAX_GROUP_HOST_INPUT_ITEMS, MAX_GROUP_ID_BYTES, collect_at_most};
+use crate::bounds::{
+    MAX_GROUP_CONTEXT_INPUT_ITEMS, MAX_GROUP_HOST_INPUT_ITEMS, MAX_GROUP_ID_BYTES, collect_at_most,
+};
 
 /// One opaque NIP-29 group id over an application-selected host set.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -254,22 +256,88 @@ trait PreparePayload: Sized {
 
 impl PreparePayload for UnsignedEvent {
     fn prepare_for(self, group: &Group) -> Result<Self, GroupError> {
+        validate_context_input_bound(self.tags.iter())?;
         let context =
             Tag::parse(["h", group.id()]).map_err(|error| GroupError::Event(error.to_string()))?;
-        EventBuilder::from_parts(
-            self.pubkey,
-            self.kind,
-            self.created_at,
-            self.tags.iter().cloned().chain([context]).collect(),
-            self.content,
-        )
-        .build()
-        .map_err(Into::into)
+        let mut matching_contexts = 0usize;
+        let mut tags = Vec::with_capacity(self.tags.len().saturating_add(1));
+        for tag in self.tags.iter() {
+            if is_group_context(tag) {
+                validate_group_context(tag, group.id())?;
+                matching_contexts += 1;
+                if matching_contexts == 1 {
+                    tags.push(tag.clone());
+                }
+            } else {
+                tags.push(tag.clone());
+            }
+        }
+        if matching_contexts == 1 {
+            return Ok(self);
+        }
+        if matching_contexts == 0 {
+            tags.push(context);
+        }
+        EventBuilder::from_parts(self.pubkey, self.kind, self.created_at, tags, self.content)
+            .build()
+            .map_err(Into::into)
     }
 }
 
 impl PreparePayload for Event {
-    fn prepare_for(self, _group: &Group) -> Result<Self, GroupError> {
+    fn prepare_for(self, group: &Group) -> Result<Self, GroupError> {
+        validate_context_input_bound(self.tags.iter())?;
+        let mut contexts = 0usize;
+        for tag in self.tags.iter().filter(|tag| is_group_context(tag)) {
+            contexts += 1;
+            if contexts > 1 {
+                return Err(GroupError::DuplicateGroupContext);
+            }
+            validate_group_context(tag, group.id())?;
+        }
+        if contexts == 0 {
+            return Err(GroupError::MissingGroupContext);
+        }
         Ok(self)
     }
+}
+
+fn validate_context_input_bound<'a>(
+    tags: impl IntoIterator<Item = &'a Tag>,
+) -> Result<(), GroupError> {
+    let actual = tags
+        .into_iter()
+        .take(MAX_GROUP_CONTEXT_INPUT_ITEMS.saturating_add(1))
+        .count();
+    if actual > MAX_GROUP_CONTEXT_INPUT_ITEMS {
+        Err(GroupError::TooManyContextTags {
+            actual,
+            maximum: MAX_GROUP_CONTEXT_INPUT_ITEMS,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn is_group_context(tag: &Tag) -> bool {
+    tag.as_slice().first().map(String::as_str) == Some("h")
+}
+
+fn validate_group_context(tag: &Tag, group_id: &str) -> Result<(), GroupError> {
+    let values = tag.as_slice();
+    let value = values
+        .get(1)
+        .map(String::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or(GroupError::EmptyGroupContext)?;
+    if value.len() > MAX_GROUP_ID_BYTES {
+        return Err(GroupError::GroupContextTooLong {
+            bytes: value.len(),
+            maximum: MAX_GROUP_ID_BYTES,
+        });
+    }
+    if values.len() != 2 || value != group_id {
+        return Err(GroupError::ConflictingGroupContext);
+    }
+    Ok(())
 }
