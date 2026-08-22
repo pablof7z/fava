@@ -591,10 +591,15 @@ if [ "$break_volume_created" != "$break_volume_name" ] \
   echo "could not create the exact causal target volume" >&2
   exit 74
 fi
-# Prime the target while the build-script sample is protected by EROFS. Then
-# discard only the canary binary fingerprint and recompile that binary against
-# the same cached build-script result with the rootfs protection removed. This
-# recreates the reviewed post-sample race without weakening build.rs itself.
+break_holder_cidfile=$temporary/control/break-holder.cid
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- docker run --detach \
+  --name "$container_prefix-break-holder" --cidfile "$break_holder_cidfile" --user 0:0 --network none \
+  --cap-drop ALL --security-opt no-new-privileges --pids-limit 8 --memory 64m --cpus 1 --read-only \
+  --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false \
+  --volume "$break_volume_name:/target" "$source_image_reference" tail -f /dev/null >/dev/null
+break_holder_id=$(tr -d '\r\n' < "$break_holder_cidfile")
+if [ "${#break_holder_id}" -ne 64 ] || [ "$(docker container inspect "$break_holder_id" --format '{{.Id}}')" != "$break_holder_id" ] \
+  || [ "$(docker container inspect "$break_holder_id" --format '{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}}|{{.RW}}{{end}}')" != "volume|$break_volume_name|/target|true" ]; then exit 74; fi
 common_run "$container_prefix-break" "$break_volume_name" --read-only
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --rm --name "$container_prefix-break-prune" \
@@ -632,6 +637,7 @@ python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
       test "$(sed -n "5s/^restored_sha256=//p" "$result")" = "$EXPECTED_SHA"
       test "$(sed -n "6p" "$result")" = outcome=compiled-hostile-bytes
       test -x /target/release/canary; grep -a -q "canary forged:" /target/release/canary'
+remove_container_id "$break_holder_id"
 remove_volume_name "$break_volume_name"
 break_volume_name=
 
