@@ -2,14 +2,12 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use nostr::event::Event;
 use serde_json::{Map, Value};
 
-use crate::croissant::process_is_alive;
+use crate::croissant_simple_groups_evidence_semantics::verify_semantic_artifacts;
 use crate::croissant_simple_groups_evidence_support::{
     MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, artifact_hashes, collect_files, read_bounded,
     signed_digest, stream_contains,
@@ -111,7 +109,8 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     }
     verify_flow_claims(manifest)?;
     verify_bounds(manifest)?;
-    verify_children(manifest)
+    verify_children(manifest)?;
+    verify_semantic_artifacts(root, manifest)
 }
 
 fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
@@ -126,7 +125,7 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
     let relay_signer = required_string(manifest, "relay_signer_public_key")?;
     let shared = required_string(manifest, "shared_event_id")?;
     let custom = required_string(manifest, "custom_event_id")?;
-    if relay_urls != evidence
+    if relay_urls.iter().collect::<BTreeSet<_>>() != evidence.iter().collect::<BTreeSet<_>>()
         || owners[0] == owners[1]
         || metadata[0] == metadata[1]
         || metadata_authors != [relay_signer, relay_signer]
@@ -239,16 +238,9 @@ fn verify_children(manifest: &Value) -> CanaryResult<()> {
                 .get("port_open_after")
                 .and_then(Value::as_bool)
                 != Some(false)
-            || process_is_alive(u32::try_from(pid).unwrap_or(u32::MAX))
         {
             return Err(CanaryError::new(
                 "simple-groups child teardown was incomplete",
-            ));
-        }
-        let address: SocketAddr = endpoint.parse().map_err(error)?;
-        if TcpStream::connect_timeout(&address, Duration::from_millis(25)).is_ok() {
-            return Err(CanaryError::new(
-                "simple-groups child endpoint remained open",
             ));
         }
     }

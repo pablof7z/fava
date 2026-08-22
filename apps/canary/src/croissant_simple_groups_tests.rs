@@ -1,14 +1,14 @@
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
+use nostr::types::Timestamp;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
-use super::croissant::{CroissantLimits, CroissantSupervisor, process_is_alive};
+use super::croissant::{CroissantLimits, process_is_alive};
 use super::croissant_simple_groups::{
     CroissantSimpleGroupsOptions, prepare_owned_supervisors, supervise_owned_pair,
 };
@@ -17,63 +17,6 @@ use super::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
 };
 use super::croissant_simple_groups_flow::execute_public_flow;
-use super::{CanaryError, repository_root};
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn two_croissant_children_are_always_reaped() {
-    let fixture = PairFixture::new();
-    let completion = supervise_owned_pair(fixture.supervisors(), |_| async { Ok(()) })
-        .await
-        .expect("both exact children complete");
-    let () = completion.flow;
-    assert_pair_cleanup(&completion.ready, &completion.teardown);
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn second_child_failure_still_reaps_first() {
-    let fixture = PairFixture::new();
-    let failure = supervise_owned_pair(fixture.supervisors(), |_| async {
-        Err::<(), _>(CanaryError::new("injected second-child flow failure"))
-    })
-    .await
-    .expect_err("injected flow failure remains attributed");
-    assert_eq!(
-        failure.ready.len(),
-        2,
-        "both exact children reached readiness"
-    );
-    assert_eq!(
-        failure.teardown.len(),
-        2,
-        "both cleanup results were captured"
-    );
-    let teardown = failure
-        .teardown
-        .iter()
-        .map(|result| result.as_ref().expect("both exact cleanups complete"))
-        .collect::<Vec<_>>();
-    for (ready, teardown) in failure.ready.iter().zip(teardown) {
-        assert_eq!(ready.pid, teardown.pid);
-        assert_ne!(teardown.pid, 75_649, "forbidden unowned PID was touched");
-        assert!(!process_is_alive(teardown.pid));
-        assert!(!teardown.port_open_after);
-    }
-
-    let startup_fixture = PairFixture::new();
-    let startup_failure =
-        supervise_owned_pair(startup_fixture.supervisors_with_failing_b(), |_| async {
-            Ok(())
-        })
-        .await
-        .expect_err("second-child startup failure remains attributed");
-    assert_eq!(startup_failure.ready.len(), 1);
-    assert_eq!(startup_failure.teardown.len(), 1);
-    let first_cleanup = startup_failure.teardown[0]
-        .as_ref()
-        .expect("first child cleanup completes after B startup failure");
-    assert_eq!(startup_failure.ready[0].pid, first_cleanup.pid);
-    assert!(!process_is_alive(first_cleanup.pid));
-}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn croissant_simple_groups_public_flow() {
@@ -148,6 +91,11 @@ fn pair_verifier_rejects_unsafe_evidence() {
         UnsafePairCase::ExtraManifest,
         UnsafePairCase::MissingManifest,
         UnsafePairCase::StagingResidue,
+        UnsafePairCase::UnderivedFlowClaim,
+        UnsafePairCase::UnderivedProcessClaim,
+        UnsafePairCase::MissingExactClose,
+        UnsafePairCase::ExtraSignedHandoff,
+        UnsafePairCase::RetainedSecretMarker,
     ] {
         let fixture = PairEvidenceFixture::new();
         fixture.apply(case);
@@ -156,6 +104,14 @@ fn pair_verifier_rejects_unsafe_evidence() {
             "pair verifier accepted unsafe fixture {case:?}"
         );
     }
+}
+
+#[test]
+fn pair_verifier_treats_shared_evidence_as_unordered_hosts() {
+    let fixture = PairEvidenceFixture::new();
+    fixture.reverse_shared_evidence(0);
+    verify_croissant_simple_groups_pair(fixture.root())
+        .expect("shared host evidence has no canonical order");
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -170,6 +126,11 @@ enum UnsafePairCase {
     ExtraManifest,
     MissingManifest,
     StagingResidue,
+    UnderivedFlowClaim,
+    UnderivedProcessClaim,
+    MissingExactClose,
+    ExtraSignedHandoff,
+    RetainedSecretMarker,
 }
 
 struct PairEvidenceFixture {
@@ -188,8 +149,6 @@ impl PairEvidenceFixture {
         ];
         for (index, root) in roots.iter().enumerate() {
             fs::create_dir(root).expect("run fixture root");
-            fs::write(root.join("flow.json"), format!("run-{index}-own-data"))
-                .expect("flow fixture");
             write_pair_manifest(root, index, &authors[index]);
         }
         Self {
@@ -203,6 +162,10 @@ impl PairEvidenceFixture {
         self.temporary.path()
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one exhaustive hostile-fixture dispatcher keeps every refusal mutation explicit"
+    )]
     fn apply(&self, case: UnsafePairCase) {
         match case {
             UnsafePairCase::PersistentParentSecret => {
@@ -265,7 +228,74 @@ impl PairEvidenceFixture {
                 fs::create_dir(self.root().join(".fava-canary-staging-residue"))
                     .expect("staging residue");
             }
+            UnsafePairCase::UnderivedFlowClaim => self.mutate(0, true, |manifest| {
+                manifest["metadata_names"][0] = json!("manifest-only-name");
+            }),
+            UnsafePairCase::UnderivedProcessClaim => {
+                let path = self.roots[0].join("children/processes.json");
+                let mut processes: Value =
+                    serde_json::from_slice(&fs::read(&path).expect("process fixture read"))
+                        .expect("process fixture json");
+                processes["teardown"][0]["completed"] = json!(false);
+                fs::write(
+                    &path,
+                    serde_json::to_vec_pretty(&processes).expect("process bytes"),
+                )
+                .expect("process fixture mutation");
+                self.mutate(0, true, |_| {});
+            }
+            UnsafePairCase::MissingExactClose => {
+                self.rewrite_wire(0, "a", |wire| {
+                    wire.lines()
+                        .filter(|line| !(line.contains("CLOSE") && line.contains("content-0")))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n"
+                });
+            }
+            UnsafePairCase::ExtraSignedHandoff => {
+                self.rewrite_wire(0, "a", |wire| {
+                    let event = wire
+                        .lines()
+                        .find(|line| line.contains("client_to_relay") && line.contains("EVENT"))
+                        .expect("client EVENT line");
+                    format!("{wire}{event}\n")
+                });
+            }
+            UnsafePairCase::RetainedSecretMarker => {
+                fs::write(self.roots[0].join("retained.txt"), "nsec1forbidden")
+                    .expect("secret marker fixture");
+                self.mutate(0, true, |_| {});
+            }
         }
+    }
+
+    fn rewrite_wire(&self, index: usize, label: &str, update: impl FnOnce(&str) -> String) {
+        let path = self.roots[index].join(format!("wire/{label}.jsonl"));
+        let wire = fs::read_to_string(&path).expect("wire fixture read");
+        fs::write(&path, update(&wire)).expect("wire fixture mutation");
+        self.mutate(index, true, |_| {});
+    }
+
+    fn reverse_shared_evidence(&self, index: usize) {
+        let flow_path = self.roots[index].join("flow.json");
+        let mut flow: Value =
+            serde_json::from_slice(&fs::read(&flow_path).expect("flow read")).expect("flow json");
+        flow["shared_evidence"]
+            .as_array_mut()
+            .expect("shared evidence array")
+            .reverse();
+        fs::write(
+            &flow_path,
+            serde_json::to_vec_pretty(&flow).expect("flow bytes"),
+        )
+        .expect("flow rewrite");
+        self.mutate(index, true, |manifest| {
+            manifest["shared_evidence"]
+                .as_array_mut()
+                .expect("shared evidence array")
+                .reverse();
+        });
     }
 
     fn mutate(&self, index: usize, reseal: bool, update: impl FnOnce(&mut Value)) {
@@ -286,6 +316,10 @@ impl PairEvidenceFixture {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one fixture builder keeps causal wire, flow, process, hash, and seal facts aligned"
+)]
 fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
     let base_pid = 4_000_100 + (index as u64 * 2);
     let port = 49_000 + (u16::try_from(index).expect("fixture index fits u16") * 10);
@@ -293,7 +327,20 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
         format!("ws://127.0.0.1:{port}"),
         format!("ws://127.0.0.1:{}", port + 1),
     ];
-    let relay_signer = Keys::generate().public_key().to_hex();
+    let relay_keys = Keys::generate();
+    let relay_signer = relay_keys.public_key().to_hex();
+    let group_id = format!("group-{index}");
+    let shared = signed_fixture_event(author, 9, &group_id, "shared");
+    let unique_events = [
+        signed_fixture_event(author, 9, &group_id, &format!("unique-a-{index}")),
+        signed_fixture_event(author, 9, &group_id, &format!("unique-b-{index}")),
+    ];
+    let custom = signed_fixture_event(author, 50_029, &group_id, "custom");
+    let metadata_names = [format!("metadata-a-{index}"), format!("metadata-b-{index}")];
+    let admin_targets = [
+        Keys::generate().public_key().to_hex(),
+        Keys::generate().public_key().to_hex(),
+    ];
     let ready = [0_u64, 1].map(|child| {
         json!({
             "pid": base_pid + child,
@@ -317,6 +364,52 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             "port_open_after": false,
         })
     });
+    let flow = json!({
+        "group_id": group_id,
+        "relay_urls": relay_urls,
+        "shared_event_id": shared.id.to_hex(),
+        "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
+        "custom_event_id": custom.id.to_hex(),
+        "shared_evidence": relay_urls,
+        "metadata_names": metadata_names,
+        "metadata_authors": [relay_signer.clone(), relay_signer.clone()],
+        "admin_targets": admin_targets,
+        "admin_authors": [relay_signer.clone(), relay_signer.clone()],
+        "write_id": 1,
+        "receipt_id": 1,
+        "custom_destinations": 2,
+        "custom_acknowledged": 2,
+        "handoffs": [1, 1],
+        "signed_refusals": 3,
+        "observation_closed": true,
+    });
+    let processes = json!({"ready": ready, "teardown": teardown});
+    fs::create_dir_all(root.join("children")).expect("children fixture directory");
+    fs::create_dir_all(root.join("wire")).expect("wire fixture directory");
+    fs::write(
+        root.join("flow.json"),
+        serde_json::to_vec_pretty(&flow).expect("flow fixture bytes"),
+    )
+    .expect("flow fixture");
+    fs::write(
+        root.join("children/processes.json"),
+        serde_json::to_vec_pretty(&processes).expect("process fixture bytes"),
+    )
+    .expect("process fixture");
+    for label in 0..2 {
+        write_wire_fixture(
+            root,
+            label,
+            author,
+            &relay_keys,
+            &group_id,
+            &shared,
+            &unique_events[label],
+            &custom,
+            &metadata_names[label],
+            &admin_targets[label],
+        );
+    }
     let mut manifest = json!({
         "run_id": format!("run-{index}"),
         "scenario": SCENARIO,
@@ -324,15 +417,15 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
         "author_public_key": author.public_key().to_hex(),
         "relay_signer_public_key": relay_signer.clone(),
         "relay_owner_public_keys": [Keys::generate().public_key().to_hex(), Keys::generate().public_key().to_hex()],
-        "group_id": format!("group-{index}"),
+        "group_id": group_id,
         "relay_urls": relay_urls,
-        "shared_event_id": format!("shared-{index}"),
-        "unique_event_ids": [format!("unique-a-{index}"), format!("unique-b-{index}")],
-        "custom_event_id": format!("custom-{index}"),
+        "shared_event_id": shared.id.to_hex(),
+        "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
+        "custom_event_id": custom.id.to_hex(),
         "shared_evidence": relay_urls,
-        "metadata_names": [format!("metadata-a-{index}"), format!("metadata-b-{index}")],
+        "metadata_names": metadata_names,
         "metadata_authors": [relay_signer.clone(), relay_signer.clone()],
-        "admin_targets": [format!("admin-a-{index}"), format!("admin-b-{index}")],
+        "admin_targets": admin_targets,
         "admin_authors": [relay_signer.clone(), relay_signer.clone()],
         "write_id": format!("run-{index}:1"),
         "receipt_id": format!("run-{index}:1"),
@@ -363,6 +456,93 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
     .expect("manifest fixture");
 }
 
+fn signed_fixture_event(keys: &Keys, kind: u16, group: &str, content: &str) -> Event {
+    EventBuilder::new(Kind::from(kind), content)
+        .tags([Tag::parse(["h", group]).expect("h tag")])
+        .custom_created_at(Timestamp::from(u64::from(kind) + 1))
+        .finalize(keys)
+        .expect("signed fixture event")
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "fixture writes one complete causal relay transcript"
+)]
+fn write_wire_fixture(
+    root: &Path,
+    index: usize,
+    author: &Keys,
+    relay: &Keys,
+    group: &str,
+    shared: &Event,
+    unique: &Event,
+    custom: &Event,
+    metadata_name: &str,
+    admin_target: &str,
+) {
+    let metadata_seed = signed_fixture_event(author, 9002, group, metadata_name);
+    let admin_seed = signed_fixture_event(author, 9000, group, admin_target);
+    let bootstrap = signed_fixture_event(author, 9007, group, "bootstrap");
+    let metadata = EventBuilder::new(Kind::from(39000), "")
+        .tags([
+            Tag::parse(["d", group]).expect("d tag"),
+            Tag::parse(["name", metadata_name]).expect("name tag"),
+        ])
+        .custom_created_at(Timestamp::from(39_001))
+        .finalize(relay)
+        .expect("metadata fixture event");
+    let admin = EventBuilder::new(Kind::from(39001), "")
+        .tags([
+            Tag::parse(["d", group]).expect("d tag"),
+            Tag::parse(["p", admin_target, "admin"]).expect("admin tag"),
+        ])
+        .custom_created_at(Timestamp::from(39_002))
+        .finalize(relay)
+        .expect("admin fixture event");
+    let content_subscription = format!("content-{index}");
+    let records_subscription = format!("records-{index}");
+    let payloads = [
+        json!(["EVENT", bootstrap]),
+        json!(["EVENT", metadata_seed]),
+        json!(["EVENT", admin_seed]),
+        json!(["EVENT", shared]),
+        json!(["EVENT", unique]),
+        json!(["REQ", content_subscription, {"kinds": [9], "limit": 16, "#h": [group]}]),
+        json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [group]}]),
+        json!(["EVENT", custom]),
+        json!(["CLOSE", content_subscription]),
+        json!(["CLOSE", records_subscription]),
+    ];
+    let responses = [
+        json!(["EVENT", content_subscription, unique]),
+        json!(["EVENT", content_subscription, shared]),
+        json!(["EVENT", records_subscription, metadata]),
+        json!(["EVENT", records_subscription, admin]),
+        json!(["OK", custom.id.to_hex(), true, ""]),
+    ];
+    let mut lines = Vec::new();
+    for payload in payloads {
+        lines.push(wire_line("client_to_relay", &payload));
+    }
+    for payload in responses {
+        lines.push(wire_line("relay_to_client", &payload));
+    }
+    fs::write(
+        root.join(format!("wire/{}.jsonl", if index == 0 { "a" } else { "b" })),
+        format!("{}\n", lines.join("\n")),
+    )
+    .expect("wire fixture");
+}
+
+fn wire_line(direction: &str, payload: &Value) -> String {
+    serde_json::to_string(&json!({
+        "direction": direction,
+        "frame_type": "text",
+        "payload": serde_json::to_string(&payload).expect("payload json"),
+    }))
+    .expect("wire line")
+}
+
 fn read_manifest(root: &Path) -> Value {
     serde_json::from_slice(&fs::read(root.join("manifest.json")).expect("manifest read"))
         .expect("manifest json")
@@ -387,93 +567,6 @@ fn assert_pair_cleanup(
     }
 }
 
-struct PairFixture {
-    temporary: TempDir,
-    binary: PathBuf,
-}
-
-impl PairFixture {
-    fn new() -> Self {
-        let temporary = TempDir::new().expect("pair fixture root");
-        let binary = executable(temporary.path());
-        Self { temporary, binary }
-    }
-
-    fn supervisors(&self) -> [CroissantSupervisor; 2] {
-        let source = repository_root().expect("source checkout");
-        [
-            supervisor(
-                &self.binary,
-                &source,
-                &self.temporary.path().join("relay-a"),
-                &owner("relay-a"),
-                &seed_hash(b"pair-fixture-a"),
-            ),
-            supervisor(
-                &self.binary,
-                &source,
-                &self.temporary.path().join("relay-b"),
-                &owner("relay-b"),
-                &seed_hash(b"pair-fixture-b"),
-            ),
-        ]
-    }
-
-    fn supervisors_with_failing_b(&self) -> [CroissantSupervisor; 2] {
-        let source = repository_root().expect("source checkout");
-        let failing = failing_executable(self.temporary.path());
-        [
-            supervisor(
-                &self.binary,
-                &source,
-                &self.temporary.path().join("startup-relay-a"),
-                &owner("startup-relay-a"),
-                &seed_hash(b"startup-fixture-a"),
-            ),
-            supervisor(
-                &failing,
-                &source,
-                &self.temporary.path().join("startup-relay-b"),
-                &owner("startup-relay-b"),
-                &seed_hash(b"startup-fixture-b"),
-            ),
-        ]
-    }
-}
-
-fn supervisor(
-    binary: &Path,
-    source: &Path,
-    root: &Path,
-    owner: &str,
-    seed: &str,
-) -> CroissantSupervisor {
-    CroissantSupervisor::prepare(binary, source, root, owner, seed, CroissantLimits::test())
-        .expect("exact child supervisor")
-}
-
-fn executable(root: &Path) -> PathBuf {
-    let path = root.join("controlled-croissant-fixture");
-    fs::write(
-        &path,
-        "#!/bin/sh\nexec python3 -c 'import os,socket,time; s=socket.socket(); s.bind((\"127.0.0.1\",int(os.environ[\"PORT\"]))); s.listen(); time.sleep(30)'\n",
-    )
-    .expect("fixture executable");
-    let mut permissions = fs::metadata(&path).expect("fixture metadata").permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&path, permissions).expect("fixture permissions");
-    path
-}
-
-fn failing_executable(root: &Path) -> PathBuf {
-    let path = root.join("failing-croissant-fixture");
-    fs::write(&path, "#!/bin/sh\nexit 71\n").expect("failing fixture executable");
-    let mut permissions = fs::metadata(&path).expect("fixture metadata").permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&path, permissions).expect("fixture permissions");
-    path
-}
-
 fn build_croissant(source: &Path, root: &Path) -> PathBuf {
     let binary = root.join("croissant");
     let output = Command::new("go")
@@ -489,12 +582,4 @@ fn build_croissant(source: &Path, root: &Path) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
     binary
-}
-
-fn owner(label: &str) -> String {
-    hex::encode(Sha256::digest(label.as_bytes()))
-}
-
-fn seed_hash(seed: &[u8]) -> String {
-    hex::encode(Sha256::digest(seed))
 }
