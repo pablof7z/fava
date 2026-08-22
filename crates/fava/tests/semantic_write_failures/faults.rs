@@ -103,6 +103,8 @@ pub(super) struct FaultingWriteStore {
     reads_after_signature: AtomicUsize,
     route_barrier: Mutex<Option<Arc<Barrier>>>,
     route_commits: AtomicU64,
+    fail_release: AtomicBool,
+    fail_initial_route_accept: AtomicBool,
 }
 
 impl FaultingWriteStore {
@@ -131,6 +133,8 @@ impl FaultingWriteStore {
             reads_after_signature: AtomicUsize::new(0),
             route_barrier: Mutex::new(None),
             route_commits: AtomicU64::new(0),
+            fail_release: AtomicBool::new(false),
+            fail_initial_route_accept: AtomicBool::new(false),
         }
     }
 
@@ -162,6 +166,14 @@ impl FaultingWriteStore {
         self.route_commits.load(Ordering::SeqCst)
     }
 
+    pub(super) fn fail_reservation_release(&self, fail: bool) {
+        self.fail_release.store(fail, Ordering::SeqCst);
+    }
+
+    pub(super) fn fail_initial_route_acceptance(&self, fail: bool) {
+        self.fail_initial_route_accept.store(fail, Ordering::SeqCst);
+    }
+
     fn should_fail_read(&self) -> bool {
         self.failing_reads
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
@@ -185,7 +197,14 @@ impl WriteStore for FaultingWriteStore {
         self.inner.reserve_active()
     }
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
-        self.inner.release_active(reservation)
+        self.inner.release_active(reservation)?;
+        if self.fail_release.load(Ordering::SeqCst) {
+            Err(WriteStoreError::Refused(
+                "injected reservation release failure".to_owned(),
+            ))
+        } else {
+            Ok(())
+        }
     }
     fn receipt_changes(&self) -> broadcast::Receiver<(ReceiptId, Option<Receipt>)> {
         self.receipt_changes.subscribe()
@@ -207,9 +226,21 @@ impl WriteStore for FaultingWriteStore {
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&Event>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner
-            .accept_reserved_materialized_edit(reservation, intent, event, source)
+        if initial_route.is_some() && self.fail_initial_route_accept.load(Ordering::SeqCst) {
+            self.inner.release_active(reservation)?;
+            return Err(WriteStoreError::Refused(
+                "injected atomic initial-route acceptance failure".to_owned(),
+            ));
+        }
+        self.inner.accept_reserved_materialized_edit(
+            reservation,
+            intent,
+            event,
+            source,
+            initial_route,
+        )
     }
     fn install_materialization(
         &self,

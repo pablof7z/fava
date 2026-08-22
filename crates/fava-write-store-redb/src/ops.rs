@@ -120,8 +120,9 @@ impl WriteStore for RedbWriteStore {
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&Event>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.accept_reserved_semantic(reservation, intent, event, source)
+        self.accept_reserved_semantic(reservation, intent, event, source, initial_route)
     }
 
     fn install_materialization(

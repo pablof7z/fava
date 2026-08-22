@@ -1,12 +1,15 @@
 use std::collections::BTreeSet;
 
+use fava_routing::RoutePlan;
 use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
-use fava_write_store::{AcceptedWrite, WriteStoreError, destination_evidence_capacity};
+use fava_write_store::{
+    AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
+};
 
 use crate::lifecycle::{active_count, destinations, next_revision};
 use crate::{RedbWriteStore, SemanticCustody};
@@ -18,7 +21,7 @@ impl RedbWriteStore {
         event: UnsignedEvent,
         source: Option<&Event>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.accept_semantic_inner(None, intent, event, source)
+        self.accept_semantic_inner(None, intent, event, source, None)
     }
 
     pub(super) fn accept_reserved_semantic(
@@ -27,8 +30,9 @@ impl RedbWriteStore {
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&Event>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.accept_semantic_inner(Some(reservation), intent, event, source)
+        self.accept_semantic_inner(Some(reservation), intent, event, source, initial_route)
     }
 
     fn accept_semantic_inner(
@@ -37,6 +41,7 @@ impl RedbWriteStore {
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&Event>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock()?;
         let reserved = reservation.is_some();
@@ -65,6 +70,7 @@ impl RedbWriteStore {
                 && stored.2 == selected_source
                 && receipt.routing == routing
                 && receipt.current.event == EventValue::Unsigned(event)
+                && initial_route.is_none_or(|plan| route_matches(receipt, plan))
             {
                 return Ok(AcceptedWrite {
                     write_id: receipt.write_id,
@@ -105,7 +111,7 @@ impl RedbWriteStore {
         let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
         let explicit = matches!(routing, WriteRouting::Explicit(_));
         let desired_destinations = current.publication.destinations.keys().cloned().collect();
-        let receipt = Receipt {
+        let mut receipt = Receipt {
             write_id,
             receipt_id,
             current: current.clone(),
@@ -117,6 +123,9 @@ impl RedbWriteStore {
             desired_destinations,
             attempts: std::collections::BTreeMap::new(),
         };
+        if let Some(plan) = initial_route {
+            apply_route_to_receipt(&mut receipt, plan)?;
+        }
         let custody = (edit, author, selected_source, None);
         let next_revision = next_revision(&state)?;
         self.commit_accept(next_identity, &receipt, Some(&custody))?;
@@ -354,6 +363,12 @@ impl RedbWriteStore {
             })
             .collect())
     }
+}
+
+fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
+    receipt.route_revision == plan.revision
+        && receipt.route_settled == plan.settled
+        && receipt.desired_destinations == plan.destinations.keys().cloned().collect()
 }
 
 fn validate_materialization(

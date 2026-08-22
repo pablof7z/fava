@@ -98,15 +98,22 @@ impl Publication {
             } = match self.prepare_semantic(&intent, None, None) {
                 Ok(prepared) => prepared,
                 Err(error) => {
-                    let _ = self.store.release_active(reservation);
+                    if let Err(release) = self.store.release_active(reservation) {
+                        return Err(PublicationError::Store(WriteStoreError::Refused(format!(
+                            "semantic preparation failed ({error}); active reservation release also failed ({release})"
+                        ))));
+                    }
                     return Err(error);
                 }
             };
+            let initial_route =
+                matches!(intent.routing(), WriteRouting::Automatic).then_some(&route);
             let accepted = match self.store.accept_reserved_materialized_edit(
                 reservation,
                 intent.clone(),
                 event,
                 source.as_ref(),
+                initial_route,
             ) {
                 Ok(accepted) => accepted,
                 Err(error) => {
@@ -114,15 +121,6 @@ impl Publication {
                     return Err(error.into());
                 }
             };
-            if matches!(intent.routing(), WriteRouting::Automatic) {
-                let _ = self.store.apply_route(
-                    accepted.write_id,
-                    accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
-                    accepted.current.id(),
-                    &route,
-                );
-            }
             let semantic = SemanticState::accepted(edit, author, source.as_ref(), sources);
             self.start_semantic(accepted.receipt_id, semantic);
             return Ok(accepted);

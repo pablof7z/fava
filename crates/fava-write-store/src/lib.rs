@@ -110,6 +110,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _intent: WriteIntent,
         _event: UnsignedEvent,
         _source: Option<&Event>,
+        _initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         Err(WriteStoreError::Refused(
             "write store does not support reserved edit acceptance".to_owned(),

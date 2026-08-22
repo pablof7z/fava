@@ -7,7 +7,7 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{CacheMutation, CachedEvent};
 use fava_write::{WriteIntent, WriteRouting};
-use fava_write_store_memory::MemoryWriteStore;
+use fava_write_store::WriteStore;
 use nostr::key::Keys;
 
 use super::ControlledMaterializer;
@@ -37,12 +37,15 @@ pub(super) fn publish_edit(fava: &Fava, author: fava::PublicKey, kind: Kind) -> 
         .expect("semantic edit accepts")
 }
 
-pub(super) fn assembly(
+pub(super) fn assembly<W>(
     keys: &Keys,
     cache: Arc<MemoryEventCache>,
-    store: Arc<MemoryWriteStore>,
+    store: Arc<W>,
     materializers: Vec<Arc<ControlledMaterializer>>,
-) -> Fava {
+) -> Fava
+where
+    W: WriteStore + 'static,
+{
     Fava::builder()
         .event_cache(cache)
         .write_store(store)

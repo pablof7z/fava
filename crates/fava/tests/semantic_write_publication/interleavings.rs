@@ -297,6 +297,7 @@ fn active_reservation_excludes_unreserved_memory_admission() {
             intent(semantic_keys.public_key(), Kind::ContactList),
             materialization(&semantic_keys, 1, "reserved"),
             None,
+            None,
         )
         .expect("the held reservation commits without a second capacity refusal");
     assert_eq!(

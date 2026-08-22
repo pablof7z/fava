@@ -40,6 +40,7 @@ fn active_reservation_excludes_unreserved_redb_admission() {
                 .unwrap(),
             materialization(semantic_keys.public_key(), 1, "reserved"),
             None,
+            None,
         )
         .expect("the held reservation commits without a second capacity refusal");
     assert_eq!(

@@ -418,6 +418,7 @@ fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
                 ordinary,
                 materialization(keys.public_key(), 1, "not an edit"),
                 None,
+                None,
             )
             .is_err()
     );
