@@ -1,4 +1,6 @@
-use fava_write::{EventValue, PublicKey};
+use std::collections::BTreeSet;
+
+use fava_write::{EventValue, PublicKey, Tag};
 
 use crate::GroupError;
 use crate::records::record_boundary;
@@ -44,14 +46,12 @@ impl GroupAdmins {
     pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
         let boundary = record_boundary(event, 39_001)?;
         let author = boundary.author();
-        let admins = boundary
-            .tags()
-            .iter()
-            .enumerate()
-            .find(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .map(|(index, tag)| parse_admin(index, tag.as_slice()))
-            .into_iter()
-            .collect();
+        let admins = collect_rows(
+            boundary.tags(),
+            "p",
+            parse_admin,
+            |(key, _): &(PublicKey, Vec<String>)| *key,
+        );
         Ok(Self {
             id: boundary.id,
             author,
@@ -72,7 +72,6 @@ impl GroupAdmins {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    #[must_use]
     pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), GroupError>] {
         &self.admins
     }
@@ -87,14 +86,12 @@ impl GroupMembers {
     pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
         let boundary = record_boundary(event, 39_002)?;
         let author = boundary.author();
-        let members = boundary
-            .tags()
-            .iter()
-            .enumerate()
-            .find(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .map(|(index, tag)| parse_key(index, tag.as_slice(), "member"))
-            .into_iter()
-            .collect();
+        let members = collect_rows(
+            boundary.tags(),
+            "p",
+            |index, values| parse_key(index, values, false),
+            |key| *key,
+        );
         Ok(Self {
             id: boundary.id,
             author,
@@ -115,7 +112,6 @@ impl GroupMembers {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    #[must_use]
     pub fn members(&self) -> &[Result<PublicKey, GroupError>] {
         &self.members
     }
@@ -130,14 +126,12 @@ impl GroupRoles {
     pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
         let boundary = record_boundary(event, 39_003)?;
         let author = boundary.author();
-        let roles = boundary
-            .tags()
-            .iter()
-            .enumerate()
-            .find(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("role"))
-            .map(|(index, tag)| parse_role(index, tag.as_slice()))
-            .into_iter()
-            .collect();
+        let roles = collect_rows(
+            boundary.tags(),
+            "role",
+            parse_role,
+            |(name, _): &(String, Option<String>)| name.clone(),
+        );
         Ok(Self {
             id: boundary.id,
             author,
@@ -158,7 +152,6 @@ impl GroupRoles {
     }
 
     /// Source-ordered role names and optional descriptions with row-local failures.
-    #[must_use]
     pub fn roles(&self) -> &[Result<(String, Option<String>), GroupError>] {
         &self.roles
     }
@@ -173,14 +166,12 @@ impl GroupParticipants {
     pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
         let boundary = record_boundary(event, 39_004)?;
         let author = boundary.author();
-        let participants = boundary
-            .tags()
-            .iter()
-            .enumerate()
-            .find(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("participant"))
-            .map(|(index, tag)| parse_key(index, tag.as_slice(), "participant"))
-            .into_iter()
-            .collect();
+        let participants = collect_rows(
+            boundary.tags(),
+            "participant",
+            |index, values| parse_key(index, values, true),
+            |key| *key,
+        );
         Ok(Self {
             id: boundary.id,
             author,
@@ -201,7 +192,6 @@ impl GroupParticipants {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    #[must_use]
     pub fn participants(&self) -> &[Result<PublicKey, GroupError>] {
         &self.participants
     }
@@ -211,14 +201,20 @@ fn parse_admin(
     tag_index: usize,
     values: &[String],
 ) -> Result<(PublicKey, Vec<String>), GroupError> {
-    let key = parse_key_prefix(tag_index, values, "admin")?;
+    if values.len() < 3 {
+        return Err(GroupError::MalformedRecordRow {
+            tag_index,
+            reason: "admin row requires a public key and at least one role",
+        });
+    }
+    let key = parse_key_prefix(tag_index, values, false)?;
     Ok((key, values[2..].to_vec()))
 }
 
 fn parse_key(
     tag_index: usize,
     values: &[String],
-    row: &'static str,
+    require_lowercase: bool,
 ) -> Result<PublicKey, GroupError> {
     if values.len() != 2 {
         return Err(GroupError::MalformedRecordRow {
@@ -226,21 +222,30 @@ fn parse_key(
             reason: "public-key row must contain exactly one value",
         });
     }
-    parse_key_prefix(tag_index, values, row)
+    parse_key_prefix(tag_index, values, require_lowercase)
 }
 
 fn parse_key_prefix(
     tag_index: usize,
     values: &[String],
-    _row: &'static str,
+    require_lowercase: bool,
 ) -> Result<PublicKey, GroupError> {
-    values
-        .get(1)
-        .and_then(|value| PublicKey::from_hex(value).ok())
-        .ok_or(GroupError::MalformedRecordRow {
+    let value = values.get(1).ok_or(GroupError::MalformedRecordRow {
+        tag_index,
+        reason: "public key is missing or invalid",
+    })?;
+    if require_lowercase
+        && (value.len() != 64 || value.bytes().any(|byte| byte.is_ascii_uppercase()))
+    {
+        return Err(GroupError::MalformedRecordRow {
             tag_index,
-            reason: "public key is missing or invalid",
-        })
+            reason: "participant public key must be lowercase hex",
+        });
+    }
+    PublicKey::from_hex(value).map_err(|_| GroupError::MalformedRecordRow {
+        tag_index,
+        reason: "public key is missing or invalid",
+    })
 }
 
 fn parse_role(tag_index: usize, values: &[String]) -> Result<(String, Option<String>), GroupError> {
@@ -250,5 +255,32 @@ fn parse_role(tag_index: usize, values: &[String]) -> Result<(String, Option<Str
             reason: "role row requires a name and optional description",
         });
     }
+    if values[1].is_empty() {
+        return Err(GroupError::MalformedRecordRow {
+            tag_index,
+            reason: "role name must not be empty",
+        });
+    }
     Ok((values[1].clone(), values.get(2).cloned()))
+}
+
+fn collect_rows<T, K>(
+    tags: &[Tag],
+    row_name: &str,
+    parse: impl Fn(usize, &[String]) -> Result<T, GroupError>,
+    key: impl Fn(&T) -> K,
+) -> Vec<Result<T, GroupError>>
+where
+    K: Ord,
+{
+    let mut seen = BTreeSet::new();
+    tags.iter()
+        .enumerate()
+        .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some(row_name))
+        .map(|(tag_index, tag)| match parse(tag_index, tag.as_slice()) {
+            Ok(value) if seen.insert(key(&value)) => Ok(value),
+            Ok(_) => Err(GroupError::DuplicateRecordRow { tag_index }),
+            Err(error) => Err(error),
+        })
+        .collect()
 }
