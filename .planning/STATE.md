@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
 status: executing
-stopped_at: Completed 07.1.1-06-PLAN.md
-last_updated: "2026-08-22T10:37:16.326Z"
+stopped_at: Completed 07.1.1-07-PLAN.md
+last_updated: "2026-08-22T11:02:47.428Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 07.1.1 execution started
-state_head: 0e4be74fb6bcd97c258c4f3f763eb1f72fc639d2
+state_head: 7ff076b1365c59545778f77b05d7bb61ff842ed4
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 36
-  completed_plans: 30
+  completed_plans: 31
   percent: 64
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 07.1.1 execution started
 
@@ -88,6 +88,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P04 | 15min | 2 tasks | 10 files |
 | Phase 07.1.1 P05 | 14min | 3 tasks | 8 files |
 | Phase 07.1.1 P06 | 14min | 3 tasks | 4 files |
+| Phase 07.1.1 P07 | 21min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: The facade consumes fava-simple-groups only through Cargo dev-dependencies and one Bazel test edge; production facade source and dependencies remain capability-blind.
 - [Phase 07.1.1]: Applications compose group.prepare(payload), fava.to(group.hosts()), and publish directly and receive ordinary Write; Group owns no publication method or lifecycle.
 - [Phase 07.1.1]: Invalid signed group context is refused by pure preparation before any facade custody, signer, router, publisher, transport, or wire interaction.
+- [Phase 07.1.1]: Relay-authored records accept signed EventValue only and distinguish invalid id from invalid signature before typed decoding.
+- [Phase 07.1.1]: Recognized multi-row inputs expose bounded source-ordered Result values; only a successfully parsed row reserves its exact duplicate key.
+- [Phase 07.1.1]: Pinned addresses reuse EventCoordinate, saved hosts reuse RelayUrl, and people rows reuse PublicKey/String tuples without new row or attribution vocabulary.
 
 ### Pending Todos
 
@@ -179,6 +183,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T10:37:16.244Z
-Stopped at: Completed 07.1.1-06-PLAN.md
+Last session: 2026-08-22T11:02:47.344Z
+Stopped at: Completed 07.1.1-07-PLAN.md
 Resume file: None

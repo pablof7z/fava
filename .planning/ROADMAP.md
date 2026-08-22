@@ -245,7 +245,7 @@ Plans:
 - [x] 07.1.1-04-PLAN.md
 - [x] 07.1.1-05-PLAN.md
 - [x] 07.1.1-06-PLAN.md
-- [ ] 07.1.1-07-PLAN.md
+- [x] 07.1.1-07-PLAN.md
 - [ ] 07.1.1-08-PLAN.md
 - [ ] 07.1.1-09-PLAN.md
 - [ ] 07.1.1-10-PLAN.md
@@ -330,7 +330,7 @@ Plans:
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
 | 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete    | 2026-08-22 |
-| 07.1.1. Multi-Relay Simple Groups | 6/12 | In Progress|  |
+| 07.1.1. Multi-Relay Simple Groups | 7/12 | In Progress|  |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |
