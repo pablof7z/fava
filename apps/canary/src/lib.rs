@@ -11,6 +11,7 @@ mod croissant_simple_groups_evidence;
 mod croissant_simple_groups_evidence_semantics;
 mod croissant_simple_groups_evidence_support;
 mod croissant_simple_groups_flow;
+mod croissant_simple_groups_source;
 #[cfg(test)]
 mod croissant_simple_groups_supervision_tests;
 mod environment;

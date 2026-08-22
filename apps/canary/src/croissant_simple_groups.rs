@@ -19,9 +19,9 @@ use crate::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, secret_needles,
 };
 use crate::croissant_simple_groups_flow::execute_public_flow;
+use crate::croissant_simple_groups_source::clean_fava_source;
 use crate::{
-    CanaryError, CanaryResult, RunArtifacts, command_output, deterministic_keys, repository_root,
-    unix_ms,
+    CanaryError, CanaryResult, RunArtifacts, deterministic_keys, repository_root, unix_ms,
 };
 
 /// Process-memory input for one controlled two-relay simple-groups proof.
@@ -124,6 +124,8 @@ pub(crate) fn prepare_owned_supervisors(
 pub async fn run_croissant_simple_groups_scenario(
     options: CroissantSimpleGroupsOptions,
 ) -> CanaryResult<CroissantSimpleGroupsOutcome> {
+    let repository = repository_root()?;
+    let fava_source = clean_fava_source(&repository)?;
     let seed = &options.scenario_seed;
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let relay = deterministic_keys(&format!("simple-groups-relay\0{seed}"))?;
@@ -132,6 +134,8 @@ pub async fn run_croissant_simple_groups_scenario(
     let target_a = deterministic_keys(&format!("simple-groups-admin-a\0{seed}"))?;
     let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?;
     let mut artifacts = RunArtifacts::create_staged(&options.runs_directory, SCENARIO, seed)?;
+    fs::create_dir_all(artifacts.root().join("source"))?;
+    artifacts.write_json("source/fava.json", &fava_source)?;
     let started = unix_ms()?;
     artifacts.record(
         "scenario_started",
@@ -182,7 +186,11 @@ pub async fn run_croissant_simple_groups_scenario(
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .sum::<u64>();
-    let revision = command_output(&repository_root()?, "git", &["rev-parse", "HEAD"])?;
+    if clean_fava_source(&repository)? != fava_source {
+        return Err(CanaryError::new(
+            "simple-groups Fava source provenance changed during the live proof",
+        ));
+    }
     let mut manifest = json!({
         "run_id": run_id,
         "scenario": SCENARIO,
@@ -223,7 +231,9 @@ pub async fn run_croissant_simple_groups_scenario(
             "teardown_ms": CroissantLimits::default().teardown_ms,
         },
         "artifact_sha256": artifacts.artifact_hashes()?,
-        "fava_revision": revision,
+        "fava_revision": fava_source.fava_revision,
+        "fava_source_tree_sha256": fava_source.fava_source_tree_sha256,
+        "fava_source_clean": fava_source.fava_source_clean,
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
     });
