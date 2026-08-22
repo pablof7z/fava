@@ -44,9 +44,11 @@ fn one_host_group_traces_pure_preparation_and_queries() {
         .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("h"))
         .map(|tag| tag.as_slice().to_vec())
         .collect();
+    let hosts: Vec<_> = group.hosts().collect();
 
     assert_eq!(group.id(), group_id, "the opaque id must not be trimmed");
-    assert_eq!(group.hosts().collect::<Vec<_>>(), [host.clone()]);
+    assert_eq!(hosts.len(), 1);
+    assert_eq!(hosts[0], host);
     assert_eq!(
         (
             contexts,

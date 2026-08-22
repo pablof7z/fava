@@ -68,7 +68,7 @@ impl GroupRecords {
 
     fn kinds(self) -> &'static [u16] {
         match self {
-            Self::All => &RECORD_KINDS[..5],
+            Self::All => &RECORD_KINDS,
             Self::Metadata => &RECORD_KINDS[0..1],
             Self::Admins => &RECORD_KINDS[1..2],
             Self::Members => &RECORD_KINDS[2..3],
@@ -83,7 +83,7 @@ pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupErr
     let h = SingleLetterTag::from_char('h').expect("lowercase h is a valid tag key");
     Ok(selection
         .tag_values(h, [group.id()])
-        .only_from_relays(group.hosts())?)
+        .from_relays(group.hosts())?)
 }
 
 pub(crate) fn records(group: &Group, records: GroupRecords) -> Result<Query, GroupError> {
@@ -93,5 +93,5 @@ pub(crate) fn records(group: &Group, records: GroupRecords) -> Result<Query, Gro
     });
     Ok(query
         .tag_values(d, [group.id()])
-        .from_relays(group.hosts())?)
+        .only_from_relays(group.hosts())?)
 }

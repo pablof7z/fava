@@ -2,7 +2,9 @@ use std::fmt;
 
 use fava_query::{Query, QueryError};
 use fava_state::RelayUrl;
-use fava_write::{Event, EventBuildError, UnsignedEvent, WriteIntentError, WriteRouting};
+use fava_write::{
+    Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError, WriteRouting,
+};
 
 use crate::GroupRecords;
 
@@ -204,8 +206,18 @@ trait PreparePayload: Sized {
 }
 
 impl PreparePayload for UnsignedEvent {
-    fn prepare_for(self, _group: &Group) -> Result<Self, GroupError> {
-        Ok(self)
+    fn prepare_for(self, group: &Group) -> Result<Self, GroupError> {
+        let context =
+            Tag::parse(["h", group.id()]).map_err(|error| GroupError::Event(error.to_string()))?;
+        EventBuilder::from_parts(
+            self.pubkey,
+            self.kind,
+            self.created_at,
+            self.tags.iter().cloned().chain([context]).collect(),
+            self.content,
+        )
+        .build()
+        .map_err(Into::into)
     }
 }
 
