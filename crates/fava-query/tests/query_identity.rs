@@ -3,7 +3,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use fava_query::{Query, QueryError, RelayUrl, SingleLetterTag};
+use fava_query::{Kind, Query, QueryError, RelayUrl, SingleLetterTag};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
@@ -13,6 +13,25 @@ fn hash(query: &Query) -> u64 {
     let mut hasher = DefaultHasher::new();
     query.hash(&mut hasher);
     hasher.finish()
+}
+
+#[test]
+fn repeated_kind_identity_is_canonical() {
+    let first = Kind::from_u16(30_001);
+    let second = Kind::from_u16(30_002);
+    let left = Query::events().kind(first).kind(first).kind(second);
+    let right = Query::events().kind(second).kind(first).kind(second);
+
+    assert_eq!(left, right);
+    assert_eq!(hash(&left), hash(&right));
+    assert_eq!(
+        left.selection().kinds.as_ref(),
+        Some(&std::collections::BTreeSet::from([first, second]))
+    );
+    assert_eq!(
+        Query::events().kind(first).selection().kinds.as_ref(),
+        Some(&std::collections::BTreeSet::from([first]))
+    );
 }
 
 #[test]
