@@ -35,6 +35,7 @@ if [ "$saw_canary" -ne 1 ] || [ "$saw_main" -ne 1 ]; then
 fi
 
 case "${FAVA_PINNED_TOCTOU_MODE:-}" in
+  prime) exec "$real_rustc" "$@" ;;
   readonly|writable-break) mode=$FAVA_PINNED_TOCTOU_MODE ;;
   *)
     echo "pinned TOCTOU wrapper mode was absent or invalid" >&2

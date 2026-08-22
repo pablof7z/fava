@@ -600,7 +600,7 @@ break_holder_id=$(tr -d '\r\n' < "$break_holder_cidfile")
 if [ "${#break_holder_id}" -ne 64 ] || [ "$(docker container inspect "$break_holder_id" --format '{{.Id}}')" != "$break_holder_id" ] \
   || [ "$(docker container inspect "$break_holder_id" --format '{{.Image}}')" != "$source_engine_id" ] \
   || [ "$(docker container inspect "$break_holder_id" --format '{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}}|{{.RW}}{{end}}')" != "volume|$break_volume_name|/target|false" ]; then exit 74; fi
-common_run "$container_prefix-break" "$break_volume_name" --read-only
+common_run "$container_prefix-break" "$break_volume_name" --read-only --env RUSTC_WRAPPER=/source/apps/canary/tools/pinned-build-toctou-wrapper.sh --env FAVA_PINNED_TOCTOU_MODE=prime
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --rm --name "$container_prefix-break-prune" \
     --cidfile "$temporary/control/break-prune.cid" --user 0:0 --network none \
