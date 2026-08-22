@@ -51,25 +51,29 @@ fn rescan_secret_markers(snapshot: &EvidenceSnapshot) -> CanaryResult<()> {
 #[cfg(test)]
 mod marker_tests {
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
 
     use tempfile::TempDir;
 
     use super::{EvidenceSnapshot, rescan_secret_markers};
+    use crate::croissant_simple_groups_source::MAX_PINNED_FAVA_EXECUTABLE_BYTES;
 
     #[test]
     fn generic_markers_ignore_only_the_exact_retained_executable() {
         let fixture = TempDir::new().expect("marker fixture");
         fs::create_dir(fixture.path().join("source")).expect("source directory");
-        fs::copy(
-            std::env::current_exe().expect("test executable"),
-            fixture.path().join("source/fava-canary"),
-        )
-        .expect("real executable fixture");
+        let executable = fixture.path().join("source/fava-canary");
+        let bytes = b"#!/bin/sh\n# embedded literal: \"private_key\":\nexit 0\n";
+        assert!((bytes.len() as u64) < MAX_PINNED_FAVA_EXECUTABLE_BYTES);
+        fs::write(&executable, bytes).expect("small executable fixture");
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o500))
+            .expect("executable mode");
+        assert!(Command::new(&executable).status().expect("execute fixture").success());
         let snapshot = EvidenceSnapshot::capture(fixture.path()).expect("binary snapshot");
         rescan_secret_markers(&snapshot).expect("embedded verifier literals are not secrets");
 
-        fs::write(fixture.path().join("retained.json"), b"{\"private_key\":\"x\"}")
-            .expect("hostile marker");
+        fs::write(fixture.path().join("retained-copy"), bytes).expect("hostile marker copy");
         let snapshot = EvidenceSnapshot::capture(fixture.path()).expect("hostile snapshot");
         assert!(rescan_secret_markers(&snapshot).is_err());
     }
