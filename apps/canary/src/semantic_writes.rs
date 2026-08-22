@@ -19,7 +19,7 @@ use crate::semantic_failure::write_failure_bundle;
 use crate::semantic_n_plus_one;
 use crate::semantic_write_support::{
     DeterministicSigner, GateSigner, RecordingPublisher, assembly, attempt_evidence,
-    deterministic_finalize, explicit, finish, next_sign, published_event, relay_evidence,
+    deterministic_finalize, finish, next_sign, publish_edit, published_event, relay_evidence,
     target_count, wait_completion, wait_query_event, wait_terminal,
 };
 use crate::{CanaryError, CanaryResult, SmokeOptions, deterministic_keys};
@@ -97,10 +97,8 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
         .await
         .map_err(error)?;
     let intent = fava_nip02::follow(target).map_err(error)?;
-    let accepted = fava
-        .publish(explicit(intent, keys.public_key())?)
-        .map_err(error)?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let accepted = publish_edit(&fava, intent, keys.public_key())?;
+    let receipt = wait_terminal(&accepted).await?;
     wait_query_event(&mut query, receipt.current.id()).await?;
     let attempts = publisher.attempts();
     let attempt = attempts
@@ -118,8 +116,8 @@ async fn first_value(seed: &str) -> CanaryResult<Value> {
     }
     Ok(json!({
         "event_id": receipt.current.id().to_hex(),
-        "write_id": accepted.write_id.as_u64(),
-        "receipt_id": accepted.receipt_id.as_u64(),
+        "write_id": accepted.write_id().as_u64(),
+        "receipt_id": accepted.receipt_id().as_u64(),
         "materialization_id": 1,
         "source_id": Value::Null,
         "route": receipt.desired_destinations.iter().map(|key| key.relay.to_string()).collect::<Vec<_>>(),
@@ -160,12 +158,11 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         selected_materializers(),
         Arc::clone(&publisher),
     )?;
-    let accepted = fava
-        .publish(explicit(
-            fava_nip02::follow(bob).map_err(error)?,
-            keys.public_key(),
-        )?)
-        .map_err(error)?;
+    let accepted = publish_edit(
+        &fava,
+        fava_nip02::follow(bob).map_err(error)?,
+        keys.public_key(),
+    )?;
     let first = next_sign(&mut requests).await?;
     let first_created_at = first.event.created_at.as_secs();
     let first_event = deterministic_finalize(first.event.clone(), &keys).map_err(error)?;
@@ -174,7 +171,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     let first_installed = wait_completion(&mut completions, 1).await?;
     require_completion(&first_installed, &accepted, 1, first_id, true, "first")?;
     let first_delivery = next_delivery(&mut deliveries).await?;
-    let first_receipt = exact_receipt(&fava, accepted.receipt_id)?;
+    let first_receipt = exact_receipt(&fava, accepted.receipt_id())?;
     let first_attempt = attempt_evidence(&accepted, &first_receipt, &first_delivery.attempt)?;
     let first_delivery_materialization_id = first_delivery.attempt.materialization_id.as_u64();
     cache
@@ -195,7 +192,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     current.complete(current_event)?;
     let installed = wait_completion(&mut completions, 2).await?;
     require_completion(&installed, &accepted, 2, current_id, true, "current")?;
-    let generation_two_pending = exact_receipt(&fava, accepted.receipt_id)?;
+    let generation_two_pending = exact_receipt(&fava, accepted.receipt_id())?;
     require_generation_two_pending(&generation_two_pending, current_id)?;
     first_delivery.complete(fava_publisher::PublishOutcome::Acknowledged {
         message: "retired generation acknowledgement".to_owned(),
@@ -203,7 +200,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     // The sole session cannot open generation two until the held generation-one
     // lane has processed its stale outcome and left the active-lane map.
     let current_delivery = next_delivery(&mut deliveries).await?;
-    let generation_two_attempting = exact_receipt(&fava, accepted.receipt_id)?;
+    let generation_two_attempting = exact_receipt(&fava, accepted.receipt_id())?;
     let generation_two_exact_after_retired_delivery = require_exact_attempt_progress(
         &generation_two_pending,
         &generation_two_attempting,
@@ -217,7 +214,7 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
     current_delivery.complete(fava_publisher::PublishOutcome::Acknowledged {
         message: "current generation acknowledgement".to_owned(),
     })?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let receipt = wait_terminal(&accepted).await?;
     require_exact_terminal_progress(&generation_two_attempting, &receipt)?;
     let event = published_event(&receipt)?;
     let current_bob_count = target_count(&event, "p", &bob.to_hex());
@@ -243,8 +240,8 @@ async fn rematerialization(seed: &str) -> CanaryResult<Value> {
         prove_timestamp_exhaustion(&format!("{seed}-exhaustion")).await?;
     Ok(json!({
         "event_id": event.id.to_hex(),
-        "write_id": accepted.write_id.as_u64(),
-        "receipt_id": accepted.receipt_id.as_u64(),
+        "write_id": accepted.write_id().as_u64(),
+        "receipt_id": accepted.receipt_id().as_u64(),
         "first_materialization_id": 1,
         "current_materialization_id": 2,
         "source_id": source_two.id.to_hex(),
@@ -288,12 +285,12 @@ async fn prove_timestamp_exhaustion(seed: &str) -> CanaryResult<bool> {
         selected_materializers(),
         Arc::clone(&publisher),
     )?;
-    let accepted = fava
-        .publish(explicit(
-            fava_nip02::follow(target).map_err(error)?,
-            keys.public_key(),
-        )?)
-        .map_err(error)?;
+    let accepted = publish_edit(
+        &fava,
+        fava_nip02::follow(target).map_err(error)?,
+        keys.public_key(),
+    )?;
+    let accepted_receipt = accepted.receipt().map_err(error)?;
     let _pending = next_sign(&mut requests).await?;
     let source = contact_source(&keys, &[], u64::MAX)?;
     cache
@@ -305,7 +302,7 @@ async fn prove_timestamp_exhaustion(seed: &str) -> CanaryResult<bool> {
     let exhausted = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             let receipt = fava
-                .receipt(accepted.receipt_id)
+                .receipt(accepted.receipt_id())
                 .map_err(error)?
                 .ok_or_else(|| CanaryError::new("timestamp-exhaustion receipt disappeared"))?;
             if receipt
@@ -322,9 +319,9 @@ async fn prove_timestamp_exhaustion(seed: &str) -> CanaryResult<bool> {
     })
     .await
     .map_err(|_| CanaryError::new("timed out awaiting timestamp-exhaustion evidence"))??;
-    let preserved = exhausted.current.id() == accepted.current.id()
+    let preserved = exhausted.current.id() == accepted_receipt.current.id()
         && exhausted.current.publication.materialization_id
-            == accepted.current.publication.materialization_id
+            == accepted_receipt.current.publication.materialization_id
         && publisher.attempts().is_empty();
     if !preserved {
         return Err(CanaryError::new(
@@ -353,14 +350,14 @@ fn contact_source(
 
 fn require_completion(
     completion: &crate::semantic_write_store::CompletionAck,
-    accepted: &fava_write_store::AcceptedWrite,
+    accepted: &fava::Write,
     materialization_id: u64,
     event_id: EventId,
     installed: bool,
     label: &str,
 ) -> CanaryResult<()> {
-    if completion.write_id != accepted.write_id
-        || completion.receipt_id != accepted.receipt_id
+    if completion.write_id != accepted.write_id()
+        || completion.receipt_id != accepted.receipt_id()
         || completion.materialization_id != MaterializationId::from_u64(materialization_id)
         || completion.event_id != event_id
         || completion.installed != installed
@@ -403,10 +400,8 @@ async fn opposing_operations(seed: &str) -> CanaryResult<Value> {
     let mut receipts = Vec::with_capacity(edits.len());
     let mut attempts = Vec::with_capacity(edits.len());
     for edit in edits {
-        let accepted = fava
-            .publish(explicit(edit.map_err(error)?, actor)?)
-            .map_err(error)?;
-        let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+        let accepted = publish_edit(&fava, edit.map_err(error)?, actor)?;
+        let receipt = wait_terminal(&accepted).await?;
         let event = published_event(&receipt)?;
         let publication_attempt =
             publisher.attempts().last().cloned().ok_or_else(|| {

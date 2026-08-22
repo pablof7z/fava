@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use crate::semantic_process::{OwnedOutput, run_owned};
 use crate::semantic_write_support::{
-    DeterministicSigner, RecordingPublisher, assembly, attempt_evidence, explicit_event,
+    DeterministicSigner, RecordingPublisher, assembly, attempt_evidence, publish_event,
     wait_terminal,
 };
 use crate::{CanaryError, CanaryResult, deterministic_keys, repository_root};
@@ -270,17 +270,16 @@ async fn raw_future_attempt(seed: &str) -> CanaryResult<Value> {
     let expected = event
         .id
         .ok_or_else(|| CanaryError::new("future event has no id"))?;
-    let accepted = fava
-        .publish(explicit_event(event.clone())?)
-        .map_err(error)?;
-    let receipt = wait_terminal(&fava, accepted.receipt_id).await?;
+    let accepted = publish_event(&fava, event.clone())?;
+    let accepted_receipt = accepted.receipt().map_err(error)?;
+    let receipt = wait_terminal(&accepted).await?;
     let exact_event = crate::semantic_write_support::published_event(&receipt)?;
     let attempts = publisher.attempts();
     let attempt = attempts
         .first()
         .ok_or_else(|| CanaryError::new("future publication attempt missing"))?;
-    if accepted.current.id() != expected
-        || accepted.current.event != EventValue::Unsigned(event.clone())
+    if accepted_receipt.current.id() != expected
+        || accepted_receipt.current.event != EventValue::Unsigned(event.clone())
         || receipt.current.id() != expected
         || exact_event.id != expected
         || attempt.event != exact_event
@@ -296,7 +295,7 @@ async fn raw_future_attempt(seed: &str) -> CanaryResult<Value> {
     Ok(json!({
         "attempt": attempt_evidence(&accepted, &receipt, attempt)?,
         "event_id": expected.to_hex(),
-        "accepted_event_id": accepted.current.id().to_hex(),
+        "accepted_event_id": accepted_receipt.current.id().to_hex(),
         "signed_event_id": exact_event.id.to_hex(),
         "published_event_id": attempt.event.id.to_hex(),
         "created_at": exact_event.created_at.as_secs(),

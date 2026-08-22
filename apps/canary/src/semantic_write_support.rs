@@ -1,14 +1,13 @@
 //! Private support for deterministic semantic-write canaries.
 
-use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventValue, Fava, Observation, PublicKey, Receipt, ReceiptId, RelayUrl,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, UnsignedEvent, WriteIntent, WriteRouting,
+    Event, EventValue, Fava, Observation, PublicKey, Receipt, RelayUrl, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, UnsignedEvent, Write, all,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -188,17 +187,23 @@ where
     Ok((builder.build().map_err(error)?, completions))
 }
 
-pub(super) fn explicit(edit: ReplaceableEventEdit, author: PublicKey) -> CanaryResult<WriteIntent> {
-    WriteIntent::edit_as(
-        edit,
-        author,
-        WriteRouting::Explicit(BTreeSet::from([relay_url()])),
-    )
-    .map_err(error)
+pub(super) fn publish_edit(
+    fava: &Fava,
+    edit: ReplaceableEventEdit,
+    author: PublicKey,
+) -> CanaryResult<Write> {
+    fava.by(author)
+        .to([relay_url()])
+        .map_err(error)?
+        .publish(edit)
+        .map_err(error)
 }
 
-pub(super) fn explicit_event(event: UnsignedEvent) -> CanaryResult<WriteIntent> {
-    WriteIntent::event(event, WriteRouting::Explicit(BTreeSet::from([relay_url()]))).map_err(error)
+pub(super) fn publish_event(fava: &Fava, event: UnsignedEvent) -> CanaryResult<Write> {
+    fava.to([relay_url()])
+        .map_err(error)?
+        .publish(event)
+        .map_err(error)
 }
 
 fn relay_url() -> RelayUrl {
@@ -252,21 +257,11 @@ pub(super) async fn wait_completion(
     .map_err(|_| CanaryError::new("timed out awaiting completion acknowledgement"))?
 }
 
-pub(super) async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId) -> CanaryResult<Receipt> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let receipt = fava
-                .receipt(receipt_id)
-                .map_err(error)?
-                .ok_or_else(|| CanaryError::new("accepted write receipt disappeared"))?;
-            if receipt.is_terminal() {
-                return Ok(receipt);
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("timed out awaiting terminal receipt"))?
+pub(super) async fn wait_terminal(write: &Write) -> CanaryResult<Receipt> {
+    tokio::time::timeout(Duration::from_secs(5), write.settled(all()))
+        .await
+        .map_err(|_| CanaryError::new("timed out awaiting terminal receipt"))?
+        .map_err(error)
 }
 
 pub(super) async fn wait_query_event(
@@ -320,17 +315,17 @@ pub(super) fn deterministic_finalize(
 }
 
 pub(super) fn attempt_evidence(
-    accepted: &fava_write_store::AcceptedWrite,
+    accepted: &Write,
     receipt: &Receipt,
     attempt: &PublishAttempt,
 ) -> CanaryResult<Value> {
     let exact_session = receipt.desired_destinations.len() == 1
         && receipt.desired_destinations.contains(&attempt.session)
         && receipt.attempts.get(&attempt.session) == Some(&attempt.number);
-    if attempt.write_id != accepted.write_id
-        || attempt.receipt_id != accepted.receipt_id
-        || receipt.write_id != accepted.write_id
-        || receipt.receipt_id != accepted.receipt_id
+    if attempt.write_id != accepted.write_id()
+        || attempt.receipt_id != accepted.receipt_id()
+        || receipt.write_id != accepted.write_id()
+        || receipt.receipt_id != accepted.receipt_id()
         || attempt.materialization_id != receipt.current.publication.materialization_id
         || attempt.event.id != receipt.current.id()
         || attempt.number != 1
