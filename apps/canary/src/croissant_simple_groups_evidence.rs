@@ -11,7 +11,8 @@ use serde_json::{Map, Value};
 
 use crate::croissant::process_is_alive;
 use crate::croissant_simple_groups_evidence_support::{
-    SECRET_SCAN_CLASSES, artifact_hashes, collect_files, signed_digest,
+    MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, artifact_hashes, collect_files, read_bounded,
+    signed_digest, stream_contains,
 };
 use crate::{CanaryError, CanaryResult};
 
@@ -33,7 +34,12 @@ pub fn verify_croissant_simple_groups_pair(runs_directory: impl AsRef<Path>) -> 
     }
     let mut runs = Vec::new();
     for run_root in roots {
-        let manifest: Value = serde_json::from_slice(&fs::read(run_root.join("manifest.json"))?)?;
+        let manifest: Value = serde_json::from_slice(&read_bounded(
+            &run_root,
+            Path::new("manifest.json"),
+            MAX_MANIFEST_BYTES,
+            "manifest",
+        )?)?;
         reject_secret_fields(&manifest)?;
         validate_manifest(&run_root, &manifest)?;
         runs.push((run_root, manifest));
@@ -384,10 +390,7 @@ fn tree_contains(root: &Path, needle: &[u8], skip_manifest: bool) -> CanaryResul
         if skip_manifest && path == Path::new("manifest.json") {
             continue;
         }
-        if fs::read(root.join(path))?
-            .windows(needle.len())
-            .any(|window| window == needle)
-        {
+        if stream_contains(root, &path, needle)? {
             return Ok(true);
         }
     }
