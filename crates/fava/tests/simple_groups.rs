@@ -113,6 +113,92 @@ async fn simple_group_records_require_actual_host_evidence() {
     assert!(!actual.contains(&host("contacted-but-not-serving")));
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
+    let keys = Keys::generate();
+    let signer = Arc::new(ExactSigner::new(keys.clone()));
+    let harness = Harness::new(Arc::clone(&signer) as Arc<dyn Signer>);
+    let group = Group::on(
+        [host("z"), host("a"), host("z"), host("m")],
+        "publication-group",
+    )
+    .expect("group normalizes duplicate hosts");
+    let expected_hosts = vec![host("z"), host("a"), host("m")];
+    let payload = EventBuilder::new(keys.public_key(), Kind::from_u16(50_029))
+        .created_at(Timestamp::from(50_029))
+        .content("kind-blind payload")
+        .build()
+        .expect("payload builds");
+    let prepared_once = group.prepare(payload.clone()).expect("first preparation");
+    let prepared_twice = group.prepare(payload).expect("repeated preparation");
+
+    assert_eq!(
+        serde_json::to_vec(&prepared_once).expect("prepared event encodes"),
+        serde_json::to_vec(&prepared_twice).expect("repeated event encodes")
+    );
+    assert_eq!(
+        prepared_once
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("h"))
+            .count(),
+        1
+    );
+    assert_eq!(signer.calls(), 0);
+    assert!(harness.publisher.attempts().is_empty());
+    assert_eq!(harness.router.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(harness.store.len().expect("store readable"), 0);
+
+    let query = group
+        .events(
+            Query::events()
+                .limit(8)
+                .expect("positive bound")
+                .cache_only(),
+        )
+        .expect("group content query");
+    let mut observation = harness.fava.observe(query).await.expect("query opens");
+    let prepared_id = prepared_once.id.expect("prepared id");
+    let write = harness
+        .fava
+        .to(group.hosts())
+        .expect("exact route")
+        .publish(prepared_once)
+        .expect("ordinary publication accepts");
+    assert_ordinary_write(&write);
+    let accepted = write.receipt().expect("accepted receipt");
+    assert_eq!(accepted.routing, WriteRouting::Explicit(expected_hosts.clone()));
+
+    wait_until(|| harness.publisher.attempts().len() == expected_hosts.len()).await;
+    let receipt = write.receipt().expect("current receipt");
+    assert_eq!(receipt.write_id, write.write_id());
+    assert_eq!(receipt.receipt_id, write.receipt_id());
+    assert_eq!(receipt.routing, WriteRouting::Explicit(expected_hosts.clone()));
+    assert_eq!(receipt.desired_destinations.len(), expected_hosts.len());
+    assert!(receipt.attempts.values().all(|attempts| *attempts == 1));
+    let attempts = harness.publisher.attempts();
+    let handed_off = attempts
+        .iter()
+        .map(|attempt| attempt.session.relay.clone())
+        .collect::<Vec<_>>();
+    for host in &expected_hosts {
+        assert_eq!(handed_off.iter().filter(|actual| *actual == host).count(), 1);
+    }
+    assert!(attempts.iter().all(|attempt| {
+        attempt.write_id == write.write_id()
+            && attempt.receipt_id == write.receipt_id()
+            && attempt.event.id == prepared_id
+    }));
+    let visible = wait_for_snapshot(&mut observation, |snapshot| {
+        snapshot.events.iter().any(|record| record.id() == prepared_id)
+    })
+    .await;
+    assert_eq!(visible.events.len(), 1);
+    assert!(visible.events[0].publication.is_some());
+}
+
+fn assert_ordinary_write(_write: &fava::Write) {}
+
 fn group() -> Group {
     Group::on(
         [host("a"), host("b"), host("contacted-but-not-serving")],
@@ -211,6 +297,10 @@ impl ExactSigner {
             calls: AtomicU64::new(0),
         }
     }
+
+    fn calls(&self) -> u64 {
+        self.calls.load(Ordering::SeqCst)
+    }
 }
 
 impl Signer for ExactSigner {
@@ -239,6 +329,12 @@ impl Signer for ExactSigner {
 #[derive(Default)]
 struct SpyPublisher {
     attempts: Mutex<Vec<PublishAttempt>>,
+}
+
+impl SpyPublisher {
+    fn attempts(&self) -> Vec<PublishAttempt> {
+        self.attempts.lock().expect("publisher lock").clone()
+    }
 }
 
 impl Publisher for SpyPublisher {
@@ -304,4 +400,14 @@ impl Transport for SpyTransport {
             ))
         })
     }
+}
+
+async fn wait_until(predicate: impl Fn() -> bool) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !predicate() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("condition deadline");
 }
