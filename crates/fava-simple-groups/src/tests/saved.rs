@@ -76,6 +76,24 @@ fn discovery_queries_are_ordinary_canonical_queries() {
         SimpleGroups::saved_groups([alice]).unwrap(),
         SimpleGroups::saved_groups([alice]).unwrap()
     );
+
+    let saver = Keys::generate();
+    let group = Group::on([relay("wss://a.example")], "photos").expect("group");
+    let snapshot = QuerySnapshot::evaluated(
+        vec![record(saved_event(
+            &saver,
+            9,
+            vec![
+                tag(&["group", "photos", "wss://a.example"]),
+                tag(&["group", "photos", "wss://a.example", "duplicate"]),
+            ],
+        ))],
+        &[],
+    );
+    assert_eq!(
+        SimpleGroups::groups_saved_by(&snapshot, &group).expect("pure projection"),
+        [saver.public_key()]
+    );
 }
 
 struct PanicAfter {

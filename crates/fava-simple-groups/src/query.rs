@@ -92,8 +92,9 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        let _ = bounded_keys(authors)?;
-        Ok(Query::events())
+        Ok(Query::events()
+            .kind(Kind::from_u16(10_009))
+            .authors(bounded_keys(authors)?))
     }
 
     /// Query kind-10009 saved-relay rows by exact saving authors.
@@ -102,8 +103,9 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        let _ = bounded_keys(authors)?;
-        Ok(Query::events())
+        Ok(Query::events()
+            .kind(Kind::from_u16(10_009))
+            .authors(bounded_keys(authors)?))
     }
 
     /// Query kind-39001 records containing exact lowercase-p subjects.
@@ -112,8 +114,7 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        let _ = bounded_keys(subjects)?;
-        Ok(Query::events())
+        Ok(discovery_by_subject(39_001, bounded_keys(subjects)?))
     }
 
     /// Query kind-39002 records containing exact lowercase-p subjects.
@@ -122,22 +123,33 @@ impl SimpleGroups {
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
     {
-        let _ = bounded_keys(subjects)?;
-        Ok(Query::events())
+        Ok(discovery_by_subject(39_002, bounded_keys(subjects)?))
     }
 
     /// Project exact saving authors for one group's selected id-host pairs.
     pub fn groups_saved_by(
         snapshot: &QuerySnapshot,
-        _group: &Group,
+        group: &Group,
     ) -> Result<Vec<PublicKey>, GroupError> {
-        let _ = collect_at_most(snapshot.events.iter(), MAX_DISCOVERY_INPUT_ITEMS).map_err(
+        let records = collect_at_most(snapshot.events.iter(), MAX_DISCOVERY_INPUT_ITEMS).map_err(
             |actual| GroupError::TooManyDiscoveryItems {
                 actual,
                 maximum: MAX_DISCOVERY_INPUT_ITEMS,
             },
         )?;
-        Ok(Vec::new())
+        let hosts = group.hosts().collect::<std::collections::BTreeSet<_>>();
+        let mut authors = std::collections::BTreeSet::new();
+        for record in records {
+            let Ok(rows) = crate::SavedGroup::from_event(&record.event) else {
+                continue;
+            };
+            if let Some(author) = rows.into_iter().flatten().find_map(|saved| {
+                (saved.id() == group.id() && hosts.contains(saved.relay())).then(|| saved.author())
+            }) {
+                authors.insert(author);
+            }
+        }
+        Ok(authors.into_iter().collect())
     }
 }
 
@@ -146,11 +158,19 @@ where
     I: IntoIterator,
     I::Item: Borrow<PublicKey>,
 {
-    Ok(input
-        .into_iter()
-        .take(MAX_DISCOVERY_INPUT_ITEMS)
-        .map(|value| *value.borrow())
-        .collect())
+    collect_at_most(input, MAX_DISCOVERY_INPUT_ITEMS)
+        .map(|values| values.into_iter().map(|value| *value.borrow()).collect())
+        .map_err(|actual| GroupError::TooManyDiscoveryItems {
+            actual,
+            maximum: MAX_DISCOVERY_INPUT_ITEMS,
+        })
+}
+
+fn discovery_by_subject(kind: u16, subjects: Vec<PublicKey>) -> Query {
+    Query::events().kind(Kind::from_u16(kind)).tag_values(
+        SingleLetterTag::LOWERCASE_P,
+        subjects.into_iter().map(|subject| subject.to_hex()),
+    )
 }
 
 pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupError> {

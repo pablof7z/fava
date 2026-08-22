@@ -207,6 +207,7 @@ symbols = [
     "fava_simple_groups::PinnedItem",
     "fava_simple_groups::SavedGroup",
     "fava_simple_groups::SavedRelay",
+    "fava_simple_groups::SimpleGroups",
 ]
 crates = ["fava-simple-groups"]
 spec_symbols = [
