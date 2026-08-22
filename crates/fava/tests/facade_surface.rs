@@ -1,8 +1,5 @@
 //! Public facade inventory and neutral-contract boundary evidence.
 
-use std::fs;
-use std::path::Path;
-
 use fava::{Receipt, WriteRouting};
 use fava_write::{WriteIntent, WritePayload};
 use fava_write_store::AcceptedWrite;
@@ -21,10 +18,8 @@ fn neutral_contracts_remain_available_to_providers() {
 
 #[test]
 fn facade_has_no_write_intent_compatibility_door() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let facade = fs::read_to_string(root.join("src/lib.rs")).expect("facade source reads");
-    let publication =
-        fs::read_to_string(root.join("src/publication.rs")).expect("publication source reads");
+    let facade = include_str!("../src/lib.rs");
+    let publication = include_str!("../src/publication.rs");
 
     let write_exports = public_use_block(&facade, "pub use fava_write::{");
     for removed in ["WriteIntent", "WritePayload"] {
@@ -34,6 +29,10 @@ fn facade_has_no_write_intent_compatibility_door() {
                 .any(|symbol| symbol == removed),
             "facade still exports {removed}: {write_exports}"
         );
+        assert!(
+            !facade.contains(&format!("pub use fava_write::{removed}")),
+            "facade still singly exports {removed}"
+        );
     }
     assert!(
         write_exports
@@ -42,12 +41,10 @@ fn facade_has_no_write_intent_compatibility_door() {
         "Receipt::routing requires the facade WriteRouting export"
     );
 
-    let store_exports = public_use_block(&facade, "pub use fava_write_store::{");
     assert!(
-        !store_exports
-            .split(|character: char| !character.is_alphanumeric())
-            .any(|symbol| symbol == "AcceptedWrite"),
-        "facade still exports AcceptedWrite: {store_exports}"
+        !facade.contains("pub use fava_write_store::AcceptedWrite")
+            && !facade.contains("pub use fava_write_store::{AcceptedWrite"),
+        "facade still exports AcceptedWrite"
     );
     assert!(
         !publication.contains("impl PublishPayload for WriteIntent"),

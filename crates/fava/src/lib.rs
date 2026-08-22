@@ -28,14 +28,16 @@ use fava_signer::Signer;
 pub use fava_state::{EventCoordinate, RelayUrl};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
+use fava_write::WriteIntent;
 pub use fava_write::{
     Event, EventBuildError, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntent,
-    WriteIntentError, WritePayload, WriteRouting,
+    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntentError,
+    WriteRouting,
 };
+use fava_write_store::AcceptedWrite;
 use fava_write_store::WriteStore;
-pub use fava_write_store::{AcceptedWrite, WriteStoreError};
+pub use fava_write_store::WriteStoreError;
 pub use publication::{PublishAs, PublishError, PublishTo, Write, all, at_least};
 use thiserror::Error;
 use tokio::sync::broadcast;
@@ -206,19 +208,6 @@ impl Fava {
             .as_ref()
             .ok_or(PublicationError::NotConfigured)?
             .remove_receipt(receipt_id)
-    }
-
-    /// Await one exact terminal receipt result.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PublicationError`] for absent publication or failed receipt access.
-    pub async fn wait_terminal(&self, receipt_id: ReceiptId) -> Result<Receipt, PublicationError> {
-        self.publication
-            .as_ref()
-            .ok_or(PublicationError::NotConfigured)?
-            .wait_terminal(receipt_id)
-            .await
     }
 
     /// Return one bounded immutable snapshot of current exact diagnostic facts.

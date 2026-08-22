@@ -8,7 +8,7 @@ use std::time::Duration;
 use fava::{
     Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, PublicKey, Receipt, ReceiptId,
     RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, UnsignedEvent,
-    WriteIntent, WriteIntentError, WriteRouting,
+    WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -22,6 +22,7 @@ use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey};
 use fava_transport::{RelaySession, Transport, TransportError};
+use fava_write::WriteIntent;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};

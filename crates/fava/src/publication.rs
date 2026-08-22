@@ -6,7 +6,7 @@ use fava_publication::{Publication, PublicationError};
 use fava_state::RelayUrl;
 use fava_write::{
     Event, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
-    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 
@@ -252,33 +252,6 @@ impl PublishPayload for ReplaceableEventEdit {
     ) -> Result<WriteIntent, PublishError> {
         let author = author.ok_or(PublishError::MissingAuthor)?;
         Ok(WriteIntent::edit_as(self, author, routing)?)
-    }
-}
-
-impl PublishPayload for WriteIntent {
-    fn into_intent(
-        self,
-        author: Option<PublicKey>,
-        routing: WriteRouting,
-    ) -> Result<WriteIntent, PublishError> {
-        let (payload, existing_routing) = self.into_parts();
-        let routing = if matches!(routing, WriteRouting::Automatic) {
-            existing_routing
-        } else {
-            routing
-        };
-        match payload {
-            WritePayload::Event(event) => Ok(WriteIntent::event(event, routing)?),
-            WritePayload::Presigned(event) => Ok(WriteIntent::presigned(event, routing)?),
-            WritePayload::Edit {
-                edit,
-                author: frozen_author,
-            } => Ok(WriteIntent::edit_as(
-                edit,
-                author.unwrap_or(frozen_author),
-                routing,
-            )?),
-        }
     }
 }
 

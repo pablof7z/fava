@@ -507,10 +507,14 @@ crates = []
 [[term]]
 name = "WriteIntent"
 source = "fava"
-meaning = "An application request asking Fava to accept responsibility for publishing an event or replaceable-event edit."
+meaning = "A neutral checked request carrying a publication payload and durable routing fact between publication and write-store contracts."
 owner = "fava-write"
 nearest_nostr = "EVENT message"
-distinction = "An EVENT message contains a signed event; WriteIntent exists before and throughout Fava's local publication lifecycle."
+distinction = "An EVENT message contains a signed event; WriteIntent coordinates neutral providers after the application has used Fava's payload-oriented publish door, and is not an application-facing facade input."
+counterexample = "An application calling fava.publish(edit) receives Write without constructing WriteIntent; WriteRouting remains facade-visible only because Receipt::routing exposes that durable fact."
+lifecycle = "The fava facade constructs WriteIntent privately after validating publication scopes; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends."
+forcing_requirement = "Publication, rematerialization, preview, and recovery require one provider-neutral payload and route contract without exposing provider custody vocabulary as an alternate application door."
+falsifier = "The facade_has_no_write_intent_compatibility_door test must fail if fava re-exports WriteIntent or WritePayload or accepts WriteIntent through Fava::publish."
 symbols = [
     "fava_write::WriteIntent",
     "fava_write::WriteIntentError",
