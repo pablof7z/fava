@@ -197,7 +197,7 @@ fn recover_ambiguous(state: &mut StoreState) -> Vec<ReceiptId> {
         }
     }
     for receipt_id in released {
-        release_semantic(state, receipt_id);
+        release_semantic_coordinate(state, receipt_id);
     }
     recovered
 }
@@ -207,6 +207,14 @@ fn release_semantic(state: &mut StoreState, receipt_id: ReceiptId) {
         state
             .coordinates
             .remove(&semantic::edit_coordinate(&edit, author));
+    }
+}
+
+fn release_semantic_coordinate(state: &mut StoreState, receipt_id: ReceiptId) {
+    if let Some((edit, author, _, _)) = state.semantics.get(&receipt_id) {
+        state
+            .coordinates
+            .remove(&semantic::edit_coordinate(edit, *author));
     }
 }
 

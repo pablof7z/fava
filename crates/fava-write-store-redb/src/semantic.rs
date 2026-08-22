@@ -130,21 +130,16 @@ impl RedbWriteStore {
         let terminal = receipt.is_terminal();
         let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
-        self.commit_accept(
-            next_identity,
-            &receipt,
-            (!terminal).then_some(&custody),
-            &removals,
-        )?;
+        self.commit_accept(next_identity, &receipt, Some(&custody), &removals)?;
         for id in &removals {
             crate::release_semantic(&mut state, *id);
             state.receipts.remove(id);
         }
         state.next_identity = next_identity;
         state.revision = next_revision;
+        state.semantics.insert(receipt_id, custody);
         if !terminal {
             state.coordinates.insert(coordinate, receipt_id);
-            state.semantics.insert(receipt_id, custody);
         }
         state.receipts.insert(receipt_id, receipt.clone());
         self.publish_snapshot(&state);

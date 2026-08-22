@@ -212,8 +212,7 @@ fn validate_semantic(
     (edit, author, current_source, failed_source): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
     WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
-    if receipt.is_terminal()
-        || receipt.current.event.author() != *author
+    if receipt.current.event.author() != *author
         || receipt
             .current
             .event

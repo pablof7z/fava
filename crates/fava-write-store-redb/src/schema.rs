@@ -112,20 +112,20 @@ pub(super) fn load(
             ));
         }
         if let Some(semantic) = row.semantic {
-            if row.receipt.is_terminal()
-                || row.receipt.current.publication.materialization_source
-                    != semantic.current_source.map(|(id, _)| id)
+            if row.receipt.current.publication.materialization_source
+                != semantic.current_source.map(|(id, _)| id)
             {
                 return Err(WriteStoreError::Refused(
                     "durable semantic custody is incoherent".to_owned(),
                 ));
             }
-            if coordinates
-                .insert(
-                    crate::semantic::edit_coordinate(&semantic.edit, semantic.author),
-                    receipt_id,
-                )
-                .is_some()
+            if !row.receipt.is_terminal()
+                && coordinates
+                    .insert(
+                        crate::semantic::edit_coordinate(&semantic.edit, semantic.author),
+                        receipt_id,
+                    )
+                    .is_some()
             {
                 return Err(WriteStoreError::Refused(
                     "duplicate durable semantic coordinate owner".to_owned(),

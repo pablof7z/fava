@@ -31,16 +31,14 @@ impl RedbWriteStore {
         }
         let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
-        let semantic = (!receipt.is_terminal())
-            .then(|| state.semantics.get(&receipt_id))
-            .flatten();
+        let semantic = state.semantics.get(&receipt_id);
         self.commit_update(Some(&receipt), semantic, &removals)?;
         for id in &removals {
             crate::release_semantic(&mut state, *id);
             state.receipts.remove(id);
         }
         if receipt.is_terminal() {
-            crate::release_semantic(&mut state, receipt_id);
+            crate::release_semantic_coordinate(&mut state, receipt_id);
         }
         state.receipts.insert(receipt_id, receipt.clone());
         state.revision = next_revision;
