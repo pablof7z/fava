@@ -3,12 +3,15 @@
 use std::sync::Arc;
 
 use fava_state::RelayUrl;
+use fava_query::{Query, QuerySnapshot};
 use fava_write::{
     EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
     Tag, Timestamp, WriteIntentError,
 };
 
-use fava_nip02::{ContactList, ContactListError, ContactListRowEvidence, Follow};
+use fava_nip02::{
+    ContactList, ContactListError, ContactListRowEvidence, Follow, IntoContactAuthors,
+};
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
 type PublicKeyEdit = fn(PublicKey) -> EditResult;
@@ -17,6 +20,12 @@ type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
 const FOLLOW: PublicKeyEdit = fava_nip02::follow;
 const UNFOLLOW: PublicKeyEdit = fava_nip02::unfollow;
 const MATERIALIZER: Selection = fava_nip02::materializer;
+const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
+const FOLLOWERS_OF: fn(PublicKey) -> Query = fava_nip02::followers_of;
+
+fn contact_lists(authors: impl IntoContactAuthors) -> Query {
+    fava_nip02::contact_list(authors)
+}
 
 fn inspect_follow(follow: &Follow) -> (usize, PublicKey, Option<&RelayUrl>, Option<&str>) {
     (
@@ -54,4 +63,12 @@ fn external_surface_uses_only_approved_functions_and_types() {
     assert_eq!(inspect_row(&evidence[0]), (1, &["p".to_owned()][..]));
     let decode: fn(&EventValue) -> Result<ContactList, ContactListError> = ContactList::from_event;
     assert!(decode as usize != 0);
+
+    let one = contact_lists(author);
+    let many = contact_lists([author]);
+    let borrowed = contact_lists(&vec![author]);
+    assert_eq!(one, many);
+    assert_eq!(many, borrowed);
+    assert_eq!(FOLLOWERS_OF(author).selection().authors, None);
+    assert!(FOLLOWS_OF(&QuerySnapshot::evaluated(Vec::new(), &[])).is_empty());
 }
