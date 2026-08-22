@@ -22,8 +22,9 @@ use crate::bounds::{self, MAX_TAGS};
 ///
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
+#[allow(clippy::needless_pass_by_value)]
 pub fn follow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(parse_target(target)?, Operation::Add)
+    edit(parse_target(&target)?, Operation::Add)
 }
 
 /// Produce one bounded edit that removes `target` from a kind-3 list.
@@ -32,8 +33,9 @@ pub fn follow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntent
 ///
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
+#[allow(clippy::needless_pass_by_value)]
 pub fn unfollow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    edit(parse_target(target)?, Operation::Remove)
+    edit(parse_target(&target)?, Operation::Remove)
 }
 
 /// Produce one bounded edit that follows `target` with optional NIP-02 metadata.
@@ -45,12 +47,13 @@ pub fn unfollow(target: impl ToString) -> Result<ReplaceableEventEdit, WriteInte
 ///
 /// Returns a typed refusal when the target or private metadata encoding is
 /// invalid or exceeds its neutral edit bound.
+#[allow(clippy::needless_pass_by_value)]
 pub fn follow_with(
     target: impl ToString,
     relay: Option<RelayUrl>,
     petname: Option<&str>,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    let target = parse_target(target)?;
+    let target = parse_target(&target)?;
     if relay.is_none() && petname.is_none() {
         return edit(target, Operation::Add);
     }
@@ -101,14 +104,14 @@ fn edit(target: PublicKey, operation: Operation) -> Result<ReplaceableEventEdit,
 }
 
 fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
-    let (relay, petname) = match &change.operation {
-        Operation::AddWithMetadata { relay, petname } => (relay.as_ref(), petname.as_deref()),
-        _ => {
-            let mut bytes = Vec::with_capacity(CODEC_LEN);
-            bytes.push(change.operation.code());
-            bytes.extend_from_slice(change.target.as_bytes());
-            return Ok(bytes);
-        }
+    let (relay, petname) = if let Operation::AddWithMetadata { relay, petname } = &change.operation
+    {
+        (relay.as_ref(), petname.as_deref())
+    } else {
+        let mut bytes = Vec::with_capacity(CODEC_LEN);
+        bytes.push(change.operation.code());
+        bytes.extend_from_slice(change.target.as_bytes());
+        return Ok(bytes);
     };
     let relay = relay.map_or("", RelayUrl::as_str);
     let relay_len = u32::try_from(relay.len()).map_err(|_| edit_too_large(relay.len()))?;
@@ -206,7 +209,7 @@ fn take_length_prefixed(bytes: &[u8]) -> Result<(&[u8], &[u8]), WriteIntentError
     Ok((value, &bytes[end..]))
 }
 
-fn parse_target(target: impl ToString) -> Result<PublicKey, WriteIntentError> {
+fn parse_target(target: &impl ToString) -> Result<PublicKey, WriteIntentError> {
     PublicKey::parse(&target.to_string())
         .map_err(|_| WriteIntentError::InvalidEvent("invalid NIP-02 target public key".to_owned()))
 }
@@ -246,7 +249,7 @@ impl ReplaceableEventMaterializer for Nip02Materializer {
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
         let (content, source_tags) = qualified_source(author, source, created_at)?;
-        let tags = apply(source_tags, change)?;
+        let tags = apply(source_tags, &change)?;
         let event = build(author, content, tags, created_at)?;
         validate_output(author, &event, created_at)?;
         Ok(event)
@@ -278,7 +281,7 @@ fn qualified_source(
     Ok((&source.content, source.tags.as_slice()))
 }
 
-fn apply(source: &[Tag], change: Change) -> Result<Vec<Tag>, WriteIntentError> {
+fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
     let matching = source
         .iter()
         .filter(|tag| tag_targets(tag, change.target))
@@ -311,7 +314,7 @@ fn apply(source: &[Tag], change: Change) -> Result<Vec<Tag>, WriteIntentError> {
         }
     }
     if !matches!(change.operation, Operation::Remove) && !found {
-        tags.push(canonical_row(&change)?);
+        tags.push(canonical_row(change)?);
     }
     debug_assert_eq!(tags.len(), capacity);
     Ok(tags)

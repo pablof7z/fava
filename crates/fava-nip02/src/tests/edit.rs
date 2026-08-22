@@ -74,7 +74,11 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
     let raw_relay = "raw-secret-not-a-relay";
     let mut malformed = vec![3];
     malformed.extend_from_slice(target.as_bytes());
-    malformed.extend_from_slice(&(raw_relay.len() as u32).to_be_bytes());
+    malformed.extend_from_slice(
+        &u32::try_from(raw_relay.len())
+            .expect("fixture relay length fits u32")
+            .to_be_bytes(),
+    );
     malformed.extend_from_slice(raw_relay.as_bytes());
     malformed.push(0);
     let malformed = ReplaceableEventEdit::new(Kind::ContactList, None, malformed)
