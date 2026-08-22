@@ -545,9 +545,9 @@ An application can express two-hop discovery without a protocol-specific
 observation:
 
 ```rust
-let first = fava.observe(contact_list(alice))?;
-let first_hop = follows_of(&first.snapshot());
-let second = fava.observe(contact_list(first_hop))?;
+let first = fava.observe(contact_list(alice)).await?;
+let first_hop = follows_of(first.current().as_ref());
+let second = fava.observe(contact_list(first_hop.as_slice())).await?;
 ```
 
 Protocol crates MUST NOT depend on one another merely to enable this composition.
