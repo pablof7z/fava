@@ -1,6 +1,5 @@
 //! Retained-evidence sealing and secret scanning for the Croissant NIP-02 canary.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -57,13 +56,9 @@ pub(super) fn assert_secrets_absent(root: &Path, secrets: &[Vec<u8>]) -> CanaryR
 
 pub(super) fn artifact_seal(
     keys: &Keys,
-    hashes: &BTreeMap<String, String>,
+    manifest: &Value,
 ) -> CanaryResult<Event> {
-    let digest = artifact_hash_digest(
-        hashes
-            .iter()
-            .map(|(path, hash)| (path.as_str(), hash.as_str())),
-    )?;
+    let digest = signed_manifest_digest(manifest)?;
     EventBuilder::new(Kind::TextNote, digest)
         .custom_created_at(Timestamp::from(0))
         .finalize(keys)
@@ -83,22 +78,9 @@ pub(super) fn verify_artifact_seal(manifest: &Value) -> CanaryResult<()> {
             "Croissant artifact seal author disagreed with the flow author",
         ));
     }
-    let hashes = manifest
-        .get("artifact_sha256")
-        .and_then(Value::as_object)
-        .ok_or_else(|| CanaryError::new("Croissant manifest omitted artifact hashes"))?;
-    let entries = hashes
-        .iter()
-        .map(|(path, value)| {
-            value
-                .as_str()
-                .map(|hash| (path.as_str(), hash))
-                .ok_or_else(|| CanaryError::new("Croissant artifact hash was not text"))
-        })
-        .collect::<CanaryResult<Vec<_>>>()?;
-    if seal.content != artifact_hash_digest(entries)? {
+    if seal.content != signed_manifest_digest(manifest)? {
         return Err(CanaryError::new(
-            "Croissant artifact seal did not cover the retained hash set",
+            "Croissant artifact seal did not cover the signed manifest claims",
         ));
     }
     Ok(())
@@ -169,11 +151,13 @@ pub(super) fn manifest_roots(root: &Path) -> CanaryResult<Vec<PathBuf>> {
     Ok(manifests)
 }
 
-fn artifact_hash_digest<'a>(
-    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
-) -> CanaryResult<String> {
-    let ordered: BTreeMap<_, _> = entries.into_iter().collect();
-    Ok(hex::encode(Sha256::digest(serde_json::to_vec(&ordered)?)))
+fn signed_manifest_digest(manifest: &Value) -> CanaryResult<String> {
+    let mut claims = manifest.clone();
+    claims
+        .as_object_mut()
+        .ok_or_else(|| CanaryError::new("Croissant manifest was not an object"))?
+        .remove("artifact_seal");
+    Ok(hex::encode(Sha256::digest(serde_json::to_vec(&claims)?)))
 }
 
 fn collect_files(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> CanaryResult<()> {

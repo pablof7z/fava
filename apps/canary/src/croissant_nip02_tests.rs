@@ -9,6 +9,7 @@ use super::{
     CroissantNip02Options, reject_cross_run_data, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
 };
+use crate::croissant_nip02_evidence::{artifact_seal, verify_artifact_seal};
 
 const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
 
@@ -150,6 +151,102 @@ fn old_data_negatives_reach_each_identity_check_in_both_directions() {
             .expect_err("second run must reject first-run data");
         assert!(error.to_string().contains(field), "wrong causal check: {error}");
         fs::write(second_root.join("retained.bin"), b"clean").expect("clean second run");
+    }
+}
+
+#[test]
+fn signed_evidence_rejects_mutated_verification_claims() {
+    let keys = nostr::key::Keys::generate();
+    let mut manifest = serde_json::json!({
+        "scenario": "croissant-nip02-public-flow",
+        "scenario_seed_sha256": "seed-hash",
+        "author_public_key": keys.public_key().to_hex(),
+        "target_public_key": "target",
+        "group_id": "aa11",
+        "group_event_id": "bb22",
+        "baseline_event_id": "cc33",
+        "event_id": "dd44",
+        "write_id": "run:1",
+        "receipt_id": "run:1",
+        "write_sequence": 1,
+        "receipt_sequence": 1,
+        "materialization_id": 1,
+        "materialization_source": "cc33",
+        "local_revision": 2,
+        "relay_revision": 3,
+        "foreign_tags_preserved": true,
+        "foreign_content_preserved": true,
+        "typed_decode_exact": true,
+        "secret_scan_passed": true,
+        "secret_scan_classes": ["one"],
+        "executable_sha256": "binary",
+        "source_head": "source",
+        "ready": { "endpoint": "127.0.0.1:1" },
+        "teardown": {
+            "completed": true,
+            "pid": 42,
+            "pid_alive_after": false,
+            "port_open_after": false,
+            "endpoint": "127.0.0.1:1"
+        },
+        "bounds": {
+            "operation_ms": 30_000,
+            "wire_bytes": 1_048_576,
+            "wire_bytes_observed": 12,
+            "log_bytes": 1_048_576,
+            "readiness_ms": 5_000,
+            "teardown_ms": 5_000
+        },
+        "terminal": {
+            "outcome": "Complete",
+            "acknowledged": 1,
+            "destinations": 1
+        },
+        "artifact_sha256": { "flow.json": "11".repeat(32) },
+        "started_unix_ms": 10,
+        "ended_unix_ms": 20
+    });
+    manifest["artifact_seal"] = serde_json::to_value(
+        artifact_seal(&keys, &manifest).expect("manifest seal"),
+    )
+    .expect("seal JSON");
+    verify_artifact_seal(&manifest).expect("control seal verifies");
+
+    for (pointer, value) in [
+        ("/scenario_seed_sha256", serde_json::json!("changed")),
+        ("/group_id", serde_json::json!("changed")),
+        ("/group_event_id", serde_json::json!("changed")),
+        ("/baseline_event_id", serde_json::json!("changed")),
+        ("/event_id", serde_json::json!("changed")),
+        ("/write_id", serde_json::json!("changed")),
+        ("/receipt_id", serde_json::json!("changed")),
+        ("/foreign_tags_preserved", serde_json::json!(false)),
+        ("/foreign_content_preserved", serde_json::json!(false)),
+        ("/typed_decode_exact", serde_json::json!(false)),
+        ("/secret_scan_passed", serde_json::json!(false)),
+        ("/terminal/outcome", serde_json::json!("Open")),
+        ("/terminal/acknowledged", serde_json::json!(0)),
+        ("/terminal/destinations", serde_json::json!(0)),
+        ("/bounds/operation_ms", serde_json::json!(1)),
+        ("/bounds/wire_bytes", serde_json::json!(1)),
+        ("/bounds/wire_bytes_observed", serde_json::json!(1)),
+        ("/bounds/log_bytes", serde_json::json!(1)),
+        ("/bounds/readiness_ms", serde_json::json!(1)),
+        ("/bounds/teardown_ms", serde_json::json!(1)),
+        ("/teardown/completed", serde_json::json!(false)),
+        ("/teardown/pid", serde_json::json!(1)),
+        ("/teardown/pid_alive_after", serde_json::json!(true)),
+        ("/teardown/port_open_after", serde_json::json!(true)),
+        ("/teardown/endpoint", serde_json::json!("127.0.0.1:2")),
+    ] {
+        let mut changed = manifest.clone();
+        *changed.pointer_mut(pointer).expect("claim pointer") = value;
+        let error = verify_artifact_seal(&changed)
+            .expect_err("signed evidence must reject a mutated verification claim");
+        assert!(
+            error.to_string().contains("signed manifest claims"),
+            "wrong refusal for {pointer}: {error}"
+        );
     }
 }
 

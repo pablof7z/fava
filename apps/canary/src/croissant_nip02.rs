@@ -458,8 +458,7 @@ fn finish_run(
     let repository = repository_root()?;
     let revision = command_output(&repository, "git", &["rev-parse", "HEAD"])?;
     let hashes = artifacts.artifact_hashes()?;
-    let seal = artifact_seal(&author_keys, &hashes)?;
-    artifacts.write_json("manifest.json", &json!({
+    let mut manifest = json!({
         "run_id": run_id,
         "scenario": SCENARIO,
         "scenario_seed_sha256": ready.scenario_seed_sha256,
@@ -482,7 +481,6 @@ fn finish_run(
         "typed_decode_exact": true,
         "secret_scan_passed": true,
         "secret_scan_classes": SECRET_SCAN_CLASSES,
-        "artifact_seal": seal,
         "executable_sha256": ready.executable_sha256,
         "source_head": ready.source_head,
         "ready": ready,
@@ -504,7 +502,13 @@ fn finish_run(
         "fava_revision": revision,
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
-    }))?;
+    });
+    let seal = artifact_seal(&author_keys, &manifest)?;
+    manifest
+        .as_object_mut()
+        .ok_or_else(|| CanaryError::new("Croissant manifest was not an object"))?
+        .insert("artifact_seal".to_owned(), serde_json::to_value(seal)?);
+    artifacts.write_json("manifest.json", &manifest)?;
     assert_secrets_absent(artifacts.root(), &secret_needles)?;
     Ok(CroissantNip02Outcome {
         run_directory: artifacts.root().to_owned(),
@@ -571,6 +575,8 @@ fn reject_cross_run_data(
 }
 
 fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
+    verify_hashes(root, manifest)?;
+    verify_artifact_seal(manifest)?;
     if manifest.get("scenario").and_then(Value::as_str) != Some(SCENARIO)
         || manifest.get("secret_scan_passed").and_then(Value::as_bool) != Some(true)
         || manifest
@@ -671,8 +677,7 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     if TcpStream::connect_timeout(&endpoint, Duration::from_millis(25)).is_ok() {
         return Err(CanaryError::new("Croissant teardown port remains open"));
     }
-    verify_hashes(root, manifest)?;
-    verify_artifact_seal(manifest)
+    Ok(())
 }
 
 fn required_string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
