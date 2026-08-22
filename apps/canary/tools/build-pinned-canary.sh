@@ -32,9 +32,19 @@ sha256_file() {
 }
 
 remove_container_id() {
-  if [ -n "$1" ] && docker container inspect "$1" >/dev/null 2>&1; then
-    docker container rm --force "$1" >/dev/null 2>&1
+  if [ -z "$1" ]; then
+    return 0
   fi
+  if container_inspect=$(docker container inspect "$1" --format '{{.Id}}' 2>&1); then
+    [ "$container_inspect" = "$1" ] || return 1
+    docker container rm --force "$1" >/dev/null 2>&1 || return 1
+  else
+    case "$container_inspect" in *'No such container'*) return 0 ;; *) return 1 ;; esac
+  fi
+  if container_inspect=$(docker container inspect "$1" --format '{{.Id}}' 2>&1); then
+    return 1
+  fi
+  case "$container_inspect" in *'No such container'*) return 0 ;; *) return 1 ;; esac
 }
 
 remove_cidfile_container() {
@@ -49,9 +59,18 @@ remove_cidfile_container() {
 }
 
 remove_image_reference() {
-  if [ -n "$1" ] && docker image inspect "$1" >/dev/null 2>&1; then
-    docker image rm "$1" >/dev/null 2>&1
+  if [ -z "$1" ]; then
+    return 0
   fi
+  if image_inspect=$(docker image inspect "$1" --format '{{.Id}}' 2>&1); then
+    docker image rm "$1" >/dev/null 2>&1 || return 1
+  else
+    case "$image_inspect" in *'No such image'*) return 0 ;; *) return 1 ;; esac
+  fi
+  if image_inspect=$(docker image inspect "$1" --format '{{.Id}}' 2>&1); then
+    return 1
+  fi
+  case "$image_inspect" in *'No such image'*) return 0 ;; *) return 1 ;; esac
 }
 
 cleanup() {
@@ -160,28 +179,43 @@ temporary=$(mktemp -d "${TMPDIR:-/tmp}/fava-pinned-build.XXXXXX")
 mkdir "$temporary/source" "$temporary/control"
 manifest=$temporary/control/source.manifest
 
-# Parse the NUL-delimited object inventory so hostile Git path bytes cannot
-# change manifest rows. Hash the exact blob objects before materialization.
+# Keep the bootstrap programs in this shell's memory after reading their exact
+# committed Git objects. Later pathname replacement cannot select executable
+# helper bytes.
 tree_digest_file=$temporary/control/source-tree.sha256
-for helper in build-pinned-manifest.py run-bounded-command.py; do
-  helper_destination=$temporary/control/$helper
-  helper_bytes=$(git -C "$source_checkout" cat-file -s \
-    "$revision:apps/canary/tools/$helper")
-  case "$helper_bytes" in *[!0-9]*|'') exit 69 ;; esac
-  if [ "$helper_bytes" -gt 1048576 ]; then
-    echo "pinned build helper exceeded 1 MiB: $helper" >&2
-    exit 69
-  fi
-  git -C "$source_checkout" cat-file blob \
-    "$revision:apps/canary/tools/$helper" > "$helper_destination"
-  if [ "$(wc -c < "$helper_destination" | tr -d ' ')" != "$helper_bytes" ]; then
-    echo "pinned build helper Git object ended early: $helper" >&2
+manifest_program=$(git -C "$source_checkout" cat-file blob \
+  "$revision:apps/canary/tools/build-pinned-manifest.py")
+bounded_runner_program=$(git -C "$source_checkout" cat-file blob \
+  "$revision:apps/canary/tools/run-bounded-command.py")
+pinned_input_program=$(git -C "$source_checkout" cat-file blob \
+  "$revision:apps/canary/tools/run-pinned-input-command.py")
+promotion_program=$(git -C "$source_checkout" cat-file blob \
+  "$revision:apps/canary/tools/promote-pinned-output.py")
+for program_path in \
+  build-pinned-manifest.py run-bounded-command.py run-pinned-input-command.py \
+  promote-pinned-output.py
+do
+  program_bytes=$(git -C "$source_checkout" cat-file -s \
+    "$revision:apps/canary/tools/$program_path")
+  case "$program_bytes" in *[!0-9]*|'') exit 69 ;; esac
+  if [ "$program_bytes" -gt 1048576 ]; then
+    echo "pinned build helper exceeded 1 MiB: $program_path" >&2
     exit 69
   fi
 done
-bounded_runner=$temporary/control/run-bounded-command.py
-python3 "$bounded_runner" --seconds 120 --bytes 1048576 -- \
-  python3 "$temporary/control/build-pinned-manifest.py" \
+if [ "$(printf '%s\n' "$manifest_program" | wc -c | tr -d ' ')" \
+      != "$(git -C "$source_checkout" cat-file -s "$revision:apps/canary/tools/build-pinned-manifest.py")" ] \
+  || [ "$(printf '%s\n' "$bounded_runner_program" | wc -c | tr -d ' ')" \
+      != "$(git -C "$source_checkout" cat-file -s "$revision:apps/canary/tools/run-bounded-command.py")" ] \
+  || [ "$(printf '%s\n' "$pinned_input_program" | wc -c | tr -d ' ')" \
+      != "$(git -C "$source_checkout" cat-file -s "$revision:apps/canary/tools/run-pinned-input-command.py")" ] \
+  || [ "$(printf '%s\n' "$promotion_program" | wc -c | tr -d ' ')" \
+      != "$(git -C "$source_checkout" cat-file -s "$revision:apps/canary/tools/promote-pinned-output.py")" ]; then
+  echo "pinned build helper was not canonical single-final-LF text" >&2
+  exit 69
+fi
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1048576 -- \
+  python3 -c "$manifest_program" \
     "$source_checkout" "$revision" "$tree" "$manifest" "$tree_digest_file"
 
 manifest_sha256=$(sha256_file "$manifest")
@@ -213,7 +247,7 @@ find "$temporary/source" ! -type f ! -type d -print -quit | grep -q . && {
 }
 "$temporary/source/apps/canary/tools/verify-pinned-source.sh" \
   "$temporary/source" "$manifest" "$manifest_sha256"
-python3 "$bounded_runner" --help >/dev/null
+python3 -c "$bounded_runner_program" --help >/dev/null
 
 base_image_id=$(docker image inspect "$rust_image_tag" --format '{{.Id}}')
 case "$base_image_id" in sha256:*) ;; *) exit 70 ;; esac
@@ -234,13 +268,13 @@ unique=$(basename "$temporary" | tr -cd 'A-Za-z0-9_.-' | tr '[:upper:]' '[:lower
 container_prefix="fava-pinned-$unique"
 if ! docker image inspect "$registry_image_ref" >/dev/null 2>&1; then
   registry_image_was_present=0
-  python3 "$bounded_runner" --seconds 120 --bytes 1048576 -- \
+  python3 -c "$bounded_runner_program" --seconds 120 --bytes 1048576 -- \
     docker pull "$registry_image_ref"
 fi
 registry_image_id=$(docker image inspect "$registry_image_ref" --format '{{.Id}}')
 case "$registry_image_id" in sha256:*) ;; *) exit 70 ;; esac
 registry_cidfile=$temporary/control/registry.cid
-registry_container_id=$(python3 "$bounded_runner" --seconds 120 --bytes 1024 -- \
+registry_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$container_prefix-registry" --cidfile "$registry_cidfile" \
     --network bridge --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 128 --memory 512m --cpus 1 --read-only \
@@ -286,7 +320,20 @@ fi
 
 source_registry_tag="127.0.0.1:$registry_port/fava-pinned-source:$revision-$unique"
 iidfile=$temporary/control/source-image.id
-python3 "$bounded_runner" \
+source_dockerfile_path=apps/canary/pinned-source.Dockerfile
+source_dockerfile_sha256=$(awk -F '\t' -v path="$source_dockerfile_path" \
+  '$4 == path { print $2 }' "$manifest")
+case "$source_dockerfile_sha256" in *[!0-9a-f]*|'') exit 71 ;; esac
+if [ "${#source_dockerfile_sha256}" -ne 64 ]; then
+  echo "pinned source Dockerfile manifest identity was invalid" >&2
+  exit 71
+fi
+python3 -c "$pinned_input_program" \
+  --repository "$source_checkout" --revision "$revision" \
+  --kind archive --path "$source_dockerfile_path" \
+  --archive-prefix source/ --archive-path $archive_paths \
+  --extra-file "$manifest" --extra-name control/source.manifest \
+  --extra-sha256 "$manifest_sha256" --maximum-input-bytes 83886080 \
   --seconds "$docker_deadline_seconds" \
   --bytes "$docker_output_maximum_bytes" -- \
   docker buildx build --builder colima --push --progress plain \
@@ -298,8 +345,8 @@ python3 "$bounded_runner" \
   --build-arg "FAVA_REVISION=$revision" \
   --build-arg "FAVA_TREE=$tree" \
   --build-arg "FAVA_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
-  --file "$temporary/source/apps/canary/pinned-source.Dockerfile" \
-  --tag "$source_registry_tag" "$temporary"
+  --file source/apps/canary/pinned-source.Dockerfile \
+  --tag "$source_registry_tag" -
 source_image_id=$(tr -d '\r\n' < "$iidfile")
 registry_source_image_id=$(docker buildx imagetools inspect "$source_registry_tag" \
   --format '{{.Manifest.Digest}}')
@@ -315,11 +362,11 @@ if [ "${#source_image_sha256}" -ne 64 ]; then
   exit 71
 fi
 source_image_reference="$source_registry_tag@$source_image_id"
-python3 "$bounded_runner" --seconds 120 --bytes 1048576 -- \
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 1048576 -- \
   docker pull "$source_image_reference"
 image_tag=$source_image_reference
 source_manifest_file=$temporary/control/source-registry-manifest.json
-python3 "$bounded_runner" --seconds 120 --bytes 65536 -- \
+python3 -c "$bounded_runner_program" --seconds 120 --bytes 65536 -- \
   docker buildx imagetools inspect "$source_image_reference" --raw > "$source_manifest_file"
 source_manifest_claims=$(python3 - "$source_image_id" "$source_manifest_file" <<'PY'
 import hashlib
@@ -370,7 +417,7 @@ common_run() {
   if [ ! -d "$target" ]; then
     mkdir "$target"
   fi
-  python3 "$bounded_runner" \
+  python3 -c "$bounded_runner_program" \
     --seconds "$docker_deadline_seconds" \
     --bytes "$docker_output_maximum_bytes" -- \
     docker run --rm --name "$run_name" --cidfile "$cidfile" \
@@ -403,7 +450,7 @@ common_run() {
 
 readonly_name=$container_prefix-readonly
 readonly_cidfile=$temporary/control/readonly.cid
-readonly_container_id=$(python3 "$bounded_runner" --seconds 120 --bytes 1024 -- \
+readonly_container_id=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$readonly_name" --cidfile "$readonly_cidfile" \
   --user 0:0 \
   --network none \
@@ -539,13 +586,28 @@ if [ ! -f "$break_result" ] \
   exit 74
 fi
 
-staging=$output_directory/.fava-pinned-build-staging-$unique
-mkdir "$staging"
+output_parent=$(dirname "$output_directory")
+staging=$output_parent/.fava-pinned-build-staging-$unique
+mkdir -m 700 "$staging"
+output_dockerfile_path=apps/canary/pinned-output.Dockerfile
+extractor_path=apps/canary/tools/extract-pinned-image.py
+output_dockerfile_sha256=$(awk -F '\t' -v path="$output_dockerfile_path" \
+  '$4 == path { print $2 }' "$manifest")
+extractor_sha256=$(awk -F '\t' -v path="$extractor_path" \
+  '$4 == path { print $2 }' "$manifest")
+case "$output_dockerfile_sha256:$extractor_sha256" in *[!0-9a-f:]*|'') exit 75 ;; esac
+if [ "${#output_dockerfile_sha256}" -ne 64 ] || [ "${#extractor_sha256}" -ne 64 ]; then
+  echo "pinned output recipe/helper manifest identity was invalid" >&2
+  exit 75
+fi
 
 # Prove BuildKit can mount the exact content-addressed source stage read-only.
 probe_image_tag="fava-pinned-probe:$revision-$unique"
 probe_iidfile=$temporary/control/probe-image.id
-python3 "$bounded_runner" --seconds 120 --bytes 1048576 -- \
+python3 -c "$pinned_input_program" \
+  --repository "$source_checkout" --revision "$revision" \
+  --path "$output_dockerfile_path" --expected-sha256 "$output_dockerfile_sha256" \
+  --maximum-input-bytes 1048576 --seconds 120 --bytes 1048576 -- \
   docker buildx build --builder colima --load --progress plain --pull=false \
     --platform linux/arm64 --provenance=false --sbom=false \
     --no-cache --network none --target buildkit_probe \
@@ -554,7 +616,7 @@ python3 "$bounded_runner" --seconds 120 --bytes 1048576 -- \
     --iidfile "$probe_iidfile" --tag "$probe_image_tag" \
     --build-arg "SOURCE_IMAGE=$source_image_reference" \
     --build-arg "FAVA_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
-    --file "$temporary/source/apps/canary/pinned-output.Dockerfile" \
+    --file - \
     "$temporary/source"
 probe_image_id=$(tr -d '\r\n' < "$probe_iidfile")
 case "$probe_image_id" in sha256:*) ;; *) exit 75 ;; esac
@@ -572,8 +634,11 @@ probe_image_id=
 # consumes the exact source image through a read-only BuildKit stage mount.
 subject_image_tag="fava-pinned-subject:$revision-$unique"
 subject_iidfile=$temporary/control/subject-image.id
-python3 "$bounded_runner" \
-  --seconds "$docker_deadline_seconds" --bytes "$docker_output_maximum_bytes" -- \
+python3 -c "$pinned_input_program" \
+  --repository "$source_checkout" --revision "$revision" \
+  --path "$output_dockerfile_path" --expected-sha256 "$output_dockerfile_sha256" \
+  --maximum-input-bytes 1048576 --seconds "$docker_deadline_seconds" \
+  --bytes "$docker_output_maximum_bytes" -- \
   docker buildx build --builder colima --load --progress plain --pull=false \
     --platform linux/arm64 --provenance=false --sbom=false \
     --no-cache --network none \
@@ -587,7 +652,7 @@ python3 "$bounded_runner" \
     --build-arg "FAVA_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
     --build-arg "FAVA_SOURCE_IMAGE_SHA256=$source_image_sha256" \
     --build-arg "FAVA_RUST_BASE_IMAGE_SHA256=$base_image_sha256" \
-    --file "$temporary/source/apps/canary/pinned-output.Dockerfile" \
+    --file - \
     "$temporary/source"
 subject_image_id=$(tr -d '\r\n' < "$subject_iidfile")
 case "$subject_image_id" in sha256:*) ;; *) exit 75 ;; esac
@@ -601,8 +666,11 @@ if [ "${#subject_image_sha256}" -ne 64 ]; then
   echo "content-addressed canary subject image identity was not canonical" >&2
   exit 75
 fi
-subject_identity=$(python3 "$temporary/source/apps/canary/tools/extract-pinned-image.py" \
-  "$subject_image_id" "$staging/canary")
+subject_identity=$(python3 -c "$pinned_input_program" \
+  --repository "$source_checkout" --revision "$revision" \
+  --path "$extractor_path" --expected-sha256 "$extractor_sha256" \
+  --maximum-input-bytes 1048576 --seconds 180 --bytes 4096 -- \
+  python3 - "$subject_image_id" "$staging/canary")
 if [ "$(printf '%s\n' "$subject_identity" | wc -l | tr -d ' ')" -ne 3 ] \
   || [ "$(printf '%s\n' "$subject_identity" | sed -n '1s/^subject_image_sha256=//p')" != "$subject_image_sha256" ]; then
   echo "immutable subject extractor did not bind the exact engine image" >&2
@@ -641,9 +709,9 @@ cat > "$staging/pinned-build.json" <<EOF
   "toctou_deliberate_break": "compiled-hostile-bytes",
   "source_root": "/source",
   "target_root": "/target",
-  "network": "none",
-  "root_filesystem": "read-only",
-  "capabilities": "none",
+  "compiler_network": "none",
+  "compiler_source_mount": "read-only",
+  "compiler_user": "65532:65532",
   "target_storage": "engine-content-addressed-image",
   "target_maximum_bytes": $green_target_maximum_bytes,
   "subject_digest_origin": "engine-image",
@@ -664,22 +732,8 @@ for path in sys.argv[1:]:
     finally:
         os.close(descriptor)
 PY
-mv "$staging/canary" "$output_directory/canary"
-mv "$staging/pinned-build.json" "$output_directory/pinned-build.json"
-mv "$staging/pinned-source.manifest" "$output_directory/pinned-source.manifest"
-rmdir "$staging"
+python3 -c "$promotion_program" "$staging" "$output_directory"
 staging=
-python3 - "$output_directory" <<'PY'
-import os
-import sys
-
-descriptor = os.open(sys.argv[1], os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-try:
-    os.fsync(descriptor)
-finally:
-    os.close(descriptor)
-PY
-
 printf '%s\n' \
   "fava_revision=$revision" \
   "source_image_sha256=$source_image_sha256" \

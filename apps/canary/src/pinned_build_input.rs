@@ -34,9 +34,9 @@ pub(crate) struct BuildAttestation {
     pub(crate) toctou_deliberate_break: String,
     pub(crate) source_root: String,
     pub(crate) target_root: String,
-    pub(crate) network: String,
-    pub(crate) root_filesystem: String,
-    pub(crate) capabilities: String,
+    pub(crate) compiler_network: String,
+    pub(crate) compiler_source_mount: String,
+    pub(crate) compiler_user: String,
     pub(crate) target_storage: String,
     pub(crate) target_maximum_bytes: u64,
     pub(crate) subject_digest_origin: String,
@@ -82,9 +82,9 @@ pub(crate) fn parse_build_attestation(
         || claim.toctou_deliberate_break != "compiled-hostile-bytes"
         || claim.source_root != "/source"
         || claim.target_root != "/target"
-        || claim.network != "none"
-        || claim.root_filesystem != "read-only"
-        || claim.capabilities != "none"
+        || claim.compiler_network != "none"
+        || claim.compiler_source_mount != "read-only"
+        || claim.compiler_user != "65532:65532"
         || claim.target_storage != "engine-content-addressed-image"
         || claim.target_maximum_bytes != PINNED_TARGET_MAXIMUM_BYTES
         || claim.subject_digest_origin != "engine-image"

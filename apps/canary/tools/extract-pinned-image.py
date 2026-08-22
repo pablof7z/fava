@@ -81,11 +81,12 @@ def save_exact_image(image_id: str, destination: str) -> None:
 
 
 def exact_outer_members(archive: tarfile.TarFile) -> dict[str, tarfile.TarInfo]:
-    members = archive.getmembers()
-    if not 3 <= len(members) <= MAX_OUTER_MEMBERS:
-        refuse("exact image archive had an invalid member count")
     result = {}
-    for member in members:
+    count = 0
+    for member in archive:
+        count += 1
+        if count > MAX_OUTER_MEMBERS:
+            refuse("exact image archive had an invalid member count")
         if member.name.startswith("/") or ".." in member.name.split("/"):
             refuse("exact image archive contained an unsafe path")
         if member.issym() or member.islnk() or member.isdev():
@@ -96,6 +97,8 @@ def exact_outer_members(archive: tarfile.TarFile) -> dict[str, tarfile.TarInfo]:
             result[member.name] = member
         elif not member.isdir():
             refuse("exact image archive contained an unsupported member")
+    if count < 3:
+        refuse("exact image archive had an invalid member count")
     return result
 
 
@@ -203,10 +206,9 @@ def extract(image_id: str, destination: str, archive_path: str) -> tuple[int, st
         os.fsync(layer_file.fileno())
     try:
         with tarfile.open(layer_path, mode="r:") as layer:
-            members = layer.getmembers()
-            if len(members) != 1:
+            subject = layer.next()
+            if subject is None or layer.next() is not None:
                 refuse("exact scratch layer did not contain one subject")
-            subject = members[0]
             if subject.name not in {"canary", "./canary"} or not subject.isfile() \
                     or subject.issym() or subject.islnk() or subject.mode & 0o777 != 0o500:
                 refuse("exact scratch layer subject was not canonical")

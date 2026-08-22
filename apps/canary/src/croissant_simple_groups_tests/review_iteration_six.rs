@@ -100,6 +100,27 @@ fn verifier_refuses_resealed_host_bound_build_subject() {
 }
 
 #[test]
+fn verifier_refuses_resealed_writable_compiler_source_claim() {
+    let fixture = PairEvidenceFixture::new();
+    let build_path = fixture.roots[0].join("source/fava-build.json");
+    let mut build: Value = serde_json::from_slice(
+        &fs::read(&build_path).expect("build attestation"),
+    )
+    .expect("build attestation JSON");
+    build["compiler_source_mount"] = json!("writable");
+    fs::write(
+        build_path,
+        serde_json::to_vec_pretty(&build).expect("mutated build attestation"),
+    )
+    .expect("write mutated build attestation");
+    fixture.mutate(0, true, |_| {});
+    assert!(
+        verify_fixture_pair(fixture.root()).is_err(),
+        "writable compiler-source claim was accepted after resealing"
+    );
+}
+
+#[test]
 fn verifier_refuses_resealed_different_content_addressed_subject_image() {
     let fixture = PairEvidenceFixture::new();
     let different = "abababababababababababababababababababababababababababababababab";

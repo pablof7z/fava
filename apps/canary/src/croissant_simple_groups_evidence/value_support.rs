@@ -243,9 +243,9 @@ fn verify_build_attestation(
         || required_string(&build, "toctou_deliberate_break")? != "compiled-hostile-bytes"
         || required_string(&build, "source_root")? != "/source"
         || required_string(&build, "target_root")? != "/target"
-        || required_string(&build, "network")? != "none"
-        || required_string(&build, "root_filesystem")? != "read-only"
-        || required_string(&build, "capabilities")? != "none"
+        || required_string(&build, "compiler_network")? != "none"
+        || required_string(&build, "compiler_source_mount")? != "read-only"
+        || required_string(&build, "compiler_user")? != "65532:65532"
         || required_string(&build, "target_storage")? != "engine-content-addressed-image"
         || build
             .get("target_maximum_bytes")
