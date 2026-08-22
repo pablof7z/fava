@@ -1,4 +1,7 @@
 //! Public-facade evidence for pure multi-relay simple-group values.
+//!
+//! Cohesion: one facade target shares the same custody, signer, router, publisher,
+//! and transport spies across query, publication, refusal, and lifecycle descriptors.
 
 use std::collections::BTreeSet;
 use std::future::Future;
@@ -7,13 +10,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, Fava, Kind, Query, Tag, Timestamp, WriteRouting};
+use fava::{EventBuilder, Fava, Kind, Query, ReceiptOutcome, Tag, Timestamp, WriteRouting};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_routing::{RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession};
+use fava_routing::{
+    RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
+};
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_simple_groups::{Group, GroupRecords};
 use fava_state::{
@@ -99,7 +104,10 @@ async fn simple_group_records_require_actual_host_evidence() {
     }
 
     let snapshot = wait_for_snapshot(&mut observation, |current| {
-        current.events.first().is_some_and(|record| record.relay_evidence.len() == 2)
+        current
+            .events
+            .first()
+            .is_some_and(|record| record.relay_evidence.len() == 2)
     })
     .await;
     assert_eq!(snapshot.events.len(), 1);
@@ -167,13 +175,19 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
         .expect("ordinary publication accepts");
     assert_ordinary_write(&write);
     let accepted = write.receipt().expect("accepted receipt");
-    assert_eq!(accepted.routing, WriteRouting::Explicit(expected_hosts.clone()));
+    assert_eq!(
+        accepted.routing,
+        WriteRouting::Explicit(expected_hosts.clone())
+    );
 
     wait_until(|| harness.publisher.attempts().len() == expected_hosts.len()).await;
     let receipt = write.receipt().expect("current receipt");
     assert_eq!(receipt.write_id, write.write_id());
     assert_eq!(receipt.receipt_id, write.receipt_id());
-    assert_eq!(receipt.routing, WriteRouting::Explicit(expected_hosts.clone()));
+    assert_eq!(
+        receipt.routing,
+        WriteRouting::Explicit(expected_hosts.clone())
+    );
     assert_eq!(receipt.desired_destinations.len(), expected_hosts.len());
     assert!(receipt.attempts.values().all(|attempts| *attempts == 1));
     let attempts = harness.publisher.attempts();
@@ -182,7 +196,10 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
         .map(|attempt| attempt.session.relay.clone())
         .collect::<Vec<_>>();
     for host in &expected_hosts {
-        assert_eq!(handed_off.iter().filter(|actual| *actual == host).count(), 1);
+        assert_eq!(
+            handed_off.iter().filter(|actual| *actual == host).count(),
+            1
+        );
     }
     assert!(attempts.iter().all(|attempt| {
         attempt.write_id == write.write_id()
@@ -190,11 +207,176 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
             && attempt.event.id == prepared_id
     }));
     let visible = wait_for_snapshot(&mut observation, |snapshot| {
-        snapshot.events.iter().any(|record| record.id() == prepared_id)
+        snapshot
+            .events
+            .iter()
+            .any(|record| record.id() == prepared_id)
     })
     .await;
     assert_eq!(visible.events.len(), 1);
     assert!(visible.events[0].publication.is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn simple_group_presigned_context_refuses_before_custody() {
+    let group = group();
+    let keys = Keys::generate();
+    let valid_signer = Arc::new(ExactSigner::new(keys.clone()));
+    let valid = Harness::new(Arc::clone(&valid_signer) as Arc<dyn Signer>);
+    let signed = NostrEventBuilder::new(Kind::from_u16(50_029), "signed exact bytes")
+        .tags([
+            tag(&["x", "before"]),
+            tag(&["h", "group-29"]),
+            tag(&["x", "after"]),
+        ])
+        .custom_created_at(Timestamp::from(88))
+        .finalize(&keys)
+        .expect("valid event signs");
+    let original_bytes = serde_json::to_vec(&signed).expect("signed event encodes");
+    let original_id = signed.id;
+    let original_signature = signed.sig;
+    let prepared = group.prepare(signed).expect("valid context passes purely");
+
+    assert_eq!(serde_json::to_vec(&prepared).unwrap(), original_bytes);
+    assert_eq!(prepared.id, original_id);
+    assert_eq!(prepared.sig, original_signature);
+    let _write = valid
+        .fava
+        .to(group.hosts())
+        .expect("exact route")
+        .publish(prepared)
+        .expect("presigned custody accepts");
+    wait_until(|| valid.publisher.attempts().len() == 3).await;
+    assert_eq!(valid_signer.calls(), 0);
+    assert!(valid.publisher.attempts().iter().all(|attempt| {
+        serde_json::to_vec(&attempt.event).expect("attempt event encodes") == original_bytes
+            && attempt.event.id == original_id
+            && attempt.event.sig == original_signature
+    }));
+
+    let invalid_keys = Keys::generate();
+    let invalid_signer = Arc::new(ExactSigner::new(invalid_keys.clone()));
+    let invalid = Harness::new(Arc::clone(&invalid_signer) as Arc<dyn Signer>);
+    let rows = [
+        ("missing", Vec::new()),
+        ("missing-value", vec![tag(&["h"])]),
+        ("present-empty", vec![tag(&["h", ""])]),
+        (
+            "duplicate-adjacent",
+            vec![tag(&["h", "group-29"]), tag(&["h", "group-29"])],
+        ),
+        ("contradictory", vec![tag(&["h", "other-group"])]),
+    ];
+    for (label, tags) in rows {
+        let event = NostrEventBuilder::new(Kind::from_u16(50_029), label)
+            .tags(tags)
+            .custom_created_at(Timestamp::from(90))
+            .finalize(&invalid_keys)
+            .expect("hostile context still signs");
+        let result = group.prepare(event);
+        if let Ok(admitted) = result.as_ref() {
+            let _ = invalid
+                .fava
+                .to(group.hosts())
+                .expect("route remains valid")
+                .publish(admitted.clone());
+        }
+        assert!(result.is_err(), "{label} must refuse before facade custody");
+        assert_eq!(invalid.store.len().expect("store readable"), 0, "{label}");
+        assert_eq!(invalid_signer.calls(), 0, "{label}");
+        assert!(invalid.publisher.attempts().is_empty(), "{label}");
+        assert_eq!(invalid.router.calls.load(Ordering::SeqCst), 0, "{label}");
+        assert_eq!(invalid.transport.opens.load(Ordering::SeqCst), 0, "{label}");
+        assert!(
+            invalid
+                .transport
+                .frames
+                .lock()
+                .expect("frames lock")
+                .is_empty()
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn simple_group_uses_ordinary_lifecycle_isolation() {
+    let keys = Keys::generate();
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let harness = Harness::new(Arc::clone(&signer) as Arc<dyn Signer>);
+    let group = group();
+    let query = group
+        .events(
+            Query::events()
+                .limit(8)
+                .expect("positive bound")
+                .cache_only(),
+        )
+        .expect("group content query");
+    let mut observation = harness.fava.observe(query).await.expect("query opens");
+    let first = group
+        .prepare(
+            EventBuilder::new(keys.public_key(), Kind::from_u16(50_029))
+                .created_at(Timestamp::from(101))
+                .content("first operation")
+                .build()
+                .expect("first builds"),
+        )
+        .expect("first prepares");
+    let second = group
+        .prepare(
+            EventBuilder::new(keys.public_key(), Kind::from_u16(50_029))
+                .created_at(Timestamp::from(102))
+                .content("second operation")
+                .build()
+                .expect("second builds"),
+        )
+        .expect("second prepares");
+    let first_id = first.id.expect("first id");
+    let second_id = second.id.expect("second id");
+    assert_ne!(first_id, second_id);
+    let first_write = harness
+        .fava
+        .to(group.hosts())
+        .expect("first route")
+        .publish(first)
+        .expect("first custody");
+    let second_write = harness
+        .fava
+        .to(group.hosts())
+        .expect("second route")
+        .publish(second)
+        .expect("second custody");
+    assert_ne!(first_write.write_id(), second_write.write_id());
+    assert_ne!(first_write.receipt_id(), second_write.receipt_id());
+    wait_until(|| signer.calls() == 2).await;
+    let both = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 2).await;
+    assert!(both.events.iter().any(|record| record.id() == first_id));
+    assert!(both.events.iter().any(|record| record.id() == second_id));
+
+    let cancelled = harness
+        .fava
+        .cancel_publication(first_write.receipt_id())
+        .expect("first cancellation commits")
+        .expect("first receipt exists");
+    assert_eq!(cancelled.outcome, ReceiptOutcome::Cancelled);
+    let remaining =
+        wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 1).await;
+    assert_eq!(remaining.events[0].id(), second_id);
+    let second_receipt = second_write.receipt().expect("second remains readable");
+    assert_eq!(second_receipt.outcome, ReceiptOutcome::Open);
+    assert!(matches!(
+        second_receipt.current.event,
+        EventValue::Unsigned(_)
+    ));
+    assert!(harness.publisher.attempts().is_empty());
+
+    harness
+        .fava
+        .cancel_publication(second_write.receipt_id())
+        .expect("second cancellation commits");
+    observation.close();
+    observation.close();
+    assert!(observation.changed().await.is_err());
 }
 
 fn assert_ordinary_write(_write: &fava::Write) {}
@@ -240,7 +422,10 @@ async fn wait_for_snapshot(
             if predicate(&current) {
                 return current;
             }
-            observation.changed().await.expect("observation remains open");
+            observation
+                .changed()
+                .await
+                .expect("observation remains open");
         }
     })
     .await
@@ -326,6 +511,46 @@ impl Signer for ExactSigner {
     }
 }
 
+struct BlockingSigner {
+    public_key: PublicKey,
+    calls: AtomicU64,
+}
+
+impl BlockingSigner {
+    fn new(public_key: PublicKey) -> Self {
+        Self {
+            public_key,
+            calls: AtomicU64::new(0),
+        }
+    }
+
+    fn calls(&self) -> u64 {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl Signer for BlockingSigner {
+    fn public_key(&self) -> PublicKey {
+        self.public_key
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Available
+    }
+
+    fn sign_event(
+        &self,
+        _event: UnsignedEvent,
+        mut cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let _ = cancel.changed().await;
+            Err(SignerError::Cancelled)
+        })
+    }
+}
+
 #[derive(Default)]
 struct SpyPublisher {
     attempts: Mutex<Vec<PublishAttempt>>,
@@ -358,7 +583,7 @@ struct SpyRouter {
 }
 
 impl Router for SpyRouter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "spy-router"
     }
 
