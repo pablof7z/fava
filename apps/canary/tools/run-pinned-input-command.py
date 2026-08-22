@@ -101,11 +101,12 @@ def committed_archive(arguments: argparse.Namespace) -> bytes:
     count = 0
     dockerfile = None
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source, \
-            tarfile.open(fileobj=result, mode="w:") as destination:
+            tarfile.open(fileobj=result, mode="w:", format=tarfile.GNU_FORMAT) as destination:
         for member in source:
             count += 1
             if count > 4_096 or member.name == arguments.extra_name:
                 raise SystemExit("committed archive inventory was invalid")
+            member.pax_headers = {}
             stream = source.extractfile(member) if member.isfile() else None
             if member.name == arguments.archive_prefix + arguments.path:
                 if stream is None or member.size <= 0 or member.size > 1_048_576:

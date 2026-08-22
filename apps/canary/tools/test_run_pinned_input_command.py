@@ -140,6 +140,7 @@ class PinnedInputCommandTests(unittest.TestCase):
             self.assertEqual(extracted.read(), committed)
             self.assertEqual(archive.extractfile("Dockerfile").read(), committed)
             self.assertEqual(archive.extractfile("control/source.manifest").read(), b"manifest\n")
+        self.assertEqual(result.read_bytes()[257:262], b"ustar")
 
     def test_output_dockerfile_ignores_post_sample_path_substitution(self) -> None:
         self.assert_committed_input_wins(
