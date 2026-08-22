@@ -433,9 +433,22 @@ impl MemoryWriteStore {
 }
 
 fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
-    receipt.route_revision == plan.revision
-        && receipt.route_settled == plan.settled
-        && receipt.desired_destinations == plan.destinations.keys().cloned().collect()
+    let mut candidate = receipt.clone();
+    candidate.outcome = ReceiptOutcome::Open;
+    candidate.route_revision = 0;
+    candidate.route_settled = false;
+    candidate.route_shortfalls.clear();
+    candidate.desired_destinations.clear();
+    candidate.attempts.clear();
+    candidate.current.publication.destinations.clear();
+    apply_route_to_receipt(&mut candidate, plan).is_ok()
+        && candidate.outcome == receipt.outcome
+        && candidate.route_revision == receipt.route_revision
+        && candidate.route_settled == receipt.route_settled
+        && candidate.route_shortfalls == receipt.route_shortfalls
+        && candidate.desired_destinations == receipt.desired_destinations
+        && candidate.attempts == receipt.attempts
+        && candidate.current.publication.destinations == receipt.current.publication.destinations
 }
 
 fn validate_materialization(

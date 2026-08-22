@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-use fava_routing::RoutePlan;
+use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
     EventBuilder, Kind, MaterializationId, ReceiptOutcome, Timestamp, WriteIntent, WriteRouting,
 };
@@ -57,6 +57,90 @@ fn active_reservation_excludes_unreserved_redb_admission() {
     );
     drop(store);
     std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
+    let first_target = RouteTarget::Author(Keys::generate().public_key());
+    let second_target = RouteTarget::Author(Keys::generate().public_key());
+    for (label, first, second) in [
+        (
+            "shortfall",
+            initial_route(vec!["first failure".to_owned()], BTreeMap::new()),
+            initial_route(vec!["different failure".to_owned()], BTreeMap::new()),
+        ),
+        (
+            "settled-absent coverage",
+            initial_route(
+                Vec::new(),
+                BTreeMap::from([(first_target.clone(), CoverageState::SettledAbsent)]),
+            ),
+            initial_route(
+                Vec::new(),
+                BTreeMap::from([(second_target.clone(), CoverageState::SettledAbsent)]),
+            ),
+        ),
+    ] {
+        let path = unique_path(label);
+        let store = RedbWriteStore::open_bounded(
+            &path,
+            NonZeroUsize::new(2).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+        )
+        .unwrap();
+        let keys = Keys::generate();
+        let intent =
+            || WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap();
+        let event = || materialization(keys.public_key(), 1, "route effect");
+        let accepted = store
+            .accept_reserved_materialized_edit(
+                store.reserve_active().unwrap(),
+                intent(),
+                event(),
+                None,
+                Some(&first),
+            )
+            .expect("first route effect commits");
+        let retained = store.receipt(accepted.receipt_id).unwrap().unwrap();
+        let mut changes = store.receipt_changes();
+        assert!(
+            store
+                .accept_reserved_materialized_edit(
+                    store.reserve_active().unwrap(),
+                    intent(),
+                    event(),
+                    None,
+                    Some(&second),
+                )
+                .is_err(),
+            "{label} mismatch was accepted as idempotent"
+        );
+        assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(retained));
+        assert!(changes.try_recv().is_err(), "{label} mismatch notified");
+        store
+            .release_active(
+                store
+                    .reserve_active()
+                    .expect("refusal consumed reservation"),
+            )
+            .unwrap();
+        drop(store);
+        std::fs::remove_file(path).ok();
+    }
+}
+
+fn initial_route(
+    shortfalls: Vec<String>,
+    coverage: BTreeMap<RouteTarget, CoverageState>,
+) -> RoutePlan {
+    RoutePlan {
+        revision: 1,
+        destinations: BTreeMap::new(),
+        coverage,
+        unresolved: BTreeSet::new(),
+        shortfalls,
+        settled: false,
+    }
 }
 
 #[test]

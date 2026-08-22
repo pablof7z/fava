@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-use fava_routing::RoutePlan;
+use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
     Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
     WriteIntent, WriteRouting,
@@ -76,6 +76,95 @@ fn memory_first_edit_has_no_prior() {
             .retired_materializations
             .is_empty()
     );
+}
+
+#[test]
+fn memory_initial_route_idempotence_compares_complete_persisted_effect() {
+    for (label, first, second) in route_effect_mismatches() {
+        let store = MemoryWriteStore::bounded(NonZeroUsize::new(2).unwrap());
+        assert_route_effect_mismatch_is_atomic(&store, label, first, second);
+    }
+}
+
+fn route_effect_mismatches() -> Vec<(&'static str, RoutePlan, RoutePlan)> {
+    let first_target = RouteTarget::Author(Keys::generate().public_key());
+    let second_target = RouteTarget::Author(Keys::generate().public_key());
+    vec![
+        (
+            "shortfall",
+            initial_route(vec!["first failure".to_owned()], BTreeMap::new()),
+            initial_route(vec!["different failure".to_owned()], BTreeMap::new()),
+        ),
+        (
+            "settled-absent coverage",
+            initial_route(
+                Vec::new(),
+                BTreeMap::from([(first_target, CoverageState::SettledAbsent)]),
+            ),
+            initial_route(
+                Vec::new(),
+                BTreeMap::from([(second_target, CoverageState::SettledAbsent)]),
+            ),
+        ),
+    ]
+}
+
+fn initial_route(
+    shortfalls: Vec<String>,
+    coverage: BTreeMap<RouteTarget, CoverageState>,
+) -> RoutePlan {
+    RoutePlan {
+        revision: 1,
+        destinations: BTreeMap::new(),
+        coverage,
+        unresolved: BTreeSet::new(),
+        shortfalls,
+        settled: false,
+    }
+}
+
+fn assert_route_effect_mismatch_is_atomic(
+    store: &MemoryWriteStore,
+    label: &str,
+    first: RoutePlan,
+    second: RoutePlan,
+) {
+    let keys = Keys::generate();
+    let intent =
+        || WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap();
+    let event = || materialization(keys.public_key(), 1, "route effect");
+    let accepted = store
+        .accept_reserved_materialized_edit(
+            store.reserve_active().unwrap(),
+            intent(),
+            event(),
+            None,
+            Some(&first),
+        )
+        .expect("first route effect commits");
+    let retained = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    let mut changes = store.receipt_changes();
+    assert!(
+        store
+            .accept_reserved_materialized_edit(
+                store.reserve_active().unwrap(),
+                intent(),
+                event(),
+                None,
+                Some(&second),
+            )
+            .is_err(),
+        "{label} mismatch was accepted as idempotent"
+    );
+    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(retained));
+    assert!(changes.try_recv().is_err(), "{label} mismatch notified");
+    store
+        .release_active(
+            store
+                .reserve_active()
+                .expect("refusal consumed reservation"),
+        )
+        .unwrap();
 }
 
 #[test]
