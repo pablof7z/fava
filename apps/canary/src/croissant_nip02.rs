@@ -459,7 +459,6 @@ fn finish_run(
         "foreign_tags_preserved": true,
         "foreign_content_preserved": true,
         "typed_decode_exact": true,
-        "old_data_excluded": true,
         "secret_scan_passed": true,
         "executable_sha256": ready.executable_sha256,
         "source_head": ready.source_head,
@@ -510,6 +509,8 @@ pub fn verify_croissant_run_pair(runs_directory: impl AsRef<Path>) -> CanaryResu
     for field in [
         "scenario_seed_sha256",
         "group_id",
+        "group_event_id",
+        "baseline_event_id",
         "event_id",
         "write_id",
         "receipt_id",
@@ -518,21 +519,35 @@ pub fn verify_croissant_run_pair(runs_directory: impl AsRef<Path>) -> CanaryResu
             return Err(CanaryError::new(format!("Croissant pair reused {field}")));
         }
     }
-    let first_group = required_string(&runs[0].1, "group_id")?.as_bytes();
-    let second_group = required_string(&runs[1].1, "group_id")?.as_bytes();
-    if directory_contains(&runs[0].0, second_group, true)?
-        || directory_contains(&runs[1].0, first_group, true)?
-    {
-        return Err(CanaryError::new(
-            "a Croissant run retained the other run's group data",
-        ));
+    reject_cross_run_data(&runs[0], &runs[1])?;
+    Ok(())
+}
+
+fn reject_cross_run_data(
+    first: &(PathBuf, Value),
+    second: &(PathBuf, Value),
+) -> CanaryResult<()> {
+    for field in [
+        "group_id",
+        "group_event_id",
+        "baseline_event_id",
+        "event_id",
+    ] {
+        let first_value = required_string(&first.1, field)?.as_bytes();
+        let second_value = required_string(&second.1, field)?.as_bytes();
+        if directory_contains(&first.0, second_value, true)?
+            || directory_contains(&second.0, first_value, true)?
+        {
+            return Err(CanaryError::new(format!(
+                "a Croissant run retained the other run's {field} data"
+            )));
+        }
     }
     Ok(())
 }
 
 fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     if manifest.get("scenario").and_then(Value::as_str) != Some(SCENARIO)
-        || manifest.get("old_data_excluded").and_then(Value::as_bool) != Some(true)
         || manifest.get("secret_scan_passed").and_then(Value::as_bool) != Some(true)
         || manifest
             .get("foreign_tags_preserved")
@@ -552,6 +567,8 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
         "scenario_seed_sha256",
         "group_id",
         "author_public_key",
+        "group_event_id",
+        "baseline_event_id",
         "event_id",
         "write_id",
         "receipt_id",
