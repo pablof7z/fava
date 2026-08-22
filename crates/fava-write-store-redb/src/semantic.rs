@@ -117,6 +117,7 @@ impl RedbWriteStore {
             route_shortfalls: Vec::new(),
             desired_destinations,
             attempts: std::collections::BTreeMap::new(),
+            spent_attempts: std::collections::BTreeMap::new(),
         };
         let custody = (edit, author, selected_source, None);
         let next_revision = next_revision(&state)?;

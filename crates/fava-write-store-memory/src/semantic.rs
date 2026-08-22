@@ -173,6 +173,7 @@ impl MemoryWriteStore {
             route_shortfalls: Vec::new(),
             desired_destinations,
             attempts: BTreeMap::new(),
+            spent_attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
 
