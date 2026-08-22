@@ -1,40 +1,43 @@
-use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    AcceptedWrite, Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError,
-    Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, WriteIntent,
-    WriteIntentError, WriteRouting, WriteStoreError,
+    Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError, PublishError,
+    Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Write,
+    WriteIntentError, WriteStoreError, all,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::{CacheMutation, CachedEvent};
+use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventId, Tag};
 use nostr::key::Keys;
 
 use super::support::{CountingSigner, RecordingPublisher, publication_builder, relay_evidence};
-use super::{EditResult, explicit_intent, signed, target_count};
+use super::{EditResult, signed, target_count};
 
 pub fn assert_source_removal(
-    accepted: &AcceptedWrite,
+    accepted: &Write,
     removed: &Receipt,
     selected_source: EventId,
     kind: Kind,
     actor: PublicKey,
     target: (&str, &str),
 ) {
+    let accepted_receipt = accepted
+        .receipt()
+        .expect("accepted receipt remains readable");
     assert_eq!(
-        accepted.current.publication.materialization_source,
+        accepted_receipt.current.publication.materialization_source,
         Some(selected_source)
     );
-    assert_eq!(removed.write_id, accepted.write_id);
-    assert_eq!(removed.receipt_id, accepted.receipt_id);
-    assert_ne!(removed.current.id(), accepted.current.id());
-    assert!(removed.current.event.created_at() > accepted.current.event.created_at());
+    assert_eq!(removed.write_id, accepted.write_id());
+    assert_eq!(removed.receipt_id, accepted.receipt_id());
+    assert_ne!(removed.current.id(), accepted_receipt.current.id());
+    assert!(removed.current.event.created_at() > accepted_receipt.current.event.created_at());
     assert!(removed.current.publication.materialization_source.is_none());
     assert_eq!(
         removed.current.publication.retired_materializations.len(),
@@ -106,6 +109,8 @@ async fn prove_first_value<Add>(
     assert_stable(&accepted, &receipt);
     assert!(
         accepted
+            .receipt()
+            .expect("accepted receipt remains readable")
             .current
             .publication
             .materialization_source
@@ -223,8 +228,11 @@ fn prove_public_refusals<Add>(
     let malformed = ReplaceableEventEdit::new(edit.kind(), None, Vec::new()).unwrap();
     let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&materializer));
     assert!(matches!(
-        fava.publish(explicit_intent(malformed, actor)),
-        Err(PublicationError::Routing(_))
+        fava.by(actor)
+            .to([super::support::relay_url()])
+            .expect("route validates")
+            .publish(malformed),
+        Err(PublishError::Publication(PublicationError::Routing(_)))
     ));
     assert_no_effects(&store, &signer, &publisher, 0);
 
@@ -257,8 +265,12 @@ fn prove_public_refusals<Add>(
     .build()
     .unwrap();
     assert!(matches!(
-        bounded.publish(explicit_intent(edit.clone(), actor)),
-        Err(PublicationError::Routing(_))
+        bounded
+            .by(actor)
+            .to([super::support::relay_url()])
+            .expect("route validates")
+            .publish(edit.clone()),
+        Err(PublishError::Publication(PublicationError::Routing(_)))
     ));
     assert_no_effects(&store, &signer, &publisher, 0);
 
@@ -278,15 +290,17 @@ fn prove_public_refusals<Add>(
         ))
         .unwrap();
     assert!(matches!(
-        capacity.publish(explicit_intent(edit, actor)),
-        Err(PublicationError::Store(WriteStoreError::Refused(_)))
+        capacity
+            .by(actor)
+            .to([super::support::relay_url()])
+            .expect("route validates")
+            .publish(edit),
+        Err(PublishError::Publication(PublicationError::Store(
+            WriteStoreError::Refused(_)
+        )))
     ));
     assert!(matches!(
-        WriteIntent::edit_as(
-            add().unwrap(),
-            actor,
-            WriteRouting::Explicit(BTreeSet::new()),
-        ),
+        WriteIntent::edit_as(add().unwrap(), actor, WriteRouting::Explicit(Vec::new()),),
         Err(WriteIntentError::EmptyExplicitRelays)
     ));
     assert!(matches!(
@@ -325,15 +339,17 @@ async fn publish_terminal(
     fava: &Fava,
     edit: ReplaceableEventEdit,
     author: PublicKey,
-) -> (AcceptedWrite, Receipt, Event) {
-    let accepted = fava.publish(explicit_intent(edit, author)).unwrap();
-    let receipt = tokio::time::timeout(
-        Duration::from_secs(1),
-        fava.wait_terminal(accepted.receipt_id),
-    )
-    .await
-    .expect("terminal receipt wait is bounded")
-    .unwrap();
+) -> (Write, Receipt, Event) {
+    let accepted = fava
+        .by(author)
+        .to([super::support::relay_url()])
+        .expect("route validates")
+        .publish(edit)
+        .unwrap();
+    let receipt = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all()))
+        .await
+        .expect("terminal receipt wait is bounded")
+        .unwrap();
     let EventValue::Signed(event) = receipt.current.event.clone() else {
         panic!("terminal semantic event must be signed")
     };
@@ -341,10 +357,13 @@ async fn publish_terminal(
     (accepted, receipt, event)
 }
 
-fn assert_stable(accepted: &AcceptedWrite, receipt: &Receipt) {
-    assert_eq!(accepted.write_id, receipt.write_id);
-    assert_eq!(accepted.receipt_id, receipt.receipt_id);
-    assert_eq!(accepted.current.id(), receipt.current.id());
+fn assert_stable(accepted: &Write, receipt: &Receipt) {
+    let accepted_receipt = accepted
+        .receipt()
+        .expect("accepted receipt remains readable");
+    assert_eq!(accepted.write_id(), receipt.write_id);
+    assert_eq!(accepted.receipt_id(), receipt.receipt_id);
+    assert_eq!(accepted_receipt.current.id(), receipt.current.id());
 }
 
 fn assert_preserved(event: &Event) {
