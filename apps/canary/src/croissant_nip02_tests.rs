@@ -5,7 +5,10 @@ use serde_json::Value;
 use sha2::Digest;
 use tempfile::TempDir;
 
-use super::{CroissantNip02Options, run_croissant_nip02_scenario, verify_croissant_run_pair};
+use super::{
+    CroissantNip02Options, reject_cross_run_data, run_croissant_nip02_scenario,
+    verify_croissant_run_pair,
+};
 
 const CROISSANT: &str = "/Users/pablofernandez/Work/croissant/croissant";
 
@@ -104,13 +107,59 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
     assert!(verify_croissant_run_pair(temporary.path()).is_err());
     fs::write(&injected, original_artifact).expect("restore artifact");
     fs::write(&manifest_path, &original).expect("restore sealed manifest");
+}
 
-    fs::write(
-        second.run_directory.join("old-data-sentinel.txt"),
-        first_manifest["group_id"].as_str().expect("first group"),
-    )
-    .expect("inject old data");
-    assert!(verify_croissant_run_pair(temporary.path()).is_err());
+#[test]
+fn old_data_negatives_reach_each_identity_check_in_both_directions() {
+    let temporary = TempDir::new().expect("temporary pair root");
+    let first_root = temporary.path().join("first");
+    let second_root = temporary.path().join("second");
+    fs::create_dir_all(&first_root).expect("first root");
+    fs::create_dir_all(&second_root).expect("second root");
+    let first = (
+        first_root.clone(),
+        identity_manifest("aa11", "bb22", "cc33", "dd44"),
+    );
+    let second = (
+        second_root.clone(),
+        identity_manifest("ee55", "ff66", "gg77", "hh88"),
+    );
+
+    for field in [
+        "group_id",
+        "group_event_id",
+        "baseline_event_id",
+        "event_id",
+    ] {
+        fs::write(
+            first_root.join("retained.bin"),
+            second.1[field].as_str().expect("second identity"),
+        )
+        .expect("inject second identity into first run");
+        let error = reject_cross_run_data(&first, &second)
+            .expect_err("first run must reject second-run data");
+        assert!(error.to_string().contains(field), "wrong causal check: {error}");
+        fs::write(first_root.join("retained.bin"), b"clean").expect("clean first run");
+
+        fs::write(
+            second_root.join("retained.bin"),
+            first.1[field].as_str().expect("first identity"),
+        )
+        .expect("inject first identity into second run");
+        let error = reject_cross_run_data(&first, &second)
+            .expect_err("second run must reject first-run data");
+        assert!(error.to_string().contains(field), "wrong causal check: {error}");
+        fs::write(second_root.join("retained.bin"), b"clean").expect("clean second run");
+    }
+}
+
+fn identity_manifest(group: &str, group_event: &str, baseline: &str, event: &str) -> Value {
+    serde_json::json!({
+        "group_id": group,
+        "group_event_id": group_event,
+        "baseline_event_id": baseline,
+        "event_id": event,
+    })
 }
 
 fn refresh_hashes(root: &std::path::Path) {
