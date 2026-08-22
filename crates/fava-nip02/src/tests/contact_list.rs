@@ -99,7 +99,7 @@ fn nip02_accounts_for_every_p_row() {
     assert_eq!(
         list.follows()
             .iter()
-            .map(|follow| follow.source_index())
+            .map(crate::Follow::source_index)
             .collect::<Vec<_>>(),
         vec![4, 7]
     );
@@ -113,7 +113,7 @@ fn nip02_accounts_for_every_p_row() {
     let mut accounted = list
         .follows()
         .iter()
-        .map(|follow| follow.source_index())
+        .map(crate::Follow::source_index)
         .chain(
             list.evidence()
                 .iter()

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use fava_state::RelayUrl;
 use fava_write::{
     EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Timestamp, WriteIntentError,
+    Tag, Timestamp, WriteIntentError,
 };
 
 use fava_nip02::{ContactList, ContactListError, ContactListRowEvidence, Follow};
@@ -42,17 +42,16 @@ fn external_surface_uses_only_approved_functions_and_types() {
             .expect("generator public key");
     let event = EventBuilder::new(author, Kind::ContactList)
         .created_at(Timestamp::from(7))
+        .tag(Tag::parse(["p", &author.to_hex()]).expect("valid follow row"))
+        .tag(Tag::parse(["p"]).expect("short evidence row"))
         .build()
         .expect("bounded contact list");
     let list: ContactList =
         ContactList::from_event(&EventValue::Unsigned(event)).expect("external decoder surface");
     let follows: &[Follow] = list.follows();
     let evidence: &[ContactListRowEvidence] = list.evidence();
-    assert!(follows.is_empty());
-    assert!(evidence.is_empty());
-    let _follow_accessors: fn(&Follow) -> (usize, PublicKey, Option<&RelayUrl>, Option<&str>) =
-        inspect_follow;
-    let _evidence_accessors: fn(&ContactListRowEvidence) -> (usize, &[String]) = inspect_row;
+    assert_eq!(inspect_follow(&follows[0]), (0, author, None, None));
+    assert_eq!(inspect_row(&evidence[0]), (1, &["p".to_owned()][..]));
     let decode: fn(&EventValue) -> Result<ContactList, ContactListError> = ContactList::from_event;
     assert!(decode as usize != 0);
 }
