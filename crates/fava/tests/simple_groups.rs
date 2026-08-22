@@ -521,24 +521,6 @@ async fn simple_group_uses_ordinary_lifecycle_isolation() {
     assert!(observation.changed().await.is_err());
 }
 
-fn assert_ordinary_write(_write: &fava::Write) {}
-
-fn group() -> Group {
-    Group::on(
-        [host("a"), host("b"), host("contacted-but-not-serving")],
-        "group-29",
-    )
-    .expect("group is valid")
-}
-
-fn host(name: &str) -> RelayUrl {
-    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
-}
-
-fn tag(cells: &[&str]) -> Tag {
-    Tag::parse(cells.iter().copied()).expect("test tag")
-}
-
 fn signed_record(keys: &Keys, kind: u16, created_at: u64, content: &str) -> Event {
     NostrEventBuilder::new(Kind::from_u16(kind), content)
         .tags([tag(&["d", "group-29"])])
@@ -606,7 +588,14 @@ impl Harness {
 
     fn new_with_materializers(
         signer: Arc<dyn Signer>,
-        _materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
+        materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
+    ) -> Self {
+        Self::new_with_signers_and_materializers([signer], materializers)
+    }
+
+    fn new_with_signers_and_materializers(
+        signers: impl IntoIterator<Item = Arc<dyn Signer>>,
+        materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
     ) -> Self {
         let cache = Arc::new(MemoryEventCache::default());
         let store = Arc::new(MemoryWriteStore::default());
@@ -619,7 +608,8 @@ impl Harness {
             .query_evaluator(Arc::new(StandardQueryEvaluator))
             .transport(Arc::clone(&transport))
             .router(Arc::clone(&router))
-            .signers([signer])
+            .signers(signers)
+            .materializers(materializers)
             .publisher(Arc::clone(&publisher))
             .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
             .build()

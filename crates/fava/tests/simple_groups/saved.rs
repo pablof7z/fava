@@ -1,9 +1,14 @@
 #[tokio::test(flavor = "current_thread")]
 async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
-    let keys = Keys::generate();
-    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let harness = Harness::new_with_materializers(
-        Arc::clone(&signer) as Arc<dyn Signer>,
+    let first_keys = Keys::generate();
+    let second_keys = Keys::generate();
+    let first_signer = Arc::new(BlockingSigner::new(first_keys.public_key()));
+    let second_signer = Arc::new(BlockingSigner::new(second_keys.public_key()));
+    let harness = Harness::new_with_signers_and_materializers(
+        [
+            Arc::clone(&first_signer) as Arc<dyn Signer>,
+            Arc::clone(&second_signer) as Arc<dyn Signer>,
+        ],
         [SimpleGroups::materializer()],
     );
     let group = Group::on([host("saved")], "photos").expect("group");
@@ -12,19 +17,19 @@ async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
 
     let first = harness
         .fava
-        .by(keys.public_key())
+        .by(first_keys.public_key())
         .to(group.hosts())
         .expect("first exact route")
         .publish(first_edit)
         .expect("first semantic custody");
     let second = harness
         .fava
-        .by(keys.public_key())
+        .by(second_keys.public_key())
         .to(group.hosts())
         .expect("second exact route")
         .publish(second_edit)
         .expect("second semantic custody");
-    wait_until(|| signer.calls() == 2).await;
+    wait_until(|| first_signer.calls() == 1 && second_signer.calls() == 1).await;
 
     let first_receipt = first.receipt().expect("first receipt");
     let second_receipt = second.receipt().expect("second receipt");
@@ -53,7 +58,7 @@ async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
     let saved = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags([tag(&["r", "wss://parsed-only.example"])])
         .custom_created_at(Timestamp::from(90))
-        .finalize(&keys)
+        .finalize(&first_keys)
         .expect("saved relay event signs");
     let parsed = SavedRelay::from_event(&EventValue::Signed(saved)).expect("saved relay parses");
     assert_eq!(parsed.len(), 1);
@@ -132,6 +137,24 @@ fn operation_generation(
         receipt.receipt_id,
         receipt.current.publication.materialization_id,
     )
+}
+
+fn assert_ordinary_write(_write: &fava::Write) {}
+
+fn group() -> Group {
+    Group::on(
+        [host("a"), host("b"), host("contacted-but-not-serving")],
+        "group-29",
+    )
+    .expect("group is valid")
+}
+
+fn host(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
+}
+
+fn tag(cells: &[&str]) -> Tag {
+    Tag::parse(cells.iter().copied()).expect("test tag")
 }
 
 async fn wait_until(predicate: impl Fn() -> bool) {
