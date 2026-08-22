@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-03-PLAN.md
-last_updated: "2026-08-22T00:21:48.364Z"
+stopped_at: Completed 07.1-04-PLAN.md
+last_updated: "2026-08-22T00:40:33.908Z"
 last_activity: 2026-08-22
 last_activity_desc: Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
-state_head: 771d8f7beb1cba414621534bae68b167bc2449a9
+state_head: f8a19aa8ccd41088128654815334fe618acc4b6b
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 15
+  completed_plans: 16
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
+Last activity: 2026-08-22 — Plan 07.1-04 completed; typed contact lists conserve every raw `p` row as a valid follow or exact evidence
 
 Progress: [██████░░░░] 57%
 
@@ -77,6 +77,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P01 | 6min | 2 tasks | 9 files |
 | Phase 07.1 P02 | 21min | 3 tasks | 16 files |
 | Phase 07.1 P03 | 11min | 2 tasks | 7 files |
+| Phase 07.1 P04 | 16min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Equivalent exact event contributions expose the newest receipt local evidence to semantic queries while every WriteId and ReceiptId remains independently readable.
 - [Phase 07.1]: all() requires settled routing and exact terminal facts for every currently desired destination; mixed terminal outcomes satisfy it.
 - [Phase 07.1]: Settlement subscribes before reading and reloads complete durable state after relevant or lagged notifications; terminal refusal carries the full Receipt.
+- [Phase 07.1]: Only a fully valid NIP-02 row enters duplicate membership; invalid rows never reserve targets.
+- [Phase 07.1]: Whole-event contact-list failures are ContactListError values; every row-local failure remains exact ContactListRowEvidence.
+- [Phase 07.1]: Follow uses the established fava-state RelayUrl directly, with no NIP-02 relay wrapper or lifecycle.
 
 ### Pending Todos
 
@@ -134,6 +138,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T00:21:48.278Z
-Stopped at: Completed 07.1-03-PLAN.md
+Last session: 2026-08-22T00:40:33.824Z
+Stopped at: Completed 07.1-04-PLAN.md
 Resume file: None
