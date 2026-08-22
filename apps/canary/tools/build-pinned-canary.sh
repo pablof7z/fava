@@ -23,6 +23,8 @@ readonly_container_id=
 registry_container_id=
 registry_image_was_present=1
 break_volume_name=
+break_volume_owner=
+break_volume_options=
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -76,8 +78,10 @@ remove_image_reference() {
 
 remove_volume_name() {
   if [ -z "$1" ]; then return 0; fi
-  if volume_inspect=$(docker volume inspect "$1" --format '{{.Name}}' 2>&1); then
-    [ "$volume_inspect" = "$1" ] || return 1
+  volume_format='{{.Name}}|{{.Driver}}|{{index .Options "type"}}|{{index .Options "device"}}|{{index .Options "o"}}|{{index .Labels "org.fava.owner"}}'
+  volume_expected="$1|local|tmpfs|tmpfs|$break_volume_options|$break_volume_owner"
+  if volume_inspect=$(docker volume inspect "$1" --format "$volume_format" 2>&1); then
+    [ "$volume_inspect" = "$volume_expected" ] || return 1
     docker volume rm "$1" >/dev/null 2>&1 || return 1
   else
     case "$volume_inspect" in *'no such volume'*) return 0 ;; *) return 1 ;; esac
@@ -565,15 +569,25 @@ docker logs --tail 8 "$readonly_container_id" >&2
 remove_container_id "$readonly_container_id"
 readonly_container_id=
 
-break_volume_name=$container_prefix-break-target
+break_volume_candidate=$container_prefix-break-target
+if volume_inspect=$(docker volume inspect "$break_volume_candidate" --format '{{.Name}}' 2>&1); then
+  echo "refusing pre-existing causal target volume: $volume_inspect" >&2
+  exit 74
+fi
+case "$volume_inspect" in *'no such volume'*) ;; *) exit 74 ;; esac
+break_volume_name=$break_volume_candidate
+break_volume_owner=$revision-$unique
 break_volume_options="size=$green_target_maximum_bytes,uid=0,gid=0,mode=0700"
 break_volume_created=$(python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker volume create --driver local --opt type=tmpfs --opt device=tmpfs \
-    --opt "o=$break_volume_options" --label org.fava.owner=phase-07.1.1 "$break_volume_name")
+    --opt "o=$break_volume_options" --label "org.fava.owner=$break_volume_owner" "$break_volume_name")
 if [ "$break_volume_created" != "$break_volume_name" ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{.Name}}')" != "$break_volume_name" ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{.Driver}}')" != local ] \
   || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "type"}}')" != tmpfs ] \
   || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "device"}}')" != tmpfs ] \
-  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "o"}}')" != "$break_volume_options" ]; then
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Options "o"}}')" != "$break_volume_options" ] \
+  || [ "$(docker volume inspect "$break_volume_name" --format '{{index .Labels "org.fava.owner"}}')" != "$break_volume_owner" ]; then
   echo "could not create the exact causal target volume" >&2
   exit 74
 fi
