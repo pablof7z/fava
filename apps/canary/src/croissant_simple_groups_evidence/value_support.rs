@@ -117,17 +117,53 @@ fn verify_source_provenance(snapshot: &EvidenceSnapshot, manifest: &Value) -> Ca
         4_096,
         "Fava source provenance",
     )?)?;
+    if source.as_object().map(Map::len) != Some(9) {
+        return Err(CanaryError::new(
+            "simple-groups retained Fava source proof had an unrecognized claim",
+        ));
+    }
     for field in [
         "fava_revision",
         "fava_source_tree_sha256",
+        "fava_build_revision",
+        "fava_build_tree",
         "fava_source_clean",
         "fava_canary_executable_sha256",
+        "fava_canary_executable_bytes",
+        "fava_canary_executable_pinned",
+        "fava_execution_platform",
     ] {
         if source.get(field) != manifest.get(field) {
             return Err(CanaryError::new(
                 "simple-groups retained Fava source proof disagreed with the manifest",
             ));
         }
+    }
+    if source
+        .get("fava_canary_executable_pinned")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return Err(CanaryError::new(
+            "simple-groups Fava executable was not independently pinned",
+        ));
+    }
+    let executable = snapshot.read(
+        Path::new("source/fava-canary"),
+        crate::croissant_simple_groups_source::MAX_PINNED_FAVA_EXECUTABLE_BYTES,
+        "retained Fava executable",
+    )?;
+    let bytes = u64::try_from(executable.len()).map_err(error)?;
+    let digest = hex::encode(Sha256::digest(executable));
+    if source
+        .get("fava_canary_executable_bytes")
+        .and_then(Value::as_u64)
+        != Some(bytes)
+        || required_string(&source, "fava_canary_executable_sha256")? != digest
+    {
+        return Err(CanaryError::new(
+            "simple-groups retained Fava executable bytes disagreed with their proof",
+        ));
     }
     Ok(())
 }

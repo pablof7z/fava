@@ -1,4 +1,7 @@
 //! Hash, seal, and exhaustive process-secret scan support for simple-groups evidence.
+//!
+//! This file stays just above the 500-line soft limit so the bounded immutable snapshot and the
+//! hashes, seals, and secret scans derived only from that snapshot retain one evidence authority.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -13,6 +16,7 @@ use nostr::nips::nip19::ToBech32;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::croissant_simple_groups_source::MAX_PINNED_FAVA_EXECUTABLE_BYTES;
 use crate::{CanaryError, CanaryResult};
 
 pub(crate) const MAX_EVIDENCE_DEPTH: usize = 8;
@@ -63,13 +67,14 @@ pub(crate) fn secret_needles(seed: &[u8], keys: &[&Keys]) -> CanaryResult<Vec<Ve
 }
 
 pub(crate) fn assert_secrets_absent(root: &Path, needles: &[Vec<u8>]) -> CanaryResult<()> {
-    let files = collect_files(root)?;
+    let snapshot = EvidenceSnapshot::capture(root)?;
+    let files = snapshot.files().map(Path::to_owned).collect::<Vec<_>>();
     for needle in needles {
         if needle.is_empty() {
             return Err(CanaryError::new("simple-groups secret needle was empty"));
         }
         for relative in &files {
-            if stream_contains(root, relative, needle)? {
+            if snapshot.contains(relative, needle)? {
                 return Err(CanaryError::new(
                     "retained simple-groups evidence contained secret material",
                 ));
@@ -113,6 +118,7 @@ pub(crate) fn signed_digest(manifest: &Value) -> CanaryResult<String> {
 struct WalkCounts {
     entries: usize,
     bytes: u64,
+    pinned_bytes: u64,
 }
 
 #[derive(Clone)]
@@ -141,6 +147,7 @@ impl EvidenceSnapshot {
         let canonical_root = fs::canonicalize(root)?;
         let mut files = BTreeMap::new();
         let mut actual_bytes = 0_u64;
+        let mut pinned_bytes = 0_u64;
         for expected in &inventory {
             hook(CapturePoint::Inventory, &expected.relative);
             let path = canonical_root.join(&expected.relative);
@@ -159,10 +166,11 @@ impl EvidenceSnapshot {
             }
             hook(CapturePoint::Opened, &expected.relative);
             let mut bytes = Vec::with_capacity(usize::try_from(before.len()).map_err(error)?);
+            let maximum = evidence_file_bound(&expected.relative);
             file.by_ref()
-                .take(MAX_EVIDENCE_FILE_BYTES.saturating_add(1))
+                .take(maximum.saturating_add(1))
                 .read_to_end(&mut bytes)?;
-            if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_EVIDENCE_FILE_BYTES {
+            if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
                 return Err(CanaryError::new(
                     "simple-groups evidence file bytes exceeded bound",
                 ));
@@ -184,12 +192,19 @@ impl EvidenceSnapshot {
                     "simple-groups evidence changed during bounded capture",
                 ));
             }
-            actual_bytes = actual_bytes
+            let count = if is_pinned_fava_executable(&expected.relative) {
+                &mut pinned_bytes
+            } else {
+                &mut actual_bytes
+            };
+            *count = count
                 .checked_add(u64::try_from(bytes.len()).map_err(error)?)
                 .ok_or_else(|| {
                     CanaryError::new("simple-groups evidence aggregate bytes overflow")
                 })?;
-            if actual_bytes > MAX_EVIDENCE_AGGREGATE_BYTES {
+            if actual_bytes > MAX_EVIDENCE_AGGREGATE_BYTES
+                || pinned_bytes > MAX_PINNED_FAVA_EXECUTABLE_BYTES
+            {
                 return Err(CanaryError::new(
                     "simple-groups evidence aggregate bytes exceeded bound",
                 ));
@@ -279,6 +294,7 @@ pub(crate) fn capture_with_test_hook(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn collect_files(root: &Path) -> CanaryResult<Vec<PathBuf>> {
     Ok(collect_inventory(root)?
         .into_iter()
@@ -309,16 +325,22 @@ fn collect_inventory(root: &Path) -> CanaryResult<Vec<InventoryFile>> {
         ));
     }
     let canonical_root = fs::canonicalize(root)?;
+    // A retained run is identifiable by its manifest. Producer-side scans also use this
+    // walker before the manifest exists, so keep their temporary layout generic while
+    // making verifier snapshots reject every directory outside the retained schema.
+    let enforce_retained_schema = root.join("manifest.json").is_file();
     let mut files = Vec::new();
     visit_files(
         root,
         &canonical_root,
         root,
         0,
+        enforce_retained_schema,
         &mut files,
         &mut WalkCounts {
             entries: 0,
             bytes: 0,
+            pinned_bytes: 0,
         },
     )?;
     files.sort_by(|left, right| left.relative.cmp(&right.relative));
@@ -330,6 +352,7 @@ fn visit_files(
     canonical_root: &Path,
     directory: &Path,
     depth: usize,
+    enforce_retained_schema: bool,
     files: &mut Vec<InventoryFile>,
     counts: &mut WalkCounts,
 ) -> CanaryResult<()> {
@@ -363,11 +386,29 @@ fn visit_files(
             ));
         }
         if file_type.is_dir() {
+            let relative = path.strip_prefix(root)?;
+            if enforce_retained_schema
+                && !matches!(
+                relative.to_str(),
+                Some(
+                    "children"
+                        | "source"
+                        | "wire"
+                        | "relays"
+                        | "relays/a"
+                        | "relays/b"
+                )
+            ) {
+                return Err(CanaryError::new(
+                    "simple-groups evidence contained an unowned directory",
+                ));
+            }
             visit_files(
                 root,
                 canonical_root,
                 &path,
                 depth.saturating_add(1),
+                enforce_retained_schema,
                 files,
                 counts,
             )?;
@@ -390,16 +431,23 @@ fn record_file(
     counts: &mut WalkCounts,
 ) -> CanaryResult<()> {
     let bytes = entry.metadata()?.len();
-    if bytes > MAX_EVIDENCE_FILE_BYTES {
+    let relative = path.strip_prefix(root)?.to_owned();
+    if bytes > evidence_file_bound(&relative) {
         return Err(CanaryError::new(
             "simple-groups evidence file bytes exceeded bound",
         ));
     }
-    counts.bytes = counts
-        .bytes
+    let count = if is_pinned_fava_executable(&relative) {
+        &mut counts.pinned_bytes
+    } else {
+        &mut counts.bytes
+    };
+    *count = count
         .checked_add(bytes)
         .ok_or_else(|| CanaryError::new("simple-groups evidence aggregate bytes overflow"))?;
-    if counts.bytes > MAX_EVIDENCE_AGGREGATE_BYTES {
+    if counts.bytes > MAX_EVIDENCE_AGGREGATE_BYTES
+        || counts.pinned_bytes > MAX_PINNED_FAVA_EXECUTABLE_BYTES
+    {
         return Err(CanaryError::new(
             "simple-groups evidence aggregate bytes exceeded bound",
         ));
@@ -409,7 +457,6 @@ fn record_file(
             "simple-groups evidence file count exceeded bound",
         ));
     }
-    let relative = path.strip_prefix(root)?.to_owned();
     if relative.to_str().is_none() {
         return Err(CanaryError::new(
             "simple-groups evidence path was not UTF-8",
@@ -425,6 +472,18 @@ fn record_file(
     Ok(())
 }
 
+fn is_pinned_fava_executable(relative: &Path) -> bool {
+    relative == Path::new("source/fava-canary")
+}
+
+fn evidence_file_bound(relative: &Path) -> u64 {
+    if is_pinned_fava_executable(relative) {
+        MAX_PINNED_FAVA_EXECUTABLE_BYTES
+    } else {
+        MAX_EVIDENCE_FILE_BYTES
+    }
+}
+
 fn same_inventory(first: &[InventoryFile], second: &[InventoryFile]) -> bool {
     first.len() == second.len()
         && first.iter().zip(second).all(|(left, right)| {
@@ -433,10 +492,6 @@ fn same_inventory(first: &[InventoryFile], second: &[InventoryFile]) -> bool {
                 && left.inode == right.inode
                 && left.bytes == right.bytes
         })
-}
-
-pub(crate) fn stream_contains(root: &Path, relative: &Path, needle: &[u8]) -> CanaryResult<bool> {
-    EvidenceSnapshot::capture(root)?.contains(relative, needle)
 }
 
 #[cfg(test)]

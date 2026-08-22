@@ -126,6 +126,7 @@ fn pair_verifier_rejects_duplicate_routes_and_wrong_revision() {
             revision.root(),
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             FIXTURE_FAVA_TREE,
+            FIXTURE_FAVA_BUILD_TREE,
             FIXTURE_FAVA_EXECUTABLE,
             FIXTURE_CROISSANT_REVISION,
             FIXTURE_CROISSANT_EXECUTABLE,

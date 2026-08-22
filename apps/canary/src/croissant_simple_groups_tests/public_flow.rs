@@ -8,7 +8,8 @@ use super::croissant_simple_groups_flow::execute_public_flow;
 
 const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
 const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
-const FIXTURE_FAVA_EXECUTABLE: &str = "5555555555555555555555555555555555555555555555555555555555555555";
+const FIXTURE_FAVA_BUILD_TREE: &str = "6666666666666666666666666666666666666666";
+const FIXTURE_FAVA_EXECUTABLE: &str = "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
 const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
 const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
 
@@ -23,7 +24,6 @@ async fn croissant_simple_groups_public_flow() {
         source_checkout: source,
         scenario_seed: seed.to_owned(),
         runs_directory: temporary.path().join("unused-retained-root"),
-        expected_canary_executable_sha256: FIXTURE_FAVA_EXECUTABLE.to_owned(),
     };
     let relay_keys = Keys::generate();
     let owner_a = Keys::generate().public_key().to_hex();
@@ -85,6 +85,7 @@ fn assert_pair_cleanup(
         assert!(teardown.completed);
         assert!(!teardown.pid_alive_after);
         assert!(!teardown.port_open_after);
+        assert!(teardown.executable_removed);
         assert!(!process_is_alive(teardown.pid));
     }
 }

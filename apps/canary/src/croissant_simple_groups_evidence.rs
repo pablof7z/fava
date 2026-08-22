@@ -1,4 +1,7 @@
 //! Safe retained evidence and independent-pair verification for the two-Croissant proof.
+//!
+//! This file stays above the 500-line soft limit so pair-root boundedness, exact source and child
+//! provenance, cross-run exclusion, and the final semantic handoff remain one verifier authority.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -7,6 +10,7 @@ use std::path::Path;
 use fava::RelayUrl;
 use nostr::event::Event;
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 
 use crate::croissant_simple_groups_evidence_semantics::verify_semantic_artifacts;
 use crate::croissant_simple_groups_evidence_support::{
@@ -26,12 +30,14 @@ pub fn verify_croissant_simple_groups_pair(
     runs_directory: impl AsRef<Path>,
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
+    expected_fava_build_tree: &str,
     expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
 ) -> CanaryResult<()> {
     if !is_lower_hex(expected_fava_revision, 40)
         || !is_lower_hex(expected_fava_source_tree_sha256, 64)
+        || !is_lower_hex(expected_fava_build_tree, 40)
         || !is_lower_hex(expected_fava_canary_executable_sha256, 64)
         || !is_lower_hex(expected_croissant_revision, 40)
         || !is_lower_hex(expected_croissant_executable_sha256, 64)
@@ -49,6 +55,7 @@ pub fn verify_croissant_simple_groups_pair(
             .and_then(|value| value.to_str())
             .ok_or_else(|| CanaryError::new("simple-groups run directory was not UTF-8"))?;
         let snapshot = EvidenceSnapshot::capture(&run_root)?;
+        reject_relay_artifact_residue(&snapshot)?;
         let manifest: Value = serde_json::from_slice(snapshot.read(
             Path::new("manifest.json"),
             MAX_MANIFEST_BYTES,
@@ -61,6 +68,7 @@ pub fn verify_croissant_simple_groups_pair(
             directory_run_id,
             expected_fava_revision,
             expected_fava_source_tree_sha256,
+            expected_fava_build_tree,
             expected_fava_canary_executable_sha256,
             expected_croissant_revision,
             expected_croissant_executable_sha256,
@@ -69,6 +77,22 @@ pub fn verify_croissant_simple_groups_pair(
     }
     verify_pair_identity(&runs)?;
     reject_cross_run_data(&runs[0], &runs[1])
+}
+
+fn reject_relay_artifact_residue(snapshot: &EvidenceSnapshot) -> CanaryResult<()> {
+    for relative in snapshot.files() {
+        for label in ["a", "b"] {
+            if let Ok(child) = relative.strip_prefix(format!("relays/{label}"))
+                && child != Path::new("stdout.log")
+                && child != Path::new("stderr.log")
+            {
+                return Err(CanaryError::new(
+                    "simple-groups retained an unowned relay artifact",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[allow(
@@ -81,6 +105,7 @@ fn validate_manifest(
     directory_run_id: &str,
     expected_fava_revision: &str,
     expected_fava_source_tree_sha256: &str,
+    expected_fava_build_tree: &str,
     expected_fava_canary_executable_sha256: &str,
     expected_croissant_revision: &str,
     expected_croissant_executable_sha256: &str,
@@ -125,6 +150,8 @@ fn validate_manifest(
         "receipt_id",
         "fava_revision",
         "fava_source_tree_sha256",
+        "fava_build_revision",
+        "fava_build_tree",
     ] {
         if required_string(manifest, field)?.is_empty() {
             return Err(CanaryError::new(format!(
@@ -137,7 +164,13 @@ fn validate_manifest(
         || required_string(manifest, "fava_source_tree_sha256")? != expected_fava_source_tree_sha256
         || required_string(manifest, "fava_canary_executable_sha256")?
             != expected_fava_canary_executable_sha256
+        || required_string(manifest, "fava_build_revision")? != expected_fava_revision
+        || required_string(manifest, "fava_build_tree")? != expected_fava_build_tree
         || manifest.get("fava_source_clean").and_then(Value::as_bool) != Some(true)
+        || required_string(manifest, "fava_execution_platform")?
+            != "linux-sealed-memfd-proc-fd"
+        || required_string(manifest, "execution_platform")?
+            != "linux-sealed-memfd-container"
     {
         return Err(CanaryError::new(
             "simple-groups evidence run/source provenance did not match its exact expectation",
@@ -227,6 +260,10 @@ fn verify_bounds(manifest: &Value) -> CanaryResult<()> {
     Ok(())
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one verifier binds each child's launch, provenance, limits, and teardown facts"
+)]
 fn verify_children(
     manifest: &Value,
     expected_croissant_revision: &str,
@@ -237,15 +274,27 @@ fn verify_children(
     let mut pids = BTreeSet::new();
     let mut endpoints = BTreeSet::new();
     let mut paths = BTreeSet::new();
+    let mut executable_inodes = BTreeSet::new();
     for index in 0..2 {
         let pid = ready[index].get("pid").and_then(Value::as_u64).unwrap_or(0);
         let endpoint = object_string(ready[index], "endpoint")?;
         let data_path = object_string(ready[index], "data_path")?;
+        let executable_device = ready[index]
+            .get("executable_device")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let executable_inode = ready[index]
+            .get("executable_inode")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         if pid == 0
             || pid == 75_649
             || !pids.insert(pid)
             || !endpoints.insert(endpoint)
             || !paths.insert(data_path)
+            || executable_device == 0
+            || executable_inode == 0
+            || !executable_inodes.insert((executable_device, executable_inode))
         {
             return Err(CanaryError::new(
                 "simple-groups child identities were reused",
@@ -288,12 +337,20 @@ fn verify_children(
                 "simple-groups Croissant child provenance did not match exact expectations",
             ));
         }
+        if object_string(ready[index], "execution_platform")?
+            != "linux-sealed-memfd-proc-fd"
+        {
+            return Err(CanaryError::new(
+                "simple-groups Croissant child did not use descriptor execution",
+            ));
+        }
         for field in [
             "executable",
             "executable_sha256",
             "source_checkout",
             "source_head",
             "scenario_seed_sha256",
+            "execution_platform",
             "stdout_path",
             "stderr_path",
         ] {
@@ -325,6 +382,10 @@ fn verify_children(
                 .get("port_open_after")
                 .and_then(Value::as_bool)
                 != Some(false)
+            || teardown[index]
+                .get("executable_removed")
+                .and_then(Value::as_bool)
+                != Some(true)
         {
             return Err(CanaryError::new(
                 "simple-groups child teardown was incomplete",

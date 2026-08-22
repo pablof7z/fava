@@ -1,3 +1,8 @@
+//! Shared sealed-evidence fixture for every simple-groups verifier mutation test.
+//!
+//! This file stays above the 500-line soft limit because all review-iteration includes must mutate
+//! one byte-identical valid fixture instead of duplicating or weakening the verifier oracle.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
@@ -15,6 +20,7 @@ include!("croissant_simple_groups_tests/review_iteration_one.rs");
 include!("croissant_simple_groups_tests/review_iteration_two.rs");
 include!("croissant_simple_groups_tests/review_iteration_three.rs");
 include!("croissant_simple_groups_tests/review_iteration_four.rs");
+include!("croissant_simple_groups_tests/review_iteration_five.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
@@ -110,6 +116,12 @@ impl PairEvidenceFixture {
                 fs::create_dir(self.root().join(".fava-canary-staging-residue"))
                     .expect("staging residue");
             }
+            UnsafePairCase::ExecutableResidue => {
+                let directory = self.roots[0].join("relays/a/executable");
+                fs::create_dir_all(&directory).expect("executable residue directory");
+                fs::write(directory.join("croissant"), b"retained executable")
+                    .expect("executable residue");
+            }
             UnsafePairCase::UnderivedFlowClaim => self.mutate(0, true, |manifest| {
                 manifest["metadata_names"][0] = json!("manifest-only-name");
             }),
@@ -192,10 +204,13 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             "stderr_path": format!("/discarded/run-{index}/relay-{child}.stderr"),
             "executable": format!("/controlled/croissant-{index}"),
             "executable_sha256": FIXTURE_CROISSANT_EXECUTABLE,
+            "executable_device": 42,
+            "executable_inode": base_pid + child,
             "source_checkout": format!("/controlled/source-{index}"),
             "source_head": FIXTURE_CROISSANT_REVISION,
             "scenario_seed_sha256": format!("seed-{index}"),
             "readiness_completed": true,
+            "execution_platform": "linux-sealed-memfd-proc-fd",
             "limits": {"log_bytes": 1_048_576, "readiness_ms": 10_000,
                 "readiness_stability_ms": 100, "teardown_ms": 5000},
         })
@@ -207,6 +222,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             "completed": true,
             "pid_alive_after": false,
             "port_open_after": false,
+            "executable_removed": true,
             "stdout_bytes": 0,
             "stderr_bytes": 0,
         })
@@ -233,6 +249,11 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
     let processes = json!({"ready": ready, "teardown": teardown});
     fs::create_dir_all(root.join("children")).expect("children fixture directory");
     fs::create_dir_all(root.join("source")).expect("source fixture directory");
+    fs::write(
+        root.join("source/fava-canary"),
+        b"fixture pinned fava canary\n",
+    )
+    .expect("pinned Fava fixture");
     fs::create_dir_all(root.join("wire")).expect("wire fixture directory");
     for label in ["a", "b"] {
         fs::create_dir_all(root.join(format!("relays/{label}"))).expect("relay fixture directory");
@@ -254,8 +275,13 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         serde_json::to_vec_pretty(&json!({
             "fava_revision": FIXTURE_FAVA_REVISION,
             "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
+            "fava_build_revision": FIXTURE_FAVA_REVISION,
+            "fava_build_tree": "6666666666666666666666666666666666666666",
             "fava_source_clean": true,
             "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
+            "fava_canary_executable_bytes": 27,
+            "fava_canary_executable_pinned": true,
+            "fava_execution_platform": "linux-sealed-memfd-proc-fd",
         }))
         .expect("source fixture bytes"),
     )
@@ -318,8 +344,14 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "artifact_sha256": artifact_hashes(root).expect("fixture hashes"),
         "fava_revision": FIXTURE_FAVA_REVISION,
         "fava_source_tree_sha256": FIXTURE_FAVA_TREE,
+        "fava_build_revision": FIXTURE_FAVA_REVISION,
+        "fava_build_tree": "6666666666666666666666666666666666666666",
         "fava_source_clean": true,
         "fava_canary_executable_sha256": FIXTURE_FAVA_EXECUTABLE,
+        "fava_canary_executable_bytes": 27,
+        "fava_canary_executable_pinned": true,
+        "fava_execution_platform": "linux-sealed-memfd-proc-fd",
+        "execution_platform": "linux-sealed-memfd-container",
     });
     manifest["artifact_seal"] =
         serde_json::to_value(artifact_seal(author, &manifest).expect("fixture seal"))

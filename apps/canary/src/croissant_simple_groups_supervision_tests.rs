@@ -58,6 +58,14 @@ async fn second_startup_failure_reaps_first_exact_child() {
     assert_eq!(ready.pid, teardown.pid);
     assert!(!process_is_alive(ready.pid));
     assert!(!teardown.port_open_after);
+    assert!(
+        !fixture
+            .temporary
+            .path()
+            .join("startup-relay-b/executable")
+            .exists(),
+        "failed child start left staged executable residue"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

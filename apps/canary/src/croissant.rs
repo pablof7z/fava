@@ -5,8 +5,11 @@
 
 use std::fmt;
 use std::fs;
+use std::io;
 use std::net::{Ipv4Addr, SocketAddr, TcpListener as StdTcpListener};
-use std::os::unix::fs::PermissionsExt;
+#[cfg(not(target_os = "linux"))]
+use std::os::unix::fs::FileExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -14,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
+#[cfg(not(target_os = "linux"))]
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -22,6 +26,8 @@ use tokio::task::JoinHandle;
 use tokio::time::{Instant, timeout};
 
 use crate::command_output;
+#[cfg(target_os = "linux")]
+use crate::sealed_executable::SealedExecutable;
 
 /// Hard bounds applied to one controlled Croissant process.
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -106,6 +112,9 @@ impl From<std::io::Error> for CroissantError {
 pub(crate) struct CroissantReadyFact {
     pub(crate) executable: PathBuf,
     pub(crate) executable_sha256: String,
+    pub(crate) executable_device: u64,
+    pub(crate) executable_inode: u64,
+    pub(crate) execution_platform: &'static str,
     pub(crate) source_checkout: PathBuf,
     pub(crate) source_head: String,
     pub(crate) pid: u32,
@@ -119,6 +128,10 @@ pub(crate) struct CroissantReadyFact {
 }
 
 /// Completed child and endpoint cleanup evidence.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each independently falsifiable teardown invariant is retained as an exact fact"
+)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CroissantTeardown {
     pub(crate) pid: u32,
@@ -126,6 +139,7 @@ pub(crate) struct CroissantTeardown {
     pub(crate) completed: bool,
     pub(crate) pid_alive_after: bool,
     pub(crate) port_open_after: bool,
+    pub(crate) executable_removed: bool,
     pub(crate) stdout_bytes: usize,
     pub(crate) stderr_bytes: usize,
 }
@@ -202,17 +216,37 @@ impl CroissantSupervisor {
         let executable_directory = root.join("executable");
         fs::create_dir(&executable_directory)?;
         fs::set_permissions(&executable_directory, fs::Permissions::from_mode(0o700))?;
+        let executable_directory_metadata = fs::metadata(&executable_directory)?;
         let staged_path = executable_directory.join("croissant");
         fs::copy(&binary, &staged_path)?;
         fs::set_permissions(&staged_path, fs::Permissions::from_mode(0o500))?;
-        let binary = Arc::new(StagedExecutable { path: staged_path });
+        let mut open = fs::OpenOptions::new();
+        open.read(true).custom_flags(libc::O_NOFOLLOW);
+        let file = open.open(&staged_path)?;
+        if file.metadata()?.nlink() != 1 {
+            return Err(CroissantError::InvalidContract(
+                "Croissant staged executable must have exactly one link",
+            ));
+        }
+        #[cfg(target_os = "linux")]
+        let sealed = SealedExecutable::copy_from(&file, 134_217_728)?;
+        let binary = Arc::new(StagedExecutable {
+            file,
+            #[cfg(target_os = "linux")]
+            sealed,
+            path: staged_path,
+            launched: AtomicBool::new(false),
+            cleaned: AtomicBool::new(false),
+            directory_device: executable_directory_metadata.dev(),
+            directory_inode: executable_directory_metadata.ino(),
+        });
         let data_path = root.join("data");
         fs::create_dir_all(&data_path)?;
         let stdout_path = root.join("stdout.log");
         let stderr_path = root.join("stderr.log");
         fs::File::create(&stdout_path)?;
         fs::File::create(&stderr_path)?;
-        let executable_sha256 = hex::encode(Sha256::digest(fs::read(&binary.path)?));
+        let executable_sha256 = binary.sha256()?;
         let source_head = command_output(&source_checkout, "git", &["rev-parse", "HEAD"])
             .map_err(|_| CroissantError::InvalidContract("Croissant source HEAD is unavailable"))?;
         let endpoint = SocketAddr::from((Ipv4Addr::LOCALHOST, reserve_port()?));
@@ -239,15 +273,33 @@ impl CroissantSupervisor {
         &self.stderr_path
     }
 
+    pub(crate) fn cleanup_executable(&self) -> Result<(), CroissantError> {
+        self.binary.cleanup().map_err(CroissantError::Io)
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn try_overwrite_execution_image(&self, bytes: &[u8]) -> io::Result<usize> {
+        self.binary.sealed.try_overwrite(bytes)
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one lifecycle owner binds descriptor launch through stable readiness"
+    )]
     pub(crate) async fn start(&self) -> Result<CroissantProcess, CroissantError> {
-        let mut child = Command::new(&self.binary.path)
+        if self.binary.launched.swap(true, Ordering::AcqRel) {
+            return Err(CroissantError::InvalidContract(
+                "Croissant staged executable may be launched only once",
+            ));
+        }
+        let mut command = opened_executable_command(&self.binary)?;
+        let mut child = command
             .env_clear()
             .env("HOST", Ipv4Addr::LOCALHOST.to_string())
             .env("PORT", self.endpoint.port().to_string())
             .env("DATAPATH", &self.data_path)
             .env("DOMAIN", "")
             .env("OWNER_PUBLIC_KEY", &self.owner_public_key)
-            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
@@ -323,7 +375,7 @@ impl CroissantSupervisor {
                         ready: self.ready_fact(pid),
                         stdout_log,
                         stderr_log,
-                        _staged_executable: Arc::clone(&self.binary),
+                        staged_executable: Arc::clone(&self.binary),
                     });
                 }
             }
@@ -338,9 +390,13 @@ impl CroissantSupervisor {
     }
 
     fn ready_fact(&self, pid: u32) -> CroissantReadyFact {
+        let (executable_device, executable_inode) = self.binary.execution_identity();
         CroissantReadyFact {
             executable: self.binary.path.clone(),
             executable_sha256: self.executable_sha256.clone(),
+            executable_device,
+            executable_inode,
+            execution_platform: descriptor_execution_platform(),
             source_checkout: self.source_checkout.clone(),
             source_head: self.source_head.clone(),
             pid,
@@ -353,6 +409,38 @@ impl CroissantSupervisor {
             limits: self.limits,
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "all platform implementations share one fail-closed result boundary"
+)]
+fn opened_executable_command(binary: &StagedExecutable) -> Result<Command, CroissantError> {
+    let executable_stdin = binary.sealed.try_clone()?;
+    let mut command = Command::new("/proc/self/fd/0");
+    // The executable is both hashed and executed through this same opened object. The child file
+    // action installs it as fd 0 before exec resolves /proc/self/fd/0.
+    command.stdin(Stdio::from(executable_stdin));
+    Ok(command)
+}
+
+#[cfg(all(target_os = "macos", test))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "all platform implementations share one fail-closed result boundary"
+)]
+fn opened_executable_command(binary: &StagedExecutable) -> Result<Command, CroissantError> {
+    let mut command = Command::new(&binary.path);
+    command.stdin(Stdio::null());
+    Ok(command)
+}
+
+#[cfg(not(any(target_os = "linux", all(target_os = "macos", test))))]
+fn opened_executable_command(_binary: &StagedExecutable) -> Result<Command, CroissantError> {
+    Err(CroissantError::InvalidContract(
+        "descriptor-bound Croissant execution is unsupported on this host",
+    ))
 }
 
 async fn finish_early_exit(
@@ -372,20 +460,149 @@ pub(crate) struct CroissantProcess {
     ready: CroissantReadyFact,
     stdout_log: BoundedLog,
     stderr_log: BoundedLog,
-    _staged_executable: Arc<StagedExecutable>,
+    staged_executable: Arc<StagedExecutable>,
 }
 
 #[derive(Debug)]
 struct StagedExecutable {
+    file: fs::File,
+    #[cfg(target_os = "linux")]
+    sealed: SealedExecutable,
     path: PathBuf,
+    launched: AtomicBool,
+    cleaned: AtomicBool,
+    directory_device: u64,
+    directory_inode: u64,
 }
 
 impl Drop for StagedExecutable {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        if let Some(parent) = self.path.parent() {
-            let _ = fs::remove_dir(parent);
+        let _ = self.cleanup();
+    }
+}
+
+impl StagedExecutable {
+    #[cfg(not(target_os = "linux"))]
+    fn metadata(&self) -> io::Result<fs::Metadata> {
+        self.file.metadata()
+    }
+
+    #[cfg(target_os = "linux")]
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "all platform implementations share one fallible digest boundary"
+    )]
+    fn sha256(&self) -> Result<String, CroissantError> {
+        Ok(self.sealed.sha256().to_owned())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn sha256(&self) -> Result<String, CroissantError> {
+        const MAX_EXECUTABLE_BYTES: u64 = 134_217_728;
+        let before = self.file.metadata()?;
+        if !before.is_file() || before.len() > MAX_EXECUTABLE_BYTES {
+            return Err(CroissantError::InvalidContract(
+                "Croissant executable exceeded the 128-MiB bound",
+            ));
         }
+        let mut digest = Sha256::new();
+        let mut offset = 0_u64;
+        let mut buffer = [0_u8; 16_384];
+        while offset < before.len() {
+            let remaining = before.len() - offset;
+            let wanted = usize::try_from(remaining.min(buffer.len() as u64))
+                .map_err(|_| CroissantError::InvalidContract("Croissant size did not fit host"))?;
+            let read = self.file.read_at(&mut buffer[..wanted], offset)?;
+            if read == 0 {
+                return Err(CroissantError::InvalidContract(
+                    "Croissant executable changed during descriptor hashing",
+                ));
+            }
+            digest.update(&buffer[..read]);
+            offset += u64::try_from(read)
+                .map_err(|_| CroissantError::InvalidContract("Croissant read did not fit u64"))?;
+        }
+        let after = self.file.metadata()?;
+        if before.dev() != after.dev()
+            || before.ino() != after.ino()
+            || before.len() != after.len()
+        {
+            return Err(CroissantError::InvalidContract(
+                "Croissant executable changed during descriptor hashing",
+            ));
+        }
+        Ok(hex::encode(digest.finalize()))
+    }
+
+    fn execution_identity(&self) -> (u64, u64) {
+        #[cfg(target_os = "linux")]
+        {
+            (self.sealed.device(), self.sealed.inode())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.metadata()
+                .map(|item| (item.dev(), item.ino()))
+                .unwrap_or((0, 0))
+        }
+    }
+
+    fn cleanup(&self) -> io::Result<()> {
+        if self.cleaned.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let opened = self.file.metadata()?;
+        let path = fs::symlink_metadata(&self.path)?;
+        if path.file_type().is_symlink()
+            || !path.is_file()
+            || path.dev() != opened.dev()
+            || path.ino() != opened.ino()
+            || opened.nlink() != 1
+        {
+            return Err(io::Error::other(
+                "staged executable path no longer names its opened object",
+            ));
+        }
+        if let Some(parent) = self.path.parent() {
+            let directory = fs::symlink_metadata(parent)?;
+            if directory.file_type().is_symlink()
+                || !directory.is_dir()
+                || directory.dev() != self.directory_device
+                || directory.ino() != self.directory_inode
+            {
+                return Err(io::Error::other(
+                    "staged executable directory changed before cleanup",
+                ));
+            }
+            fs::remove_file(&self.path)?;
+            if self.file.metadata()?.nlink() != 0 {
+                return Err(io::Error::other(
+                    "staged executable retained an unexpected hard link",
+                ));
+            }
+            fs::remove_dir(parent)?;
+        } else {
+            return Err(io::Error::other(
+                "staged executable path omitted its owned directory",
+            ));
+        }
+        self.cleaned.store(true, Ordering::Release);
+        Ok(())
+    }
+}
+
+fn descriptor_execution_platform() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        "linux-sealed-memfd-proc-fd"
+    }
+    #[cfg(all(target_os = "macos", test))]
+    {
+        "darwin-test-only-path"
+    }
+    #[cfg(not(any(target_os = "linux", all(target_os = "macos", test))))]
+    {
+        "unsupported"
     }
 }
 
@@ -416,25 +633,35 @@ impl CroissantProcess {
             .stderr_log
             .finish(self.ready.limits.teardown_ms)
             .await?;
-        if stdout.overflowed {
-            return Err(CroissantError::LogOverflow {
+        let terminal_failure = if stdout.overflowed {
+            Some(CroissantError::LogOverflow {
                 stream: "stdout",
                 limit: self.ready.limits.log_bytes,
-            });
-        }
-        if stderr.overflowed {
-            return Err(CroissantError::LogOverflow {
+            })
+        } else if stderr.overflowed {
+            Some(CroissantError::LogOverflow {
                 stream: "stderr",
                 limit: self.ready.limits.log_bytes,
-            });
-        }
+            })
+        } else {
+            None
+        };
         let pid_alive_after = process_is_alive(pid);
         let port_open_after = TcpStream::connect(endpoint).await.is_ok();
-        if pid_alive_after || port_open_after {
-            return Err(CroissantError::TeardownFailure {
+        let terminal_failure = terminal_failure.or_else(|| {
+            (pid_alive_after || port_open_after).then_some(CroissantError::TeardownFailure {
                 pid,
                 reason: "pid or loopback port remained live",
-            });
+            })
+        });
+        self.staged_executable
+            .cleanup()
+            .map_err(|_| CroissantError::TeardownFailure {
+                pid,
+                reason: "staged executable cleanup failed",
+            })?;
+        if let Some(failure) = terminal_failure {
+            return Err(failure);
         }
         Ok(CroissantTeardown {
             pid,
@@ -442,6 +669,7 @@ impl CroissantProcess {
             completed: true,
             pid_alive_after,
             port_open_after,
+            executable_removed: true,
             stdout_bytes: stdout.bytes,
             stderr_bytes: stderr.bytes,
         })

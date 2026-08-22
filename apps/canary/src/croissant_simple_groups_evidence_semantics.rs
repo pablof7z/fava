@@ -35,6 +35,9 @@ fn rescan_secret_markers(snapshot: &EvidenceSnapshot) -> CanaryResult<()> {
         b"\"secret_key\":".as_slice(),
     ] {
         for relative in snapshot.files() {
+            if relative == Path::new("source/fava-canary") {
+                continue;
+            }
             if snapshot.contains(relative, needle)? {
                 return Err(CanaryError::new(
                     "simple-groups retained evidence contained a secret marker",
@@ -43,6 +46,33 @@ fn rescan_secret_markers(snapshot: &EvidenceSnapshot) -> CanaryResult<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::{EvidenceSnapshot, rescan_secret_markers};
+
+    #[test]
+    fn generic_markers_ignore_only_the_exact_retained_executable() {
+        let fixture = TempDir::new().expect("marker fixture");
+        fs::create_dir(fixture.path().join("source")).expect("source directory");
+        fs::copy(
+            std::env::current_exe().expect("test executable"),
+            fixture.path().join("source/fava-canary"),
+        )
+        .expect("real executable fixture");
+        let snapshot = EvidenceSnapshot::capture(fixture.path()).expect("binary snapshot");
+        rescan_secret_markers(&snapshot).expect("embedded verifier literals are not secrets");
+
+        fs::write(fixture.path().join("retained.json"), b"{\"private_key\":\"x\"}")
+            .expect("hostile marker");
+        let snapshot = EvidenceSnapshot::capture(fixture.path()).expect("hostile snapshot");
+        assert!(rescan_secret_markers(&snapshot).is_err());
+    }
 }
 
 fn verify_flow(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {

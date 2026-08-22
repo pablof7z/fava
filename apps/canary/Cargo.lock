@@ -164,6 +164,7 @@ dependencies = [
  "hex",
  "libc",
  "nostr",
+ "rustix",
  "secp256k1",
  "serde",
  "serde_json",

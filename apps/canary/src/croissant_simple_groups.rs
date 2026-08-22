@@ -19,7 +19,7 @@ use crate::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, secret_needles,
 };
 use crate::croissant_simple_groups_flow::execute_public_flow;
-use crate::croissant_simple_groups_source::clean_fava_source;
+use crate::croissant_simple_groups_source::{PinnedFavaExecutable, clean_fava_source};
 use crate::{
     CanaryError, CanaryResult, RunArtifacts, deterministic_keys, repository_root, unix_ms,
 };
@@ -35,8 +35,6 @@ pub struct CroissantSimpleGroupsOptions {
     pub scenario_seed: String,
     /// Parent directory for one fresh durable evidence bundle.
     pub runs_directory: PathBuf,
-    /// SHA-256 of the owner-staged canary executable being invoked.
-    pub expected_canary_executable_sha256: String,
 }
 
 /// Durable location produced by one completed controlled run.
@@ -127,10 +125,8 @@ pub async fn run_croissant_simple_groups_scenario(
     options: CroissantSimpleGroupsOptions,
 ) -> CanaryResult<CroissantSimpleGroupsOutcome> {
     let repository = repository_root()?;
-    let fava_source = clean_fava_source(
-        &repository,
-        &options.expected_canary_executable_sha256,
-    )?;
+    let pinned_fava_executable = PinnedFavaExecutable::inherited()?;
+    let fava_source = clean_fava_source(&repository, &pinned_fava_executable)?;
     let seed = &options.scenario_seed;
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let relay = deterministic_keys(&format!("simple-groups-relay\0{seed}"))?;
@@ -140,6 +136,7 @@ pub async fn run_croissant_simple_groups_scenario(
     let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?;
     let mut artifacts = RunArtifacts::create_staged(&options.runs_directory, SCENARIO, seed)?;
     fs::create_dir_all(artifacts.root().join("source"))?;
+    pinned_fava_executable.retain(&artifacts.root().join("source/fava-canary"))?;
     artifacts.write_json("source/fava.json", &fava_source)?;
     let started = unix_ms()?;
     artifacts.record(
@@ -181,6 +178,10 @@ pub async fn run_croissant_simple_groups_scenario(
             fs::remove_dir_all(data)?;
         }
     }
+    let unused_relay_root = artifacts.root().join("relays/nostr-rs-relay");
+    if unused_relay_root.exists() {
+        fs::remove_dir_all(unused_relay_root)?;
+    }
     let keys = [&author, &relay, &owner_a, &owner_b, &target_a, &target_b];
     let needles = secret_needles(seed.as_bytes(), &keys)?;
     assert_secrets_absent(artifacts.root(), &needles)?;
@@ -191,7 +192,7 @@ pub async fn run_croissant_simple_groups_scenario(
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .sum::<u64>();
-    if clean_fava_source(&repository, &options.expected_canary_executable_sha256)? != fava_source {
+    if clean_fava_source(&repository, &pinned_fava_executable)? != fava_source {
         return Err(CanaryError::new(
             "simple-groups Fava source provenance changed during the live proof",
         ));
@@ -238,8 +239,14 @@ pub async fn run_croissant_simple_groups_scenario(
         "artifact_sha256": artifacts.artifact_hashes()?,
         "fava_revision": fava_source.revision,
         "fava_source_tree_sha256": fava_source.tree_sha256,
+        "fava_build_revision": fava_source.build_revision,
+        "fava_build_tree": fava_source.build_tree,
         "fava_source_clean": fava_source.clean,
         "fava_canary_executable_sha256": fava_source.canary_executable_sha256,
+        "fava_canary_executable_bytes": fava_source.canary_executable_bytes,
+        "fava_canary_executable_pinned": fava_source.canary_executable_pinned,
+        "fava_execution_platform": fava_source.execution_platform,
+        "execution_platform": "linux-sealed-memfd-container",
         "started_unix_ms": started,
         "ended_unix_ms": unix_ms()?,
     });
@@ -340,11 +347,15 @@ impl OwnedCroissantProcess {
 async fn start_owned(supervisor: CroissantSupervisor) -> Result<OwnedCroissantProcess, String> {
     let (sender, receiver) = oneshot::channel();
     tokio::spawn(async move {
-        let result = supervisor
-            .start()
-            .await
-            .map(OwnedCroissantProcess::new)
-            .map_err(|error| error.to_string());
+        let result = match supervisor.start().await {
+            Ok(process) => Ok(OwnedCroissantProcess::new(process)),
+            Err(start_error) => match supervisor.cleanup_executable() {
+                Ok(()) => Err(start_error.to_string()),
+                Err(cleanup_error) => Err(format!(
+                    "{start_error}; staged executable cleanup failed: {cleanup_error}"
+                )),
+            },
+        };
         let _ = sender.send(result);
     });
     receiver

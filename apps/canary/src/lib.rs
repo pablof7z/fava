@@ -1,5 +1,7 @@
 //! Independent acceptance application and evidence lab for the Fava rewrite.
 
+#![recursion_limit = "256"]
+
 mod artifacts;
 mod automatic_publication;
 mod automatic_support;
@@ -33,6 +35,8 @@ mod semantic_process;
 mod semantic_write_store;
 mod semantic_write_support;
 mod semantic_writes;
+#[cfg(target_os = "linux")]
+mod sealed_executable;
 mod wire;
 
 pub use automatic_publication::run_automatic_publication_scenario;
