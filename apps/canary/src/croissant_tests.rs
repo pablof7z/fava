@@ -41,9 +41,9 @@ async fn supervisor_attributes_exit_before_readiness() {
     let supervisor = CroissantSupervisor::prepare(
         &binary,
         &source_checkout(),
-        fixture.path().join("run"),
+        &fixture.path().join("run"),
         owner(),
-        seed_hash(b"early-exit-seed"),
+        &seed_hash(b"early-exit-seed"),
         CroissantLimits::test(),
     )
     .expect("prepare");
@@ -64,9 +64,9 @@ async fn supervisor_refuses_log_overflow_without_echoing_secret_environment() {
     let supervisor = CroissantSupervisor::prepare(
         &binary,
         &source_checkout(),
-        fixture.path().join("run"),
+        &fixture.path().join("run"),
         owner(),
-        seed_hash(sentinel.as_bytes()),
+        &seed_hash(sentinel.as_bytes()),
         CroissantLimits::test(),
     )
     .expect("prepare");
@@ -76,7 +76,11 @@ async fn supervisor_refuses_log_overflow_without_echoing_secret_environment() {
     for path in [supervisor.stdout_path(), supervisor.stderr_path()] {
         let bytes = fs::read(path).expect("bounded log exists");
         assert!(bytes.len() <= CroissantLimits::test().log_bytes);
-        assert!(!bytes.windows(sentinel.len()).any(|window| window == sentinel.as_bytes()));
+        assert!(
+            !bytes
+                .windows(sentinel.len())
+                .any(|window| window == sentinel.as_bytes())
+        );
     }
 }
 
@@ -86,22 +90,25 @@ async fn supervisor_records_provenance_and_completes_bounded_teardown() {
     let binary = executable(
         fixture.path(),
         "ready",
-        "exec python3 -c 'import os,socket; s=socket.socket(); s.bind((\"127.0.0.1\",int(os.environ[\"PORT\"]))); s.listen(); s.accept()'",
+        "exec python3 -c 'import os,socket,time; s=socket.socket(); s.bind((\"127.0.0.1\",int(os.environ[\"PORT\"]))); s.listen(); s.accept(); time.sleep(30)'",
     );
     let expected_binary_hash = hex::encode(Sha256::digest(fs::read(&binary).expect("binary")));
     let supervisor = CroissantSupervisor::prepare(
         &binary,
         &source_checkout(),
-        fixture.path().join("run"),
+        &fixture.path().join("run"),
         owner(),
-        seed_hash(b"bounded-teardown-seed"),
+        &seed_hash(b"bounded-teardown-seed"),
         CroissantLimits::test(),
     )
     .expect("prepare");
     let process = supervisor.start().await.expect("ready process");
     let ready = process.ready_fact();
     assert_eq!(ready.executable_sha256, expected_binary_hash);
-    assert_eq!(ready.scenario_seed_sha256, seed_hash(b"bounded-teardown-seed"));
+    assert_eq!(
+        ready.scenario_seed_sha256,
+        seed_hash(b"bounded-teardown-seed")
+    );
     assert_eq!(ready.endpoint.ip().to_string(), "127.0.0.1");
     assert!(process_is_alive(ready.pid));
     assert!(TcpStream::connect(ready.endpoint).await.is_ok());
@@ -109,10 +116,13 @@ async fn supervisor_records_provenance_and_completes_bounded_teardown() {
     assert!(teardown.completed);
     assert!(!process_is_alive(teardown.pid));
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), TcpStream::connect(teardown.endpoint))
-            .await
-            .expect("connection attempt bounded")
-            .is_err()
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            TcpStream::connect(teardown.endpoint)
+        )
+        .await
+        .expect("connection attempt bounded")
+        .is_err()
     );
     assert!(teardown.stdout_bytes <= CroissantLimits::test().log_bytes);
     assert!(teardown.stderr_bytes <= CroissantLimits::test().log_bytes);
@@ -129,9 +139,9 @@ async fn dropping_a_live_process_starts_kill_on_drop() {
     let supervisor = CroissantSupervisor::prepare(
         &binary,
         &source_checkout(),
-        fixture.path().join("run"),
+        &fixture.path().join("run"),
         owner(),
-        seed_hash(b"kill-on-drop-seed"),
+        &seed_hash(b"kill-on-drop-seed"),
         CroissantLimits::test(),
     )
     .expect("prepare");
