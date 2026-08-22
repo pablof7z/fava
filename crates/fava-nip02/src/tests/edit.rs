@@ -10,8 +10,14 @@ fn edit_codec_accepts_keys_and_supported_key_strings() {
     let target = nostr::key::Keys::generate().public_key();
     let hex = target.to_hex();
 
-    assert_eq!(follow(target).expect("key"), follow(hex.as_str()).expect("hex"));
-    assert_eq!(unfollow(target).expect("key"), unfollow(hex).expect("owned hex"));
+    assert_eq!(
+        follow(target).expect("key"),
+        follow(hex.as_str()).expect("hex")
+    );
+    assert_eq!(
+        unfollow(target).expect("key"),
+        unfollow(hex).expect("owned hex")
+    );
 
     let refused = follow("raw-secret-invalid-key").expect_err("invalid key refuses");
     assert!(matches!(refused, WriteIntentError::InvalidEvent(_)));
@@ -79,4 +85,3 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
     assert!(matches!(error, WriteIntentError::Encoding(_)));
     assert!(!error.to_string().contains(raw_relay));
 }
-
