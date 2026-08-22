@@ -277,7 +277,7 @@ registry_cidfile=$temporary/control/registry.cid
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --detach --name "$container_prefix-registry" --cidfile "$registry_cidfile" \
     --network bridge --cap-drop ALL --security-opt no-new-privileges \
-    --pids-limit 128 --memory 512m --cpus 1 --read-only \
+    --pids-limit 128 --memory 6g --cpus 2 --read-only \
     --tmpfs "/var/lib/registry:rw,nosuid,nodev,size=$green_target_maximum_bytes" \
     --log-driver local --log-opt max-size=1m --log-opt max-file=1 \
     --log-opt compress=false \
