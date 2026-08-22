@@ -568,7 +568,6 @@ fi
 docker logs --tail 8 "$readonly_container_id" >&2
 remove_container_id "$readonly_container_id"
 readonly_container_id=
-
 break_volume_candidate=$container_prefix-break-target
 if volume_inspect=$(docker volume inspect "$break_volume_candidate" --format '{{.Name}}' 2>&1); then
   echo "refusing pre-existing causal target volume: $volume_inspect" >&2
@@ -596,10 +595,11 @@ python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- docker run --
   --name "$container_prefix-break-holder" --cidfile "$break_holder_cidfile" --user 0:0 --network none \
   --cap-drop ALL --security-opt no-new-privileges --pids-limit 8 --memory 64m --cpus 1 --read-only \
   --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false \
-  --volume "$break_volume_name:/target" "$source_image_reference" tail -f /dev/null >/dev/null
+  --volume "$break_volume_name:/target:ro" "$source_image_reference" tail -f /dev/null >/dev/null
 break_holder_id=$(tr -d '\r\n' < "$break_holder_cidfile")
 if [ "${#break_holder_id}" -ne 64 ] || [ "$(docker container inspect "$break_holder_id" --format '{{.Id}}')" != "$break_holder_id" ] \
-  || [ "$(docker container inspect "$break_holder_id" --format '{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}}|{{.RW}}{{end}}')" != "volume|$break_volume_name|/target|true" ]; then exit 74; fi
+  || [ "$(docker container inspect "$break_holder_id" --format '{{.Image}}')" != "$source_engine_id" ] \
+  || [ "$(docker container inspect "$break_holder_id" --format '{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}}|{{.RW}}{{end}}')" != "volume|$break_volume_name|/target|false" ]; then exit 74; fi
 common_run "$container_prefix-break" "$break_volume_name" --read-only
 python3 -c "$bounded_runner_program" --seconds 120 --bytes 1024 -- \
   docker run --rm --name "$container_prefix-break-prune" \
