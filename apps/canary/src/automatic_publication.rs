@@ -11,11 +11,11 @@ use fava_router_app_relays::AppRelayRouter;
 use fava_router_fallback_relays::FallbackRelayRouter;
 use fava_router_hints::HintRouter;
 use fava_router_outbox::OutboxRouter;
-use fava_routing::Router;
+use fava_routing::{RoutePlan, RouteRequest, Router};
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayUrl, Timestamp};
-use fava_write::{Event, Kind, Tag, WriteIntent, WriteRouting};
+use fava_write::{Event, Kind, Tag};
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 use serde_json::{Value, json};
@@ -110,6 +110,7 @@ async fn async_recipients(
         outbox,
         Arc::new(AppRelayRouter::new("app-relays", [urls[0].clone()])),
     ];
+    let preview_routers = routers.clone();
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(author.clone()));
     let fava = publication_fava(
         cache,
@@ -119,8 +120,10 @@ async fn async_recipients(
     )?;
     let event = tagged_event(&author, &recipients, format!("Fava M6 async {seed}"))?;
     let event_id = event.id.expect("checked event id");
-    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).map_err(error)?;
-    let preview = fava.preview_write_routes(&intent).map_err(error)?;
+    let preview = preview_write_routes(
+        &preview_routers,
+        EventValue::Unsigned(event.clone()),
+    )?;
     if preview.destinations.len() != 3 || preview.settled {
         return Err(CanaryError::new(format!(
             "initial preview was not partial: {preview:?}"
@@ -246,6 +249,7 @@ async fn preview_parity(
     let keys = deterministic_keys(seed)?;
     let relay = RelayUrl::parse(&relays[0].url).map_err(error)?;
     let routers: Vec<Arc<dyn Router>> = vec![Arc::new(AppRelayRouter::new("app-relays", [relay]))];
+    let preview_routers = routers.clone();
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(keys.clone()));
     let fava = publication_fava(
         Arc::new(MemoryEventCache::default()),
@@ -258,8 +262,7 @@ async fn preview_parity(
         .build()
         .map_err(error)?;
     let event_id = event.id.expect("checked event id");
-    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).map_err(error)?;
-    let preview = fava.preview_write_routes(&intent).map_err(error)?;
+    let preview = preview_write_routes(&preview_routers, EventValue::Unsigned(event.clone()))?;
     if !fava.open_receipts().map_err(error)?.is_empty() || wire_count(&relays[0].log, "EVENT")? != 0
     {
         return Err(CanaryError::new("preview created custody or relay work"));
@@ -296,6 +299,8 @@ async fn profile_selection(
         )
         .reads(false),
     )];
+    let app_preview_routers = app_routers.clone();
+    let fallback_preview_routers = fallback_routers.clone();
     let app = publication_fava(
         Arc::new(MemoryEventCache::default()),
         &artifacts.root().join("children/app-profile.redb"),
@@ -308,14 +313,14 @@ async fn profile_selection(
         fallback_routers,
         None,
     )?;
-    let app_intent =
-        WriteIntent::presigned(event.clone(), WriteRouting::Automatic).map_err(error)?;
-    let fallback_intent =
-        WriteIntent::presigned(event.clone(), WriteRouting::Automatic).map_err(error)?;
-    let app_plan = app.preview_write_routes(&app_intent).map_err(error)?;
-    let fallback_plan = fallback
-        .preview_write_routes(&fallback_intent)
-        .map_err(error)?;
+    let app_plan = preview_write_routes(
+        &app_preview_routers,
+        EventValue::Signed(event.clone()),
+    )?;
+    let fallback_plan = preview_write_routes(
+        &fallback_preview_routers,
+        EventValue::Signed(event.clone()),
+    )?;
     if app_plan
         .destinations
         .keys()
@@ -340,6 +345,13 @@ async fn profile_selection(
             "same_event": true,
         }),
     })
+}
+
+fn preview_write_routes(
+    routers: &[Arc<dyn Router>],
+    event: EventValue,
+) -> CanaryResult<RoutePlan> {
+    fava_routing::preview(routers, &RouteRequest::Write(event)).map_err(error)
 }
 
 fn tagged_event(

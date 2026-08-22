@@ -98,7 +98,7 @@ async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QueryS
 
 #[tokio::test(flavor = "current_thread")]
 async fn accepted_local_event_is_visible_without_cache_pollution() {
-    let (fava, cache, _writes) = assembly();
+    let (fava, cache, writes) = assembly();
     let keys = Keys::generate();
     let unsigned = unsigned_event(&keys, Kind::TextNote, 10, "local");
     let id = unsigned.id.expect("builder computes id");
@@ -108,9 +108,9 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
         .expect("query opens from local sources");
     assert!(feed.current().events.is_empty());
 
-    let accepted = fava
-        .accept_event(EventValue::Unsigned(unsigned))
-        .expect("facade accepts finalized local event");
+    let accepted = writes
+        .accept_materialized(EventValue::Unsigned(unsigned))
+        .expect("write-store provider accepts finalized local event");
     let visible = next_snapshot(&mut feed).await;
 
     assert_eq!(visible.events.len(), 1);
@@ -320,7 +320,7 @@ async fn deletion_and_expiration_update_the_same_open_query() {
 // observation lifecycle so the facade proof cannot pass on isolated fixtures.
 #[allow(clippy::too_many_lines)]
 async fn literal_tag_selection_preserves_exact_sources_through_public_observation() {
-    let (fava, cache, _writes) = assembly();
+    let (fava, cache, writes) = assembly();
     let keys = Keys::generate();
     let signed = signed_event_with_tags(
         &keys,
@@ -380,12 +380,14 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
             CacheMutation::Upsert(CachedEvent::new(missing_conjunct.clone(), relay)),
         ])
         .expect("signed cache corpus commits");
-    let accepted = fava
-        .accept_event(EventValue::Unsigned(unsigned))
+    let accepted = writes
+        .accept_materialized(EventValue::Unsigned(unsigned))
         .expect("exact unsigned event accepts");
-    fava.accept_event(EventValue::Unsigned(wrong_value_case))
+    writes
+        .accept_materialized(EventValue::Unsigned(wrong_value_case))
         .expect("wrong-case decoy accepts");
-    fava.accept_event(EventValue::Unsigned(later_cell_only))
+    writes
+        .accept_materialized(EventValue::Unsigned(later_cell_only))
         .expect("later-cell decoy accepts");
     let all_ids = [
         signed.id,

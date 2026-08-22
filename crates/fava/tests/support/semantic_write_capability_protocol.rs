@@ -282,8 +282,8 @@ fn prove_public_refusals<Add>(
     .materializers([materializer])
     .build()
     .unwrap();
-    capacity
-        .accept_event(EventValue::Unsigned(
+    capacity_store
+        .accept_materialized(EventValue::Unsigned(
             EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
         ))
         .unwrap();

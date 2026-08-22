@@ -9,6 +9,7 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
 use fava_write_store_memory::MemoryWriteStore;
+use fava_write_store::WriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag};
 use nostr::key::Keys;
 
@@ -26,21 +27,27 @@ pub async fn run_local_scenario(id: &str, seed: &str) -> CanaryResult<usize> {
     let writes = Arc::new(MemoryWriteStore::default());
     let fava = Fava::builder()
         .event_cache(Arc::clone(&cache))
-        .write_store(writes)
+        .write_store(Arc::clone(&writes))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .build()
         .map_err(error)?;
     let count = match id {
-        "local-source-merge" => source_merge(&fava, &cache, &keys).await?,
-        "local-replaceable-shadow-and-cancel" => replaceable_shadow(&fava, &cache, &keys).await?,
+        "local-source-merge" => source_merge(&fava, &cache, &writes, &keys).await?,
+        "local-replaceable-shadow-and-cancel" => {
+            replaceable_shadow(&fava, &cache, &writes, &keys).await?
+        }
         "local-source-removal" => source_removal(&fava, &cache, &keys).await?,
-        "slow-consumer-latest-state" => slow_consumer(&fava, &keys).await?,
+        "slow-consumer-latest-state" => slow_consumer(&fava, &writes, &keys).await?,
         _ => return Err(CanaryError::new(format!("unknown local scenario: {id}"))),
     };
     Ok(count)
 }
 
-async fn slow_consumer(fava: &Fava, keys: &Keys) -> CanaryResult<usize> {
+async fn slow_consumer(
+    fava: &Fava,
+    writes: &MemoryWriteStore,
+    keys: &Keys,
+) -> CanaryResult<usize> {
     let mut observation = fava
         .observe(Query::events().cache_only())
         .await
@@ -60,7 +67,7 @@ async fn slow_consumer(fava: &Fava, keys: &Keys) -> CanaryResult<usize> {
             .custom_created_at(Timestamp::from(index + 1))
             .finalize(keys)
             .map_err(error)?;
-        fava.accept_event(EventValue::Signed(event))
+        writes.accept_materialized(EventValue::Signed(event))
             .map_err(error)?;
     }
     tokio::time::timeout(Duration::from_secs(2), async {
@@ -82,13 +89,18 @@ async fn slow_consumer(fava: &Fava, keys: &Keys) -> CanaryResult<usize> {
     Ok(current.events.len())
 }
 
-async fn source_merge(fava: &Fava, cache: &MemoryEventCache, keys: &Keys) -> CanaryResult<usize> {
+async fn source_merge(
+    fava: &Fava,
+    cache: &MemoryEventCache,
+    writes: &MemoryWriteStore,
+    keys: &Keys,
+) -> CanaryResult<usize> {
     let event = EventBuilder::new(Kind::TextNote, "same event")
         .custom_created_at(Timestamp::from(10))
         .finalize(keys)
         .map_err(error)?;
-    let accepted = fava
-        .accept_event(EventValue::Signed(event.clone()))
+    let accepted = writes
+        .accept_materialized(EventValue::Signed(event.clone()))
         .map_err(error)?;
     cache
         .admit(cached(event), Timestamp::from(11))
@@ -116,6 +128,7 @@ async fn source_merge(fava: &Fava, cache: &MemoryEventCache, keys: &Keys) -> Can
 async fn replaceable_shadow(
     fava: &Fava,
     cache: &MemoryEventCache,
+    writes: &MemoryWriteStore,
     keys: &Keys,
 ) -> CanaryResult<usize> {
     let predecessor = EventBuilder::new(Kind::ContactList, "cached")
@@ -132,8 +145,8 @@ async fn replaceable_shadow(
     let successor_id = successor
         .id
         .ok_or_else(|| CanaryError::new("missing event id"))?;
-    let accepted = fava
-        .accept_event(EventValue::Unsigned(successor))
+    let accepted = writes
+        .accept_materialized(EventValue::Unsigned(successor))
         .map_err(error)?;
     let mut observation = fava
         .observe(Query::events().kind(Kind::ContactList).cache_only())

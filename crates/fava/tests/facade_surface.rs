@@ -54,6 +54,12 @@ fn facade_has_no_write_intent_compatibility_door() {
         !facade.contains("pub async fn wait_terminal(&self"),
         "facade-level terminal wait remains"
     );
+    for removed in ["pub fn accept_event(", "pub fn preview_write_routes("] {
+        assert!(
+            !facade.contains(removed),
+            "facade still exposes neutral custody method {removed}"
+        );
+    }
 }
 
 fn public_use_block<'a>(source: &'a str, start: &str) -> &'a str {

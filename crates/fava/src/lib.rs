@@ -28,14 +28,12 @@ use fava_signer::Signer;
 pub use fava_state::{EventCoordinate, RelayUrl};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
-use fava_write::WriteIntent;
 pub use fava_write::{
     Event, EventBuildError, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntentError,
     WriteRouting,
 };
-use fava_write_store::AcceptedWrite;
 use fava_write_store::WriteStore;
 pub use fava_write_store::WriteStoreError;
 pub use publication::{PublishAs, PublishError, PublishTo, Write, all, at_least};
@@ -55,6 +53,22 @@ use tokio::sync::broadcast;
 /// ```compile_fail
 /// fn old_publication_door(fava: &fava::Fava, intent: fava_write::WriteIntent) {
 ///     let _ = fava.publish(intent);
+/// }
+/// ```
+///
+/// Neutral custody acceptance remains on the write-store provider contract:
+///
+/// ```compile_fail
+/// fn old_acceptance_door(fava: &fava::Fava, event: fava::EventValue) {
+///     let _ = fava.accept_event(event);
+/// }
+/// ```
+///
+/// Neutral write-route preview remains on routing/publication providers:
+///
+/// ```compile_fail
+/// fn old_preview_door(fava: &fava::Fava, intent: &fava_write::WriteIntent) {
+///     let _ = fava.preview_write_routes(intent);
 /// }
 /// ```
 ///
@@ -97,16 +111,6 @@ impl Fava {
         } else {
             live::open(self, query).await
         }
-    }
-
-    /// Accept one finalized local event into the durable-write authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`WriteStoreError`] when the event is invalid or acceptance
-    /// cannot commit atomically.
-    pub fn accept_event(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
-        self.write_store.accept_materialized(event)
     }
 
     /// Cancel one accepted event before publication work exists.
@@ -239,40 +243,6 @@ impl Fava {
                 fava_routing::preview(&self.routers, &request)
                     .map_err(|error| ObserveError::Relay(error.to_string()))
             }
-        }
-    }
-
-    /// Evaluate current routing facts for a prospective write without custody,
-    /// signing, router acquisition, or relay work.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PublicationError`] when routing refuses the current facts.
-    pub fn preview_write_routes(
-        &self,
-        intent: &WriteIntent,
-    ) -> Result<RoutePlan, PublicationError> {
-        let event = match intent.payload() {
-            fava_write::WritePayload::Event(event) => EventValue::Unsigned(event.clone()),
-            fava_write::WritePayload::Edit { .. } => {
-                return self
-                    .publication
-                    .as_ref()
-                    .ok_or(PublicationError::NotConfigured)?
-                    .preview_semantic_routes(intent);
-            }
-            fava_write::WritePayload::Presigned(event) => EventValue::Signed(event.clone()),
-        };
-        let request = RouteRequest::Write(event);
-        match intent.routing() {
-            WriteRouting::Explicit(relays) => RoutePlan::explicit(
-                relays.iter().cloned(),
-                &fava_state::RelayAccess::public(),
-                &request.targets(),
-            )
-            .map_err(|error| PublicationError::Routing(error.to_string())),
-            WriteRouting::Automatic => fava_routing::preview(&self.routers, &request)
-                .map_err(|error| PublicationError::Routing(error.to_string())),
         }
     }
 }

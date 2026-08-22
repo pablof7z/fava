@@ -7,22 +7,25 @@ use fava::{EventValue, Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::Timestamp;
+use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
 
-fn assembly() -> Fava {
-    Fava::builder()
+fn assembly() -> (Fava, Arc<MemoryWriteStore>) {
+    let writes = Arc::new(MemoryWriteStore::default());
+    let fava = Fava::builder()
         .event_cache(Arc::new(MemoryEventCache::default()))
-        .write_store(Arc::new(MemoryWriteStore::default()))
+        .write_store(Arc::clone(&writes))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .build()
-        .expect("local assembly")
+        .expect("local assembly");
+    (fava, writes)
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn one_thousand_idle_observations_share_the_current_runtime_thread() {
-    let fava = assembly();
+    let (fava, _writes) = assembly();
     let thread = std::thread::current().id();
     let mut observations = Vec::with_capacity(1_000);
     for _ in 0..1_000 {
@@ -46,7 +49,7 @@ async fn one_thousand_idle_observations_share_the_current_runtime_thread() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_pulls_and_large_burst_deliver_one_exact_latest_state() {
-    let fava = assembly();
+    let (fava, writes) = assembly();
     let mut observation = fava
         .observe(Query::events().cache_only())
         .await
@@ -64,7 +67,8 @@ async fn cancelled_pulls_and_large_burst_deliver_one_exact_latest_state() {
             .custom_created_at(Timestamp::from(index + 1))
             .finalize(&keys)
             .expect("event signs");
-        fava.accept_event(EventValue::Signed(event))
+        writes
+            .accept_materialized(EventValue::Signed(event))
             .expect("event accepts");
     }
 

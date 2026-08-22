@@ -28,7 +28,7 @@ mod support;
 
 use support::{
     BlockingSigner, CountingRouter, CountingSigner, NoopTransport, RecordingPublisher,
-    TestMaterializer, publication_builder, relay_url, wait_for_materialization,
+    TestMaterializer, publication_builder, publication_owner, relay_url, wait_for_materialization,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
@@ -76,15 +76,23 @@ async fn shared_preview_bounds_and_failure<Add>(
     let signer = Arc::new(BlockingSigner::new(actor));
     let publisher = Arc::new(RecordingPublisher::default());
     let router = Arc::new(CountingRouter::new(relay_url()));
+    let owner = publication_owner(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::clone(&publisher),
+        vec![Arc::clone(&materializer)],
+        vec![router.clone()],
+    );
     let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&signer), publisher)
         .router(Arc::clone(&router))
         .materializers([Arc::clone(&materializer)])
         .build()
         .expect("preview assembly");
     let intent = automatic_intent(edit.clone(), actor);
-    let preview = fava
-        .preview_write_routes(&intent)
-        .expect("preview succeeds");
+    let preview = owner
+        .preview_semantic_routes(&intent)
+        .expect("publication-provider preview succeeds");
     assert_eq!(store.len().unwrap(), 0);
     assert_eq!(router.previews(), 1);
     assert_eq!(router.opens(), 0);
@@ -158,8 +166,8 @@ fn assert_selection_and_capacity_refusals(
         .materializers([materializer])
         .build()
         .expect("bounded assembly");
-    bounded
-        .accept_event(EventValue::Unsigned(
+    bounded_store
+        .accept_materialized(EventValue::Unsigned(
             EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
         ))
         .expect("one active write fills capacity");

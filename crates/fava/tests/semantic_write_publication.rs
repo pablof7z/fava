@@ -165,8 +165,8 @@ async fn materializer_selection_bounds_refuse_before_custody() {
         keys.clone(),
         vec![Arc::clone(&bounded_materializer)],
     );
-    bounded
-        .accept_event(EventValue::Unsigned(
+    bounded_store
+        .accept_materialized(EventValue::Unsigned(
             EventBuilder::new(keys.public_key(), Kind::TextNote)
                 .created_at(Timestamp::from(1))
                 .build()
@@ -406,6 +406,14 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     let publisher = Arc::new(RecordingPublisher::default());
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let router = Arc::new(CountingRouter::new(relay_url()));
+    let owner = publication_owner(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::clone(&publisher),
+        vec![materializer.clone()],
+        vec![router.clone()],
+    );
     let fava = publication_builder(
         cache,
         Arc::clone(&store),
@@ -419,9 +427,9 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     let intent = automatic_intent(keys.public_key(), Kind::ContactList);
     let mut receipt_changes = store.receipt_changes();
 
-    let preview = fava
-        .preview_write_routes(&intent)
-        .expect("semantic preview");
+    let preview = owner
+        .preview_semantic_routes(&intent)
+        .expect("publication-provider semantic preview");
     assert_eq!(store.len().expect("store readable"), 0);
     assert_eq!(signer.calls(), 0);
     assert!(publisher.attempts().is_empty());
@@ -433,7 +441,8 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
     ));
     assert!(
-        fava.preview_write_routes(&automatic_intent(keys.public_key(), Kind::MuteList))
+        owner
+            .preview_semantic_routes(&automatic_intent(keys.public_key(), Kind::MuteList))
             .is_err()
     );
     let addressable = ReplaceableEventEdit::new(

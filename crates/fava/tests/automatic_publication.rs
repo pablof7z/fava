@@ -6,18 +6,20 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, Fava, ReceiptId, ReceiptOutcome, all};
+use fava::{EventBuilder, EventValue, Fava, ReceiptId, ReceiptOutcome, all};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_testkit::DelayedRouter;
-use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
+use fava_routing::{
+    CoverageState, RouteContribution, RouteDestination, RouteRequest, RouteTarget, Router,
+};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{RelaySession, Transport, TransportError};
-use fava_write::{Kind, Tag, WriteIntent, WriteRouting};
+use fava_write::{Kind, Tag};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
@@ -47,13 +49,16 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     let delayed = Arc::new(DelayedRouter::new("outbox-test", initial));
     let publisher = Arc::new(RecordingPublisher::default());
     let store = Arc::new(MemoryWriteStore::default());
+    let routers: Vec<Arc<dyn Router>> = vec![
+        delayed.clone(),
+        Arc::new(AppRelayRouter::new("app-relays", [app.clone()])),
+    ];
     let fava = Fava::builder()
         .event_cache(Arc::new(MemoryEventCache::default()))
         .write_store(Arc::clone(&store))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
-        .router(Arc::clone(&delayed))
-        .router(Arc::new(AppRelayRouter::new("app-relays", [app.clone()])))
+        .routers(routers.clone())
         .signer(Arc::new(LocalSigner::new(author.clone())))
         .publisher(Arc::clone(&publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
@@ -67,9 +72,11 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         )
         .build()
         .expect("event");
-    let intent = WriteIntent::event(event.clone(), WriteRouting::Automatic).expect("intent");
-
-    let preview = fava.preview_write_routes(&intent).expect("preview");
+    let preview = fava_routing::preview(
+        &routers,
+        &RouteRequest::Write(EventValue::Unsigned(event.clone())),
+    )
+    .expect("routing-provider preview");
     assert!(!preview.settled);
     assert_eq!(preview.destinations.len(), 3);
     assert_eq!(delayed.open_count(), 0);

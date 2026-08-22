@@ -12,7 +12,9 @@ use fava::{
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
+use fava_query::{QueryEvaluator, QuerySource};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
@@ -110,6 +112,34 @@ where
         .signer(signer)
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
+}
+
+pub fn publication_owner<S>(
+    cache: Arc<MemoryEventCache>,
+    store: Arc<MemoryWriteStore>,
+    signer: Arc<S>,
+    publisher: Arc<RecordingPublisher>,
+    materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
+    routers: Vec<Arc<dyn Router>>,
+) -> Publication
+where
+    S: Signer + 'static,
+{
+    let event_source: Arc<dyn QuerySource> = cache;
+    let evaluator: Arc<dyn QueryEvaluator> = Arc::new(StandardQueryEvaluator);
+    let signer: Arc<dyn Signer> = signer;
+    Publication::new(
+        store,
+        event_source,
+        evaluator,
+        materializers,
+        [signer],
+        publisher,
+        Arc::new(StandardDeliveryPolicy::default()),
+        Arc::new(NoopTransport),
+        routers,
+    )
+    .expect("publication provider assembly")
 }
 
 pub fn assert_no_effects(
