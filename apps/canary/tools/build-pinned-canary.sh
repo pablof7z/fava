@@ -334,6 +334,7 @@ python3 -c "$pinned_input_program" \
   --repository "$source_checkout" --revision "$revision" \
   --kind archive --path "$source_dockerfile_path" \
   --archive-prefix source/ --archive-path $archive_paths \
+  --dockerfile-name Dockerfile --expected-sha256 "$source_dockerfile_sha256" \
   --extra-file "$manifest" --extra-name control/source.manifest \
   --extra-sha256 "$manifest_sha256" --maximum-input-bytes 83886080 \
   --seconds "$docker_deadline_seconds" \
@@ -347,7 +348,6 @@ python3 -c "$pinned_input_program" \
   --build-arg "FAVA_REVISION=$revision" \
   --build-arg "FAVA_TREE=$tree" \
   --build-arg "FAVA_SOURCE_MANIFEST_SHA256=$manifest_sha256" \
-  --file source/apps/canary/pinned-source.Dockerfile \
   --tag "$source_registry_tag" -
 source_image_id=$(tr -d '\r\n' < "$iidfile")
 registry_source_image_id=$(docker buildx imagetools inspect "$source_registry_tag" \

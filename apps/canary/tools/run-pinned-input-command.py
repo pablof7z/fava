@@ -70,7 +70,11 @@ def committed_blob(arguments: argparse.Namespace) -> bytes:
 
 
 def committed_archive(arguments: argparse.Namespace) -> bytes:
-    if not arguments.archive_path or not arguments.archive_prefix.endswith("/"):
+    if (
+        not arguments.archive_path
+        or not arguments.archive_prefix.endswith("/")
+        or arguments.dockerfile_name != "Dockerfile"
+    ):
         raise SystemExit("committed archive arguments were incomplete")
     archive = run_git(
         arguments,
@@ -95,6 +99,7 @@ def committed_archive(arguments: argparse.Namespace) -> bytes:
         raise SystemExit("committed archive extra input disagreed with its exact claim")
     result = io.BytesIO()
     count = 0
+    dockerfile = None
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as source, \
             tarfile.open(fileobj=result, mode="w:") as destination:
         for member in source:
@@ -102,7 +107,21 @@ def committed_archive(arguments: argparse.Namespace) -> bytes:
             if count > 4_096 or member.name == arguments.extra_name:
                 raise SystemExit("committed archive inventory was invalid")
             stream = source.extractfile(member) if member.isfile() else None
+            if member.name == arguments.archive_prefix + arguments.path:
+                if stream is None or member.size <= 0 or member.size > 1_048_576:
+                    raise SystemExit("committed archive Dockerfile exceeded its bound")
+                dockerfile = stream.read(1_048_577)
+                if len(dockerfile) != member.size \
+                        or hashlib.sha256(dockerfile).hexdigest() != arguments.expected_sha256:
+                    raise SystemExit("committed archive Dockerfile disagreed with its claim")
+                stream = io.BytesIO(dockerfile)
             destination.addfile(member, stream)
+        if dockerfile is None:
+            raise SystemExit("committed archive Dockerfile was absent")
+        dockerfile_member = tarfile.TarInfo(arguments.dockerfile_name)
+        dockerfile_member.mode = 0o400
+        dockerfile_member.size = len(dockerfile)
+        destination.addfile(dockerfile_member, io.BytesIO(dockerfile))
         extra_member = tarfile.TarInfo(arguments.extra_name)
         extra_member.mode = 0o400
         extra_member.size = len(extra)
@@ -194,6 +213,7 @@ def main() -> int:
     parser.add_argument("--kind", choices=("blob", "archive"), default="blob")
     parser.add_argument("--archive-path", nargs="+")
     parser.add_argument("--archive-prefix", default="")
+    parser.add_argument("--dockerfile-name")
     parser.add_argument("--extra-file")
     parser.add_argument("--extra-name")
     parser.add_argument("--extra-sha256")
@@ -217,12 +237,12 @@ def main() -> int:
         or ".." in arguments.path.split("/")
     ):
         parser.error("pinned-input command arguments exceeded their limits")
-    if arguments.kind == "blob" and (
+    if (
         arguments.expected_sha256 is None
         or len(arguments.expected_sha256) != 64
         or any(byte not in "0123456789abcdef" for byte in arguments.expected_sha256)
     ):
-        parser.error("pinned blob identity was invalid")
+        parser.error("pinned input identity was invalid")
     value = committed_blob(arguments) if arguments.kind == "blob" else committed_archive(arguments)
     return run_consumer(arguments, value)
 

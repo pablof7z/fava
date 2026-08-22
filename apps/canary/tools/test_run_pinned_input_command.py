@@ -107,6 +107,10 @@ class PinnedInputCommandTests(unittest.TestCase):
                     path,
                     "--archive-prefix",
                     "source/",
+                    "--dockerfile-name",
+                    "Dockerfile",
+                    "--expected-sha256",
+                    hashlib.sha256(committed).hexdigest(),
                     "--archive-path",
                     "apps/canary",
                     "--extra-file",
@@ -134,6 +138,7 @@ class PinnedInputCommandTests(unittest.TestCase):
             self.assertIsNotNone(extracted)
             assert extracted is not None
             self.assertEqual(extracted.read(), committed)
+            self.assertEqual(archive.extractfile("Dockerfile").read(), committed)
             self.assertEqual(archive.extractfile("control/source.manifest").read(), b"manifest\n")
 
     def test_output_dockerfile_ignores_post_sample_path_substitution(self) -> None:
