@@ -309,11 +309,16 @@ if [ "$(printf '%s\n' "$bin_fingerprints" | sed '/^$/d' | wc -l | tr -d ' ')" -n
   exit 74
 fi
 bin_fingerprint_directory=$(dirname "$bin_fingerprints")
-case "$bin_fingerprint_directory" in
-  "$break_target"/release/.fingerprint/canary-*) find "$bin_fingerprint_directory" -depth -delete ;;
-  *) echo "refusing unsafe canary fingerprint invalidation" >&2; exit 74 ;;
-esac
-if [ ! -f "$break_target/release/canary" ]; then
+bin_fingerprint_name=$(basename "$bin_fingerprint_directory")
+bin_fingerprint_hash=${bin_fingerprint_name#canary-}
+case "$bin_fingerprint_hash" in *[!0-9a-f]*|'') exit 74 ;; esac
+if [ "$(dirname "$bin_fingerprint_directory")" != "$break_target/release/.fingerprint" ] \
+  || [ "${#bin_fingerprint_hash}" -ne 16 ]; then
+  echo "refusing unsafe canary fingerprint invalidation" >&2
+  exit 74
+fi
+find "$bin_fingerprint_directory" -depth -delete
+if [ ! -f "$break_target/release/canary" ] || [ -L "$break_target/release/canary" ]; then
   echo "primed canary binary was absent" >&2
   exit 74
 fi
