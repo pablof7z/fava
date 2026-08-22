@@ -52,19 +52,21 @@ impl WireProxy {
                         let connection_log = Arc::clone(&log);
                         let connection_inject = task_inject.subscribe();
                         connections.spawn(async move {
-                            if let Err(error) = handle_connection(
+                            let result = handle_connection(
                                 stream,
                                 upstream,
                                 connection,
                                 connection_log,
                                 connection_inject,
-                            ).await {
+                            ).await;
+                            if let Err(error) = &result {
                                 log_proxy_error(connection, &error);
                             }
+                            result
                         });
                     }
                     Some(joined) = connections.join_next(), if !connections.is_empty() => {
-                        joined.map_err(|error| CanaryError::new(format!("proxy connection task failed: {error}")))?;
+                        joined.map_err(|error| CanaryError::new(format!("proxy connection task failed: {error}")))??;
                     }
                 }
             }
@@ -100,14 +102,14 @@ impl WireProxy {
     }
 }
 
-async fn drain_connections(connections: &mut JoinSet<()>) -> CanaryResult<()> {
+async fn drain_connections(connections: &mut JoinSet<CanaryResult<()>>) -> CanaryResult<()> {
     let drain = async {
         while let Some(joined) = connections.join_next().await {
             joined.map_err(|error| {
                 CanaryError::new(format!(
                     "proxy connection task failed during drain: {error}"
                 ))
-            })?;
+            })??;
         }
         Ok::<(), CanaryError>(())
     };
@@ -256,18 +258,26 @@ mod tests {
     #[tokio::test]
     async fn drain_finishes_completed_bridges_and_reaps_timed_out_bridges() {
         let mut completed = JoinSet::new();
-        completed.spawn(async {});
+        completed.spawn(async { Ok(()) });
         drain_connections(&mut completed)
             .await
             .expect("completed bridge drains");
         assert!(completed.is_empty());
 
         let mut stalled = JoinSet::new();
-        stalled.spawn(pending());
+        stalled.spawn(pending::<crate::CanaryResult<()>>());
         let error = drain_connections(&mut stalled)
             .await
             .expect_err("stalled bridge is refused");
         assert_eq!(error.to_string(), "proxy connection drain deadline elapsed");
         assert!(stalled.is_empty());
+
+        let mut failed = JoinSet::new();
+        failed.spawn(async { Err(crate::CanaryError::new("capture write failed")) });
+        let error = drain_connections(&mut failed)
+            .await
+            .expect_err("capture failure is propagated");
+        assert_eq!(error.to_string(), "capture write failed");
+        assert!(failed.is_empty());
     }
 }

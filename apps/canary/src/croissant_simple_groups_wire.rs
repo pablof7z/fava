@@ -41,7 +41,7 @@ pub(crate) async fn wait_for_query_completion(
         loop {
             let wire_a = read_wire(&paths[0])?;
             let wire_b = read_wire(&paths[1])?;
-            if pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id)? {
+            if pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id, false)? {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -58,7 +58,7 @@ pub(crate) fn verify_query_completion(
 ) -> CanaryResult<()> {
     let wire_a = read_wire(&paths[0])?;
     let wire_b = read_wire(&paths[1])?;
-    if !pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id)? {
+    if !pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id, true)? {
         return Err(CanaryError::new(
             "both final wire logs must carry exact terminal query completion",
         ));
@@ -106,6 +106,7 @@ fn pair_query_completion(
     wires: [&str; 2],
     group_id: &str,
     bootstrap_event_id: &str,
+    require_terminated: bool,
 ) -> CanaryResult<bool> {
     let mut complete = true;
     for (relay_index, wire) in wires.into_iter().enumerate() {
@@ -114,6 +115,7 @@ fn pair_query_completion(
             group_id,
             bootstrap_event_id,
             &format!("group-create-{relay_index}"),
+            require_terminated,
         )?;
     }
     Ok(complete)
@@ -124,7 +126,13 @@ fn query_completion(
     group_id: &str,
     bootstrap_event_id: &str,
     bootstrap_subscription: &str,
+    require_terminated: bool,
 ) -> CanaryResult<bool> {
+    if require_terminated && !wire.ends_with('\n') {
+        return Err(CanaryError::new(
+            "final wire log ended with an unterminated record",
+        ));
+    }
     let mut frames = wire
         .split_inclusive('\n')
         .filter(|line| line.ends_with('\n'))
@@ -164,8 +172,8 @@ fn query_completion(
         let Some(array) = decoded.as_array() else {
             return Err(CanaryError::new("wire text frame was not an array"));
         };
-        match array.first().and_then(Value::as_str) {
-            Some("REQ") => {
+        match (direction, array.first().and_then(Value::as_str)) {
+            ("client_to_relay", Some("REQ")) => {
                 let (role, subscription) =
                     classify_request(array, group_id, bootstrap_event_id, bootstrap_subscription)?;
                 if queries.values().any(|state| {
@@ -186,7 +194,7 @@ fn query_completion(
                     return Err(CanaryError::new("wire repeated an exact query role"));
                 }
             }
-            Some("EOSE") => {
+            ("relay_to_client", Some("EOSE")) => {
                 let subscription = exact_terminal_subscription(array, "EOSE")?;
                 let state = exact_query_mut(&mut queries, connection, subscription)?;
                 if state.saw_eose || state.saw_text_close || state.saw_socket_close {
@@ -194,7 +202,7 @@ fn query_completion(
                 }
                 state.saw_eose = true;
             }
-            Some("CLOSE") => {
+            ("client_to_relay", Some("CLOSE")) => {
                 let subscription = exact_terminal_subscription(array, "CLOSE")?;
                 let state = exact_query_mut(&mut queries, connection, subscription)?;
                 if !state.saw_eose || state.saw_text_close || state.saw_socket_close {
@@ -203,6 +211,11 @@ fn query_completion(
                     ));
                 }
                 state.saw_text_close = true;
+            }
+            (_, Some("REQ" | "EOSE" | "CLOSE")) => {
+                return Err(CanaryError::new(
+                    "wire query frame used the wrong direction",
+                ));
             }
             _ => {}
         }
@@ -351,14 +364,17 @@ mod tests {
     #[test]
     fn exact_three_query_completion_is_required_per_relay() {
         let complete = complete_wire();
-        assert!(query_completion(&complete, GROUP, EVENT, "bootstrap").unwrap());
+        assert!(query_completion(&complete, GROUP, EVENT, "bootstrap", true).unwrap());
 
         let bootstrap_only = complete.lines().take(4).collect::<Vec<_>>().join("\n") + "\n";
-        assert!(!query_completion(&bootstrap_only, GROUP, EVENT, "bootstrap").unwrap());
+        assert!(!query_completion(&bootstrap_only, GROUP, EVENT, "bootstrap", true).unwrap());
 
         let missing_final_socket_close =
             complete.lines().take(11).collect::<Vec<_>>().join("\n") + "\n";
-        assert!(!query_completion(&missing_final_socket_close, GROUP, EVENT, "bootstrap").unwrap());
+        assert!(
+            !query_completion(&missing_final_socket_close, GROUP, EVENT, "bootstrap", true)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -366,8 +382,10 @@ mod tests {
         let relay_a = complete_wire().replace("bootstrap", "group-create-0");
         let relay_b = complete_wire().replace("bootstrap", "group-create-1");
         let relay_b_incomplete = relay_b.lines().take(8).collect::<Vec<_>>().join("\n") + "\n";
-        assert!(pair_query_completion([&relay_a, &relay_b], GROUP, EVENT).unwrap());
-        assert!(!pair_query_completion([&relay_a, &relay_b_incomplete], GROUP, EVENT).unwrap());
+        assert!(pair_query_completion([&relay_a, &relay_b], GROUP, EVENT, true).unwrap());
+        assert!(
+            !pair_query_completion([&relay_a, &relay_b_incomplete], GROUP, EVENT, true).unwrap()
+        );
     }
 
     #[test]
@@ -381,13 +399,13 @@ mod tests {
                 "text",
                 &json!(["REQ", "other", {"kinds": [1]}]),
             );
-        assert!(query_completion(&auxiliary, GROUP, EVENT, "bootstrap").is_err());
+        assert!(query_completion(&auxiliary, GROUP, EVENT, "bootstrap", true).is_err());
 
         let malformed = complete.replace(
             "[\\\"CLOSE\\\",\\\"content\\\"]",
             "[\\\"CLOSE\\\",\\\"content\\\",\\\"extra\\\"]",
         );
-        assert!(query_completion(&malformed, GROUP, EVENT, "bootstrap").is_err());
+        assert!(query_completion(&malformed, GROUP, EVENT, "bootstrap", true).is_err());
 
         let duplicate = complete
             + &frame(
@@ -397,6 +415,32 @@ mod tests {
                 "text",
                 &json!(["CLOSE", "content"]),
             );
-        assert!(query_completion(&duplicate, GROUP, EVENT, "bootstrap").is_err());
+        assert!(query_completion(&duplicate, GROUP, EVENT, "bootstrap", true).is_err());
+    }
+
+    #[test]
+    fn wrong_directions_and_final_partial_tail_are_refused() {
+        let complete = complete_wire();
+        let reversed_req = complete.replacen(
+            "\"direction\":\"client_to_relay\"",
+            "\"direction\":\"relay_to_client\"",
+            1,
+        );
+        assert!(query_completion(&reversed_req, GROUP, EVENT, "bootstrap", true).is_err());
+
+        let reversed_eose = complete.replacen(
+            "\"direction\":\"relay_to_client\"",
+            "\"direction\":\"client_to_relay\"",
+            1,
+        );
+        assert!(query_completion(&reversed_eose, GROUP, EVENT, "bootstrap", true).is_err());
+
+        let partial_late_duplicate = complete + "{\"sequence\":13";
+        assert!(
+            query_completion(&partial_late_duplicate, GROUP, EVENT, "bootstrap", true).is_err()
+        );
+        assert!(
+            query_completion(&partial_late_duplicate, GROUP, EVENT, "bootstrap", false).unwrap()
+        );
     }
 }
