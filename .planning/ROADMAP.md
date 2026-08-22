@@ -182,7 +182,7 @@ Plans:
 **Goal:** An application can read, discover, edit, publish, and await NIP-02 contact-list changes through the README-level typed Rust API, while the same universal `publish`/`by`/`to` vocabulary accepts every write payload without exposing `WriteIntent` ceremony.
 **Requirements**: R1, R2, R3, R4, R5, R6, R7, R8, R9
 **Depends on:** Phase 7
-**Plans:** 8/12 plans executed
+**Plans:** 9/12 plans executed
 
 Plans:
 **Wave 1**
@@ -213,7 +213,7 @@ Plans:
 
 - [x] 07.1-07-PLAN.md — Migrate primary facade publication regressions
 - [x] 07.1-08-PLAN.md — Migrate store, lifecycle, signer, and fault harnesses
-- [ ] 07.1-09-PLAN.md — Remove the old facade compatibility surface and prove independent consumption
+- [x] 07.1-09-PLAN.md — Remove the old facade compatibility surface and prove independent consumption
 - [ ] 07.1-10-PLAN.md — Migrate the existing downstream canary corpus
 
 **Wave 8** *(blocked on Wave 7 completion)*
@@ -316,7 +316,7 @@ Plans:
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
-| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 8/12 | In Progress|  |
+| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 9/12 | In Progress|  |
 | 07.1.1. Multi-Relay Simple Groups | 0/TBD | Ready to plan after 07.1 | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
