@@ -3,6 +3,11 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::OnceLock;
+
+#[cfg(test)]
+use tokio::sync::{Mutex, MutexGuard};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -15,8 +20,19 @@ const CROISSANT_SOURCE: &str = "/Users/pablo/Work/croissant";
 const LOCAL_BAZELISK: &str = "/Users/pablo/.local/bin/bazelisk";
 
 #[cfg(test)]
+static LIVE_CROISSANT_FIXTURE: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(test)]
 pub(crate) fn croissant_fixture_binary() -> CanaryResult<PathBuf> {
     require_executable(Path::new(CROISSANT_BINARY), "Croissant fixture")
+}
+
+#[cfg(test)]
+pub(crate) async fn croissant_fixture_guard() -> MutexGuard<'static, ()> {
+    LIVE_CROISSANT_FIXTURE
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .await
 }
 
 pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
@@ -64,7 +80,11 @@ fn require_executable(path: &Path, label: &str) -> CanaryResult<PathBuf> {
 mod tests {
     use std::path::Path;
 
-    use super::{bazel_program, croissant_fixture_binary, croissant_fixture_source};
+    use std::time::Duration;
+
+    use super::{
+        bazel_program, croissant_fixture_binary, croissant_fixture_guard, croissant_fixture_source,
+    };
 
     #[test]
     fn current_croissant_fixture_is_resolved_explicitly() {
@@ -84,5 +104,19 @@ mod tests {
             bazel_program().expect("Bazel or Bazelisk prerequisite"),
             Path::new("/Users/pablo/.local/bin/bazelisk")
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn live_croissant_fixture_has_one_suite_owner() {
+        let first = croissant_fixture_guard().await;
+        let blocked = tokio::time::timeout(Duration::from_millis(50), async {
+            let _second = croissant_fixture_guard().await;
+        })
+        .await;
+        assert!(blocked.is_err(), "a second live fixture owner entered");
+        drop(first);
+        let _released = tokio::time::timeout(Duration::from_secs(1), croissant_fixture_guard())
+            .await
+            .expect("fixture owner releases within deadline");
     }
 }

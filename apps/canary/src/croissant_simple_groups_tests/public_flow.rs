@@ -25,6 +25,7 @@ const FIXTURE_CROISSANT_EXECUTABLE: &str = "444444444444444444444444444444444444
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn croissant_simple_groups_public_flow() {
+    let _fixture_guard = crate::environment::croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("public-flow fixture root");
     let source = PathBuf::from("/Users/pablo/Work/croissant");
     let binary = build_croissant(&source, temporary.path());

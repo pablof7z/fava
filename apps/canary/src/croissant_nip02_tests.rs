@@ -12,10 +12,11 @@ use super::{
 use crate::croissant_nip02_evidence::{
     artifact_seal, assert_secrets_absent, secret_needles, verify_artifact_seal,
 };
-use crate::environment::croissant_fixture_binary;
+use crate::environment::{croissant_fixture_binary, croissant_fixture_guard};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_unique_public_flows_pass_exact_pair_verification() {
+    let _fixture_guard = croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("temporary pair root");
     let first = Box::pin(run(
         temporary.path().to_path_buf(),
@@ -45,6 +46,7 @@ async fn two_unique_public_flows_pass_exact_pair_verification() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secret_fields() {
+    let _fixture_guard = croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("temporary pair root");
     let first = Box::pin(run(
         temporary.path().to_path_buf(),
@@ -97,6 +99,7 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
+    let _fixture_guard = croissant_fixture_guard().await;
     for (stage, seed) in [
         (SecretScanStage::BeforeSeal, "pre-seal-secret-scan"),
         (SecretScanStage::AfterManifest, "post-manifest-secret-scan"),
