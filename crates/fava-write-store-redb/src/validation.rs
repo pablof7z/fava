@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use fava_state::{RelayAccess, RelaySessionKey};
 use fava_write::{
     EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState, WriteIntent, WriteRouting,
@@ -64,6 +65,21 @@ fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
     let mut seen = BTreeSet::new();
     if relays.iter().any(|relay| !seen.insert(relay)) {
         return incoherent("durable explicit route repeats a relay identity");
+    }
+    let expected: BTreeSet<_> = relays
+        .iter()
+        .cloned()
+        .map(|relay| RelaySessionKey::new(relay, RelayAccess::public()))
+        .collect();
+    let retained: BTreeSet<_> = receipt
+        .current
+        .publication
+        .destinations
+        .keys()
+        .cloned()
+        .collect();
+    if retained != expected || receipt.desired_destinations != expected {
+        return incoherent("durable explicit route disagrees with its destination lanes");
     }
     Ok(())
 }

@@ -85,6 +85,59 @@ fn schema_v2_refuses_unsound_ordered_route_shapes() {
 }
 
 #[test]
+fn schema_v2_refuses_missing_extra_and_substituted_explicit_lanes() {
+    let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
+    let second_lane = RelaySessionKey::new(second.clone(), RelayAccess::public());
+    mutate_typed_receipt(&missing_path, |receipt| {
+        receipt
+            .current
+            .publication
+            .destinations
+            .remove(&second_lane);
+        receipt.desired_destinations.remove(&second_lane);
+    });
+    assert_lane_mismatch(missing_path, "missing");
+
+    let (extra_path, _, _) = explicit_path("extra-explicit-lane");
+    let extra = RelaySessionKey::new(
+        RelayUrl::parse("wss://extra.example").unwrap(),
+        RelayAccess::public(),
+    );
+    mutate_typed_receipt(&extra_path, |receipt| {
+        receipt
+            .current
+            .publication
+            .destinations
+            .insert(extra.clone(), RelayDeliveryOutcome::Pending);
+        receipt.desired_destinations.insert(extra);
+    });
+    assert_lane_mismatch(extra_path, "extra");
+
+    let (substituted_path, _, second) = explicit_path("substituted-explicit-lane");
+    let expected = RelaySessionKey::new(second, RelayAccess::public());
+    let substitute = RelaySessionKey::new(
+        RelayUrl::parse("wss://substitute.example").unwrap(),
+        RelayAccess::public(),
+    );
+    mutate_typed_receipt(&substituted_path, |receipt| {
+        let outcome = receipt
+            .current
+            .publication
+            .destinations
+            .remove(&expected)
+            .expect("expected lane exists");
+        receipt
+            .current
+            .publication
+            .destinations
+            .insert(substitute.clone(), outcome);
+        receipt.desired_destinations.remove(&expected);
+        receipt.desired_destinations.insert(substitute);
+    });
+    assert_lane_mismatch(substituted_path, "substituted");
+}
+
+#[test]
 fn exact_current_guard_precedes_idempotent_semantic_success() {
     let path = unique_path("exact-current-first");
     let keys = Keys::generate();
@@ -487,6 +540,48 @@ fn valid_path(label: &str) -> std::path::PathBuf {
     );
     drop(store);
     path
+}
+
+fn explicit_path(label: &str) -> (std::path::PathBuf, RelayUrl, RelayUrl) {
+    let path = unique_path(label);
+    let keys = Keys::generate();
+    let first = RelayUrl::parse("wss://first.example").unwrap();
+    let second = RelayUrl::parse("wss://second.example").unwrap();
+    let store = RedbWriteStore::open(&path).unwrap();
+    store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(
+                edit(),
+                keys.public_key(),
+                WriteRouting::explicit([first.clone(), second.clone()]).unwrap(),
+            )
+            .unwrap(),
+            materialization(keys.public_key(), 10, "explicit"),
+            None,
+        )
+        .unwrap();
+    drop(store);
+    (path, first, second)
+}
+
+fn assert_lane_mismatch(path: std::path::PathBuf, label: &str) {
+    let error = RedbWriteStore::open(path)
+        .err()
+        .unwrap_or_else(|| panic!("{label} explicit lane was reconstructed"));
+    assert!(
+        error
+            .to_string()
+            .contains("durable explicit route disagrees with its destination lanes"),
+        "unexpected {label}-lane refusal: {error}"
+    );
+}
+
+fn mutate_typed_receipt(path: &std::path::Path, mutate: impl FnOnce(&mut Receipt)) {
+    let mut receipt = read_receipt(path);
+    mutate(&mut receipt);
+    mutate_row(path, |row| {
+        set(row, "/receipt", serde_json::to_value(receipt).unwrap());
+    });
 }
 
 fn valid_source_path(label: &str) -> std::path::PathBuf {
