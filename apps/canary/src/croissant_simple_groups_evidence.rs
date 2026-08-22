@@ -40,11 +40,6 @@ pub fn verify_croissant_simple_groups_pair(
     }
     let root = runs_directory.as_ref();
     let roots = run_roots(root)?;
-    if roots.len() != 2 {
-        return Err(CanaryError::new(
-            "simple-groups pair must contain exactly two manifests",
-        ));
-    }
     let mut runs = Vec::new();
     for run_root in roots {
         let directory_run_id = run_root
@@ -74,11 +69,26 @@ pub fn verify_croissant_simple_groups_pair(
 }
 
 fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
+    run_roots_with(root, |_| {})
+}
+
+fn run_roots_with(
+    root: &Path,
+    mut visited: impl FnMut(&Path),
+) -> CanaryResult<Vec<std::path::PathBuf>> {
     let mut roots = Vec::new();
     for entry in fs::read_dir(root)? {
         let entry = entry?;
+        visited(&entry.path());
+        if roots.len() == 2 {
+            return Err(CanaryError::new(
+                "simple-groups pair must contain exactly two manifests",
+            ));
+        }
         let name = entry.file_name();
-        let name = name.to_string_lossy();
+        let name = name
+            .to_str()
+            .ok_or_else(|| CanaryError::new("simple-groups pair entry was not UTF-8"))?;
         if !entry.file_type()?.is_dir() || name.starts_with(".fava-canary-staging-") {
             return Err(CanaryError::new(
                 "simple-groups pair root contained staging or non-run residue",
@@ -86,8 +96,36 @@ fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
         }
         roots.push(entry.path());
     }
-    roots.sort();
+    if roots.len() != 2 {
+        return Err(CanaryError::new(
+            "simple-groups pair must contain exactly two manifests",
+        ));
+    }
+    roots.sort_unstable();
     Ok(roots)
+}
+
+#[cfg(test)]
+mod pair_root_tests {
+    use std::cell::Cell;
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::run_roots_with;
+
+    #[test]
+    fn pair_root_refuses_on_third_entry_without_enumerating_the_remainder() {
+        let root = TempDir::new().expect("pair root");
+        for index in 0..64 {
+            fs::create_dir(root.path().join(format!("run-{index:02}"))).expect("run directory");
+        }
+        let visited = Cell::new(0_usize);
+        let error = run_roots_with(root.path(), |_| visited.set(visited.get() + 1))
+            .expect_err("third entry exceeds the exact pair bound");
+        assert!(error.to_string().contains("exactly two"));
+        assert_eq!(visited.get(), 3, "hostile remainder was enumerated");
+    }
 }
 
 fn validate_manifest(
