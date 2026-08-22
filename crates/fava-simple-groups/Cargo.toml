@@ -1,0 +1,15 @@
+[package]
+name = "fava-simple-groups"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+autolib = false
+
+[dependencies]
+fava-query.workspace = true
+fava-state.workspace = true
+fava-write.workspace = true
+
+[lints]
+workspace = true

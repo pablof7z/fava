@@ -544,6 +544,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-simple-groups"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-state",
+ "fava-write",
+]
+
+[[package]]
 name = "fava-state"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,26 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "lib",
+    crate_name = "fava_simple_groups",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-query:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "architecture",
+    crate_name = "fava_simple_groups_architecture",
+    srcs = ["tests/architecture.rs"],
+    edition = crate_edition(),
+    compile_data = ["Cargo.toml", "BUILD.bazel"],
+)
