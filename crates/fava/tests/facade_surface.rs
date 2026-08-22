@@ -21,7 +21,7 @@ fn facade_has_no_write_intent_compatibility_door() {
     let facade = include_str!("../src/lib.rs");
     let publication = include_str!("../src/publication.rs");
 
-    let write_exports = public_use_block(&facade, "pub use fava_write::{");
+    let write_exports = public_use_block(facade, "pub use fava_write::{");
     for removed in ["WriteIntent", "WritePayload"] {
         assert!(
             !write_exports
