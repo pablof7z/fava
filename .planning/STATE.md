@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
-status: executing
-stopped_at: Completed 07.1-11-PLAN.md
-last_updated: "2026-08-22T02:32:00.218Z"
+status: verifying
+stopped_at: Completed 07.1-12-PLAN.md
+last_updated: "2026-08-22T03:12:33.210Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-11 completed; authoritative publication and NIP-02 documentation aligned
-state_head: 28130d400e290aa90d675bf4354dd08fe097d3ac
+last_activity_desc: Plan 07.1-12 completed; controlled Croissant pair and full phase matrix passed
+state_head: 6b913b4e274cc97c5e2cf82fccb3f972188a3ff0
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
   percent: 57
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
+Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — READY FOR VERIFICATION
 Plan: 12 of 12
-Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-11 completed; authoritative publication and NIP-02 documentation aligned
+Status: Phase complete — ready for verification
+Last activity: 2026-08-22 — Plan 07.1-12 completed; controlled Croissant pair and full phase matrix passed
 
 Progress: [██████░░░░] 57%
 
@@ -80,6 +80,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P09 | 13min | 3 tasks | 14 files |
 | Phase 07.1 P10 | 11min | 2 tasks | 9 files |
 | Phase 07.1 P11 | 17min | 3 tasks | 9 files |
+| Phase 07.1 P12 | 34min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Applications publish payloads through optional inert by/to scopes and receive Write after synchronous durable acceptance; neutral WriteIntent and AcceptedWrite remain internal owner vocabulary.
 - [Phase 07.1]: ContactList accounts for every p row; NIP-02 edit materialization owns foreign tag and content preservation.
 - [Phase 07.1]: Simple-groups consumes the universal publication door without claiming Phase 07.1.1 delivery or a current ValueSet surface.
+- [Phase 07.1]: Croissant is supervised as its exact executable, with executable SHA and source HEAD recorded separately.
+- [Phase 07.1]: Kind 9007 and kind 3 cross the same public kind-blind publication lifecycle.
+- [Phase 07.1]: PublishError retains the complete terminal Receipt without boxing; narrow Clippy allowances document that evidence boundary.
+- [Phase 07.1]: Seed-bearing Cargo invocations use --quiet so Cargo cannot echo process-memory secrets in argv diagnostics.
 
 ### Pending Todos
 
@@ -155,6 +160,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T02:32:00.127Z
-Stopped at: Completed 07.1-11-PLAN.md
+Last session: 2026-08-22T03:12:33.115Z
+Stopped at: Completed 07.1-12-PLAN.md
 Resume file: None
