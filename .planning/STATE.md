@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 current_phase: 07.1.1
 current_phase_name: Multi-Relay Simple Groups
-status: executing
-stopped_at: Completed 07.1.1-11-PLAN.md
-last_updated: "2026-08-22T13:04:41.496Z"
+status: complete
+stopped_at: Completed 07.1.1-12-PLAN.md
+last_updated: "2026-08-22T13:48:03Z"
 last_activity: 2026-08-22
-last_activity_desc: Phase 07.1.1 execution started
-state_head: 76c69bef372faebc27102803c08171718adcb15c
+last_activity_desc: Phase 07.1.1 complete with retained controlled pair and all gates green
+state_head: 1cd0fb34a9f4ce8d2a9cbd31dcde60ba688dd90f
 progress:
   total_phases: 14
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 36
-  completed_plans: 35
-  percent: 64
+  completed_plans: 36
+  percent: 71
 ---
 
 # Project State
@@ -23,19 +23,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 07.1.1 — Multi-Relay Simple Groups
+**Current focus:** Phase 8 — Authentication, Hostile Boundaries, and Boundedness
 
 ## Current Position
 
-Phase: 07.1.1 (Multi-Relay Simple Groups) — EXECUTING
+Phase: 07.1.1 (Multi-Relay Simple Groups) — COMPLETE
 Plan: 12 of 12
-Status: Ready to execute
-Last activity: 2026-08-22 — Phase 07.1.1 execution started
+Status: Complete
+Last activity: 2026-08-22 — Phase 07.1.1 completed with retained controlled pair and all gates green
 
-Progress: [██████░░░░] 64%
+Progress: [███████░░░] 71%
 
-Phase progress is 8/14. Phases 1-6 predate GSD plans; Phases 06.1 and 7 completed
-all authored plans and their review and verification gates.
+Phase progress is 10/14. Phases 1-6 predate GSD plans; Phases 06.1, 7, 07.1,
+and 07.1.1 completed all authored plans and their review and verification gates.
 
 ## Performance Metrics
 
@@ -93,6 +93,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1.1 P09 | 24min | 3 tasks | 13 files |
 | Phase 07.1.1 P10 | 21min | 3 tasks | 7 files |
 | Phase 07.1.1 P11 | 40min | 3 tasks | 10 files |
+| Phase 07.1.1 P12 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Two controlled Croissant children remain individually owned and both cleanup results are captured before failure propagation.
 - [Phase 07.1.1]: Public multi-relay group behavior retains relay-local record authority while ordinary Fava owners handle observation and publication.
 - [Phase 07.1.1]: Only twice-scanned complete author-sealed evidence is atomically promoted; pair verification requires exactly two runs and four distinct children.
+- [Phase 07.1.1]: Controlled canary evidence is durably retained at the exact owner-private path named by 07.1.1-12-PAIR-ROOT.txt and remains excluded from Git by the canary evidence policy.
 
 ### Pending Todos
 
@@ -200,6 +202,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T13:04:41.399Z
-Stopped at: Completed 07.1.1-11-PLAN.md
+Last session: 2026-08-22T13:48:03Z
+Stopped at: Completed 07.1.1-12-PLAN.md
 Resume file: None
