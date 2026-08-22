@@ -25,8 +25,10 @@ const REMOVE: u8 = 2;
 const CODEC_LEN: usize = 33;
 mod bounds;
 mod contact_list;
+mod query;
 
 pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
+pub use query::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
 use bounds::MAX_TAGS;
 

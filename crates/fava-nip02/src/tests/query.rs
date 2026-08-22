@@ -10,7 +10,7 @@ use fava_state::{CachedEvent, RelayEvidence};
 use fava_write::{EventValue, Kind};
 use nostr::key::Keys;
 
-use crate::{contact_list, followers_of, follows_of, IntoContactAuthors};
+use crate::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
 use super::{source, tag};
 
@@ -25,6 +25,10 @@ fn snapshot(events: Vec<fava_write::Event>) -> QuerySnapshot {
             .collect(),
         &[],
     )
+}
+
+fn accepts_sealed_trait(authors: impl IntoContactAuthors) -> fava_query::Query {
+    contact_list(authors)
 }
 
 #[test]
@@ -43,10 +47,7 @@ fn one_many_and_empty_contact_list_queries_keep_a_concrete_author_axis() {
 
     let authors = vec![alice, bob, alice];
     let many = contact_list(authors.as_slice());
-    assert_eq!(
-        many.selection().authors,
-        Some(BTreeSet::from([alice, bob]))
-    );
+    assert_eq!(many.selection().authors, Some(BTreeSet::from([alice, bob])));
     assert_eq!(many.result_limit(), None);
 
     let empty: &[fava_write::PublicKey] = &[];
@@ -54,9 +55,6 @@ fn one_many_and_empty_contact_list_queries_keep_a_concrete_author_axis() {
     assert_eq!(none.selection().authors, Some(BTreeSet::new()));
     assert_ne!(none, fava_query::Query::events().kind(Kind::ContactList));
 
-    fn accepts_sealed_trait(authors: impl IntoContactAuthors) -> fava_query::Query {
-        contact_list(authors)
-    }
     assert_eq!(accepts_sealed_trait(&authors), many);
 }
 
@@ -73,9 +71,7 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
         status: SourceStatus::Open,
         events: vec![alice_old, bob_only.clone(), alice_new.clone()]
             .into_iter()
-            .map(|event| {
-                SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default()))
-            })
+            .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
             .collect(),
     }];
 
@@ -154,7 +150,10 @@ fn follow_projection_is_ordered_repeatable_and_safe_for_two_hop_concurrency() {
         "",
         vec![tag(&["p", &dave.public_key().to_hex()])],
     );
-    assert_eq!(follows_of(&snapshot(vec![bob_list])), vec![dave.public_key()]);
+    assert_eq!(
+        follows_of(&snapshot(vec![bob_list])),
+        vec![dave.public_key()]
+    );
 
     let left_snapshot = Arc::clone(&first_hop_snapshot);
     let right_snapshot = Arc::clone(&first_hop_snapshot);
