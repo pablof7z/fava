@@ -14,7 +14,7 @@ LABEL org.opencontainers.image.revision="${FAVA_REVISION}" \
 
 WORKDIR /source
 COPY --chown=65532:65532 source/ /source/
-COPY --chown=65532:65532 control/source.manifest /attestation/source.manifest
+COPY --chown=65532:65532 --chmod=0644 control/source.manifest /attestation/source.manifest
 
 RUN mkdir -p /home/fava \
     && chown 65532:65532 /home/fava \
