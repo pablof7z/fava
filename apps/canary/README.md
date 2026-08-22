@@ -18,14 +18,14 @@ unavailable prerequisite; they never silently skip.
 Run the deterministic local scenario:
 
 ```sh
-cargo run --manifest-path apps/canary/Cargo.toml -- \
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run lab-real-relay-smoke --seed <unique-seed>
 ```
 
 Run bounded read-only public-relay reconnaissance only with an explicit URL:
 
 ```sh
-cargo run --manifest-path apps/canary/Cargo.toml -- \
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   recon --relay wss://relay.example --seed <unique-seed>
 ```
 
@@ -45,7 +45,7 @@ Run it twice beneath one fresh pair root, then verify the pair:
 
 ```sh
 pair_root="$(mktemp -d apps/canary/runs/phase-07.1-pair.XXXXXX)"
-cargo run --manifest-path apps/canary/Cargo.toml -- \
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
   --relay-bin /Users/pablofernandez/Work/croissant/croissant \
   --seed "$first_private_seed" --runs-dir "$pair_root"
