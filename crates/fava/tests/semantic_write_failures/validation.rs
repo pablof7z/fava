@@ -14,7 +14,10 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     );
     assert!(
         first
-            .publish(edit_intent(first_keys.public_key(), Kind::ContactList))
+            .by(first_keys.public_key())
+            .to([support::relay_url()])
+            .expect("explicit route validates")
+            .publish(failure_support::edit(Kind::ContactList))
             .is_err()
     );
     assert_eq!(first_materializer.calls(), 1);
@@ -30,17 +33,20 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .expect("valid first generation accepts");
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted_event_id = accepted
+        .receipt()
+        .expect("accepted receipt reads")
+        .current
+        .id();
     materializer.set(WRONG_TIMESTAMP);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "new source", &[]),
     );
-    let failed = wait_failure(&fava, accepted.receipt_id).await;
+    let failed = wait_failure(&fava, accepted.receipt_id()).await;
 
-    assert_eq!(failed.current.id(), accepted.current.id());
+    assert_eq!(failed.current.id(), accepted_event_id);
     assert_eq!(
         failed.current.publication.materialization_id,
         MaterializationId::from_u64(1)
@@ -70,7 +76,10 @@ async fn wrong_author_or_kind_refuses_before_custody() {
         );
 
         assert!(
-            fava.publish(edit_intent(keys.public_key(), Kind::ContactList))
+            fava.by(keys.public_key())
+                .to([support::relay_url()])
+                .expect("explicit route validates")
+                .publish(failure_support::edit(Kind::ContactList))
                 .is_err()
         );
         assert_eq!(materializer.calls(), 1);

@@ -6,7 +6,8 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 
-use super::failure_support::{assembly, edit_intent};
+use super::failure_support::{assembly, edit, publish_edit};
+use super::support::relay_url;
 use super::{ControlledMaterializer, ERROR, PANIC, VALID, WRONG_TIMESTAMP};
 
 #[tokio::test(flavor = "current_thread")]
@@ -24,15 +25,16 @@ async fn every_pre_custody_provider_failure_releases_active_reservation() {
     for failure in [ERROR, PANIC, WRONG_TIMESTAMP] {
         materializer.set(failure);
         assert!(
-            fava.publish(edit_intent(keys.public_key(), Kind::ContactList))
+            fava.by(keys.public_key())
+                .to([relay_url()])
+                .expect("explicit route validates")
+                .publish(edit(Kind::ContactList))
                 .is_err()
         );
         materializer.set(VALID);
-        let accepted = fava
-            .publish(edit_intent(keys.public_key(), Kind::ContactList))
-            .expect("the same sole capacity slot is reusable");
+        let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
         assert!(
-            fava.cancel_write(accepted.receipt_id)
+            fava.cancel_write(accepted.receipt_id())
                 .expect("accepted generation cancels")
         );
     }

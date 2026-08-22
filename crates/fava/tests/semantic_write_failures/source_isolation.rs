@@ -15,7 +15,7 @@ use super::support::{
     BlockingSigner, NoopTransport, RecordingPublisher, relay_evidence, signed_source,
     wait_for_materialization,
 };
-use super::{ControlledMaterializer, edit_intent, wait_failure};
+use super::{ControlledMaterializer, publish_edit, wait_failure};
 
 fn build<C, W>(
     keys: &Keys,
@@ -47,12 +47,10 @@ async fn cache_source_closure_keeps_write_store_source_live() {
     let store = Arc::new(MemoryWriteStore::default());
     let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
     let fava = build(&keys, Arc::clone(&cache), Arc::clone(&store), materializer);
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .expect("first generation accepts");
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
 
     cache.close_observations();
-    let failure = wait_failure(&fava, accepted.receipt_id).await;
+    let failure = wait_failure(&fava, accepted.receipt_id()).await;
     assert!(
         failure
             .current
@@ -65,7 +63,7 @@ async fn cache_source_closure_keeps_write_store_source_live() {
     store
         .accept_materialized(EventValue::Signed(source.clone()))
         .expect("independent signed local source commits");
-    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
 
     assert_eq!(
         rematerialized.current.publication.materialization_source,
@@ -90,12 +88,10 @@ async fn write_store_source_closure_keeps_cache_source_live() {
     let store = Arc::new(FaultingWriteStore::new());
     let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
     let fava = build(&keys, Arc::clone(&cache), Arc::clone(&store), materializer);
-    let accepted = fava
-        .publish(edit_intent(keys.public_key(), Kind::ContactList))
-        .expect("first generation accepts");
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
 
     store.close_observations();
-    let failure = wait_failure(&fava, accepted.receipt_id).await;
+    let failure = wait_failure(&fava, accepted.receipt_id()).await;
     assert!(
         failure
             .current
@@ -111,7 +107,7 @@ async fn write_store_source_closure_keeps_cache_source_live() {
             relay_evidence(),
         ))])
         .expect("independent cache source commits");
-    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
 
     assert_eq!(
         rematerialized.current.publication.materialization_source,

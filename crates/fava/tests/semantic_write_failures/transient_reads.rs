@@ -1,16 +1,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Kind, ReceiptOutcome};
+use fava::{Kind, ReceiptOutcome, all};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::{CacheMutation, CachedEvent};
 use nostr::key::Keys;
 
+use super::failure_support::publish_edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, intent,
-    publication_builder, relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
+    BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, publication_builder,
+    relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -30,9 +31,7 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads(1);
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
-        .expect("custody commits before transient read");
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
 
     wait_for_signer(&signer, 1).await;
     let source = signed_source(&keys, Kind::ContactList, 10, "new source", &[]);
@@ -42,9 +41,9 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
             relay_evidence(),
         ))])
         .expect("source change commits");
-    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
-    assert_eq!(rematerialized.receipt_id, accepted.receipt_id);
+    assert_eq!(rematerialized.receipt_id, accepted.receipt_id());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -63,9 +62,7 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads_after_signature(4);
-    let accepted = fava
-        .publish(intent(keys.public_key(), Kind::ContactList))
-        .expect("semantic write accepts");
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
 
     tokio::time::timeout(Duration::from_secs(1), async {
         while publisher.attempts().is_empty() {
@@ -74,12 +71,9 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
     })
     .await
     .expect("delivery lane resumes after transient reads");
-    let terminal = fava
-        .wait_terminal(accepted.receipt_id)
-        .await
-        .expect("same receipt settles");
+    let terminal = accepted.settled(all()).await.expect("same receipt settles");
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
-    assert_eq!(terminal.receipt_id, accepted.receipt_id);
+    assert_eq!(terminal.receipt_id, accepted.receipt_id());
     assert_eq!(signer.calls(), 1);
     assert_eq!(publisher.attempts().len(), 1);
 }

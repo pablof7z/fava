@@ -16,10 +16,11 @@ use fava_state::{CacheMutation, CachedEvent, RelayAccess, RelaySessionKey, Relay
 use nostr::key::Keys;
 use tokio::sync::{broadcast, watch};
 
+use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, automatic_intent, publication_builder,
-    relay_evidence, signed_source, wait_for_signer,
+    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_evidence,
+    signed_source, wait_for_signer,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -41,11 +42,12 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     .build()
     .unwrap();
     let accepted = fava
-        .publish(automatic_intent(keys.public_key(), Kind::ContactList))
+        .by(keys.public_key())
+        .publish(edit(Kind::ContactList))
         .unwrap();
     wait_for_signer(&signer, 1).await;
     wait_for_opens(&router, 1).await;
-    wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+    wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.route_revision >= 1
     })
     .await;
@@ -69,7 +71,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
             relay_evidence(),
         ))])
         .unwrap();
-    wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+    wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.current.publication.materialization_id == fava::MaterializationId::from_u64(2)
     })
     .await;
@@ -77,7 +79,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     wait_for_signer(&signer, 2).await;
     wait_for_opens(&router, 2).await;
     let later_session = RelaySessionKey::new(later, RelayAccess::public());
-    let rematerialized = wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+    let rematerialized = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.destinations().contains_key(&later_session)
     })
     .await;
@@ -88,7 +90,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     wait_for_route_commits(&store, baseline_commits.saturating_add(1)).await;
 
     let second_session = RelaySessionKey::new(second, RelayAccess::public());
-    let updated = wait_for_receipt(&fava, accepted.receipt_id, |receipt| {
+    let updated = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.destinations().contains_key(&second_session)
     })
     .await;
