@@ -260,14 +260,12 @@ common_run() {
   if [ ! -d "$target" ]; then
     mkdir "$target"
   fi
-  if [ ! -d "$target/tmp" ]; then
-    mkdir "$target/tmp"
-  fi
   docker run --rm --name "$run_name" \
     --network none \
     --cap-drop ALL \
     --security-opt no-new-privileges \
     --volume "$target:/target" \
+    --tmpfs /target/tmp:rw,nosuid,nodev,size=67108864 \
     --env CARGO_INCREMENTAL=0 \
     --env CARGO_TARGET_DIR=/target \
     --env TMPDIR=/target/tmp \
