@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use fava_query::{EventRecord, QuerySnapshot, SingleLetterTag};
 use fava_state::{RelayEvidence, RelayUrl};
-use fava_write::{EventValue, Kind, PublicKey, Tag, Timestamp};
+use fava_write::{EventValue, Kind, PublicKey, ReplaceableEventEdit, Tag, Timestamp};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
@@ -191,6 +191,56 @@ fn materialize(
     SimpleGroups::materializer()
         .materialize(edit, author, source, Timestamp::from(created_at))
         .expect("saved-list materializes")
+}
+
+fn duplicate_host_edit() -> ReplaceableEventEdit {
+    fn text(bytes: &mut Vec<u8>, value: &str) {
+        bytes.extend_from_slice(
+            &u32::try_from(value.len())
+                .expect("fixture length")
+                .to_be_bytes(),
+        );
+        bytes.extend_from_slice(value.as_bytes());
+    }
+
+    let mut bytes = vec![1];
+    text(&mut bytes, "photos");
+    bytes.extend_from_slice(&2_u16.to_be_bytes());
+    text(&mut bytes, "wss://a.example");
+    text(&mut bytes, "wss://a.example");
+    bytes.push(0);
+    ReplaceableEventEdit::new(Kind::from_u16(10_009), None, bytes)
+        .expect("neutral edit accepts bounded opaque bytes")
+}
+
+#[test]
+fn saved_materializer_refuses_duplicate_encoded_hosts() {
+    let actor = Keys::generate();
+    let edit = duplicate_host_edit();
+    let materializer = SimpleGroups::materializer();
+    assert!(!materializer.supports(&edit));
+    assert!(
+        materializer
+            .materialize(&edit, actor.public_key(), None, Timestamp::from(10))
+            .is_err()
+    );
+
+    let source = signed_source(
+        &actor,
+        10,
+        "opaque encrypted bytes",
+        vec![tag(&["group", "photos", "wss://a.example", "existing"])],
+    );
+    assert!(
+        materializer
+            .materialize(
+                &edit,
+                actor.public_key(),
+                Some(&source),
+                Timestamp::from(11),
+            )
+            .is_err()
+    );
 }
 
 fn signed_source(keys: &Keys, created_at: u64, content: &str, tags: Vec<Tag>) -> fava_write::Event {

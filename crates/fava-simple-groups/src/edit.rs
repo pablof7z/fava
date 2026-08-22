@@ -283,8 +283,13 @@ impl<'a> Input<'a> {
             return Err(codec_refusal("invalid saved-list host count"));
         }
         let mut hosts = Vec::with_capacity(count);
+        let mut seen = std::collections::BTreeSet::new();
         for _ in 0..count {
-            hosts.push(self.relay()?);
+            let host = self.relay()?;
+            if !seen.insert(host.clone()) {
+                return Err(codec_refusal("duplicate saved-list group host"));
+            }
+            hosts.push(host);
         }
         Ok((id, hosts))
     }
@@ -396,13 +401,17 @@ fn apply_group(
     }
     match operation {
         GroupOperation::Save(name) => {
-            for host in hosts.iter().filter(|host| !found.contains(*host)) {
-                tags.push(group_row(id, host, name)?);
+            for host in hosts {
+                if found.insert(host.clone()) {
+                    tags.push(group_row(id, host, name)?);
+                }
             }
         }
         GroupOperation::Rename(name) => {
-            for host in hosts.iter().filter(|host| !found.contains(*host)) {
-                tags.push(group_row(id, host, Some(name))?);
+            for host in hosts {
+                if found.insert(host.clone()) {
+                    tags.push(group_row(id, host, Some(name))?);
+                }
             }
         }
         GroupOperation::Remove => {}
