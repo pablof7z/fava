@@ -3,6 +3,7 @@
 mod artifacts;
 mod automatic_publication;
 mod automatic_support;
+mod croissant;
 mod grouping;
 mod hostile;
 mod live;
