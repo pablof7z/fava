@@ -126,6 +126,14 @@ fn code_lines(source: &str) -> String {
 fn public_exports(root: &str) -> BTreeSet<String> {
     let mut exports = BTreeSet::new();
     for line in root.lines().map(str::trim) {
+        for prefix in ["pub struct ", "pub enum ", "pub trait ", "pub type "] {
+            if let Some(name) = line.strip_prefix(prefix).and_then(|body| {
+                body.split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                    .next()
+            }) {
+                exports.insert(name.to_owned());
+            }
+        }
         let Some(body) = line.strip_prefix("pub use ") else {
             continue;
         };
@@ -244,6 +252,7 @@ fn capability_sources_and_exports_own_no_lifecycle() {
             "GroupRuntime",
             "GroupProvider",
             "GroupStore",
+            "GroupLifecycle",
         ] {
             assert!(
                 !code.contains(forbidden),

@@ -191,8 +191,12 @@ spec_crates = ["fava-bookmarks"]
 name = "Group"
 source = "nostr"
 protocol = "NIP-29"
-meaning = "A relay-based Nostr group; Fava's Group value aggregates one opaque group id over an application-selected non-empty host-relay set while preserving each relay's independent authority."
+meaning = "A relay-based Nostr group; Fava's Group value presents one opaque group id over an application-selected non-empty host-relay set while each relay remains independently authoritative."
 owner = "fava-simple-groups"
+counterexample = "A value that lets one host's record answer for another host or silently selects one host is not Fava's Group."
+lifecycle = "Group and every capability helper are immutable or pure values; ordinary Fava query and publication owners retain all work and state."
+forcing_requirement = "Applications must read and publish across selected NIP-29 hosts while keeping exact relay-local record authority and explicit destinations."
+falsifier = "The public API and architecture targets must fail if per-host authority collapses, a helper retains state, or a universal owner gains an NIP-29 branch."
 symbols = [
     "fava_simple_groups::Group",
     "fava_simple_groups::GroupAdmins",
@@ -210,23 +214,6 @@ symbols = [
     "fava_simple_groups::SimpleGroups",
 ]
 crates = ["fava-simple-groups"]
-spec_symbols = [
-    "Group",
-    "GroupAdmins",
-    "GroupError",
-    "GroupMembers",
-    "GroupMetadata",
-    "GroupParticipants",
-    "GroupPins",
-    "GroupRecords",
-    "GroupRoles",
-    "GroupSnapshot",
-    "PinnedItem",
-    "SavedGroup",
-    "SavedRelay",
-    "SimpleGroups",
-]
-spec_crates = ["fava-simple-groups"]
 
 [[term]]
 name = "RelayList"

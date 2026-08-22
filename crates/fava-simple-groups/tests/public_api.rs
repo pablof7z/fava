@@ -14,6 +14,11 @@ use fava_simple_groups::{
     GroupRecords, GroupRoles, GroupSnapshot, PinnedItem, SavedGroup, SavedRelay, SimpleGroups,
 };
 
+type ReadmePublishResult = Result<Write, Box<dyn Error>>;
+type PublishUnsigned = fn(&Fava, &Group, fava_write::UnsignedEvent) -> ReadmePublishResult;
+type PublishSigned = fn(&Fava, &Group, fava_write::Event) -> ReadmePublishResult;
+type PublishSavedEdit = fn(&Fava, &Group, PublicKey) -> ReadmePublishResult;
+
 fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
     GroupMetadata::from_event(event).map(|metadata| metadata.id().to_owned())
 }
@@ -223,12 +228,9 @@ fn readme_cancels_and_closes(
 
 #[test]
 fn readme_facade_flow_compiles_externally() {
-    let _: fn(&Fava, &Group, fava_write::UnsignedEvent) -> Result<Write, Box<dyn Error>> =
-        readme_publishes_prepared_unsigned;
-    let _: fn(&Fava, &Group, fava_write::Event) -> Result<Write, Box<dyn Error>> =
-        readme_publishes_prepared_signed;
-    let _: fn(&Fava, &Group, PublicKey) -> Result<Write, Box<dyn Error>> =
-        readme_publishes_saved_edit;
+    let _: PublishUnsigned = readme_publishes_prepared_unsigned;
+    let _: PublishSigned = readme_publishes_prepared_signed;
+    let _: PublishSavedEdit = readme_publishes_saved_edit;
     let _: fn(&Fava, &Observation, &Write) -> Result<(), fava::PublicationError> =
         readme_cancels_and_closes;
 }

@@ -18,7 +18,7 @@ use thiserror::Error;
 /// One accepted publication obligation as seen by an application.
 #[derive(Clone)]
 pub struct Write {
-    write_id: WriteId,
+    id: WriteId,
     receipt_id: ReceiptId,
     publication: Publication,
 }
@@ -27,7 +27,7 @@ impl Write {
     /// Stable identity of this accepted publication obligation.
     #[must_use]
     pub const fn write_id(&self) -> WriteId {
-        self.write_id
+        self.id
     }
 
     /// Stable reattachable identity of this publication receipt.
@@ -74,7 +74,7 @@ impl fmt::Debug for Write {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Write")
-            .field("write_id", &self.write_id)
+            .field("write_id", &self.id)
             .field("receipt_id", &self.receipt_id)
             .finish_non_exhaustive()
     }
@@ -310,7 +310,7 @@ where
     let publication = publication.ok_or(PublicationError::NotConfigured)?;
     let accepted = publication.accept(intent)?;
     Ok(Write {
-        write_id: accepted.write_id,
+        id: accepted.write_id,
         receipt_id: accepted.receipt_id,
         publication: publication.clone(),
     })
