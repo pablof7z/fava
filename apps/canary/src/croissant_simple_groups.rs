@@ -2,11 +2,14 @@
 
 use std::fs;
 use std::future::Future;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
+use futures_util::FutureExt;
 use nostr::key::Keys;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use tokio::sync::oneshot;
 
 use crate::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown,
@@ -244,37 +247,31 @@ where
     Fut: Future<Output = CanaryResult<T>>,
 {
     let [supervisor_a, supervisor_b] = supervisors;
-    let process_a = supervisor_a
-        .start()
+    let process_a = start_owned(supervisor_a)
         .await
         .map_err(|error| OwnedPairFailure {
             ready: Vec::new(),
             teardown: Vec::new(),
             flow_error: None,
-            startup_error: Some(error.to_string()),
+            startup_error: Some(error),
         })?;
-    let ready_a = process_a.ready_fact();
-    let process_b = match supervisor_b.start().await {
+    let ready_a = process_a.ready.clone();
+    let process_b = match start_owned(supervisor_b).await {
         Ok(process) => process,
         Err(error) => {
-            let cleanup_a = process_a
-                .stop()
-                .await
-                .map_err(|cleanup| cleanup.to_string());
+            let cleanup_a = process_a.stop().await;
             return Err(OwnedPairFailure {
                 ready: vec![ready_a],
                 teardown: vec![cleanup_a],
                 flow_error: None,
-                startup_error: Some(error.to_string()),
+                startup_error: Some(error),
             });
         }
     };
-    let ready_b = process_b.ready_fact();
+    let ready_b = process_b.ready.clone();
     let ready = [ready_a, ready_b];
-    let flow = flow(ready.clone()).await;
-    let cleanup_a = process_a.stop().await.map_err(|error| error.to_string());
-
-    let cleanup_b = process_b.stop().await.map_err(|error| error.to_string());
+    let flow = run_flow(flow, ready.clone()).await;
+    let (cleanup_a, cleanup_b) = tokio::join!(process_a.stop(), process_b.stop());
     match (flow, cleanup_a, cleanup_b) {
         (Ok(flow), Ok(teardown_a), Ok(teardown_b)) => Ok(OwnedPairCompletion {
             ready,
@@ -288,6 +285,77 @@ where
             startup_error: None,
         }),
     }
+}
+
+#[derive(Debug)]
+struct OwnedCroissantProcess {
+    ready: CroissantReadyFact,
+    stop: Option<oneshot::Sender<()>>,
+    teardown: oneshot::Receiver<Result<CroissantTeardown, String>>,
+}
+
+impl OwnedCroissantProcess {
+    fn new(process: crate::croissant::CroissantProcess) -> Self {
+        let ready = process.ready_fact();
+        let (stop, stop_receiver) = oneshot::channel();
+        let (teardown_sender, teardown) = oneshot::channel();
+        tokio::spawn(async move {
+            let _ = stop_receiver.await;
+            let result = process.stop().await.map_err(|error| error.to_string());
+            let _ = teardown_sender.send(result);
+        });
+        Self {
+            ready,
+            stop: Some(stop),
+            teardown,
+        }
+    }
+
+    async fn stop(mut self) -> Result<CroissantTeardown, String> {
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+        self.teardown
+            .await
+            .map_err(|_| "Croissant child owner ended without teardown evidence".to_owned())?
+    }
+}
+
+async fn start_owned(supervisor: CroissantSupervisor) -> Result<OwnedCroissantProcess, String> {
+    let (sender, receiver) = oneshot::channel();
+    tokio::spawn(async move {
+        let result = supervisor
+            .start()
+            .await
+            .map(OwnedCroissantProcess::new)
+            .map_err(|error| error.to_string());
+        let _ = sender.send(result);
+    });
+    receiver
+        .await
+        .map_err(|_| "Croissant child start owner ended without a result".to_owned())?
+}
+
+async fn run_flow<T, F, Fut>(flow: F, ready: [CroissantReadyFact; 2]) -> CanaryResult<T>
+where
+    F: FnOnce([CroissantReadyFact; 2]) -> Fut,
+    Fut: Future<Output = CanaryResult<T>>,
+{
+    let future = catch_unwind(AssertUnwindSafe(|| flow(ready)))
+        .map_err(|payload| panic_error(payload.as_ref()))?;
+    AssertUnwindSafe(future)
+        .catch_unwind()
+        .await
+        .map_err(|payload| panic_error(payload.as_ref()))?
+}
+
+fn panic_error(payload: &(dyn std::any::Any + Send)) -> CanaryError {
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload");
+    CanaryError::new(format!("two-child Croissant flow panicked: {message}"))
 }
 
 fn error(value: impl std::fmt::Display) -> CanaryError {
