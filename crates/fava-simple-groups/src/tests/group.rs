@@ -13,7 +13,10 @@ fn relay(url: &str) -> RelayUrl {
 fn group_construction_refuses_empty_oversized_and_infinite_hosts() {
     let host = relay("wss://groups.example");
 
-    assert_eq!(Group::on(Vec::<RelayUrl>::new(), "photos"), Err(GroupError::EmptyHosts));
+    assert_eq!(
+        Group::on(Vec::<RelayUrl>::new(), "photos"),
+        Err(GroupError::EmptyHosts)
+    );
 
     let duplicate_bound_plus_one = vec![host.clone(); 257];
     assert_eq!(
@@ -84,6 +87,9 @@ fn group_construction_preserves_first_occurrence_order() {
     )
     .expect("bounded hosts normalize");
 
-    assert_eq!(group.hosts().collect::<Vec<_>>(), vec![first, second, third]);
+    assert_eq!(
+        group.hosts().collect::<Vec<_>>(),
+        vec![first, second, third]
+    );
     assert_eq!(group.id(), " photos ");
 }

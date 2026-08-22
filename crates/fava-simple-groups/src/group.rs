@@ -1,12 +1,12 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use fava_query::{Query, QueryError};
 use fava_state::RelayUrl;
-use fava_write::{
-    Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError, WriteRouting,
-};
+use fava_write::{Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError};
 
 use crate::GroupRecords;
+use crate::bounds::{MAX_GROUP_HOST_INPUT_ITEMS, MAX_GROUP_ID_BYTES, collect_at_most};
 
 /// One opaque NIP-29 group id over an application-selected host set.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -24,7 +24,7 @@ pub enum GroupError {
     EmptyHosts,
     /// Host input exceeds the shared explicit-route bound.
     TooManyHosts {
-        /// Number of distinct hosts observed before refusal.
+        /// Total host inputs observed before refusal.
         actual: usize,
         /// Maximum supported distinct host count.
         maximum: usize,
@@ -117,17 +117,35 @@ impl Group {
         I: IntoIterator,
         I::Item: IntoRelayUrl,
     {
-        let parsed = hosts
+        let id = id.into();
+        if id.is_empty() {
+            return Err(GroupError::EmptyId);
+        }
+        if id.len() > MAX_GROUP_ID_BYTES {
+            return Err(GroupError::GroupIdTooLong {
+                bytes: id.len(),
+                maximum: MAX_GROUP_ID_BYTES,
+            });
+        }
+        let inputs = collect_at_most(hosts, MAX_GROUP_HOST_INPUT_ITEMS).map_err(|actual| {
+            GroupError::TooManyHosts {
+                actual,
+                maximum: MAX_GROUP_HOST_INPUT_ITEMS,
+            }
+        })?;
+        let parsed = inputs
             .into_iter()
             .map(IntoRelayUrl::into_relay_url)
             .collect::<Result<Vec<_>, _>>()?;
-        let WriteRouting::Explicit(hosts) = WriteRouting::explicit(parsed)? else {
-            unreachable!("explicit route construction returns an explicit route")
-        };
-        Ok(Self {
-            hosts,
-            id: id.into(),
-        })
+        if parsed.is_empty() {
+            return Err(GroupError::EmptyHosts);
+        }
+        let mut seen = BTreeSet::new();
+        let hosts = parsed
+            .into_iter()
+            .filter(|host| seen.insert(host.clone()))
+            .collect();
+        Ok(Self { hosts, id })
     }
 
     /// Return the opaque group id exactly as supplied.
