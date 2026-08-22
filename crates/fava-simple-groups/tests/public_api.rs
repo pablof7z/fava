@@ -181,3 +181,17 @@ fn management_event_signatures_compile_externally() {
     let _: fn(&Group, fava_write::UnsignedEvent) -> Result<fava_write::UnsignedEvent, GroupError> =
         Group::set_pins;
 }
+
+#[test]
+fn stale_readme_publication_surface_does_not_compile() {
+    let group = group(relay("wss://groups.example"), "photos").expect("one host");
+    let author =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .expect("generator public key");
+    let draft = EventBuilder::new(author, Kind::from_u16(9))
+        .created_at(Timestamp::from(7))
+        .build()
+        .expect("bounded draft");
+
+    let _stale_intent = group.publish(draft).expect("stale group-owned publication");
+}
