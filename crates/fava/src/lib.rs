@@ -41,6 +41,28 @@ use thiserror::Error;
 use tokio::sync::broadcast;
 
 /// Built engine instance for the selected local-source assembly.
+///
+/// Application publication does not expose neutral custody inputs or results:
+///
+/// ```compile_fail
+/// use fava::{AcceptedWrite, WriteIntent, WritePayload};
+/// ```
+///
+/// A neutral intent cannot enter the application publication door:
+///
+/// ```compile_fail
+/// fn old_publication_door(fava: &fava::Fava, intent: fava_write::WriteIntent) {
+///     let _ = fava.publish(intent);
+/// }
+/// ```
+///
+/// Terminal waiting belongs to the returned [`Write`]:
+///
+/// ```compile_fail
+/// async fn old_terminal_wait(fava: &fava::Fava, receipt: fava::ReceiptId) {
+///     let _ = fava.wait_terminal(receipt).await;
+/// }
+/// ```
 #[derive(Clone)]
 pub struct Fava {
     observer: Observer,
