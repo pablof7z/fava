@@ -1,14 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
+use nostr::nips::nip19::ToBech32;
 use serde_json::Value;
 use tempfile::TempDir;
-use nostr::nips::nip19::ToBech32;
 
 use super::{
     CroissantNip02Options, SecretScanHook, SecretScanStage, reject_cross_run_data,
-    run_croissant_nip02_scenario, run_croissant_nip02_scenario_inner,
-    verify_croissant_run_pair,
+    run_croissant_nip02_scenario, run_croissant_nip02_scenario_inner, verify_croissant_run_pair,
 };
 use crate::croissant_nip02_evidence::{
     artifact_seal, assert_secrets_absent, secret_needles, verify_artifact_seal,
@@ -38,12 +37,10 @@ async fn two_unique_public_flows_pass_exact_pair_verification() {
         assert!(!retained.contains("pair-first-private-sentinel"));
         assert!(!retained.contains("pair-second-private-sentinel"));
     }
-    let first_secret = crate::deterministic_keys(
-        "croissant-author\0pair-first-private-sentinel",
-    )
-    .expect("derived author")
-    .secret_key()
-    .to_secret_hex();
+    let first_secret = crate::deterministic_keys("croissant-author\0pair-first-private-sentinel")
+        .expect("derived author")
+        .secret_key()
+        .to_secret_hex();
     assert!(!retained_bytes(&first.run_directory).contains(&first_secret));
 }
 
@@ -97,7 +94,6 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
         );
     }
     fs::write(&manifest_path, &original).expect("restore manifest");
-
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -107,6 +103,13 @@ async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
         (SecretScanStage::AfterManifest, "post-manifest-secret-scan"),
     ] {
         let temporary = TempDir::new().expect("secret injection root");
+        let persistent_parent = temporary.path().join("persistent-parent");
+        let runs_directory = persistent_parent.join("runs");
+        fs::create_dir_all(&runs_directory).expect("persistent runs root");
+        let injected = crate::deterministic_keys(&format!("croissant-author\0{seed}"))
+            .expect("derived author")
+            .secret_key()
+            .to_secret_bytes();
         let hook: SecretScanHook = std::sync::Arc::new(move |actual, root, needles| {
             if actual == stage {
                 fs::write(root.join("app.stdout.log"), &needles[1])?;
@@ -117,7 +120,7 @@ async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
             CroissantNip02Options {
                 relay_binary: PathBuf::from(CROISSANT),
                 scenario_seed: seed.to_owned(),
-                runs_directory: temporary.path().to_path_buf(),
+                runs_directory: runs_directory.clone(),
             },
             Some(hook),
         )
@@ -127,6 +130,28 @@ async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
             error.to_string(),
             "retained Croissant evidence contained secret material",
             "wrong causal refusal at {stage:?}"
+        );
+        assert!(
+            fs::read_dir(&runs_directory)
+                .expect("persistent runs root remains readable")
+                .next()
+                .is_none(),
+            "a refused run remained beneath the persistent runs root at {stage:?}"
+        );
+        let parent_entries = fs::read_dir(&persistent_parent)
+            .expect("persistent parent remains readable")
+            .map(|entry| entry.expect("persistent parent entry").file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parent_entries,
+            [std::ffi::OsString::from("runs")],
+            "owner-private staging remained after refusal at {stage:?}"
+        );
+        assert!(
+            !retained_binary(&persistent_parent)
+                .windows(injected.len())
+                .any(|window| window == injected),
+            "injected derived secret remained after refusal at {stage:?}"
         );
     }
 }
@@ -160,7 +185,10 @@ fn old_data_negatives_reach_each_identity_check_in_both_directions() {
         .expect("inject second identity into first run");
         let error = reject_cross_run_data(&first, &second)
             .expect_err("first run must reject second-run data");
-        assert!(error.to_string().contains(field), "wrong causal check: {error}");
+        assert!(
+            error.to_string().contains(field),
+            "wrong causal check: {error}"
+        );
         fs::write(first_root.join("retained.bin"), b"clean").expect("clean first run");
 
         fs::write(
@@ -170,7 +198,10 @@ fn old_data_negatives_reach_each_identity_check_in_both_directions() {
         .expect("inject first identity into second run");
         let error = reject_cross_run_data(&first, &second)
             .expect_err("second run must reject first-run data");
-        assert!(error.to_string().contains(field), "wrong causal check: {error}");
+        assert!(
+            error.to_string().contains(field),
+            "wrong causal check: {error}"
+        );
         fs::write(second_root.join("retained.bin"), b"clean").expect("clean second run");
     }
 }
@@ -227,10 +258,9 @@ fn signed_evidence_rejects_mutated_verification_claims() {
         "started_unix_ms": 10,
         "ended_unix_ms": 20
     });
-    manifest["artifact_seal"] = serde_json::to_value(
-        artifact_seal(&keys, &manifest).expect("manifest seal"),
-    )
-    .expect("seal JSON");
+    manifest["artifact_seal"] =
+        serde_json::to_value(artifact_seal(&keys, &manifest).expect("manifest seal"))
+            .expect("seal JSON");
     verify_artifact_seal(&manifest).expect("control seal verifies");
 
     for (pointer, value) in [
@@ -335,6 +365,10 @@ fn manifest(root: &std::path::Path) -> Value {
 }
 
 fn retained_bytes(root: &std::path::Path) -> String {
+    String::from_utf8_lossy(&retained_binary(root)).into_owned()
+}
+
+fn retained_binary(root: &std::path::Path) -> Vec<u8> {
     fn collect(path: &std::path::Path, bytes: &mut Vec<u8>) {
         for entry in fs::read_dir(path).expect("artifact directory") {
             let path = entry.expect("artifact entry").path();
@@ -347,5 +381,5 @@ fn retained_bytes(root: &std::path::Path) -> String {
     }
     let mut bytes = Vec::new();
     collect(root, &mut bytes);
-    String::from_utf8_lossy(&bytes).into_owned()
+    bytes
 }

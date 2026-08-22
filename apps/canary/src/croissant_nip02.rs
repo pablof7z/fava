@@ -31,8 +31,8 @@ use crate::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown, process_is_alive,
 };
 use crate::croissant_nip02_evidence::{
-    SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, directory_contains,
-    manifest_roots, secret_needles, verify_artifact_seal, verify_hashes,
+    SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, directory_contains, manifest_roots,
+    secret_needles, verify_artifact_seal, verify_hashes,
 };
 use crate::publication_support::{wait_record, wait_terminal};
 use crate::semantic_write_support::{GateSigner, PendingSign, deterministic_finalize, next_sign};
@@ -87,9 +87,8 @@ enum SecretScanStage {
     AfterManifest,
 }
 
-type SecretScanHook = Arc<
-    dyn Fn(SecretScanStage, &Path, &[Vec<u8>]) -> CanaryResult<()> + Send + Sync,
->;
+type SecretScanHook =
+    Arc<dyn Fn(SecretScanStage, &Path, &[Vec<u8>]) -> CanaryResult<()> + Send + Sync>;
 
 /// Run the kind-9007 control and README NIP-02 flow through one public Fava assembly.
 ///
@@ -109,7 +108,7 @@ async fn run_croissant_nip02_scenario_inner(
     let seed_hash = hex::encode(Sha256::digest(options.scenario_seed.as_bytes()));
     let keys = deterministic_keys(&format!("croissant-author\0{}", options.scenario_seed))?;
     let mut artifacts =
-        RunArtifacts::create(&options.runs_directory, SCENARIO, &options.scenario_seed)?;
+        RunArtifacts::create_staged(&options.runs_directory, SCENARIO, &options.scenario_seed)?;
     let started = unix_ms()?;
     artifacts.record(
         "scenario_started",
@@ -468,14 +467,8 @@ fn finish_run(
         "# Controlled Croissant NIP-02 proof\n\n- Result: passed\n- Group: {}\n- Author: {}\n- Event: {}\n- Local revision: {}\n- Relay revision: {}\n",
         facts.group_id, facts.author, edit_id, facts.local_revision, facts.relay_revision,
     ))?;
-    let author_keys = deterministic_keys(&format!(
-        "croissant-author\0{}",
-        options.scenario_seed
-    ))?;
-    let target_keys = deterministic_keys(&format!(
-        "croissant-target\0{}",
-        options.scenario_seed
-    ))?;
+    let author_keys = deterministic_keys(&format!("croissant-author\0{}", options.scenario_seed))?;
+    let target_keys = deterministic_keys(&format!("croissant-target\0{}", options.scenario_seed))?;
     let secret_needles = secret_needles(
         options.scenario_seed.as_bytes(),
         [&author_keys, &target_keys],
@@ -548,9 +541,8 @@ fn finish_run(
         &secret_needles,
     )?;
     assert_secrets_absent(artifacts.root(), &secret_needles)?;
-    Ok(CroissantNip02Outcome {
-        run_directory: artifacts.root().to_owned(),
-    })
+    let run_directory = artifacts.promote()?;
+    Ok(CroissantNip02Outcome { run_directory })
 }
 
 fn run_secret_scan_hook(
@@ -598,10 +590,7 @@ pub fn verify_croissant_run_pair(runs_directory: impl AsRef<Path>) -> CanaryResu
     Ok(())
 }
 
-fn reject_cross_run_data(
-    first: &(PathBuf, Value),
-    second: &(PathBuf, Value),
-) -> CanaryResult<()> {
+fn reject_cross_run_data(first: &(PathBuf, Value), second: &(PathBuf, Value)) -> CanaryResult<()> {
     for field in [
         "group_id",
         "group_event_id",

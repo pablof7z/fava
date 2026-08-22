@@ -4,7 +4,11 @@ use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(unix)]
+use std::os::unix::fs::DirBuilderExt;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -13,6 +17,9 @@ use crate::{CanaryError, CanaryResult};
 
 pub(crate) struct RunArtifacts {
     root: PathBuf,
+    retained_root: Option<PathBuf>,
+    staging_parent: Option<PathBuf>,
+    run_id: String,
     evidence: File,
     sequence: u64,
 }
@@ -21,6 +28,40 @@ impl RunArtifacts {
     pub(crate) fn create(runs_dir: &Path, scenario: &str, seed: &str) -> CanaryResult<Self> {
         let run_id = run_id(scenario, seed);
         let root = runs_dir.join(run_id);
+        Self::create_at(root, None, None)
+    }
+
+    /// Create owner-private evidence outside the retained root until explicit promotion.
+    pub(crate) fn create_staged(runs_dir: &Path, scenario: &str, seed: &str) -> CanaryResult<Self> {
+        fs::create_dir_all(runs_dir)?;
+        let run_id = run_id(scenario, seed);
+        let retained_root = runs_dir.join(&run_id);
+        if retained_root.exists() {
+            return Err(CanaryError::new(format!(
+                "run directory already exists: {}; choose another seed",
+                retained_root.display()
+            )));
+        }
+        let staging_parent = create_private_staging_parent(runs_dir)?;
+        let staging_root = staging_parent.join(&run_id);
+        match Self::create_at(
+            staging_root,
+            Some(retained_root),
+            Some(staging_parent.clone()),
+        ) {
+            Ok(artifacts) => Ok(artifacts),
+            Err(error) => {
+                let _ = fs::remove_dir_all(staging_parent);
+                Err(error)
+            }
+        }
+    }
+
+    fn create_at(
+        root: PathBuf,
+        retained_root: Option<PathBuf>,
+        staging_parent: Option<PathBuf>,
+    ) -> CanaryResult<Self> {
         if root.exists() {
             return Err(CanaryError::new(format!(
                 "run directory already exists: {}; choose another seed",
@@ -34,8 +75,16 @@ impl RunArtifacts {
         File::create(root.join("app.stderr.log"))?;
         File::create(root.join("resources.csv"))?.write_all(b"unix_ms,pid,rss_kib,generation\n")?;
         let evidence = File::create(root.join("evidence.jsonl"))?;
+        let run_id = root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(str::to_owned)
+            .ok_or_else(|| CanaryError::new("run directory has no UTF-8 identifier"))?;
         Ok(Self {
             root,
+            retained_root,
+            staging_parent,
+            run_id,
             evidence,
             sequence: 0,
         })
@@ -46,11 +95,7 @@ impl RunArtifacts {
     }
 
     pub(crate) fn run_id(&self) -> CanaryResult<String> {
-        self.root
-            .file_name()
-            .and_then(|value| value.to_str())
-            .map(str::to_owned)
-            .ok_or_else(|| CanaryError::new("run directory has no UTF-8 identifier"))
+        Ok(self.run_id.clone())
     }
 
     pub(crate) fn relay_dir(&self) -> PathBuf {
@@ -126,6 +171,42 @@ impl RunArtifacts {
         }
         Ok(hashes)
     }
+
+    /// Atomically publish a fully scanned staged run beneath its retained evidence root.
+    pub(crate) fn promote(mut self) -> CanaryResult<PathBuf> {
+        self.evidence.flush()?;
+        let retained_root = self
+            .retained_root
+            .clone()
+            .ok_or_else(|| CanaryError::new("run artifacts were not created in staging"))?;
+        let staging_parent = self
+            .staging_parent
+            .clone()
+            .ok_or_else(|| CanaryError::new("staged run omitted its private parent"))?;
+        if retained_root.exists() {
+            return Err(CanaryError::new(format!(
+                "run directory already exists: {}; choose another seed",
+                retained_root.display()
+            )));
+        }
+        fs::rename(&self.root, &retained_root)?;
+        if let Err(error) = fs::remove_dir(&staging_parent) {
+            let _ = fs::remove_dir_all(&retained_root);
+            return Err(error.into());
+        }
+        self.root = retained_root.clone();
+        self.retained_root = None;
+        self.staging_parent = None;
+        Ok(retained_root)
+    }
+}
+
+impl Drop for RunArtifacts {
+    fn drop(&mut self) {
+        if let Some(staging_parent) = self.staging_parent.take() {
+            let _ = fs::remove_dir_all(staging_parent);
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -139,6 +220,31 @@ struct EvidenceLine<'a, T> {
 fn run_id(scenario: &str, seed: &str) -> String {
     let digest = Sha256::digest(format!("{scenario}\0{seed}"));
     format!("{scenario}-{}", &hex::encode(digest)[..16])
+}
+
+fn create_private_staging_parent(runs_dir: &Path) -> CanaryResult<PathBuf> {
+    let parent = runs_dir
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    for attempt in 0_u8..32 {
+        let path = parent.join(format!(
+            ".fava-canary-staging-{}-{}-{attempt}",
+            process::id(),
+            unix_ms()?
+        ));
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        builder.mode(0o700);
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(CanaryError::new(
+        "could not allocate an owner-private canary staging directory",
+    ))
 }
 
 pub(crate) fn unix_ms() -> CanaryResult<u128> {
