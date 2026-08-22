@@ -18,15 +18,25 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
         vec![Arc::clone(&second_materializer)],
     );
 
-    first
-        .publish(intent(first_keys.public_key(), Kind::ContactList))
+    let first_write = first
+        .by(first_keys.public_key())
+        .to([relay_url()])
+        .expect("first route validates")
+        .publish(edit(Kind::ContactList))
         .expect("first publication owns the only slot");
     assert!(
         second
-            .publish(intent(second_keys.public_key(), Kind::ContactList))
+            .by(second_keys.public_key())
+            .to([relay_url()])
+            .expect("second route validates")
+            .publish(edit(Kind::ContactList))
             .is_err()
     );
 
+    assert_eq!(
+        first_write.receipt().unwrap().write_id,
+        first_write.write_id()
+    );
     assert_eq!(first_materializer.calls().len(), 1);
     assert_eq!(second_materializer.calls().len(), 0);
     assert_no_effects(&store, &second_signer, &second_publisher, 1);

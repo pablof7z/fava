@@ -36,8 +36,9 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
     .materializer(materializer)
     .build()
     .unwrap();
-    let accepted = fava
-        .publish(automatic_intent(keys.public_key(), Kind::ContactList))
+    let write = fava
+        .by(keys.public_key())
+        .publish(edit(Kind::ContactList))
         .unwrap();
     wait_for_signer(&signer, 1).await;
 
@@ -48,14 +49,14 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
             relay_evidence(),
         ))])
         .unwrap();
-    wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    wait_for_materialization(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
-    let reopened = wait_for_route_revision(&fava, accepted.receipt_id, 3).await;
+    let reopened = wait_for_route_revision(&fava, write.receipt_id(), 3).await;
 
     let later = RelayUrl::parse("wss://later-route.example").unwrap();
     let later_session = RelaySessionKey::new(later.clone(), RelayAccess::public());
     delayed.replace(contribution(later));
-    let updated = wait_for_destination(&fava, accepted.receipt_id, &later_session).await;
+    let updated = wait_for_destination(&fava, write.receipt_id(), &later_session).await;
     assert!(updated.route_revision > reopened.route_revision);
 }
 
