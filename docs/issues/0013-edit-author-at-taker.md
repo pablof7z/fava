@@ -1,208 +1,75 @@
 # Edit author at the taker, not the edit
 
-**Status:** accepted; M7 implementation in progress
-**Authority:** `AGENTS.md` (focused local issue before implementation; vocabulary change),
-`docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` WRITE-003 / ID-002 / ID-003,
-`docs/spec/ARCHITECTURE.md` :167-178, :714-716, :900, :1997, :2080, :2583, and
-:726-730 (illustrative)
-**Related:** `docs/issues/0014-publish-door-ergonomics.md` separately owns the
-proposed application door (`publish` ergonomics, the `by` / `to` scopes, auto
-default, `WriteIntent` demotion, `NonEmptyVec`). M7 restores the amended
-ownership rule through explicit `WriteIntent::edit_as`; it does not approve or
-implement those proposed nouns or ergonomics.
+**Status:** accepted and completed
+**Implementation:** `495ca42` (`ReplaceableEventEdit` final shape), `8239393`
+(acceptance and recovery freeze the author), `ee38b6d` (application `by` scope)
+**Authority:** WRITE-002, WRITE-003, WRITE-006; `docs/spec/ARCHITECTURE.md`
+publication and write-store ownership
+**Related:** `0014` owns the application publication door; `0015` owns its
+scope-handle nouns.
 
-## Product result
+## Adopted result
 
-A `ReplaceableEventEdit` is a durable change to a replaceable event that carries
-no author. The author is supplied to the *taker* — `WriteIntent::edit` resolves
-the active signer; `WriteIntent::edit_as` takes an explicit pubkey — and is
-resolved once at acceptance, persisted with the edit, and never re-resolved.
-`fava_nip02::follow(target)` is one argument, engine-free, with no
-`fava-signer` dependency and no coordinate construction. A restart after an
-account switch never rematerializes Alice's follow as Bob's.
+`ReplaceableEventEdit` carries the replaceable kind, optional identifier, and
+opaque protocol change. It carries no author, inverse, or format field. The
+application supplies the author to the publication taker:
 
-## The spec amendment — applied
+```rust
+let edit = fava_nip02::follow(bob)?;
+let write = fava.by(alice).publish(edit)?;
+```
 
-Twelve sites said the edit carries its actor. All twelve are amended; `grep -rn
-"actor" docs/spec/` now returns nothing.
+The facade constructs the neutral internal form with
+`WriteIntent::edit_as(edit, alice, routing)`. Acceptance persists Alice beside
+the edit. Every initial or successor materialization uses that persisted key;
+recovery never consults the current session to derive another author.
 
-**`FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` (authority #1):**
+An unscoped edit call is a typed pre-custody refusal:
 
-- WRITE-003 (`:720`) — "the edit carries its actor … an event with that actor as
-  `pubkey`" becomes "the accepted write carries its resolved author … an event
-  with that author as `pubkey`".
-- WRITE-003 (`:722`) — account resolution now happens "before the write is
-  accepted, and the resolved author is committed with it", rather than "before
-  producing the accepted event or edit".
-- WRITE-006 (`:759`) — "retain the edit and actor" becomes "retain the edit and
-  its resolved author".
-- ID-003 (`:1170`) — "no explicit actor/pubkey" becomes "no explicit author
-  public key". The requirement itself is unchanged and remains permanent.
-- Summary bullet (`:1617`) — authorship comes from the event `pubkey` or "the
-  author resolved when a replaceable-event edit was accepted".
+```rust
+let error = fava.publish(edit).unwrap_err();
+assert!(matches!(error, fava::PublishError::MissingAuthor));
+```
 
-**`ARCHITECTURE.md` (authority #2):**
+Unsigned and pre-signed events already carry their author and cannot pass
+through `PublishAs::publish`.
 
-- `:167-178` — the prose and the illustrative struct. `ReplaceableEventEdit`
-  loses `actor` and the author half of its coordinate, keeping `kind` and
-  `identifier`; materialization
-  now produces an event whose `pubkey` is "the accepted write's resolved author".
-- `:714-716` — prose, not an illustrative signature, so AGENTS.md's
-  "preserve the behavior and ownership rule" escape does not cover it. "It
-  identifies the actor and event coordinate" becomes "It identifies the
-  coordinate it changes apart from the author — the replaceable kind, and the
-  identifier when that coordinate is addressable … It carries no author."
-- `:726-730` — illustrative signatures: `follow(actor, bob)` → `follow(bob)`,
-  `fava_bookmarks::add(actor, target)` → `add(target)`.
-- `:900` — owned state: "actor for replaceable-event edits" becomes "resolved
-  author for replaceable-event edits".
-- `:1997` — "The edit contains its actor, coordinate, durable protocol-owned
-  change, and format version" becomes the coordinate apart from the author and
-  the change, with the author carried by the accepted write.
-- `:2080` — "a `ReplaceableEventEdit` whose `actor` is the resolved account"
-  becomes "a `ReplaceableEventEdit`, whose accepted write records the resolved
-  account as its author".
-- `:2583` — the acceptance walkthrough drops `actor=alice` from the call and
-  gains an explicit author-resolution step at acceptance.
+## Ownership
 
-The spirit survives exactly: resolved before acceptance, carried by accepted
-state, never re-resolved. The Alice/Bob acceptance test is unchanged and still
-passes.
+- `fava-nip02` owns the semantic change and pure materializer.
+- `fava` owns the inert application author scope.
+- `fava-publication` resolves the scope once and orders acceptance.
+- `WriteStore` owns the accepted author, edit, materialization generations, and
+  recovery facts.
+- The signer signs the exact event produced for the persisted author; it does
+  not choose that author.
 
-`python3 tools/check_vocabulary.py` passes after the amendment — `EventCoordinate`
-remains referenced elsewhere in the spec (`ARCHITECTURE.md:368`), so removing it
-from the edit struct does not break registry closure.
+This keeps protocol crates engine-free and preserves addressable edits: the
+identifier stays in the edit because a kind-30023 edit must still name which
+article changes.
 
-## Architecture
+## Executable evidence
 
-- **The edit.** `ReplaceableEventEdit { kind, identifier, change }`.
-  The `actor` goes; the coordinate stays, minus its author. Only the author half
-  of the coordinate is redundant once the accepted write resolves it — `kind` and
-  `identifier` are not. Dropping `identifier` too would bake in a limitation the
-  spec does not have: `GOALS:528` and `ARCHITECTURE.md:411` both put
-  "replaceable-event coordinates, including addressable coordinates" in scope,
-  and the `identifier: None` requirement in `fava-nip02`
-  (`fava-nip02/src/lib.rs:151-162`) is correct *for kind 3*, which is not
-  addressable — it is not a global refusal of addressable coordinates. An edit to
-  a kind-30023 article must be able to say which article. Both redundant author
-  checks vanish (`edit.rs:106`, `fava-nip02/src/lib.rs:157`) because there is no
-  second author field to disagree with.
-- **nip02.** `follow(target)` — one argument, engine-free, no `fava-signer`
-  dependency, no coordinate construction.
-- **Where the author enters.** At the door, per `0014`: `fava.publish(edit)?`
-  resolves the active signer, `fava.by(carol).publish(edit)?` names one. The
-  application never constructs the intent. Internally that is still two
-  constructors rather than an `Option` param, because Rust has no named or
-  optional arguments:
-  - `WriteIntent::edit(edit, routing)` — author = active signer.
-  - `WriteIntent::edit_as(edit, pubkey, routing)` — explicit.
-  `by` names a pubkey; signers are already indexed by pubkey
-  (`fava-publication/src/lib.rs:62`), so naming the pubkey names the signer.
-  The `fava-write → fava-signer` dependency cycle dissolves: `fava-write` names
-  no `Signer`.
-- **Resolve once, persist, never re-resolve.** `publish` resolves the active
-  signer at acceptance; the write store persists the resolved pubkey alongside
-  the edit; recovery (`recover_materialized_edits` → `fava-publication/src/run.rs:179`)
-  reads the stored pubkey and never re-consults the session. A restart after an
-  account switch must not rematerialize Alice's follow as Bob's — the WRITE-003
-  acceptance test.
-- **Before `fava-session` exists.** The no-`as:` branch refuses with a typed
-  error. Not a placeholder: ID-003 (`GOALS:1170`) mandates it permanently —
-  *"If a convenience publication operation requires a current account and none
-  exists, and no explicit actor/pubkey is supplied, the operation MUST fail
-  before creating a write or receipt."* The API shape is final on day one; when
-  `fava-session` lands, only that branch changes from "always refuse" to
-  "resolve or refuse."
-- **Materializer contract gains the author.**
-  `materialize(&self, edit, author, source, created_at)`. The author must be
-  known before materialize regardless: source selection queries by it
-  (`fava-publication/src/materialization.rs:367`) and qualification rejects a
-  mismatched source (`fava-nip02/src/lib.rs:202`).
+```sh
+cargo test -p fava --test publication_door
+cargo test -p fava --test publication_scopes
+cargo test -p fava --test semantic_write_publication author::
+cargo test -p fava-write --test replaceable_edit
+python3 tools/check_vocabulary.py
+python3 -m unittest tools.tests.test_vocabulary_check
+```
 
-## The inverse and the encoding version are gone
+`author::accepted_author_scopes_sources_signing_and_every_generation` proves
+source selection, signing, and successor generations stay on the accepted
+author. `author::recovery_uses_persisted_author_when_only_bob_signer_is_selected`
+reopens Alice's accepted edit with only Bob's signer selected and proves the
+write remains Alice's. The latter is the executable falsifier: replacing the
+persisted author with session-derived Bob makes the named recovery assertion
+fail.
 
-Both were removed from the spec, and neither was ever a spec field — the earlier
-amendment introduced `inverse`, and `format` predated it.
+## Decision rationale
 
-**The inverse is derivable where it exists at all.** `decode_edit`
-(`fava-nip02/src/lib.rs:141-148`) derives the inverse through the pure
-`Operation::inverse()` (`:80-85`) in order to check the stored one; if it can be
-derived to validate it, it can be derived instead of stored. The
-format-stability argument does not rescue it either, since `decode_edit` refuses
-on an encoding mismatch before it reads the inverse at all. And the one case
-where an inverse genuinely is not derivable — an edit like "set the title to X",
-whose undo needs the previous title — is also the case where a stored inverse
-cannot be correct, because the edit is constructed before any source event is
-read (WRITE-006's offline edit) and is rematerialized against newer sources
-afterwards. Follow and unfollow are two edits, not an edit and an undo.
-
-**An edit carries no encoding version.** A protocol crate that cannot read one
-of its own edits refuses it rather than interpreting it under an older encoding,
-so the version byte has nothing to decide. `ARCHITECTURE.md:2401`'s bullet giving
-protocol crates ownership of persisted-edit-format *compatibility* is deleted
-with it; the provider bullets around it keep theirs, because redb caches and
-write stores have real schemas to migrate.
-
-The `replaceable-edit-inverse` scenario survives under a truer name,
-`replaceable-edit-opposing-operations` (`FAVA_REWRITE_IMPLEMENTATION_PLAN.md:752`):
-follow-then-unfollow must still normalize to the right state without
-accumulating obsolete delivery. Only the framing was wrong.
-
-**The code still has all of it.** `format`, `CODEC_VERSION`, and `inverse` live
-on `milestone/m7-semantic-writes` — the fields and `inverse()`/`inverse_change()`
-in `fava-write/src/edit.rs`, `FORMAT`/`CODEC_VERSION`/`Operation::inverse` and
-both encode/decode halves in `fava-nip02` and `fava-bookmarks`, plus the
-`.inverse()` assertions in `semantic_write_contract.rs`, both crates' `tests.rs`,
-and `semantic_write_capability_protocol.rs`. That branch is being committed to by
-another agent, so the removal is routed there rather than made here.
-
-## Blast radius — 13 non-test sites, 6 crates, mechanical
-
-| crate | sites |
-|---|---|
-| `fava-write` | `edit.rs` struct/ctor/serde; `WriteIntent::edit`/`edit_as`; `materialization.rs` trait |
-| `fava-nip02` | `:157` delete, `:184`, `:202`, `:280` |
-| `fava-bookmarks` | `:269` delete, `:323`, `:341`, `:467` |
-| `fava-publication` | `materialization.rs:367`, `:402`; author threading through `prepare_semantic` |
-| `fava-write-store-{memory,redb}` | `semantic.rs:352`/`:297`, `redb/validation.rs:185`, redb `schema.rs:25` persist the author |
-| `fava` | `publish`, and `preview_write_routes` (`:210-236`) — preview materializes, so it needs the same resolution |
-
-## Two things not to miss
-
-- **`preview_write_routes` is on this path** — it materializes to have an event
-  to route (`fava/src/lib.rs:210-236`), so it needs the same author resolution.
-  Easy to forget.
-- **The silent no-signer hole becomes load-bearing.** `fava-publication/src/run.rs:306-308`
-  returns without recording when no signer matches the author, leaving an
-  accepted receipt that never progresses. With an active-signer default that is
-  now a reachable normal state, so it becomes a typed refusal at `publish`
-  rather than a silent stall.
-
-## Vocabulary delta
-
-`docs/internals/vocabulary.toml` `ReplaceableEventEdit` term (`:411-420`): the
-persisted entity (no `actor`; the coordinate keeps `kind` and `identifier`) and the
-provider contract (`ReplaceableEventMaterializer::materialize` gains `author`)
-both change. `WriteIntent` gains `edit`/`edit_as`. Run
-`python3 tools/check_vocabulary.py` (and its unit tests) after the edit.
-
-## Exit-gate evidence
-
-- Spec amendment applied to all twelve sites (see above); `grep -rn "actor"
-  docs/spec/` returns nothing.
-- `vocabulary.toml` updated; `tools/check_vocabulary.py` passes.
-- Alice/Bob acceptance test: resolve Alice, switch to Bob, rematerialize from
-  the stored write → the event is still Alice's.
-- `follow(target)` one-arg compiles engine-free with no `fava-signer` dep;
-  `fava.by(carol).publish(edit)?` compiles; the no-`by` branch refuses with a
-  typed error before `fava-session` exists.
-- `preview_write_routes` resolves the author the same way as `publish`.
-- No-signer at `publish` is a typed refusal, not a silent stall.
-
-## Falsifier evidence
-
-Recovery that re-consults the session after an account switch rematerializes
-Alice's follow as Bob's — the WRITE-003 acceptance test catches it. An edit
-that still carries an `actor` keeps the redundant `actor == coordinate.author`
-check and the `fava-write → fava-signer` dependency cycle, both of which this
-design deletes.
+The author is mutable application/session context before acceptance and a
+durable fact after acceptance. Putting it in both the edit and accepted write
+would create two authorities and a contradiction check. Keeping only the
+accepted owner makes account switches, rematerialization, and restart exact.
