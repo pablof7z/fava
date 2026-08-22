@@ -83,6 +83,16 @@ class VocabularyCheckTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+        phase_path = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=(
+                "source: /var/project/phases/12.3-deliver-"
+                "fava-example-capability-as-a-service/CONTEXT.md\n"
+            ),
+        )
+        self.assertEqual(phase_path.returncode, 0, phase_path.stderr)
+
     def test_linked_worktree_prefix_is_not_a_crate(self) -> None:
         result = self.run_check(
             source="pub struct Query;\n",
@@ -95,6 +105,20 @@ class VocabularyCheckTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+        path_control = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=(
+                "worktree: /var/work/fava-worktree-agent-example-resume/"
+                "crates/fava-unregistered/src/lib.rs\n"
+            ),
+        )
+        self.assertNotEqual(path_control.returncode, 0)
+        self.assertIn(
+            "undocumented specified architectural crate: fava-unregistered",
+            path_control.stderr,
+        )
 
     def test_metadata_exclusion_does_not_hide_real_crate_reference(self) -> None:
         result = self.run_check(
@@ -111,6 +135,30 @@ class VocabularyCheckTest(unittest.TestCase):
         self.assertIn(
             "undocumented specified architectural crate: fava-unregistered",
             result.stderr,
+        )
+
+    def test_checker_diagnostic_is_not_a_crate_declaration(self) -> None:
+        diagnostic = (
+            "checker output: `undocumented specified architectural crate: "
+            "fava-example-capability-as-a-service`"
+        )
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=f"{diagnostic}\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        control = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification=f"{diagnostic}; actual dependency fava-unregistered\n",
+        )
+        self.assertNotEqual(control.returncode, 0)
+        self.assertIn(
+            "undocumented specified architectural crate: fava-unregistered",
+            control.stderr,
         )
 
     def run_check(

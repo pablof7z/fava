@@ -18,6 +18,13 @@ PUBLIC_NOUN = re.compile(
 SPEC_CRATE = re.compile(r"\b(fava(?:-[a-z0-9]+)+)(?![-a-z0-9])")
 CAMEL_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 REQUIRED_TERM_FIELDS = {"name", "source", "meaning", "owner", "symbols", "crates"}
+PHASE_METADATA = re.compile(
+    r"^\s*[*_`-]*\s*(?:phase|slug)\s*:\s*[\"']?(?P<value>[A-Za-z0-9._/-]+)",
+    re.IGNORECASE,
+)
+PHASE_PATH_PREFIX = re.compile(r"\d+(?:\.\d+)+(?:-[a-z0-9]+)*-")
+PATH_CHARACTER = re.compile(r"[A-Za-z0-9._/-]")
+SPEC_CRATE_DIAGNOSTIC = "undocumented specified architectural crate: "
 
 
 @dataclass(frozen=True)
@@ -158,6 +165,43 @@ def collect_public_symbols(root: Path) -> tuple[set[str], set[str], list[str]]:
     return symbols, crates, problems
 
 
+def is_structural_crate_metadata(line: str, candidate: re.Match[str]) -> bool:
+    """Return whether one crate-like token is structural metadata, not a declaration."""
+    metadata = PHASE_METADATA.match(line)
+    if metadata and metadata.start("value") <= candidate.start() < metadata.end("value"):
+        return True
+
+    diagnostic = line[
+        max(0, candidate.start() - len(SPEC_CRATE_DIAGNOSTIC)) : candidate.start()
+    ]
+    if diagnostic == SPEC_CRATE_DIAGNOSTIC:
+        return True
+
+    prefix = line[max(0, candidate.start() - len("/tmp/")) : candidate.start()]
+    if prefix == "/tmp/":
+        return True
+
+    path_start = candidate.start()
+    while path_start > 0 and PATH_CHARACTER.fullmatch(line[path_start - 1]):
+        path_start -= 1
+    path_end = candidate.end()
+    while path_end < len(line) and PATH_CHARACTER.fullmatch(line[path_end]):
+        path_end += 1
+    if "/" not in line[path_start:path_end]:
+        return False
+
+    segment_start = line.rfind("/", path_start, candidate.start()) + 1
+    next_slash = line.find("/", candidate.end(), path_end)
+    segment_end = path_end if next_slash == -1 else next_slash
+    if candidate.end() != segment_end:
+        return False
+
+    segment_prefix = line[segment_start : candidate.start()]
+    if PHASE_PATH_PREFIX.fullmatch(segment_prefix):
+        return True
+    return candidate.start() == segment_start and "-worktree-agent-" in candidate.group(1)
+
+
 def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
     """Collect public symbols and Fava crate names declared by architecture docs."""
     symbols: set[str] = set()
@@ -179,8 +223,7 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
         symbols.update(PUBLIC_NOUN.findall(content))
         for line in content.splitlines():
             for match in SPEC_CRATE.finditer(line):
-                prefix = line[max(0, match.start() - len("/tmp/")) : match.start()]
-                if prefix != "/tmp/":
+                if not is_structural_crate_metadata(line, match):
                     crates.add(match.group(1))
     return symbols, crates, problems
 
