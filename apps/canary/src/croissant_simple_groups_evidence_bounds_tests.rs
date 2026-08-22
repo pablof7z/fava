@@ -12,7 +12,7 @@ const MAX_AGGREGATE_BYTES: u64 = 8_388_608;
 const MAX_MANIFEST_BYTES: u64 = 262_144;
 
 fn refusal(root: &Path) -> String {
-    verify_croissant_simple_groups_pair(root)
+    verify_croissant_simple_groups_pair(root, "fixture-revision")
         .expect_err("hostile evidence must be refused")
         .to_string()
 }

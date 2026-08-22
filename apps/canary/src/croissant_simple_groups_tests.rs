@@ -12,64 +12,8 @@ use super::croissant_simple_groups_evidence_support::{
     SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
 };
 include!("croissant_simple_groups_tests/public_flow.rs");
-
-#[test]
-fn pair_verifier_rejects_unsafe_evidence() {
-    let control = PairEvidenceFixture::new();
-    verify_croissant_simple_groups_pair(control.root()).expect("narrow safe pair verifies");
-
-    for case in [
-        UnsafePairCase::PersistentParentSecret,
-        UnsafePairCase::IncompleteCleanup,
-        UnsafePairCase::UnsignedClaim,
-        UnsafePairCase::ReusedIdentity,
-        UnsafePairCase::ReusedUniqueIdentity,
-        UnsafePairCase::CrossRunData,
-        UnsafePairCase::CrossRunUniqueData,
-        UnsafePairCase::ExtraManifest,
-        UnsafePairCase::MissingManifest,
-        UnsafePairCase::StagingResidue,
-        UnsafePairCase::UnderivedFlowClaim,
-        UnsafePairCase::UnderivedProcessClaim,
-        UnsafePairCase::MissingExactClose,
-        UnsafePairCase::ExtraSignedHandoff,
-        UnsafePairCase::RetainedSecretMarker,
-    ] {
-        let fixture = PairEvidenceFixture::new();
-        fixture.apply(case);
-        assert!(
-            verify_croissant_simple_groups_pair(fixture.root()).is_err(),
-            "pair verifier accepted unsafe fixture {case:?}"
-        );
-    }
-}
-
-#[test]
-fn pair_verifier_treats_shared_evidence_as_unordered_hosts() {
-    let fixture = PairEvidenceFixture::new();
-    fixture.reverse_shared_evidence(0);
-    verify_croissant_simple_groups_pair(fixture.root())
-        .expect("shared host evidence has no canonical order");
-}
-
-#[derive(Clone, Copy, Debug)]
-enum UnsafePairCase {
-    PersistentParentSecret,
-    IncompleteCleanup,
-    UnsignedClaim,
-    ReusedIdentity,
-    ReusedUniqueIdentity,
-    CrossRunData,
-    CrossRunUniqueData,
-    ExtraManifest,
-    MissingManifest,
-    StagingResidue,
-    UnderivedFlowClaim,
-    UnderivedProcessClaim,
-    MissingExactClose,
-    ExtraSignedHandoff,
-    RetainedSecretMarker,
-}
+include!("croissant_simple_groups_tests/review_iteration_one.rs");
+include!("croissant_simple_groups_tests/review_iteration_two.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
@@ -94,10 +38,6 @@ impl PairEvidenceFixture {
             authors,
             roots,
         }
-    }
-
-    fn root(&self) -> &Path {
-        self.temporary.path()
     }
 
     #[allow(
@@ -240,6 +180,16 @@ impl PairEvidenceFixture {
         let mut manifest = read_manifest(&self.roots[index]);
         update(&mut manifest);
         if reseal {
+            manifest["bounds"]["wire_bytes_observed"] = json!(
+                ["a", "b"]
+                    .into_iter()
+                    .map(|label| fs::metadata(
+                        self.roots[index].join(format!("wire/{label}.jsonl"))
+                    )
+                    .expect("wire metadata")
+                    .len())
+                    .sum::<u64>()
+            );
             manifest["artifact_sha256"] =
                 serde_json::to_value(artifact_hashes(&self.roots[index]).expect("fixture hashes"))
                     .expect("hash value");
@@ -291,6 +241,9 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             "source_checkout": format!("/controlled/source-{index}"),
             "source_head": format!("source-{index}"),
             "scenario_seed_sha256": format!("seed-{index}"),
+            "readiness_completed": true,
+            "limits": {"log_bytes": 1_048_576, "readiness_ms": 10_000,
+                "readiness_stability_ms": 100, "teardown_ms": 5000},
         })
     });
     let teardown = [0_u64, 1].map(|child| {
@@ -300,6 +253,8 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             "completed": true,
             "pid_alive_after": false,
             "port_open_after": false,
+            "stdout_bytes": 0,
+            "stderr_bytes": 0,
         })
     });
     let flow = json!({
@@ -324,6 +279,11 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
     let processes = json!({"ready": ready, "teardown": teardown});
     fs::create_dir_all(root.join("children")).expect("children fixture directory");
     fs::create_dir_all(root.join("wire")).expect("wire fixture directory");
+    for label in ["a", "b"] {
+        fs::create_dir_all(root.join(format!("relays/{label}"))).expect("relay fixture directory");
+        fs::write(root.join(format!("relays/{label}/stdout.log")), []).expect("stdout fixture");
+        fs::write(root.join(format!("relays/{label}/stderr.log")), []).expect("stderr fixture");
+    }
     fs::write(
         root.join("flow.json"),
         serde_json::to_vec_pretty(&flow).expect("flow fixture bytes"),
@@ -348,6 +308,14 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
             &admin_targets[label],
         );
     }
+    let wire_bytes_observed = ["a", "b"]
+        .into_iter()
+        .map(|label| {
+            fs::metadata(root.join(format!("wire/{label}.jsonl")))
+                .expect("wire metadata")
+                .len()
+        })
+        .sum::<u64>();
     let mut manifest = json!({
         "run_id": format!("run-{index}"),
         "scenario": SCENARIO,
@@ -378,11 +346,11 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys) {
         "post_manifest_secret_scan_passed": true,
         "secret_scan_classes": SECRET_SCAN_CLASSES,
         "secret_scan_key_count": 6,
-        "bounds": {"operation_ms": 30_000, "wire_bytes": 2_097_152, "wire_bytes_observed": 10,
+        "bounds": {"operation_ms": 30_000, "wire_bytes": 2_097_152, "wire_bytes_observed": wire_bytes_observed,
             "log_bytes": 1_048_576, "readiness_ms": 10_000, "readiness_stability_ms": 100,
             "teardown_ms": 5000},
         "artifact_sha256": artifact_hashes(root).expect("fixture hashes"),
-        "fava_revision": format!("revision-{index}"),
+        "fava_revision": "fixture-revision",
     });
     manifest["artifact_seal"] =
         serde_json::to_value(artifact_seal(author, &manifest).expect("fixture seal"))
@@ -439,49 +407,93 @@ fn write_wire_fixture(
         .expect("admin fixture event");
     let content_subscription = format!("content-{index}");
     let records_subscription = format!("records-{index}");
-    let payloads = [
-        json!(["EVENT", bootstrap]),
-        json!(["EVENT", metadata_seed]),
-        json!(["EVENT", admin_seed]),
-        json!(["EVENT", shared]),
-        json!(["EVENT", unique]),
-        json!(["REQ", content_subscription, {"kinds": [9], "limit": 16, "#h": [group]}]),
-        json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [group]}]),
-        json!(["EVENT", custom]),
-        json!(["CLOSE", content_subscription]),
-        json!(["CLOSE", records_subscription]),
+    let exchanges = [
+        (1, "client_to_relay", json!(["EVENT", bootstrap])),
+        (
+            1,
+            "relay_to_client",
+            json!(["OK", bootstrap.id.to_hex(), true, ""]),
+        ),
+        (2, "client_to_relay", json!(["EVENT", metadata_seed])),
+        (
+            2,
+            "relay_to_client",
+            json!(["OK", metadata_seed.id.to_hex(), true, ""]),
+        ),
+        (3, "client_to_relay", json!(["EVENT", admin_seed])),
+        (
+            3,
+            "relay_to_client",
+            json!(["OK", admin_seed.id.to_hex(), true, ""]),
+        ),
+        (4, "client_to_relay", json!(["EVENT", shared])),
+        (
+            4,
+            "relay_to_client",
+            json!(["OK", shared.id.to_hex(), true, ""]),
+        ),
+        (5, "client_to_relay", json!(["EVENT", unique])),
+        (
+            5,
+            "relay_to_client",
+            json!(["OK", unique.id.to_hex(), true, ""]),
+        ),
+        (6, "client_to_relay", json!(["EVENT", custom])),
+        (
+            6,
+            "relay_to_client",
+            json!(["OK", custom.id.to_hex(), true, ""]),
+        ),
+        (
+            7,
+            "client_to_relay",
+            json!(["REQ", content_subscription, {"kinds": [9], "limit": 16, "#h": [group]}]),
+        ),
+        (
+            7,
+            "relay_to_client",
+            json!(["EVENT", content_subscription, unique]),
+        ),
+        (
+            7,
+            "relay_to_client",
+            json!(["EVENT", content_subscription, shared]),
+        ),
+        (7, "relay_to_client", json!(["EOSE", content_subscription])),
+        (7, "client_to_relay", json!(["CLOSE", content_subscription])),
+        (
+            8,
+            "client_to_relay",
+            json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [group]}]),
+        ),
+        (
+            8,
+            "relay_to_client",
+            json!(["EVENT", records_subscription, metadata]),
+        ),
+        (
+            8,
+            "relay_to_client",
+            json!(["EVENT", records_subscription, admin]),
+        ),
+        (8, "relay_to_client", json!(["EOSE", records_subscription])),
+        (8, "client_to_relay", json!(["CLOSE", records_subscription])),
     ];
-    let responses = [
-        json!(["EVENT", content_subscription, unique]),
-        json!(["EVENT", content_subscription, shared]),
-        json!(["EVENT", records_subscription, metadata]),
-        json!(["EVENT", records_subscription, admin]),
-        json!(["OK", custom.id.to_hex(), true, ""]),
-    ];
-    let mut lines = Vec::new();
-    for payload in payloads {
-        lines.push(wire_line("client_to_relay", &payload));
-    }
-    for payload in responses {
-        lines.push(wire_line("relay_to_client", &payload));
-    }
+    let lines = exchanges
+        .into_iter()
+        .enumerate()
+        .map(|(sequence, (connection, direction, payload))| {
+            wire_line(
+                u64::try_from(sequence + 1).expect("sequence fits"),
+                connection,
+                direction,
+                &payload,
+            )
+        })
+        .collect::<Vec<_>>();
     fs::write(
         root.join(format!("wire/{}.jsonl", if index == 0 { "a" } else { "b" })),
         format!("{}\n", lines.join("\n")),
     )
     .expect("wire fixture");
-}
-
-fn wire_line(direction: &str, payload: &Value) -> String {
-    serde_json::to_string(&json!({
-        "direction": direction,
-        "frame_type": "text",
-        "payload": serde_json::to_string(&payload).expect("payload json"),
-    }))
-    .expect("wire line")
-}
-
-fn read_manifest(root: &Path) -> Value {
-    serde_json::from_slice(&fs::read(root.join("manifest.json")).expect("manifest read"))
-        .expect("manifest json")
 }

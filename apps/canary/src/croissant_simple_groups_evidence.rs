@@ -2,15 +2,15 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use fava::RelayUrl;
 use nostr::event::Event;
 use serde_json::{Map, Value};
 
 use crate::croissant_simple_groups_evidence_semantics::verify_semantic_artifacts;
 use crate::croissant_simple_groups_evidence_support::{
-    MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, artifact_hashes, collect_files, read_bounded,
-    signed_digest, stream_contains,
+    EvidenceSnapshot, MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, signed_digest,
 };
 use crate::{CanaryError, CanaryResult};
 
@@ -21,10 +21,17 @@ pub(crate) const SCENARIO: &str = "croissant-simple-groups-public-flow";
 /// # Errors
 ///
 /// Returns a redacted refusal for unsafe, incomplete, reused, or tampered evidence.
-pub fn verify_croissant_simple_groups_pair(runs_directory: impl AsRef<Path>) -> CanaryResult<()> {
+pub fn verify_croissant_simple_groups_pair(
+    runs_directory: impl AsRef<Path>,
+    expected_revision: &str,
+) -> CanaryResult<()> {
+    if expected_revision.is_empty() {
+        return Err(CanaryError::new(
+            "simple-groups expected Fava revision was empty",
+        ));
+    }
     let root = runs_directory.as_ref();
-    reject_parent_residue(root)?;
-    let roots = manifest_roots(root)?;
+    let roots = run_roots(root)?;
     if roots.len() != 2 {
         return Err(CanaryError::new(
             "simple-groups pair must contain exactly two manifests",
@@ -32,21 +39,22 @@ pub fn verify_croissant_simple_groups_pair(runs_directory: impl AsRef<Path>) -> 
     }
     let mut runs = Vec::new();
     for run_root in roots {
-        let manifest: Value = serde_json::from_slice(&read_bounded(
-            &run_root,
+        let snapshot = EvidenceSnapshot::capture(&run_root)?;
+        let manifest: Value = serde_json::from_slice(snapshot.read(
             Path::new("manifest.json"),
             MAX_MANIFEST_BYTES,
             "manifest",
         )?)?;
         reject_secret_fields(&manifest)?;
-        validate_manifest(&run_root, &manifest)?;
-        runs.push((run_root, manifest));
+        validate_manifest(&snapshot, &manifest, expected_revision)?;
+        runs.push((snapshot, manifest));
     }
     verify_pair_identity(&runs)?;
     reject_cross_run_data(&runs[0], &runs[1])
 }
 
-fn reject_parent_residue(root: &Path) -> CanaryResult<()> {
+fn run_roots(root: &Path) -> CanaryResult<Vec<std::path::PathBuf>> {
+    let mut roots = Vec::new();
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let name = entry.file_name();
@@ -56,12 +64,18 @@ fn reject_parent_residue(root: &Path) -> CanaryResult<()> {
                 "simple-groups pair root contained staging or non-run residue",
             ));
         }
+        roots.push(entry.path());
     }
-    Ok(())
+    roots.sort();
+    Ok(roots)
 }
 
-fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
-    verify_hashes(root, manifest)?;
+fn validate_manifest(
+    snapshot: &EvidenceSnapshot,
+    manifest: &Value,
+    expected_revision: &str,
+) -> CanaryResult<()> {
+    verify_hashes(snapshot, manifest)?;
     verify_seal(manifest)?;
     if required_string(manifest, "scenario")? != SCENARIO
         || manifest
@@ -107,10 +121,15 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
             )));
         }
     }
+    if required_string(manifest, "fava_revision")? != expected_revision {
+        return Err(CanaryError::new(
+            "simple-groups evidence revision did not match the expected revision",
+        ));
+    }
     verify_flow_claims(manifest)?;
     verify_bounds(manifest)?;
     verify_children(manifest)?;
-    verify_semantic_artifacts(root, manifest)
+    verify_semantic_artifacts(snapshot, manifest)
 }
 
 fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
@@ -125,7 +144,12 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
     let relay_signer = required_string(manifest, "relay_signer_public_key")?;
     let shared = required_string(manifest, "shared_event_id")?;
     let custom = required_string(manifest, "custom_event_id")?;
-    if relay_urls.iter().collect::<BTreeSet<_>>() != evidence.iter().collect::<BTreeSet<_>>()
+    let parsed_relays = relay_urls
+        .iter()
+        .map(|url| RelayUrl::parse(url).map_err(error))
+        .collect::<CanaryResult<Vec<_>>>()?;
+    if parsed_relays[0] == parsed_relays[1]
+        || relay_urls.iter().collect::<BTreeSet<_>>() != evidence.iter().collect::<BTreeSet<_>>()
         || owners[0] == owners[1]
         || metadata[0] == metadata[1]
         || metadata_authors != [relay_signer, relay_signer]
@@ -201,6 +225,35 @@ fn verify_children(manifest: &Value) -> CanaryResult<()> {
                 "simple-groups child identities were reused",
             ));
         }
+        if ready[index]
+            .get("readiness_completed")
+            .and_then(Value::as_bool)
+            != Some(true)
+        {
+            return Err(CanaryError::new(
+                "simple-groups child readiness was incomplete",
+            ));
+        }
+        let limits = ready[index]
+            .get("limits")
+            .and_then(Value::as_object)
+            .ok_or_else(|| CanaryError::new("simple-groups child omitted readiness limits"))?;
+        let bounds = manifest
+            .get("bounds")
+            .and_then(Value::as_object)
+            .ok_or_else(|| CanaryError::new("simple-groups manifest omitted bounds"))?;
+        for field in [
+            "log_bytes",
+            "readiness_ms",
+            "readiness_stability_ms",
+            "teardown_ms",
+        ] {
+            if limits.get(field) != bounds.get(field) {
+                return Err(CanaryError::new(
+                    "simple-groups child limits disagreed with manifest bounds",
+                ));
+            }
+        }
         for field in [
             "executable",
             "executable_sha256",
@@ -247,7 +300,7 @@ fn verify_children(manifest: &Value) -> CanaryResult<()> {
     Ok(())
 }
 
-fn verify_pair_identity(runs: &[(PathBuf, Value)]) -> CanaryResult<()> {
+fn verify_pair_identity(runs: &[(EvidenceSnapshot, Value)]) -> CanaryResult<()> {
     for field in [
         "scenario_seed_sha256",
         "author_public_key",
@@ -286,7 +339,10 @@ fn verify_pair_identity(runs: &[(PathBuf, Value)]) -> CanaryResult<()> {
     Ok(())
 }
 
-fn reject_cross_run_data(first: &(PathBuf, Value), second: &(PathBuf, Value)) -> CanaryResult<()> {
+fn reject_cross_run_data(
+    first: &(EvidenceSnapshot, Value),
+    second: &(EvidenceSnapshot, Value),
+) -> CanaryResult<()> {
     let first_group = required_string(&first.1, "group_id")?.to_owned();
     let second_group = required_string(&second.1, "group_id")?.to_owned();
     let first_identities = event_identities(&first.1)?;
@@ -331,12 +387,13 @@ fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
     Ok(identities)
 }
 
-fn verify_hashes(root: &Path, manifest: &Value) -> CanaryResult<()> {
+fn verify_hashes(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
     let expected = manifest
         .get("artifact_sha256")
         .and_then(Value::as_object)
         .ok_or_else(|| CanaryError::new("simple-groups manifest omitted artifact hashes"))?;
-    let actual = artifact_hashes(root)?
+    let actual = snapshot
+        .artifact_hashes()?
         .into_iter()
         .map(|(path, hash)| (path, Value::String(hash)))
         .collect::<Map<_, _>>();
@@ -407,88 +464,4 @@ fn reject_secret_fields(value: &Value) -> CanaryResult<()> {
     Ok(())
 }
 
-fn manifest_roots(root: &Path) -> CanaryResult<Vec<PathBuf>> {
-    let mut roots = collect_files(root)?
-        .into_iter()
-        .filter(|path| path.file_name().and_then(|name| name.to_str()) == Some("manifest.json"))
-        .filter_map(|path| root.join(path).parent().map(Path::to_owned))
-        .collect::<Vec<_>>();
-    roots.sort();
-    Ok(roots)
-}
-
-fn tree_contains(root: &Path, needle: &[u8], skip_manifest: bool) -> CanaryResult<bool> {
-    for path in collect_files(root)? {
-        if skip_manifest && path == Path::new("manifest.json") {
-            continue;
-        }
-        if stream_contains(root, &path, needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn exact_objects<'a>(
-    value: &'a Value,
-    field: &str,
-    count: usize,
-) -> CanaryResult<Vec<&'a Map<String, Value>>> {
-    exact_values(value, field, count)?
-        .iter()
-        .map(|item| item.as_object().ok_or_else(|| invalid_entry(field)))
-        .collect()
-}
-
-fn exact_strings(value: &Value, field: &str, count: usize) -> CanaryResult<Vec<String>> {
-    exact_values(value, field, count)?
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| invalid_entry(field))
-        })
-        .collect()
-}
-
-fn exact_u64s(value: &Value, field: &str, count: usize) -> CanaryResult<Vec<u64>> {
-    exact_values(value, field, count)?
-        .iter()
-        .map(|item| item.as_u64().ok_or_else(|| invalid_entry(field)))
-        .collect()
-}
-
-fn exact_values<'a>(value: &'a Value, field: &str, count: usize) -> CanaryResult<&'a [Value]> {
-    let values = value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| CanaryError::new(format!("simple-groups manifest omitted {field}")))?;
-    if values.len() != count {
-        return Err(CanaryError::new(format!(
-            "simple-groups {field} count was not {count}"
-        )));
-    }
-    Ok(values)
-}
-
-fn invalid_entry(field: &str) -> CanaryError {
-    CanaryError::new(format!("simple-groups {field} entry was invalid"))
-}
-
-fn object_string<'a>(value: &'a Map<String, Value>, field: &str) -> CanaryResult<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| CanaryError::new(format!("simple-groups child omitted {field}")))
-}
-
-fn required_string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| CanaryError::new(format!("simple-groups manifest omitted {field}")))
-}
-
-fn error(value: impl std::fmt::Display) -> CanaryError {
-    CanaryError::new(value.to_string())
-}
+include!("croissant_simple_groups_evidence/value_support.rs");

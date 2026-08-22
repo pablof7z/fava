@@ -6,23 +6,24 @@ use std::path::Path;
 use nostr::event::Event;
 use serde_json::{Map, Value, json};
 
-use crate::croissant_simple_groups_evidence_support::{
-    collect_files, read_bounded, stream_contains,
-};
+use crate::croissant_simple_groups_evidence_support::EvidenceSnapshot;
 use crate::{CanaryError, CanaryResult};
 
 const FLOW_LIMIT: u64 = 128 * 1024;
 const PROCESS_LIMIT: u64 = 256 * 1024;
 const WIRE_LIMIT: u64 = 2 * 1024 * 1024;
 
-pub(super) fn verify_semantic_artifacts(root: &Path, manifest: &Value) -> CanaryResult<()> {
-    verify_flow(root, manifest)?;
-    verify_processes(root, manifest)?;
-    verify_wire(root, manifest)?;
-    rescan_secret_markers(root)
+pub(super) fn verify_semantic_artifacts(
+    snapshot: &EvidenceSnapshot,
+    manifest: &Value,
+) -> CanaryResult<()> {
+    verify_flow(snapshot, manifest)?;
+    verify_processes(snapshot, manifest)?;
+    verify_wire(snapshot, manifest)?;
+    rescan_secret_markers(snapshot)
 }
 
-fn rescan_secret_markers(root: &Path) -> CanaryResult<()> {
+fn rescan_secret_markers(snapshot: &EvidenceSnapshot) -> CanaryResult<()> {
     for needle in [
         b"nsec1".as_slice(),
         b"NSEC1".as_slice(),
@@ -33,8 +34,8 @@ fn rescan_secret_markers(root: &Path) -> CanaryResult<()> {
         b"\"private_key\":".as_slice(),
         b"\"secret_key\":".as_slice(),
     ] {
-        for relative in collect_files(root)? {
-            if stream_contains(root, &relative, needle)? {
+        for relative in snapshot.files() {
+            if snapshot.contains(relative, needle)? {
                 return Err(CanaryError::new(
                     "simple-groups retained evidence contained a secret marker",
                 ));
@@ -44,13 +45,9 @@ fn rescan_secret_markers(root: &Path) -> CanaryResult<()> {
     Ok(())
 }
 
-fn verify_flow(root: &Path, manifest: &Value) -> CanaryResult<()> {
-    let flow: Value = serde_json::from_slice(&read_bounded(
-        root,
-        Path::new("flow.json"),
-        FLOW_LIMIT,
-        "flow",
-    )?)?;
+fn verify_flow(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
+    let flow: Value =
+        serde_json::from_slice(snapshot.read(Path::new("flow.json"), FLOW_LIMIT, "flow")?)?;
     for field in [
         "group_id",
         "relay_urls",
@@ -88,9 +85,8 @@ fn verify_flow(root: &Path, manifest: &Value) -> CanaryResult<()> {
     Ok(())
 }
 
-fn verify_processes(root: &Path, manifest: &Value) -> CanaryResult<()> {
-    let processes: Value = serde_json::from_slice(&read_bounded(
-        root,
+fn verify_processes(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
+    let processes: Value = serde_json::from_slice(snapshot.read(
         Path::new("children/processes.json"),
         PROCESS_LIMIT,
         "process evidence",
@@ -102,30 +98,99 @@ fn verify_processes(root: &Path, manifest: &Value) -> CanaryResult<()> {
             )));
         }
     }
+    let bounds = manifest
+        .get("bounds")
+        .and_then(Value::as_object)
+        .ok_or_else(|| CanaryError::new("simple-groups manifest omitted bounds"))?;
+    let log_limit = bounds.get("log_bytes").and_then(Value::as_u64).unwrap_or(0);
+    let teardown = processes
+        .get("teardown")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CanaryError::new("simple-groups process evidence omitted teardown"))?;
+    for (index, label) in ["a", "b"].iter().enumerate() {
+        for (field, suffix) in [
+            ("stdout_bytes", "stdout.log"),
+            ("stderr_bytes", "stderr.log"),
+        ] {
+            let claimed = teardown[index]
+                .get(field)
+                .and_then(Value::as_u64)
+                .unwrap_or(u64::MAX);
+            let actual = snapshot
+                .read(
+                    Path::new(&format!("relays/{label}/{suffix}")),
+                    log_limit,
+                    "child log",
+                )?
+                .len();
+            if claimed != u64::try_from(actual).unwrap_or(u64::MAX) {
+                return Err(CanaryError::new(
+                    "simple-groups child log bytes disagreed with teardown evidence",
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
-fn verify_wire(root: &Path, manifest: &Value) -> CanaryResult<()> {
+fn verify_wire(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()> {
     let relay_urls = strings(manifest, "relay_urls", 2)?;
     let shared_evidence = strings(manifest, "shared_evidence", 2)?;
-    if relay_urls.iter().collect::<BTreeSet<_>>() != shared_evidence.iter().collect::<BTreeSet<_>>()
-    {
+    if relay_urls != shared_evidence {
         return Err(CanaryError::new(
-            "simple-groups shared evidence did not cover both exact hosts",
+            "simple-groups shared evidence was not bound to exact relay routes",
         ));
     }
+    let mut observed = 0_u64;
     for (index, label) in ["a", "b"].iter().enumerate() {
-        verify_one_wire(root, manifest, index, label)?;
+        observed = observed
+            .checked_add(verify_one_wire(snapshot, manifest, index, label)?)
+            .ok_or_else(|| CanaryError::new("simple-groups wire byte count overflow"))?;
+    }
+    if manifest
+        .get("bounds")
+        .and_then(|bounds| bounds.get("wire_bytes_observed"))
+        .and_then(Value::as_u64)
+        != Some(observed)
+    {
+        return Err(CanaryError::new(
+            "simple-groups wire byte claim disagreed with retained logs",
+        ));
     }
     Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QueryKind {
+    Content,
+    Records,
+    Auxiliary,
+}
+
+enum ConnectionState {
+    Publish {
+        event_id: String,
+        acknowledged: bool,
+    },
+    Query {
+        subscription: String,
+        kind: QueryKind,
+        eose: bool,
+        closed: bool,
+    },
 }
 
 #[allow(
     clippy::too_many_lines,
     reason = "one pass derives one relay's complete wire proof"
 )]
-fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> CanaryResult<()> {
-    let frames = wire_frames(root, label)?;
+fn verify_one_wire(
+    snapshot: &EvidenceSnapshot,
+    manifest: &Value,
+    index: usize,
+    label: &str,
+) -> CanaryResult<u64> {
+    let (frames, wire_bytes) = wire_frames(snapshot, label)?;
     let group = string(manifest, "group_id")?;
     let shared = string(manifest, "shared_event_id")?;
     let unique = strings(manifest, "unique_event_ids", 2)?;
@@ -133,6 +198,8 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
     let metadata_names = strings(manifest, "metadata_names", 2)?;
     let admin_targets = strings(manifest, "admin_targets", 2)?;
     let relay_signer = string(manifest, "relay_signer_public_key")?;
+    let author = string(manifest, "author_public_key")?;
+    let mut connections = std::collections::BTreeMap::<u64, ConnectionState>::new();
     let mut content_subscription = None;
     let mut records_subscription = None;
     let mut content_events = BTreeSet::new();
@@ -142,7 +209,19 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
     let mut custom_acknowledged = 0_u64;
     let mut client_events = 0_u64;
 
+    let mut expected_sequence = 1_u64;
     for frame in &frames {
+        if frame.get("sequence").and_then(Value::as_u64) != Some(expected_sequence) {
+            return Err(CanaryError::new(
+                "simple-groups wire sequence was not strict and contiguous",
+            ));
+        }
+        expected_sequence = expected_sequence.saturating_add(1);
+        let connection = frame
+            .get("connection")
+            .and_then(Value::as_u64)
+            .filter(|value| *value != 0)
+            .ok_or_else(|| CanaryError::new("simple-groups wire omitted connection identity"))?;
         let direction = frame
             .get("direction")
             .and_then(Value::as_str)
@@ -155,47 +234,117 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
         };
         match (direction, kind) {
             ("client_to_relay", "REQ") => {
+                if connections.contains_key(&connection) {
+                    return Err(CanaryError::new(
+                        "simple-groups wire reused a connection for a second exchange",
+                    ));
+                }
                 let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
                 let filter = payload.get(2).and_then(Value::as_object);
-                if filter.is_some_and(|filter| exact_filter(filter, "#h", group, &[9], 16)) {
-                    assign_once(&mut content_subscription, subscription, "content REQ")?;
+                let query_kind =
+                    if filter.is_some_and(|filter| exact_filter(filter, "#h", group, &[9], 16)) {
+                        assign_once(&mut content_subscription, subscription, "content REQ")?;
+                        QueryKind::Content
+                    } else if filter.is_some_and(|filter| {
+                        exact_filter(
+                            filter,
+                            "#d",
+                            group,
+                            &[39000, 39001, 39002, 39003, 39004, 39005],
+                            4096,
+                        )
+                    }) {
+                        assign_once(&mut records_subscription, subscription, "records REQ")?;
+                        QueryKind::Records
+                    } else {
+                        QueryKind::Auxiliary
+                    };
+                if subscription.is_empty() {
+                    return Err(CanaryError::new("simple-groups REQ omitted subscription"));
                 }
-                if filter.is_some_and(|filter| {
-                    exact_filter(
-                        filter,
-                        "#d",
-                        group,
-                        &[39000, 39001, 39002, 39003, 39004, 39005],
-                        4096,
-                    )
-                }) {
-                    assign_once(&mut records_subscription, subscription, "records REQ")?;
-                }
+                connections.insert(
+                    connection,
+                    ConnectionState::Query {
+                        subscription: subscription.to_owned(),
+                        kind: query_kind,
+                        eose: false,
+                        closed: false,
+                    },
+                );
             }
             ("client_to_relay", "EVENT") => {
+                if connections.contains_key(&connection) {
+                    return Err(CanaryError::new(
+                        "simple-groups wire reused a connection for a second exchange",
+                    ));
+                }
                 client_events += 1;
                 let event = event_at(payload, 1)?;
                 event.verify().map_err(error)?;
-                if !has_exact_tag(&event, "h", group) {
+                if event.pubkey.to_hex() != author || !has_exact_tag(&event, "h", group) {
                     return Err(CanaryError::new(
-                        "simple-groups client EVENT omitted its exact h authority",
+                        "simple-groups client EVENT escaped its author or h authority",
                     ));
                 }
                 if event.id.to_hex() == custom {
                     custom_handoffs += 1;
                 }
+                connections.insert(
+                    connection,
+                    ConnectionState::Publish {
+                        event_id: event.id.to_hex(),
+                        acknowledged: false,
+                    },
+                );
             }
-            ("relay_to_client", "OK")
-                if payload.get(1).and_then(Value::as_str) == Some(custom)
-                    && payload.get(2).and_then(Value::as_bool) == Some(true) =>
-            {
-                custom_acknowledged += 1;
+            ("relay_to_client", "OK") => {
+                let acknowledged = payload.get(1).and_then(Value::as_str).unwrap_or_default();
+                let accepted = payload.get(2).and_then(Value::as_bool) == Some(true);
+                let Some(ConnectionState::Publish {
+                    event_id,
+                    acknowledged: was_acknowledged,
+                }) = connections.get_mut(&connection)
+                else {
+                    return Err(CanaryError::new(
+                        "simple-groups OK was not on its EVENT connection",
+                    ));
+                };
+                if !accepted || *was_acknowledged || acknowledged != event_id {
+                    return Err(CanaryError::new(
+                        "simple-groups OK did not causally acknowledge its EVENT",
+                    ));
+                }
+                *was_acknowledged = true;
+                if acknowledged == custom {
+                    custom_acknowledged += 1;
+                }
             }
             ("relay_to_client", "EVENT") => {
                 let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
                 let event = event_at(payload, 2)?;
                 event.verify().map_err(error)?;
-                if Some(subscription) == content_subscription.as_deref() {
+                let Some(ConnectionState::Query {
+                    subscription: expected,
+                    kind,
+                    eose,
+                    closed,
+                }) = connections.get(&connection)
+                else {
+                    return Err(CanaryError::new(
+                        "simple-groups response EVENT preceded its REQ",
+                    ));
+                };
+                if subscription != expected || *eose || *closed {
+                    return Err(CanaryError::new(
+                        "simple-groups response EVENT escaped its open REQ",
+                    ));
+                }
+                if *kind == QueryKind::Content {
+                    if event.pubkey.to_hex() != author {
+                        return Err(CanaryError::new(
+                            "simple-groups content result escaped author authority",
+                        ));
+                    }
                     if !has_exact_tag(&event, "h", group) || event.kind.as_u16() != 9 {
                         return Err(CanaryError::new(
                             "simple-groups content result escaped its exact group query",
@@ -203,7 +352,7 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
                     }
                     content_events.insert(event.id.to_hex());
                 }
-                if Some(subscription) == records_subscription.as_deref() {
+                if *kind == QueryKind::Records {
                     if !has_exact_tag(&event, "d", group) {
                         return Err(CanaryError::new(
                             "simple-groups record result escaped its exact group query",
@@ -223,12 +372,44 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
                     }
                 }
             }
+            ("relay_to_client", "EOSE") => {
+                let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
+                let Some(ConnectionState::Query {
+                    subscription: expected,
+                    eose,
+                    closed,
+                    ..
+                }) = connections.get_mut(&connection)
+                else {
+                    return Err(CanaryError::new("simple-groups EOSE preceded its REQ"));
+                };
+                if subscription != expected || *eose || *closed {
+                    return Err(CanaryError::new("simple-groups EOSE was not causal"));
+                }
+                *eose = true;
+            }
+            ("client_to_relay", "CLOSE") => {
+                let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
+                let Some(ConnectionState::Query {
+                    subscription: expected,
+                    eose,
+                    closed,
+                    ..
+                }) = connections.get_mut(&connection)
+                else {
+                    return Err(CanaryError::new("simple-groups CLOSE preceded its REQ"));
+                };
+                if subscription != expected || !*eose || *closed {
+                    return Err(CanaryError::new("simple-groups CLOSE was not causal"));
+                }
+                *closed = true;
+            }
             _ => {}
         }
     }
-    let content_subscription = content_subscription
+    content_subscription
         .ok_or_else(|| CanaryError::new("simple-groups wire omitted exact content REQ"))?;
-    let records_subscription = records_subscription
+    records_subscription
         .ok_or_else(|| CanaryError::new("simple-groups wire omitted exact records REQ"))?;
     let expected = BTreeSet::from([shared.to_owned(), unique[index].clone()]);
     if content_events != expected
@@ -237,142 +418,16 @@ fn verify_one_wire(root: &Path, manifest: &Value, index: usize, label: &str) -> 
         || custom_handoffs != 1
         || custom_acknowledged != 1
         || client_events != 6
-        || count_close(&frames, &content_subscription) != 1
-        || count_close(&frames, &records_subscription) != 1
+        || connections.values().any(|state| match state {
+            ConnectionState::Publish { acknowledged, .. } => !acknowledged,
+            ConnectionState::Query { eose, closed, .. } => !eose || !closed,
+        })
     {
         return Err(CanaryError::new(
             "simple-groups wire did not derive the complete public flow",
         ));
     }
-    Ok(())
+    Ok(wire_bytes)
 }
 
-fn wire_frames(root: &Path, label: &str) -> CanaryResult<Vec<Value>> {
-    let relative = format!("wire/{label}.jsonl");
-    let bytes = read_bounded(root, Path::new(&relative), WIRE_LIMIT, "wire log")?;
-    if !bytes.ends_with(b"\n") {
-        return Err(CanaryError::new("simple-groups wire log was incomplete"));
-    }
-    let mut frames = Vec::new();
-    for line in bytes
-        .split(|byte| *byte == b'\n')
-        .filter(|line| !line.is_empty())
-    {
-        let mut frame: Value = serde_json::from_slice(line)?;
-        if frame.get("frame_type").and_then(Value::as_str) == Some("text") {
-            let payload = frame
-                .get("payload")
-                .and_then(Value::as_str)
-                .ok_or_else(|| CanaryError::new("simple-groups text frame omitted payload"))?;
-            let decoded: Value = serde_json::from_str(payload.trim_end())?;
-            frame
-                .as_object_mut()
-                .ok_or_else(|| CanaryError::new("simple-groups wire frame was not an object"))?
-                .insert("decoded".to_owned(), decoded);
-        }
-        frames.push(frame);
-    }
-    if frames.is_empty() {
-        return Err(CanaryError::new("simple-groups wire log was empty"));
-    }
-    Ok(frames)
-}
-
-fn exact_filter(
-    filter: &Map<String, Value>,
-    axis: &str,
-    group: &str,
-    kinds: &[u64],
-    limit: u64,
-) -> bool {
-    filter.len() == 3
-        && filter.get(axis) == Some(&json!([group]))
-        && filter.get("kinds") == Some(&json!(kinds))
-        && filter.get("limit").and_then(Value::as_u64) == Some(limit)
-}
-
-fn assign_once(slot: &mut Option<String>, value: &str, label: &str) -> CanaryResult<()> {
-    if value.is_empty() || slot.replace(value.to_owned()).is_some() {
-        return Err(CanaryError::new(format!(
-            "simple-groups wire repeated {label}"
-        )));
-    }
-    Ok(())
-}
-
-fn event_at(payload: &Value, index: usize) -> CanaryResult<Event> {
-    serde_json::from_value(
-        payload
-            .get(index)
-            .cloned()
-            .ok_or_else(|| CanaryError::new("simple-groups EVENT omitted event body"))?,
-    )
-    .map_err(Into::into)
-}
-
-fn has_exact_tag(event: &Event, name: &str, value: &str) -> bool {
-    let matches = event
-        .tags
-        .iter()
-        .filter(|tag| tag.as_slice().first().map(String::as_str) == Some(name))
-        .collect::<Vec<_>>();
-    matches.len() == 1 && matches[0].as_slice().get(1).map(String::as_str) == Some(value)
-}
-
-fn has_tag_value(event: &Event, name: &str, value: &str) -> bool {
-    event.tags.iter().any(|tag| {
-        tag.as_slice().first().map(String::as_str) == Some(name)
-            && tag.as_slice().get(1).map(String::as_str) == Some(value)
-    })
-}
-
-fn count_close(frames: &[Value], subscription: &str) -> usize {
-    frames
-        .iter()
-        .filter(|frame| {
-            frame.get("direction").and_then(Value::as_str) == Some("client_to_relay")
-                && frame
-                    .get("decoded")
-                    .and_then(|value| value.get(0))
-                    .and_then(Value::as_str)
-                    == Some("CLOSE")
-                && frame
-                    .get("decoded")
-                    .and_then(|value| value.get(1))
-                    .and_then(Value::as_str)
-                    == Some(subscription)
-        })
-        .count()
-}
-
-fn string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| CanaryError::new(format!("simple-groups evidence omitted {field}")))
-}
-
-fn strings(value: &Value, field: &str, count: usize) -> CanaryResult<Vec<String>> {
-    let values = value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| CanaryError::new(format!("simple-groups evidence omitted {field}")))?;
-    if values.len() != count {
-        return Err(CanaryError::new(format!(
-            "simple-groups evidence required exactly {count} {field}"
-        )));
-    }
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| CanaryError::new(format!("simple-groups {field} was not text")))
-        })
-        .collect()
-}
-
-fn error(error: impl std::fmt::Display) -> CanaryError {
-    CanaryError::new(error.to_string())
-}
+include!("croissant_simple_groups_evidence_semantics/value_support.rs");

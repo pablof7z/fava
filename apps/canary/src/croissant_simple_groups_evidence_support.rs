@@ -286,7 +286,10 @@ pub(crate) fn collect_files(root: &Path) -> CanaryResult<Vec<PathBuf>> {
         .collect())
 }
 
-#[allow(dead_code, reason = "bounded single-file compatibility for evidence producers")]
+#[allow(
+    dead_code,
+    reason = "bounded single-file compatibility for evidence producers"
+)]
 pub(crate) fn read_bounded(
     root: &Path,
     relative: &Path,

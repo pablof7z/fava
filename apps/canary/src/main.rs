@@ -48,10 +48,15 @@ async fn run() -> canary::CanaryResult<()> {
         "verify-croissant-simple-groups-pair" => {
             let flag = arguments.next().ok_or_else(usage)?;
             let root = arguments.next().ok_or_else(usage)?;
-            if flag != "--runs-dir" || arguments.next().is_some() {
+            let revision_flag = arguments.next().ok_or_else(usage)?;
+            let expected_revision = arguments.next().ok_or_else(usage)?;
+            if flag != "--runs-dir"
+                || revision_flag != "--expected-revision"
+                || arguments.next().is_some()
+            {
                 return Err(usage());
             }
-            verify_croissant_simple_groups_pair(PathBuf::from(root))?;
+            verify_croissant_simple_groups_pair(PathBuf::from(root), &expected_revision)?;
             println!("verified Croissant simple-groups pair");
             Ok(())
         }
@@ -233,7 +238,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | run <enabled-scenario> [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-revision SHA | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }
