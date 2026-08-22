@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 0
 fixed_count: 0
-total_count: 5
-last_updated: 2026-08-22T09:43:55.793Z
+total_count: 6
+last_updated: 2026-08-22T10:35:46.242Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,7 @@ last_updated: 2026-08-22T09:43:55.793Z
 | 3 | 07.1.1 | lint-warning | crates/fava/src/publication.rs | 21 | Pre-existing strict-Clippy struct_field_names warning on Write.write_id blocks Plan 02 full touched-crate Clippy gate | open |  | 2026-08-22T09:43:55.607Z |  |
 | 4 | 07.1.1 | lint-warning | crates/fava/tests/write_settlement.rs | 369 | Pre-existing strict-Clippy similar_names warning blocks Plan 02 full touched-crate Clippy gate | open |  | 2026-08-22T09:43:55.699Z |  |
 | 5 | 07.1.1 | lint-warning | crates/fava/tests/semantic_write_store.rs | 129 | Pre-existing strict-Clippy needless_pass_by_value warnings block Plan 02 full touched-crate Clippy gate | open |  | 2026-08-22T09:43:55.793Z |  |
+| 6 | 07.1.1 | unrun-verify | crates/fava/BUILD.bazel |  | Bazel simple_groups target could not run because neither bazelisk nor bazel is installed; Cargo target and manifest boundary checks passed | open |  | 2026-08-22T10:35:46.242Z |  |
 
 ````json
 [
@@ -81,6 +82,18 @@ last_updated: 2026-08-22T09:43:55.793Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T09:43:55.793Z",
+    "resolved_at": null
+  },
+  {
+    "id": 6,
+    "kind": "unrun-verify",
+    "phase": "07.1.1",
+    "file": "crates/fava/BUILD.bazel",
+    "line": null,
+    "description": "Bazel simple_groups target could not run because neither bazelisk nor bazel is installed; Cargo target and manifest boundary checks passed",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T10:35:46.242Z",
     "resolved_at": null
   }
 ]
