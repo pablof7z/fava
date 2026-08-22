@@ -1,1 +1,1 @@
-apps/canary/runs/phase-07.1.1-pair.i6.SjgbQz
+apps/canary/runs/phase-07.1.1-pair.i6.SjgbQz/pair

@@ -78,6 +78,10 @@ enum UnsafePairCase {
 
 impl PairEvidenceFixture {
     fn root(&self) -> &Path {
+        &self.pair_root
+    }
+
+    fn outer_root(&self) -> &Path {
         self.temporary.path()
     }
 }

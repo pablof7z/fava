@@ -144,3 +144,14 @@ fn verifier_refuses_resealed_different_content_addressed_subject_image() {
         "different content-addressed subject was accepted after consistent resealing"
     );
 }
+
+#[test]
+fn pair_verifier_requires_selector_to_name_exact_manifest_parent() {
+    let fixture = PairEvidenceFixture::nested();
+    assert!(
+        verify_fixture_pair(fixture.outer_root()).is_err(),
+        "selector wrapper without two direct manifests was accepted"
+    );
+    verify_fixture_pair(fixture.root())
+        .expect("selector naming the exact two-manifest parent verifies");
+}

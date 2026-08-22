@@ -26,6 +26,7 @@ include!("croissant_simple_groups_tests/review_iteration_six.rs");
 
 struct PairEvidenceFixture {
     temporary: TempDir,
+    pair_root: PathBuf,
     authors: [Keys; 2],
     relays: [Keys; 2],
     roots: [PathBuf; 2],
@@ -33,19 +34,32 @@ struct PairEvidenceFixture {
 
 impl PairEvidenceFixture {
     fn new() -> Self {
+        Self::with_nested_pair_root(false)
+    }
+
+    fn nested() -> Self {
+        Self::with_nested_pair_root(true)
+    }
+
+    fn with_nested_pair_root(nested: bool) -> Self {
         let temporary = TempDir::new().expect("pair evidence root");
+        let pair_root = if nested {
+            let pair_root = temporary.path().join("pair");
+            fs::create_dir(&pair_root).expect("nested pair evidence root");
+            pair_root
+        } else {
+            temporary.path().to_path_buf()
+        };
         let authors = [Keys::generate(), Keys::generate()];
         let relays = [Keys::generate(), Keys::generate()];
-        let roots = [
-            temporary.path().join("run-0"),
-            temporary.path().join("run-1"),
-        ];
+        let roots = [pair_root.join("run-0"), pair_root.join("run-1")];
         for (index, root) in roots.iter().enumerate() {
             fs::create_dir(root).expect("run fixture root");
             write_pair_manifest(root, index, &authors[index], &relays[index]);
         }
         Self {
             temporary,
+            pair_root,
             authors,
             relays,
             roots,
