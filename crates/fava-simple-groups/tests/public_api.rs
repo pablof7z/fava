@@ -5,7 +5,11 @@ use std::collections::BTreeSet;
 use fava_query::{Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, SingleLetterTag};
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
-use fava_simple_groups::{Group, GroupError, GroupRecords};
+use fava_simple_groups::{Group, GroupError, GroupMetadata, GroupRecords};
+
+fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, GroupError> {
+    GroupMetadata::from_event(event).map(|metadata| metadata.id().to_owned())
+}
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
@@ -100,4 +104,11 @@ fn group_records_uses_exact_fixed_kind_set() {
             &ResultAuthority::OnlyRelays(BTreeSet::from([host])),
         )
     );
+}
+
+#[test]
+fn metadata_parser_accessors_compile_externally() {
+    let parser: fn(&fava_write::EventValue) -> Result<String, GroupError> =
+        metadata_signature_is_public;
+    let _ = parser;
 }

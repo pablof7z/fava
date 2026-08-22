@@ -551,6 +551,7 @@ dependencies = [
  "fava-query",
  "fava-state",
  "fava-write",
+ "nostr",
 ]
 
 [[package]]

@@ -66,6 +66,75 @@ pub enum GroupError {
         /// Maximum supported tag count.
         maximum: usize,
     },
+    /// A parser received an event kind other than its exact protocol kind.
+    WrongRecordKind {
+        /// Required event kind.
+        expected: u16,
+        /// Supplied event kind.
+        actual: u16,
+    },
+    /// Relay-authored records must carry a signature.
+    UnsignedRecord,
+    /// A signed record's id does not match its body.
+    InvalidRecordId,
+    /// A signed record's signature does not verify against its id and author.
+    InvalidRecordSignature,
+    /// An addressable group record has no `d` row.
+    MissingRecordId,
+    /// An addressable group record has an empty `d` value.
+    EmptyRecordId,
+    /// An addressable group record repeats its `d` row.
+    DuplicateRecordId,
+    /// An addressable group record carries contradictory `d` values.
+    ConflictingRecordId,
+    /// Record tag input exceeds the parser's structural bound.
+    TooManyRecordTags {
+        /// Tags observed before refusal.
+        actual: usize,
+        /// Maximum accepted tag count.
+        maximum: usize,
+    },
+    /// A record exceeds the parser's aggregate byte bound.
+    RecordTooLarge {
+        /// Bytes observed before refusal.
+        bytes: usize,
+        /// Maximum accepted aggregate bytes.
+        maximum: usize,
+    },
+    /// A single tag carries too many values.
+    TooManyRecordTagValues {
+        /// Source tag index.
+        tag_index: usize,
+        /// Values observed before refusal.
+        actual: usize,
+        /// Maximum accepted value count.
+        maximum: usize,
+    },
+    /// A tag value exceeds the parser's string bound.
+    RecordValueTooLong {
+        /// Source tag index.
+        tag_index: usize,
+        /// Source value index within the tag.
+        value_index: usize,
+        /// Value length in bytes.
+        bytes: usize,
+        /// Maximum accepted string bytes.
+        maximum: usize,
+    },
+    /// A singleton record field was repeated and cannot be selected safely.
+    AmbiguousRecordField(&'static str),
+    /// One recognized source row is malformed without retaining hostile input.
+    MalformedRecordRow {
+        /// Source tag index.
+        tag_index: usize,
+        /// Stable bounded reason.
+        reason: &'static str,
+    },
+    /// One recognized source row repeats an already accepted exact target.
+    DuplicateRecordRow {
+        /// Source tag index.
+        tag_index: usize,
+    },
 }
 
 impl fmt::Display for GroupError {
@@ -104,6 +173,67 @@ impl fmt::Display for GroupError {
                 write!(
                     formatter,
                     "group event tag count exceeds bound: {actual} > {maximum}"
+                )
+            }
+            Self::WrongRecordKind { expected, actual } => {
+                write!(
+                    formatter,
+                    "wrong group record kind: {actual}, expected {expected}"
+                )
+            }
+            Self::UnsignedRecord => formatter.write_str("group records must be signed"),
+            Self::InvalidRecordId => formatter.write_str("group record id is invalid"),
+            Self::InvalidRecordSignature => {
+                formatter.write_str("group record signature is invalid")
+            }
+            Self::MissingRecordId => formatter.write_str("group record has no d row"),
+            Self::EmptyRecordId => formatter.write_str("group record d value is empty"),
+            Self::DuplicateRecordId => formatter.write_str("group record d row is duplicated"),
+            Self::ConflictingRecordId => {
+                formatter.write_str("group record d rows are contradictory")
+            }
+            Self::TooManyRecordTags { actual, maximum } => {
+                write!(
+                    formatter,
+                    "group record tag count exceeds bound: {actual} > {maximum}"
+                )
+            }
+            Self::RecordTooLarge { bytes, maximum } => {
+                write!(
+                    formatter,
+                    "group record bytes exceed bound: {bytes} > {maximum}"
+                )
+            }
+            Self::TooManyRecordTagValues {
+                tag_index,
+                actual,
+                maximum,
+            } => write!(
+                formatter,
+                "group record tag {tag_index} value count exceeds bound: {actual} > {maximum}"
+            ),
+            Self::RecordValueTooLong {
+                tag_index,
+                value_index,
+                bytes,
+                maximum,
+            } => write!(
+                formatter,
+                "group record tag {tag_index} value {value_index} bytes exceed bound: {bytes} > {maximum}"
+            ),
+            Self::AmbiguousRecordField(field) => {
+                write!(formatter, "group record field {field} is ambiguous")
+            }
+            Self::MalformedRecordRow { tag_index, reason } => {
+                write!(
+                    formatter,
+                    "group record row {tag_index} is malformed: {reason}"
+                )
+            }
+            Self::DuplicateRecordRow { tag_index } => {
+                write!(
+                    formatter,
+                    "group record row {tag_index} repeats an accepted target"
                 )
             }
         }
