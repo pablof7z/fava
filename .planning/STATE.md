@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-06-PLAN.md
-last_updated: "2026-08-22T01:10:42.875Z"
+stopped_at: Completed 07.1-07-PLAN.md
+last_updated: "2026-08-22T01:28:22.604Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-06 completed; lossless fallible NIP-02 edit helpers delivered
-state_head: 6ae2cec18d44ced91790038e655d6ded2a6ebf79
+last_activity_desc: Plan 07.1-07 completed; primary facade publication regressions migrated
+state_head: ff54ba9d49af5a8a82f89fbd397ce6eb9afc4558
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 18
+  completed_plans: 19
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-06 completed; lossless fallible NIP-02 edit helpers delivered
+Last activity: 2026-08-22 — Plan 07.1-07 completed; primary facade publication regressions migrated
 
 Progress: [██████░░░░] 57%
 
@@ -52,11 +52,6 @@ all authored plans and their review and verification gates.
 | Phase 07 | 9 | 407 min | 45 min |
 | Phase 06.1 | 3 | 42 min | 14 min |
 | Phase 07.1 | 1 | 6 min | 6 min |
-
-**Recent Trend:**
-
-- Last 5 plans: 38 min, 15 min, 9 min, 18 min, 6 min
-- Trend: Phase 07.1 began below the Phase 06.1 remediation average
 
 **Per-Plan Metrics:**
 
@@ -80,6 +75,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P04 | 16min | 2 tasks | 12 files |
 | Phase 07.1 P05 | 10min | 2 tasks | 11 files |
 | Phase 07.1 P06 | 11min | 2 tasks | 6 files |
+| Phase 07.1 P07 | 18min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -119,6 +115,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: follow and unfollow accept standard ToString inputs parsed by upstream PublicKey::parse, avoiding new target vocabulary.
 - [Phase 07.1]: NIP-02 metadata add uses distinct opcode 3 while original 33-byte add/remove meanings remain unchanged.
 - [Phase 07.1]: Kind-3 edits preserve every nonmatching row and content byte; only exact valid-key target matches are retained once or removed.
+- [Phase 07.1]: Facade callers use publish/by/to; neutral intents stay in fava-write preview/store fixtures, and Plan 08 owns shared capability support without a compatibility adapter.
 
 ### Pending Todos
 
@@ -146,6 +143,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T01:10:42.786Z
-Stopped at: Completed 07.1-06-PLAN.md
+Last session: 2026-08-22T01:28:22.516Z
+Stopped at: Completed 07.1-07-PLAN.md
 Resume file: None
