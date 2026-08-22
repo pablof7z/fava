@@ -1,15 +1,22 @@
-//! Executable exact dependency boundary for the simple-groups capability.
+//! Executable dependency, ownership, and universal-owner boundaries.
 
 use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use fava_query::{Kind, Query, RelayUrl};
+use fava_simple_groups::{Group, GroupRecords, SimpleGroups};
+use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 const CARGO_MANIFEST: &str = include_str!("../Cargo.toml");
 const BAZEL_MANIFEST: &str = include_str!("../BUILD.bazel");
+const PUBLIC_ROOT: &str = include_str!("../src/lib.rs");
 
 fn toml_table_keys(manifest: &str, table: &str) -> BTreeSet<String> {
     let header = format!("[{table}]");
     let mut in_table = false;
     let mut keys = BTreeSet::new();
-
     for line in manifest.lines() {
         let line = line.split('#').next().unwrap_or_default().trim();
         if line.starts_with('[') && line.ends_with(']') {
@@ -28,7 +35,6 @@ fn toml_table_keys(manifest: &str, table: &str) -> BTreeSet<String> {
             );
         }
     }
-
     keys
 }
 
@@ -66,6 +72,79 @@ fn first_party_library_deps(target: &str) -> BTreeSet<String> {
         .collect()
 }
 
+fn workspace_root() -> PathBuf {
+    std::env::var_os("BUILD_WORKSPACE_DIRECTORY").map_or_else(
+        || {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(Path::parent)
+                .expect("crate lives beneath workspace/crates")
+                .to_owned()
+        },
+        PathBuf::from,
+    )
+}
+
+fn rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(root).expect("source directory exists") {
+        let path = entry.expect("source entry").path();
+        if path.is_dir() {
+            rust_sources(&path, sources);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            sources.push(path);
+        }
+    }
+}
+
+fn capability_production_sources() -> Vec<PathBuf> {
+    let mut sources = Vec::new();
+    rust_sources(
+        &workspace_root().join("crates/fava-simple-groups/src"),
+        &mut sources,
+    );
+    sources.retain(|source| {
+        !source
+            .components()
+            .any(|component| component.as_os_str() == "tests")
+            && source.file_name().is_none_or(|name| name != "tests.rs")
+    });
+    sources.sort();
+    sources
+}
+
+fn code_lines(source: &str) -> String {
+    source
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("//") && !line.starts_with("/*") && !line.starts_with('*')
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn public_exports(root: &str) -> BTreeSet<String> {
+    let mut exports = BTreeSet::new();
+    for line in root.lines().map(str::trim) {
+        let Some(body) = line.strip_prefix("pub use ") else {
+            continue;
+        };
+        let body = body.trim_end_matches(';');
+        if let Some((_, names)) = body.split_once("::{") {
+            for name in names.trim_end_matches('}').split(',') {
+                exports.insert(name.trim().to_owned());
+            }
+        } else {
+            exports.insert(
+                body.rsplit_once("::")
+                    .map_or(body, |(_, name)| name)
+                    .to_owned(),
+            );
+        }
+    }
+    exports
+}
+
 #[test]
 fn normal_dependencies_are_exact() {
     let cargo_expected = BTreeSet::from([
@@ -78,13 +157,171 @@ fn normal_dependencies_are_exact() {
         "//crates/fava-state:lib".to_owned(),
         "//crates/fava-write:lib".to_owned(),
     ]);
-
     let cargo_actual = toml_table_keys(CARGO_MANIFEST, "dependencies");
     let bazel_actual = first_party_library_deps(starlark_call(BAZEL_MANIFEST, "rust_library"));
-
     assert_eq!(
         (cargo_actual, bazel_actual),
         (cargo_expected, bazel_expected),
         "Cargo and Bazel normal dependencies must equal the approved neutral owners"
     );
+}
+
+#[test]
+fn pure_helpers_have_no_lifecycle_owner() {
+    let sources = capability_production_sources();
+    assert!(
+        !sources.is_empty(),
+        "capability source set must be non-empty"
+    );
+    for source in &sources {
+        let code = code_lines(&fs::read_to_string(source).expect("source is readable"));
+        assert!(
+            !code.lines().any(|line| {
+                let line = line.trim_start();
+                line.starts_with("static ") || line.starts_with("pub static ")
+            }),
+            "pure helper retained hidden static state in {}",
+            source.display()
+        );
+        for forbidden in [
+            "thread_local!",
+            "OnceLock",
+            "LazyLock",
+            "Mutex<",
+            "RwLock<",
+            "AtomicBool",
+            "AtomicUsize",
+            "AtomicU64",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "pure helper retained hidden state in {} through {forbidden}",
+                source.display()
+            );
+        }
+    }
+
+    let host = RelayUrl::parse("wss://groups.example").expect("relay URL");
+    let group = Group::on([host.clone()], "photos").expect("group");
+    let author =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .expect("generator public key");
+    let draft = EventBuilder::new(author, Kind::from_u16(9))
+        .created_at(Timestamp::from(7))
+        .build()
+        .expect("bounded draft");
+    let prepared = group.prepare(draft).expect("first preparation");
+    assert_eq!(group.prepare(prepared.clone()), Ok(prepared));
+    let query = Query::events().limit(8).expect("positive limit");
+    assert_eq!(group.events(query.clone()), group.events(query));
+    assert_eq!(
+        group.records(GroupRecords::all()),
+        group.records(GroupRecords::all())
+    );
+    assert_eq!(group.hosts().collect::<Vec<_>>(), vec![host]);
+    let first = SimpleGroups::materializer();
+    let second = SimpleGroups::materializer();
+    assert!(!Arc::ptr_eq(&first, &second));
+}
+
+#[test]
+fn capability_sources_and_exports_own_no_lifecycle() {
+    for source in capability_production_sources() {
+        let code = code_lines(&fs::read_to_string(&source).expect("source is readable"));
+        for forbidden in [
+            "use fava::",
+            "fava_observe",
+            "fava_publication",
+            "fava_signer",
+            "fava_routing",
+            "fava_write_store",
+            "fava_publisher",
+            "fava_delivery",
+            "fava_transport",
+            "GroupObservation",
+            "GroupPublication",
+            "GroupReceipt",
+            "GroupRuntime",
+            "GroupProvider",
+            "GroupStore",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "capability source {} owns forbidden lifecycle edge {forbidden}",
+                source.display()
+            );
+        }
+    }
+    let approved = BTreeSet::from([
+        "Group".to_owned(),
+        "GroupAdmins".to_owned(),
+        "GroupError".to_owned(),
+        "GroupMembers".to_owned(),
+        "GroupMetadata".to_owned(),
+        "GroupParticipants".to_owned(),
+        "GroupPins".to_owned(),
+        "GroupRecords".to_owned(),
+        "GroupRoles".to_owned(),
+        "GroupSnapshot".to_owned(),
+        "PinnedItem".to_owned(),
+        "SavedGroup".to_owned(),
+        "SavedRelay".to_owned(),
+        "SimpleGroups".to_owned(),
+    ]);
+    assert_eq!(public_exports(PUBLIC_ROOT), approved);
+}
+
+#[test]
+fn universal_owners_remain_nip29_blind() {
+    let root = workspace_root().join("crates");
+    let mut sources = Vec::new();
+    for owner in ["fava", "fava-query", "fava-state", "fava-write"] {
+        rust_sources(&root.join(owner).join("src"), &mut sources);
+    }
+    assert!(
+        !sources.is_empty(),
+        "universal owner source set must be non-empty"
+    );
+    for source in sources {
+        let code = code_lines(&fs::read_to_string(&source).expect("source is readable"));
+        for forbidden in [
+            "fava_simple_groups",
+            "fava-simple-groups",
+            "NIP-29",
+            "nip29",
+            "nip_29",
+            "39_000",
+            "39_001",
+            "39_002",
+            "39_003",
+            "39_004",
+            "39_005",
+            "10_009",
+            "9_002",
+            "9_010",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "universal owner {} contains capability branch {forbidden}",
+                source.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn management_kinds_remain_author_bearing_architecture_break() {
+    let root = workspace_root().join("crates/fava-simple-groups/src");
+    let management = code_lines(
+        &fs::read_to_string(root.join("management.rs")).expect("management source is readable"),
+    );
+    let edit = code_lines(&fs::read_to_string(root.join("edit.rs")).expect("edit source readable"));
+    assert!(management.contains("UnsignedEvent"));
+    assert!(!management.contains("ReplaceableEventEdit"));
+    for forbidden in ["9_002", "9_010", "9002", "9010"] {
+        assert!(
+            !edit.contains(forbidden),
+            "management kind entered ReplaceableEventEdit source through {forbidden}"
+        );
+    }
 }

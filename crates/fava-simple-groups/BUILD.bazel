@@ -38,6 +38,7 @@ rust_test(
     edition = crate_edition(),
     deps = [
         ":lib",
+        "//crates/fava:lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
@@ -49,5 +50,10 @@ rust_test(
     crate_name = "fava_simple_groups_architecture",
     srcs = ["tests/architecture.rs"],
     edition = crate_edition(),
+    deps = [
+        ":lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-write:lib",
+    ],
     compile_data = ["Cargo.toml", "BUILD.bazel"],
 )
