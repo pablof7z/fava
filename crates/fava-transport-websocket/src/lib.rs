@@ -10,14 +10,21 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::Error as WebSocketError;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async_with_config};
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type SocketSink = SplitSink<Socket, Message>;
 type SocketStream = SplitStream<Socket>;
 
-/// WebSocket relay transport with an exact text-frame size bound.
+/// WebSocket relay transport with one exact text-frame size bound.
+///
+/// The bound applies in both directions. An outbound frame over the bound is a
+/// definite pre-handoff refusal; an inbound frame over the bound is refused by
+/// the WebSocket layer and reported as an exact scoped invalid frame. A hostile
+/// relay cannot make Fava buffer more than the declared bound.
 pub struct WebSocketTransport {
     max_frame_bytes: NonZeroUsize,
     next_generation: AtomicU64,
@@ -63,7 +70,10 @@ impl Transport for WebSocketTransport {
                     )
                 })?
                 + 1;
-            let (socket, _) = connect_async(key.relay.as_str())
+            let config = WebSocketConfig::default()
+                .max_message_size(Some(self.max_frame_bytes.get()))
+                .max_frame_size(Some(self.max_frame_bytes.get()));
+            let (socket, _) = connect_async_with_config(key.relay.as_str(), Some(config), false)
                 .await
                 .map_err(|error| TransportError::ConnectionRefused(error.to_string()))?;
             let (sink, stream) = socket.split();
@@ -143,7 +153,16 @@ impl RelaySession for WebSocketRelaySession {
                 }
                 let message = self.stream.lock().await.next().await;
                 match message {
-                    Some(Ok(Message::Text(text))) => return Ok(text.to_string()),
+                    Some(Ok(Message::Text(text))) => {
+                        if text.len() > self.max_frame_bytes.get() {
+                            return Err(TransportError::InvalidFrame(format!(
+                                "inbound frame uses {} bytes but this transport allows {}",
+                                text.len(),
+                                self.max_frame_bytes
+                            )));
+                        }
+                        return Ok(text.to_string());
+                    }
                     Some(Ok(Message::Close(frame))) => {
                         self.closed.store(true, Ordering::SeqCst);
                         return Err(TransportError::Disconnected(format!("{frame:?}")));
@@ -154,6 +173,10 @@ impl RelaySession for WebSocketRelaySession {
                         ));
                     }
                     Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
+                    Some(Err(WebSocketError::Capacity(error))) => {
+                        self.closed.store(true, Ordering::SeqCst);
+                        return Err(TransportError::InvalidFrame(error.to_string()));
+                    }
                     Some(Err(error)) => {
                         self.closed.store(true, Ordering::SeqCst);
                         return Err(TransportError::Disconnected(error.to_string()));

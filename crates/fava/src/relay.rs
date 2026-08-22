@@ -1,3 +1,5 @@
+mod ingress;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -6,10 +8,9 @@ use std::time::Duration;
 use fava_auth::{AUTHENTICATION_DEADLINE, Authentication, AuthenticationOutcome, RelayChallenge};
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
-use fava_ingest::admit_subscription_event;
 use fava_nip11::{RelayInformationFetcher, RelayLimitation};
 use fava_query::Query;
-use fava_state::{RelaySessionKey, Timestamp};
+use fava_state::RelaySessionKey;
 use fava_subscriptions::{RelayLimits, SubscriptionPlan, SubscriptionPlanner, demand_for_query};
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
@@ -17,6 +18,8 @@ use nostr::event::EventId;
 use nostr::filter::Filter;
 use nostr::key::PublicKey;
 use tokio::sync::watch;
+
+use self::ingress::RelayIngress;
 
 /// Providers one live relay task needs, selected once by the assembly.
 #[derive(Clone)]
@@ -62,7 +65,7 @@ pub(super) struct OpenedRelay {
     query: Query,
     providers: RelayProviders,
     session: Arc<dyn RelaySession>,
-    attribution: BTreeMap<SubscriptionId, Filter>,
+    ingress: RelayIngress,
     demand: Vec<ClientMessage<'static>>,
     pending_authentication: Option<(EventId, PublicKey)>,
 }
@@ -74,12 +77,13 @@ impl OpenedRelay {
         providers: RelayProviders,
     ) -> Result<Self, String> {
         let established = establish(&session_key, &query, &providers).await?;
+        let generation = established.session.generation();
         Ok(Self {
             session_key,
             query,
             providers,
             session: established.session,
-            attribution: established.attribution,
+            ingress: RelayIngress::new(generation, established.attribution),
             demand: established.demand,
             pending_authentication: None,
         })
@@ -89,7 +93,7 @@ impl OpenedRelay {
         withdraw(
             self.session.as_ref(),
             self.providers.diagnostics.as_ref(),
-            &self.attribution,
+            self.ingress.attribution(),
         )
         .await;
     }
@@ -103,7 +107,7 @@ impl OpenedRelay {
                         withdraw(
                             self.session.as_ref(),
                             self.providers.diagnostics.as_ref(),
-                            &self.attribution,
+                            self.ingress.attribution(),
                         ).await;
                         return;
                     }
@@ -152,21 +156,16 @@ impl OpenedRelay {
                 self.settle_authentication(event_id, status, message.into_owned())
                     .await;
             }
-            message => handle_message(
-                self.session.as_ref(),
+            message => self.ingress.handle(
                 self.providers.cache.as_ref(),
                 self.providers.diagnostics.as_ref(),
-                &self.attribution,
+                &self.session_key,
+                generation,
                 message,
             ),
         }
     }
 
-    /// Answer one exact challenge on the generation that carried it.
-    ///
-    /// The application policy decides. A decline or failure ends only this
-    /// relay session's authentication; the query, other relays, and other
-    /// relay-access identities are untouched.
     async fn answer_challenge(&mut self, challenge: String) {
         let generation = self.session.generation();
         self.providers
@@ -252,7 +251,18 @@ impl OpenedRelay {
     }
 
     /// Re-issue the exact accepted plan after authentication unblocks it.
-    async fn restore_demand(&self) {
+    ///
+    /// Restoring demand opens the same subscription ids again on this same
+    /// generation, so their earlier terminal state no longer applies.
+    async fn restore_demand(&mut self) {
+        if !self.ingress.restore_generation(self.session.generation()) {
+            self.providers.diagnostics.failed(
+                self.session_key.clone(),
+                self.session.generation(),
+                "authenticated demand belongs to a retired relay generation".to_owned(),
+            );
+            return;
+        }
         for message in &self.demand {
             let Ok(frame) = encode_client(message) else {
                 continue;
@@ -293,8 +303,9 @@ impl OpenedRelay {
             };
             match established {
                 Ok(established) => {
+                    let generation = established.session.generation();
                     self.session = established.session;
-                    self.attribution = established.attribution;
+                    self.ingress = RelayIngress::new(generation, established.attribution);
                     self.demand = established.demand;
                     self.pending_authentication = None;
                     return true;
@@ -419,67 +430,6 @@ fn validate_plan(expected: &RelaySessionKey, plan: &SubscriptionPlan) -> Result<
         }
     }
     Ok(())
-}
-
-fn handle_message(
-    session: &dyn RelaySession,
-    cache: &dyn EventCache,
-    diagnostics: &Diagnostics,
-    attribution: &BTreeMap<SubscriptionId, Filter>,
-    message: RelayMessage<'static>,
-) {
-    let key = session.key().clone();
-    let generation = session.generation();
-    match message {
-        RelayMessage::Event {
-            subscription_id,
-            event,
-        } => {
-            let id = subscription_id.into_owned();
-            let Some(filter) = attribution.get(&id) else {
-                diagnostics.failed(key, generation, format!("unattributed EVENT for {id}"));
-                return;
-            };
-            if let Err(error) = admit_subscription_event(
-                cache,
-                session.key(),
-                &id,
-                &id,
-                filter,
-                event.into_owned(),
-                Timestamp::now(),
-            ) {
-                diagnostics.failed(key, generation, error.to_string());
-            }
-        }
-        RelayMessage::EndOfStoredEvents(subscription) => {
-            let id = subscription.into_owned();
-            if attribution.contains_key(&id) {
-                diagnostics.eose(key, generation, id);
-            } else {
-                diagnostics.failed(key, generation, format!("unattributed EOSE for {id}"));
-            }
-        }
-        RelayMessage::Closed {
-            subscription_id,
-            message,
-        } => {
-            let id = subscription_id.into_owned();
-            if attribution.contains_key(&id) {
-                diagnostics.closed(key, generation, id, message.into_owned());
-            } else {
-                diagnostics.failed(key, generation, format!("unattributed CLOSED for {id}"));
-            }
-        }
-        RelayMessage::Notice(message) => {
-            diagnostics.failed(key, generation, format!("relay NOTICE: {message}"));
-        }
-        RelayMessage::Auth { .. }
-        | RelayMessage::Ok { .. }
-        | RelayMessage::Count { .. }
-        | RelayMessage::NegMsg { .. }
-        | RelayMessage::NegErr { .. } => {}
-    }
 }
 
 async fn withdraw(
