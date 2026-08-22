@@ -162,6 +162,7 @@ dependencies = [
  "fava-write-store-redb",
  "futures-util",
  "hex",
+ "libc",
  "nostr",
  "secp256k1",
  "serde",
