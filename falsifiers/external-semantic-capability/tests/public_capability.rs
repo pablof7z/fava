@@ -16,8 +16,8 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
 use support::{
-    explicit_intent, harness, open_external_source, open_observation, raw_intent, signed,
-    wait_eose, wait_first_record, wait_generation_record, wait_receipt, wait_terminal,
+    harness, open_external_source, open_observation, signed, wait_eose, wait_first_record,
+    wait_generation_record, wait_receipt, wait_terminal,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -25,49 +25,34 @@ async fn external_capability_composes_through_public_fava() {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let harness = harness(keys.clone());
-    let intent = explicit_intent(insert("alpha").unwrap(), actor, &harness.relay);
-
-    let preview = harness
-        .fava
-        .preview_write_routes(&intent)
-        .expect("external semantic preview");
-    assert!(preview.settled);
-    assert_eq!(preview.destinations.len(), 1);
-    let preview_keys = preview
-        .destinations
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    assert!(
-        preview
-            .destinations
-            .keys()
-            .any(|session| session.relay == harness.relay)
-    );
     assert!(harness.fava.open_receipts().unwrap().is_empty());
     assert_eq!(harness.transport.open_count(), 0);
     assert_eq!(harness.transport.publication_count(), 0);
 
     let mut observation = open_external_source(&harness.fava, &harness.relay, actor).await;
     let subscription = harness.transport.subscription().await;
-    let accepted = harness.fava.publish(intent).expect("external edit accepts");
+    let accepted = harness
+        .fava
+        .by(actor)
+        .to([harness.relay.clone()])
+        .expect("external relay scope validates")
+        .publish(insert("alpha").unwrap())
+        .expect("external edit accepts");
     let first = harness.transport.published(0).await;
-    let generation_one = wait_receipt(&harness.fava, accepted.receipt_id, |receipt| {
+    let generation_one = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
         receipt.current.publication.materialization_id == MaterializationId::from_u64(1)
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
     .await;
-    assert_eq!(accepted.write_id, generation_one.write_id);
-    assert_eq!(accepted.receipt_id, generation_one.receipt_id);
+    assert_eq!(accepted.write_id(), generation_one.write_id);
+    assert_eq!(accepted.receipt_id(), generation_one.receipt_id);
     assert_eq!(first.kind, external_kind());
-    assert_eq!(generation_one.desired_destinations, preview_keys);
-    assert_eq!(
+    assert_eq!(generation_one.desired_destinations.len(), 1);
+    assert!(
         generation_one
-            .destinations()
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>(),
-        preview_keys
+            .desired_destinations
+            .iter()
+            .all(|session| session.relay == harness.relay)
     );
     assert_eq!(
         generation_one
@@ -75,7 +60,7 @@ async fn external_capability_composes_through_public_fava() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>(),
-        preview_keys
+        generation_one.desired_destinations
     );
 
     let preserved_tag = Tag::parse(["x-future", "opaque"]).expect("unknown tag");
@@ -89,12 +74,12 @@ async fn external_capability_composes_through_public_fava() {
     .expect("independent source signs");
     harness.transport.deliver(&subscription, &source);
 
-    let generation_two = wait_receipt(&harness.fava, accepted.receipt_id, |receipt| {
+    let generation_two = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
         receipt.current.publication.materialization_id == MaterializationId::from_u64(2)
     })
     .await;
-    assert_eq!(generation_two.write_id, accepted.write_id);
-    assert_eq!(generation_two.receipt_id, accepted.receipt_id);
+    assert_eq!(generation_two.write_id, accepted.write_id());
+    assert_eq!(generation_two.receipt_id, accepted.receipt_id());
     assert_eq!(
         generation_two.current.publication.materialization_source,
         Some(source.id)
@@ -147,10 +132,8 @@ async fn external_capability_composes_through_public_fava() {
     wait_eose(&harness.fava, &subscription).await;
     assert_eq!(harness.transport.publication_count(), 1);
     assert_eq!(
-        harness
-            .fava
-            .receipt(accepted.receipt_id)
-            .unwrap()
+        accepted
+            .receipt()
             .unwrap()
             .current
             .publication
@@ -160,14 +143,14 @@ async fn external_capability_composes_through_public_fava() {
 
     let retired = harness.transport.acknowledge(0);
     harness.transport.wait_closed(retired).await;
-    let after_retired = harness.fava.receipt(accepted.receipt_id).unwrap().unwrap();
+    let after_retired = accepted.receipt().unwrap();
     assert_eq!(
         after_retired.current.publication.materialization_id,
         MaterializationId::from_u64(2)
     );
     let second = harness.transport.published(1).await;
     assert_ne!(second.id, retired);
-    let before_successor_ack = wait_receipt(&harness.fava, accepted.receipt_id, |receipt| {
+    let before_successor_ack = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
         receipt.current.publication.materialization_id == MaterializationId::from_u64(2)
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
@@ -189,15 +172,10 @@ async fn external_capability_composes_through_public_fava() {
     );
     let current = harness.transport.acknowledge(1);
     harness.transport.wait_closed(current).await;
-    let terminal = wait_terminal(
-        &harness.fava,
-        accepted.receipt_id,
-        "successor terminal receipt",
-    )
-    .await;
+    let terminal = wait_terminal(&accepted, "successor terminal receipt").await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
-    assert_eq!(terminal.write_id, accepted.write_id);
-    assert_eq!(terminal.receipt_id, accepted.receipt_id);
+    assert_eq!(terminal.write_id, accepted.write_id());
+    assert_eq!(terminal.receipt_id, accepted.receipt_id());
     assert_eq!(terminal.current.publication.materialization_id.as_u64(), 2);
     assert_eq!(harness.transport.publication_count(), 2);
     observation.close();
@@ -212,11 +190,10 @@ async fn external_retired_completion_and_failure_preserve_current() {
     let subscription = harness.transport.subscription().await;
     let accepted = harness
         .fava
-        .publish(explicit_intent(
-            insert("alpha").unwrap(),
-            actor,
-            &harness.relay,
-        ))
+        .by(actor)
+        .to([harness.relay.clone()])
+        .expect("external relay scope validates")
+        .publish(insert("alpha").unwrap())
         .expect("external edit accepts");
     let first = harness.transport.published(0).await;
 
@@ -225,7 +202,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
         .finalize(&keys)
         .expect("core-valid oversized source signs");
     harness.transport.deliver(&subscription, &oversized);
-    let failed = wait_receipt(&harness.fava, accepted.receipt_id, |receipt| {
+    let failed = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
         receipt
             .current
             .publication
@@ -251,12 +228,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
 
     let current = harness.transport.acknowledge(0);
     harness.transport.wait_closed(current).await;
-    let terminal = wait_terminal(
-        &harness.fava,
-        accepted.receipt_id,
-        "preserved generation terminal receipt",
-    )
-    .await;
+    let terminal = wait_terminal(&accepted, "preserved generation terminal receipt").await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.current.id(), first.id);
     assert_eq!(terminal.current.publication.materialization_id.as_u64(), 1);
@@ -293,9 +265,14 @@ async fn raw_future_event_kind_publishes_unchanged() {
     .await;
     let accepted = harness
         .fava
-        .publish(raw_intent(event.clone(), &harness.relay))
+        .to([harness.relay.clone()])
+        .expect("future-kind relay scope validates")
+        .publish(event.clone())
         .expect("raw future event accepts without matching materializer");
-    assert_eq!(accepted.current.event, EventValue::Unsigned(event.clone()));
+    assert_eq!(
+        accepted.receipt().unwrap().current.event,
+        EventValue::Unsigned(event.clone())
+    );
     let record = wait_first_record(&mut observation, "raw future query visibility").await;
     assert_eq!(record.id(), expected_id);
     assert_eq!(record.event.kind(), future_kind);
@@ -311,12 +288,7 @@ async fn raw_future_event_kind_publishes_unchanged() {
     assert_eq!(published.content, "opaque future content");
     let id = harness.transport.acknowledge(0);
     harness.transport.wait_closed(id).await;
-    let terminal = wait_terminal(
-        &harness.fava,
-        accepted.receipt_id,
-        "raw future terminal receipt",
-    )
-    .await;
+    let terminal = wait_terminal(&accepted, "raw future terminal receipt").await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(signed(&terminal), &published);
     assert_eq!(signed(&terminal).tags.as_slice(), unknown.as_slice());

@@ -1,11 +1,11 @@
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventValue, Fava, Receipt, RelayUrl, WriteIntent, WriteRouting};
+use fava::{EventValue, Fava, Receipt, RelayUrl};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_external_semantic_capability_proof::selected_materializer;
@@ -56,27 +56,6 @@ pub fn harness(keys: Keys) -> Harness {
         transport,
         relay,
     }
-}
-
-pub fn explicit_intent(
-    edit: fava::ReplaceableEventEdit,
-    author: fava::PublicKey,
-    relay: &RelayUrl,
-) -> WriteIntent {
-    WriteIntent::edit_as(
-        edit,
-        author,
-        WriteRouting::Explicit(BTreeSet::from([relay.clone()])),
-    )
-    .expect("external edit intent")
-}
-
-pub fn raw_intent(event: fava::UnsignedEvent, relay: &RelayUrl) -> WriteIntent {
-    WriteIntent::event(
-        event,
-        WriteRouting::Explicit(BTreeSet::from([relay.clone()])),
-    )
-    .expect("raw future intent")
 }
 
 pub fn signed(receipt: &Receipt) -> &Event {

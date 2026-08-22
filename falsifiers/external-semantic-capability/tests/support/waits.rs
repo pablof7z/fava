@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use fava::{Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl};
+use fava::{Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl, Write, all};
 use fava_external_semantic_capability_proof::external_query;
 
 const DEADLINE: Duration = Duration::from_secs(2);
@@ -139,11 +139,11 @@ pub async fn wait_eose(fava: &Fava, subscription: &str) {
     .await;
 }
 
-pub async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId, label: &str) -> Receipt {
+pub async fn wait_terminal(write: &Write, label: &str) -> Receipt {
     with_deadline(
         label,
-        || format!("receipt={:?}", fava.receipt(receipt_id)),
-        fava.wait_terminal(receipt_id),
+        || format!("receipt={:?}", write.receipt()),
+        write.settled(all()),
     )
     .await
     .expect("receipt reaches terminal state")
