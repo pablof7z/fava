@@ -1,3 +1,8 @@
+#![allow(
+    clippy::result_large_err,
+    reason = "PublishError intentionally carries the complete terminal Receipt as evidence"
+)]
+
 //! Application-facing synchronous publication vocabulary.
 
 use std::fmt;
@@ -144,7 +149,6 @@ pub struct PublishTo<'a> {
 
 impl<'a> PublishTo<'a> {
     /// Add an exact edit author while preserving this explicit route.
-    #[must_use]
     pub fn by(self, author: PublicKey) -> PublishAs<'a> {
         PublishAs {
             fava: self.fava,
@@ -168,6 +172,10 @@ impl<'a> PublishTo<'a> {
 }
 
 /// Refusal at the application publication door.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "NotReached must expose the complete terminal Receipt without indirection"
+)]
 #[derive(Debug, Error)]
 pub enum PublishError {
     /// An authorless edit has no selected current account or explicit signer scope.

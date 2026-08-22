@@ -125,6 +125,10 @@ impl Fava {
     /// # Errors
     ///
     /// Returns [`PublishError`] when this assembly cannot validate or accept it.
+    #[allow(
+        clippy::result_large_err,
+        reason = "PublishError intentionally carries the complete terminal Receipt as evidence"
+    )]
     #[allow(private_bounds)]
     pub fn publish<P>(&self, payload: P) -> Result<Write, PublishError>
     where
@@ -134,7 +138,6 @@ impl Fava {
     }
 
     /// Narrow one edit publication to this exact author.
-    #[must_use]
     pub fn by(&self, author: PublicKey) -> PublishAs<'_> {
         publication::by(self, author)
     }
@@ -145,6 +148,10 @@ impl Fava {
     ///
     /// Returns [`PublishError`] when the normalized route is empty or exceeds
     /// the explicit publication bound.
+    #[allow(
+        clippy::result_large_err,
+        reason = "PublishError intentionally carries the complete terminal Receipt as evidence"
+    )]
     pub fn to(
         &self,
         relays: impl IntoIterator<Item = RelayUrl>,
