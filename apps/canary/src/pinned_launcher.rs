@@ -3,7 +3,7 @@
 use std::fs;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{FileExt, OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 
 use rustix::io::dup;
@@ -46,11 +46,11 @@ pub(crate) async fn launch(
     verify_source_manifest(&source_manifest_bytes, &claim)?;
     let mut child = opened_child(
         &sealed,
+        source,
         arguments,
         attestation_file,
         source_manifest_file,
     )?;
-    child.current_dir(source).kill_on_drop(true);
     let status = child.wait().await?;
     if !status.success() {
         return Err(std::io::Error::other(format!("pinned canary child failed with {status}")).into());
@@ -107,14 +107,15 @@ fn verify_source_manifest(bytes: &[u8], claim: &BuildAttestation) -> canary::Can
 
 fn opened_child(
     executable: &SealedExecutable,
+    current_directory: &Path,
     arguments: impl IntoIterator<Item = String>,
     build_attestation: SealedExecutable,
     source_manifest: SealedExecutable,
 ) -> canary::CanaryResult<tokio::process::Child> {
     let build_file = build_attestation.try_clone()?;
     let source_file = source_manifest.try_clone()?;
-    let build_attestation = dup(&build_file)?;
-    let source_manifest = dup(&source_file)?;
+    let build_attestation = dup(&build_file).map_err(std::io::Error::from)?;
+    let source_manifest = dup(&source_file).map_err(std::io::Error::from)?;
     let build_path = format!("/proc/self/fd/{}", build_attestation.as_raw_fd());
     let source_path = format!("/proc/self/fd/{}", source_manifest.as_raw_fd());
     let mut command = Command::new("/proc/self/fd/0");
@@ -127,7 +128,9 @@ fn opened_child(
             source_path,
         ])
         .args(arguments)
-        .stdin(Stdio::from(executable.try_clone()?));
+        .stdin(Stdio::from(executable.try_clone()?))
+        .current_dir(current_directory)
+        .kill_on_drop(true);
     Ok(command.spawn()?)
 }
 
@@ -190,6 +193,7 @@ mod tests {
         let source_input = SealedExecutable::copy_from(&opened, 1024).expect("sealed manifest");
         let status = opened_child(
             &sealed,
+            fixture.path(),
             Vec::new(),
             build_input,
             source_input,
