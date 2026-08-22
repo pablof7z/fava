@@ -71,7 +71,11 @@ pub(super) fn destinations(
     }
 }
 
-fn terminal_evictions(state: &StoreState, updated: &Receipt, maximum: usize) -> Vec<ReceiptId> {
+pub(super) fn terminal_evictions(
+    state: &StoreState,
+    updated: &Receipt,
+    maximum: usize,
+) -> Vec<ReceiptId> {
     let mut terminal: Vec<_> = state
         .receipts
         .values()

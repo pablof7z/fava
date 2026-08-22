@@ -117,8 +117,9 @@ impl RedbWriteStore {
         next_identity: u64,
         receipt: &Receipt,
         semantic: Option<&SemanticCustody>,
+        removals: &[ReceiptId],
     ) -> Result<(), WriteStoreError> {
-        schema::commit_accept(&self.database, next_identity, receipt, semantic)
+        schema::commit_accept(&self.database, next_identity, receipt, semantic, removals)
     }
 
     fn commit_update(

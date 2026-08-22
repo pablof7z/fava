@@ -1,6 +1,10 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-use fava_write::{EventBuilder, Kind, MaterializationId, Timestamp, WriteIntent, WriteRouting};
+use fava_routing::RoutePlan;
+use fava_write::{
+    EventBuilder, Kind, MaterializationId, ReceiptOutcome, Timestamp, WriteIntent, WriteRouting,
+};
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
@@ -102,5 +106,63 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
             .is_err()
     );
     drop(store);
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
+    let path = unique_path("terminal-initial-route");
+    let store = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .unwrap();
+    let keys = Keys::generate();
+    let route = RoutePlan {
+        revision: 1,
+        destinations: BTreeMap::new(),
+        coverage: BTreeMap::new(),
+        unresolved: BTreeSet::new(),
+        shortfalls: Vec::new(),
+        settled: true,
+    };
+    let mut identities = Vec::new();
+
+    for timestamp in [1, 2] {
+        let reservation = store.reserve_active().expect("terminal slot reserves");
+        let accepted = store
+            .accept_reserved_materialized_edit(
+                reservation,
+                WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
+                materialization(keys.public_key(), timestamp, "terminal"),
+                None,
+                Some(&route),
+            )
+            .expect("terminal route commits atomically");
+        let receipt = store
+            .receipt(accepted.receipt_id)
+            .unwrap()
+            .expect("terminal receipt remains readable");
+        assert_eq!(receipt.outcome, ReceiptOutcome::NoDestination);
+        assert_eq!(accepted.current, receipt.current);
+        assert!(store.recover_materialized_edits().unwrap().is_empty());
+        identities.push(accepted.receipt_id);
+    }
+
+    assert_ne!(identities[0], identities[1]);
+    assert_eq!(store.len().unwrap(), 1, "terminal retention remains exact");
+    assert!(store.receipt(identities[0]).unwrap().is_none());
+    drop(store);
+
+    let reopened = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .expect("bounded store reopens");
+    assert_eq!(reopened.len().unwrap(), 1);
+    assert!(reopened.recover_materialized_edits().unwrap().is_empty());
+    drop(reopened);
     std::fs::remove_file(path).ok();
 }

@@ -92,7 +92,7 @@ impl WriteStore for RedbWriteStore {
             attempts: BTreeMap::new(),
         };
         let next_revision = next_revision(&state)?;
-        self.commit_accept(next_identity, &receipt, None)?;
+        self.commit_accept(next_identity, &receipt, None, &[])?;
         state.next_identity = next_identity;
         state.revision = next_revision;
         state.receipts.insert(receipt_id, receipt.clone());

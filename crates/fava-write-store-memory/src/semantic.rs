@@ -191,16 +191,18 @@ impl MemoryWriteStore {
 
         state.next_identity = next_identity;
         state.revision = next_revision;
-        state.coordinates.insert(coordinate, receipt_id);
-        state
-            .edits
-            .insert(receipt_id, (edit, author, selected_source, None));
+        if !receipt.is_terminal() {
+            state.coordinates.insert(coordinate, receipt_id);
+            state
+                .edits
+                .insert(receipt_id, (edit, author, selected_source, None));
+        }
         state.writes.insert(receipt_id, receipt.clone());
         self.publish_receipt(&state, &receipt);
         Ok(AcceptedWrite {
             write_id,
             receipt_id,
-            current,
+            current: receipt.current,
         })
     }
 

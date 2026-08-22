@@ -11,7 +11,7 @@ use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
 };
 
-use crate::lifecycle::{active_count, destinations, next_revision};
+use crate::lifecycle::{active_count, destinations, next_revision, terminal_evictions};
 use crate::{RedbWriteStore, SemanticCustody};
 
 impl RedbWriteStore {
@@ -127,19 +127,35 @@ impl RedbWriteStore {
             apply_route_to_receipt(&mut receipt, plan)?;
         }
         let custody = (edit, author, selected_source, None);
+        let terminal = receipt.is_terminal();
+        let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
-        self.commit_accept(next_identity, &receipt, Some(&custody))?;
+        self.commit_accept(
+            next_identity,
+            &receipt,
+            (!terminal).then_some(&custody),
+            &removals,
+        )?;
+        for id in &removals {
+            crate::release_semantic(&mut state, *id);
+            state.receipts.remove(id);
+        }
         state.next_identity = next_identity;
         state.revision = next_revision;
-        state.coordinates.insert(coordinate, receipt_id);
-        state.semantics.insert(receipt_id, custody);
+        if !terminal {
+            state.coordinates.insert(coordinate, receipt_id);
+            state.semantics.insert(receipt_id, custody);
+        }
         state.receipts.insert(receipt_id, receipt.clone());
         self.publish_snapshot(&state);
-        self.publish_receipt(Some(receipt), receipt_id);
+        for id in removals {
+            self.publish_receipt(None, id);
+        }
+        self.publish_receipt(Some(receipt.clone()), receipt_id);
         Ok(AcceptedWrite {
             write_id,
             receipt_id,
-            current,
+            current: receipt.current,
         })
     }
 

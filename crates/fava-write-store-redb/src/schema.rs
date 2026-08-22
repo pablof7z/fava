@@ -156,12 +156,13 @@ pub(super) fn commit_accept(
     next_identity: u64,
     receipt: &Receipt,
     semantic: Option<&SemanticCustody>,
+    removals: &[ReceiptId],
 ) -> Result<(), WriteStoreError> {
     commit(
         database,
         Some(next_identity),
         Some((receipt, semantic)),
-        &[],
+        removals,
     )
 }
 
