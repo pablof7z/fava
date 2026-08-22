@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-04-PLAN.md
-last_updated: "2026-08-22T00:40:33.908Z"
+stopped_at: Completed 07.1-05-PLAN.md
+last_updated: "2026-08-22T00:54:30.154Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
-state_head: f8a19aa8ccd41088128654815334fe618acc4b6b
+last_activity_desc: Plan 07.1-05 completed; typed NIP-02 reads and pure follow projection delivered
+state_head: d602f1dbe1c7d426b19f200e31adee472d808e31
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 16
+  completed_plans: 17
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-04 completed; typed contact lists conserve every raw `p` row as a valid follow or exact evidence
+Last activity: 2026-08-22 — Plan 07.1-05 completed; typed NIP-02 reads and pure follow projection delivered
 
 Progress: [██████░░░░] 57%
 
@@ -78,6 +78,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P02 | 21min | 3 tasks | 16 files |
 | Phase 07.1 P03 | 11min | 2 tasks | 7 files |
 | Phase 07.1 P04 | 16min | 2 tasks | 12 files |
+| Phase 07.1 P05 | 10min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Only a fully valid NIP-02 row enters duplicate membership; invalid rows never reserve targets.
 - [Phase 07.1]: Whole-event contact-list failures are ContactListError values; every row-local failure remains exact ContactListRowEvidence.
 - [Phase 07.1]: Follow uses the established fava-state RelayUrl directly, with no NIP-02 relay wrapper or lifecycle.
+- [Phase 07.1]: IntoContactAuthors is sealed and supports exact owned or borrowed one/many key shapes; every shape feeds the same present author axis.
+- [Phase 07.1]: contact_list applies no global limit because ordinary replacement evaluation selects one newest kind-3 event independently for every author coordinate.
+- [Phase 07.1]: followers_of uses exact lowercase p with canonical subject hex; follows_of owns no mutable state and preserves snapshot then row order.
 
 ### Pending Todos
 
@@ -138,6 +142,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T00:40:33.824Z
-Stopped at: Completed 07.1-04-PLAN.md
+Last session: 2026-08-22T00:54:30.069Z
+Stopped at: Completed 07.1-05-PLAN.md
 Resume file: None
