@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava_query::{EventRecord, QuerySnapshot};
-use fava_state::{RelayEvidence, RelayUrl};
+use fava_state::RelayUrl;
 use fava_write::{EventId, EventValue, PublicKey, Timestamp};
 
 use crate::{
@@ -96,7 +96,10 @@ impl GroupSnapshot {
                 .observations()
                 .map(|observation| observation.session.relay.clone())
                 .collect();
-            for host in hosts.iter_mut().filter(|_| !actual_hosts.is_empty()) {
+            for host in hosts
+                .iter_mut()
+                .filter(|host| actual_hosts.contains(&host.host))
+            {
                 host.consider(event.id(), event.created_at(), parsed.clone());
             }
         }
@@ -280,12 +283,7 @@ fn deduplicate_events(snapshot: &QuerySnapshot) -> Vec<EventRecord> {
             }
         } else {
             positions.insert(event.id(), events.len());
-            let mut retained = event.clone();
-            if let Some(observation) = event.relay_evidence.observations().next() {
-                retained.relay_evidence =
-                    RelayEvidence::one(observation.session.clone(), observation.observed_at);
-            }
-            events.push(retained);
+            events.push(event.clone());
         }
     }
     events
