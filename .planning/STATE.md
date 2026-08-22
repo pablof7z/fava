@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-09-PLAN.md
-last_updated: "2026-08-22T01:56:34.161Z"
+stopped_at: Completed 07.1-10-PLAN.md
+last_updated: "2026-08-22T02:11:26.954Z"
 last_activity: 2026-08-22
-last_activity_desc: Plan 07.1-09 completed; remaining callers migrated and old facade compatibility removed
-state_head: c2983dd43a49475c32143fdc0dbb4de9236dcb46
+last_activity_desc: Plan 07.1-10 completed; downstream canaries migrated and workspace compile debt cleared
+state_head: 7dea429fb8a2b94aff3bbc9b0daf4a460390b9c6
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 21
+  completed_plans: 22
   percent: 57
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
-Last activity: 2026-08-22 — Plan 07.1-09 completed; remaining callers migrated and old facade compatibility removed
+Last activity: 2026-08-22 — Plan 07.1-10 completed; downstream canaries migrated and workspace compile debt cleared
 
 Progress: [██████░░░░] 57%
 
@@ -78,6 +78,7 @@ all authored plans and their review and verification gates.
 | Phase 07.1 P07 | 18min | 3 tasks | 10 files |
 | Phase 07.1 P08 | 6min | 2 tasks | 4 files |
 | Phase 07.1 P09 | 13min | 3 tasks | 14 files |
+| Phase 07.1 P10 | 11min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Application harnesses publish through by and to and consume Write; embedded providers import WriteIntent only from fava-write.
 - [Phase 07.1]: Facade publication exposes payload scopes and returned Write, while neutral WriteIntent and AcceptedWrite stay in their provider contract crates.
 - [Phase 07.1]: WriteRouting remains facade-visible because Receipt::routing returns it; all other old intent and wait compatibility doors are removed.
+- [Phase 07.1]: Canary application flows publish payloads through publish, by, and to; only preview/store/provider boundaries construct neutral WriteIntent values.
+- [Phase 07.1]: Recovered durable obligations without their original Write handle reattach through subscribe-before-read receipt facts and an exact ReceiptId.
 
 ### Pending Todos
 
@@ -148,6 +151,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T01:56:34.072Z
-Stopped at: Completed 07.1-09-PLAN.md
+Last session: 2026-08-22T02:11:26.859Z
+Stopped at: Completed 07.1-10-PLAN.md
 Resume file: None
