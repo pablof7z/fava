@@ -517,6 +517,7 @@ if [ "$readonly_status" -eq 0 ]; then
   exit 73
 fi
 if ! docker exec "$readonly_container_id" test -f /target/toctou-readonly/result; then
+  docker logs --tail 32 "$readonly_container_id" >&2 || true
   echo "read-only post-build.rs mutation did not retain its result" >&2
   exit 73
 fi
