@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 current_phase: 07.1
 current_phase_name: Universal publication vocabulary and typed NIP-02 reads
 status: executing
-stopped_at: Completed 07.1-02-PLAN.md
-last_updated: "2026-08-22T00:05:33.817Z"
+stopped_at: Completed 07.1-03-PLAN.md
+last_updated: "2026-08-22T00:21:48.364Z"
 last_activity: 2026-08-22
 last_activity_desc: Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
-state_head: 2dd48665fc11ea3a18edd82a0e67cf45df39b2b7
+state_head: 771d8f7beb1cba414621534bae68b167bc2449a9
 progress:
   total_phases: 14
   completed_phases: 8
   total_plans: 24
-  completed_plans: 14
+  completed_plans: 15
   percent: 57
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 ## Current Position
 
 Phase: 07.1 (Universal publication vocabulary and typed NIP-02 reads) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-08-22 — Plan 07.1-02 completed; inert publication scopes and ordered routing delivered
 
@@ -76,6 +76,7 @@ all authored plans and their review and verification gates.
 | Phase 06.1 P03 | 18min | 2 tasks | 9 files |
 | Phase 07.1 P01 | 6min | 2 tasks | 9 files |
 | Phase 07.1 P02 | 21min | 3 tasks | 16 files |
+| Phase 07.1 P03 | 11min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: PublishAs is a borrowed edit-only handle and PublishTo is a borrowed sealed-payload handle; neither owns providers or performs work until publish receives a valid payload.
 - [Phase 07.1]: WriteRouting remains publicly re-exported from fava-write, while Explicit stores a first-occurrence sequence and keyed destination maps remain derived lane facts.
 - [Phase 07.1]: Equivalent exact event contributions expose the newest receipt local evidence to semantic queries while every WriteId and ReceiptId remains independently readable.
+- [Phase 07.1]: all() requires settled routing and exact terminal facts for every currently desired destination; mixed terminal outcomes satisfy it.
+- [Phase 07.1]: Settlement subscribes before reading and reloads complete durable state after relevant or lagged notifications; terminal refusal carries the full Receipt.
 
 ### Pending Todos
 
@@ -131,6 +134,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T00:05:33.736Z
-Stopped at: Completed 07.1-02-PLAN.md
+Last session: 2026-08-22T00:21:48.278Z
+Stopped at: Completed 07.1-03-PLAN.md
 Resume file: None
