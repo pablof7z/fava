@@ -87,6 +87,10 @@ impl GroupRecords {
 
 impl SimpleGroups {
     /// Query kind-10009 saved-group rows by exact saving authors.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
     pub fn saved_groups<I>(authors: I) -> Result<Query, GroupError>
     where
         I: IntoIterator,
@@ -98,6 +102,10 @@ impl SimpleGroups {
     }
 
     /// Query kind-10009 saved-relay rows by exact saving authors.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
     pub fn saved_relays<I>(authors: I) -> Result<Query, GroupError>
     where
         I: IntoIterator,
@@ -109,6 +117,10 @@ impl SimpleGroups {
     }
 
     /// Query kind-39001 records containing exact lowercase-p subjects.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
     pub fn groups_where_admin<I>(subjects: I) -> Result<Query, GroupError>
     where
         I: IntoIterator,
@@ -118,6 +130,10 @@ impl SimpleGroups {
     }
 
     /// Query kind-39002 records containing exact lowercase-p subjects.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
     pub fn groups_where_member<I>(subjects: I) -> Result<Query, GroupError>
     where
         I: IntoIterator,
@@ -127,6 +143,10 @@ impl SimpleGroups {
     }
 
     /// Project exact saving authors for one group's selected id-host pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupError`] when the supplied snapshot exceeds the projection bound.
     pub fn groups_saved_by(
         snapshot: &QuerySnapshot,
         group: &Group,

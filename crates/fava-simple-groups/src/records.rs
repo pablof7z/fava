@@ -94,7 +94,7 @@ pub(crate) fn saved_boundary(event: &EventValue) -> Result<&Event, GroupError> {
     Ok(event)
 }
 
-fn validate_structure(event: &Event) -> Result<(), GroupError> {
+pub(crate) fn validate_structure(event: &Event) -> Result<(), GroupError> {
     if event.tags.len() > MAX_RECORD_TAGS {
         return Err(GroupError::TooManyRecordTags {
             actual: event.tags.len().min(MAX_RECORD_TAGS.saturating_add(1)),

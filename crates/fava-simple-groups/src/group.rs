@@ -145,6 +145,7 @@ pub enum GroupError {
 }
 
 impl fmt::Display for GroupError {
+    #[allow(clippy::too_many_lines)] // One closed error owner keeps every typed refusal attributable.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidHost(error) => write!(formatter, "invalid group host: {error}"),

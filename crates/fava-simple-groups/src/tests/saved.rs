@@ -77,11 +77,11 @@ fn discovery_queries_are_ordinary_canonical_queries() {
         SimpleGroups::saved_groups([alice]).unwrap()
     );
 
-    let saver = Keys::generate();
+    let signing_keys = Keys::generate();
     let group = Group::on([relay("wss://a.example")], "photos").expect("group");
     let snapshot = QuerySnapshot::evaluated(
         vec![record(saved_event(
-            &saver,
+            &signing_keys,
             9,
             vec![
                 tag(&["group", "photos", "wss://a.example"]),
@@ -92,7 +92,7 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     );
     assert_eq!(
         SimpleGroups::groups_saved_by(&snapshot, &group).expect("pure projection"),
-        [saver.public_key()]
+        [signing_keys.public_key()]
     );
 }
 
@@ -269,6 +269,28 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         ]
     );
 
+    let save = SimpleGroups::save_group(&group, Some("ignored for existing")).expect("save edit");
+    let saved = materialize(&save, actor.public_key(), Some(&source), 21);
+    assert_eq!(saved.tags[1], source_tags[1]);
+    assert_eq!(
+        saved.tags.last(),
+        Some(&tag(&[
+            "group",
+            "photos",
+            "wss://b.example",
+            "ignored for existing",
+        ]))
+    );
+    assert_eq!(
+        saved
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().get(2).map(String::as_str) == Some("wss://a.example"))
+            .count(),
+        2,
+        "one valid row plus the malformed extension row survive"
+    );
+
     let remove = SimpleGroups::remove_group(&group).expect("remove edit");
     let removed = materialize(&remove, actor.public_key(), Some(&source), 21);
     assert_eq!(
@@ -315,5 +337,21 @@ fn saved_edit_rebases_on_newer_qualified_source() {
             tag(&["r", "wss://kept.example"]),
             tag(&["group", "photos", "wss://a.example"]),
         ]
+    );
+    assert!(SimpleGroups::save_group(&group, Some(&"x".repeat(4_097))).is_err());
+    assert!(
+        SimpleGroups::materializer()
+            .materialize(
+                &edit,
+                Keys::generate().public_key(),
+                Some(&newer),
+                Timestamp::from(33),
+            )
+            .is_err()
+    );
+    assert!(
+        SimpleGroups::materializer()
+            .materialize(&edit, actor.public_key(), Some(&newer), Timestamp::from(31),)
+            .is_err()
     );
 }
