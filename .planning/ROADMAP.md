@@ -162,7 +162,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 
 **Plans:** TBD
 
-- [ ] 08-01-PLAN.md
+- [x] 08-01-PLAN.md
 - [x] 08-02-PLAN.md
 - [ ] 08-03-PLAN.md
 - [ ] 08-04-PLAN.md
@@ -240,7 +240,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | In Progress|  |
-| 8. Authentication, Hostile Boundaries, and Boundedness | 1/18 | In Progress|  |
+| 8. Authentication, Hostile Boundaries, and Boundedness | 2/18 | In Progress|  |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |
 | 11. Native Products and Release Qualification | 0/TBD | Not started | - |
