@@ -285,8 +285,8 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
     let fava = assembly(Arc::clone(&cache), Arc::clone(&transport));
     let keys = Keys::generate();
     let kind = Kind::from_u16(30_001);
-    let winner_a = addressable_event(&keys, 20, "winner A", "same");
-    let winner_b = addressable_event(&keys, 30, "winner B", "same");
+    let winner_a = addressable_event(&keys, 30, "winner A", "same");
+    let winner_b = addressable_event(&keys, 20, "winner B", "same");
     let shared = addressable_event(&keys, 10, "shared", "shared");
     let mut observation = fava
         .observe(
