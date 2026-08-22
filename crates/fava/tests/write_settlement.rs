@@ -366,8 +366,8 @@ async fn wait_for_counts(
     rejected: usize,
 ) {
     loop {
-        let (changed, receipt) = changes.recv().await.expect("receipt change remains open");
-        if changed == receipt_id
+        let (changed_id, receipt) = changes.recv().await.expect("receipt change remains open");
+        if changed_id == receipt_id
             && receipt.as_ref().is_some_and(|receipt| {
                 receipt.acknowledged() == acknowledged && receipt.rejected() == rejected
             })

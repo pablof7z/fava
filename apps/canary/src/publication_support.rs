@@ -34,10 +34,12 @@ pub(crate) async fn wait_recovered_terminal(
                 return Ok(receipt);
             }
             match changes.recv().await {
-                Ok((changed, Some(receipt))) if changed == receipt_id && receipt.is_terminal() => {
+                Ok((changed_id, Some(receipt)))
+                    if changed_id == receipt_id && receipt.is_terminal() =>
+                {
                     return Ok(receipt);
                 }
-                Ok((changed, None)) if changed == receipt_id => {
+                Ok((changed_id, None)) if changed_id == receipt_id => {
                     return Err(CanaryError::new(
                         "recovered receipt removed before terminal state",
                     ));

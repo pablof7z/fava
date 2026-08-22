@@ -116,14 +116,14 @@ async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
             }
             Ok(())
         });
-        let error = run_croissant_nip02_scenario_inner(
+        let error = Box::pin(run_croissant_nip02_scenario_inner(
             CroissantNip02Options {
                 relay_binary: PathBuf::from(CROISSANT),
                 scenario_seed: seed.to_owned(),
                 runs_directory: runs_directory.clone(),
             },
             Some(hook),
-        )
+        ))
         .await
         .expect_err("generation scan must reject injected derived secret");
         assert_eq!(

@@ -94,6 +94,10 @@ impl RunArtifacts {
         &self.root
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "all scenario callers share this fallible artifact-access boundary"
+    )]
     pub(crate) fn run_id(&self) -> CanaryResult<String> {
         Ok(self.run_id.clone())
     }
@@ -194,7 +198,7 @@ impl RunArtifacts {
             let _ = fs::remove_dir_all(&retained_root);
             return Err(error.into());
         }
-        self.root = retained_root.clone();
+        self.root.clone_from(&retained_root);
         self.retained_root = None;
         self.staging_parent = None;
         Ok(retained_root)
@@ -238,7 +242,7 @@ fn create_private_staging_parent(runs_dir: &Path) -> CanaryResult<PathBuf> {
         builder.mode(0o700);
         match builder.create(&path) {
             Ok(()) => return Ok(path),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error.into()),
         }
     }

@@ -98,7 +98,7 @@ type SecretScanHook =
 pub async fn run_croissant_nip02_scenario(
     options: CroissantNip02Options,
 ) -> CanaryResult<CroissantNip02Outcome> {
-    run_croissant_nip02_scenario_inner(options, None).await
+    Box::pin(run_croissant_nip02_scenario_inner(options, None)).await
 }
 
 async fn run_croissant_nip02_scenario_inner(
@@ -662,6 +662,10 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
             )));
         }
     }
+    validate_manifest_bounds_and_teardown(manifest)
+}
+
+fn validate_manifest_bounds_and_teardown(manifest: &Value) -> CanaryResult<()> {
     let bounds = manifest
         .get("bounds")
         .and_then(Value::as_object)

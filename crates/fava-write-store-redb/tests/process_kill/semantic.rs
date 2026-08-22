@@ -468,10 +468,12 @@ async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId) -> Receipt {
                 return receipt;
             }
             match changes.recv().await {
-                Ok((changed, Some(receipt))) if changed == receipt_id && receipt.is_terminal() => {
+                Ok((changed_id, Some(receipt)))
+                    if changed_id == receipt_id && receipt.is_terminal() =>
+                {
                     return receipt;
                 }
-                Ok((changed, None)) if changed == receipt_id => {
+                Ok((changed_id, None)) if changed_id == receipt_id => {
                     panic!("recovered receipt removed before terminal state")
                 }
                 Ok(_) => {}

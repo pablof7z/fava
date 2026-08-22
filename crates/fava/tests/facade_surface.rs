@@ -6,13 +6,13 @@ use fava_write_store::AcceptedWrite;
 
 #[test]
 fn neutral_contracts_remain_available_to_providers() {
-    let _ = std::mem::size_of::<WriteIntent>();
-    let _ = std::mem::size_of::<WritePayload>();
-    let _ = std::mem::size_of::<AcceptedWrite>();
-
     fn routing(receipt: &Receipt) -> &WriteRouting {
         &receipt.routing
     }
+
+    let _ = std::mem::size_of::<WriteIntent>();
+    let _ = std::mem::size_of::<WritePayload>();
+    let _ = std::mem::size_of::<AcceptedWrite>();
     let _: fn(&Receipt) -> &WriteRouting = routing;
 }
 

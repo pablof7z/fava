@@ -1,4 +1,8 @@
 //! Public contract evidence for volatile semantic-write custody.
+//!
+//! This file stays above the 500-line soft limit because it owns the complete volatile-store
+//! admission, recovery, failure, and evidence-exhaustion matrix; author and current-guard
+//! concerns are already split into their adjacent cohesive modules.
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
@@ -82,7 +86,7 @@ fn memory_first_edit_has_no_prior() {
 fn memory_initial_route_idempotence_compares_complete_persisted_effect() {
     for (label, first, second) in route_effect_mismatches() {
         let store = MemoryWriteStore::bounded(NonZeroUsize::new(2).unwrap());
-        assert_route_effect_mismatch_is_atomic(&store, label, first, second);
+        assert_route_effect_mismatch_is_atomic(&store, label, &first, &second);
     }
 }
 
@@ -126,8 +130,8 @@ fn initial_route(
 fn assert_route_effect_mismatch_is_atomic(
     store: &MemoryWriteStore,
     label: &str,
-    first: RoutePlan,
-    second: RoutePlan,
+    first: &RoutePlan,
+    second: &RoutePlan,
 ) {
     let keys = Keys::generate();
     let intent =
@@ -139,7 +143,7 @@ fn assert_route_effect_mismatch_is_atomic(
             intent(),
             event(),
             None,
-            Some(&first),
+            Some(first),
         )
         .expect("first route effect commits");
     let retained = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -151,7 +155,7 @@ fn assert_route_effect_mismatch_is_atomic(
                 intent(),
                 event(),
                 None,
-                Some(&second),
+                Some(second),
             )
             .is_err(),
         "{label} mismatch was accepted as idempotent"
