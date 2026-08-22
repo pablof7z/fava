@@ -1,6 +1,11 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["src/**/*.rs"]),
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_simple_groups",
@@ -55,5 +60,16 @@ rust_test(
         "//crates/fava-query:lib",
         "//crates/fava-write:lib",
     ],
-    compile_data = ["Cargo.toml", "BUILD.bazel"],
+    compile_data = [
+        "Cargo.toml",
+        "BUILD.bazel",
+        "src/lib.rs",
+    ],
+    data = [
+        ":architecture_sources",
+        "//crates/fava-query:simple_groups_architecture_sources",
+        "//crates/fava-state:simple_groups_architecture_sources",
+        "//crates/fava-write:simple_groups_architecture_sources",
+        "//crates/fava:simple_groups_architecture_sources",
+    ],
 )

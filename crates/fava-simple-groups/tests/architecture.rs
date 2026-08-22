@@ -73,16 +73,20 @@ fn first_party_library_deps(target: &str) -> BTreeSet<String> {
 }
 
 fn workspace_root() -> PathBuf {
-    std::env::var_os("BUILD_WORKSPACE_DIRECTORY").map_or_else(
-        || {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .and_then(Path::parent)
-                .expect("crate lives beneath workspace/crates")
-                .to_owned()
-        },
-        PathBuf::from,
-    )
+    if let Some(root) = std::env::var_os("BUILD_WORKSPACE_DIRECTORY") {
+        return PathBuf::from(root);
+    }
+    if let (Some(runfiles), Some(workspace)) = (
+        std::env::var_os("TEST_SRCDIR"),
+        std::env::var_os("TEST_WORKSPACE"),
+    ) {
+        return PathBuf::from(runfiles).join(workspace);
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("crate lives beneath workspace/crates")
+        .to_owned()
 }
 
 fn rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
@@ -305,9 +309,18 @@ fn universal_owners_remain_nip29_blind() {
             "39_003",
             "39_004",
             "39_005",
+            "39000",
+            "39001",
+            "39002",
+            "39003",
+            "39004",
+            "39005",
             "10_009",
+            "10009",
             "9_002",
+            "9002",
             "9_010",
+            "9010",
         ] {
             assert!(
                 !code.contains(forbidden),

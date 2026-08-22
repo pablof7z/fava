@@ -37,7 +37,10 @@ async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
     assert_ne!(first.receipt_id(), second.receipt_id());
     assert_eq!(first_receipt.current.event.kind(), Kind::from_u16(10_009));
     assert_eq!(second_receipt.current.event.kind(), Kind::from_u16(10_009));
-    assert_eq!(first_receipt.routing, WriteRouting::Explicit(vec![host("saved")]));
+    assert_eq!(
+        first_receipt.routing,
+        WriteRouting::Explicit(vec![host("saved")])
+    );
     assert_eq!(second_receipt.routing, first_receipt.routing);
     assert_eq!(
         BTreeSet::from([
@@ -105,8 +108,17 @@ async fn simple_group_management_events_are_author_bearing() {
     assert_eq!(metadata.kind, Kind::from_u16(9_002));
     assert_eq!(pins.pubkey, keys.public_key());
     assert_eq!(pins.kind, Kind::from_u16(9_010));
-    assert!(metadata.tags.iter().any(|row| row.as_slice() == ["h", "photos"]));
-    assert!(pins.tags.iter().any(|row| row.as_slice() == ["h", "photos"]));
+    assert!(
+        metadata
+            .tags
+            .iter()
+            .any(|row| row.as_slice() == ["h", "photos"])
+    );
+    assert!(
+        pins.tags
+            .iter()
+            .any(|row| row.as_slice() == ["h", "photos"])
+    );
 
     let metadata_write = harness
         .fava
@@ -125,8 +137,20 @@ async fn simple_group_management_events_are_author_bearing() {
     assert_ne!(metadata_write.write_id(), pins_write.write_id());
     wait_until(|| signer.calls() == 2).await;
     wait_until(|| harness.publisher.attempts().len() == 2).await;
-    assert!(harness.publisher.attempts().iter().any(|attempt| attempt.event.kind == Kind::from_u16(9_002)));
-    assert!(harness.publisher.attempts().iter().any(|attempt| attempt.event.kind == Kind::from_u16(9_010)));
+    assert!(
+        harness
+            .publisher
+            .attempts()
+            .iter()
+            .any(|attempt| attempt.event.kind == Kind::from_u16(9_002))
+    );
+    assert!(
+        harness
+            .publisher
+            .attempts()
+            .iter()
+            .any(|attempt| attempt.event.kind == Kind::from_u16(9_010))
+    );
 }
 
 fn operation_generation(

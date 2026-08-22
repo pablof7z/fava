@@ -4,6 +4,12 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+filegroup(
+    name = "simple_groups_architecture_sources",
+    srcs = glob(["src/**/*.rs"]),
+    visibility = ["//crates/fava-simple-groups:__pkg__"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_state",
