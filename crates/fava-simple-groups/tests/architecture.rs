@@ -4,11 +4,6 @@ use std::collections::BTreeSet;
 
 const CARGO_MANIFEST: &str = include_str!("../Cargo.toml");
 const BAZEL_MANIFEST: &str = include_str!("../BUILD.bazel");
-const INCOMPLETE_CARGO_MANIFEST: &str = r#"
-[dependencies]
-fava-query.workspace = true
-fava-state.workspace = true
-"#;
 
 fn toml_table_keys(manifest: &str, table: &str) -> BTreeSet<String> {
     let header = format!("[{table}]");
@@ -25,7 +20,12 @@ fn toml_table_keys(manifest: &str, table: &str) -> BTreeSet<String> {
             let (key, _) = line
                 .split_once('=')
                 .expect("dependency entries are TOML key/value assignments");
-            keys.insert(key.trim().to_owned());
+            keys.insert(
+                key.trim()
+                    .strip_suffix(".workspace")
+                    .unwrap_or(key.trim())
+                    .to_owned(),
+            );
         }
     }
 
@@ -79,16 +79,12 @@ fn normal_dependencies_are_exact() {
         "//crates/fava-write:lib".to_owned(),
     ]);
 
-    assert_eq!(
-        toml_table_keys(INCOMPLETE_CARGO_MANIFEST, "dependencies"),
-        cargo_expected,
-        "Cargo normal dependencies must equal the approved neutral owners"
-    );
-    assert_eq!(
-        first_party_library_deps(starlark_call(BAZEL_MANIFEST, "rust_library")),
-        bazel_expected,
-        "Bazel library dependencies must equal the approved neutral owners"
-    );
+    let cargo_actual = toml_table_keys(CARGO_MANIFEST, "dependencies");
+    let bazel_actual = first_party_library_deps(starlark_call(BAZEL_MANIFEST, "rust_library"));
 
-    let _ = CARGO_MANIFEST;
+    assert_eq!(
+        (cargo_actual, bazel_actual),
+        (cargo_expected, bazel_expected),
+        "Cargo and Bazel normal dependencies must equal the approved neutral owners"
+    );
 }
