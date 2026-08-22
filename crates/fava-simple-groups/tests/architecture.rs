@@ -301,6 +301,8 @@ fn universal_owners_remain_nip29_blind() {
             "fava_simple_groups",
             "fava-simple-groups",
             "NIP-29",
+            "NIP29",
+            "NIP_29",
             "nip29",
             "nip_29",
             "39_000",

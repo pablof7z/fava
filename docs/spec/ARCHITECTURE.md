@@ -1955,7 +1955,7 @@ retry, or receipt lifecycle. Its operations lower to universal primitives:
 Group::on(hosts, id) -> Result<Group, GroupError>
 group.events(selection) -> Result<Query, GroupError>
 group.records(which) -> Result<Query, GroupError>
-group.project(snapshot) -> GroupSnapshot
+group.project(snapshot) -> Result<GroupSnapshot, GroupError>
 group.prepare(draft) -> Result<UnsignedEvent, GroupError>
 ```
 
@@ -1988,8 +1988,10 @@ The signatures are illustrative; the observable contract is fixed:
 - the same event id appears once across hosts with every actual relay evidence
   contribution;
 - `GroupSnapshot` is a pure projection with typed merged views, per-host views,
-  and per-record disagreement; it never field-merges conflicting metadata or
-  chooses a canonical host;
+  and per-record disagreement; projection accepts at most 4,096 snapshot events
+  and refuses the 4,097th as `GroupError::TooManyDiscoveryItems` before
+  deduplication; it never field-merges conflicting metadata or chooses a
+  canonical host;
 - member and admin collections retain per-entry host attribution, and absence
   never proves non-membership or non-administration;
 - application code chooses one fork by constructing a single-host `Group`, not
