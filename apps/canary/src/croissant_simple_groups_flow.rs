@@ -1,4 +1,6 @@
 //! Public Fava and `fava-simple-groups` flow across two controlled Croissant relays.
+//!
+//! This cohesive executable scenario owns the exact cross-relay facts retained by the canary.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -250,7 +252,7 @@ async fn execute_with_proxies(
         admins.get(1).cloned().unwrap_or_default(),
     ];
 
-    let shared_evidence = content_snapshot
+    let observed_shared_evidence = content_snapshot
         .events
         .iter()
         .find(|record| record.id() == shared.id)
@@ -259,6 +261,16 @@ async fn execute_with_proxies(
         .observations()
         .map(|observation| observation.session.relay.to_string())
         .collect::<Vec<_>>();
+    let shared_evidence = relays.iter().map(ToString::to_string).collect::<Vec<_>>();
+    if observed_shared_evidence.len() != shared_evidence.len()
+        || shared_evidence
+            .iter()
+            .any(|relay| !observed_shared_evidence.contains(relay))
+    {
+        return Err(CanaryError::new(
+            "shared content evidence did not match the exact relay route",
+        ));
+    }
     for (relay, expected) in [(&relays[0], "relay-A"), (&relays[1], "relay-B")]
         .into_iter()
         .take(selected_hosts)
