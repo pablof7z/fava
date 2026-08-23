@@ -1,61 +1,36 @@
-//! Deterministic wire identity and exact REQ sizing.
+//! Wire identity and exact REQ sizing.
+//!
+//! Identity is minted, never derived from content.
+//!
+//! A content digest recycles by construction: close a subscription, demand the
+//! same filter again, and the same id comes back — so a late EOSE or EVENT for
+//! the closed request settles the new one. `GOALS:426` (QUERY-010) forbids that
+//! by name: *"Reopening dropped demand MUST use fresh request identity so a
+//! late EOSE or event from the old request cannot settle the new one."*
+//!
+//! Two further properties fall out of minting rather than digesting. The id
+//! carries no network-controlled bytes, so a hostile relay steering a derived
+//! author or tag set cannot aim a collision at an established subscription. And
+//! nothing the relay advertises feeds the id, so a NIP-11 refetch can never
+//! move an id that is already live.
 
-use std::collections::BTreeSet;
-
-use fava_subscriptions::{RelayReadConstraints, SubscriptionPlanError};
+use fava_subscriptions::{PlanRevision, SubscriptionPlanError};
 use fava_transport::BoundedReason;
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::filter::Filter;
 
-/// Hex digits of the content digest a full-length wire id carries.
-const DIGEST_CHARS: usize = 16;
+/// Namespace prefix every Fava-minted wire id carries.
+const PREFIX: &str = "fava";
 
-/// Namespace prefix a full-length wire id carries.
-const PREFIX: &str = "fava-";
-
-/// Characters a full-length wire id occupies.
-const FULL_CHARS: usize = PREFIX.len() + DIGEST_CHARS;
-
-/// Derive one wire id from the exact content it will carry.
+/// Mint the wire id for one newly-opened subscription.
 ///
-/// The id is a pure function of the filters and the salt, so an unchanged
-/// candidate wears an unchanged id across replans and can be retained rather
-/// than reopened. `salt` exists only to step past a digest collision.
-pub(crate) fn identity(
-    filters: &[Filter],
-    constraints: &RelayReadConstraints,
-    salt: u64,
-) -> Option<SubscriptionId> {
-    let digest = format!("{:016x}", digest_of(filters, salt));
-    let Some(maximum) = constraints.max_subscription_id_chars.get() else {
-        return Some(SubscriptionId::new(format!("{PREFIX}{digest}")));
-    };
-    let maximum = maximum.get();
-    if maximum >= FULL_CHARS {
-        return Some(SubscriptionId::new(format!("{PREFIX}{digest}")));
-    }
-    digest
-        .get(..maximum.min(DIGEST_CHARS))
-        .map(SubscriptionId::new)
-}
-
-/// Allocate the first collision-free wire id for this content.
-///
-/// A digest collision against a *different* installed or planned subscription
-/// is stepped past deterministically; exhausting the declared id space is a
-/// caller-visible `None`.
-pub(crate) fn allocate(
-    filters: &[Filter],
-    constraints: &RelayReadConstraints,
-    taken: &BTreeSet<SubscriptionId>,
-) -> Option<SubscriptionId> {
-    for salt in 0..u64::from(u16::MAX) {
-        let candidate = identity(filters, constraints, salt)?;
-        if !taken.contains(&candidate) {
-            return Some(candidate);
-        }
-    }
-    None
+/// `revision` is the owner's monotonic plan revision and `ordinal` is the
+/// candidate's position in the plan's canonical order, so the pair is unique
+/// within a plan and never repeats across plans of one session. Nothing else
+/// contributes: not the filter, not the relay's advertisement.
+#[must_use]
+pub(crate) fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
+    SubscriptionId::new(format!("{PREFIX}-{}-{ordinal}", revision.0))
 }
 
 /// Exact encoded byte length of the REQ this content produces.
@@ -78,28 +53,4 @@ pub(crate) fn encoded_bytes(
     encode_client(&message)
         .map(|frame| frame.len())
         .map_err(|error| SubscriptionPlanError::Encoding(BoundedReason::new(error.to_string())))
-}
-
-/// FNV-1a over the canonical debug encoding of the filters and the salt.
-///
-/// A repository-owned hash keeps wire identity reproducible across processes
-/// and Rust releases, which `RandomState` would not.
-fn digest_of(filters: &[Filter], salt: u64) -> u64 {
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-
-    let mut hash = OFFSET;
-    for byte in salt.to_be_bytes() {
-        hash = (hash ^ u64::from(byte)).wrapping_mul(PRIME);
-    }
-    for filter in filters {
-        for byte in serde_json::to_string(filter)
-            .unwrap_or_else(|_| format!("{filter:?}"))
-            .as_bytes()
-        {
-            hash = (hash ^ u64::from(*byte)).wrapping_mul(PRIME);
-        }
-        hash = (hash ^ 0xff).wrapping_mul(PRIME);
-    }
-    hash
 }

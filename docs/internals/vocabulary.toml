@@ -715,6 +715,7 @@ symbols = [
     "fava_subscriptions::AttributedSubscription",
     "fava_subscriptions::DeclaredLimit",
     "fava_subscriptions::DemandId",
+    "fava_subscriptions::EoseCompleteness",
     "fava_subscriptions::InstalledSubscription",
     "fava_subscriptions::InstalledSubscriptions",
     "fava_subscriptions::PlanConformanceError",

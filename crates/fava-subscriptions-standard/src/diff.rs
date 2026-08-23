@@ -1,151 +1,113 @@
-//! Turning the desired candidate set into a diff against what is installed.
+//! Expressing the answer as a diff against what is already running.
+//!
+//! `retain` is every running subscription that still has an owner — including
+//! ones whose owner set grew or shrank, because neither changes a byte on the
+//! wire. `close` is only ever "the last owner is gone". `open` is only ever
+//! coverage that was missing.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroUsize;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    AttributedSubscription, DemandId, InstalledSubscriptions, PlanRevision, PlannedSubscription,
-    RelayReadConstraints, ShortfallReason, SubscriptionAttribution, SubscriptionPlan,
+    AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
+    PlannedSubscription, RelayReadConstraints, SubscriptionAttribution, SubscriptionPlan,
     SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription,
 };
 use fava_wire::SubscriptionId;
+use nostr::filter::Filter;
 
-use crate::wire;
-
-/// Assemble the desired candidates into a plan expressed against `installed`.
+/// Assemble the answer for one relay session.
 pub(crate) fn assemble(
     relay: &RelaySessionKey,
     revision: PlanRevision,
-    candidates: Vec<PlannedSubscription>,
+    opened: Vec<(SubscriptionId, AttributedSubscription)>,
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
-    mut shortfalls: Vec<SubscriptionShortfall>,
+    owners: &BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
+    shortfalls: Vec<SubscriptionShortfall>,
 ) -> SubscriptionPlan {
-    let resolved = resolve_identity(candidates, constraints, installed, &mut shortfalls);
+    let mut attribution = Vec::with_capacity(opened.len() + owners.len());
+    let mut open = Vec::with_capacity(opened.len());
+    for (id, attributed) in opened {
+        open.push(PlannedSubscription {
+            id: id.clone(),
+            filters: attributed.filters.clone(),
+            serves: attributed.serves.clone(),
+        });
+        attribution.push((id, attributed));
+    }
 
-    let mut open = Vec::new();
-    let mut retain = Vec::new();
-    let mut attribution = Vec::new();
-    let mut served_now: BTreeMap<DemandId, SubscriptionId> = BTreeMap::new();
-    for candidate in resolved {
-        for demand in &candidate.serves {
-            served_now.insert(*demand, candidate.id.clone());
-        }
+    let mut retain = Vec::with_capacity(owners.len());
+    for (id, serves) in owners {
+        let Some(entry) = installed.get(id) else {
+            continue;
+        };
         attribution.push((
-            candidate.id.clone(),
+            id.clone(),
             AttributedSubscription {
-                filters: candidate.filters.clone(),
-                serves: candidate.serves.clone(),
+                filters: entry.filters.clone(),
+                serves: serves.clone(),
+                completeness: completeness(&entry.filters, constraints),
             },
         ));
-        let unchanged = installed
-            .get(&candidate.id)
-            .is_some_and(|entry| entry.filters == candidate.filters);
-        if unchanged {
-            retain.push(candidate.id);
-        } else {
-            open.push(PlannedSubscription {
-                id: candidate.id,
-                filters: candidate.filters,
-                serves: candidate.serves,
-            });
-        }
+        retain.push(id.clone());
     }
     open.sort_by(|left, right| left.id.cmp(&right.id));
     retain.sort();
 
-    let close = withdrawals(installed, &served_now, &shortfalls, &retain);
     SubscriptionPlan {
         relay: relay.clone(),
         revision,
         open,
         retain,
-        close,
+        close: withdrawals(installed, owners, &shortfalls),
         attribution: SubscriptionAttribution::from_entries(attribution),
         shortfalls,
     }
 }
 
-/// Give every carried candidate a wire id free of collision.
+/// What an EOSE on this subscription would actually prove.
 ///
-/// A candidate whose derived id already names an installed subscription with
-/// identical filters keeps it — that is what makes retention possible. Anything
-/// else is stepped to the next free id, and a declared id space too small to
-/// hold one more subscription becomes typed shortfall rather than a collision.
-fn resolve_identity(
-    candidates: Vec<PlannedSubscription>,
-    constraints: &RelayReadConstraints,
-    installed: &InstalledSubscriptions,
-    shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Vec<PlannedSubscription> {
-    let installed_ids: BTreeSet<SubscriptionId> = installed.ids().cloned().collect();
-    let mut taken: BTreeSet<SubscriptionId> = BTreeSet::new();
-    let mut resolved = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        let reusable = !taken.contains(&candidate.id)
-            && installed
-                .get(&candidate.id)
-                .is_some_and(|entry| entry.filters == candidate.filters);
-        let id = if reusable {
-            Some(candidate.id.clone())
-        } else {
-            let mut blocked = taken.clone();
-            blocked.extend(installed_ids.iter().cloned());
-            wire::allocate(&candidate.filters, constraints, &blocked)
-        };
-        if let Some(id) = id {
-            taken.insert(id.clone());
-            resolved.push(PlannedSubscription { id, ..candidate });
-            continue;
-        }
-        let maximum = constraints
-            .max_subscription_id_chars
-            .get()
-            .map_or(0, NonZeroUsize::get);
-        for demand in candidate.serves {
-            shortfalls.push(SubscriptionShortfall {
-                demand,
-                reason: ShortfallReason::SubscriptionIdTooLong { maximum },
-            });
-        }
+/// The planner is the only component that sees both the filter it is sending
+/// and what the relay declared, so it records the fact instead of leaving the
+/// evidence layer to re-derive it from a filter it never saw.
+fn completeness(filters: &[Filter], constraints: &RelayReadConstraints) -> EoseCompleteness {
+    if filters.iter().any(|filter| filter.limit.is_some()) {
+        return EoseCompleteness::LimitedRequest;
     }
-    resolved
+    if constraints.default_filter_limit.get().is_some() {
+        return EoseCompleteness::RelayDefaultLimit;
+    }
+    EoseCompleteness::Proven
 }
 
-/// Every installed subscription the plan no longer wants, with its reason.
+/// Every running subscription whose last logical owner is gone.
+///
+/// There is no other reason to close one. A subscription that keeps an owner is
+/// retained unchanged, even when it is now broader than what its remaining
+/// owners asked for: the surplus is discarded by the local per-demand re-match,
+/// and narrowing it would cost a full re-serve of the stored window.
 fn withdrawals(
     installed: &InstalledSubscriptions,
-    served_now: &BTreeMap<DemandId, SubscriptionId>,
+    owners: &BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
     shortfalls: &[SubscriptionShortfall],
-    retain: &[SubscriptionId],
 ) -> Vec<WithdrawnSubscription> {
-    let retained: BTreeSet<&SubscriptionId> = retain.iter().collect();
     let lost: BTreeSet<DemandId> = shortfalls.iter().map(|entry| entry.demand).collect();
     let mut close = Vec::new();
     for id in installed.ids() {
-        if retained.contains(id) {
+        if owners.contains_key(id) {
             continue;
         }
         let Some(entry) = installed.get(id) else {
             continue;
         };
-        let reason = entry
-            .serves
-            .iter()
-            .find_map(|demand| served_now.get(demand))
-            .map_or_else(
-                || {
-                    if entry.serves.iter().any(|demand| lost.contains(demand)) {
-                        WithdrawalReason::ConstraintChanged
-                    } else {
-                        WithdrawalReason::DemandWithdrawn {
-                            released: entry.serves.clone(),
-                        }
-                    }
-                },
-                |into| WithdrawalReason::Regrouped { into: into.clone() },
-            );
+        let reason = if entry.serves.iter().any(|demand| lost.contains(demand)) {
+            WithdrawalReason::ConstraintChanged
+        } else {
+            WithdrawalReason::DemandWithdrawn {
+                released: entry.serves.clone(),
+            }
+        };
         close.push(WithdrawnSubscription {
             id: id.clone(),
             reason,

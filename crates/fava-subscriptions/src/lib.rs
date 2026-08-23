@@ -16,6 +16,7 @@
 
 mod conformance;
 mod constraints;
+mod coverage;
 mod demand;
 mod installed;
 mod plan;
@@ -25,6 +26,7 @@ use std::num::{NonZeroU32, NonZeroUsize};
 
 pub use conformance::{PlanConformanceError, validate_plan};
 pub use constraints::{DeclaredLimit, RelayReadConstraints};
+pub use coverage::filter_covers;
 pub use demand::{DemandId, RelayDemand};
 use fava_query::Query;
 /// Cross-crate read-side identity, re-exported from its neutral home so a
@@ -33,7 +35,7 @@ pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranc
 pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
 pub use plan::{
-    AttributedSubscription, PlanRevision, PlannedSubscription, ShortfallReason,
+    AttributedSubscription, EoseCompleteness, PlanRevision, PlannedSubscription, ShortfallReason,
     SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall, WithdrawalReason,
     WithdrawnSubscription,
 };

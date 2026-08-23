@@ -14,4 +14,7 @@ pub use differential::{
     DifferentialReport, assert_planners_agree, assert_withdrawal_agrees, delivered_to,
     settled_by_eose_on,
 };
-pub use scenario::{PlannerScenario, apply_plan, assert_conformant};
+pub use scenario::{
+    PlannerScenario, apply_plan, assert_conformant,
+    assert_partial_withdrawal_leaves_the_wire_alone, assert_running_subscriptions_are_immutable,
+};

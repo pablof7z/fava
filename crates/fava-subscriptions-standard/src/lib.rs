@@ -1,27 +1,44 @@
 //! Standard exact grouping of compatible logical relay demand.
 //!
-//! This planner is told the complete current demand for one relay session and
-//! the set currently installed on it, and answers with a diff: what to open,
-//! what to retain untouched, and what to close. It invents no relay limit —
-//! every bound it honors is one the relay declared through
-//! [`RelayReadConstraints`], and demand it cannot carry becomes a typed
+//! The planner is told the complete current demand for one relay session and
+//! what is currently running on it, and answers with a diff. The two inputs
+//! play entirely different roles, and keeping them apart is the whole design:
+//!
+//! * **demand** that no running subscription already carries is *unsent*. Only
+//!   unsent demand is grouped, and only unsent demand is given wire identity.
+//! * **what is running** is consulted to attach demand whose traffic is already
+//!   arriving, to compute the residual subscription budget, and to find the
+//!   subscriptions that have lost their last owner. It never reaches grouping
+//!   and never reaches identity.
+//!
+//! A subscription the relay is already serving is therefore immutable: demand
+//! joining never widens it and demand leaving never narrows it. The alternative
+//! — recomputing a desired wire set and diffing it — tears down and re-runs a
+//! completed subscription every time demand grows, and the relay traffic that
+//! wastes is quadratic in the number of growth steps.
+//!
+//! It invents no relay limit. Every bound it honors is one the relay declared
+//! through [`RelayReadConstraints`], and demand it cannot carry becomes a typed
 //! [`SubscriptionShortfall`] inside a plan that still installs the rest.
 
+mod attach;
 mod diff;
 mod grouping;
 mod wire;
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::num::NonZeroUsize;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    InstalledSubscriptions, PlanRevision, PlannedSubscription, RelayDemand, RelayReadConstraints,
-    ShortfallReason, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
-    SubscriptionShortfall,
+    AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
+    RelayDemand, RelayReadConstraints, ShortfallReason, SubscriptionPlan, SubscriptionPlanError,
+    SubscriptionPlanner, SubscriptionShortfall,
 };
+use fava_wire::SubscriptionId;
+use nostr::filter::Filter;
 
-/// Exact subscription planner that groups compatible author and tag filters.
+/// Exact subscription planner that groups compatible unsent demand.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct StandardSubscriptionPlanner;
 
@@ -45,15 +62,30 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
         refuse_duplicate_demand(demand)?;
         let mut shortfalls = Vec::new();
         let admissible = admit_filter_limits(demand, constraints, &mut shortfalls);
-        let grouped = grouping::group(&admissible, constraints);
-        let candidates = fit_message_bound(grouped, constraints, &mut shortfalls)?;
-        let carried = fit_subscription_count(candidates, constraints, installed, &mut shortfalls);
+
+        let (mut attached, pending) = attach::admit(&admissible, installed);
+        let grouped = grouping::group(&pending, constraints);
+        let candidates = fit_message_bound(
+            grouped,
+            constraints,
+            revision,
+            pending.len(),
+            &mut shortfalls,
+        )?;
+        let candidates = fold_identical_filters(candidates);
+        let candidates = fold_into_running(candidates, installed, &mut attached);
+
+        let owners = attach::surviving_owners(&admissible, installed, &attached);
+        let candidates = fit_residual_count(candidates, constraints, owners.len(), &mut shortfalls);
+        let opened = mint_identities(candidates, constraints, revision, &mut shortfalls);
+
         Ok(diff::assemble(
             relay,
             revision,
-            carried,
+            opened,
             constraints,
             installed,
+            &owners,
             shortfalls,
         ))
     }
@@ -97,30 +129,32 @@ fn admit_filter_limits(
 
 /// Split every candidate until its exact REQ fits a *declared* message bound.
 ///
-/// Splitting undoes a merge rather than truncating it: the members are halved
+/// Splitting undoes a merge rather than truncating one: the members are halved
 /// and each half is regrouped, so every surviving REQ is still an exact
 /// encoding of the demand attributed to it.
+///
+/// Sizing runs against a probe id of the widest identity this plan could mint,
+/// so the estimate never understates the frame.
 fn fit_message_bound(
-    grouped: Vec<Vec<RelayDemand>>,
+    grouped: Vec<(Filter, Vec<RelayDemand>)>,
     constraints: &RelayReadConstraints,
+    revision: PlanRevision,
+    pending: usize,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Result<Vec<PlannedSubscription>, SubscriptionPlanError> {
-    let mut queue: VecDeque<Vec<RelayDemand>> = grouped.into();
+) -> Result<Vec<AttributedSubscription>, SubscriptionPlanError> {
+    let probe = wire::mint(revision, pending);
+    let mut queue: VecDeque<(Filter, Vec<RelayDemand>)> = grouped.into();
     let mut carried = Vec::new();
-    while let Some(members) = queue.pop_front() {
-        let Some(filter) = grouping::merged_filter(&members, constraints) else {
+    while let Some((filter, members)) = queue.pop_front() {
+        if members.is_empty() {
             continue;
-        };
+        }
         let filters = vec![filter];
-        let Some(id) = wire::identity(&filters, constraints, 0) else {
-            record_id_shortfall(&members, constraints, shortfalls);
-            continue;
-        };
-        let bytes = wire::encoded_bytes(&id, &filters)?;
+        let bytes = wire::encoded_bytes(&probe, &filters)?;
         let declared = constraints.max_message_bytes.get().map(NonZeroUsize::get);
         if declared.is_none_or(|maximum| bytes <= maximum) {
-            carried.push(PlannedSubscription {
-                id,
+            carried.push(AttributedSubscription {
+                completeness: completeness(&filters, constraints),
                 filters,
                 serves: members.iter().map(RelayDemand::id).collect(),
             });
@@ -142,32 +176,77 @@ fn fit_message_bound(
     Ok(carried)
 }
 
-/// Drop the candidates that do not fit a *declared* subscription count.
+/// Fold candidates carrying byte-identical filters into one subscription.
 ///
-/// Already-installed candidates are kept first so a declared ceiling does not
-/// churn live subscriptions; ties break on wire id, so the demand that loses is
-/// the same on every replan with the same inputs.
-fn fit_subscription_count(
-    mut candidates: Vec<PlannedSubscription>,
-    constraints: &RelayReadConstraints,
+/// Grouping already folds identical demand, but splitting for a declared
+/// message bound can recreate a filter the pool already holds. Two
+/// byte-identical REQs on one session are strictly worse than one: the relay
+/// double-delivers, a slot is burned, and completion evidence splits.
+fn fold_identical_filters(candidates: Vec<AttributedSubscription>) -> Vec<AttributedSubscription> {
+    let mut folded: Vec<AttributedSubscription> = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if let Some(existing) = folded
+            .iter_mut()
+            .find(|seen| seen.filters == candidate.filters)
+        {
+            existing.serves.extend(candidate.serves);
+        } else {
+            folded.push(candidate);
+        }
+    }
+    folded
+}
+
+/// Attach a candidate whose filters a running subscription already carries.
+///
+/// Nothing should reach here — a demand covered by a running filter attaches
+/// before grouping — but a merged candidate could in principle recreate a
+/// running filter, and opening it would put two byte-identical REQs on one
+/// session.
+fn fold_into_running(
+    candidates: Vec<AttributedSubscription>,
     installed: &InstalledSubscriptions,
+    attached: &mut BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
+) -> Vec<AttributedSubscription> {
+    let mut kept = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        let running = installed
+            .ids()
+            .find(|id| {
+                installed
+                    .get(id)
+                    .is_some_and(|entry| entry.filters == candidate.filters)
+            })
+            .cloned();
+        match running {
+            Some(id) => attached.entry(id).or_default().extend(candidate.serves),
+            None => kept.push(candidate),
+        }
+    }
+    kept
+}
+
+/// Drop the candidates that do not fit the *residual* subscription budget.
+///
+/// The budget a plan may spend is the declared maximum less what is already
+/// running and still wanted. A running subscription is never closed to make
+/// room for a new one, so a relay that lowers its advertisement below the count
+/// already live simply leaves no residual.
+fn fit_residual_count(
+    mut candidates: Vec<AttributedSubscription>,
+    constraints: &RelayReadConstraints,
+    running: usize,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Vec<PlannedSubscription> {
+) -> Vec<AttributedSubscription> {
     let Some(maximum) = constraints.max_subscriptions.get().map(NonZeroUsize::get) else {
         return candidates;
     };
-    let required = candidates.len();
-    if required <= maximum {
+    let residual = maximum.saturating_sub(running);
+    if candidates.len() <= residual {
         return candidates;
     }
-    candidates.sort_by(|left, right| {
-        installed
-            .get(&left.id)
-            .is_none()
-            .cmp(&installed.get(&right.id).is_none())
-            .then_with(|| left.id.cmp(&right.id))
-    });
-    for dropped in candidates.split_off(maximum) {
+    let required = running + candidates.len();
+    for dropped in candidates.split_off(residual) {
         for demand in dropped.serves {
             shortfalls.push(SubscriptionShortfall {
                 demand,
@@ -178,20 +257,49 @@ fn fit_subscription_count(
     candidates
 }
 
-/// Report every member of a group whose wire identity cannot be expressed.
-fn record_id_shortfall(
-    members: &[RelayDemand],
+/// Give every carried candidate a freshly minted wire identity.
+///
+/// A declared id-length bound is an admission check, never a truncation: an id
+/// too long for the relay is typed shortfall, because a truncated id collides.
+fn mint_identities(
+    candidates: Vec<AttributedSubscription>,
     constraints: &RelayReadConstraints,
+    revision: PlanRevision,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) {
-    let maximum = constraints
+) -> Vec<(SubscriptionId, AttributedSubscription)> {
+    let declared = constraints
         .max_subscription_id_chars
         .get()
-        .map_or(0, NonZeroUsize::get);
-    for member in members {
-        shortfalls.push(SubscriptionShortfall {
-            demand: member.id(),
-            reason: ShortfallReason::SubscriptionIdTooLong { maximum },
-        });
+        .map(NonZeroUsize::get);
+    let mut opened = Vec::with_capacity(candidates.len());
+    for (ordinal, candidate) in candidates.into_iter().enumerate() {
+        let id = wire::mint(revision, ordinal);
+        if declared.is_some_and(|maximum| id.as_str().chars().count() > maximum) {
+            let maximum = declared.unwrap_or(0);
+            for demand in candidate.serves {
+                shortfalls.push(SubscriptionShortfall {
+                    demand,
+                    reason: ShortfallReason::SubscriptionIdTooLong { maximum },
+                });
+            }
+            continue;
+        }
+        opened.push((id, candidate));
     }
+    opened
+}
+
+/// What an EOSE on one candidate would actually prove.
+///
+/// The planner is the only component that sees both the filter it is sending
+/// and what the relay declared, so it records the fact here instead of leaving
+/// the evidence layer to re-derive it from a filter it never saw.
+fn completeness(filters: &[Filter], constraints: &RelayReadConstraints) -> EoseCompleteness {
+    if filters.iter().any(|filter| filter.limit.is_some()) {
+        return EoseCompleteness::LimitedRequest;
+    }
+    if constraints.default_filter_limit.get().is_some() {
+        return EoseCompleteness::RelayDefaultLimit;
+    }
+    EoseCompleteness::Proven
 }
