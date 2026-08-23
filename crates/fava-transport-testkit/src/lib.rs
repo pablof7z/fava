@@ -92,6 +92,9 @@ pub async fn require_acquire_reuses_live_session<T: Transport>(
 /// Require that a stalled peer converts into a bounded refusal within
 /// `attempts`, never an unbounded park.
 ///
+/// Each attempt hands over a frame at the declared per-frame bound, so a peer
+/// that stops reading fills the outbound queue rather than absorbing the test.
+///
 /// # Errors
 ///
 /// Returns a precise mismatch when no attempt is refused for a full queue.
@@ -100,6 +103,7 @@ pub async fn require_bounded_outbound_refusal<T: Transport>(
     request: OpenRelaySession,
     attempts: u64,
 ) -> Result<(), String> {
+    let frame = vec![b'f'; request.bounds.max_frame_bytes.get()];
     let lease = transport
         .acquire_session(request)
         .await
@@ -107,7 +111,7 @@ pub async fn require_bounded_outbound_refusal<T: Transport>(
     for attempt in 0..attempts {
         let outcome = lease
             .session()
-            .send(b"[\"REQ\",\"conformance\",{}]".to_vec(), HandoffCorrelation(attempt))
+            .send(frame.clone(), HandoffCorrelation(attempt))
             .await;
         if let HandoffOutcome::NotHandedOff {
             reason: TransportFailure::OutboundQueueFull { .. },
