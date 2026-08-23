@@ -123,6 +123,7 @@ async fn removed_signer_stale_valid_completion_is_inert_and_readd_wakes() {
 
     fava.remove_signer(alice.public_key())
         .expect("Alice signer removes");
+    wait_until(|| old_signer.cancellations() == 1).await;
     old_signer.release();
     wait_until(|| old_signer.completions() == 1).await;
     tokio::task::yield_now().await;
@@ -164,6 +165,7 @@ async fn replaced_signer_stale_valid_completion_cannot_install_or_deliver() {
 
     fava.replace_signer(Arc::clone(&new_signer) as Arc<dyn Signer>)
         .expect("replacement succeeds");
+    wait_until(|| old_signer.cancellations() == 1).await;
     wait_until(|| new_signer.calls() == 1).await;
     old_signer.release();
     wait_until(|| old_signer.completions() == 1).await;
@@ -297,6 +299,7 @@ struct BlockingSigner {
 struct GatedValidSigner {
     inner: LocalSigner,
     calls: AtomicU64,
+    cancellations: AtomicU64,
     completions: AtomicU64,
     release: watch::Sender<bool>,
 }
@@ -307,6 +310,7 @@ impl GatedValidSigner {
         Self {
             inner: LocalSigner::new(keys),
             calls: AtomicU64::new(0),
+            cancellations: AtomicU64::new(0),
             completions: AtomicU64::new(0),
             release,
         }
@@ -318,6 +322,10 @@ impl GatedValidSigner {
 
     fn completions(&self) -> u64 {
         self.completions.load(Ordering::SeqCst)
+    }
+
+    fn cancellations(&self) -> u64 {
+        self.cancellations.load(Ordering::SeqCst)
     }
 
     fn release(&self) {
@@ -337,13 +345,26 @@ impl Signer for GatedValidSigner {
     fn sign_event(
         &self,
         event: UnsignedEvent,
-        _cancel: watch::Receiver<bool>,
+        mut cancel: watch::Receiver<bool>,
     ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let mut release = self.release.subscribe();
         Box::pin(async move {
-            if !*release.borrow() {
-                let _ = release.changed().await;
+            let mut cancellation_recorded = false;
+            while !*release.borrow() {
+                tokio::select! {
+                    changed = release.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                    }
+                    changed = cancel.changed(), if !cancellation_recorded => {
+                        if changed.is_err() || *cancel.borrow_and_update() {
+                            self.cancellations.fetch_add(1, Ordering::SeqCst);
+                            cancellation_recorded = true;
+                        }
+                    }
+                }
             }
             let (keep_uncancelled, uncancelled) = watch::channel(false);
             let result = self.inner.sign_event(event, uncancelled).await;
