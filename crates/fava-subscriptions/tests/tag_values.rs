@@ -14,8 +14,7 @@ fn encode_query(id: &str, query: &Query) -> String {
     let observation =
         ObservationId::new(NonZeroU64::new(1).expect("non-zero observation identity"));
     let demand = demand_for_query(observation, QueryBranchId::ROOT, query);
-    encode_client(&ClientMessage::req(SubscriptionId::new(id), demand.filter))
-        .expect("REQ encodes")
+    encode_client(&ClientMessage::req(SubscriptionId::new(id), demand.filter)).expect("REQ encodes")
 }
 
 #[test]

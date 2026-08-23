@@ -58,7 +58,9 @@ fn grouped_author_demand_delivers_exactly_what_ungrouped_delivers() {
         .map(|(index, keys)| {
             demand(
                 u64::try_from(index).expect("index fits") + 1,
-                Filter::new().author(keys.public_key()).kind(Kind::from_u16(1)),
+                Filter::new()
+                    .author(keys.public_key())
+                    .kind(Kind::from_u16(1)),
             )
         })
         .collect();
@@ -77,7 +79,12 @@ fn grouped_author_demand_delivers_exactly_what_ungrouped_delivers() {
 fn three_hundred_grouped_tag_queries_deliver_exactly_what_ungrouped_delivers() {
     let key = tag_key();
     let asked: Vec<RelayDemand> = (1..=300)
-        .map(|index| demand(index, Filter::new().custom_tag(key, format!("topic-{index}"))))
+        .map(|index| {
+            demand(
+                index,
+                Filter::new().custom_tag(key, format!("topic-{index}")),
+            )
+        })
         .collect();
     let author = Keys::generate();
     let topics: Vec<String> = (1..=300).map(|index| format!("topic-{index}")).collect();
@@ -158,7 +165,12 @@ fn cancellation_withdraws_the_same_demand_under_both_planners() {
 fn cancelling_everything_withdraws_everything_under_both_planners() {
     let key = tag_key();
     let asked: Vec<RelayDemand> = (1..=5)
-        .map(|index| demand(index, Filter::new().custom_tag(key, format!("topic-{index}"))))
+        .map(|index| {
+            demand(
+                index,
+                Filter::new().custom_tag(key, format!("topic-{index}")),
+            )
+        })
         .collect();
     let scenario = PlannerScenario::fresh("full cancel", relay(), asked);
 
@@ -176,8 +188,7 @@ fn a_declared_ceiling_is_reported_by_both_planners() {
         max_subscriptions: declared(2),
         ..fava_subscriptions::RelayReadConstraints::unknown()
     };
-    let scenario =
-        PlannerScenario::fresh("shared ceiling", relay(), asked).declaring(constraints);
+    let scenario = PlannerScenario::fresh("shared ceiling", relay(), asked).declaring(constraints);
 
     let grouped = fava_subscriptions_testkit::assert_conformant(&grouping(), &scenario);
     let ungrouped = fava_subscriptions_testkit::assert_conformant(&no_grouping(), &scenario);
@@ -199,7 +210,12 @@ fn a_declared_ceiling_is_reported_by_both_planners() {
 fn the_no_grouping_policy_passes_the_same_conformance_kit() {
     let key = tag_key();
     let asked: Vec<RelayDemand> = (1..=20)
-        .map(|index| demand(index, Filter::new().custom_tag(key, format!("topic-{index}"))))
+        .map(|index| {
+            demand(
+                index,
+                Filter::new().custom_tag(key, format!("topic-{index}")),
+            )
+        })
         .collect();
     let scenario = PlannerScenario::fresh("no grouping conformance", relay(), asked);
 

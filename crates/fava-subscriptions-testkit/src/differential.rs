@@ -66,8 +66,7 @@ pub fn assert_planners_agree(
         assert_eq!(
             grouped, ungrouped,
             "{}: grouped and ungrouped delivery diverge for event {}",
-            scenario.name,
-            event.id
+            scenario.name, event.id
         );
         let expected: BTreeSet<DemandId> = wanted
             .iter()

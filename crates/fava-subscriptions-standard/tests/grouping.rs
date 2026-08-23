@@ -417,10 +417,7 @@ fn two_demands_with_one_identity_are_refused() {
         )
         .expect_err("one logical identity cannot appear twice");
 
-    assert_eq!(
-        error,
-        SubscriptionPlanError::DuplicateDemand(demand_id(1))
-    );
+    assert_eq!(error, SubscriptionPlanError::DuplicateDemand(demand_id(1)));
     assert_ne!(observation(1), observation(2));
     assert_eq!(DeclaredLimit::Unknown.get(), None);
 }

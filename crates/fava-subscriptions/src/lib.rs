@@ -26,10 +26,10 @@ use std::num::{NonZeroU32, NonZeroUsize};
 pub use conformance::{PlanConformanceError, validate_plan};
 pub use constraints::{DeclaredLimit, RelayReadConstraints};
 pub use demand::{DemandId, RelayDemand};
+use fava_query::Query;
 /// Cross-crate read-side identity, re-exported from its neutral home so a
 /// planner never has to depend on the lifecycle owner that mints it.
 pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
-use fava_query::Query;
 pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
 pub use plan::{

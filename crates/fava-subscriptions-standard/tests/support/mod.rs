@@ -65,7 +65,10 @@ pub fn declared(value: usize) -> DeclaredLimit {
 
 /// Constraints declaring only a subscription ceiling.
 #[must_use]
-#[allow(dead_code, reason = "shared fixture; not every test file uses every helper")]
+#[allow(
+    dead_code,
+    reason = "shared fixture; not every test file uses every helper"
+)]
 pub fn declaring_subscriptions(maximum: usize) -> RelayReadConstraints {
     RelayReadConstraints {
         max_subscriptions: declared(maximum),

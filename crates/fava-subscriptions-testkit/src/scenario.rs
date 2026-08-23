@@ -84,7 +84,12 @@ pub fn assert_conformant(
             &scenario.installed,
             scenario.revision,
         )
-        .unwrap_or_else(|error| panic!("{}: planner refused conformant input: {error}", scenario.name));
+        .unwrap_or_else(|error| {
+            panic!(
+                "{}: planner refused conformant input: {error}",
+                scenario.name
+            )
+        });
     if let Err(violation) = validate_plan(
         &scenario.relay,
         &scenario.demand,

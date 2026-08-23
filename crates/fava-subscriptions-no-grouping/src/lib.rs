@@ -64,13 +64,7 @@ impl SubscriptionPlanner for OnePerDemand {
         }
         enforce_count(&mut desired, constraints, installed, &mut shortfalls);
 
-        Ok(assemble(
-            relay,
-            revision,
-            desired,
-            installed,
-            shortfalls,
-        ))
+        Ok(assemble(relay, revision, desired, installed, shortfalls))
     }
 }
 
@@ -97,7 +91,8 @@ fn refusal(
     constraints: &RelayReadConstraints,
     id: &SubscriptionId,
 ) -> Option<ShortfallReason> {
-    if let (Some(required), Some(maximum)) = (demand.filter.limit, constraints.max_filter_limit.get())
+    if let (Some(required), Some(maximum)) =
+        (demand.filter.limit, constraints.max_filter_limit.get())
         && required > maximum.get()
     {
         return Some(ShortfallReason::FilterLimitExceeded {
