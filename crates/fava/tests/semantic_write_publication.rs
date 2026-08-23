@@ -9,7 +9,7 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::{CacheMutation, CachedEvent, RetractionCause};
 use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -370,7 +370,10 @@ async fn source_removal_selects_next_or_empty_once() {
     wait_for_signer(&signer, 1).await;
 
     cache
-        .commit(vec![CacheMutation::Retract(current.id)])
+        .commit(vec![CacheMutation::Retract {
+            event_id: current.id,
+            cause: RetractionCause::Evicted,
+        }])
         .expect("current source retracts");
     let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
@@ -378,7 +381,10 @@ async fn source_removal_selects_next_or_empty_once() {
     assert!(materializer.calls()[1].source.is_none());
 
     cache
-        .commit(vec![CacheMutation::Retract(current.id)])
+        .commit(vec![CacheMutation::Retract {
+            event_id: current.id,
+            cause: RetractionCause::Evicted,
+        }])
         .expect("duplicate removal is accepted");
     assert_no_receipt_change(&store).await;
     assert_eq!(materializer.calls().len(), 2);

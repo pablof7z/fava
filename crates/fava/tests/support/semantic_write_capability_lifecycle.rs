@@ -10,7 +10,7 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, Query, QuerySource, QuerySourceError};
 use fava_routing::RoutePlan;
-use fava_state::{CacheMutation, CachedEvent, RelaySessionKey};
+use fava_state::{CacheMutation, CachedEvent, RelaySessionKey, RetractionCause};
 use fava_write::{EventId, LocalWriteEvent, WriteIntent};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
@@ -84,7 +84,10 @@ async fn prove_source_removal<Add>(
         .expect("accepted receipt remains readable");
     wait_for_signer(&signer, 1).await;
     cache
-        .commit(vec![CacheMutation::Retract(current.id)])
+        .commit(vec![CacheMutation::Retract {
+            event_id: current.id,
+            cause: RetractionCause::Evicted,
+        }])
         .unwrap();
     let removed = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
     assert_source_removal(
