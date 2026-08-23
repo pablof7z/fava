@@ -71,6 +71,7 @@ impl MemoryWriteStore {
             revision: SourceRevision(state.revision),
             status: SourceStatus::Open,
             events,
+            retractions: Vec::new(),
         }
     }
 

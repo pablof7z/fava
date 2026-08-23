@@ -1,10 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use fava_query::{
-    OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot, SourceStatus,
-    SourceTerminationCause,
-};
+use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot};
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
 use fava_write::{
@@ -55,15 +52,18 @@ impl OpenedSemanticSources {
         } else {
             SourceKind::WriteStore
         };
-        if let Ok(snapshot) = changed {
-            self.snapshots[index] = snapshot;
-            Some(Ok(kind))
-        } else {
-            self.live[index] = false;
-            self.snapshots[index].status = SourceStatus::Closed {
-                cause: SourceTerminationCause::ProviderClosed,
-            };
-            Some(Err(kind))
+        match changed {
+            Ok(snapshot) => {
+                self.snapshots[index] = snapshot;
+                Some(Ok(kind))
+            }
+            Err(closed) => {
+                self.live[index] = false;
+                // Keep the reported cause: a provider that failed and one that
+                // finished are different facts about this materialization.
+                self.snapshots[index].status = closed.status();
+                Some(Err(kind))
+            }
         }
     }
 

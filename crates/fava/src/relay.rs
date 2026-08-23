@@ -26,7 +26,7 @@ pub(super) struct OpenedRelay {
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
     session: Arc<dyn RelaySession>,
-    attribution: BTreeMap<SubscriptionId, Filter>,
+    attribution: BTreeMap<SubscriptionId, Vec<Filter>>,
 }
 
 impl OpenedRelay {
@@ -178,7 +178,7 @@ async fn establish(
     planner: &dyn SubscriptionPlanner,
     diagnostics: &Diagnostics,
     next_subscription: &AtomicU64,
-) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Filter>), String> {
+) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Vec<Filter>>), String> {
     let owner = allocate_observation(next_subscription)?;
     // The planner mints wire identity from the revision, so a reconnect must
     // carry a fresh one or the new session would reuse the retired session's
@@ -227,10 +227,10 @@ async fn establish(
     let mut attribution = BTreeMap::new();
     for id in plan.attribution.ids() {
         diagnostics.subscription_opened(session_key.clone(), generation, id.clone());
-        if let Some(entry) = plan.attribution.get(id)
-            && let Some(filter) = entry.filters.first()
-        {
-            attribution.insert(id.clone(), filter.clone());
+        if let Some(entry) = plan.attribution.get(id) {
+            // Retain every filter the REQ installed. Keeping only the first
+            // would drop every event the relay serves under the later ones.
+            attribution.insert(id.clone(), entry.filters.clone());
         }
     }
     Ok((session, attribution))
@@ -252,7 +252,7 @@ fn handle_message(
     session: &dyn RelaySession,
     cache: &dyn EventCache,
     diagnostics: &Diagnostics,
-    attribution: &BTreeMap<SubscriptionId, Filter>,
+    attribution: &BTreeMap<SubscriptionId, Vec<Filter>>,
     message: RelayMessage<'static>,
 ) {
     let key = session.key().clone();
@@ -313,7 +313,7 @@ fn handle_message(
 async fn withdraw(
     session: &dyn RelaySession,
     diagnostics: &Diagnostics,
-    attribution: &BTreeMap<SubscriptionId, Filter>,
+    attribution: &BTreeMap<SubscriptionId, Vec<Filter>>,
 ) {
     for id in attribution.keys() {
         let frame = match encode_client(&ClientMessage::close(id.clone())) {

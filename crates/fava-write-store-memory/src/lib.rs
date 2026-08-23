@@ -409,8 +409,12 @@ struct WatchChanges {
 impl SourceChanges for WatchChanges {
     fn next_change(&mut self) -> SourceChangeFuture<'_> {
         Box::pin(async move {
-            if self.closed || self.receiver.changed().await.is_err() {
-                return Err(QuerySourceClosed);
+            if self.closed {
+                return Err(QuerySourceClosed::local_close());
+            }
+            if self.receiver.changed().await.is_err() {
+                self.closed = true;
+                return Err(QuerySourceClosed::provider_closed());
             }
             Ok(self.receiver.borrow_and_update().as_ref().clone())
         })

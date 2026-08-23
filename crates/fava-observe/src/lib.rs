@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use fava_query::{
     OpenedQuerySource, Query, QueryEvaluationError, QueryEvaluator, QueryRevision, QuerySnapshot,
-    QuerySource, QuerySourceError, SourceKind, SourceSnapshot, SourceStatus,
-    SourceTerminationCause,
+    QuerySource, QuerySourceClosed, QuerySourceError, SourceKind, SourceSnapshot,
 };
 use thiserror::Error;
 use tokio::sync::watch;
@@ -135,24 +134,27 @@ impl Observation {
                 let Some((role, changed)) = changed else {
                     continue;
                 };
-                if let Ok(snapshot) = changed {
-                    if let Some(current) = sources.iter().find(|source| source.kind == role) {
-                        report_skipped(
-                            task_coalesced.as_deref(),
-                            current.revision.0,
-                            snapshot.revision.0,
-                        );
+                match changed {
+                    Ok(snapshot) => {
+                        if let Some(current) = sources.iter().find(|source| source.kind == role) {
+                            report_skipped(
+                                task_coalesced.as_deref(),
+                                current.revision.0,
+                                snapshot.revision.0,
+                            );
+                        }
+                        replace_source(&mut sources, snapshot);
                     }
-                    replace_source(&mut sources, snapshot);
-                } else {
-                    if role == SourceKind::EventCache {
-                        cache_open = false;
-                        cache_changes.close();
-                    } else {
-                        writes_open = false;
-                        write_changes.close();
+                    Err(closed) => {
+                        if role == SourceKind::EventCache {
+                            cache_open = false;
+                            cache_changes.close();
+                        } else {
+                            writes_open = false;
+                            write_changes.close();
+                        }
+                        mark_source_closed(&mut sources, &role, &closed);
                     }
-                    mark_source_closed(&mut sources, &role);
                 }
                 let Ok(mut snapshot) = evaluator.evaluate(&query, &sources) else {
                     break;
@@ -246,11 +248,18 @@ fn replace_source(sources: &mut [SourceSnapshot], changed: SourceSnapshot) {
     }
 }
 
-fn mark_source_closed(sources: &mut [SourceSnapshot], role: &SourceKind) {
+/// Stamp the terminal fact the provider actually reported.
+///
+/// Assuming [`SourceTerminationCause::ProviderClosed`] here would make a
+/// failed provider indistinguishable from one that finished, and routing
+/// treats only a clean finish as evidence of absence.
+fn mark_source_closed(
+    sources: &mut [SourceSnapshot],
+    role: &SourceKind,
+    closed: &QuerySourceClosed,
+) {
     if let Some(source) = sources.iter_mut().find(|source| &source.kind == role) {
-        source.status = SourceStatus::Closed {
-            cause: SourceTerminationCause::ProviderClosed,
-        };
+        source.status = closed.status();
     }
 }
 
@@ -286,7 +295,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use fava_query::{
-        BoundedText, QuerySourceClosed, SourceChangeFuture, SourceChanges, SourceRevision,
+        BoundedText, QuerySourceClosed, SourceChangeFuture, SourceChanges, SourceStatus,
     };
 
     use super::*;
@@ -299,12 +308,7 @@ mod tests {
     impl QuerySource for TrackingSource {
         fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
             Ok(OpenedQuerySource {
-                initial: SourceSnapshot {
-                    kind: self.role.clone(),
-                    revision: SourceRevision(0),
-                    status: SourceStatus::Open,
-                    events: Vec::new(),
-                },
+                initial: SourceSnapshot::empty(self.role.clone()),
                 changes: Box::new(TrackingChanges {
                     closes: Arc::clone(&self.closes),
                 }),
@@ -318,7 +322,7 @@ mod tests {
 
     impl SourceChanges for TrackingChanges {
         fn next_change(&mut self) -> SourceChangeFuture<'_> {
-            Box::pin(async { Err(QuerySourceClosed) })
+            Box::pin(async { Err(QuerySourceClosed::provider_closed()) })
         }
 
         fn close(&mut self) {

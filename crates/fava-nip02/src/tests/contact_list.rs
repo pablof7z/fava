@@ -267,3 +267,36 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         Err(ContactListError::TooLarge { .. })
     ));
 }
+
+/// A duplicate relay in the publication route is a routing defect. Reporting
+/// it as a malformed contact list sends the caller to fix the wrong thing.
+#[test]
+fn a_repeated_publication_relay_is_reported_as_a_route_defect() {
+    let relay = fava_state::RelayUrl::parse("wss://relay.example").expect("relay url");
+
+    let mapped = crate::contact_list::map_write_error(
+        fava_write::WriteIntentError::DuplicateExplicitRelay {
+            relay: relay.clone(),
+        },
+    );
+
+    assert_eq!(mapped, ContactListError::DuplicateRelay { relay });
+    assert!(
+        !matches!(mapped, ContactListError::InvalidEvent(_)),
+        "a bad route is never a malformed event"
+    );
+}
+
+#[test]
+fn an_empty_or_oversized_publication_route_is_reported_as_a_route_defect() {
+    let mapped =
+        crate::contact_list::map_write_error(fava_write::WriteIntentError::EmptyExplicitRelays);
+    assert!(matches!(mapped, ContactListError::InvalidRoute(_)));
+
+    let mapped =
+        crate::contact_list::map_write_error(fava_write::WriteIntentError::TooManyExplicitRelays {
+            actual: 100,
+            maximum: 32,
+        });
+    assert!(matches!(mapped, ContactListError::InvalidRoute(_)));
+}

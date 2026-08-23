@@ -20,9 +20,12 @@ pub use selection::{FilterSelection, SingleLetterTag};
 pub use evidence::{
     AuthenticationState, BoundedText, DesiredPlanEvidence, QueryEvidence, QueryShortfall,
     RelayDeadline, RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal,
-    RouteOrigin, SourceEvidence, SourceKind, SourceStatus, SourceTerminationCause,
+    RouteOrigin, SourceEvidence, SourceKind, SourceRetraction, SourceStatus,
+    SourceTerminationCause,
 };
-pub use identity::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
+pub use identity::{
+    ObservationId, ObservationIds, OperationGeneration, QueryBounds, QueryBranchId,
+};
 use thiserror::Error;
 
 /// Relays Fava should ask for acquisition.
@@ -261,6 +264,11 @@ pub struct SourceSnapshot {
     pub status: SourceStatus,
     /// Complete current contributions for this opened source query.
     pub events: Vec<SourceEvent>,
+    /// Retained events this revision removed, and the exact rule that removed
+    /// each one. A snapshot that only lists what survives cannot tell a NIP-09
+    /// deletion from a capacity eviction, so the cause travels with the
+    /// revision that applied it.
+    pub retractions: Vec<SourceRetraction>,
 }
 
 impl SourceSnapshot {
@@ -272,6 +280,19 @@ impl SourceSnapshot {
             revision: SourceRevision(0),
             status: SourceStatus::Open,
             events: Vec::new(),
+            retractions: Vec::new(),
+        }
+    }
+
+    /// Current state for a source role, retracting nothing.
+    #[must_use]
+    pub fn current(kind: SourceKind, revision: SourceRevision, events: Vec<SourceEvent>) -> Self {
+        Self {
+            kind,
+            revision,
+            status: SourceStatus::Open,
+            events,
+            retractions: Vec::new(),
         }
     }
 }
@@ -320,9 +341,62 @@ pub enum QuerySourceError {
 }
 
 /// Terminal source observation fact.
+///
+/// Termination travels on the error channel, not as a final `Ok` snapshot: a
+/// provider's last coherent state and the fact that it ended are two different
+/// facts, and every production provider drives its later revisions through a
+/// lossy latest-state channel that may coalesce a trailing snapshot away. The
+/// cause therefore rides the terminal value itself, and the consumer stamps it
+/// onto the last coherent snapshot it already holds ([`Self::status`]).
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
-#[error("query source observation closed")]
-pub struct QuerySourceClosed;
+#[error("query source observation closed: {cause}")]
+pub struct QuerySourceClosed {
+    /// Why the provider's observation ended.
+    pub cause: SourceTerminationCause,
+}
+
+impl QuerySourceClosed {
+    /// Terminate with an exact cause.
+    #[must_use]
+    pub const fn new(cause: SourceTerminationCause) -> Self {
+        Self { cause }
+    }
+
+    /// Fava released this observation.
+    #[must_use]
+    pub const fn local_close() -> Self {
+        Self::new(SourceTerminationCause::LocalClose)
+    }
+
+    /// The provider ended its own observation cleanly. Only this cause is
+    /// evidence that the provider had nothing further to say.
+    #[must_use]
+    pub const fn provider_closed() -> Self {
+        Self::new(SourceTerminationCause::ProviderClosed)
+    }
+
+    /// The provider failed. This proves nothing about the answer.
+    #[must_use]
+    pub fn provider_failed(detail: impl AsRef<str>) -> Self {
+        Self::new(SourceTerminationCause::ProviderFailed {
+            detail: BoundedText::new(detail),
+        })
+    }
+
+    /// The engine is tearing down.
+    #[must_use]
+    pub const fn shutdown() -> Self {
+        Self::new(SourceTerminationCause::Shutdown)
+    }
+
+    /// The terminal lifecycle fact to stamp onto the last coherent snapshot.
+    #[must_use]
+    pub fn status(&self) -> SourceStatus {
+        SourceStatus::Closed {
+            cause: self.cause.clone(),
+        }
+    }
+}
 
 /// Application-facing event plus exact currently known evidence.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -399,6 +473,7 @@ impl QuerySnapshot {
                         kind: source.kind.clone(),
                         revision: source.revision,
                         status: source.status.clone(),
+                        retractions: source.retractions.clone(),
                     })
                     .collect(),
                 ..QueryEvidence::default()
