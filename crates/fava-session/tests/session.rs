@@ -3,6 +3,8 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::Barrier;
+use std::thread;
 
 use fava_session::{Session, SessionError};
 use fava_signer::{Signer, SignerAvailability, SignerError};
@@ -53,6 +55,119 @@ fn duplicate_add_refuses_without_replacing_current_attachment() {
     let (current_generation, current) = session.signer(alice_key).unwrap();
     assert_eq!(current_generation, generation);
     assert!(Arc::ptr_eq(&selected, &current));
+}
+
+#[test]
+fn replace_remove_and_missing_mutations_are_exact() {
+    let alice_key = Keys::generate().public_key();
+    let first = Arc::new(TestSigner(alice_key)) as Arc<dyn Signer>;
+    let replacement = Arc::new(TestSigner(alice_key)) as Arc<dyn Signer>;
+    let session = Session::new([Arc::clone(&first)]).unwrap();
+    let mut changes = session.subscribe();
+    let original_generation = session.signer(alice_key).unwrap().0;
+
+    session
+        .replace_signer(Arc::clone(&replacement))
+        .expect("explicit replacement succeeds");
+    assert!(changes.has_changed().unwrap());
+    let replacement_revision = *changes.borrow_and_update();
+    let (replacement_generation, current) = session.signer(alice_key).unwrap();
+    assert_eq!(replacement_generation, replacement_revision);
+    assert!(replacement_generation > original_generation);
+    assert!(Arc::ptr_eq(&replacement, &current));
+
+    session.remove_signer(alice_key).expect("removal succeeds");
+    assert!(changes.has_changed().unwrap());
+    let removal_revision = *changes.borrow_and_update();
+    assert!(removal_revision > replacement_revision);
+    assert!(session.signer(alice_key).is_none());
+
+    assert_eq!(
+        session.remove_signer(alice_key),
+        Err(SessionError::MissingSigner(alice_key))
+    );
+    assert_eq!(
+        session.replace_signer(first),
+        Err(SessionError::MissingSigner(alice_key))
+    );
+    assert!(!changes.has_changed().unwrap());
+}
+
+#[test]
+fn sixty_fourth_succeeds_sixty_fifth_refuses_and_replace_still_succeeds() {
+    let keys: Vec<_> = (0..65).map(|_| Keys::generate().public_key()).collect();
+    let initial = keys[..63]
+        .iter()
+        .copied()
+        .map(|key| Arc::new(TestSigner(key)) as Arc<dyn Signer>);
+    let session = Session::new(initial).expect("63 signer session");
+
+    session
+        .add_signer(Arc::new(TestSigner(keys[63])))
+        .expect("64th signer succeeds");
+    assert_eq!(
+        session.add_signer(Arc::new(TestSigner(keys[64]))),
+        Err(SessionError::SignerCapacityExceeded { limit: 64 })
+    );
+    assert!(session.signer(keys[64]).is_none());
+
+    let replacement = Arc::new(TestSigner(keys[0])) as Arc<dyn Signer>;
+    session
+        .replace_signer(Arc::clone(&replacement))
+        .expect("replacement does not grow capacity");
+    assert!(Arc::ptr_eq(
+        &session.signer(keys[0]).unwrap().1,
+        &replacement
+    ));
+}
+
+#[test]
+fn concurrent_final_slot_growth_never_exceeds_capacity() {
+    let keys: Vec<_> = (0..65).map(|_| Keys::generate().public_key()).collect();
+    let initial = keys[..63]
+        .iter()
+        .copied()
+        .map(|key| Arc::new(TestSigner(key)) as Arc<dyn Signer>);
+    let session = Session::new(initial).expect("63 signer session");
+    let barrier = Arc::new(Barrier::new(3));
+    let contenders: Vec<_> = keys[63..]
+        .iter()
+        .copied()
+        .map(|key| {
+            let session = session.clone();
+            let barrier = Arc::clone(&barrier);
+            thread::spawn(move || {
+                barrier.wait();
+                (key, session.add_signer(Arc::new(TestSigner(key))))
+            })
+        })
+        .collect();
+    barrier.wait();
+    let outcomes: Vec<_> = contenders
+        .into_iter()
+        .map(|contender| contender.join().expect("contender does not panic"))
+        .collect();
+
+    assert_eq!(
+        outcomes.iter().filter(|(_, result)| result.is_ok()).count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|(_, result)| {
+                *result == Err(SessionError::SignerCapacityExceeded { limit: 64 })
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|(key, _)| session.signer(*key).is_some())
+            .count(),
+        1
+    );
 }
 
 struct TestSigner(PublicKey);

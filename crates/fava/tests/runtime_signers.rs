@@ -98,6 +98,93 @@ async fn adding_bob_does_not_wake_alice() {
     assert!(publisher.attempts().is_empty());
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn removed_signer_stale_valid_completion_is_inert_and_readd_wakes() {
+    let alice = Keys::generate();
+    let old_signer = Arc::new(GatedValidSigner::new(alice.clone()));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let fava = assembly(Arc::clone(&publisher))
+        .signer(Arc::clone(&old_signer))
+        .build()
+        .expect("publication assembly");
+    let write = fava
+        .to([relay("remove-readd")])
+        .expect("route validates")
+        .publish(
+            EventBuilder::new(alice.public_key(), Kind::TextNote)
+                .content("same custody survives logout and login")
+                .build()
+                .expect("unsigned event builds"),
+        )
+        .expect("Alice's write is accepted");
+    let write_id = write.write_id();
+    let receipt_id = write.receipt_id();
+    wait_until(|| old_signer.calls() == 1).await;
+
+    fava.remove_signer(alice.public_key())
+        .expect("Alice signer removes");
+    old_signer.release();
+    wait_until(|| old_signer.completions() == 1).await;
+    tokio::task::yield_now().await;
+    assert!(matches!(
+        write.receipt().unwrap().current.event,
+        EventValue::Unsigned(_)
+    ));
+    assert!(publisher.attempts().is_empty());
+
+    fava.add_signer(Arc::new(LocalSigner::new(alice)))
+        .expect("Alice signer reattaches");
+    let settled = write.settled(all()).await.expect("same write settles");
+    assert_eq!(settled.write_id, write_id);
+    assert_eq!(settled.receipt_id, receipt_id);
+    assert_eq!(publisher.attempts().len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn replaced_signer_stale_valid_completion_cannot_install_or_deliver() {
+    let alice = Keys::generate();
+    let old_signer = Arc::new(GatedValidSigner::new(alice.clone()));
+    let new_signer = Arc::new(GatedValidSigner::new(alice.clone()));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let fava = assembly(Arc::clone(&publisher))
+        .signer(Arc::clone(&old_signer))
+        .build()
+        .expect("publication assembly");
+    let write = fava
+        .to([relay("replace")])
+        .expect("route validates")
+        .publish(
+            EventBuilder::new(alice.public_key(), Kind::TextNote)
+                .content("only the replacement generation may complete")
+                .build()
+                .expect("unsigned event builds"),
+        )
+        .expect("Alice's write is accepted");
+    wait_until(|| old_signer.calls() == 1).await;
+
+    fava.replace_signer(Arc::clone(&new_signer) as Arc<dyn Signer>)
+        .expect("replacement succeeds");
+    wait_until(|| new_signer.calls() == 1).await;
+    old_signer.release();
+    wait_until(|| old_signer.completions() == 1).await;
+    tokio::task::yield_now().await;
+    assert!(matches!(
+        write.receipt().unwrap().current.event,
+        EventValue::Unsigned(_)
+    ));
+    assert!(publisher.attempts().is_empty());
+
+    new_signer.release();
+    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+        .await
+        .unwrap_or_else(|_| panic!("replacement signer stalled: {:?}", write.receipt()))
+        .expect("replacement signer settles the write");
+    assert!(matches!(settled.current.event, EventValue::Signed(_)));
+    assert_eq!(old_signer.completions(), 1);
+    assert_eq!(new_signer.completions(), 1);
+    assert_eq!(publisher.attempts().len(), 1);
+}
+
 fn assembly(publisher: Arc<RecordingPublisher>) -> FavaBuilder {
     Fava::builder()
         .event_cache(Arc::new(MemoryEventCache::default()))
@@ -205,6 +292,66 @@ struct BlockingSigner {
     public_key: PublicKey,
     calls: AtomicU64,
     cancellations: AtomicU64,
+}
+
+struct GatedValidSigner {
+    inner: LocalSigner,
+    calls: AtomicU64,
+    completions: AtomicU64,
+    release: watch::Sender<bool>,
+}
+
+impl GatedValidSigner {
+    fn new(keys: Keys) -> Self {
+        let (release, _) = watch::channel(false);
+        Self {
+            inner: LocalSigner::new(keys),
+            calls: AtomicU64::new(0),
+            completions: AtomicU64::new(0),
+            release,
+        }
+    }
+
+    fn calls(&self) -> u64 {
+        self.calls.load(Ordering::SeqCst)
+    }
+
+    fn completions(&self) -> u64 {
+        self.completions.load(Ordering::SeqCst)
+    }
+
+    fn release(&self) {
+        self.release.send_replace(true);
+    }
+}
+
+impl Signer for GatedValidSigner {
+    fn public_key(&self) -> PublicKey {
+        self.inner.public_key()
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Available
+    }
+
+    fn sign_event(
+        &self,
+        event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let mut release = self.release.subscribe();
+        Box::pin(async move {
+            if !*release.borrow() {
+                let _ = release.changed().await;
+            }
+            let (keep_uncancelled, uncancelled) = watch::channel(false);
+            let result = self.inner.sign_event(event, uncancelled).await;
+            drop(keep_uncancelled);
+            self.completions.fetch_add(1, Ordering::SeqCst);
+            result
+        })
+    }
 }
 
 impl BlockingSigner {
