@@ -56,7 +56,7 @@ impl Publisher for Nip01Publisher {
             {
                 Ok(lease) if lease.session().identity().key == attempt.session => lease,
                 Ok(lease) => {
-                    let _ = lease.session().close().await;
+                    let _ = lease.release().await;
                     return PublishOutcome::NotHandedOff {
                         reason: "transport returned the wrong relay session identity".to_owned(),
                     };
@@ -67,12 +67,12 @@ impl Publisher for Nip01Publisher {
                     };
                 }
             };
-            let session = lease.session();
+            let session = std::sync::Arc::clone(lease.session());
             let mut inbound = session.messages();
             let frame = match encode_client(&ClientMessage::event(attempt.event.clone())) {
                 Ok(frame) => frame,
                 Err(error) => {
-                    let _ = session.close().await;
+                    let _ = lease.release().await;
                     return PublishOutcome::NotHandedOff {
                         reason: error.to_string(),
                     };
@@ -83,13 +83,13 @@ impl Publisher for Nip01Publisher {
                 .await
             {
                 HandoffOutcome::NotHandedOff { reason, .. } => {
-                    let _ = session.close().await;
+                    let _ = lease.release().await;
                     return PublishOutcome::NotHandedOff {
                         reason: format!("{reason:?}"),
                     };
                 }
                 HandoffOutcome::Ambiguous { reason, .. } => {
-                    let _ = session.close().await;
+                    let _ = lease.release().await;
                     return PublishOutcome::OutcomeUnknown {
                         reason: format!("{reason:?}"),
                     };
@@ -148,7 +148,10 @@ impl Publisher for Nip01Publisher {
                 ))
             })
             .await;
-            let _ = session.close().await;
+            // Release this attempt's hold. The session closes only when the
+            // last holder lets go; other observations and publications share it.
+            inbound.close();
+            let _ = lease.release().await;
             match result {
                 Ok(Ok(outcome)) => outcome,
                 Ok(Err(reason)) => PublishOutcome::OutcomeUnknown { reason },

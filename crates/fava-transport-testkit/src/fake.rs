@@ -349,10 +349,16 @@ impl FakeRelay {
 #[must_use]
 pub fn detached_lease(session: Arc<dyn RelaySession>) -> RelaySessionLease {
     let identity = session.identity();
-    RelaySessionLease::new(session, Arc::new(DetachedRelease), identity)
+    let release = Arc::new(DetachedRelease {
+        session: Arc::clone(&session),
+    });
+    RelaySessionLease::new(session, release, identity)
 }
 
-struct DetachedRelease;
+/// The single holder of a detached lease, so releasing it closes the session.
+struct DetachedRelease {
+    session: Arc<dyn RelaySession>,
+}
 
 impl LeaseRelease for DetachedRelease {
     fn release_now(&self, _identity: &RelaySessionIdentity) {}
@@ -361,6 +367,9 @@ impl LeaseRelease for DetachedRelease {
         &'a self,
         _identity: &'a RelaySessionIdentity,
     ) -> ReleaseFuture<'a> {
-        Box::pin(async { Ok(ReleaseOutcome::Closed) })
+        Box::pin(async move {
+            self.session.close().await?;
+            Ok(ReleaseOutcome::Closed)
+        })
     }
 }
