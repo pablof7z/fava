@@ -7,10 +7,10 @@ use fava_delivery::DeliveryPolicy;
 use fava_publisher::Publisher;
 use fava_query::{QueryEvaluator, QuerySource};
 use fava_routing::Router;
-use fava_signer::Signer;
+use fava_session::Session;
 use fava_transport::Transport;
 use fava_write::{
-    Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
+    Kind, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
     WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
@@ -20,6 +20,7 @@ use tokio::sync::watch;
 mod delivery;
 mod materialization;
 mod run;
+mod sign;
 
 use materialization::{PreparedSemantic, SemanticState};
 
@@ -30,7 +31,7 @@ pub struct Publication {
     event_source: Arc<dyn QuerySource>,
     evaluator: Arc<dyn QueryEvaluator>,
     materializers: Arc<BTreeMap<Kind, Arc<dyn ReplaceableEventMaterializer>>>,
-    signers: Arc<BTreeMap<PublicKey, Arc<dyn Signer>>>,
+    session: Session,
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
     transport: Arc<dyn Transport>,
@@ -43,33 +44,26 @@ impl Publication {
     ///
     /// # Errors
     ///
-    /// Returns [`PublicationError`] for duplicate signer public keys.
+    /// Returns [`PublicationError`] for invalid materializer selection.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: Arc<dyn WriteStore>,
         event_source: Arc<dyn QuerySource>,
         evaluator: Arc<dyn QueryEvaluator>,
         materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
-        signers: impl IntoIterator<Item = Arc<dyn Signer>>,
+        session: Session,
         publisher: Arc<dyn Publisher>,
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
         routers: Vec<Arc<dyn Router>>,
     ) -> Result<Self, PublicationError> {
         let materializers = Self::index_materializers(materializers)?;
-        let mut indexed = BTreeMap::new();
-        for signer in signers {
-            let public_key = signer.public_key();
-            if indexed.insert(public_key, signer).is_some() {
-                return Err(PublicationError::DuplicateSigner(public_key));
-            }
-        }
         Ok(Self {
             store,
             event_source,
             evaluator,
             materializers: Arc::new(materializers),
-            signers: Arc::new(indexed),
+            session,
             publisher,
             delivery,
             transport,
@@ -301,9 +295,6 @@ pub enum PublicationError {
     /// Publication work requires a running Tokio runtime.
     #[error("publication requires a running Tokio runtime")]
     RuntimeUnavailable,
-    /// Two signer providers claimed one public key.
-    #[error("duplicate signer for {0}")]
-    DuplicateSigner(PublicKey),
     /// Requested receipt does not exist.
     #[error("receipt {0:?} does not exist")]
     ReceiptMissing(ReceiptId),

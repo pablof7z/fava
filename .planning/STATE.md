@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 07.3
-current_phase_name: Architecture Gate Integrity and Requirement Traceability
-status: not_started
-stopped_at: Remediation series 07.3-07.9 inserted from the 2026-08-23 architecture audit
-last_updated: "2026-08-23T13:24:09.391Z"
+current_phase: 8
+current_phase_name: Authentication, Hostile Boundaries, and Boundedness
+status: ready_to_plan
+stopped_at: Completed and verified Phase 07.2
+last_updated: "2026-08-23T14:01:18Z"
 last_activity: 2026-08-23
-last_activity_desc: Full-workspace architecture audit complete; remediation phases 07.3-07.9 inserted
-state_head: f5922f309507fc18685c81357159710a0db3c677
+last_activity_desc: Phase 07.2 runtime signer lifecycle completed and verified
+state_head: c46c4a5fb0a2fe28ced3f1d419ddc1453290c186
 progress:
-  total_phases: 21
-  completed_phases: 9
-  total_plans: 36
-  completed_plans: 36
-  percent: 43
+  total_phases: 15
+  completed_phases: 10
+  total_plans: 38
+  completed_plans: 38
+  percent: 67
 ---
 
 # Project State
@@ -27,32 +27,22 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 07.3 (Architecture Gate Integrity and Requirement Traceability) — NOT STARTED
-Plan: none authored
-Status: not_started
-Last activity: 2026-08-23 — Full-workspace architecture audit complete; remediation series inserted
+Phase: 07.2 (Runtime Signer Lifecycle and Parked-Write Wakeup) — COMPLETE
+Plan: 2 of 2
+Status: Implementation, review, security, Nyquist, and goal verification passed
+Last activity: 2026-08-23 — Runtime signer lifecycle completed and verified
 
-Progress: [█████░░░░░] 48%
+Progress: [███████░░░] 67%
 
-Phase progress is 10/21. A full-workspace architecture audit on 2026-08-23
-recorded 127 findings (39+ critical) in `.planning/audit/2026-08-23/LEDGER.md`
-and inserted the remediation series 07.3-07.9 before Phase 8.
-
-**Completion verdicts under revocation.** The audit established that
-`.planning/REQUIREMENTS.md` was authored after M6 shipped and reverse-engineered
-from finished code, that 113 of 131 authoritative spec requirement IDs appear
-nowhere in `.planning/`, and that the M2-M6 verification records cite evidence
-authored by the change they verify. Phase 07.9 revokes or re-earns the M1, M2,
-M3, M5, M6, and 07.1.1 verdicts, downgrades M4, and retains Phase 7. Until then
-the completed-phase counts above are provisional and must not be read as proof.
+Phase 8 is next and ready for research/planning.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 25
+- Total plans completed: 26
 - Average duration: 35 minutes
-- Total execution time: 7 hours 35 minutes
+- Total execution time: 7 hours 55 minutes
 
 **By Phase:**
 
@@ -103,6 +93,8 @@ the completed-phase counts above are provisional and must not be read as proof.
 | Phase 07.1.1 P10 | 21min | 3 tasks | 7 files |
 | Phase 07.1.1 P11 | 40min | 3 tasks | 10 files |
 | Phase 07.1.1 P12 | 6min | 2 tasks | 5 files |
+| Phase 07.2 P01 | 9min | 2 tasks | 19 files |
+| Phase 07.2 P02 | 20min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -184,6 +176,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Public multi-relay group behavior retains relay-local record authority while ordinary Fava owners handle observation and publication.
 - [Phase 07.1.1]: Only twice-scanned complete author-sealed evidence is atomically promoted; pair verification requires exactly two runs and four distinct children.
 - [Phase 07.1.1]: Controlled canary evidence is durably retained at the exact owner-private path named by 07.1.1-12-PAIR-ROOT.txt and remains excluded from Git by the canary evidence policy.
+- [Phase 07.2]: Session is the sole mutable signer attachment owner; publication retains only per-write signer operations.
+- [Phase 07.2]: Runtime add, explicit replace, and remove use one exact signer per pubkey with a fixed 64-entry bound and atomic typed refusal.
+- [Phase 07.2]: Session revisions are coalescible wake signals only; publication reloads its exact event pubkey and admits completions by current attachment generation.
+- [Phase 07.2]: Cancellation is advisory; a valid stale provider completion remains inert after replacement or removal.
 
 ### Pending Todos
 
@@ -192,7 +188,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 ### Blockers/Concerns
 
 - No current blocker.
-- Phase 06.1 awaits final goal verification; implementation and code review are complete.
 - Targeted research remains required during planning for Phases 8-11; recommendations do not override specifications.
 
 ### Roadmap Evolution
@@ -200,13 +195,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Phase 06.1 inserted after Phase 6: Literal Tag-Value Query Semantics Remediation
 - Phase 07.1 inserted after Phase 7: Universal publication vocabulary and typed NIP-02 reads (URGENT)
 - Phase 07.1.1 inserted after Phase 07.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability
-- Phase 07.3 inserted after Phase 7: Make the vocabulary, requirement, and verification gates truthful (URGENT)
-- Phase 07.4 inserted after Phase 7: Reshape transport, subscription, evidence, and diagnostics contracts (URGENT)
-- Phase 07.5 inserted after Phase 7: Create the fava-runtime execution owner (URGENT)
-- Phase 07.6 inserted after Phase 7: Restore fava-observe live-query ownership and delete the facade relay layer (URGENT)
-- Phase 07.7 inserted after Phase 7: Facade lifecycle and fava-session signer ownership (URGENT)
-- Phase 07.8 inserted after Phase 7: Independent correctness defects in ingest, routing, and cache (URGENT)
-- Phase 07.9 inserted after Phase 7: Evidence reconstruction and milestone verdict revocation (URGENT)
+- Phase 07.2 inserted after Phase 7: Runtime signer lifecycle and parked-write wakeup (URGENT)
 
 ## Deferred Items
 
@@ -218,6 +207,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T13:48:03Z
-Stopped at: Completed 07.1.1-12-PLAN.md
+Last session: 2026-08-23T14:01:18Z
+Stopped at: Completed and verified Phase 07.2
 Resume file: None

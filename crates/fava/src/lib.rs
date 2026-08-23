@@ -5,6 +5,7 @@ mod publication;
 mod query_source;
 mod relay;
 mod routes;
+mod session;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -24,6 +25,8 @@ pub use fava_query::{
 use fava_query::{QueryEvaluator, QuerySource};
 pub use fava_routing::RoutePlan;
 use fava_routing::{RouteRequest, Router};
+use fava_session::Session;
+pub use fava_session::SessionError;
 use fava_signer::Signer;
 pub use fava_state::{EventCoordinate, RelayUrl};
 use fava_subscriptions::SubscriptionPlanner;
@@ -89,6 +92,7 @@ pub struct Fava {
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
     routers: Vec<Arc<dyn Router>>,
+    session: Session,
     publication: Option<Publication>,
 }
 
@@ -408,6 +412,7 @@ impl FavaBuilder {
             || self.delivery.is_some()
             || !self.signers.is_empty()
             || !self.materializers.is_empty();
+        let session = Session::new(self.signers)?;
         let publication = if publication_selected {
             let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
             let delivery = self.delivery.ok_or(BuildError::MissingDeliveryPolicy)?;
@@ -420,7 +425,7 @@ impl FavaBuilder {
                 event_source.clone(),
                 evaluator.clone(),
                 self.materializers,
-                self.signers,
+                session.clone(),
                 publisher,
                 delivery,
                 transport,
@@ -443,6 +448,7 @@ impl FavaBuilder {
             diagnostics,
             next_subscription: Arc::new(AtomicU64::new(0)),
             routers: self.routers,
+            session,
             publication,
         })
     }
@@ -472,4 +478,7 @@ pub enum BuildError {
     /// Publication providers or durable recovery were invalid.
     #[error("Fava publication assembly failed: {0}")]
     Publication(String),
+    /// Runtime signer seed selection was invalid.
+    #[error(transparent)]
+    Session(#[from] SessionError),
 }

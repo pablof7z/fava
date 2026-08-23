@@ -267,7 +267,7 @@ nearest_nostr = "none"
 distinction = "Nostr defines protocol messages, not an application's assembled client lifecycle."
 symbols = ["fava::Fava", "fava::FavaBuilder", "fava::BuildError"]
 crates = ["fava"]
-spec_crates = ["fava-ffi", "fava-runtime", "fava-session", "fava-standard"]
+spec_crates = ["fava-ffi", "fava-runtime", "fava-standard"]
 
 [[term]]
 name = "Query"
@@ -774,6 +774,20 @@ spec_crates = [
     "fava-signer-nip46",
     "fava-signer-testkit",
 ]
+
+[[term]]
+name = "Session"
+source = "fava"
+meaning = "The runtime authority for which signer provider is currently attached to each exact author public key."
+owner = "fava-session"
+nearest_nostr = "Event author public key"
+distinction = "A Nostr public key identifies an author and a Signer executes one provider operation; Session owns the mutable runtime attachment between those facts without owning accepted writes."
+counterexample = "An accepted Alice write awaiting a signer begins signing in the same running Fava instance when Alice's signer is attached, while attaching Bob's signer leaves Alice's write parked."
+lifecycle = "Created with Fava, mutated through bounded add, explicit replace, and remove operations, observed by publication, and closed during Fava shutdown; accepted writes remain independently durable."
+forcing_requirement = "WRITE-007, WRITE-008, ID-001, ID-005, and ID-006 require runtime signer attachment, exact missing-signer parking and wakeup, and separation from durable write custody."
+falsifier = "Accept an unsigned Alice write without a signer, attach Alice's signer without rebuilding Fava, and require the same write and receipt to continue; suppressing the exact session-change wakeup must fail."
+symbols = ["fava_session::Session", "fava_session::SessionError"]
+crates = ["fava-session"]
 
 [[term]]
 name = "FetchCache"

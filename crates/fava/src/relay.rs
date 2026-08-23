@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
-use fava_ingest::admit_subscription_event;
+use fava_ingest::{RelayIngestError, admit_subscription_event};
 use fava_query::Query;
 use fava_state::{RelaySessionKey, Timestamp};
 use fava_subscriptions::{SubscriptionPlan, SubscriptionPlanner, demand_for_query};
@@ -262,20 +262,21 @@ fn handle_message(
             event,
         } => {
             let id = subscription_id.into_owned();
-            let Some(filter) = attribution.get(&id) else {
-                diagnostics.failed(key, generation, format!("unattributed EVENT for {id}"));
-                return;
-            };
             if let Err(error) = admit_subscription_event(
                 cache,
                 session.key(),
+                attribution,
                 &id,
-                &id,
-                filter,
                 event.into_owned(),
                 Timestamp::now(),
             ) {
-                diagnostics.failed(key, generation, error.to_string());
+                let reason = match &error {
+                    RelayIngestError::WrongSubscription => {
+                        format!("unattributed EVENT for {id}")
+                    }
+                    other => other.to_string(),
+                };
+                diagnostics.failed(key, generation, reason);
             }
         }
         RelayMessage::EndOfStoredEvents(subscription) => {

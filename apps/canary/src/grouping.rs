@@ -284,16 +284,11 @@ async fn read_until_terminal(
                     event,
                 } => {
                     let id = subscription_id.into_owned();
-                    let filter = plan
-                        .attribution
-                        .get(&id)
-                        .ok_or_else(|| CanaryError::new("unattributed planner EVENT"))?;
                     admit_subscription_event(
                         cache,
                         session.key(),
+                        &plan.attribution,
                         &id,
-                        &id,
-                        filter,
                         event.into_owned(),
                         Timestamp::now(),
                     )
