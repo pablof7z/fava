@@ -355,6 +355,7 @@ dependencies = [
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-state",
  "fava-subscriptions",
@@ -465,6 +466,7 @@ dependencies = [
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-state",
  "fava-transport",
@@ -575,6 +577,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-session"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
+ "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "fava-signer"
 version = "0.1.0"
 dependencies = [
@@ -616,6 +628,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "thiserror",
@@ -628,6 +641,7 @@ dependencies = [
  "fava-state",
  "fava-subscriptions",
  "fava-wire",
+ "nostr",
 ]
 
 [[package]]
@@ -636,6 +650,7 @@ version = "0.1.0"
 dependencies = [
  "fava-state",
  "fava-subscriptions",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "serde_json",

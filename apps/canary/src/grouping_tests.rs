@@ -11,7 +11,8 @@ fn fixture() -> (Filter, Vec<RelayDemand>) {
         .enumerate()
         .map(|(index, value)| {
             demand_for_query(
-                SubscriptionId::new(format!("logical-{index:03}")),
+                observation(index),
+                QueryBranchId::ROOT,
                 &Query::events().tag_values(key, [value.clone()]),
             )
         })
