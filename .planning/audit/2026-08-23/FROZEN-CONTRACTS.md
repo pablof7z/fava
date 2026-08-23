@@ -20,6 +20,12 @@ marked `DECIDED:`.
 `GOALS:NNNN` = `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` line NNNN.
 `VOCAB:NNNN` = `docs/internals/vocabulary.toml` line NNNN.
 
+**Line numbers are advisory, verified at this document's commit.** The spec files
+move under concurrent phase work (the `fava-session` section grew 66 lines while
+this document was being written, shifting every `ARCH` citation after 2204).
+When a number does not land on the quoted sentence, the **quoted sentence and
+the requirement id are authoritative** — search for the sentence, not the line.
+
 **No adapters.** All five contracts are breaking changes. No compatibility
 shim, no deprecated alias, no `#[doc(hidden)]` bridge. `crates/fava/src/relay.rs`
 and every current call site are expected to stop compiling; Wave 3 rewrites them.
@@ -30,7 +36,7 @@ and every current call site are expected to stop compiling; Wave 3 rewrites them
 
 Three identity types are named by `ARCH:1492-1497` inside `fava-subscriptions`'
 contract but are semantically owned by `fava-observe`. A neutral contract crate
-must not depend on a lifecycle owner (`ARCH:2984-3016`, dependency direction:
+must not depend on a lifecycle owner (`ARCH:3050-3082`, dependency direction:
 `domain values and pure rules` ← `neutral contracts` ← `universal lifecycle owners`).
 
 `DECIDED: ObservationId, QueryBranchId, QueryBounds, and OperationGeneration are
@@ -84,7 +90,7 @@ impl QueryBranchId {
 /// across differing bounds.
 ///
 /// Authority: ARCH:1495 (`RelayDemand.bounds: QueryBounds`);
-/// GOALS:1049 (RELAY-003) "MUST NOT merge across differences that would change
+/// GOALS:1055 (RELAY-003) "MUST NOT merge across differences that would change
 /// meaning, including incompatible time windows, relay-side limits".
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct QueryBounds {
@@ -138,18 +144,18 @@ The implementer of `Transport` owns every byte, every socket, every clock the
 socket is measured against, and every generation number a session ever wears.
 It owns a **registry keyed by `RelaySessionKey`** so that `acquire_session` is
 a lookup-then-maybe-dial, not a dial (`ARCH:1593` "current and retiring session
-lifecycle"; `GOALS:930` "Several writes for one relay SHOULD share
+lifecycle"; `GOALS:936` "Several writes for one relay SHOULD share
 connection/backoff ownership rather than creating independent reconnect
 storms"). It owns the refcount on each registry entry and the deterministic
 close that fires when the count reaches zero (`ARCH:1628`). It owns reconnect
 policy, backoff, jitter, and attempt exhaustion (`ARCH:1588-1589`, `ARCH:1625`),
 and it owns the fact that a reconnect mints a new `OperationGeneration` *inside*
 the session object the lease holders already hold, so no holder ever swaps an
-`Arc` (`GOALS:1086-1089`, RELAY-006). It owns two bounded byte queues per
+`Arc` (`GOALS:1093-1095`, RELAY-006). It owns two bounded byte queues per
 session (`ARCH:1590`) and therefore owns the only place in Fava where a full
 queue converts into `HandoffOutcome::NotHandedOff` instead of an unbounded park.
 It owns *nothing* about query meaning, filters, attribution, route policy, or
-durable retry (`GOALS:1082`, RELAY-005). It never decides a deadline value: it
+durable retry (`GOALS:1089`, RELAY-005). It never decides a deadline value: it
 enforces the four durations the caller hands it in `OpenRelaySession`.
 
 ### 1.2 Literal contract
@@ -233,7 +239,7 @@ pub struct TransportDeadlines {
 /// Bounded byte queues for one session, in whole frames.
 ///
 /// Authority: ARCH:1590 "bounded inbound and outbound byte queues";
-/// GOALS:1437 (OPS-004) "Exceeding a bound MUST produce refusal, backpressure,
+/// GOALS:1448 (OPS-004) "Exceeding a bound MUST produce refusal, backpressure,
 /// or exact shortfall."
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TransportBounds {
@@ -476,7 +482,7 @@ pub enum TransportFailure {
     },
     /// The relay or the network refused or dropped the connection.
     Disconnected {
-        /// Bounded verbatim reason (GOALS:1105, RELAY-008).
+        /// Bounded verbatim reason (GOALS:1111, RELAY-008).
         detail: BoundedReason,
     },
     /// Fava is shutting down; no new bytes are admitted.
@@ -538,7 +544,7 @@ pub trait LeaseRelease: Send + Sync {
 /// A refcounted hold on one relay session.
 ///
 /// Authority: ARCH:1593 "current and retiring session lifecycle";
-/// GOALS:930 shared connection ownership; ARCH:2072 "ownership/refcounts for
+/// GOALS:936 shared connection ownership; ARCH:2072 "ownership/refcounts for
 /// shared work" (held by `fava-observe`, expressed through this lease).
 pub struct RelaySessionLease {
     session: Arc<dyn RelaySession>,
@@ -601,7 +607,7 @@ impl Drop for RelaySessionLease {
 
 /// Relay- or OS-supplied text retained under a Fava-owned byte bound.
 ///
-/// Authority: GOALS:1428 (OPS-004, "frame and message sizes"), GOALS:1105
+/// Authority: GOALS:1439 (OPS-004, "frame and message sizes"), GOALS:1111
 /// (RELAY-008, verbatim evidence). Truncation is recorded, never silent.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BoundedReason {
@@ -693,9 +699,9 @@ pub enum TransportError {
 | `send(frame, correlation)` two-argument shape | `ARCH:1572-1576` |
 | `OpenRelaySession` as the acquire argument (not a bare key) | `ARCH:1560-1565` |
 | `RelaySessionIdentity` as a named type with a generation | `ARCH:1567-1571`, `ARCH:1588` |
-| Bounded inbound *and* outbound queues; refusal not park | `ARCH:1590` + `GOALS:1437` |
-| Reconnect generation minted inside the session, holders unchanged | `GOALS:1086-1089` (RELAY-006) |
-| Refcounted acquire-or-reuse | `ARCH:1593` + `GOALS:930` |
+| Bounded inbound *and* outbound queues; refusal not park | `ARCH:1590` + `GOALS:1448` |
+| Reconnect generation minted inside the session, holders unchanged | `GOALS:1093-1095` (RELAY-006) |
+| Refcounted acquire-or-reuse | `ARCH:1593` + `GOALS:936` |
 | `Transport::shutdown` | `ARCH:1594` "shutdown and resource joining" |
 
 ### 1.4 Decisions
@@ -710,10 +716,10 @@ pub enum TransportError {
   RelaySession>` must cross threads; `Send`-only would make the refcount the
   spec requires unrepresentable.
 - `DECIDED: reconnect exhaustion is a stream item, not a silent stop.`
-  Reasoning: `GOALS:1066` forbids claiming omitted work was completed; an
+  Reasoning: `GOALS:1072` forbids claiming omitted work was completed; an
   exhausted reconnect that produced no item is exactly that claim.
 - `DECIDED: Transport::holders is on the public trait.` Reasoning: the audit's
-  shared-work falsifier is unwritable otherwise, and `GOALS:1439-1450` (OPS-005)
+  shared-work falsifier is unwritable otherwise, and `GOALS:1450-1461` (OPS-005)
   makes test observability part of the product.
 - `DECIDED: no keepalive/ping method on the trait.` Reasoning: `ARCH:1624`
   assigns keepalive to the *websocket* implementation, not to the neutral
@@ -728,13 +734,13 @@ pub enum TransportError {
 The planner owns the entire mapping from *logical* demand to *wire* subscriptions
 and nothing else. It allocates every wire `SubscriptionId` (`ARCH:1508` "planner
 input identity"), decides grouping and splitting, and proves that grouping did
-not change meaning (`GOALS:1045-1051`, RELAY-003). It owns the diff: given the
+not change meaning (`GOALS:1051-1057`, RELAY-003). It owns the diff: given the
 complete current demand for one relay and the set currently installed on that
 relay's session, it decides which subscriptions to open, which to leave
 untouched, and which to close — and the close list *is* withdrawal identity
 (`ARCH:1511`, `ARCH:1513`). It owns typed in-plan shortfall: a plan that carries
 60 of 64 filters is a `SubscriptionPlan` with four `SubscriptionShortfall`
-entries, not an `Err` (`ARCH:1512`, `GOALS:1066`). It owns the conformance rules
+entries, not an `Err` (`ARCH:1512`, `GOALS:1072`). It owns the conformance rules
 that define semantic equivalence (`ARCH:1514`) — which is why `validate_plan`
 moves here from `crates/fava/src/relay.rs:224-248`. It owns **no** socket, no
 route policy, no observation state, no refcount (the planner is told the truth
@@ -764,7 +770,7 @@ use thiserror::Error;
 /// observation's two branches also produce two. This is what lets a grouped
 /// EOSE settle more than one logical query.
 ///
-/// Authority: GOALS:1043 (RELAY-002) "The planner MUST preserve attribution
+/// Authority: GOALS:1049 (RELAY-002) "The planner MUST preserve attribution
 /// from every wire request back to the logical queries it serves."
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DemandId {
@@ -820,7 +826,7 @@ impl RelayDemand {
 
 /// One relay-declared read limit, or the honest absence of one.
 ///
-/// Authority: GOALS:1068 (RELAY-004) "Missing, stale, malformed, or unsupported
+/// Authority: GOALS:1074 (RELAY-004) "Missing, stale, malformed, or unsupported
 /// claims remain unknown rather than becoming invented defaults."
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DeclaredLimit {
@@ -845,7 +851,7 @@ impl DeclaredLimit {
 /// Read limits one relay declares, per relay session.
 ///
 /// Authority: ARCH:1488 (`constraints: &RelayReadConstraints`);
-/// GOALS:1055-1064 (RELAY-004) enumerates exactly these five.
+/// GOALS:1061-1070 (RELAY-004) enumerates exactly these five.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RelayReadConstraints {
     /// Concurrent wire subscriptions this relay accepts.
@@ -857,7 +863,7 @@ pub struct RelayReadConstraints {
     /// Maximum `limit` a filter may request.
     pub max_filter_limit: DeclaredLimit,
     /// `limit` the relay applies when a filter declares none. Its presence
-    /// forbids merging filters that declare no limit (GOALS:1049).
+    /// forbids merging filters that declare no limit (GOALS:1055).
     pub default_filter_limit: DeclaredLimit,
 }
 
@@ -989,7 +995,7 @@ pub enum WithdrawalReason {
 /// Attribution from every wire subscription back to the logical demand it serves.
 ///
 /// Authority: ARCH:1501 (`attribution: SubscriptionAttribution`);
-/// GOALS:1043; ARCH:2044 (ingest attributes "to an accepted wire subscription
+/// GOALS:1049; ARCH:2044 (ingest attributes "to an accepted wire subscription
 /// and logical demand").
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SubscriptionAttribution {
@@ -1058,7 +1064,7 @@ impl SubscriptionAttribution {
 /// still succeeded for the rest.
 ///
 /// Authority: ARCH:1502 (`shortfalls: Vec<SubscriptionShortfall>`), ARCH:1512,
-/// ARCH:1536, GOALS:1066 "MUST NOT ... claim omitted work was completed".
+/// ARCH:1536, GOALS:1072 "MUST NOT ... claim omitted work was completed".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscriptionShortfall {
     /// Exact logical demand omitted from this plan.
@@ -1195,7 +1201,7 @@ pub enum SubscriptionPlanError {
 /// which must be deleted, not adapted.
 ///
 /// Authority: ARCH:1514 "the conformance rules that define semantic
-/// equivalence"; ARCH:3148 external providers "pass the same conformance kit as
+/// equivalence"; ARCH:3157 external providers "pass the same conformance kit as
 /// the standard provider".
 ///
 /// # Errors
@@ -1276,7 +1282,7 @@ disposition is frozen:
 | 6 every message is `Req` | **Deleted.** The plan is `Vec<PlannedSubscription>`, not `Vec<ClientMessage>`; frame construction is the executor's |
 | 7 exactly one filter per REQ | **Deleted.** NIP-01 permits many; nothing in `ARCH` or RELAY-002/003/004 requires one |
 | 8 `attribution[id] == filters[0]` | **Replaced** by C7, which compares the whole filter vector |
-| 9 refusal is `String` | **Deleted.** `PlanConformanceError` is typed (`GOALS:1389`, OPS-001) |
+| 9 refusal is `String` | **Deleted.** `PlanConformanceError` is typed (`GOALS:1400`, OPS-001) |
 | — | **New:** C2, C3, C4 (diff integrity), C10, C11 (declared-limit integrity) |
 
 ### 2.4 Signatures forced by a specific authority line
@@ -1288,21 +1294,21 @@ disposition is frozen:
 | `shortfalls` inside a successful plan | `ARCH:1502`, `ARCH:1512`, `ARCH:1536` |
 | `close: Vec<WithdrawnSubscription>` | `ARCH:1513` |
 | `retain` / diff shape | `ARCH:1511` "plan diff values" |
-| `SubscriptionAttribution` as a named type mapping wire → many `DemandId` | `ARCH:1501` + `GOALS:1043` |
-| `DeclaredLimit::Unknown` rather than a numeric default | `GOALS:1068` |
-| `validate_plan` living in this crate | `ARCH:1514`, `ARCH:3148` |
-| `demand` is the complete set for the relay | `ARCH:1478`, `GOALS:1041` |
+| `SubscriptionAttribution` as a named type mapping wire → many `DemandId` | `ARCH:1501` + `GOALS:1049` |
+| `DeclaredLimit::Unknown` rather than a numeric default | `GOALS:1074` |
+| `validate_plan` living in this crate | `ARCH:1514`, `ARCH:3157` |
+| `demand` is the complete set for the relay | `ARCH:1478`, `GOALS:1047` |
 
 ### 2.5 Decisions
 
 - `DECIDED: the return type keeps the name SubscriptionPlan while carrying the
   diff, rather than introducing SubscriptionPlanDiff.` Reasoning: `ARCH:1499`
-  and `VOCAB:681` name `SubscriptionPlan` as an approved `spec_symbol`; adding a
+  and `VOCAB:676` name `SubscriptionPlan` as an approved `spec_symbol`; adding a
   second noun would require a vocabulary change for a value the spec already
   names, and `ARCH:1511` puts "plan diff values" inside this crate's *owned
   meaning* rather than in a separate type.
 - `DECIDED: plan() takes revision as a parameter instead of the planner minting
-  it.` Reasoning: `ARCH:2922` — `fava-observe` owns the desired plan, the
+  it.` Reasoning: `ARCH:2988` — `fava-observe` owns the desired plan, the
   planner only computes it; a planner that minted revisions would own plan
   identity.
 - `DECIDED: SubscriptionPlanError shrinks to three variants;
@@ -1312,7 +1318,7 @@ disposition is frozen:
 - `DECIDED: RelayReadConstraints lives in fava-subscriptions, not fava-nip11.`
   Reasoning: it is the planner's contract input (`ARCH:1488`); a NIP-11 service
   produces it, and a service crate depending on a contract crate is the legal
-  direction (`ARCH:2984-3016`).
+  direction (`ARCH:3050-3082`).
 - `DECIDED: no NIP-11 acquisition is in scope for Wave 1.` Reasoning: with
   `RelayReadConstraints::unknown()` the planner is correct-by-absence today;
   `no-nip11-invented-planner-limits` is a Wave 5 defect and must not gate this
@@ -1332,7 +1338,7 @@ disposition is frozen:
 `fava-query` owns the *vocabulary* of evidence, not the facts. It owns the
 guarantee that an application can tell "this relay told us it has nothing" from
 "we never reached this relay" from "this relay refused us" from "we stopped
-asking" (`GOALS:414`, `GOALS:422-426`). It owns the third source role: a live
+asking" (`GOALS:416`, `GOALS:422-426`). It owns the third source role: a live
 admitted relay occurrence is a first-class merge input whether or not a cache
 retained it (`GOALS:344-350`, QUERY-005). It owns per-branch scoping so
 overlapping branches deliver one `EventRecord` while keeping separate EOSE,
@@ -1483,7 +1489,7 @@ pub enum RelaySourceState {
     },
     /// The relay sent CLOSED for the request.
     Refused {
-        /// Verbatim, bounded relay text (GOALS:1105, RELAY-008).
+        /// Verbatim, bounded relay text (GOALS:1111, RELAY-008).
         message: BoundedText,
         /// When it arrived.
         at: Timestamp,
@@ -1626,7 +1632,7 @@ pub enum QueryShortfall {
 
 /// Complete scoped evidence for one query result.
 ///
-/// Authority: ARCH:700-716 (`QuerySnapshot.evidence`), GOALS:393-403
+/// Authority: ARCH:700-716 (`QuerySnapshot.evidence`), GOALS:393-401
 /// (QUERY-008), GOALS:403-418 (QUERY-009), GOALS:420-428 (QUERY-010).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct QueryEvidence {
@@ -1741,14 +1747,14 @@ write-store snapshots. Two consequences are frozen here:
 |---|---|
 | `SourceKind::LiveRelay` | `GOALS:344-350` (QUERY-005) |
 | `RelaySourceState` variants kept mutually exclusive | `GOALS:422` (QUERY-010) |
-| `stored_events_complete()` true only for an actual EOSE | `GOALS:421-424` |
+| `stored_events_complete()` true only for an actual EOSE | `GOALS:422-424` |
 | `plan_revision` on relay evidence | `GOALS:426` |
 | `branches: Vec<QueryBranchId>` on relay evidence | `GOALS:401` (QUERY-008) |
 | `shared_with: Vec<ObservationId>` | `ARCH:2072`, `GOALS:294-298` (QUERY-002) |
 | `QueryShortfall::CoalescedUpdates` inside the snapshot | `GOALS:434` (QUERY-011) |
 | `SourceTerminationCause` | `ARCH:724` merge rule 5 |
-| `AuthenticationState` distinct from failure | `GOALS:1091-1104` (RELAY-007) |
-| No `synced`/`complete`/percentage accessor anywhere | `GOALS:405-414` (QUERY-009) |
+| `AuthenticationState` distinct from failure | `GOALS:1097-1110` (RELAY-007) |
+| No `synced`/`complete`/percentage accessor anywhere | `GOALS:405-416` (QUERY-009) |
 
 ### 3.5 Decisions
 
@@ -1757,7 +1763,7 @@ write-store snapshots. Two consequences are frozen here:
   it that Wave 3 does not already rewrite.
 - `DECIDED: plan_revision and RouteOrigin::Automatic.revision are u64, not the
   newtypes from fava-subscriptions / fava-routing.` Reasoning: `fava-query` sits
-  *below* both contract crates in the dependency order (`ARCH:2984-3016`);
+  *below* both contract crates in the dependency order (`ARCH:3050-3082`);
   importing either would invert the arrow. The owner converts.
 - `DECIDED: BoundedText is duplicated rather than shared with
   fava_transport::BoundedReason.` Reasoning: same as above — `fava-query` must
@@ -1765,7 +1771,7 @@ write-store snapshots. Two consequences are frozen here:
   behavior and both cap at 512.
 - `DECIDED: QueryEvidence exposes accessors, not a builder.` Reasoning: only
   `fava-observe` constructs it; public struct fields plus read accessors keep
-  the type inspectable from tests (`GOALS:1439`, OPS-005) without a second API.
+  the type inspectable from tests (`GOALS:1450`, OPS-005) without a second API.
 
 ---
 
@@ -1775,15 +1781,15 @@ write-store snapshots. Two consequences are frozen here:
 
 `fava-diagnostics` owns a bounded, current, typed snapshot and **nothing else**
 — no policy, no health score, no aggregation that turns facts into a verdict
-(`ARCH:2250`, `GOALS:1387`). It owns the bound in **both dimensions**: at most
+(`ARCH:2316`, `GOALS:1398`). It owns the bound in **both dimensions**: at most
 `capacity` facts per category *and* at most `BoundedText::MAX_BYTES` of
 externally-supplied text per fact, so retention is a real number of bytes rather
-than `256 × unbounded` (`GOALS:1428-1437`, OPS-004). It owns the ownership graph
+than `256 × unbounded` (`GOALS:1439-1448`, OPS-004). It owns the ownership graph
 of open observations: which observation, bound to which route revision, holding
 which logical demand, under which desired plan, sharing which wire work with how
 many peers, short of what, and waiting on which provider operation. It owns
 publication **from every owner**, not from the facade: the `Diagnostics` handle
-is `Send + Sync` and each owner writes its own facts (`ARCH:2254` "Each owner
+is `Send + Sync` and each owner writes its own facts (`ARCH:2320` "Each owner
 publishes structured diagnostic facts").
 
 ### 4.2 Literal contract
@@ -1802,7 +1808,7 @@ use fava_wire::SubscriptionId;
 
 /// Bounded exact current facts published by Fava owners.
 ///
-/// Authority: ARCH:2269-2275, verbatim five-category shape.
+/// Authority: ARCH:2335-2341, verbatim five-category shape.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DiagnosticsSnapshot {
     /// One entry per relay session Fava currently holds.
@@ -1816,7 +1822,7 @@ pub struct DiagnosticsSnapshot {
     /// One entry per bound that refused, backpressured, or fell short.
     pub limits: Vec<LimitDiagnostic>,
     /// Facts dropped by the per-category count bound since construction.
-    /// A bound that discards must say so (GOALS:1437).
+    /// A bound that discards must say so (GOALS:1448).
     pub dropped_facts: DroppedFacts,
 }
 
@@ -1892,7 +1898,7 @@ pub struct WireSubscriptionDiagnostic {
 
 /// The complete ownership record for one open observation.
 ///
-/// Authority: ARCH:2254-2262 "open observation and route ownership".
+/// Authority: ARCH:2320-2328 "open observation and route ownership".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryDiagnostic {
     /// Observation identity.
@@ -1941,7 +1947,7 @@ pub struct ObservationWireBinding {
 
 /// One write that has not settled.
 ///
-/// Authority: GOALS:1408-1418 (OPS-003).
+/// Authority: GOALS:1419-1429 (OPS-003).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WriteDiagnostic {
     /// Receipt identity, rendered by the write-store owner.
@@ -2069,7 +2075,7 @@ pub struct LimitDiagnostic {
     pub scope: LimitScope,
 }
 
-/// The externally-influenced resources Fava bounds (GOALS:1420-1437).
+/// The externally-influenced resources Fava bounds (GOALS:1431-1448).
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum BoundKind {
     /// Concurrent relay sessions.
@@ -2133,22 +2139,22 @@ implementer with one frozen constraint: **there is no method taking a bare
 
 | Element | Forced by |
 |---|---|
-| Exactly five categories named `relays`/`queries`/`writes`/`providers`/`limits` | `ARCH:2269-2275` verbatim |
-| `QueryDiagnostic.observation` | `ARCH:2254` "open observation and route ownership" |
-| `route_revision` + `route_relays` on the query record | `ARCH:2254` |
+| Exactly five categories named `relays`/`queries`/`writes`/`providers`/`limits` | `ARCH:2335-2341` verbatim |
+| `QueryDiagnostic.observation` | `ARCH:2320` "open observation and route ownership" |
+| `route_revision` + `route_relays` on the query record | `ARCH:2320` |
 | `demand` on the query record | `ARCH:2071` |
 | `shared_holders` / `RelayDiagnostic.holders` | `ARCH:2072` |
-| `pending_operation` with a generation | `ARCH:2262` "signer and auth availability", `ARCH:2933` |
-| `WriteStall` as a single classification | `GOALS:1408-1418` (OPS-003) |
-| `BoundedText` on every externally-supplied string | `GOALS:1428-1437` (OPS-004) |
-| `DroppedFacts` | `GOALS:1437` "MUST NOT silently discard work while claiming success" |
-| No health score, no percentage | `GOALS:1387-1400` (OPS-001) |
+| `pending_operation` with a generation | `ARCH:2328` "signer and auth availability", `ARCH:2999` |
+| `WriteStall` as a single classification | `GOALS:1419-1429` (OPS-003) |
+| `BoundedText` on every externally-supplied string | `GOALS:1439-1448` (OPS-004) |
+| `DroppedFacts` | `GOALS:1448` "MUST NOT silently discard work while claiming success" |
+| No health score, no percentage | `GOALS:1398-1411` (OPS-001) |
 
 ### 4.4 Decisions
 
-- `DECIDED: DiagnosticsSnapshot carries DroppedFacts, which ARCH:2269 does not
-  list.` Reasoning: `ARCH:2277` calls the output "a bounded latest-state
-  stream", and `GOALS:1437` forbids silent discard; without this field the count
+- `DECIDED: DiagnosticsSnapshot carries DroppedFacts, which ARCH:2335 does not
+  list.` Reasoning: `ARCH:2343` calls the output "a bounded latest-state
+  stream", and `GOALS:1448` forbids silent discard; without this field the count
   bound is itself a silent discard.
 - `DECIDED: coalesced_query_updates moves from a global counter to a per-
   observation field.` Reasoning: `GOALS:434` scopes loss to the causal stream
@@ -2168,17 +2174,17 @@ implementer with one frozen constraint: **there is no method taking a bare
 ### 5.1 What the implementer owns
 
 `fava-runtime` owns every task Fava starts and every task Fava must join
-(`ARCH:2288`, `ARCH:2298`). It owns the join registry, so `Fava::close()` can
+(`ARCH:2354`, `ARCH:2364`). It owns the join registry, so `Fava::close()` can
 prove that no Fava-started task outlives it. It owns bounded command channels,
 so an owner's mailbox has a declared depth and a full mailbox is a typed refusal
-rather than a park (`ARCH:2290`, `GOALS:1437`). It owns the deadline wrapped
-around **every** provider invocation — `ARCH:2306` "A stalled provider has
+rather than a park (`ARCH:2356`, `GOALS:1448`). It owns the deadline wrapped
+around **every** provider invocation — `ARCH:2372` "A stalled provider has
 bounded influence and cannot block unrelated owner progress or Fava shutdown
 indefinitely" — and it owns panic isolation, so an application-supplied provider
 that panics becomes a typed completion rather than an aborted owner. It owns
-cancellation tokens and their propagation (`ARCH:2297`). It owns **no** meaning:
+cancellation tokens and their propagation (`ARCH:2363`). It owns **no** meaning:
 it never inspects an event kind, chooses a route, evaluates a query, or writes
-durable state (`ARCH:2302`).
+durable state (`ARCH:2368`).
 
 `fava-runtime` is a **universal owner, not a replaceable provider**. It exposes
 concrete types, not a trait to implement. `VOCAB:270` lists it under `Fava`'s
@@ -2199,7 +2205,7 @@ use thiserror::Error;
 
 /// Owner of every task, timer, channel, deadline, and join in one Fava engine.
 ///
-/// Authority: ARCH:2284-2298.
+/// Authority: ARCH:2350-2364.
 #[derive(Clone)]
 pub struct Runtime {
     /* private fields */
@@ -2281,7 +2287,7 @@ impl Runtime {
     /// This is the only sanctioned way to await a provider. A bare `.await` on
     /// a `dyn` provider anywhere in a lifecycle owner is a contract violation.
     ///
-    /// Authority: ARCH:2306.
+    /// Authority: ARCH:2372.
     pub async fn call_provider<T, F>(
         &self,
         operation: OperationName,
@@ -2316,8 +2322,8 @@ impl Runtime {
     /// Refuse new spawns and channels, cancel the root token, and join every
     /// registered task within `deadline`.
     ///
-    /// Authority: ARCH:2298 "resource joining and shutdown deadlines";
-    /// GOALS:1486-1496 (OPS-009).
+    /// Authority: ARCH:2364 "resource joining and shutdown deadlines";
+    /// GOALS:1497-1507 (OPS-009).
     ///
     /// # Errors
     ///
@@ -2495,7 +2501,7 @@ pub enum SendRefusal {
 
 /// Typed completion of one deadline-wrapped provider call.
 ///
-/// Authority: ARCH:2300 "The runtime performs the work and returns typed
+/// Authority: ARCH:2366 "The runtime performs the work and returns typed
 /// completions."
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderCompletion<T> {
@@ -2583,7 +2589,7 @@ impl<T> ProviderCompletion<T> {
 
 /// A cancellation signal owned by a lifecycle owner and propagated by the runtime.
 ///
-/// Authority: ARCH:2297.
+/// Authority: ARCH:2363.
 #[derive(Clone)]
 pub struct CancellationToken {
     /* private fields */
@@ -2646,29 +2652,29 @@ pub enum RuntimeError {
 
 | Element | Forced by |
 |---|---|
-| Join registry and `shutdown(deadline)` | `ARCH:2298`, `ARCH:2893` "runtime joins owned resources" |
-| Bounded channels with refusal, not park | `ARCH:2290` + `GOALS:1437` |
-| `call_provider` with an owner-supplied deadline | `ARCH:2306` |
-| `ProviderCompletion` carrying `OperationGeneration` | `ARCH:2300` + `GOALS:426` |
-| `Panicked` as a completion, not an unwind | `ARCH:2296` "provider panic/failure isolation" |
-| `CancellationToken` with parent/child propagation | `ARCH:2297` |
-| Concrete types, no `Runtime` trait | `ARCH:2300` (universal owner), `VOCAB:270` |
+| Join registry and `shutdown(deadline)` | `ARCH:2364`, `ARCH:2959` "runtime joins owned resources" |
+| Bounded channels with refusal, not park | `ARCH:2356` + `GOALS:1448` |
+| `call_provider` with an owner-supplied deadline | `ARCH:2372` |
+| `ProviderCompletion` carrying `OperationGeneration` | `ARCH:2366` + `GOALS:426` |
+| `Panicked` as a completion, not an unwind | `ARCH:2362` "provider panic/failure isolation" |
+| `CancellationToken` with parent/child propagation | `ARCH:2363` |
+| Concrete types, no `Runtime` trait | `ARCH:2366` (universal owner), `VOCAB:270` |
 
 ### 5.4 Decisions
 
 - `DECIDED: Runtime is a concrete Clone struct, not a trait.` Reasoning: it is a
-  universal owner (`ARCH:2284`), not a replaceable provider; `VOCAB:270` places
+  universal owner (`ARCH:2350`), not a replaceable provider; `VOCAB:270` places
   it inside `Fava`'s `spec_crates`, and making it swappable would create a
   twelfth injection point the architecture never names.
 - `DECIDED: TimedOut detaches rather than aborting the provider future.`
-  Reasoning: `ARCH:2306` bounds a stalled provider's *influence*, not its
+  Reasoning: `ARCH:2372` bounds a stalled provider's *influence*, not its
   existence; a provider mid-write to its own store must not be torn apart.
   The detached future is registered for shutdown join.
 - `DECIDED: TaskName and OperationName are &'static str newtypes.` Reasoning:
-  `GOALS:1428` bounds diagnostics; a static name cannot be attacker-supplied and
+  `GOALS:1439` bounds diagnostics; a static name cannot be attacker-supplied and
   needs no `BoundedText`.
 - `DECIDED: try_send returns the value inside SendRefused.` Reasoning:
-  `GOALS:1437` forbids silently discarding work; the caller must be able to
+  `GOALS:1448` forbids silently discarding work; the caller must be able to
   report exact shortfall about the specific command it could not enqueue.
 - `DECIDED: fava-runtime depends only on fava-query (for
   OperationGeneration), thiserror, and the async executor.` Reasoning: it must
@@ -2717,7 +2723,7 @@ fava-runtime    -> fava-query, thiserror, tokio
 Every edge runs contract → contract or contract → domain. None runs
 contract → owner. `fava-observe` gains `fava-routing`, `fava-subscriptions`,
 `fava-transport`, `fava-ingest`, `fava-diagnostics`, `fava-runtime` in Wave 3;
-that is legal (`ARCH:2984-3016`) and out of scope here.
+that is legal (`ARCH:3050-3082`) and out of scope here.
 
 ## 8. Falsifier obligations attached to these contracts
 
