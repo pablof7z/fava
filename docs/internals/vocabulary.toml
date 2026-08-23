@@ -285,6 +285,8 @@ symbols = [
     "fava_query::QueryOrdering",
     "fava_query::Query",
     "fava_query::QueryError",
+    "fava_query::QueryBranchId",
+    "fava_query::QueryBounds",
 ]
 crates = ["fava-query"]
 spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
@@ -302,6 +304,7 @@ symbols = [
     "fava_query::SourceEvent",
     "fava_query::SourceSnapshot",
     "fava_query::SourceStatus",
+    "fava_query::SourceTerminationCause",
     "fava_query::SourceChangeFuture",
     "fava_query::SourceChanges",
     "fava_query::OpenedQuerySource",
@@ -331,6 +334,16 @@ distinction = "Relay messages are source facts; a QuerySnapshot is the merged ap
 symbols = [
     "fava_query::QueryEvidence",
     "fava_query::SourceEvidence",
+    "fava_query::RelayQueryEvidence",
+    "fava_query::RelaySourceState",
+    "fava_query::RelayDeadline",
+    "fava_query::RelayWithdrawal",
+    "fava_query::RelayShortfall",
+    "fava_query::AuthenticationState",
+    "fava_query::RouteOrigin",
+    "fava_query::DesiredPlanEvidence",
+    "fava_query::QueryShortfall",
+    "fava_query::BoundedText",
     "fava_query::QueryRevision",
     "fava_query::QuerySnapshot",
 ]
@@ -363,6 +376,8 @@ symbols = [
     "fava_observe::Observation",
     "fava_observe::ObserveError",
     "fava_observe::ObservationClosed",
+    "fava_query::ObservationId",
+    "fava_query::OperationGeneration",
 ]
 crates = ["fava-observe"]
 
