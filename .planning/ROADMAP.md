@@ -267,6 +267,13 @@ Plans:
   4. Signer registration is bounded with typed refusal, and signer provider execution occurs outside session/publication locks and store transactions.
 
 **Plans:** TBD
+**Wave 1**
+
+- [ ] 07.2-01-PLAN.md
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07.2-02-PLAN.md
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
