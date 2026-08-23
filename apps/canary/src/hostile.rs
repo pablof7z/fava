@@ -3,11 +3,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Fava, Query};
+use fava::{Fava, Query, RelayUrl, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write_store_memory::MemoryWriteStore;

@@ -130,34 +130,24 @@ name = "canary"
 version = "0.1.0"
 dependencies = [
  "fava",
- "fava-bookmarks",
  "fava-delivery-standard",
  "fava-event-cache",
  "fava-event-cache-memory",
- "fava-ingest",
  "fava-nip02",
- "fava-publisher",
  "fava-publisher-nip01",
- "fava-query",
  "fava-query-standard",
  "fava-router-app-relays",
  "fava-router-fallback-relays",
- "fava-router-hints",
- "fava-router-outbox",
  "fava-router-testkit",
  "fava-routing",
  "fava-signer",
  "fava-signer-local",
  "fava-simple-groups",
  "fava-state",
- "fava-subscriptions",
  "fava-subscriptions-no-grouping",
  "fava-subscriptions-standard",
- "fava-transport",
  "fava-transport-websocket",
- "fava-wire",
  "fava-write",
- "fava-write-store",
  "fava-write-store-memory",
  "fava-write-store-redb",
  "futures-util",
@@ -368,14 +358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fava-bookmarks"
-version = "0.1.0"
-dependencies = [
- "fava-state",
- "fava-write",
-]
-
-[[package]]
 name = "fava-delivery"
 version = "0.1.0"
 dependencies = [
@@ -438,15 +420,6 @@ dependencies = [
  "fava-query",
  "fava-state",
  "fava-write",
-]
-
-[[package]]
-name = "fava-nip65"
-version = "0.1.0"
-dependencies = [
- "fava-state",
- "fava-write",
- "thiserror",
 ]
 
 [[package]]
@@ -542,29 +515,6 @@ version = "0.1.0"
 dependencies = [
  "fava-routing",
  "fava-state",
- "tokio",
-]
-
-[[package]]
-name = "fava-router-hints"
-version = "0.1.0"
-dependencies = [
- "fava-query",
- "fava-routing",
- "fava-state",
- "fava-write",
- "tokio",
-]
-
-[[package]]
-name = "fava-router-outbox"
-version = "0.1.0"
-dependencies = [
- "fava-nip65",
- "fava-query",
- "fava-routing",
- "fava-state",
- "fava-write",
  "tokio",
 ]
 
