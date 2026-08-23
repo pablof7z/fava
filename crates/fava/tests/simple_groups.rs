@@ -3,6 +3,7 @@
 //! Cohesion: one facade target shares the same custody, signer, router, publisher,
 //! and transport spies across query, publication, refusal, and lifecycle descriptors.
 
+use std::num::NonZeroUsize;
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
@@ -27,7 +28,10 @@ use fava_simple_groups::{Group, GroupRecords, SavedRelay, SimpleGroups};
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
 };
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
+    TransportFailure, TransportShutdownFuture, Transport,
+};
 use fava_write::{Event, EventValue, PublicKey, UnsignedEvent};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -771,16 +775,23 @@ struct SpyTransport {
 }
 
 impl Transport for SpyTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let _ = request;
         self.opens.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "spy transport must remain unopened".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("spy transport must remain unopened"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }

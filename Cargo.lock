@@ -300,6 +300,7 @@ dependencies = [
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
  "fava-transport",
+ "fava-transport-testkit",
  "fava-wire",
  "fava-write",
  "fava-write-store",
@@ -438,6 +439,7 @@ name = "fava-publisher-nip01"
 version = "0.1.0"
 dependencies = [
  "fava-publisher",
+ "fava-state",
  "fava-transport",
  "fava-wire",
  "tokio",
@@ -612,6 +614,7 @@ dependencies = [
 name = "fava-transport"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "thiserror",
 ]
@@ -620,13 +623,17 @@ dependencies = [
 name = "fava-transport-testkit"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
+ "fava-state",
  "fava-transport",
+ "tokio",
 ]
 
 [[package]]
 name = "fava-transport-websocket"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "fava-transport",
  "fava-transport-testkit",

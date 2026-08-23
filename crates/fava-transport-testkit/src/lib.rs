@@ -10,7 +10,7 @@ mod stream;
 
 use std::num::NonZeroUsize;
 
-pub use fake::{FakeRelay, FakeTransport};
+pub use fake::{FakeRelay, FakeTransport, detached_lease};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport,
     TransportFailure,

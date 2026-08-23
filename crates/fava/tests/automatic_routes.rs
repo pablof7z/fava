@@ -1,7 +1,7 @@
 //! Public-facade evidence for ordered asynchronous automatic routing.
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -15,7 +15,12 @@ use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
+use fava_transport::{
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInboundFuture,
+    RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity, ReleaseFuture,
+    ReleaseOutcome, Transport, TransportFailure, TransportShutdownFuture,
+};
+use fava_transport_testkit::detached_lease;
 use fava_wire::ClientMessage;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
@@ -32,7 +37,7 @@ impl RecordingTransport {
             .lock()
             .expect("transport lock")
             .iter()
-            .filter(|session| &session.key.relay == relay)
+            .filter(|session| &session.identity.key.relay == relay)
             .count()
     }
 
@@ -41,7 +46,7 @@ impl RecordingTransport {
             .lock()
             .expect("transport lock")
             .iter()
-            .filter(|session| &session.key.relay == relay)
+            .filter(|session| &session.identity.key.relay == relay)
             .any(|session| {
                 session
                     .sent
@@ -59,20 +64,15 @@ impl RecordingTransport {
 }
 
 impl Transport for RecordingTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
             let session = Arc::new(RecordingSession {
-                key,
-                generation: self.next_generation.fetch_add(1, Ordering::SeqCst) + 1,
+                identity: RelaySessionIdentity {
+                    key: request.key,
+                    generation: OperationGeneration(
+                        self.next_generation.fetch_add(1, Ordering::SeqCst) + 1,
+                    ),
+                },
                 sent: Mutex::new(Vec::new()),
                 closed: AtomicBool::new(false),
             });
@@ -80,58 +80,74 @@ impl Transport for RecordingTransport {
                 .lock()
                 .expect("transport lock")
                 .push(Arc::clone(&session));
-            Ok(session as Arc<dyn RelaySession>)
+            Ok(detached_lease(session as Arc<dyn RelaySession>))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
 struct RecordingSession {
-    key: RelaySessionKey,
-    generation: u64,
+    identity: RelaySessionIdentity,
     sent: Mutex<Vec<String>>,
     closed: AtomicBool,
 }
 
-impl RelaySession for RecordingSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
+/// The recording fake never delivers inbound items.
+struct SilentStream;
+
+impl RelayMessageStream for SilentStream {
+    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
+        Box::pin(std::future::pending())
     }
 
-    fn generation(&self) -> u64 {
-        self.generation
+    fn close(&mut self) {}
+}
+
+impl RelaySession for RecordingSession {
+    fn identity(&self) -> RelaySessionIdentity {
+        self.identity.clone()
     }
 
     fn send(
         &self,
-        frame: String,
+        frame: Vec<u8>,
+        correlation: HandoffCorrelation,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
         Box::pin(async move {
             if self.closed.load(Ordering::SeqCst) {
                 HandoffOutcome::NotHandedOff {
-                    reason: "closed".to_owned(),
+                    identity: self.identity.clone(),
+                    correlation,
+                    reason: TransportFailure::SessionClosed,
                 }
             } else {
-                self.sent.lock().expect("session lock").push(frame);
-                HandoffOutcome::HandedOff
+                self.sent
+                    .lock()
+                    .expect("session lock")
+                    .push(String::from_utf8_lossy(&frame).into_owned());
+                HandoffOutcome::HandedOff {
+                    identity: self.identity.clone(),
+                    correlation,
+                }
             }
         })
     }
 
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
-        Box::pin(std::future::pending())
+    fn messages(&self) -> Box<dyn RelayMessageStream> {
+        Box::new(SilentStream)
     }
 
-    fn close(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
+    fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
             self.closed.store(true, Ordering::SeqCst);
-            Ok(())
+            Ok(ReleaseOutcome::Closed)
         })
     }
 }

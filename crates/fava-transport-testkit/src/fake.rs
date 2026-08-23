@@ -342,3 +342,25 @@ impl FakeRelay {
         self.session.state().cancelled.clone()
     }
 }
+
+/// A lease with no registry behind it, for a fake that owns no refcount.
+///
+/// Releasing it reports [`ReleaseOutcome::Closed`] and closes the session.
+#[must_use]
+pub fn detached_lease(session: Arc<dyn RelaySession>) -> RelaySessionLease {
+    let identity = session.identity();
+    RelaySessionLease::new(session, Arc::new(DetachedRelease), identity)
+}
+
+struct DetachedRelease;
+
+impl LeaseRelease for DetachedRelease {
+    fn release_now(&self, _identity: &RelaySessionIdentity) {}
+
+    fn release_deterministically<'a>(
+        &'a self,
+        _identity: &'a RelaySessionIdentity,
+    ) -> ReleaseFuture<'a> {
+        Box::pin(async { Ok(ReleaseOutcome::Closed) })
+    }
+}

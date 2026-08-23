@@ -1,6 +1,7 @@
 //! Public-facade explicit live-query evidence over a scripted transport.
 
 use std::collections::VecDeque;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -10,7 +11,13 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration,
+    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
+    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
+use fava_transport_testkit::detached_lease;
 use fava_wire::{ClientMessage, RelayMessage, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
@@ -19,17 +26,22 @@ use tokio::sync::Notify;
 
 #[derive(Default)]
 struct Script {
-    inbound: Mutex<VecDeque<Result<String, TransportError>>>,
+    inbound: Mutex<VecDeque<Result<RelayInbound, TransportError>>>,
     sent: Mutex<Vec<String>>,
     notify: Notify,
 }
 
 impl Script {
     fn receive(&self, message: &RelayMessage<'_>) {
+        let frame = serde_json::to_string(&message).expect("message encodes");
         self.inbound
             .lock()
             .expect("script lock")
-            .push_back(Ok(serde_json::to_string(&message).expect("message encodes")));
+            .push_back(Ok(RelayInbound::Frame {
+                identity: scripted_identity(),
+                frame: frame.into_bytes(),
+                received_at: Timestamp::now(),
+            }));
         self.notify.notify_one();
     }
 
@@ -37,12 +49,28 @@ impl Script {
         self.sent.lock().expect("script lock").clone()
     }
 
-    fn fail(&self, error: TransportError) {
+    fn disconnect(&self, detail: &str) {
         self.inbound
             .lock()
             .expect("script lock")
-            .push_back(Err(error));
+            .push_back(Ok(RelayInbound::Disconnected {
+                identity: scripted_identity(),
+                reason: TransportFailure::Disconnected {
+                    detail: BoundedReason::new(detail),
+                },
+            }));
         self.notify.notify_one();
+    }
+}
+
+/// The scripted relay wears one fixed generation for the whole test.
+fn scripted_identity() -> RelaySessionIdentity {
+    RelaySessionIdentity {
+        key: RelaySessionKey::new(
+            RelayUrl::parse("wss://relay.example").expect("relay URL"),
+            fava_state::RelayAccess::public(),
+        ),
+        generation: OperationGeneration(7),
     }
 }
 
@@ -51,81 +79,103 @@ struct ScriptedTransport {
 }
 
 impl Transport for ScriptedTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         let script = Arc::clone(&self.script);
         Box::pin(async move {
-            Ok(Arc::new(ScriptedSession {
-                key,
+            let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
+                identity: RelaySessionIdentity {
+                    key: request.key,
+                    generation: OperationGeneration(7),
+                },
                 script,
-                closed: std::sync::atomic::AtomicBool::new(false),
-            }) as Arc<dyn RelaySession>)
+                closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            });
+            Ok(detached_lease(session))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
 struct ScriptedSession {
-    key: RelaySessionKey,
+    identity: RelaySessionIdentity,
     script: Arc<Script>,
-    closed: std::sync::atomic::AtomicBool,
+    closed: Arc<std::sync::atomic::AtomicBool>,
 }
 
-impl RelaySession for ScriptedSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
+struct ScriptedStream {
+    identity: RelaySessionIdentity,
+    script: Arc<Script>,
+    closed: Arc<std::sync::atomic::AtomicBool>,
+}
 
-    fn generation(&self) -> u64 {
-        7
-    }
-
-    fn send(
-        &self,
-        frame: String,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
-        Box::pin(async move {
-            if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
-                return HandoffOutcome::NotHandedOff {
-                    reason: "closed".to_owned(),
-                };
-            }
-            self.script.sent.lock().expect("script lock").push(frame);
-            HandoffOutcome::HandedOff
-        })
-    }
-
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
+impl RelayMessageStream for ScriptedStream {
+    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
         Box::pin(async move {
             loop {
-                if let Some(message) = self.script.inbound.lock().expect("script lock").pop_front()
-                {
-                    return message;
+                if let Some(item) = self.script.inbound.lock().expect("script lock").pop_front() {
+                    return item;
+                }
+                if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Err(TransportError::Closed(self.identity.clone()));
                 }
                 self.script.notify.notified().await;
             }
         })
     }
 
-    fn close(
+    fn close(&mut self) {}
+}
+
+impl RelaySession for ScriptedSession {
+    fn identity(&self) -> RelaySessionIdentity {
+        self.identity.clone()
+    }
+
+    fn send(
         &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
+        frame: Vec<u8>,
+        correlation: HandoffCorrelation,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
+        Box::pin(async move {
+            if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
+                return HandoffOutcome::NotHandedOff {
+                    identity: self.identity.clone(),
+                    correlation,
+                    reason: TransportFailure::SessionClosed,
+                };
+            }
+            self.script
+                .sent
+                .lock()
+                .expect("script lock")
+                .push(String::from_utf8_lossy(&frame).into_owned());
+            HandoffOutcome::HandedOff {
+                identity: self.identity.clone(),
+                correlation,
+            }
+        })
+    }
+
+    fn messages(&self) -> Box<dyn RelayMessageStream> {
+        Box::new(ScriptedStream {
+            identity: self.identity.clone(),
+            script: Arc::clone(&self.script),
+            closed: Arc::clone(&self.closed),
+        })
+    }
+
+    fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
             self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
             self.script.notify.notify_waiters();
-            Ok(())
+            Ok(ReleaseOutcome::Closed)
         })
     }
 }
@@ -227,7 +277,7 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
     script.receive(&RelayMessage::eose(subscription.clone()));
     script.receive(&RelayMessage::auth("challenge"));
     script.receive(&RelayMessage::closed(subscription.clone(), "rate-limited"));
-    script.fail(TransportError::Disconnected("injected".to_owned()));
+    script.disconnect("injected");
     wait_until(Duration::from_secs(1), || {
         let facts = fava.diagnostics();
         facts.eose.len() == 1
@@ -239,7 +289,11 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
     let facts = fava.diagnostics();
     assert_eq!(facts.eose[0].2, subscription);
     assert_eq!(facts.closed[0].3, "rate-limited");
-    assert_eq!(facts.failures[0].2, "relay session disconnected: injected");
+    let disconnect = &facts.failures[0].2;
+    assert!(
+        disconnect.starts_with("Disconnected") && disconnect.contains("injected"),
+        "disconnect must stay a distinct, verbatim-carrying fact, got {disconnect}"
+    );
     observation.close();
 }
 

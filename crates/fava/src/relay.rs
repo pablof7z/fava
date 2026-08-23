@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -9,7 +10,10 @@ use fava_ingest::{RelayIngestError, admit_subscription_event};
 use fava_query::Query;
 use fava_state::{RelaySessionKey, Timestamp};
 use fava_subscriptions::{SubscriptionPlan, SubscriptionPlanner, demand_for_query};
-use fava_transport::{HandoffOutcome, RelaySession, Transport};
+use fava_transport::{
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, RelayMessageStream,
+    RelaySession, RelaySessionLease, Transport, TransportBounds, TransportDeadlines,
+};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
 use nostr::filter::Filter;
 use tokio::sync::watch;
@@ -22,8 +26,33 @@ pub(super) struct OpenedRelay {
     cache: Arc<dyn EventCache>,
     diagnostics: Arc<Diagnostics>,
     next_subscription: Arc<AtomicU64>,
-    session: Arc<dyn RelaySession>,
+    lease: RelaySessionLease,
     attribution: BTreeMap<SubscriptionId, Filter>,
+}
+
+/// Transport request this call site hands the transport. Phase 07.6 replaces
+/// this whole file; the durations state the previous behaviour explicitly.
+fn open_request(session_key: &RelaySessionKey) -> OpenRelaySession {
+    let frames = |count: usize| NonZeroUsize::new(count).expect("constant is non-zero");
+    OpenRelaySession {
+        key: session_key.clone(),
+        deadlines: TransportDeadlines {
+            establish: Duration::from_secs(10),
+            write: Duration::from_secs(10),
+            idle: Duration::from_secs(120),
+            close: Duration::from_secs(5),
+        },
+        bounds: TransportBounds {
+            inbound_frames: frames(256),
+            outbound_frames: frames(64),
+            max_frame_bytes: frames(1_048_576),
+        },
+        reconnect_attempts: None,
+    }
+}
+
+fn generation_of(session: &dyn RelaySession) -> u64 {
+    session.identity().generation.0
 }
 
 impl OpenedRelay {
@@ -37,7 +66,7 @@ impl OpenedRelay {
         diagnostics: Arc<Diagnostics>,
         next_subscription: Arc<AtomicU64>,
     ) -> Result<Self, String> {
-        let (session, attribution) = establish(
+        let (lease, attribution) = establish(
             &session_key,
             &query,
             transport.as_ref(),
@@ -54,14 +83,14 @@ impl OpenedRelay {
             cache,
             diagnostics,
             next_subscription,
-            session,
+            lease,
             attribution,
         })
     }
 
     pub(super) async fn abort(self) {
         withdraw(
-            self.session.as_ref(),
+            self.lease.session().as_ref(),
             self.diagnostics.as_ref(),
             &self.attribution,
         )
@@ -69,40 +98,52 @@ impl OpenedRelay {
     }
 
     pub(super) async fn run(mut self, mut cancel: watch::Receiver<bool>) {
+        let mut stream: Box<dyn RelayMessageStream> = self.lease.session().messages();
         loop {
-            tokio::select! {
+            let inbound = tokio::select! {
                 biased;
                 changed = cancel.changed() => {
                     if changed.is_err() || *cancel.borrow_and_update() {
                         withdraw(
-                            self.session.as_ref(),
+                            self.lease.session().as_ref(),
                             self.diagnostics.as_ref(),
                             &self.attribution,
                         ).await;
                         return;
                     }
+                    continue;
                 }
-                inbound = self.session.next_message() => {
-                    match inbound {
-                        Ok(frame) => self.handle_frame(&frame),
-                        Err(error) => {
-                            self.diagnostics.failed(
-                                self.session_key.clone(),
-                                self.session.generation(),
-                                error.to_string(),
-                            );
-                            if !self.reconnect(&mut cancel).await {
-                                return;
-                            }
-                        }
-                    }
+                inbound = stream.next_inbound() => inbound,
+            };
+            let failure = match inbound {
+                Ok(RelayInbound::Frame { frame, .. }) => {
+                    self.handle_frame(&String::from_utf8_lossy(&frame));
+                    continue;
                 }
+                Ok(RelayInbound::Reconnected { .. }) => continue,
+                Ok(RelayInbound::Lost { dropped, .. }) => {
+                    format!("{dropped} inbound relay items were dropped")
+                }
+                Ok(RelayInbound::Disconnected { reason, .. }) => format!("{reason:?}"),
+                Ok(RelayInbound::ReconnectExhausted { reason, .. }) => {
+                    format!("reconnect exhausted: {reason:?}")
+                }
+                Err(error) => error.to_string(),
+            };
+            self.diagnostics.failed(
+                self.session_key.clone(),
+                generation_of(self.lease.session().as_ref()),
+                failure,
+            );
+            if !self.reconnect(&mut cancel).await {
+                return;
             }
+            stream = self.lease.session().messages();
         }
     }
 
     fn handle_frame(&self, frame: &str) {
-        let generation = self.session.generation();
+        let generation = generation_of(self.lease.session().as_ref());
         let message = match decode_relay(frame) {
             Ok(message) => message,
             Err(error) => {
@@ -115,7 +156,7 @@ impl OpenedRelay {
             }
         };
         handle_message(
-            self.session.as_ref(),
+            self.lease.session().as_ref(),
             self.cache.as_ref(),
             self.diagnostics.as_ref(),
             &self.attribution,
@@ -153,14 +194,14 @@ impl OpenedRelay {
                 established = reconnect => established,
             };
             match established {
-                Ok((session, attribution)) => {
-                    self.session = session;
+                Ok((lease, attribution)) => {
+                    self.lease = lease;
                     self.attribution = attribution;
                     return true;
                 }
                 Err(error) => self.diagnostics.failed(
                     self.session_key.clone(),
-                    self.session.generation(),
+                    generation_of(self.lease.session().as_ref()),
                     format!("reconnect refused: {error}"),
                 ),
             }
@@ -175,40 +216,42 @@ async fn establish(
     planner: &dyn SubscriptionPlanner,
     diagnostics: &Diagnostics,
     next_subscription: &AtomicU64,
-) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Filter>), String> {
+) -> Result<(RelaySessionLease, BTreeMap<SubscriptionId, Filter>), String> {
     let subscription = allocate_subscription(next_subscription)?;
     let plan = planner
         .plan(session_key, &[demand_for_query(subscription, query)])
         .map_err(|error| error.to_string())?;
     validate_plan(session_key, &plan)?;
-    let session = transport
-        .open_session(session_key.clone())
+    let lease = transport
+        .acquire_session(open_request(session_key))
         .await
         .map_err(|error| error.to_string())?;
-    if session.key() != session_key {
-        let _ = session.close().await;
+    let identity = lease.session().identity();
+    if identity.key != *session_key {
+        let _ = lease.session().close().await;
         return Err("transport returned the wrong relay session identity".to_owned());
     }
-    let generation = session.generation();
+    let generation = identity.generation.0;
     diagnostics.session_opened(session_key.clone(), generation);
-    for message in &plan.messages {
+    for (index, message) in plan.messages.iter().enumerate() {
         let frame = encode_client(message).map_err(|error| error.to_string())?;
-        match session.send(frame).await {
-            HandoffOutcome::HandedOff => {}
-            HandoffOutcome::NotHandedOff { reason } => {
-                let _ = session.close().await;
-                return Err(format!("subscription was not handed off: {reason}"));
+        let correlation = HandoffCorrelation(index as u64);
+        match lease.session().send(frame.into_bytes(), correlation).await {
+            HandoffOutcome::HandedOff { .. } => {}
+            HandoffOutcome::NotHandedOff { reason, .. } => {
+                let _ = lease.session().close().await;
+                return Err(format!("subscription was not handed off: {reason:?}"));
             }
-            HandoffOutcome::Ambiguous { reason } => {
-                let _ = session.close().await;
-                return Err(format!("subscription handoff is ambiguous: {reason}"));
+            HandoffOutcome::Ambiguous { reason, .. } => {
+                let _ = lease.session().close().await;
+                return Err(format!("subscription handoff is ambiguous: {reason:?}"));
             }
         }
     }
     for id in plan.attribution.keys() {
         diagnostics.subscription_opened(session_key.clone(), generation, id.clone());
     }
-    Ok((session, plan.attribution))
+    Ok((lease, plan.attribution))
 }
 
 fn allocate_subscription(next: &AtomicU64) -> Result<SubscriptionId, String> {
@@ -254,8 +297,9 @@ fn handle_message(
     attribution: &BTreeMap<SubscriptionId, Filter>,
     message: RelayMessage<'static>,
 ) {
-    let key = session.key().clone();
-    let generation = session.generation();
+    let identity = session.identity();
+    let key = identity.key.clone();
+    let generation = identity.generation.0;
     match message {
         RelayMessage::Event {
             subscription_id,
@@ -264,7 +308,7 @@ fn handle_message(
             let id = subscription_id.into_owned();
             if let Err(error) = admit_subscription_event(
                 cache,
-                session.key(),
+                &identity.key,
                 attribution,
                 &id,
                 event.into_owned(),
@@ -314,32 +358,31 @@ async fn withdraw(
     diagnostics: &Diagnostics,
     attribution: &BTreeMap<SubscriptionId, Filter>,
 ) {
-    for id in attribution.keys() {
+    let identity = session.identity();
+    let key = identity.key.clone();
+    let generation = identity.generation.0;
+    for (index, id) in attribution.keys().enumerate() {
         let frame = match encode_client(&ClientMessage::close(id.clone())) {
             Ok(frame) => frame,
             Err(error) => {
-                diagnostics.failed(
-                    session.key().clone(),
-                    session.generation(),
-                    error.to_string(),
-                );
+                diagnostics.failed(key.clone(), generation, error.to_string());
                 continue;
             }
         };
-        match session.send(frame).await {
-            HandoffOutcome::HandedOff => {
-                diagnostics.withdrawn(session.key().clone(), session.generation(), id.clone());
+        let correlation = HandoffCorrelation(index as u64);
+        match session.send(frame.into_bytes(), correlation).await {
+            HandoffOutcome::HandedOff { .. } => {
+                diagnostics.withdrawn(key.clone(), generation, id.clone());
             }
-            HandoffOutcome::NotHandedOff { reason } | HandoffOutcome::Ambiguous { reason } => {
-                diagnostics.failed(session.key().clone(), session.generation(), reason);
+            HandoffOutcome::NotHandedOff { reason, .. } => {
+                diagnostics.failed(key.clone(), generation, format!("{reason:?}"));
+            }
+            HandoffOutcome::Ambiguous { reason, .. } => {
+                diagnostics.failed(key.clone(), generation, format!("{reason:?}"));
             }
         }
     }
     if let Err(error) = session.close().await {
-        diagnostics.failed(
-            session.key().clone(),
-            session.generation(),
-            error.to_string(),
-        );
+        diagnostics.failed(key, generation, error.to_string());
     }
 }
