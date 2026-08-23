@@ -1,15 +1,11 @@
 //! Thin Rust facade over the selected Fava provider assembly.
 
-mod live;
 mod publication;
 mod query_source;
-mod relay;
-mod routes;
 mod session;
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 
 use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
@@ -31,6 +27,7 @@ pub use fava_query::{
 use fava_query::{QueryEvaluator, QuerySource};
 pub use fava_routing::RoutePlan;
 use fava_routing::{RouteRequest, Router};
+pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;
 use fava_signer::Signer;
@@ -91,12 +88,8 @@ use tokio::sync::broadcast;
 #[derive(Clone)]
 pub struct Fava {
     observer: Observer,
-    event_cache: Arc<dyn EventCache>,
     write_store: Arc<dyn WriteStore>,
-    subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
-    transport: Option<Arc<dyn Transport>>,
     diagnostics: Arc<Diagnostics>,
-    next_subscription: Arc<AtomicU64>,
     routers: Vec<Arc<dyn Router>>,
     session: Session,
     publication: Option<Publication>,
@@ -115,12 +108,16 @@ impl Fava {
     ///
     /// Returns [`ObserveError`] when the declarative query is invalid or the
     /// configured local sources cannot establish one coherent initial view.
+    #[allow(
+        clippy::unused_async,
+        reason = "opening is total and synchronous; the async signature is the public door and never awaits a provider"
+    )]
+    #[allow(
+        clippy::result_large_err,
+        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
+    )]
     pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError> {
-        if query.freshness() == Freshness::CacheOnly {
-            self.observer.open(query)
-        } else {
-            live::open(self, query).await
-        }
+        self.observer.open(query)
     }
 
     /// Cancel one accepted event before publication work exists.
@@ -242,6 +239,10 @@ impl Fava {
     /// # Errors
     ///
     /// Returns [`ObserveError`] when a configured router refuses preview.
+    #[allow(
+        clippy::result_large_err,
+        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
+    )]
     pub fn preview_routes(&self, query: &Query) -> Result<RoutePlan, ObserveError> {
         let request = RouteRequest::Read(query.clone());
         match query.source().acquisition() {
@@ -261,6 +262,7 @@ impl Fava {
 #[derive(Default)]
 pub struct FavaBuilder {
     event_cache: Option<Arc<dyn EventCache>>,
+    runtime: Option<Runtime>,
     write_store: Option<Arc<dyn WriteStore>>,
     evaluator: Option<Arc<dyn QueryEvaluator>>,
     subscription_planner: Option<Arc<dyn SubscriptionPlanner>>,
@@ -405,6 +407,13 @@ impl FavaBuilder {
         self
     }
 
+    /// Select the execution owner every Fava-started task is registered with.
+    #[must_use]
+    pub fn runtime(mut self, runtime: Runtime) -> Self {
+        self.runtime = Some(runtime);
+        self
+    }
+
     /// Validate the complete Slice 1 assembly.
     ///
     /// # Errors
@@ -421,6 +430,7 @@ impl FavaBuilder {
             || Arc::new(Diagnostics::default()),
             |capacity| Arc::new(Diagnostics::bounded(capacity)),
         );
+        let runtime = self.runtime.unwrap_or_else(default_runtime);
         let publication_selected = self.publisher.is_some()
             || self.delivery.is_some()
             || !self.signers.is_empty()
@@ -452,19 +462,39 @@ impl FavaBuilder {
         } else {
             None
         };
+        let mut observer = Observer::new(event_source, write_source, evaluator)
+            .with_event_cache(event_cache)
+            .with_diagnostics(Arc::clone(&diagnostics))
+            .with_routers(self.routers.clone())
+            .with_runtime(runtime);
+        if let Some(transport) = self.transport {
+            observer = observer.with_transport(transport);
+        }
+        if let Some(planner) = self.subscription_planner {
+            observer = observer.with_subscription_planner(planner);
+        }
         Ok(Fava {
-            observer: Observer::new(event_source, write_source, evaluator),
-            event_cache,
+            observer,
             write_store,
-            subscription_planner: self.subscription_planner,
-            transport: self.transport,
             diagnostics,
-            next_subscription: Arc::new(AtomicU64::new(0)),
             routers: self.routers,
             session,
             publication,
         })
     }
+}
+
+/// The execution owner an assembly gets when it selects none.
+fn default_runtime() -> Runtime {
+    Runtime::new(RuntimeConfig {
+        default_channel_depth: nonzero(1_024),
+        max_tasks: nonzero(65_536),
+        max_provider_operations: nonzero(4_096),
+    })
+}
+
+fn nonzero(value: usize) -> NonZeroUsize {
+    NonZeroUsize::new(value).expect("constant is non-zero")
 }
 
 /// Static assembly refusal.

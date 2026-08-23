@@ -5,10 +5,28 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-diagnostics.workspace = true
+fava-event-cache.workspace = true
+fava-ingest.workspace = true
 fava-query.workspace = true
+fava-routing.workspace = true
+fava-runtime.workspace = true
+fava-state.workspace = true
+fava-subscriptions.workspace = true
+fava-transport.workspace = true
+fava-wire.workspace = true
+nostr.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
+[dev-dependencies]
+fava-event-cache-memory.workspace = true
+fava-query-standard.workspace = true
+fava-subscriptions-no-grouping.workspace = true
+fava-subscriptions-standard.workspace = true
+fava-transport-testkit.workspace = true
+fava-write-store-memory.workspace = true
+serde_json.workspace = true
+
 [lints]
 workspace = true
-

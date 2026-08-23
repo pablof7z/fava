@@ -281,7 +281,6 @@ dependencies = [
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
- "fava-ingest",
  "fava-nip02",
  "fava-observe",
  "fava-publication",
@@ -292,6 +291,7 @@ dependencies = [
  "fava-router-fallback-relays",
  "fava-router-testkit",
  "fava-routing",
+ "fava-runtime",
  "fava-session",
  "fava-signer",
  "fava-signer-local",
@@ -300,8 +300,6 @@ dependencies = [
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
  "fava-transport",
- "fava-transport-testkit",
- "fava-wire",
  "fava-write",
  "fava-write-store",
  "fava-write-store-memory",
@@ -403,7 +401,24 @@ dependencies = [
 name = "fava-observe"
 version = "0.1.0"
 dependencies = [
+ "fava-diagnostics",
+ "fava-event-cache",
+ "fava-event-cache-memory",
+ "fava-ingest",
  "fava-query",
+ "fava-query-standard",
+ "fava-routing",
+ "fava-runtime",
+ "fava-state",
+ "fava-subscriptions",
+ "fava-subscriptions-no-grouping",
+ "fava-subscriptions-standard",
+ "fava-transport",
+ "fava-transport-testkit",
+ "fava-wire",
+ "fava-write-store-memory",
+ "nostr",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -538,6 +553,7 @@ dependencies = [
 name = "fava-runtime"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "futures-util",
  "thiserror",
  "tokio",
