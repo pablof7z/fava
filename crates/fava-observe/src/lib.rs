@@ -5,6 +5,7 @@ use std::sync::Arc;
 use fava_query::{
     OpenedQuerySource, Query, QueryEvaluationError, QueryEvaluator, QueryRevision, QuerySnapshot,
     QuerySource, QuerySourceError, SourceKind, SourceSnapshot, SourceStatus,
+    SourceTerminationCause,
 };
 use thiserror::Error;
 use tokio::sync::watch;
@@ -151,7 +152,7 @@ impl Observation {
                         writes_open = false;
                         write_changes.close();
                     }
-                    mark_source_closed(&mut sources, role);
+                    mark_source_closed(&mut sources, &role);
                 }
                 let Ok(mut snapshot) = evaluator.evaluate(&query, &sources) else {
                     break;
@@ -245,9 +246,11 @@ fn replace_source(sources: &mut [SourceSnapshot], changed: SourceSnapshot) {
     }
 }
 
-fn mark_source_closed(sources: &mut [SourceSnapshot], role: SourceKind) {
-    if let Some(source) = sources.iter_mut().find(|source| source.kind == role) {
-        source.status = SourceStatus::Closed;
+fn mark_source_closed(sources: &mut [SourceSnapshot], role: &SourceKind) {
+    if let Some(source) = sources.iter_mut().find(|source| &source.kind == role) {
+        source.status = SourceStatus::Closed {
+            cause: SourceTerminationCause::ProviderClosed,
+        };
     }
 }
 
@@ -279,7 +282,9 @@ pub struct ObservationClosed;
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use fava_query::{QuerySourceClosed, SourceChangeFuture, SourceChanges, SourceRevision};
+    use fava_query::{
+        BoundedText, QuerySourceClosed, SourceChangeFuture, SourceChanges, SourceRevision,
+    };
 
     use super::*;
 
@@ -292,7 +297,7 @@ mod tests {
         fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
             Ok(OpenedQuerySource {
                 initial: SourceSnapshot {
-                    kind: self.role,
+                    kind: self.role.clone(),
                     revision: SourceRevision(0),
                     status: SourceStatus::Open,
                     events: Vec::new(),
@@ -322,9 +327,9 @@ mod tests {
 
     impl QuerySource for RefusingSource {
         fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
-            Err(QuerySourceError::Refused(
-                "injected open failure".to_owned(),
-            ))
+            Err(QuerySourceError::Refused(BoundedText::new(
+                "injected open failure",
+            )))
         }
     }
 
@@ -348,9 +353,9 @@ mod tests {
             _query: &Query,
             _sources: &[SourceSnapshot],
         ) -> Result<QuerySnapshot, QueryEvaluationError> {
-            Err(QueryEvaluationError::Refused(
-                "injected evaluation failure".to_owned(),
-            ))
+            Err(QueryEvaluationError::Refused(BoundedText::new(
+                "injected evaluation failure",
+            )))
         }
     }
 
@@ -423,7 +428,7 @@ mod tests {
                 .evidence
                 .sources
                 .iter()
-                .all(|source| source.status == SourceStatus::Closed)
+                .all(|source| matches!(source.status, SourceStatus::Closed { .. }))
             {
                 break;
             }
@@ -439,7 +444,7 @@ mod tests {
                 .evidence
                 .sources
                 .iter()
-                .all(|source| source.status == SourceStatus::Closed)
+                .all(|source| matches!(source.status, SourceStatus::Closed { .. }))
         );
         assert_eq!(closes.load(Ordering::SeqCst), 2);
         observation.close();

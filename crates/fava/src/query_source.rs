@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use fava_query::{
-    OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
+    BoundedText, OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError,
+    SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot,
+    SourceStatus,
 };
 use fava_state::CachedEvent;
 use fava_write::{EventValue, LocalWriteEvent};
@@ -13,9 +14,9 @@ use super::Fava;
 impl QuerySource for Fava {
     fn open(&self, query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
         tokio::runtime::Handle::try_current().map_err(|_| {
-            QuerySourceError::Refused(
-                "Fava query source requires a running Tokio runtime".to_owned(),
-            )
+            QuerySourceError::Refused(BoundedText::new(
+                "Fava query source requires a running Tokio runtime",
+            ))
         })?;
         let initial = SourceSnapshot::empty(SourceKind::EventCache);
         let (latest, receiver) = watch::channel(Arc::new(initial.clone()));
