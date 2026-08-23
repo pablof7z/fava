@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use fava_nip65::{RelayList, RelayListError};
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, SourceChanges, SourceEvent,
-    SourceSnapshot,
+    SourceSnapshot, SourceStatus,
 };
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
@@ -19,6 +19,34 @@ use fava_write::{EventValue, Kind};
 use tokio::sync::watch;
 
 const MAX_SHORTFALLS: usize = 256;
+
+/// Bounded shortfall evidence that counts, never hides, discarded entries.
+#[derive(Clone, Debug, Default)]
+struct Shortfalls {
+    entries: Vec<String>,
+    discarded: usize,
+}
+
+impl Shortfalls {
+    fn push(&mut self, message: String) {
+        if self.entries.len() < MAX_SHORTFALLS - 1 {
+            self.entries.push(message);
+        } else {
+            self.discarded = self.discarded.saturating_add(1);
+        }
+    }
+
+    fn rendered(&self) -> Vec<String> {
+        let mut rendered = self.entries.clone();
+        if self.discarded > 0 {
+            rendered.push(format!(
+                "{} relay-list failures discarded beyond the {MAX_SHORTFALLS}-entry shortfall bound",
+                self.discarded
+            ));
+        }
+        rendered
+    }
+}
 
 /// NIP-65 router using explicit indexer queries for missing relay lists.
 pub struct OutboxRouter {
@@ -76,9 +104,14 @@ impl OutboxRouter {
         &self,
         request: &RouteRequest,
         settled_absent: &BTreeSet<PublicKey>,
-        shortfalls: Vec<String>,
+        shortfalls: &Shortfalls,
     ) -> RouteContribution {
-        contribution(request, &self.lists.values(), settled_absent, shortfalls)
+        contribution(
+            request,
+            &self.lists.values(),
+            settled_absent,
+            shortfalls.rendered(),
+        )
     }
 }
 
@@ -109,15 +142,13 @@ impl KnownLists {
         Ok(true)
     }
 
-    fn ingest(&self, snapshot: &SourceSnapshot, shortfalls: &mut Vec<String>) {
+    fn ingest(&self, snapshot: &SourceSnapshot, shortfalls: &mut Shortfalls) {
         for source in &snapshot.events {
             let event = match source {
                 SourceEvent::Cached(cached) => EventValue::Signed(cached.event.clone()),
                 SourceEvent::Local(local) => local.event.clone(),
             };
-            if let Err(error) = self.remember(&event)
-                && shortfalls.len() < MAX_SHORTFALLS
-            {
+            if let Err(error) = self.remember(&event) {
                 shortfalls.push(error.to_string());
             }
         }
@@ -134,7 +165,7 @@ impl Router for OutboxRouter {
         request: &RouteRequest,
         _upstream: &RoutePlan,
     ) -> Result<RouteContribution, RouterError> {
-        Ok(self.contribution(request, &BTreeSet::new(), Vec::new()))
+        Ok(self.contribution(request, &BTreeSet::new(), &Shortfalls::default()))
     }
 
     fn open(
@@ -148,7 +179,8 @@ impl Router for OutboxRouter {
             .into_iter()
             .filter(|author| !known.contains_key(author))
             .collect();
-        let mut shortfalls = Vec::new();
+        let mut shortfalls = Shortfalls::default();
+        let mut settled_absent = BTreeSet::new();
         let changes = if missing.is_empty() {
             None
         } else {
@@ -162,6 +194,9 @@ impl Router for OutboxRouter {
                 .open(&query)
                 .map_err(|error| RouterError::Refused(error.to_string()))?;
             self.lists.ingest(&initial, &mut shortfalls);
+            if initial.status == SourceStatus::Closed {
+                settled_absent.extend(missing.iter().copied());
+            }
             Some(changes)
         };
         Ok(Box::new(OutboxSession {
@@ -170,7 +205,7 @@ impl Router for OutboxRouter {
             revision: self.lists.revision.subscribe(),
             changes,
             queried: missing,
-            settled_absent: BTreeSet::new(),
+            settled_absent,
             shortfalls,
             closed: false,
         }))
@@ -184,17 +219,25 @@ struct OutboxSession {
     changes: Option<Box<dyn SourceChanges>>,
     queried: BTreeSet<PublicKey>,
     settled_absent: BTreeSet<PublicKey>,
-    shortfalls: Vec<String>,
+    shortfalls: Shortfalls,
     closed: bool,
 }
 
 impl OutboxSession {
+    fn unresolved_count(&self) -> usize {
+        let known = self.lists.values();
+        self.queried
+            .iter()
+            .filter(|author| !known.contains_key(author))
+            .count()
+    }
+
     fn contribution(&self) -> RouteContribution {
         contribution(
             &self.request,
             &self.lists.values(),
             &self.settled_absent,
-            self.shortfalls.clone(),
+            self.shortfalls.rendered(),
         )
     }
 }
@@ -217,11 +260,20 @@ impl RouterSession for OutboxSession {
                     self.revision.borrow_and_update();
                 }
                 changed = next_source(&mut self.changes) => {
+                    // Settled absence comes only from a source that reports it
+                    // completed; a lost source is a shortfall, not a fact.
                     if let Ok(snapshot) = changed {
                         self.lists.ingest(&snapshot, &mut self.shortfalls);
+                        if snapshot.status == SourceStatus::Closed {
+                            self.settled_absent.extend(self.queried.iter().copied());
+                            self.changes = None;
+                        }
                     } else {
-                        self.settled_absent.extend(self.queried.iter().copied());
                         self.changes = None;
+                        self.shortfalls.push(format!(
+                            "relay-list discovery source closed before settling; {} author relay lists remain unresolved",
+                            self.unresolved_count()
+                        ));
                     }
                     self.revision.borrow_and_update();
                 }
