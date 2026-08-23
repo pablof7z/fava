@@ -35,7 +35,7 @@ pub trait RelaySession: Send + Sync {
     ///
     /// MUST NOT park indefinitely: the outbound queue is bounded and
     /// `deadlines.write` applies. A full queue is `NotHandedOff`, never a wait.
-    fn send<'a>(&'a self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'a>;
+    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_>;
 
     /// Obtain an independently-pollable inbound stream for **this consumer**.
     ///
@@ -48,7 +48,7 @@ pub trait RelaySession: Send + Sync {
     /// Close this session's current generation deterministically, regardless of
     /// remaining leases. Callers hold leases; this is the transport's own
     /// escape hatch and is idempotent.
-    fn close<'a>(&'a self) -> ReleaseFuture<'a>;
+    fn close(&self) -> ReleaseFuture<'_>;
 }
 
 /// One consumer's bounded view of a session's inbound items.

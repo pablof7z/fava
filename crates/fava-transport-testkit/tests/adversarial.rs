@@ -51,6 +51,7 @@ async fn pending_establishment_expires_at_the_fava_owned_deadline() {
     let refusal = transport
         .acquire_session(request())
         .await
+        .map(|_| ())
         .expect_err("establishment never completes");
 
     assert_eq!(
@@ -169,9 +170,9 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .reconnect();
 
     let item = loop {
-        match stream.next_inbound().await.expect("a lifecycle item arrives") {
-            RelayInbound::Disconnected { .. } => continue,
-            other => break other,
+        let next = stream.next_inbound().await.expect("a lifecycle item arrives");
+        if !matches!(next, RelayInbound::Disconnected { .. }) {
+            break next;
         }
     };
     let RelayInbound::Reconnected { previous, identity } = item else {
@@ -221,11 +222,11 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     relay.fail_now("relay dropped us");
 
     let exhausted = loop {
-        match stream.next_inbound().await.expect("a lifecycle item arrives") {
-            RelayInbound::ReconnectExhausted {
-                attempts, reason, ..
-            } => break (attempts, reason),
-            _ => continue,
+        if let RelayInbound::ReconnectExhausted {
+            attempts, reason, ..
+        } = stream.next_inbound().await.expect("a lifecycle item arrives")
+        {
+            break (attempts, reason);
         }
     };
     assert_eq!(exhausted.0, 2);
@@ -335,7 +336,11 @@ async fn shutdown_closes_every_registered_session() {
         }
     ));
     assert_eq!(
-        transport.acquire_session(request()).await.unwrap_err(),
+        transport
+            .acquire_session(request())
+            .await
+            .map(|_| ())
+            .unwrap_err(),
         TransportError::ShuttingDown
     );
 }

@@ -72,7 +72,7 @@ pub trait Transport: Send + Sync {
     ///
     /// [`TransportError`] when establishment refuses, times out, or the
     /// transport is shutting down.
-    fn acquire_session<'a>(&'a self, request: OpenRelaySession) -> RelaySessionFuture<'a>;
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_>;
 
     /// Current holder count for one key, or `None` when no session is
     /// registered. This is the observable proof that acquire-or-reuse happened.
@@ -85,5 +85,5 @@ pub trait Transport: Send + Sync {
     ///
     /// [`TransportError::ShutdownIncomplete`] when sessions remained after
     /// `deadline`; the transport is unusable either way.
-    fn shutdown<'a>(&'a self, deadline: Duration) -> TransportShutdownFuture<'a>;
+    fn shutdown(&self, deadline: Duration) -> TransportShutdownFuture<'_>;
 }
