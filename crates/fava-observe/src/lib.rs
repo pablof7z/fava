@@ -24,6 +24,7 @@ mod ingest;
 mod observation;
 mod observer;
 mod operations;
+mod plan;
 mod registry;
 mod routes;
 mod slot;

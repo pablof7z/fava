@@ -432,41 +432,7 @@ impl Engine {
         let Some(slot) = self.slots.get_mut(relay) else {
             return;
         };
-        let mut entries = Vec::new();
-        for id in slot.installed.ids() {
-            if closed.contains(id) {
-                continue;
-            }
-            let Some(current) = slot.installed.get(id) else {
-                continue;
-            };
-            // A retained subscription keeps its exact filters; only the demand
-            // it serves may change, and that is a refcount, not wire work.
-            let serves = planned
-                .attribution
-                .get(id)
-                .map_or_else(|| current.serves.clone(), |entry| entry.serves.clone());
-            entries.push((
-                id.clone(),
-                InstalledSubscription {
-                    filters: current.filters.clone(),
-                    serves,
-                },
-            ));
-        }
-        for candidate in &planned.open {
-            if !opened.contains(&candidate.id) {
-                continue;
-            }
-            entries.push((
-                candidate.id.clone(),
-                InstalledSubscription {
-                    filters: candidate.filters.clone(),
-                    serves: candidate.serves.clone(),
-                },
-            ));
-        }
-        slot.installed = InstalledSubscriptions::from_entries(entries);
+        slot.installed = crate::plan::accepted(&slot.installed, planned, opened, closed);
         let live: BTreeSet<SubscriptionId> = slot.installed.ids().cloned().collect();
         slot.settled.retain(|id, _| live.contains(id));
         slot.completeness.retain(|id, _| live.contains(id));

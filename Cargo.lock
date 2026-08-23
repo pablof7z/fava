@@ -418,6 +418,7 @@ dependencies = [
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
  "fava-subscriptions-standard",
+ "fava-subscriptions-testkit",
  "fava-transport",
  "fava-transport-testkit",
  "fava-wire",
