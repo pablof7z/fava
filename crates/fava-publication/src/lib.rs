@@ -1,6 +1,6 @@
 //! Accepted-write signing, live routing, and delivery lifecycle.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use fava_delivery::DeliveryPolicy;
@@ -10,8 +10,8 @@ use fava_routing::Router;
 use fava_session::Session;
 use fava_transport::Transport;
 use fava_write::{
-    Kind, Receipt, ReceiptId, ReceiptOutcome, ReplaceableEventMaterializer, WriteIntent,
-    WritePayload, WriteRouting,
+    EventId, Kind, MaterializationId, Receipt, ReceiptId, ReceiptOutcome,
+    ReplaceableEventMaterializer, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
@@ -37,6 +37,11 @@ pub struct Publication {
     transport: Arc<dyn Transport>,
     routers: Arc<Vec<Arc<dyn Router>>>,
     cancellations: Arc<Mutex<BTreeMap<ReceiptId, watch::Sender<bool>>>>,
+    // Rejected late signer completions: receipt, write, generation, event, reason.
+    // Deliberately existing identity values rather than a new architectural noun.
+    #[allow(clippy::type_complexity)]
+    stale_signer_completions:
+        Arc<Mutex<VecDeque<(ReceiptId, WriteId, MaterializationId, EventId, String)>>>,
 }
 
 impl Publication {
@@ -69,6 +74,7 @@ impl Publication {
             transport,
             routers: Arc::new(routers),
             cancellations: Arc::new(Mutex::new(BTreeMap::new())),
+            stale_signer_completions: Arc::new(Mutex::new(VecDeque::new())),
         })
     }
 

@@ -18,5 +18,16 @@ fava-write-store.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
+[dev-dependencies]
+fava-delivery-standard.workspace = true
+fava-query-standard.workspace = true
+fava-write-store-memory.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[[test]]
+name = "owner_lifecycle"
+path = "tests/owner_lifecycle.rs"
+
 [lints]
 workspace = true

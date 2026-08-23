@@ -40,6 +40,11 @@ pub enum RelayDeliveryOutcome {
         /// Exact bounded relay message.
         message: String,
     },
+    /// Relay demanded authentication this attempt did not satisfy, after handoff.
+    AuthenticationDenied {
+        /// Exact bounded relay authentication fact.
+        reason: String,
+    },
     /// Bounded policy stopped after definite pre-handoff failure.
     GivenUp {
         /// Exact policy reason.
@@ -62,6 +67,7 @@ impl RelayDeliveryOutcome {
             self,
             Self::Acknowledged { .. }
                 | Self::Rejected { .. }
+                | Self::AuthenticationDenied { .. }
                 | Self::GivenUp { .. }
                 | Self::Unknown { .. }
                 | Self::CancelledBeforeHandoff
