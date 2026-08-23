@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
-use fava_query::{
+use fava_query::{SourceTerminationCause, 
     OpenedQuerySource, Query, QueryAcquisition, QuerySource, QuerySourceClosed, QuerySourceError,
     SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot,
     SourceStatus,
@@ -171,7 +171,9 @@ impl WatchSource {
         self.latest.send_replace(Arc::new(SourceSnapshot {
             kind: SourceKind::EventCache,
             revision: SourceRevision(revision),
-            status: SourceStatus::Closed,
+            status: SourceStatus::Closed {
+                cause: SourceTerminationCause::ProviderClosed,
+            },
             events: Vec::new(),
         }));
     }

@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use fava_nip65::{RelayList, RelayListError};
-use fava_query::{
+use fava_query::{SourceTerminationCause, 
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, SourceChanges, SourceEvent,
     SourceSnapshot, SourceStatus,
 };
@@ -194,7 +194,7 @@ impl Router for OutboxRouter {
                 .open(&query)
                 .map_err(|error| RouterError::Refused(error.to_string()))?;
             self.lists.ingest(&initial, &mut shortfalls);
-            if initial.status == SourceStatus::Closed {
+            if settles_absence(&initial.status) {
                 settled_absent.extend(missing.iter().copied());
             }
             Some(changes)
@@ -264,7 +264,7 @@ impl RouterSession for OutboxSession {
                     // completed; a lost source is a shortfall, not a fact.
                     if let Ok(snapshot) = changed {
                         self.lists.ingest(&snapshot, &mut self.shortfalls);
-                        if snapshot.status == SourceStatus::Closed {
+                        if settles_absence(&snapshot.status) {
                             self.settled_absent.extend(self.queried.iter().copied());
                             self.changes = None;
                         }
@@ -363,4 +363,20 @@ fn contribution(
         unresolved: BTreeSet::new(),
         shortfalls,
     }
+}
+
+/// Only a clean provider close settles absence.
+///
+/// A source that ends because the provider *failed* proves nothing about
+/// whether a relay list exists; treating it as settled absence is the defect
+/// this crate was corrected for. `SourceTerminationCause` makes the
+/// distinction expressible, so the check is now on the cause rather than on
+/// the mere fact of closure.
+fn settles_absence(status: &SourceStatus) -> bool {
+    matches!(
+        status,
+        SourceStatus::Closed {
+            cause: SourceTerminationCause::ProviderClosed
+        }
+    )
 }
