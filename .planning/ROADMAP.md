@@ -370,7 +370,7 @@ Plans:
 **Goal:** The confirmed correctness defects that are not consequences of the ownership inversion are fixed, so they do not survive the remediation unnoticed.
 **Mode:** remediation
 **Depends on:** Phase 07.4
-**Requirements:** EVENT-014, RELAY-001, RELAY-012, ROUTER-001, WRITE-015, WRITE-018, WRITE-019, WRITE-028, QUERY-004, QUERY-009. Full mapping produced during planning.
+**Requirements:** WRITE-014, WRITE-015, WRITE-027, WRITE-028, ROUTER-001, QUERY-004, QUERY-009, RELAY-001. Mapping produced during planning 2026-08-23: WRITE-014/WRITE-027 added (router acquisition with no separate transport stack; settled-empty routing), EVENT-014/RELAY-012/WRITE-018/WRITE-019 removed (verified already satisfied on `87c3688`, or evidence-only and owned by Phase 07.9 / Phase 8), RELAY-004 (NIP-11 declared limits) split out — see Deferred below.
 **Success Criteria** (what must be TRUE):
 
   1. Relay-issued attribution is checked against the accepted subscription that actually carries the filter; a relay cannot choose which accepted filter validates its event, and `WrongSubscription` is reachable through the real path.
@@ -378,8 +378,20 @@ Plans:
   3. A bounded event cache at capacity can still apply a deletion, and expiry is swept by a named production owner rather than by tests alone.
   4. A purely local write cannot empty a relay-qualified query. An authentication outcome reaches the replaceable delivery policy and is reported truthfully with respect to whether bytes left Fava. Relay-declared limits come from the relay, not from invented constants.
 
-**Plans:** Not yet planned - run `/gsd-plan-phase 07.8`.
-**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 5; `transport-wire-ingest.md`, `routing.md`, `query-state-cache.md`, `publication-write.md`.
+**Plans:** 5 plans
+
+Plans:
+- [ ] 07.8-01-PLAN.md — Settled absence requires an answer: a failed router no longer fabricates `SettledAbsent`; resolves the LEDGER's WRITE-027 cross-owner question
+- [ ] 07.8-02-PLAN.md — The router acquisition contract and its first real implementation on `Observer` (blocked on a vocabulary decision checkpoint)
+- [ ] 07.8-03-PLAN.md — `Router`/`RouterSession` signature change and all four `fava_routing::open`/`preview` call sites wired to real handles
+- [ ] 07.8-04-PLAN.md — Outbox reads the warm cache before asking a relay; settled absence from indexer evidence; ROUTER-001 re-specified at the wire
+- [ ] 07.8-05-PLAN.md — Delete `impl QuerySource for Fava`, the canary's second engine, and `ARCHITECTURE.md`'s two invented query services
+
+**Deferred out of this phase** (planning judgement 2026-08-23, awaiting Pablo):
+- `no-nip11-invented-planner-limits` (RELAY-004) — relay-declared constraints have no producer; needs a NIP-11 acquisition capability the transport contract does not have, plus its own vocabulary approval. Success criterion 4's last sentence moves with it.
+- `expiry-is-never-swept` — `EventCache::expire` still has no production caller; needs a named sweep owner and a cadence. Success criterion 3's second half moves with it. The first half (deletion at capacity) is already satisfied.
+
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 5; `transport-wire-ingest.md`, `routing.md`, `query-state-cache.md`, `publication-write.md`; `07.8-CONTEXT.md` (Pablo's router-acquisition ruling); `RESEARCH.md`.
 
 ### Phase 07.9: Evidence Reconstruction and Milestone Verdict Revocation (INSERTED)
 
