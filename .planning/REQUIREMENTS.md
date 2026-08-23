@@ -126,10 +126,10 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 
 - [x] **SESSION-01**: A running Fava instance accepts a signer after build without replacing the engine, session, write store, or accepted write identity.
 - [x] **SESSION-02**: Adding a signer wakes already accepted unsigned writes for that exact event pubkey and no other author.
-- [ ] **SESSION-03**: Adding a second signer for an attached pubkey refuses without mutation; replacement is an explicit separate operation.
-- [ ] **SESSION-04**: Removing a signer preserves accepted writes and receipts, cancels its current signer operation, and leaves matching unsigned work awaiting a signer until an exact signer is re-added.
-- [ ] **SESSION-05**: Signer completions from replaced, removed, or retired materialization generations are attributable and cannot install signed state or start delivery.
-- [ ] **SESSION-06**: Runtime signer attachment is bounded and capacity overflow returns typed refusal without partial mutation.
+- [x] **SESSION-03**: Adding a second signer for an attached pubkey refuses without mutation; replacement is an explicit separate operation.
+- [x] **SESSION-04**: Removing a signer preserves accepted writes and receipts, cancels its current signer operation, and leaves matching unsigned work awaiting a signer until an exact signer is re-added.
+- [x] **SESSION-05**: Signer completions from replaced, removed, or retired materialization generations are attributable and cannot install signed state or start delivery.
+- [x] **SESSION-06**: Runtime signer attachment is bounded and capacity overflow returns typed refusal without partial mutation.
 - [x] **SESSION-07**: `fava-session` exclusively owns mutable signer attachment; publication loads current exact attachments and invokes providers outside session/publication locks and write-store transactions.
 
 ### Authentication, Hostility, and Bounds
@@ -317,10 +317,10 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | GROUP-12 | Phase 07.1.1 | Complete |
 | SESSION-01 | Phase 07.2 | Complete |
 | SESSION-02 | Phase 07.2 | Complete |
-| SESSION-03 | Phase 07.2 | Pending |
-| SESSION-04 | Phase 07.2 | Pending |
-| SESSION-05 | Phase 07.2 | Pending |
-| SESSION-06 | Phase 07.2 | Pending |
+| SESSION-03 | Phase 07.2 | Complete |
+| SESSION-04 | Phase 07.2 | Complete |
+| SESSION-05 | Phase 07.2 | Complete |
+| SESSION-06 | Phase 07.2 | Complete |
 | SESSION-07 | Phase 07.2 | Complete |
 | HARD-01 | Phase 8 | Pending |
 | HARD-02 | Phase 8 | Pending |

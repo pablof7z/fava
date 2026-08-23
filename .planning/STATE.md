@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 07.2
-current_phase_name: Runtime Signer Lifecycle and Parked-Write Wakeup
-status: executing
-stopped_at: Completed 07.2-01-PLAN.md
-last_updated: "2026-08-23T13:27:13.648Z"
+current_phase: 8
+current_phase_name: Authentication, Hostile Boundaries, and Boundedness
+status: ready_to_plan
+stopped_at: Completed and verified Phase 07.2
+last_updated: "2026-08-23T14:01:18Z"
 last_activity: 2026-08-23
-last_activity_desc: Phase 07.2 execution started
-state_head: c3222c11dcc988a5726b4b188019d2f27fa49bb7
+last_activity_desc: Phase 07.2 runtime signer lifecycle completed and verified
+state_head: c46c4a5fb0a2fe28ced3f1d419ddc1453290c186
 progress:
   total_phases: 15
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 38
-  completed_plans: 37
-  percent: 60
+  completed_plans: 38
+  percent: 67
 ---
 
 # Project State
@@ -23,27 +23,26 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 07.2 — Runtime Signer Lifecycle and Parked-Write Wakeup
+**Current focus:** Phase 8 — Authentication, Hostile Boundaries, and Boundedness
 
 ## Current Position
 
-Phase: 07.2 (Runtime Signer Lifecycle and Parked-Write Wakeup) — IN PROGRESS
+Phase: 07.2 (Runtime Signer Lifecycle and Parked-Write Wakeup) — COMPLETE
 Plan: 2 of 2
-Status: Plan 01 complete; executing Plan 02
-Last activity: 2026-08-23 — Runtime add and exact-key wakeup completed
+Status: Implementation, review, security, Nyquist, and goal verification passed
+Last activity: 2026-08-23 — Runtime signer lifecycle completed and verified
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 67%
 
-Phase progress is 10/14. Phases 1-6 predate GSD plans; Phases 06.1, 7, 07.1,
-and 07.1.1 completed all authored plans and their review and verification gates.
+Phase 8 is next and ready for research/planning.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 25
+- Total plans completed: 26
 - Average duration: 35 minutes
-- Total execution time: 7 hours 35 minutes
+- Total execution time: 7 hours 55 minutes
 
 **By Phase:**
 
@@ -95,6 +94,7 @@ and 07.1.1 completed all authored plans and their review and verification gates.
 | Phase 07.1.1 P11 | 40min | 3 tasks | 10 files |
 | Phase 07.1.1 P12 | 6min | 2 tasks | 5 files |
 | Phase 07.2 P01 | 9min | 2 tasks | 19 files |
+| Phase 07.2 P02 | 20min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -176,6 +176,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Public multi-relay group behavior retains relay-local record authority while ordinary Fava owners handle observation and publication.
 - [Phase 07.1.1]: Only twice-scanned complete author-sealed evidence is atomically promoted; pair verification requires exactly two runs and four distinct children.
 - [Phase 07.1.1]: Controlled canary evidence is durably retained at the exact owner-private path named by 07.1.1-12-PAIR-ROOT.txt and remains excluded from Git by the canary evidence policy.
+- [Phase 07.2]: Session is the sole mutable signer attachment owner; publication retains only per-write signer operations.
+- [Phase 07.2]: Runtime add, explicit replace, and remove use one exact signer per pubkey with a fixed 64-entry bound and atomic typed refusal.
+- [Phase 07.2]: Session revisions are coalescible wake signals only; publication reloads its exact event pubkey and admits completions by current attachment generation.
+- [Phase 07.2]: Cancellation is advisory; a valid stale provider completion remains inert after replacement or removal.
 
 ### Pending Todos
 
@@ -184,7 +188,6 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 ### Blockers/Concerns
 
 - No current blocker.
-- Phase 06.1 awaits final goal verification; implementation and code review are complete.
 - Targeted research remains required during planning for Phases 8-11; recommendations do not override specifications.
 
 ### Roadmap Evolution
@@ -204,6 +207,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-23T13:27:13.570Z
-Stopped at: Completed 07.2-01-PLAN.md
+Last session: 2026-08-23T14:01:18Z
+Stopped at: Completed and verified Phase 07.2
 Resume file: None

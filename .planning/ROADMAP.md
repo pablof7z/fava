@@ -25,7 +25,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
 - [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
 - [x] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
-- [ ] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava.
+- [x] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava. (completed 2026-08-23)
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
 - [ ] **Phase 10: Provider Substitution Qualification** - Complete M10's public-contract substitution matrix and architecture falsifiers.
@@ -255,7 +255,7 @@ Plans:
 
 ### Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup (INSERTED)
 
-**Goal:** A running Fava instance accepts bounded signer add, explicit replacement, and removal operations, and exact matching accepted writes react to signer availability without engine rebuild or loss of durable write identity.
+**Goal:** As a Fava application developer, I want to add, explicitly replace, and remove bounded signers on a running Fava instance, so that exact matching accepted writes resume without rebuilding the engine or losing durable write identity.
 **Mode:** mvp
 **Requirements:** SESSION-01, SESSION-02, SESSION-03, SESSION-04, SESSION-05, SESSION-06, SESSION-07
 **Depends on:** Phase 07.1.1
@@ -273,7 +273,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07.2-02-PLAN.md
+- [x] 07.2-02-PLAN.md
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
