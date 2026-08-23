@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use fava::ReceiptOutcome;
 use fava::{EventBuilder, EventValue, Fava, Kind, Observation, Receipt, RelayUrl, Tag};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -19,7 +20,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
-use fava_write::{EventId, ReceiptOutcome};
+use fava_write::EventId;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
 use serde_json::{Value, json};
@@ -35,8 +36,8 @@ use crate::croissant_nip02_evidence::{
     secret_needles, verify_artifact_seal, verify_hashes,
 };
 use crate::environment::croissant_fixture_source;
+use crate::gate_signer::{GateSigner, PendingSign, deterministic_finalize, next_sign};
 use crate::publication_support::{wait_record, wait_terminal};
-use crate::semantic_write_support::{GateSigner, PendingSign, deterministic_finalize, next_sign};
 use crate::{
     CanaryError, CanaryResult, WireProxy, command_output, deterministic_keys, repository_root, wire,
 };

@@ -1,28 +1,70 @@
 # Fava end-to-end canary
 
-An ordinary downstream Rust application and independent evidence lab. It must
-not depend on Fava internal crates or use Fava diagnostics as the sole witness
-for external effects.
+An ordinary downstream Rust application and independent evidence lab.
 
-The first enabled scenario is `lab-real-relay-smoke`, using the pinned
-`nostr-rs-relay` 0.8.12 binary as a real third-party process on macOS. Install
-it with:
+## The one rule
+
+**The canary may not work around Fava.**
+
+If a flow is awkward, impossible, requires reaching past the public API,
+requires constructing a second engine, requires a stub provider, requires
+hand-feeding data the library should have fetched, or requires knowledge no
+outside developer could have, the canary records it as a wall and fails. It
+does not route around it. A workaround here is a suppressed bug report, and
+suppressed bug reports are what users hit instead.
+
+Consequences of the rule:
+
+- The canary depends on the `fava` facade and on provider crates an
+  application selects. Every remaining internal-crate dependency is annotated
+  in `Cargo.toml` with the public-API hole that forces it.
+- No stub transport, publisher, write store, or event cache. If a scenario can
+  only be made deterministic by replacing the thing under test, the scenario is
+  blocked instead.
+- No value is written into a retained manifest unless the run measured it.
+- A scenario that cannot be expressed through the public API is registered with
+  `"status": "blocked"` in `scenarios.json`, its executor is deleted, and
+  `canary run <id>` prints the wall and exits nonzero.
+
+`apps/canary/src/blocked.rs` is the ledger: for every blocked scenario it names
+the workaround that was removed and the wall that workaround was hiding.
+
+## Consumer flows
+
+`dx-flows` is the primary scenario. It drives ten things a real Nostr client
+must do, through the public facade only, against a real relay:
+
+```sh
+cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
+  run dx-flows --relay-url ws://127.0.0.1:7447 --seed <unique-seed>
+```
+
+`--relay-url` must name a running relay. Any relay implementation works; the
+audit of 2026-08-23 used `nostr-rs-relay` 0.10.0 in Docker:
+
+```sh
+docker run -d --name fava-relay -p 7447:8080 scsibug/nostr-rs-relay:latest
+```
+
+The run writes `flows.json` with one record per flow: intent, status, severity,
+the conclusion an outside developer would draw, and the measured detail. It
+exits nonzero while any flow is a wall. Findings are written up in
+`.planning/audit/2026-08-23/dx-walls.md`.
+
+## Other scenarios
+
+`canary list` prints every scenario with its milestone and status. Enabled
+scenarios that start their own relay process need the pinned binary:
 
 ```sh
 cargo install nostr-rs-relay --version 0.8.12 --locked
 ```
 
-Scenario status is recorded in `scenarios.json`. Enabled scenarios fail on an
-unavailable prerequisite; they never silently skip.
+That pin does not currently build on Rust 1.90 (`time` fails with E0282), so
+those scenarios could not be executed during the 2026-08-23 audit. Enabled
+scenarios fail on an unavailable prerequisite; they never silently skip.
 
-Run the deterministic local scenario:
-
-```sh
-cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
-  run lab-real-relay-smoke --seed <unique-seed>
-```
-
-Run bounded read-only public-relay reconnaissance only with an explicit URL:
+Bounded read-only public-relay reconnaissance needs an explicit URL:
 
 ```sh
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
@@ -35,9 +77,9 @@ Evidence is preserved under `apps/canary/runs/` and excluded from Git.
 
 `croissant-nip02-public-flow` starts the exact Croissant executable on a fresh
 loopback port and data path. It publishes a kind-9007 group create and then the
-README NIP-02 baseline/edit flow through the same public `Fava::to(...).publish`
-lifecycle. The retained manifest correlates local observation before signing,
-the exact relay echo, typed lossless decode, write/receipt/materialization/event
+NIP-02 baseline/edit flow through the public `Fava::to(...).publish` lifecycle.
+The retained manifest correlates local observation before signing, the exact
+relay echo, typed lossless decode, write/receipt/materialization/event
 identities, executable SHA-256, Croissant source HEAD, declared bounds, and
 completed PID/port teardown.
 
@@ -47,11 +89,11 @@ Run it twice beneath one fresh pair root, then verify the pair:
 pair_root="$(mktemp -d apps/canary/runs/phase-07.1-pair.XXXXXX)"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
-  --relay-bin /Users/pablo/.local/bin/croissant \
+  --relay-bin /path/to/croissant \
   --seed "$first_private_seed" --runs-dir "$pair_root"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   run croissant-nip02-public-flow \
-  --relay-bin /Users/pablo/.local/bin/croissant \
+  --relay-bin /path/to/croissant \
   --seed "$second_private_seed" --runs-dir "$pair_root"
 cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
   verify-croissant-pair --runs-dir "$pair_root"
@@ -59,41 +101,4 @@ cargo run --quiet --manifest-path apps/canary/Cargo.toml -- \
 
 Seeds are process-memory inputs. Never place literal seeds in shell history,
 reports, or retained files. The scenario scans every pre-manifest artifact for
-the raw input and retains only its SHA-256 plus public coordinates. The pair
-verifier requires exactly two manifests, distinct seed/group/event/write/receipt
-identities, no cross-run group data, complete artifact hashes and bounds, exact
-foreign kind-3 tags/content, and closed child processes and ports.
-
-The four M7 semantic-write canaries are deterministic, memory-backed public
-Fava executions. They do not start a relay or use timing sleeps:
-
-```sh
-cargo run --manifest-path apps/canary/Cargo.toml -- \
-  run replaceable-edit-first-value --seed <unique-seed>
-cargo run --manifest-path apps/canary/Cargo.toml -- \
-  run replaceable-edit-rematerialization --seed <unique-seed>
-cargo run --manifest-path apps/canary/Cargo.toml -- \
-  run replaceable-edit-opposing-operations --seed <unique-seed>
-cargo run --manifest-path apps/canary/Cargo.toml -- \
-  run protocol-crate-n-plus-one --seed <unique-seed>
-```
-
-Each successful run writes `semantic.json`, a bounded event log, a report, and
-a manifest with artifact hashes. Every publication record correlates its exact
-write, receipt, materialization, event, engine-owned timestamp, relay session,
-and attempt number. Semantic generations assert exact timestamp agreement with
-their accepted materialization and strict monotonicity across rematerialization.
-Rematerialization starts from sources that both lack the followed target, adds
-one unrelated source participant, and proves the final event contains each
-exactly once. It holds a real generation-one delivery, installs generation two,
-releases the retired completion, and accepts the generation-two attempt only as
-the causal processing acknowledgement. The exact expected receipt transition
-proves the retired outcome cannot contaminate current event, route, attempt, or
-delivery evidence. Inverse evidence includes both final events and all ten
-correlated attempts. N+1 evidence records canonical-package normal-edge
-Cargo reachability, Bazel product reachability, owned-child reaping, and the raw
-future event's exact caller-owned `created_at = 42`, tags, content, and identity.
-A failed run retains bounded `failure.json`, `replay.json`, report, event log,
-and hashed manifest evidence; the replay record names the working directory,
-redacts the caller seed while retaining its hash, and selects a fresh output
-directory. Any missing proof exits nonzero.
+the raw input and retains only its SHA-256 plus public coordinates.

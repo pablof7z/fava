@@ -10,12 +10,11 @@ mod pinned_launcher;
 mod sealed_executable;
 
 use canary::{
-    CroissantNip02Options, CroissantSimpleGroupsOptions, ReconOptions, SmokeOptions,
-    run_automatic_publication_scenario, run_croissant_nip02_scenario,
-    run_croissant_simple_groups_scenario, run_grouping_scenario, run_live_scenario,
-    run_local_scenario, run_m3_live_scenario, run_public_recon, run_publication_scenario,
-    run_real_relay_smoke, run_routing_scenario, run_semantic_write_scenario, scenario_registry,
-    verify_croissant_run_pair, verify_croissant_simple_groups_pair,
+    CroissantNip02Options, CroissantSimpleGroupsOptions, FlowOptions, ReconOptions, SmokeOptions,
+    run_croissant_nip02_scenario, run_croissant_simple_groups_scenario, run_live_scenario,
+    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
+    run_routing_scenario, scenario_registry, verify_croissant_run_pair,
+    verify_croissant_simple_groups_pair,
 };
 
 #[tokio::main]
@@ -137,12 +136,39 @@ async fn run() -> canary::CanaryResult<()> {
             Ok(())
         }
         "crash-child" => canary::run_crash_child(arguments.collect()).await,
+        "flow-close-child" => canary::run_flow_close_child(arguments.collect()).await,
         _ => Err(usage()),
     }
 }
 
 async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::CanaryResult<()> {
     let scenario = arguments.next().ok_or_else(usage)?;
+    if let Some(entry) = canary::blocked(&scenario) {
+        return canary::refuse(entry).map(|()| unreachable!("a blocked scenario always refuses"));
+    }
+    if scenario == "dx-flows" {
+        let mut relay_url = None;
+        let mut seed = String::from("dx-flows");
+        let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+        while let Some(flag) = arguments.next() {
+            let value = arguments.next().ok_or_else(usage)?;
+            match flag.as_str() {
+                "--relay-url" => relay_url = Some(value),
+                "--seed" => seed = value,
+                "--runs-dir" => runs_directory = PathBuf::from(value),
+                _ => return Err(usage()),
+            }
+        }
+        let run = canary::run_flows_scenario(FlowOptions {
+            relay_url: relay_url.ok_or_else(usage)?,
+            seed,
+            runs_directory,
+        })
+        .await?;
+        println!("passed dx-flows");
+        println!("evidence: {}", run.display());
+        return Ok(());
+    }
     if scenario == "croissant-nip02-public-flow" {
         let options = smoke_options(&mut arguments, "croissant-nip02")?;
         let outcome = run_croissant_nip02_scenario(CroissantNip02Options {
@@ -162,35 +188,12 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
         println!("evidence: {}", outcome.run_directory.display());
         return Ok(());
     }
-    if matches!(
-        scenario.as_str(),
-        "local-source-merge"
-            | "local-replaceable-shadow-and-cancel"
-            | "local-source-removal"
-            | "slow-consumer-latest-state"
-    ) {
-        let mut seed = String::from("local-m1");
-        while let Some(flag) = arguments.next() {
-            let value = arguments.next().ok_or_else(usage)?;
-            match flag.as_str() {
-                "--seed" => seed = value,
-                _ => return Err(usage()),
-            }
-        }
-        let event_count = run_local_scenario(&scenario, &seed).await?;
-        println!("passed {scenario}");
-        println!("events: {event_count}");
-        return Ok(());
-    }
     let evidence = match scenario.as_str() {
         "multi-relay-dedup-provenance" | "reconnect-generation" => {
             run_m3_live_scenario(&scenario, smoke_options(&mut arguments, "live-m3")?).await?
         }
         "async-route-partial-read" | "explicit-route-bypass" | "fallback-reacts" => {
             run_routing_scenario(&scenario, smoke_options(&mut arguments, "live-m4")?).await?
-        }
-        "subscription-grouping-equivalence" => {
-            run_grouping_scenario(smoke_options(&mut arguments, "grouping-m4")?).await?
         }
         "explicit-publish-optimistic"
         | "mixed-relay-outcomes"
@@ -199,25 +202,8 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
             run_publication_scenario(&scenario, smoke_options(&mut arguments, "publish-m5")?)
                 .await?
         }
-        "async-recipient-routing"
-        | "hint-routing"
-        | "route-preview-parity"
-        | "app-relay-versus-fallback-profile" => {
-            run_automatic_publication_scenario(
-                &scenario,
-                smoke_options(&mut arguments, "routing-m6")?,
-            )
-            .await?
-        }
         "explicit-read-eose" | "explicit-read-live-after-eose" | "explicit-read-cancel" => {
             run_live_scenario(&scenario, smoke_options(&mut arguments, "live-m2")?).await?
-        }
-        "replaceable-edit-first-value"
-        | "replaceable-edit-rematerialization"
-        | "replaceable-edit-opposing-operations"
-        | "protocol-crate-n-plus-one" => {
-            run_semantic_write_scenario(&scenario, smoke_options(&mut arguments, "semantic-m7")?)
-                .await?
         }
         "lab-real-relay-smoke" => {
             let outcome =
@@ -332,7 +318,7 @@ fn smoke_options(
 
 fn usage() -> canary::CanaryError {
     std::io::Error::other(
-        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --fava-build-attestation PATH --fava-build-source-manifest PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> --fava-build-attestation-fd PATH --fava-build-source-manifest-fd PATH [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-build-source-image-sha256 SHA256 --expected-fava-build-source-manifest-sha256 SHA256 --expected-fava-rust-base-image-sha256 SHA256 --expected-fava-canary-executable-sha256 SHA256 --expected-fava-canary-subject-image-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
+        "usage: canary list | launch-croissant-simple-groups --canary-bin PATH --fava-source PATH --fava-build-attestation PATH --fava-build-source-manifest PATH --relay-bin PATH --relay-source PATH [--seed SEED] [--runs-dir PATH] | run <enabled-scenario> --fava-build-attestation-fd PATH --fava-build-source-manifest-fd PATH [--relay-bin PATH] [--relay-source PATH] [--seed SEED] [--runs-dir PATH] | run dx-flows --relay-url URL [--seed SEED] [--runs-dir PATH] | verify-croissant-pair --runs-dir PATH | verify-croissant-simple-groups-pair --runs-dir PATH --expected-fava-revision SHA --expected-fava-tree-sha256 SHA256 --expected-fava-build-tree SHA --expected-fava-build-source-image-sha256 SHA256 --expected-fava-build-source-manifest-sha256 SHA256 --expected-fava-rust-base-image-sha256 SHA256 --expected-fava-canary-executable-sha256 SHA256 --expected-fava-canary-subject-image-sha256 SHA256 --expected-croissant-revision SHA --expected-croissant-executable-sha256 SHA256 | recon --relay URL [--seed SEED] [--runs-dir PATH]",
     )
     .into()
 }

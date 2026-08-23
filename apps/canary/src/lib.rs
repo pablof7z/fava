@@ -3,8 +3,7 @@
 #![recursion_limit = "256"]
 
 mod artifacts;
-mod automatic_publication;
-mod automatic_support;
+mod blocked;
 mod croissant;
 mod croissant_nip02;
 mod croissant_nip02_evidence;
@@ -20,10 +19,10 @@ mod croissant_simple_groups_source_tests;
 mod croissant_simple_groups_supervision_tests;
 mod croissant_simple_groups_wire;
 mod environment;
-mod grouping;
+mod flows;
+mod gate_signer;
 mod hostile;
 mod live;
-mod local;
 mod multi;
 mod pinned_build_input;
 mod proxy;
@@ -35,15 +34,9 @@ mod relay;
 mod routing;
 #[cfg(target_os = "linux")]
 mod sealed_executable;
-mod semantic_failure;
-mod semantic_n_plus_one;
-mod semantic_process;
-mod semantic_write_store;
-mod semantic_write_support;
-mod semantic_writes;
 mod wire;
 
-pub use automatic_publication::run_automatic_publication_scenario;
+pub use blocked::{BLOCKED, Blocked, blocked, refuse};
 pub use croissant_nip02::{
     CroissantNip02Options, CroissantNip02Outcome, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
@@ -53,15 +46,13 @@ pub use croissant_simple_groups::{
     run_croissant_simple_groups_scenario,
 };
 pub use croissant_simple_groups_evidence::verify_croissant_simple_groups_pair;
-pub use grouping::run_grouping_scenario;
+pub use flows::{FlowOptions, run_flow_close_child, run_flows_scenario};
 pub use live::run_live_scenario;
-pub use local::run_local_scenario;
 pub use multi::run_m3_live_scenario;
 pub use publication::run_publication_scenario;
 pub use publication_child::run_crash_child;
 pub use recon::{ReconOptions, ReconOutcome};
 pub use routing::run_routing_scenario;
-pub use semantic_writes::run_semantic_write_scenario;
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -179,30 +170,22 @@ pub fn has_executor(id: &str) -> bool {
         id,
         "lab-real-relay-smoke"
             | "public-relay-recon"
-            | "local-source-merge"
-            | "local-replaceable-shadow-and-cancel"
-            | "local-source-removal"
             | "explicit-read-eose"
             | "explicit-read-live-after-eose"
             | "explicit-read-cancel"
             | "multi-relay-dedup-provenance"
             | "reconnect-generation"
-            | "slow-consumer-latest-state"
             | "async-route-partial-read"
             | "explicit-route-bypass"
             | "fallback-reacts"
-            | "subscription-grouping-equivalence"
             | "explicit-publish-optimistic"
             | "mixed-relay-outcomes"
             | "cancel-pre-handoff"
             | "crash-after-acceptance"
-            | "async-recipient-routing"
-            | "hint-routing"
-            | "route-preview-parity"
-            | "app-relay-versus-fallback-profile"
             | "croissant-nip02-public-flow"
             | "croissant-simple-groups-public-flow"
-    ) || semantic_writes::has_executor(id)
+            | "dx-flows"
+    )
 }
 
 /// Runs bounded read-only reconnaissance against an explicit public relay.
@@ -390,6 +373,24 @@ fn require_complete_query(label: &str, witness: wire::QueryWitness) -> CanaryRes
         )));
     }
     Ok(())
+}
+
+/// Resolve the TCP address behind a `ws://host:port` relay URL.
+pub(crate) fn relay_socket_address(url: &str) -> CanaryResult<std::net::SocketAddr> {
+    let authority = url
+        .strip_prefix("ws://")
+        .ok_or_else(|| CanaryError::new(format!("expected a ws:// relay URL, got {url}")))?
+        .trim_end_matches('/');
+    let (host, port) = authority
+        .rsplit_once(':')
+        .ok_or_else(|| CanaryError::new(format!("relay URL {url} has no port")))?;
+    let port: u16 = port
+        .parse()
+        .map_err(|_| CanaryError::new(format!("relay URL {url} has an invalid port")))?;
+    let host: std::net::IpAddr = host
+        .parse()
+        .map_err(|_| CanaryError::new(format!("relay URL {url} must name a literal IP address")))?;
+    Ok(std::net::SocketAddr::new(host, port))
 }
 
 async fn reserve_port() -> CanaryResult<u16> {

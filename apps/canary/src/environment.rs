@@ -1,15 +1,17 @@
 //! Fail-closed resolution of machine-local canary prerequisites.
 
-use std::env;
+#[cfg(test)]
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 #[cfg(test)]
 use std::sync::OnceLock;
 
 #[cfg(test)]
 use tokio::sync::{Mutex, MutexGuard};
 
-#[cfg(unix)]
+#[cfg(all(unix, test))]
 use std::os::unix::fs::PermissionsExt;
 
 use crate::{CanaryError, CanaryResult};
@@ -17,7 +19,6 @@ use crate::{CanaryError, CanaryResult};
 #[cfg(test)]
 const CROISSANT_BINARY: &str = "/Users/pablo/.local/bin/croissant";
 const CROISSANT_SOURCE: &str = "/Users/pablo/Work/croissant";
-const LOCAL_BAZELISK: &str = "/Users/pablo/.local/bin/bazelisk";
 
 #[cfg(test)]
 static LIVE_CROISSANT_FIXTURE: OnceLock<Mutex<()>> = OnceLock::new();
@@ -43,24 +44,7 @@ pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
     Err(CanaryError::new("Croissant source checkout is unavailable"))
 }
 
-pub(crate) fn bazel_program() -> CanaryResult<PathBuf> {
-    for name in ["bazel", "bazelisk"] {
-        if let Some(path) = executable_on_path(name) {
-            return Ok(path);
-        }
-    }
-    require_executable(Path::new(LOCAL_BAZELISK), "Bazelisk").map_err(|_| {
-        CanaryError::new("neither Bazel nor Bazelisk is available for the product graph probe")
-    })
-}
-
-fn executable_on_path(name: &str) -> Option<PathBuf> {
-    let search_path = env::var_os("PATH")?;
-    env::split_paths(&search_path)
-        .map(|directory| directory.join(name))
-        .find_map(|candidate| require_executable(&candidate, name).ok())
-}
-
+#[cfg(test)]
 fn require_executable(path: &Path, label: &str) -> CanaryResult<PathBuf> {
     let metadata = fs::metadata(path)
         .map_err(|_| CanaryError::new(format!("{label} executable is unavailable")))?;
@@ -82,9 +66,7 @@ mod tests {
 
     use std::time::Duration;
 
-    use super::{
-        bazel_program, croissant_fixture_binary, croissant_fixture_guard, croissant_fixture_source,
-    };
+    use super::{croissant_fixture_binary, croissant_fixture_guard, croissant_fixture_source};
 
     #[test]
     fn current_croissant_fixture_is_resolved_explicitly() {
@@ -95,14 +77,6 @@ mod tests {
         assert_eq!(
             croissant_fixture_source().expect("Croissant source checkout"),
             Path::new("/Users/pablo/Work/croissant")
-        );
-    }
-
-    #[test]
-    fn bazelisk_is_accepted_when_bazel_is_unavailable() {
-        assert_eq!(
-            bazel_program().expect("Bazel or Bazelisk prerequisite"),
-            Path::new("/Users/pablo/.local/bin/bazelisk")
         );
     }
 
