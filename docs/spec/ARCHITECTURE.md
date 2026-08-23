@@ -2205,6 +2205,63 @@ retention.rs        terminal receipt retention
 
 **Responsibility:** own the application-visible account set and current-account input.
 
+The first delivered slice owns the bounded runtime signer attachment for each exact
+account public key. It uses the existing signer contract and protocol `PublicKey`; it
+introduces no signer wrapper or second write lifecycle.
+
+### Runtime signer contract
+
+```rust
+#[derive(Clone)]
+pub struct Session { /* private shared state */ }
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum SessionError {
+    DuplicateSigner(PublicKey),
+    MissingSigner(PublicKey),
+    SignerCapacityExceeded { limit: usize },
+    GenerationExhausted,
+}
+
+impl Session {
+    pub fn new(
+        signers: impl IntoIterator<Item = Arc<dyn Signer>>,
+    ) -> Result<Self, SessionError>;
+
+    pub fn add_signer(
+        &self,
+        signer: Arc<dyn Signer>,
+    ) -> Result<(), SessionError>;
+
+    pub fn replace_signer(
+        &self,
+        signer: Arc<dyn Signer>,
+    ) -> Result<(), SessionError>;
+
+    pub fn remove_signer(
+        &self,
+        public_key: PublicKey,
+    ) -> Result<(), SessionError>;
+
+    pub fn signer(
+        &self,
+        public_key: PublicKey,
+    ) -> Option<(u64, Arc<dyn Signer>)>;
+
+    pub fn subscribe(&self) -> watch::Receiver<u64>;
+}
+```
+
+The returned signer generation identifies one exact attachment. Publication must
+re-check that generation before installing a signer completion. The watch revision is
+only a coalescing change signal: after any change, each publication obligation reloads
+the signer for its own exact event pubkey and acts only when that attachment generation
+changed.
+
+The public `Fava` facade delegates runtime `add_signer`, explicit
+`replace_signer`, and `remove_signer` operations to this owner. Builder-supplied
+signers seed the same `Session`; they are not copied into publication-owned state.
+
 ### Owned state
 
 - account identities;
