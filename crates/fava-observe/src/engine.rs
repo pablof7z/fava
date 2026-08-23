@@ -7,10 +7,13 @@
 //! Demand is never merged by this owner. New demand that no live request
 //! already covers enters a per-relay pending cohort behind one fixed,
 //! first-arrival-anchored window; at the window's edge the cohort is frozen and
-//! compiled by the planner **against an empty incumbent namespace**, so the
-//! merge step structurally cannot widen a request that has already reached the
-//! wire. Demand arriving after the freeze attaches to a covering incumbent or
-//! opens its own request beside it.
+//! handed to the planner **together with everything the transport actually
+//! accepted**, because a planner that could not see the incumbents would have
+//! to reopen them. The merge step still cannot widen a request that has already
+//! reached the wire: the planner removes covered demand before it groups
+//! anything, so an incumbent is never an operand of a merge. Demand arriving
+//! after the freeze attaches to a covering incumbent or opens its own request
+//! beside it.
 //!
 //! The refcount that decides withdrawal is the attribution fan-out on each live
 //! request: it closes when, and only when, the last demand it serves goes away.
