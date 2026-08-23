@@ -35,7 +35,6 @@ choosing an implementation.
 - Confirm new evidence fails before the implementation and under its named deliberate break.
 - Build vertical slices through the public `fava` API; do not stabilize empty provider frameworks.
 - Keep unfinished behavior out of public claims and link it to a local issue.
-- Do not add a Git remote or push this repository until Pablo explicitly authorizes it.
 
 ## Architecture gates
 
