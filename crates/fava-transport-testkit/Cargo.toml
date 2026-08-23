@@ -5,7 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-query.workspace = true
+fava-state.workspace = true
 fava-transport.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
 
 [lints]
 workspace = true

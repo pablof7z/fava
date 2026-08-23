@@ -1,5 +1,6 @@
 //! Multi-relay provenance and reconnect-generation evidence through the public facade.
 
+use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,7 +12,13 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration,
+    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
+    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
+use fava_transport_testkit::detached_lease;
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
@@ -48,26 +55,17 @@ impl ScriptedTransport {
 }
 
 impl Transport for ScriptedTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
             let generation = self.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
-            let relay = key.relay.clone();
+            let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
-                key,
-                generation,
-                inbound: Mutex::new(VecDeque::new()),
+                identity: RelaySessionIdentity {
+                    key: request.key,
+                    generation: OperationGeneration(generation),
+                },
+                mailbox: Arc::new(Mailbox::default()),
                 sent: Mutex::new(Vec::new()),
-                changed: Notify::new(),
-                closed: AtomicBool::new(false),
             });
             self.sessions
                 .lock()
@@ -76,35 +74,86 @@ impl Transport for ScriptedTransport {
                 .or_default()
                 .push(Arc::clone(&session));
             self.changed.notify_waiters();
-            Ok(session as Arc<dyn RelaySession>)
+            Ok(detached_lease(session as Arc<dyn RelaySession>))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
-struct ScriptedSession {
-    key: RelaySessionKey,
-    generation: u64,
-    inbound: Mutex<VecDeque<Result<String, TransportError>>>,
-    sent: Mutex<Vec<String>>,
+#[derive(Default)]
+struct Mailbox {
+    inbound: Mutex<VecDeque<Result<RelayInbound, TransportError>>>,
     changed: Notify,
     closed: AtomicBool,
 }
 
+struct ScriptedStream {
+    mailbox: Arc<Mailbox>,
+    identity: RelaySessionIdentity,
+}
+
+impl RelayMessageStream for ScriptedStream {
+    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
+        Box::pin(async move {
+            loop {
+                if let Some(item) = self.mailbox.inbound.lock().expect("session lock").pop_front() {
+                    return item;
+                }
+                if self.mailbox.closed.load(Ordering::SeqCst) {
+                    return Err(TransportError::Closed(self.identity.clone()));
+                }
+                self.mailbox.changed.notified().await;
+            }
+        })
+    }
+
+    fn close(&mut self) {}
+}
+
+struct ScriptedSession {
+    identity: RelaySessionIdentity,
+    mailbox: Arc<Mailbox>,
+    sent: Mutex<Vec<String>>,
+}
+
 impl ScriptedSession {
+    fn generation(&self) -> u64 {
+        self.identity.generation.0
+    }
+
     fn receive(&self, message: &RelayMessage<'_>) {
-        self.inbound
+        let frame = serde_json::to_string(message).expect("message encodes");
+        self.mailbox
+            .inbound
             .lock()
             .expect("session lock")
-            .push_back(Ok(serde_json::to_string(message).expect("message encodes")));
-        self.changed.notify_one();
+            .push_back(Ok(RelayInbound::Frame {
+                identity: self.identity.clone(),
+                frame: frame.into_bytes(),
+                received_at: fava_state::Timestamp::now(),
+            }));
+        self.mailbox.changed.notify_one();
     }
 
     fn disconnect(&self) {
-        self.inbound
+        self.mailbox
+            .inbound
             .lock()
             .expect("session lock")
-            .push_back(Err(TransportError::Disconnected("injected".to_owned())));
-        self.changed.notify_one();
+            .push_back(Ok(RelayInbound::Disconnected {
+                identity: self.identity.clone(),
+                reason: TransportFailure::Disconnected {
+                    detail: BoundedReason::new("injected"),
+                },
+            }));
+        self.mailbox.changed.notify_one();
     }
 
     fn subscription(&self) -> SubscriptionId {
@@ -127,55 +176,46 @@ impl ScriptedSession {
 }
 
 impl RelaySession for ScriptedSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
-
-    fn generation(&self) -> u64 {
-        self.generation
+    fn identity(&self) -> RelaySessionIdentity {
+        self.identity.clone()
     }
 
     fn send(
         &self,
-        frame: String,
+        frame: Vec<u8>,
+        correlation: HandoffCorrelation,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
         Box::pin(async move {
-            if self.closed.load(Ordering::SeqCst) {
+            if self.mailbox.closed.load(Ordering::SeqCst) {
                 return HandoffOutcome::NotHandedOff {
-                    reason: "closed".to_owned(),
+                    identity: self.identity.clone(),
+                    correlation,
+                    reason: TransportFailure::SessionClosed,
                 };
             }
-            self.sent.lock().expect("session lock").push(frame);
-            HandoffOutcome::HandedOff
-        })
-    }
-
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
-        Box::pin(async move {
-            loop {
-                if let Some(message) = self.inbound.lock().expect("session lock").pop_front() {
-                    return message;
-                }
-                if self.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed);
-                }
-                self.changed.notified().await;
+            self.sent
+                .lock()
+                .expect("session lock")
+                .push(String::from_utf8_lossy(&frame).into_owned());
+            HandoffOutcome::HandedOff {
+                identity: self.identity.clone(),
+                correlation,
             }
         })
     }
 
-    fn close(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
+    fn messages(&self) -> Box<dyn RelayMessageStream> {
+        Box::new(ScriptedStream {
+            mailbox: Arc::clone(&self.mailbox),
+            identity: self.identity.clone(),
+        })
+    }
+
+    fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
-            self.closed.store(true, Ordering::SeqCst);
-            self.changed.notify_waiters();
-            Ok(())
+            self.mailbox.closed.store(true, Ordering::SeqCst);
+            self.mailbox.changed.notify_waiters();
+            Ok(ReleaseOutcome::Closed)
         })
     }
 }

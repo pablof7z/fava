@@ -1,5 +1,6 @@
 //! Public receipt-summary and write-settlement evidence.
 
+use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -13,7 +14,10 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
+    TransportFailure, TransportShutdownFuture, Transport,
+};
 use fava_write::{
     EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, ReceiptOutcome,
     SignatureState, WriteId, WriteIntent, WriteRouting,
@@ -472,15 +476,22 @@ impl ManualLane {
 struct NoopTransport;
 
 impl Transport for NoopTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let _ = request;
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "manual publisher owns the result".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("manual publisher owns the result"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }

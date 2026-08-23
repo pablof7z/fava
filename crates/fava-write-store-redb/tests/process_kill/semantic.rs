@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -19,8 +20,11 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
-use fava_state::{CacheMutation, CachedEvent, RelayEvidence};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_state::{CacheMutation, CachedEvent, RelayEvidence, RelaySessionKey};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
+    TransportFailure, TransportShutdownFuture, Transport,
+};
 use fava_write::{Receipt, ReceiptId, WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
@@ -426,16 +430,23 @@ impl Publisher for AcknowledgingPublisher {
 struct NoopTransport;
 
 impl Transport for NoopTransport {
-    fn open_session(
-        &self,
-        _key: fava_state::RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let _ = request;
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "publisher does not use transport".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("publisher does not use transport"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 

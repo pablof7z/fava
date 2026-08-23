@@ -5,14 +5,17 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-query.workspace = true
 fava-state.workspace = true
 fava-transport.workspace = true
 futures-util.workspace = true
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 tokio-tungstenite.workspace = true
 
 [dev-dependencies]
 fava-transport-testkit.workspace = true
+futures-util.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
 
 [lints]
 workspace = true
