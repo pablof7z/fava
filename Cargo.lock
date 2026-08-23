@@ -582,6 +582,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "thiserror",
