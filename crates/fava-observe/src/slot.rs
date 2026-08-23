@@ -25,8 +25,9 @@ pub(crate) struct Slot {
     pub(crate) completeness: BTreeMap<SubscriptionId, EoseCompleteness>,
     /// Wire subscriptions the relay has sent EOSE for on this generation.
     pub(crate) settled: BTreeMap<SubscriptionId, bool>,
-    /// Strictly increasing across this transport session and never reused,
-    /// because wire identity is minted from it.
+    /// The last plan revision this slot issued. The counter it is stamped
+    /// from lives on the engine and outlives the slot, because wire identity
+    /// is minted from it and a slot dies whenever its relay's demand drains.
     pub(crate) revision: PlanRevision,
     /// A fixed admission window is pending for this relay.
     pub(crate) armed: bool,
@@ -57,8 +58,7 @@ impl Slot {
     ///
     /// Work already issued is cancelled at its next boundary rather than
     /// aborted, so an operation that produced a provider resource always
-    /// reaches the owner and the owner always releases it. The plan revision
-    /// keeps climbing: an id minted for a closed request must never come back.
+    /// reaches the owner and the owner always releases it.
     pub(crate) fn advance(&mut self, root: &CancellationToken) -> OperationGeneration {
         self.cancel.cancel();
         self.cancel = root.child();
@@ -69,12 +69,6 @@ impl Slot {
         self.busy = false;
         self.generation = self.generation.next();
         self.generation
-    }
-
-    /// The next plan revision for this transport session.
-    pub(crate) fn next_revision(&mut self) -> PlanRevision {
-        self.revision = PlanRevision(self.revision.0.saturating_add(1));
-        self.revision
     }
 
     /// Demand whose traffic no running subscription already carries.
