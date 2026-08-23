@@ -367,3 +367,24 @@ any other phase is measured, CI must run the workspace test suite, clippy, the
 falsifier corpus, and the canary, and must record the `Red:`/`Mutation:` evidence
 the testing guide already requires. Until that lands, every "green" verdict this
 remediation produces would carry exactly the same defect as the ones it revokes.
+
+---
+
+## Open cross-owner question raised during remediation (2026-08-23)
+
+**Total router refusal makes an automatic write terminal immediately.**
+
+After the routing failure-isolation fix (`chain::open` now isolates a router's
+refusal and returns `Ok` with an attributed shortfall), an automatic write whose
+routers all refuse settles as terminal `NoDestination` with coverage reported
+settled-absent. The publication owner reads that as contradicting WRITE-027,
+which requires the receipt to stay non-terminal while the shortfall is typed and
+the write remains open to later destinations.
+
+Raised by the publication agent, which deliberately did not act on it: the
+behaviour belongs to the routing owner, and the routing change's own rationale
+was to stop fabricating absence. Two owners, one disputed transition.
+
+Neither agent was willing to overrule the other, which is correct. Resolve in
+Phase 07.8 or 07.9 with a falsifier that states which outcome WRITE-027 requires
+when every router refuses but the chain itself is healthy.
