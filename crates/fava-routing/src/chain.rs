@@ -156,6 +156,12 @@ fn isolate<T>(
 /// Ordered per-router contributions plus the chain's own bounded shortfalls.
 struct Composer {
     contributions: Vec<RouteContribution>,
+    /// Whether each configured router has produced a retained contribution.
+    ///
+    /// A default contribution is indistinguishable from an answer of "I cover
+    /// nothing", so absence of coverage is only a routing *fact* once every
+    /// configured router has actually answered.
+    answered: Vec<bool>,
     shortfalls: Vec<String>,
     discarded: usize,
     targets: BTreeSet<RouteTarget>,
@@ -165,6 +171,7 @@ impl Composer {
     fn new(routers: usize, targets: BTreeSet<RouteTarget>) -> Self {
         Self {
             contributions: vec![RouteContribution::default(); routers],
+            answered: vec![false; routers],
             shortfalls: Vec::new(),
             discarded: 0,
             targets,
@@ -184,14 +191,29 @@ impl Composer {
     /// combined result would leave routing bounds.
     fn accept(&mut self, index: usize, router: &str, contribution: RouteContribution) {
         let previous = std::mem::replace(&mut self.contributions[index], contribution);
+        let answered = std::mem::replace(&mut self.answered[index], true);
         if let Err(error) = validate_combined(&self.merged()) {
             self.contributions[index] = previous;
+            self.answered[index] = answered;
             self.record(&bounded_error(router, &error));
         }
     }
 
+    /// Whether every configured router has produced a retained contribution.
+    ///
+    /// A router that refuses, panics, or ends *after* a coherent contribution
+    /// keeps that contribution and therefore keeps its answer. Only a router
+    /// that never produced one is outstanding.
+    fn all_answered(&self) -> bool {
+        self.answered.iter().all(|answered| *answered)
+    }
+
     fn merged(&self) -> RouteContribution {
-        complete_targets(combine(&self.contributions), &self.targets)
+        complete_targets(
+            combine(&self.contributions),
+            &self.targets,
+            self.all_answered(),
+        )
     }
 
     /// Complete current chain contribution, always within routing bounds.
@@ -214,7 +236,14 @@ impl Composer {
 
     /// Plan visible to the router at `index`, built from earlier routers only.
     fn upstream_plan(&self, index: usize, revision: u64) -> RoutePlan {
-        let upstream = complete_targets(combine(&self.contributions[..index]), &self.targets);
+        // Routers from `index` onward have not been asked yet, so an upstream
+        // view can never report a target as settled absent.
+        let answered = index >= self.contributions.len() && self.all_answered();
+        let upstream = complete_targets(
+            combine(&self.contributions[..index]),
+            &self.targets,
+            answered,
+        );
         RoutePlan::from_contribution(revision, &upstream).unwrap_or_default()
     }
 
@@ -401,21 +430,31 @@ fn combine(contributions: &[RouteContribution]) -> RouteContribution {
     combined
 }
 
+/// Fill every request target no contribution mentioned.
+///
+/// Settled absence is a positive routing fact and must have an answer behind
+/// it: an unmentioned target settles absent only when every configured router
+/// answered. Otherwise it stays outstanding, in both the coverage map and the
+/// unresolved set, so every consumer of the contribution sees the same fact.
 fn complete_targets(
     mut contribution: RouteContribution,
     targets: &BTreeSet<RouteTarget>,
+    all_answered: bool,
 ) -> RouteContribution {
     for target in targets {
-        contribution
-            .coverage
-            .entry(target.clone())
-            .or_insert_with(|| {
-                if contribution.unresolved.contains(target) {
-                    CoverageState::Unresolved
-                } else {
-                    CoverageState::SettledAbsent
-                }
-            });
+        if contribution.coverage.contains_key(target) {
+            continue;
+        }
+        if all_answered && !contribution.unresolved.contains(target) {
+            contribution
+                .coverage
+                .insert(target.clone(), CoverageState::SettledAbsent);
+        } else {
+            contribution
+                .coverage
+                .insert(target.clone(), CoverageState::Unresolved);
+            contribution.unresolved.insert(target.clone());
+        }
     }
     contribution
 }

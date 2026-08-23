@@ -15,7 +15,8 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{
-    CoverageState, RouteContribution, RouteDestination, RouteRequest, RouteTarget, Router,
+    CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
+    Router, RouterError, RouterSession,
 };
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
@@ -27,6 +28,7 @@ use fava_write::{Kind, Tag};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
+use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
 async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
@@ -120,6 +122,96 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     assert_eq!(terminal.destinations().len(), 4);
     assert_eq!(publisher.count(), 4);
     assert!(publisher.all_once_under(write.receipt_id()));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_router_refusing_to_open_leaves_the_write_open_with_an_attributed_shortfall() {
+    let author = Keys::generate();
+    let recipient = Keys::generate();
+    let quiet = Arc::new(DelayedRouter::new(
+        "quiet-test",
+        RouteContribution::default(),
+    ));
+    let refusing = Arc::new(RefusingRouter::new("refusing-test"));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let routers: Vec<Arc<dyn Router>> = vec![quiet.clone(), refusing];
+    let fava = Fava::builder()
+        .event_cache(Arc::new(MemoryEventCache::default()))
+        .write_store(Arc::new(MemoryWriteStore::default()))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .transport(Arc::new(NoopTransport))
+        .routers(routers)
+        .signer(Arc::new(LocalSigner::new(author.clone())))
+        .publisher(Arc::clone(&publisher))
+        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
+        .build()
+        .expect("assembly");
+    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+        .tags([Tag::parse(["p", &recipient.public_key().to_hex()]).expect("p tag")])
+        .build()
+        .expect("event");
+
+    let write = fava.publish(event).expect("accepted");
+    wait_until(|| {
+        write
+            .receipt()
+            .is_ok_and(|receipt| receipt.route_revision >= 1)
+    })
+    .await;
+    let receipt = write.receipt().expect("receipt exists");
+
+    assert_eq!(
+        receipt.outcome,
+        ReceiptOutcome::Open,
+        "a router that never answered cannot make the write terminal: {:?}",
+        receipt.route_shortfalls
+    );
+    assert!(
+        !receipt.route_settled,
+        "settled absence requires every configured router to have answered"
+    );
+    assert!(
+        receipt
+            .route_shortfalls
+            .iter()
+            .any(|shortfall| shortfall.contains("refusing-test")),
+        "the refusal must be attributed to the router instance: {:?}",
+        receipt.route_shortfalls
+    );
+    assert_eq!(publisher.count(), 0);
+    assert_eq!(quiet.open_count(), 1);
+}
+
+struct RefusingRouter {
+    name: String,
+}
+
+impl RefusingRouter {
+    fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+impl Router for RefusingRouter {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn preview(
+        &self,
+        _request: &RouteRequest,
+        _upstream: &RoutePlan,
+    ) -> Result<RouteContribution, RouterError> {
+        Err(RouterError::Refused("test refusal".to_owned()))
+    }
+
+    fn open(
+        &self,
+        _request: RouteRequest,
+        _upstream: watch::Receiver<Arc<RoutePlan>>,
+    ) -> Result<Box<dyn RouterSession>, RouterError> {
+        Err(RouterError::Refused("test refusal".to_owned()))
+    }
 }
 
 fn contribution(
