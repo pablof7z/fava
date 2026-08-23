@@ -27,7 +27,7 @@ use fava_query::{BoundedText, OperationGeneration, RelaySourceState};
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    InstalledSubscription, InstalledSubscriptions, RelayDemand, RelayReadConstraints,
+    InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
     SubscriptionPlan, SubscriptionPlanner, filter_covers, validate_plan,
 };
 use fava_transport::{
@@ -109,6 +109,18 @@ pub(crate) struct Engine {
     pub(crate) reports: Reports,
     pub(crate) inbox: tokio::sync::mpsc::Receiver<Report>,
     pub(crate) slots: BTreeMap<RelaySessionKey, Slot>,
+    /// Source of every plan revision this owner issues, for every relay.
+    ///
+    /// Wire identity is minted from a revision, so a revision reused inside
+    /// one transport session hands a reopened subscription the identity of a
+    /// closed one — which `GOALS:426` (QUERY-010) forbids by name. The counter
+    /// therefore lives here rather than in [`Slot`]: a slot is released the
+    /// moment its relay's demand drains, while the socket behind it survives
+    /// for as long as any other lease holder wants it, and the standard
+    /// assembly gives publication a lease on the very same session key.
+    /// Engine-wide monotonicity is stronger than the promise needs and costs
+    /// one `u64` for the life of the engine.
+    pub(crate) revision: PlanRevision,
 }
 
 impl Engine {
@@ -128,6 +140,7 @@ impl Engine {
             reports: Reports { sender },
             inbox,
             slots: BTreeMap::new(),
+            revision: PlanRevision(0),
         };
         runtime
             .spawn_cancellable(TaskName("observe.engine"), root, engine.run())
@@ -297,6 +310,12 @@ impl Engine {
         }
         self.publish_states(relay, demand, generation, &RelaySourceState::Connecting);
     }
+    /// The next plan revision, never reused for the life of this engine.
+    fn next_revision(&mut self) -> PlanRevision {
+        self.revision = PlanRevision(self.revision.0.saturating_add(1));
+        self.revision
+    }
+
     /// Arm one fixed, first-arrival-anchored admission window.
     pub(crate) fn arm(&self, relay: &RelaySessionKey, generation: OperationGeneration) {
         operations::arm_admission(
@@ -322,7 +341,6 @@ impl Engine {
         let demand = self.registry.desired().remove(relay).unwrap_or_default();
         let session;
         let installed;
-        let revision;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
                 return false;
@@ -342,7 +360,12 @@ impl Engine {
             };
             session = live;
             installed = slot.installed.clone();
-            revision = slot.next_revision();
+        }
+        let revision = self.next_revision();
+        if let Some(slot) = self.slots.get_mut(relay) {
+            // The last revision this slot issued, so a completion for an
+            // earlier one is refused rather than installed.
+            slot.revision = revision;
         }
         let constraints = RelayReadConstraints::unknown();
         let planned = self
