@@ -4,6 +4,14 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
+# Source set exported for the cross-crate architecture gates that assert the
+# universal owners stay kind-blind.
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["src/**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_observe",

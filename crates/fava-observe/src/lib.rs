@@ -53,7 +53,7 @@ impl Observer {
             .event_cache
             .open(&query)
             .map_err(|error| ObserveError::SourceOpen {
-                role: SourceKind::EventCache,
+                role: Box::new(SourceKind::EventCache),
                 error,
             })?;
         let writes = match self.write_store.open(&query) {
@@ -62,7 +62,7 @@ impl Observer {
                 let mut cache_changes = cache.changes;
                 cache_changes.close();
                 return Err(ObserveError::SourceOpen {
-                    role: SourceKind::WriteStore,
+                    role: Box::new(SourceKind::WriteStore),
                     error,
                 });
             }
@@ -260,8 +260,11 @@ pub enum ObserveError {
     /// One named local source could not establish its initial boundary.
     #[error("{role:?} failed to open: {error}")]
     SourceOpen {
-        /// Query-source role.
-        role: SourceKind,
+        /// Query-source role. Boxed because [`SourceKind::LiveRelay`] carries a
+        /// whole [`fava_state::RelaySessionKey`] — 120 bytes of relay URL that
+        /// would otherwise widen every `Result<_, ObserveError>` on the open
+        /// path, which is exactly what `clippy::result_large_err` refuses.
+        role: Box<SourceKind>,
         /// Scoped provider refusal.
         error: QuerySourceError,
     },
@@ -374,11 +377,9 @@ mod tests {
         let result = observer.open(Query::events().cache_only());
 
         assert!(matches!(
-            result,
-            Err(ObserveError::SourceOpen {
-                role: SourceKind::WriteStore,
-                ..
-            })
+            &result,
+            Err(ObserveError::SourceOpen { role, .. })
+                if **role == SourceKind::WriteStore
         ));
         assert_eq!(closes.load(Ordering::SeqCst), 1);
     }

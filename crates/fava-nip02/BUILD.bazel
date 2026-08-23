@@ -45,3 +45,26 @@ rust_test(
         "//crates/fava-write:lib",
     ],
 )
+
+# `tests/architecture.rs` reads this BUILD file and the crate's Cargo.toml and
+# sources through `include_str!`, so every file it reads is compile_data. Its
+# recursive source walk resolves through `BUILD_WORKSPACE_DIRECTORY` when Bazel
+# sets it and falls back to `CARGO_MANIFEST_DIR` otherwise.
+rust_test(
+    name = "architecture",
+    srcs = ["tests/architecture.rs"],
+    crate_name = "fava_nip02_architecture",
+    edition = crate_edition(),
+    deps = [],
+    data = [
+        "//crates/fava-observe:architecture_sources",
+        "//crates/fava-publication:architecture_sources",
+        "//crates/fava-query:architecture_sources",
+        "//crates/fava-write:architecture_sources",
+        "//crates/fava:architecture_sources",
+    ],
+    compile_data = glob(["src/**/*.rs"]) + [
+        "BUILD.bazel",
+        "Cargo.toml",
+    ],
+)

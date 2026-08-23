@@ -68,6 +68,31 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      # The three live-query ownership falsifiers imported in `af2097a`. They
+      # encode the Wave 3 / Phase 07.6 target architecture — relay-independent
+      # local observation, shared relay work across equivalent observations, and
+      # exact cancellation of provisional relay work — and they are RED on
+      # purpose until 07.6 delivers it. They are not deleted, not weakened, and
+      # not `#[ignore]`d: an ignored test proves nothing and stops reporting.
+      #
+      # CI splits the corpus around them instead, so the expectation is
+      # falsifiable in both directions:
+      #
+      #   * the main run skips exactly these three, so every other test in the
+      #     workspace still gates the merge and any genuine regression is red;
+      #   * the second step runs exactly these three and requires the run to
+      #     report `0 passed; 3 failed`. If one starts passing, the count no
+      #     longer matches and the job fails loudly — which is the signal to
+      #     promote it out of this list, not to widen the list.
+      #
+      # Renaming or deleting one of the three also fails: the skip stops
+      # matching (main run turns red) and the filtered run reports a different
+      # count (second step turns red).
+      EXPECTED_RED_UNTIL_07_6: >-
+        relay_establishment_does_not_delay_the_coherent_local_observation
+        equivalent_observations_share_relay_work_until_the_last_handle_closes
+        cancelling_observe_while_another_relay_opens_closes_provisional_work
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -75,7 +100,27 @@ jobs:
           toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
       - name: Test workspace
-        run: cargo test --workspace --all-targets --locked
+        run: |
+          set -euo pipefail
+          skip=()
+          for name in $EXPECTED_RED_UNTIL_07_6; do
+            skip+=(--skip "$name")
+          done
+          cargo test --workspace --all-targets --locked -- "${skip[@]}"
+      - name: Assert the Phase 07.6 falsifiers are still red
+        run: |
+          set -euo pipefail
+          names=($EXPECTED_RED_UNTIL_07_6)
+          expected="test result: FAILED. 0 passed; ${#names[@]} failed"
+          output=$(cargo test --locked --package fava --test explicit_live \
+            -- --exact "${names[@]}" 2>&1) || true
+          echo "$output"
+          if ! printf '%s' "$output" | grep -qF "$expected"; then
+            echo "::error::expected '$expected' from the Phase 07.6 falsifiers." >&2
+            echo "If one now passes, Phase 07.6 landed for it: remove it from" >&2
+            echo "EXPECTED_RED_UNTIL_07_6 so the main run gates it from now on." >&2
+            exit 1
+          fi
       # `--all-targets` skips doctests; the public API examples are behavioral
       # evidence too.
       - name: Test workspace doctests
@@ -99,14 +144,13 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Clippy canary
         run: cargo clippy --manifest-path apps/canary/Cargo.toml --all-targets --locked -- -D warnings
-      # `--locked` is deliberately absent here and in the falsifiers job:
-      # `falsifiers/external-null-cache/Cargo.lock` is committed stale (it is
-      # missing the `fava-query` edge that `fava-publication` added), so
-      # `cargo metadata --locked` refuses it today. Regenerating that lock is a
-      # falsifier-owned change, not a CI change; restore `--locked` once it
-      # lands so dependency drift stays a CI failure.
+      # Both falsifier lock files are current and both are checked with
+      # `--locked`, so dependency drift in a standalone falsifier workspace is a
+      # CI failure rather than a silent re-resolve. Do not drop `--locked` to get
+      # past a stale lock: regenerate the lock, because a stale one means the
+      # falsifier is no longer proving what the workspace actually depends on.
       - name: Clippy external null-cache falsifier
-        run: cargo clippy --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets --locked -- -D warnings
       - name: Clippy external semantic-capability falsifier
         run: cargo clippy --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets --locked -- -D warnings
       - name: Check formatting
@@ -124,10 +168,8 @@ jobs:
       # Both falsifier packages are standalone workspaces that consume Fava only
       # through its public contracts, so they are the replaceability proof and
       # they run headless with no relay and no network.
-      # See the clippy job: this lock file is committed stale, so `--locked`
-      # cannot be applied to this package yet.
       - name: External null-cache proof
-        run: cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets
+        run: cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets --locked
       - name: External semantic-capability proof
         run: cargo test --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets --locked
 

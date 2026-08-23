@@ -43,7 +43,7 @@ pub fn harness(keys: Keys) -> Harness {
         .event_cache(Arc::new(MemoryEventCache::default()))
         .write_store(Arc::new(MemoryWriteStore::default()))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .subscription_planner(Arc::new(StandardSubscriptionPlanner::default()))
+        .subscription_planner(Arc::new(StandardSubscriptionPlanner))
         .transport(Arc::clone(&transport))
         .signer(Arc::new(LocalSigner::new(keys)))
         .materializers([selected_materializer()])
