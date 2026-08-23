@@ -11,13 +11,13 @@ use fava_subscriptions::{
 };
 use fava_wire::SubscriptionId;
 
-use crate::{Candidate, wire};
+use crate::wire;
 
 /// Assemble the desired candidates into a plan expressed against `installed`.
 pub(crate) fn assemble(
     relay: &RelaySessionKey,
     revision: PlanRevision,
-    candidates: Vec<Candidate>,
+    candidates: Vec<PlannedSubscription>,
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
     mut shortfalls: Vec<SubscriptionShortfall>,
@@ -74,11 +74,11 @@ pub(crate) fn assemble(
 /// else is stepped to the next free id, and a declared id space too small to
 /// hold one more subscription becomes typed shortfall rather than a collision.
 fn resolve_identity(
-    candidates: Vec<Candidate>,
+    candidates: Vec<PlannedSubscription>,
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Vec<Candidate> {
+) -> Vec<PlannedSubscription> {
     let installed_ids: BTreeSet<SubscriptionId> = installed.ids().cloned().collect();
     let mut taken: BTreeSet<SubscriptionId> = BTreeSet::new();
     let mut resolved = Vec::with_capacity(candidates.len());
@@ -96,7 +96,7 @@ fn resolve_identity(
         };
         if let Some(id) = id {
             taken.insert(id.clone());
-            resolved.push(Candidate { id, ..candidate });
+            resolved.push(PlannedSubscription { id, ..candidate });
             continue;
         }
         let maximum = constraints

@@ -126,13 +126,50 @@ pub struct CachedEvent {
     pub evidence: RelayEvidence,
 }
 
+/// Why Nostr event-state rules removed one retained event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RetractionCause {
+    /// An authorized NIP-09 deletion event covers the retained event.
+    Deleted {
+        /// The kind-5 event that authorized the retraction and remains retained
+        /// as the tombstone preventing resurrection.
+        deletion: EventId,
+    },
+    /// Another event won the same replaceable coordinate.
+    Superseded {
+        /// The coordinate whose current winner changed.
+        coordinate: EventCoordinate,
+    },
+    /// The event's NIP-40 expiration timestamp has passed.
+    Expired,
+    /// The provider removed retained state under its own bound or maintenance
+    /// rather than under a Nostr rule.
+    Evicted,
+}
+
 /// One atomic mutation decided by Nostr event-state rules.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CacheMutation {
     /// Insert a new event or merge evidence for the same event id.
     Upsert(CachedEvent),
-    /// Retract one retained event id.
-    Retract(EventId),
+    /// Retract one retained event id for an exact cause.
+    Retract {
+        /// The retained event removed.
+        event_id: EventId,
+        /// The rule that removed it.
+        cause: RetractionCause,
+    },
+}
+
+impl CacheMutation {
+    /// Whether the mutation removes retained state.
+    ///
+    /// A retraction is always applicable: a provider may refuse an insertion
+    /// for capacity, but never a removal.
+    #[must_use]
+    pub const fn is_retraction(&self) -> bool {
+        matches!(self, Self::Retract { .. })
+    }
 }
 
 impl CachedEvent {
@@ -227,13 +264,19 @@ pub fn admission_mutations(
     }
 
     if incoming.event.kind == Kind::EventDeletion {
-        let mut mutations = vec![CacheMutation::Upsert(incoming.clone())];
-        mutations.extend(
-            current
-                .iter()
-                .filter(|known| deletion_applies(&incoming.event, &known.event))
-                .map(|known| CacheMutation::Retract(known.event.id)),
-        );
+        // Retract first: a bounded provider must be able to free room before it
+        // records the kind-5 tombstone, so a full cache can still delete.
+        let mut mutations: Vec<_> = current
+            .iter()
+            .filter(|known| deletion_applies(&incoming.event, &known.event))
+            .map(|known| CacheMutation::Retract {
+                event_id: known.event.id,
+                cause: RetractionCause::Deleted {
+                    deletion: incoming.event.id,
+                },
+            })
+            .collect();
+        mutations.push(CacheMutation::Upsert(incoming));
         return mutations;
     }
 
@@ -265,7 +308,12 @@ pub fn admission_mutations(
         let mut mutations: Vec<_> = same_coordinate
             .iter()
             .filter(|known| !retained.contains(&known.event.id))
-            .map(|known| CacheMutation::Retract(known.event.id))
+            .map(|known| CacheMutation::Retract {
+                event_id: known.event.id,
+                cause: RetractionCause::Superseded {
+                    coordinate: coordinate.clone(),
+                },
+            })
             .collect();
         if retained.contains(&incoming.event.id) && evidence_changed {
             mutations.push(CacheMutation::Upsert(incoming));
@@ -321,11 +369,16 @@ pub fn expiration_mutations(current: &[CachedEvent], now: Timestamp) -> Vec<Cach
     current
         .iter()
         .filter(|known| event_is_expired(&known.event, now))
-        .map(|known| CacheMutation::Retract(known.event.id))
+        .map(|known| CacheMutation::Retract {
+            event_id: known.event.id,
+            cause: RetractionCause::Expired,
+        })
         .collect()
 }
 
-fn event_is_expired(event: &Event, now: Timestamp) -> bool {
+/// Whether a NIP-40 expiration timestamp has passed at an exact time.
+#[must_use]
+pub fn event_is_expired(event: &Event, now: Timestamp) -> bool {
     event.tags.expiration().is_some_and(|expiry| expiry <= now)
 }
 

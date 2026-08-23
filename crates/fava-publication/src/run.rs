@@ -118,7 +118,7 @@ impl Publication {
                         }
                         Some(Err(kind)) => {
                             if let Some(state) = &mut semantic {
-                                self.record_source_failure(&current, state, kind);
+                                self.record_source_failure(&current, state, &kind);
                             }
                         }
                         None => {
@@ -199,14 +199,10 @@ impl Publication {
             };
             receipt = current;
         }
+        // Route acquisition begins independently of signer acquisition: a refused
+        // router chain commits a typed route shortfall on the receipt and the write
+        // stays open, but it never gates signing or abandons durable custody.
         let (routes, _) = self.open_routes(&receipt);
-        if matches!(receipt.routing, WriteRouting::Automatic)
-            && routes.is_none()
-            && semantic.is_none()
-        {
-            self.finished(receipt_id);
-            return None;
-        }
         let Some(current) = self.read_receipt(receipt_id, cancel).await else {
             if let Some(semantic) = semantic {
                 semantic.close();
@@ -242,11 +238,12 @@ impl Publication {
         }
     }
 
-    fn record_source_failure(&self, receipt: &Receipt, state: &SemanticState, kind: SourceKind) {
+    fn record_source_failure(&self, receipt: &Receipt, state: &SemanticState, kind: &SourceKind) {
         let source = state.sources.selected(state.selected_id);
         let label = match kind {
             SourceKind::EventCache => "event-cache",
             SourceKind::WriteStore => "write-store",
+            SourceKind::LiveRelay { .. } => "live-relay",
         };
         let _ = self.store.record_materialization_failure(
             receipt.write_id,

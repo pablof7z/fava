@@ -211,35 +211,11 @@ fn nonmatching_local_replacement_shadows_cached_predecessor_until_cancelled() {
     assert_eq!(result_ids(&after_cancel), BTreeSet::from([predecessor.id]));
 }
 
-#[test]
-fn local_replacement_without_relay_evidence_shadows_qualified_cached_predecessor() {
-    let keys = Keys::generate();
-    let predecessor = signed_event(&keys, Kind::ContactList, 10, "predecessor");
-    let successor = unsigned_event(&keys, Kind::ContactList, 20, "successor");
-    let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
-    let cache = snapshot(
-        SourceKind::EventCache,
-        vec![SourceEvent::Cached(CachedEvent::new(
-            predecessor.clone(),
-            relay_evidence(&["wss://relay.example"]),
-        ))],
-    );
-    let writes = snapshot(SourceKind::WriteStore, vec![local_unsigned(successor)]);
-    let query = Query::events()
-        .kind(Kind::ContactList)
-        .only_from_relays([relay])
-        .expect("relay set is non-empty");
-
-    let overlaid = StandardQueryEvaluator
-        .evaluate(&query, &[cache.clone(), writes])
-        .expect("evaluation succeeds");
-    assert!(overlaid.events.is_empty());
-
-    let after_cancel = StandardQueryEvaluator
-        .evaluate(&query, &[cache])
-        .expect("evaluation succeeds");
-    assert_eq!(result_ids(&after_cancel), BTreeSet::from([predecessor.id]));
-}
+// `local_replacement_without_relay_evidence_shadows_qualified_cached_predecessor` stood
+// here and asserted that a write-store-only successor empties an `only_from_relays`
+// query. That contradicts `docs/spec/partial-spec-api-semantics.md:200` and `:214`, so it
+// is deleted rather than relaxed. The specified behavior is proved by
+// `relay_authority.rs::unpublished_local_event_cannot_hide_a_relay_qualified_predecessor`.
 
 #[test]
 fn asking_relays_and_trusting_only_relays_are_distinct() {

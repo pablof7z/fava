@@ -10,16 +10,17 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from rust_declarations import nominal_declarations
+
 
 PUBLIC_NOUN = re.compile(
-    r"^\s*pub\s+(?:unsafe\s+)?(?:struct|enum|trait|type)\s+([A-Z][A-Za-z0-9_]*)",
+    r"^\s*pub\s+(?:unsafe\s+)?(?:struct|enum|trait|type|union)\s+([A-Z][A-Za-z0-9_]*)",
     re.MULTILINE,
 )
-NOMINAL_NOUN = re.compile(
-    r"^\s*(?:pub(?:\s*\([^\n)]*\))?\s+)?"
-    r"(?:unsafe\s+)?(?:struct|enum|trait|type)\s+([A-Z][A-Za-z0-9_]*)",
-    re.MULTILINE,
-)
+# Build output and retained canary evidence (`apps/canary/runs/`) hold no
+# package manifest and can be very large.
+IGNORED_DIRECTORY_NAMES = frozenset({"target", "node_modules", "runs"})
+RUST_SOURCE_DIRECTORIES = ("src", "tests", "benches", "examples")
 SPEC_CRATE = re.compile(r"\b(fava(?:-[a-z0-9]+)+)(?![-a-z0-9])")
 CAMEL_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 REQUIRED_TERM_FIELDS = {"name", "source", "meaning", "owner", "symbols", "crates"}
@@ -137,16 +138,34 @@ def load_registry(path: Path) -> tuple[Registry | None, list[str]]:
     ), problems
 
 
-def crate_name(manifest: Path) -> str:
-    """Read a package name from one crate manifest."""
-    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    return str(data["package"]["name"])
+def package_manifests(root: Path) -> list[Path]:
+    """Return every Cargo package manifest in the repository."""
+    manifests: list[Path] = []
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if entry.name.startswith(".") or entry.name.startswith("bazel-"):
+                    continue
+                if entry.name in IGNORED_DIRECTORY_NAMES:
+                    continue
+                pending.append(entry)
+            elif entry.name == "Cargo.toml":
+                manifests.append(entry)
+    return sorted(manifests)
 
 
 def collect_rust_vocabulary(
     root: Path,
 ) -> tuple[set[str], set[str], set[str], list[str]]:
-    """Collect public and internal nominal symbols and crates under crates/."""
+    """Collect public and internal nominal symbols and every package name."""
     public_symbols: set[str] = set()
     nominal_symbols: set[str] = set()
     crates: set[str] = set()
@@ -160,26 +179,39 @@ def collect_rust_vocabulary(
             [f"missing crates directory: {crates_root}"],
         )
 
-    for manifest in sorted(crates_root.glob("*/Cargo.toml")):
+    for manifest in package_manifests(root):
         try:
-            package = crate_name(manifest)
-        except (KeyError, OSError, tomllib.TOMLDecodeError) as error:
+            data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as error:
             problems.append(f"cannot read package name from {manifest}: {error}")
+            continue
+        package = data.get("package", {}).get("name")
+        if not isinstance(package, str) or not package.strip():
+            if "workspace" in data and "package" not in data:
+                continue
+            problems.append(f"cannot read package name from {manifest}")
             continue
         crates.add(package)
         rust_crate = package.replace("-", "_")
-        for source in sorted((manifest.parent / "src").rglob("*.rs")):
-            try:
-                text = source.read_text(encoding="utf-8")
-            except OSError as error:
-                problems.append(f"cannot read {source}: {error}")
-                continue
-            public_symbols.update(
-                f"{rust_crate}::{name}" for name in PUBLIC_NOUN.findall(text)
-            )
-            nominal_symbols.update(
-                f"{rust_crate}::{name}" for name in NOMINAL_NOUN.findall(text)
-            )
+        # A library crate under `crates/` owns closed Fava vocabulary at every
+        # visibility. Any other package (the canary application, the external
+        # falsifier proofs) is downstream: only the public names it declares are
+        # architectural vocabulary, its private helpers are its own business.
+        library = manifest.parent.parent == crates_root
+        for directory in RUST_SOURCE_DIRECTORIES:
+            for source in sorted((manifest.parent / directory).rglob("*.rs")):
+                try:
+                    text = source.read_text(encoding="utf-8")
+                except OSError as error:
+                    problems.append(f"cannot read {source}: {error}")
+                    continue
+                internal = library and directory == "src"
+                for name, is_public in nominal_declarations(text):
+                    if internal:
+                        nominal_symbols.add(f"{rust_crate}::{name}")
+                    if is_public:
+                        public_symbols.add(f"{rust_crate}::{name}")
+                        nominal_symbols.add(f"{rust_crate}::{name}")
     return public_symbols, nominal_symbols, crates, problems
 
 
@@ -228,10 +260,12 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
     spec_root = root / "docs" / "spec"
     if not spec_root.is_dir():
         return symbols, crates, [f"missing specification directory: {spec_root}"]
-    documents = list(spec_root.glob("*.md"))
-    planning_root = root / ".planning"
-    if planning_root.is_dir():
-        documents.extend(planning_root.rglob("*.md"))
+    # Authority is `docs/spec/**` and `docs/internals/vocabulary.toml`, nothing
+    # else. `.planning/**` records plans, reviews, and audits; harvesting them
+    # let any prose invent a crate or a symbol and flip this gate in either
+    # direction. See `.planning/audit/2026-08-23/vocabulary.md`
+    # (`vocab-planning-md-is-authority`).
+    documents = list(spec_root.rglob("*.md"))
     for document in sorted(documents):
         try:
             content = document.read_text(encoding="utf-8")
@@ -249,7 +283,7 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
 def closest_registered_noun(symbol: str, registry: Registry) -> str | None:
     """Find an approved noun embedded in an unregistered symbol."""
     candidate_parts = CAMEL_WORD.findall(symbol.rsplit("::", maxsplit=1)[-1])
-    candidate_words = tuple(part.lower() for part in candidate_parts)
+    candidate_words = words(symbol.rsplit("::", maxsplit=1)[-1])
     registered_names: list[str] = []
     for term in registry.terms:
         registered_names.append(str(term["name"]))
@@ -261,8 +295,7 @@ def closest_registered_noun(symbol: str, registry: Registry) -> str | None:
     concept_matches: list[tuple[int, int, str]] = []
     registered_parts: set[str] = set()
     for name in registered_names:
-        name_parts = CAMEL_WORD.findall(name)
-        name_words = tuple(part.lower() for part in name_parts)
+        name_words = words(name)
         registered_parts.update(name_words)
         if not name_words or len(name_words) > len(candidate_words):
             continue
@@ -280,18 +313,37 @@ def closest_registered_noun(symbol: str, registry: Registry) -> str | None:
     return None
 
 
-def approved_nominal_names(registry: Registry) -> set[str]:
-    """Return exact Rust nominal names approved by the registry."""
-    names = {
-        symbol.rsplit("::", maxsplit=1)[-1]
-        for symbol in (*registry.symbols, *registry.spec_symbols)
-    }
-    names.update(
-        str(term["name"])
-        for term in registry.terms
-        if re.fullmatch(r"[A-Z][A-Za-z0-9_]*", str(term["name"]))
-    )
-    return names
+def approved_nominal_names(registry: Registry) -> dict[str, set[str]]:
+    """Return the nominal names each crate is approved to declare.
+
+    Approval is crate-scoped. A name registered for one owner does not approve
+    a homonym in an unrelated crate: `Group` is an approved NIP-29 noun owned
+    by `fava-simple-groups`, and a struct of the same name in another crate is
+    a distinct concept wearing an approved spelling.
+    """
+    approved: dict[str, set[str]] = {}
+    for symbol in registry.symbols:
+        crate, _, name = symbol.rpartition("::")
+        if crate:
+            approved.setdefault(crate, set()).add(name)
+    for term in registry.terms:
+        owners = {str(term["owner"])}
+        owners.update(str(value) for value in term.get("crates", []))
+        names: set[str] = set()
+        term_name = str(term["name"])
+        if re.fullmatch(r"[A-Z][A-Za-z0-9_]*", term_name):
+            names.add(term_name)
+        names.update(
+            str(value)
+            for value in term.get("spec_symbols", [])
+            if re.fullmatch(r"[A-Z][A-Za-z0-9_]*", str(value))
+        )
+        names.update(
+            str(value).rsplit("::", maxsplit=1)[-1] for value in term.get("symbols", [])
+        )
+        for owner in owners:
+            approved.setdefault(owner.replace("-", "_"), set()).update(names)
+    return approved
 
 
 def check(root: Path) -> list[str]:
@@ -318,15 +370,18 @@ def check(root: Path) -> list[str]:
     approved_names = approved_nominal_names(registry)
     internal_symbols = nominal_symbols - public_symbols
     for symbol in sorted(internal_symbols):
-        name = symbol.rsplit("::", maxsplit=1)[-1]
-        if name in approved_names or len(words(name)) < 2:
+        crate, _, name = symbol.rpartition("::")
+        if name in approved_names.get(crate, frozenset()):
             continue
+        # Vocabulary is closed by default: a single-word name and a name that
+        # embeds no registered noun are both unapproved nominal vocabulary.
+        # Filtering either one silenced the `Group` homonym and two of the nine
+        # unapproved lifecycle owners.
+        message = f"unapproved nominal vocabulary variant: {symbol}"
         noun = closest_registered_noun(symbol, registry)
         if noun:
-            problems.append(
-                f"unapproved nominal vocabulary variant: {symbol} "
-                f"(existing noun: {noun})"
-            )
+            message += f" (existing noun: {noun})"
+        problems.append(message)
     for package in sorted(package_names - registry.crates):
         problems.append(f"undocumented architectural crate: {package}")
     for package in sorted(registry.crates - package_names):
@@ -350,6 +405,15 @@ def check(root: Path) -> list[str]:
         problems.append(f"undocumented specified architectural crate: {package}")
     for package in sorted(registry.spec_crates - spec_crates):
         problems.append(f"registered specified crate does not exist: {package}")
+
+    # The specified half of the registry is an approval record, not evidence of
+    # delivery. Check it against reality too, so an approved crate or symbol
+    # that was never built is visible instead of silent.
+    declared_names = {symbol.rsplit("::", maxsplit=1)[-1] for symbol in nominal_symbols}
+    for package in sorted(registry.spec_crates - package_names):
+        problems.append(f"specified architectural crate is not implemented: {package}")
+    for symbol in sorted(registry.spec_symbols - declared_names):
+        problems.append(f"specified architectural symbol is not implemented: {symbol}")
     return problems
 
 

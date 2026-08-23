@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 8
-current_phase_name: Authentication, Hostile Boundaries, and Boundedness
-status: ready_to_plan
-stopped_at: Completed and verified Phase 07.2
-last_updated: "2026-08-23T14:01:18Z"
+current_phase: 07.3
+current_phase_name: Architecture Gate Integrity and Requirement Traceability
+status: not_started
+stopped_at: Phase 07.2 complete and merged; remediation series 07.3-07.9 inserted from the 2026-08-23 architecture audit
+last_updated: "2026-08-23T14:30:00Z"
 last_activity: 2026-08-23
-last_activity_desc: Phase 07.2 runtime signer lifecycle completed and verified
-state_head: c46c4a5fb0a2fe28ced3f1d419ddc1453290c186
+last_activity_desc: Phase 07.2 merged; full-workspace architecture audit complete; remediation phases 07.3-07.9 inserted before Phase 8
+state_head: HEAD
 progress:
-  total_phases: 15
+  total_phases: 22
   completed_phases: 10
   total_plans: 38
   completed_plans: 38
-  percent: 67
+  percent: 45
 ---
 
 # Project State
@@ -27,14 +27,30 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 07.2 (Runtime Signer Lifecycle and Parked-Write Wakeup) — COMPLETE
-Plan: 2 of 2
-Status: Implementation, review, security, Nyquist, and goal verification passed
-Last activity: 2026-08-23 — Runtime signer lifecycle completed and verified
+Phase: 07.3 (Architecture Gate Integrity and Requirement Traceability) — NOT STARTED
+Plan: none authored
+Status: not_started
+Last activity: 2026-08-23 — Phase 07.2 merged; architecture audit complete; remediation series inserted
 
-Progress: [███████░░░] 67%
+Progress: [████░░░░░░] 45%
 
-Phase 8 is next and ready for research/planning.
+Phase progress is 10/22. Phase 07.2 (Runtime Signer Lifecycle) completed and
+merged as `0b23b52`, delivering `crates/fava-session` and migrating
+`fava-publication` off its private signer registry.
+
+A full-workspace architecture audit on 2026-08-23 recorded **164 findings
+(59 critical, 80 major, 25 minor)** in `.planning/audit/2026-08-23/LEDGER.md`
+and inserted the remediation series 07.3-07.9 before Phase 8.
+
+**Completion verdicts under revocation.** The audit established that
+`.planning/REQUIREMENTS.md` was authored after M6 shipped and reverse-engineered
+from finished code, that 113 of 131 authoritative spec requirement IDs appear
+nowhere in `.planning/`, that the M2-M6 verification records cite evidence
+authored by the change they verify, and that CI has never run `cargo test` —
+`.github/workflows/` holds one file running two Python steps. Phase 07.9 revokes
+or re-earns the M1, M2, M3, M5, M6, and 07.1.1 verdicts, downgrades M4, and
+retains Phase 7. Until then the completed-phase counts above are provisional
+and must not be read as proof.
 
 ## Performance Metrics
 
@@ -196,6 +212,13 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Phase 07.1 inserted after Phase 7: Universal publication vocabulary and typed NIP-02 reads (URGENT)
 - Phase 07.1.1 inserted after Phase 07.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability
 - Phase 07.2 inserted after Phase 7: Runtime signer lifecycle and parked-write wakeup (URGENT)
+- Phase 07.3 inserted after Phase 7: Make the vocabulary, requirement, and verification gates truthful (URGENT)
+- Phase 07.4 inserted after Phase 7: Reshape transport, subscription, evidence, and diagnostics contracts (URGENT)
+- Phase 07.5 inserted after Phase 7: Create the fava-runtime execution owner (URGENT)
+- Phase 07.6 inserted after Phase 7: Restore fava-observe live-query ownership and delete the facade relay layer (URGENT)
+- Phase 07.7 inserted after Phase 7: Facade lifecycle and fava-session signer ownership (URGENT)
+- Phase 07.8 inserted after Phase 7: Independent correctness defects in ingest, routing, and cache (URGENT)
+- Phase 07.9 inserted after Phase 7: Evidence reconstruction and milestone verdict revocation (URGENT)
 
 ## Deferred Items
 

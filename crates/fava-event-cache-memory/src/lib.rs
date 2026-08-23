@@ -10,7 +10,7 @@ use fava_query::{
     SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_state::{CacheMutation, CachedEvent};
-use nostr::event::EventId;
+use nostr::event::{EventId, Kind};
 use tokio::sync::watch;
 
 /// Bounded in-memory cache with coherent latest-state observations.
@@ -57,53 +57,114 @@ impl MemoryEventCache {
                 .collect(),
         }
     }
-}
 
-impl EventCache for MemoryEventCache {
-    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError> {
-        let mut guard = self
-            .state
-            .lock()
-            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
-        let mut next = guard.clone();
-
+    /// Apply one batch to a working copy of current state.
+    ///
+    /// Retractions apply first and unconditionally: a bounded cache refuses
+    /// insertions, never removals, so removing state can never be blocked by
+    /// the capacity that removing state would relieve. A NIP-09 deletion event
+    /// is admitted even at capacity by evicting the oldest retained
+    /// non-deletion event, because losing the tombstone would allow the deleted
+    /// event to be resurrected.
+    fn apply(
+        &self,
+        current: &CacheState,
+        mutations: Vec<CacheMutation>,
+    ) -> Result<CacheState, EventCacheError> {
+        let mut next = current.clone();
+        let mut upserts = Vec::new();
         for mutation in mutations {
             match mutation {
-                CacheMutation::Upsert(incoming) => {
-                    incoming.event.verify().map_err(|error| {
-                        EventCacheError::Refused(format!("invalid signed event: {error}"))
-                    })?;
-                    if let Some(current) = next.events.get_mut(&incoming.event.id) {
-                        if current.event != incoming.event {
-                            return Err(EventCacheError::Refused(
-                                "same event id carried a different signed body".to_owned(),
-                            ));
-                        }
-                        current.merge_evidence(&incoming.evidence);
-                    } else {
-                        if next.events.len() == self.capacity.get() {
-                            return Err(EventCacheError::Refused(format!(
-                                "bounded event cache capacity {} reached",
-                                self.capacity
-                            )));
-                        }
-                        next.events.insert(incoming.event.id, incoming);
-                    }
+                CacheMutation::Retract { event_id, .. } => {
+                    next.events.remove(&event_id);
                 }
-                CacheMutation::Retract(id) => {
-                    next.events.remove(&id);
-                }
+                CacheMutation::Upsert(incoming) => upserts.push(incoming),
             }
         }
 
+        for incoming in upserts {
+            incoming.event.verify().map_err(|error| {
+                EventCacheError::Refused(format!("invalid signed event: {error}"))
+            })?;
+            if let Some(retained) = next.events.get_mut(&incoming.event.id) {
+                if retained.event != incoming.event {
+                    return Err(EventCacheError::Refused(
+                        "same event id carried a different signed body".to_owned(),
+                    ));
+                }
+                retained.merge_evidence(&incoming.evidence);
+                continue;
+            }
+            if next.events.len() >= self.capacity.get() {
+                if incoming.event.kind != Kind::EventDeletion {
+                    return Err(EventCacheError::Refused(format!(
+                        "bounded event cache capacity {} reached",
+                        self.capacity
+                    )));
+                }
+                let evicted = next
+                    .events
+                    .values()
+                    .filter(|retained| retained.event.kind != Kind::EventDeletion)
+                    .min_by_key(|retained| (retained.event.created_at, retained.event.id))
+                    .map(|retained| retained.event.id)
+                    .ok_or_else(|| {
+                        EventCacheError::Refused(format!(
+                            "bounded event cache capacity {} holds only deletions",
+                            self.capacity
+                        ))
+                    })?;
+                next.events.remove(&evicted);
+            }
+            next.events.insert(incoming.event.id, incoming);
+        }
+        Ok(next)
+    }
+
+    fn publish(
+        guard: &mut CacheState,
+        next: CacheState,
+        sender: &watch::Sender<Arc<SourceSnapshot>>,
+    ) -> Result<(), EventCacheError> {
+        let mut next = next;
         next.revision = next
             .revision
             .checked_add(1)
             .ok_or_else(|| EventCacheError::Refused("source revision exhausted".to_owned()))?;
         let snapshot = Arc::new(Self::snapshot(&next));
         *guard = next;
-        self.latest.send_replace(snapshot);
+        sender.send_replace(snapshot);
         Ok(())
+    }
+}
+
+impl EventCache for MemoryEventCache {
+    fn transact(
+        &self,
+        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+    ) -> Result<usize, EventCacheError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
+        let current: Vec<CachedEvent> = guard.events.values().cloned().collect();
+        let mutations = decide(&current);
+        let count = mutations.len();
+        if count == 0 {
+            return Ok(0);
+        }
+        let next = self.apply(&guard, mutations)?;
+        Self::publish(&mut guard, next, &self.latest)?;
+        Ok(count)
+    }
+
+    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
+        let next = self.apply(&guard, mutations)?;
+        Self::publish(&mut guard, next, &self.latest)
     }
 
     fn event(&self, id: EventId) -> Result<Option<CachedEvent>, EventCacheError> {
@@ -112,14 +173,6 @@ impl EventCache for MemoryEventCache {
             .lock()
             .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
         Ok(guard.events.get(&id).cloned())
-    }
-
-    fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError> {
-        let guard = self
-            .state
-            .lock()
-            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
-        Ok(guard.events.values().cloned().collect())
     }
 
     fn len(&self) -> Result<usize, EventCacheError> {

@@ -265,9 +265,27 @@ meaning = "One assembled Fava engine instance and its public facade."
 owner = "fava"
 nearest_nostr = "none"
 distinction = "Nostr defines protocol messages, not an application's assembled client lifecycle."
-symbols = ["fava::Fava", "fava::FavaBuilder", "fava::BuildError"]
-crates = ["fava"]
-spec_crates = ["fava-ffi", "fava-runtime", "fava-standard"]
+symbols = [
+    "fava::Fava",
+    "fava::FavaBuilder",
+    "fava::BuildError",
+    "fava_runtime::Runtime",
+    "fava_runtime::RuntimeConfig",
+    "fava_runtime::RuntimeError",
+    "fava_runtime::TaskName",
+    "fava_runtime::TaskHandle",
+    "fava_runtime::TaskFailure",
+    "fava_runtime::OperationName",
+    "fava_runtime::OperationGeneration",
+    "fava_runtime::ProviderCompletion",
+    "fava_runtime::CancellationToken",
+    "fava_runtime::Sender",
+    "fava_runtime::Receiver",
+    "fava_runtime::SendRefused",
+    "fava_runtime::SendRefusal",
+]
+crates = ["fava", "fava-runtime"]
+spec_crates = ["fava-ffi", "fava-standard"]
 
 [[term]]
 name = "Query"
@@ -287,6 +305,8 @@ symbols = [
     "fava_query::QueryBounds",
     "fava_query::QueryBranchId",
     "fava_query::QueryError",
+    "fava_query::QueryBranchId",
+    "fava_query::QueryBounds",
 ]
 crates = ["fava-query"]
 spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
@@ -304,6 +324,7 @@ symbols = [
     "fava_query::SourceEvent",
     "fava_query::SourceSnapshot",
     "fava_query::SourceStatus",
+    "fava_query::SourceTerminationCause",
     "fava_query::SourceChangeFuture",
     "fava_query::SourceChanges",
     "fava_query::OpenedQuerySource",
@@ -333,6 +354,16 @@ distinction = "Relay messages are source facts; a QuerySnapshot is the merged ap
 symbols = [
     "fava_query::QueryEvidence",
     "fava_query::SourceEvidence",
+    "fava_query::RelayQueryEvidence",
+    "fava_query::RelaySourceState",
+    "fava_query::RelayDeadline",
+    "fava_query::RelayWithdrawal",
+    "fava_query::RelayShortfall",
+    "fava_query::AuthenticationState",
+    "fava_query::RouteOrigin",
+    "fava_query::DesiredPlanEvidence",
+    "fava_query::QueryShortfall",
+    "fava_query::BoundedText",
     "fava_query::QueryRevision",
     "fava_query::QuerySnapshot",
 ]
@@ -407,11 +438,15 @@ crates = []
 [[term]]
 name = "CacheMutation"
 source = "fava"
-meaning = "One atomic event-cache insertion, evidence merge, or retraction decided by Nostr event-state rules."
+meaning = "One atomic event-cache insertion, evidence merge, or caused retraction decided by Nostr event-state rules."
 owner = "fava-state"
 nearest_nostr = "Event"
-distinction = "Nostr defines events; CacheMutation carries the local atomic change an EventCache must commit."
-symbols = ["fava_state::CacheMutation"]
+distinction = "Nostr defines events; CacheMutation carries the local atomic change an EventCache must commit, and RetractionCause carries why a retraction removes state so a provider can tell a removal it must always apply from an insertion it may refuse."
+counterexample = "A bare event id is not a CacheMutation: removing an event because a kind-5 deletion authorized it, because a newer event won the coordinate, because NIP-40 expiry passed, and because the provider hit its own bound are four different facts, and collapsing them loses the tombstone that blocks resurrection."
+lifecycle = "fava-state decides the batch from current state; the EventCache provider commits it atomically and never persists the cause beyond the commit."
+forcing_requirement = "A bounded EventCache must apply a NIP-09 deletion at capacity, so it must distinguish the retractions it must always apply from the insertions it may refuse."
+falsifier = "cache_lifecycle::a_full_cache_still_applies_a_deletion and event_state::every_retraction_names_its_cause fail when a retraction carries no cause or is ordered after the kind-5 upsert."
+symbols = ["fava_state::CacheMutation", "fava_state::RetractionCause"]
 crates = []
 spec_symbols = ["EventStateDecision"]
 

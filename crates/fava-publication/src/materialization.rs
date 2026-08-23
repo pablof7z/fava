@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot, SourceStatus};
+use fava_query::{
+    OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot, SourceStatus,
+    SourceTerminationCause,
+};
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
 use fava_write::{
@@ -57,7 +60,9 @@ impl OpenedSemanticSources {
             Some(Ok(kind))
         } else {
             self.live[index] = false;
-            self.snapshots[index].status = SourceStatus::Closed;
+            self.snapshots[index].status = SourceStatus::Closed {
+                cause: SourceTerminationCause::ProviderClosed,
+            };
             Some(Err(kind))
         }
     }

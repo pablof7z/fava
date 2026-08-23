@@ -1,6 +1,7 @@
 //! Public-facade explicit live-query evidence over a scripted transport.
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -21,6 +22,7 @@ use tokio::sync::Notify;
 struct Script {
     inbound: Mutex<VecDeque<Result<String, TransportError>>>,
     sent: Mutex<Vec<String>>,
+    opens: AtomicUsize,
     notify: Notify,
 }
 
@@ -50,6 +52,58 @@ struct ScriptedTransport {
     script: Arc<Script>,
 }
 
+struct PendingTransport;
+
+impl Transport for PendingTransport {
+    fn open_session(
+        &self,
+        _key: RelaySessionKey,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(std::future::pending())
+    }
+}
+
+#[derive(Default)]
+struct FirstOpenThenPendingTransport {
+    calls: AtomicUsize,
+    opened: Mutex<Vec<Arc<ScriptedSession>>>,
+}
+
+impl Transport for FirstOpenThenPendingTransport {
+    fn open_session(
+        &self,
+        key: RelaySessionKey,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            if self.calls.fetch_add(1, Ordering::SeqCst) > 0 {
+                return std::future::pending().await;
+            }
+            let session = Arc::new(ScriptedSession {
+                key,
+                script: Arc::new(Script::default()),
+                closed: std::sync::atomic::AtomicBool::new(false),
+            });
+            self.opened
+                .lock()
+                .expect("transport lock")
+                .push(Arc::clone(&session));
+            Ok(session as Arc<dyn RelaySession>)
+        })
+    }
+}
+
 impl Transport for ScriptedTransport {
     fn open_session(
         &self,
@@ -63,6 +117,7 @@ impl Transport for ScriptedTransport {
     > {
         let script = Arc::clone(&self.script);
         Box::pin(async move {
+            script.opens.fetch_add(1, Ordering::SeqCst);
             Ok(Arc::new(ScriptedSession {
                 key,
                 script,
@@ -128,6 +183,90 @@ impl RelaySession for ScriptedSession {
             Ok(())
         })
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
+    let relay = RelayUrl::parse("wss://pending.example").expect("relay URL");
+    let fava = Fava::builder()
+        .event_cache(Arc::new(MemoryEventCache::default()))
+        .write_store(Arc::new(MemoryWriteStore::default()))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .subscription_planner(Arc::new(planner()))
+        .transport(Arc::new(PendingTransport))
+        .build()
+        .expect("assembly is complete");
+
+    let observation = tokio::time::timeout(
+        Duration::from_millis(50),
+        fava.observe(
+            Query::events()
+                .only_from_relays([relay])
+                .expect("explicit relay is valid"),
+        ),
+    )
+    .await
+    .expect("local observation must not await relay establishment")
+    .expect("local observation opens");
+
+    assert!(observation.current().events.is_empty());
+    observation.close();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn equivalent_observations_share_relay_work_until_the_last_handle_closes() {
+    let relay = RelayUrl::parse("wss://shared.example").expect("relay URL");
+    let script = Arc::new(Script::default());
+    let fava = assembly(Arc::new(MemoryEventCache::default()), Arc::clone(&script));
+    let query = Query::events()
+        .only_from_relays([relay])
+        .expect("explicit relay is valid");
+
+    let first = fava
+        .observe(query.clone())
+        .await
+        .expect("first query opens");
+    let second = fava.observe(query).await.expect("second query opens");
+
+    assert_eq!(script.opens.load(Ordering::SeqCst), 1);
+    assert_eq!(script.sent().len(), 1);
+    first.close();
+    assert_eq!(script.sent().len(), 1);
+    second.close();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cancelling_observe_while_another_relay_opens_closes_provisional_work() {
+    let transport = Arc::new(FirstOpenThenPendingTransport::default());
+    let fava = Fava::builder()
+        .event_cache(Arc::new(MemoryEventCache::default()))
+        .write_store(Arc::new(MemoryWriteStore::default()))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .subscription_planner(Arc::new(planner()))
+        .transport(Arc::clone(&transport))
+        .build()
+        .expect("assembly is complete");
+    let query = Query::events()
+        .only_from_relays([
+            RelayUrl::parse("wss://a-open.example").expect("relay URL"),
+            RelayUrl::parse("wss://b-pending.example").expect("relay URL"),
+        ])
+        .expect("explicit relays are valid");
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), fava.observe(query))
+            .await
+            .is_err()
+    );
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 2);
+    let first = transport
+        .opened
+        .lock()
+        .expect("transport lock")
+        .first()
+        .cloned()
+        .expect("first relay opened");
+    assert!(first.closed.load(Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use fava_query::{
-    EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator, QueryOrdering,
-    QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
+    BoundedText, EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator,
+    QueryOrdering, QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
 };
 use fava_state::{EventCoordinate, RelayEvidence, RelayUrl};
 use fava_write::EventValue;
@@ -51,6 +51,20 @@ impl QueryEvaluator for StandardQueryEvaluator {
     }
 }
 
+/// Resolve replaceable coordinates within the authority's candidate universe.
+///
+/// Result provenance authority selects the candidates, it does not merely filter the
+/// winners. `docs/spec/partial-spec-api-semantics.md:194` scopes an `only_from_relays`
+/// match to events whose provenance "MUST include at least one relay in the specified
+/// set", so a record without qualifying relay provenance is not a candidate at any
+/// coordinate and cannot displace one that is. Admitting it into selection and dropping
+/// it afterwards would let a purely local write erase a relay-qualified result, which
+/// `:200` and `:214` forbid: an unpublished local event "MUST NOT appear", and differing
+/// source modes "MUST NOT accidentally share evidence or local-result visibility in a way
+/// that changes either query's results".
+///
+/// Acquisition scope never reaches here: `from_relays` leaves the authority
+/// [`ResultAuthority::AnyLocal`], so asking a relay set cannot narrow local visibility.
 fn coordinate_winners(
     authority: &ResultAuthority,
     records: BTreeMap<EventId, EventRecord>,
@@ -70,15 +84,11 @@ fn coordinate_winners(
         ResultAuthority::OnlyRelays(relays) => {
             let mut by_relay_coordinate =
                 BTreeMap::<(RelayUrl, EventCoordinate), EventRecord>::new();
-            let mut local_by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
             for record in records.into_values() {
                 let coordinate = record
                     .event
                     .coordinate()
                     .map_err(|_| QueryEvaluationError::MissingEventId)?;
-                if record.publication.is_some() {
-                    insert_newest(&mut local_by_coordinate, coordinate.clone(), record.clone());
-                }
                 for observation in record.relay_evidence.observations() {
                     if relays.contains(&observation.session.relay) {
                         insert_newest(
@@ -87,13 +97,6 @@ fn coordinate_winners(
                             record.clone(),
                         );
                     }
-                }
-            }
-            for ((_, coordinate), record) in &mut by_relay_coordinate {
-                if let Some(local) = local_by_coordinate.get(coordinate)
-                    && record_is_newer(local, record)
-                {
-                    *record = local.clone();
                 }
             }
             let mut by_id = BTreeMap::new();
@@ -150,9 +153,9 @@ fn merge_contribution(
             };
             if let Some(publication) = &record.publication {
                 if publication != &local.publication {
-                    return Err(QueryEvaluationError::Refused(format!(
+                    return Err(QueryEvaluationError::Refused(BoundedText::new(format!(
                         "event {id} has conflicting local publication evidence"
-                    )));
+                    ))));
                 }
             } else {
                 record.publication = Some(local.publication.clone());

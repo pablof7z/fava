@@ -34,8 +34,8 @@ pub fn validate_plan(
     plan: &SubscriptionPlan,
 ) -> Result<(), PlanConformanceError> {
     check_relay(relay, plan)?;
-    let buckets = check_buckets(installed, plan)?;
-    check_attribution_keys(&buckets, plan)?;
+    let resulting = check_buckets(installed, plan)?;
+    check_attribution_keys(&resulting, plan)?;
     check_filters(installed, plan)?;
     check_demand(demand, plan)?;
     check_declared_limits(constraints, plan)
@@ -53,16 +53,13 @@ fn check_relay(
     }
 }
 
-/// The resulting installed set, after C2, C3, and C4 hold.
-struct Buckets {
-    resulting: BTreeSet<SubscriptionId>,
-}
-
 /// C2, C3, C4: the diff is internally consistent against the baseline.
+///
+/// Returns the wire ids the plan expects to be installed after execution.
 fn check_buckets(
     installed: &InstalledSubscriptions,
     plan: &SubscriptionPlan,
-) -> Result<Buckets, PlanConformanceError> {
+) -> Result<BTreeSet<SubscriptionId>, PlanConformanceError> {
     let mut seen: BTreeSet<SubscriptionId> = BTreeSet::new();
     for id in plan
         .open
@@ -89,19 +86,17 @@ fn check_buckets(
             return Err(PlanConformanceError::UnknownInstalled(id.clone()));
         }
     }
-    Ok(Buckets {
-        resulting: plan.installed_after().cloned().collect(),
-    })
+    Ok(plan.installed_after().cloned().collect())
 }
 
 /// C5: attribution describes exactly the resulting installed set, including
 /// which logical demand each wire subscription serves.
 fn check_attribution_keys(
-    buckets: &Buckets,
+    resulting: &BTreeSet<SubscriptionId>,
     plan: &SubscriptionPlan,
 ) -> Result<(), PlanConformanceError> {
     let attributed: BTreeSet<SubscriptionId> = plan.attribution.ids().cloned().collect();
-    if attributed != buckets.resulting {
+    if &attributed != resulting {
         return Err(PlanConformanceError::AttributionMismatch);
     }
     for planned in &plan.open {

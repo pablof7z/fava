@@ -85,8 +85,11 @@ impl EventCache for ClosingEventCache {
     fn event(&self, id: NostrEventId) -> Result<Option<CachedEvent>, EventCacheError> {
         self.inner.event(id)
     }
-    fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError> {
-        self.inner.events()
+    fn transact(
+        &self,
+        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+    ) -> Result<usize, EventCacheError> {
+        self.inner.transact(decide)
     }
     fn len(&self) -> Result<usize, EventCacheError> {
         self.inner.len()

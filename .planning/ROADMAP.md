@@ -26,6 +26,13 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
 - [x] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
 - [x] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava. (completed 2026-08-23)
+- [ ] **Phase 07.3: Architecture Gate Integrity and Requirement Traceability** - Make the vocabulary, requirement, and verification gates truthful before measuring any remediation against them.
+- [ ] **Phase 07.4: Neutral Contract Correction** - Reshape transport, subscription-planning, evidence, and diagnostics contracts so their specified owners can express the facts they own.
+- [ ] **Phase 07.5: Create the fava-runtime Execution Owner** - Build the named-but-absent execution owner: tasks, deadlines, isolation, cancellation, and shutdown joins.
+- [ ] **Phase 07.6: Restore fava-observe Live-Query Ownership** - Move the live-query lifecycle to its specified owner and delete the facade relay layer outright.
+- [ ] **Phase 07.7: Facade Lifecycle and fava-session Signer Ownership** - Give the facade a real lifecycle and the account/signer set its specified owner.
+- [ ] **Phase 07.8: Independent Correctness Defects** - Fix the confirmed defects that are not consequences of the ownership inversion.
+- [ ] **Phase 07.9: Evidence Reconstruction and Milestone Verdict Revocation** - Prove public promises through the real path and withdraw the verdicts that rest on evidence which cannot.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
 - [ ] **Phase 10: Provider Substitution Qualification** - Complete M10's public-contract substitution matrix and architecture falsifiers.
@@ -274,6 +281,121 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 07.2-02-PLAN.md
+### Phase 07.3: Architecture Gate Integrity and Requirement Traceability (INSERTED)
+
+**Goal:** The gates that failed to detect the M2-M4 ownership deviation become truthful instruments, and every authoritative spec requirement is traceable to a mapped requirement before any remediation is measured against it.
+**Mode:** remediation
+**Depends on:** Phase 07.1.1
+**Requirements:** Authored by this phase. Adds ownership-ledger requirements (proposed `OWN-01`..`OWN-08` in `.planning/audit/2026-08-23/requirements-process.md`) and restores the 113 authoritative spec IDs currently absent from `.planning/`.
+**Success Criteria** (what must be TRUE):
+
+  1. `tools/check_vocabulary.py` reports exactly the policy-covered declarations AGENTS.md defines, at every visibility, with no false positive and no silencing heuristic; it never treats `.planning/**` prose as vocabulary authority; it verifies each `spec_crates`/`spec_symbols` entry against reality so a missing owner crate is a failure rather than silence.
+  2. Every authoritative requirement ID in `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` maps to a `.planning/REQUIREMENTS.md` entry that preserves its full conjunction, and a mechanical check fails when a mapped requirement weakens or splits its authority.
+  3. Every row of the ownership ledger in `docs/spec/ARCHITECTURE.md` is represented as a verifiable requirement with a named falsifier, so an owner moving is a test failure rather than a review opinion.
+  4. The nine unapproved lifecycle owners named in the audit, `fava::OpenedRelay` included, are recorded as violations scheduled for deletion; none is approved into `vocabulary.toml` to make the gate pass.
+  5. CI runs the workspace test suite, clippy, the falsifier corpus, and the canary on every change. Today `.github/workflows/architecture.yml` runs two Python steps and nothing else: no `cargo test` has ever run automatically in this repository, which is why 306 green tests coexisted with a systemic ownership inversion for six milestones.
+  6. The `Red:` / `Mutation:` evidence record required by `FAVA_TDD_BDD_TESTING_GUIDE.md` §16 is enforced mechanically. It is currently present in zero of 510 commits, and 36 of 41 named deliberate breaks have never been executed.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.3`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 0; `vocabulary.md`, `requirements-process.md`.
+
+### Phase 07.4: Neutral Contract Correction (INSERTED)
+
+**Goal:** The neutral contracts can express the facts the architecture assigns to their owners, so live-query ownership becomes buildable at all.
+**Mode:** remediation
+**Depends on:** Phase 07.3
+**Requirements:** RELAY-003, QUERY-005, QUERY-012, OPS-003, plus the ownership requirements authored in 07.3. Full mapping produced during planning.
+**Success Criteria** (what must be TRUE):
+
+  1. `Transport`/`RelaySession` expose per-consumer message streams and acquire-with-refcount session semantics, so two observations can share one physical session without stealing each other's frames; inbound and outbound byte queues are bounded and every handoff outcome carries session key and generation.
+  2. `SubscriptionPlanner` receives the complete current logical demand assigned to a relay together with that relay's declared constraints, and returns a desired-plan diff carrying withdrawal identity and typed shortfall; no conformance rule the planner must satisfy lives outside the contract crate.
+  3. `QueryEvidence` can name per-relay EOSE, failure, authentication, CLOSED, route state, desired-plan revision, subscription shortfall, shared-work ownership, provider-operation generation, and coalescing loss; empty-with-EOSE is distinguishable from an unreachable relay through the public API.
+  4. A live admitted relay event reaches an open query without requiring a retaining event cache, and the diagnostics surface can express the open observation ownership graph.
+  5. Every reshaped contract ships a conformance testkit that a competing implementation can run; no adapter, shim, or compatibility path exists for the previous shapes.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.4`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 1.
+
+### Phase 07.5: Create the fava-runtime Execution Owner (INSERTED)
+
+**Goal:** Asynchronous execution, provider isolation, deadlines, cancellation, and shutdown joins have the single owner the architecture already names and vocabulary already approves.
+**Mode:** remediation
+**Depends on:** Phase 07.4
+**Requirements:** OPS-009, QUERY-003, WRITE-007, plus the isolation and boundedness requirements restored in 07.3.
+**Success Criteria** (what must be TRUE):
+
+  1. `fava-runtime` exists as a crate and owns task execution with a join registry, timers, bounded command and completion channels, provider-operation identity, cancellation propagation, and shutdown deadlines.
+  2. Every provider call in the workspace runs under a Fava-owned deadline and returns a typed completion; a stalled or panicking provider is scoped, attributable, and cannot block unrelated owner progress or shutdown. A substituted provider is bounded by the same policy as the default one.
+  3. No detached task remains: every spawned task is owned, joinable, cancellable, and joined at shutdown within its declared deadline.
+  4. Reconnect is a bounded policy with growth, ceiling, jitter, and an attempt bound that terminates in a typed, application-visible shortfall; N observations against one unreachable relay produce one reconnect lifecycle, not N.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.5`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 2; `missing-owners.md`.
+
+### Phase 07.6: Restore fava-observe Live-Query Ownership (INSERTED)
+
+**Goal:** The observation owner owns the live query, and the facade owns none of it. This is the phase that closes the reported crisis.
+**Mode:** remediation
+**Depends on:** Phase 07.5
+**Requirements:** QUERY-002, QUERY-004, QUERY-011, QUERY-014, READ-02, RELAY-003, and the ownership requirements authored in 07.3.
+**Success Criteria** (what must be TRUE):
+
+  1. `Fava::observe` returns a coherent local observation without awaiting any relay, router, or transport future. A transport whose establishment never resolves cannot delay the handle, and a refusing router cannot deny the application its local view.
+  2. `fava-observe` owns observation identity, the observation registry, logical per-relay demand, the desired subscription plan and its diff, shared-work identity and refcount, relay-session binding, provider-operation generation with late-completion rejection, the route session, and cancellation.
+  3. Equivalent observations share one demand, one session, and one `REQ`; withdrawal is refcounted and the last handle to close sends exactly the `CLOSE`s that lost their final holder. Dropping a handle while another relay is still establishing closes the already-open session exactly.
+  4. `crates/fava/src/relay.rs`, `OpenedRelay`, the relay coordination in `live.rs` and `routes.rs`, and `Fava::next_subscription` no longer exist. No replacement adapter, wrapper, or compatibility path is introduced in the facade.
+  5. `crates/fava-observe/` carries owner-level evidence for every fact it owns.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.6`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 3; `observe-facade.md`, `REMEDIATION-CORE.md`, `.planning/debug/observe-ownership-collapse.md`.
+
+### Phase 07.7: Facade Lifecycle and fava-session Signer Ownership (INSERTED)
+
+**Goal:** The facade owns exactly what the architecture assigns it - instance identity, command admission, and startup/shutdown ordering - and the account and signer set has its specified owner.
+**Mode:** remediation
+**Depends on:** Phase 07.6
+**Requirements:** QUERY-003, OPS-009, WRITE-008, WRITE-023, plus the session requirements Phase 07.2 was authored against.
+**Success Criteria** (what must be TRUE):
+
+  1. `Fava` has explicit lifecycle state and a deterministic `close` that stops new commands, then closes observations, publications, routers, transports, and stores in the specified order and joins owned resources. Shutdown is distinguishable from source failure through the public API.
+  2. DELIVERED BY PHASE 07.2 (merged as `0b23b52`): `fava-session` exists and owns the account set, signer registrations, and attachment generations, with runtime attach/replace/remove and parked-write wakeup on availability transition. This phase VERIFIES that delivery against the audit findings rather than rebuilding it, and closes anything 07.2 left open.
+  3. No public door mutates a publication lifecycle without passing through its owner - `cancel_write` included. `Fava::cancel_write` currently calls raw `WriteStore::cancel`, skipping `Publication::cancel`'s eligibility decision and leaving in-flight signer and delivery work running.
+  4. Signer provider calls run under a Fava-owned deadline with a typed timed-out outcome, and a stale signer completion is rejected observably rather than discarded with `let _ =`.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.7`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 4; `identity-protocols.md`, `missing-owners.md`.
+
+### Phase 07.8: Independent Correctness Defects (INSERTED)
+
+**Goal:** The confirmed correctness defects that are not consequences of the ownership inversion are fixed, so they do not survive the remediation unnoticed.
+**Mode:** remediation
+**Depends on:** Phase 07.4
+**Requirements:** EVENT-014, RELAY-001, RELAY-012, ROUTER-001, WRITE-015, WRITE-018, WRITE-019, WRITE-028, QUERY-004, QUERY-009. Full mapping produced during planning.
+**Success Criteria** (what must be TRUE):
+
+  1. Relay-issued attribution is checked against the accepted subscription that actually carries the filter; a relay cannot choose which accepted filter validates its event, and `WrongSubscription` is reachable through the real path.
+  2. A router refusal, closure, or panic produces typed shortfall scoped to that router; it never denies the application its local view, never aborts the chain, and never tears down unchanged relay demand. A settled-absent routing fact can only be produced by settled absence, never by a query failure.
+  3. A bounded event cache at capacity can still apply a deletion, and expiry is swept by a named production owner rather than by tests alone.
+  4. A purely local write cannot empty a relay-qualified query. An authentication outcome reaches the replaceable delivery policy and is reported truthfully with respect to whether bytes left Fava. Relay-declared limits come from the relay, not from invented constants.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.8`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 5; `transport-wire-ingest.md`, `routing.md`, `query-state-cache.md`, `publication-write.md`.
+
+### Phase 07.9: Evidence Reconstruction and Milestone Verdict Revocation (INSERTED)
+
+**Goal:** Every public promise is proved through the assembled public path by evidence that can distinguish the specified architecture from the one that was built, and the milestone verdicts that rest on evidence which cannot are withdrawn.
+**Mode:** remediation
+**Depends on:** Phase 07.6, Phase 07.8
+**Requirements:** GOAL-009, SUB-08, OPS-003, and the full restored requirement corpus from 07.3.
+**Success Criteria** (what must be TRUE):
+
+  1. No evidence for a public promise constructs internals, calls a provider directly, or drives a second engine to observe the first. The grouping-equivalence, outbox-acquisition, and group-read acceptances run through one assembled `Fava` on the real path.
+  2. Every provider test double can express pending, mid-operation failure, mid-operation cancellation, stale completion, and slow-peer backpressure; conformance testkits exist for transport, router, subscription planner, and signer.
+  3. Each of the six architecture gates has at least one falsifier that fails against the pre-remediation tree and passes after it, and each named deliberate break is one that could plausibly ship.
+  4. The M1, M2, M3, M5, M6, and Phase 07.1.1 verdicts are revoked with recorded reasons and re-earned against the restored requirement corpus, or left open. M4 is downgraded. Phase 7 is retained. No verdict rests on evidence authored by the change it verifies.
+
+**Plans:** Not yet planned - run `/gsd-plan-phase 07.9`.
+**Source:** `.planning/audit/2026-08-23/LEDGER.md` Wave 6; `evidence.md`, `requirements-process.md`, `public-surface.md`.
 
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 

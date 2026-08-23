@@ -2,70 +2,82 @@
 //!
 //! RELAY-003: a planner MAY merge filters that differ in one safely unionable
 //! dimension and MUST NOT merge across differences that would change meaning.
+//!
+//! A merged candidate is represented as the exact demand it was merged from,
+//! never as a filter that has forgotten its members. [`merged_filter`]
+//! recomputes the union from those members, so splitting a candidate is
+//! undoing a merge rather than truncating a filter.
 
 use std::collections::BTreeSet;
 
-use fava_subscriptions::{DemandId, RelayDemand, RelayReadConstraints};
+use fava_subscriptions::{RelayDemand, RelayReadConstraints};
 use nostr::filter::Filter;
 
-/// One candidate wire subscription: the merged filter and the exact logical
-/// demand it stands for.
-#[derive(Clone, Debug)]
-pub(crate) struct Group {
-    /// Merged filter carried by this candidate REQ.
-    pub(crate) filter: Filter,
-    /// Demands merged into it, in input order.
-    pub(crate) members: Vec<RelayDemand>,
-}
-
-impl Group {
-    /// Logical demand this candidate serves.
-    pub(crate) fn serves(&self) -> BTreeSet<DemandId> {
-        self.members.iter().map(RelayDemand::id).collect()
-    }
-}
-
-/// Merge demand into candidate wire subscriptions.
+/// Partition demand into the candidate wire subscriptions it can share.
 ///
 /// Merging is refused across differing whole-query bounds, and refused entirely
 /// beyond exact deduplication when the relay declares a default filter limit:
 /// a relay-applied default limit makes a union return fewer events per member
 /// than each member would have received alone (GOALS:1049).
-pub(crate) fn group(demand: &[RelayDemand], constraints: &RelayReadConstraints) -> Vec<Group> {
+pub(crate) fn group(
+    demand: &[RelayDemand],
+    constraints: &RelayReadConstraints,
+) -> Vec<Vec<RelayDemand>> {
     let dedup_only = constraints.default_filter_limit.get().is_some();
-    let mut groups: Vec<Group> = Vec::new();
+    let mut groups: Vec<(Filter, Vec<RelayDemand>)> = Vec::new();
     for item in demand {
-        let merged = groups.iter().enumerate().find_map(|(index, group)| {
-            merge_candidate(group, item, dedup_only).map(|filter| (index, filter))
-        });
+        let merged = groups
+            .iter()
+            .enumerate()
+            .find_map(|(index, (filter, members))| {
+                merge_candidate(filter, members.first(), item, dedup_only)
+                    .map(|merged| (index, merged))
+            });
         match merged {
             Some((index, filter)) => {
-                groups[index].filter = filter;
-                groups[index].members.push(item.clone());
+                groups[index].0 = filter;
+                groups[index].1.push(item.clone());
             }
-            None => groups.push(Group {
-                filter: item.filter.clone(),
-                members: vec![item.clone()],
-            }),
+            None => groups.push((item.filter.clone(), vec![item.clone()])),
         }
     }
-    groups
+    groups.into_iter().map(|(_, members)| members).collect()
 }
 
-/// The filter that would carry `item` inside `group` without changing meaning.
-fn merge_candidate(group: &Group, item: &RelayDemand, dedup_only: bool) -> Option<Filter> {
-    let anchor = group.members.first()?;
-    if anchor.bounds != item.bounds {
+/// The exact union filter one candidate's members share.
+///
+/// Recomputing from the members keeps the filter and the attribution derived
+/// from one source, so they cannot drift apart.
+pub(crate) fn merged_filter(
+    members: &[RelayDemand],
+    constraints: &RelayReadConstraints,
+) -> Option<Filter> {
+    let dedup_only = constraints.default_filter_limit.get().is_some();
+    let mut merged = members.first()?.filter.clone();
+    for item in members.iter().skip(1) {
+        merged = merge_candidate(&merged, members.first(), item, dedup_only)?;
+    }
+    Some(merged)
+}
+
+/// The filter that would carry `item` alongside `anchor`'s group without
+/// changing meaning.
+fn merge_candidate(
+    filter: &Filter,
+    anchor: Option<&RelayDemand>,
+    item: &RelayDemand,
+    dedup_only: bool,
+) -> Option<Filter> {
+    if anchor?.bounds != item.bounds {
         return None;
     }
-    if group.filter == item.filter {
-        return Some(group.filter.clone());
+    if filter == &item.filter {
+        return Some(filter.clone());
     }
-    if dedup_only || group.filter.limit.is_some() || item.filter.limit.is_some() {
+    if dedup_only || filter.limit.is_some() || item.filter.limit.is_some() {
         return None;
     }
-    merge_author_axis(&group.filter, &item.filter)
-        .or_else(|| merge_tag_axis(&group.filter, &item.filter))
+    merge_author_axis(filter, &item.filter).or_else(|| merge_tag_axis(filter, &item.filter))
 }
 
 /// Union two filters that differ only in their author set.

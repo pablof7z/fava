@@ -1,5 +1,6 @@
 //! Declarative event queries, local source contracts, and application snapshots.
 
+mod evidence;
 mod identity;
 mod selection;
 
@@ -11,11 +12,17 @@ use std::sync::Arc;
 
 use fava_state::{CachedEvent, RelayAccess, RelayEvidence};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
-pub use identity::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
 pub use nostr::event::{EventId, Kind};
 pub use nostr::key::PublicKey;
 pub use nostr::types::{RelayUrl, Timestamp};
 pub use selection::{FilterSelection, SingleLetterTag};
+
+pub use evidence::{
+    AuthenticationState, BoundedText, DesiredPlanEvidence, QueryEvidence, QueryShortfall,
+    RelayDeadline, RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal,
+    RouteOrigin, SourceEvidence, SourceKind, SourceStatus, SourceTerminationCause,
+};
+pub use identity::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
 use thiserror::Error;
 
 /// Relays Fava should ask for acquisition.
@@ -230,15 +237,6 @@ pub enum QueryError {
     ZeroLimit,
 }
 
-/// Role of one independently observed local source.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum SourceKind {
-    /// Signed relay-observed cache state.
-    EventCache,
-    /// Current accepted local materializations.
-    WriteStore,
-}
-
 /// Monotonic revision owned by one query source.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SourceRevision(pub u64);
@@ -268,7 +266,7 @@ pub struct SourceSnapshot {
 impl SourceSnapshot {
     /// Empty initial snapshot for a source role.
     #[must_use]
-    pub const fn empty(kind: SourceKind) -> Self {
+    pub fn empty(kind: SourceKind) -> Self {
         Self {
             kind,
             revision: SourceRevision(0),
@@ -276,16 +274,6 @@ impl SourceSnapshot {
             events: Vec::new(),
         }
     }
-}
-
-/// Current lifecycle fact for one opened source.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub enum SourceStatus {
-    /// The provider's continuous observation remains open.
-    #[default]
-    Open,
-    /// The provider's observation terminated after a coherent prior snapshot.
-    Closed,
 }
 
 /// Future returned by a source observation.
@@ -326,9 +314,9 @@ pub enum QuerySourceError {
     /// Provider is no longer able to open work.
     #[error("query source is closed")]
     Closed,
-    /// Provider-specific refusal retained as scoped evidence.
-    #[error("query source refused open: {0}")]
-    Refused(String),
+    /// Provider-specific refusal retained as bounded scoped evidence.
+    #[error("query source refused open: {}", .0.as_str())]
+    Refused(BoundedText),
 }
 
 /// Terminal source observation fact.
@@ -382,24 +370,6 @@ impl EventRecord {
     }
 }
 
-/// Source-scoped evidence attached to one query revision.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct QueryEvidence {
-    /// Latest scoped source facts included in this exact result.
-    pub sources: Vec<SourceEvidence>,
-}
-
-/// Revision and lifecycle fact for one independent local source.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SourceEvidence {
-    /// Query-source role.
-    pub kind: SourceKind,
-    /// Last coherent revision included in the result.
-    pub revision: SourceRevision,
-    /// Whether the continuous source observation remains open.
-    pub status: SourceStatus,
-}
-
 /// Monotonic revision delivered by one live observation.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct QueryRevision(pub u64);
@@ -426,11 +396,12 @@ impl QuerySnapshot {
                 sources: sources
                     .iter()
                     .map(|source| SourceEvidence {
-                        kind: source.kind,
+                        kind: source.kind.clone(),
                         revision: source.revision,
-                        status: source.status,
+                        status: source.status.clone(),
                     })
                     .collect(),
+                ..QueryEvidence::default()
             },
         }
     }
@@ -455,7 +426,7 @@ pub enum QueryEvaluationError {
     /// A supposedly accepted local event violated the source contract.
     #[error("query source supplied an event without a stable id")]
     MissingEventId,
-    /// Evaluator-specific refusal.
-    #[error("query evaluator refused current sources: {0}")]
-    Refused(String),
+    /// Evaluator-specific refusal, retained under a Fava-owned byte bound.
+    #[error("query evaluator refused current sources: {}", .0.as_str())]
+    Refused(BoundedText),
 }

@@ -199,8 +199,11 @@ fn delivery_outcome(outcome: PublishOutcome) -> RelayDeliveryOutcome {
     match outcome {
         PublishOutcome::Acknowledged { message } => RelayDeliveryOutcome::Acknowledged { message },
         PublishOutcome::Rejected { message } => RelayDeliveryOutcome::Rejected { message },
-        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::GivenUp {
-            reason: "relay authentication required".to_owned(),
+        // The owner records only what the publisher observed. `GivenUp` is a policy
+        // noun the owner must never invent, and this outcome is reached after handoff,
+        // so it cannot be reported as a definite pre-handoff failure.
+        PublishOutcome::AuthenticationRequired => RelayDeliveryOutcome::AuthenticationDenied {
+            reason: "relay demanded authentication this attempt did not satisfy".to_owned(),
         },
         PublishOutcome::NotHandedOff { reason } => RelayDeliveryOutcome::Retryable { reason },
         PublishOutcome::OutcomeUnknown { reason } => RelayDeliveryOutcome::Unknown { reason },

@@ -16,14 +16,10 @@ use std::num::NonZeroUsize;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    DemandId, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
+    InstalledSubscriptions, PlanRevision, PlannedSubscription, RelayDemand, RelayReadConstraints,
     ShortfallReason, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
     SubscriptionShortfall,
 };
-use fava_wire::SubscriptionId;
-use nostr::filter::Filter;
-
-use crate::grouping::Group;
 
 /// Exact subscription planner that groups compatible author and tag filters.
 #[derive(Clone, Copy, Debug, Default)]
@@ -61,17 +57,6 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
             shortfalls,
         ))
     }
-}
-
-/// One candidate wire subscription with its allocated identity.
-#[derive(Clone, Debug)]
-struct Candidate {
-    /// Wire id derived from this candidate's exact content.
-    id: SubscriptionId,
-    /// Filters this REQ will carry.
-    filters: Vec<Filter>,
-    /// Logical demand it serves.
-    serves: BTreeSet<DemandId>,
 }
 
 /// Two demands in one call may not carry the same logical identity.
@@ -116,36 +101,41 @@ fn admit_filter_limits(
 /// and each half is regrouped, so every surviving REQ is still an exact
 /// encoding of the demand attributed to it.
 fn fit_message_bound(
-    grouped: Vec<Group>,
+    grouped: Vec<Vec<RelayDemand>>,
     constraints: &RelayReadConstraints,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Result<Vec<Candidate>, SubscriptionPlanError> {
-    let mut queue: VecDeque<Group> = grouped.into();
+) -> Result<Vec<PlannedSubscription>, SubscriptionPlanError> {
+    let mut queue: VecDeque<Vec<RelayDemand>> = grouped.into();
     let mut carried = Vec::new();
-    while let Some(group) = queue.pop_front() {
-        let filters = vec![group.filter.clone()];
+    while let Some(members) = queue.pop_front() {
+        let Some(filter) = grouping::merged_filter(&members, constraints) else {
+            continue;
+        };
+        let filters = vec![filter];
         let Some(id) = wire::identity(&filters, constraints, 0) else {
-            record_id_shortfall(&group, constraints, shortfalls);
+            record_id_shortfall(&members, constraints, shortfalls);
             continue;
         };
         let bytes = wire::encoded_bytes(&id, &filters)?;
-        let Some(maximum) = constraints.max_message_bytes.get().map(NonZeroUsize::get) else {
-            carried.push(candidate(id, filters, &group));
-            continue;
-        };
-        if bytes <= maximum {
-            carried.push(candidate(id, filters, &group));
+        let declared = constraints.max_message_bytes.get().map(NonZeroUsize::get);
+        if declared.is_none_or(|maximum| bytes <= maximum) {
+            carried.push(PlannedSubscription {
+                id,
+                filters,
+                serves: members.iter().map(RelayDemand::id).collect(),
+            });
             continue;
         }
-        if group.members.len() == 1 {
+        let maximum = declared.unwrap_or(bytes);
+        if members.len() == 1 {
             shortfalls.push(SubscriptionShortfall {
-                demand: group.members[0].id(),
+                demand: members[0].id(),
                 reason: ShortfallReason::MessageTooLarge { bytes, maximum },
             });
             continue;
         }
-        let midpoint = group.members.len().div_ceil(2);
-        let (left, right) = group.members.split_at(midpoint);
+        let midpoint = members.len().div_ceil(2);
+        let (left, right) = members.split_at(midpoint);
         queue.extend(grouping::group(left, constraints));
         queue.extend(grouping::group(right, constraints));
     }
@@ -158,11 +148,11 @@ fn fit_message_bound(
 /// churn live subscriptions; ties break on wire id, so the demand that loses is
 /// the same on every replan with the same inputs.
 fn fit_subscription_count(
-    mut candidates: Vec<Candidate>,
+    mut candidates: Vec<PlannedSubscription>,
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
     shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Vec<Candidate> {
+) -> Vec<PlannedSubscription> {
     let Some(maximum) = constraints.max_subscriptions.get().map(NonZeroUsize::get) else {
         return candidates;
     };
@@ -188,18 +178,9 @@ fn fit_subscription_count(
     candidates
 }
 
-/// Build one candidate from a group whose identity is already allocated.
-fn candidate(id: SubscriptionId, filters: Vec<Filter>, group: &Group) -> Candidate {
-    Candidate {
-        id,
-        filters,
-        serves: group.serves(),
-    }
-}
-
 /// Report every member of a group whose wire identity cannot be expressed.
 fn record_id_shortfall(
-    group: &Group,
+    members: &[RelayDemand],
     constraints: &RelayReadConstraints,
     shortfalls: &mut Vec<SubscriptionShortfall>,
 ) {
@@ -207,7 +188,7 @@ fn record_id_shortfall(
         .max_subscription_id_chars
         .get()
         .map_or(0, NonZeroUsize::get);
-    for member in &group.members {
+    for member in members {
         shortfalls.push(SubscriptionShortfall {
             demand: member.id(),
             reason: ShortfallReason::SubscriptionIdTooLong { maximum },

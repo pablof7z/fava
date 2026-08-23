@@ -86,7 +86,10 @@ fn memory_event_cache_runs_the_source_corpus() {
         },
         |id| {
             cache
-                .commit(vec![fava_state::CacheMutation::Retract(id)])
+                .commit(vec![fava_state::CacheMutation::Retract {
+                    event_id: id,
+                    cause: fava_state::RetractionCause::Evicted,
+                }])
                 .expect("event retracts");
         },
     ));

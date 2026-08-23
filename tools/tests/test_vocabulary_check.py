@@ -52,6 +52,17 @@ class VocabularyCheckTest(unittest.TestCase):
                 self.assertIn("sample::OpenedRelay", result.stderr)
                 self.assertIn("existing noun: Relay", result.stderr)
 
+    def test_restricted_visibility_is_not_a_public_symbol(self) -> None:
+        """`pub(crate)` is internal vocabulary, not the crate's public surface."""
+        result = self.run_check(
+            source="pub struct Query;\npub(crate) struct QueryLane;\n",
+            symbols=["sample::Query"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unapproved nominal vocabulary variant: sample::QueryLane", result.stderr)
+        self.assertNotIn("undocumented public architectural symbol: sample::QueryLane", result.stderr)
+
     def test_accepts_a_nominal_variant_approved_as_its_own_term(self) -> None:
         result = self.run_check(
             source="pub struct RelayUrl;\npub(super) struct OpenedRelay;\n",
@@ -73,14 +84,285 @@ class VocabularyCheckTest(unittest.TestCase):
         self.assertIn("sample::RelayWrapper", result.stderr)
         self.assertIn("existing noun: Relay", result.stderr)
 
-    def test_accepts_an_unrelated_private_nominal_helper(self) -> None:
+    def test_rejects_a_single_word_internal_declaration(self) -> None:
+        """A one-word name is still vocabulary; `len(words(name)) < 2` hid six."""
         result = self.run_check(
-            source="pub struct RelayUrl;\nstruct ConnectionTask;\n",
-            symbols=["sample::RelayUrl"],
-            term_name="RelayUrl",
+            source="pub struct Query;\nstruct Change;\n",
+            symbols=["sample::Query"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "unapproved nominal vocabulary variant: sample::Change", result.stderr
+        )
+
+    def test_rejects_a_single_word_homonym_of_a_term_owned_elsewhere(self) -> None:
+        """`Group` is approved for its owner only; the same spelling elsewhere is a
+        second unrelated concept."""
+        result = self.run_check(
+            source="pub struct Query;\nstruct Group;\n",
+            symbols=["sample::Query"],
+            approved_terms=["Group"],
+            approved_term_owner="other-crate",
+            extra_packages={"crates/other-crate": ("other-crate", "")},
+            registry_crates=["sample", "other-crate"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "unapproved nominal vocabulary variant: sample::Group", result.stderr
+        )
+        self.assertIn("existing noun: Group", result.stderr)
+
+    def test_rejects_a_declaration_embedding_no_registered_noun(self) -> None:
+        """The "must embed a registered noun" filter hid five more violations,
+        including two of the nine unapproved lifecycle owners."""
+        result = self.run_check(
+            source="pub struct Query;\nstruct KnownLists;\n",
+            symbols=["sample::Query"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "unapproved nominal vocabulary variant: sample::KnownLists", result.stderr
+        )
+
+    def test_rejects_every_nominal_keyword(self) -> None:
+        declarations = (
+            "struct HiddenOwner;",
+            "enum HiddenOwner {}",
+            "trait HiddenOwner {}",
+            "type HiddenOwner = u8;",
+            "union HiddenOwner { first: u8 }",
+        )
+
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                result = self.run_check(
+                    source=f"pub struct Query;\n{declaration}\n",
+                    symbols=["sample::Query"],
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("sample::HiddenOwner", result.stderr)
+
+    def test_associated_items_inside_impl_blocks_are_not_declarations(self) -> None:
+        """`fava_nip02::IntoIter` was nine false positives: an associated type
+        inside an `impl` block declares no new noun."""
+        source = textwrap.dedent(
+            """\
+            pub struct Query;
+
+            impl IntoIterator for Query {
+                type Item = u8;
+                type IntoIter = std::vec::IntoIter<u8>;
+
+                fn into_iter(self) -> Self::IntoIter {
+                    Vec::new().into_iter()
+                }
+            }
+            """
+        )
+        result = self.run_check(source=source, symbols=["sample::Query"])
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_associated_items_inside_trait_definitions_are_not_declarations(
+        self,
+    ) -> None:
+        source = textwrap.dedent(
+            """\
+            pub struct Query;
+
+            trait Projection {
+                type Outcome;
+            }
+            """
+        )
+        result = self.run_check(source=source, symbols=["sample::Query"])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sample::Projection", result.stderr)
+        self.assertNotIn("sample::Outcome", result.stderr)
+
+    def test_comments_and_string_literals_are_not_declarations(self) -> None:
+        source = textwrap.dedent(
+            '''\
+            pub struct Query;
+
+            // pub struct CommentGhost;
+            /* pub struct BlockGhost; */
+
+            fn describe() -> &'static str {
+                let _lifetime: &'static str = "pub struct StringGhost;";
+                r#"pub struct RawGhost;"#
+            }
+            '''
+        )
+        result = self.run_check(source=source, symbols=["sample::Query"])
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_derive_attributes_do_not_hide_a_declaration(self) -> None:
+        source = textwrap.dedent(
+            """\
+            pub struct Query;
+
+            #[derive(Debug, Clone)]
+            #[allow(dead_code)]
+            struct HiddenOwner;
+            """
+        )
+        result = self.run_check(source=source, symbols=["sample::Query"])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sample::HiddenOwner", result.stderr)
+
+    def test_scans_every_workspace_package_not_only_the_crates_directory(self) -> None:
+        """Three packages and twenty-one public declarations sat outside the old
+        walk root entirely."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            extra_packages={"apps/tool": ("tool", "pub struct ToolOutcome;\n")},
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("undocumented architectural crate: tool", result.stderr)
+        self.assertIn(
+            "undocumented public architectural symbol: tool::ToolOutcome", result.stderr
+        )
+
+    def test_scans_public_declarations_in_crate_tests(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            tests_source="pub struct CountingSigner;\n",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "undocumented public architectural symbol: sample::CountingSigner",
+            result.stderr,
+        )
+
+    def test_private_helpers_outside_crates_are_not_fava_vocabulary(self) -> None:
+        """A downstream package owns its private names; only what it publishes is
+        architectural vocabulary."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            extra_packages={"apps/tool": ("tool", "struct LocalScratch;\n")},
+            registry_crates=["sample", "tool"],
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_planning_records_are_not_vocabulary_authority(self) -> None:
+        """`.planning/**` is a record of plans, reviews, and audits. Harvesting it
+        let prose invent crates and symbols and flip this gate in either
+        direction."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            planning=(
+                "The review mentions fava-canary and fava-owned-deadline.\n"
+                "pub struct SubscriptionPlanDiff;\n"
+            ),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("fava-canary", result.stderr)
+        self.assertNotIn("SubscriptionPlanDiff", result.stderr)
+
+    def test_planning_records_cannot_satisfy_a_registered_specification_entry(
+        self,
+    ) -> None:
+        """The reverse direction: a plan mentioning a term must not stand in for a
+        specification that never named it."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification_symbols=["Session"],
+            planning="pub struct Session;\n",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("registered specified symbol does not exist: Session", result.stderr)
+
+    def test_reports_a_specified_crate_with_no_implementation(self) -> None:
+        """`fava-runtime` was registered, unimplemented, and silent for six
+        milestones."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification="Routing lives in fava-runtime.\n",
+            specification_crates=["fava-runtime"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "specified architectural crate is not implemented: fava-runtime",
+            result.stderr,
+        )
+
+    def test_accepts_a_specified_crate_that_exists(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification="Routing lives in fava-runtime.\n",
+            specification_crates=["fava-runtime"],
+            extra_packages={"crates/fava-runtime": ("fava-runtime", "")},
+            registry_crates=["sample", "fava-runtime"],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_reports_a_specified_symbol_with_no_implementation(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            specification="pub struct Session;\n",
+            specification_symbols=["Session"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "specified architectural symbol is not implemented: Session", result.stderr
+        )
+
+    def test_rejects_a_registered_symbol_that_does_not_exist(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query", "sample::Vanished"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "registered public symbol does not exist: sample::Vanished", result.stderr
+        )
+
+    def test_rejects_a_registered_crate_that_does_not_exist(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            registry_crates=["sample", "ghost-crate"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "registered architectural crate does not exist: ghost-crate", result.stderr
+        )
+
+    def test_rejects_a_fava_term_without_a_nearest_nostr_concept(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            omit_nearest_nostr=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Query: Fava terms require nearest_nostr", result.stderr)
 
     def test_rejects_an_undocumented_specification_symbol(self) -> None:
         result = self.run_check(
@@ -94,7 +376,7 @@ class VocabularyCheckTest(unittest.TestCase):
 
     def test_accepts_a_registered_specification_symbol(self) -> None:
         result = self.run_check(
-            source="pub struct Query;\n",
+            source="pub struct Query;\nstruct ReplaceableEventEdit;\n",
             symbols=["sample::Query"],
             specification="pub struct ReplaceableEventEdit;\n",
             specification_symbols=["ReplaceableEventEdit"],
@@ -152,6 +434,8 @@ class VocabularyCheckTest(unittest.TestCase):
                 "crates/fava-simple-groups\n"
             ),
             specification_crates=["fava-simple-groups"],
+            extra_packages={"crates/fava-simple-groups": ("fava-simple-groups", "")},
+            registry_crates=["sample", "fava-simple-groups"],
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -179,6 +463,8 @@ class VocabularyCheckTest(unittest.TestCase):
                 "# uses fava-simple-groups and fava-unregistered\n"
             ),
             specification_crates=["fava-simple-groups"],
+            extra_packages={"crates/fava-simple-groups": ("fava-simple-groups", "")},
+            registry_crates=["sample", "fava-simple-groups"],
         )
 
         self.assertNotEqual(result.returncode, 0)
@@ -218,9 +504,15 @@ class VocabularyCheckTest(unittest.TestCase):
         symbols: list[str],
         term_name: str = "Query",
         approved_terms: list[str] | None = None,
+        approved_term_owner: str = "sample",
+        registry_crates: list[str] | None = None,
         specification: str = "",
         specification_symbols: list[str] | None = None,
         specification_crates: list[str] | None = None,
+        planning: str = "",
+        tests_source: str = "",
+        extra_packages: dict[str, tuple[str, str]] | None = None,
+        omit_nearest_nostr: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -232,15 +524,35 @@ class VocabularyCheckTest(unittest.TestCase):
                 '[package]\nname = "sample"\n', encoding="utf-8"
             )
             (crate / "src" / "lib.rs").write_text(source, encoding="utf-8")
+            if tests_source:
+                (crate / "tests").mkdir(parents=True)
+                (crate / "tests" / "support.rs").write_text(
+                    tests_source, encoding="utf-8"
+                )
+            for location, (package, package_source) in (extra_packages or {}).items():
+                package_root = root / location
+                (package_root / "src").mkdir(parents=True)
+                (package_root / "Cargo.toml").write_text(
+                    f'[package]\nname = "{package}"\n', encoding="utf-8"
+                )
+                (package_root / "src" / "lib.rs").write_text(
+                    package_source, encoding="utf-8"
+                )
             (root / "docs" / "spec" / "ARCHITECTURE.md").write_text(
                 specification, encoding="utf-8"
             )
+            if planning:
+                (root / ".planning").mkdir(parents=True)
+                (root / ".planning" / "NOTES.md").write_text(planning, encoding="utf-8")
             rendered_symbols = ", ".join(f'"{symbol}"' for symbol in symbols)
+            rendered_crates = ", ".join(
+                f'"{name}"' for name in registry_crates or ["sample"]
+            )
             rendered_specification_symbols = ", ".join(
                 f'"{symbol}"' for symbol in specification_symbols or []
             )
             rendered_specification_crates = ", ".join(
-                f'"{crate}"' for crate in specification_crates or []
+                f'"{crate_name}"' for crate_name in specification_crates or []
             )
             rendered_approved_terms = "".join(
                 textwrap.dedent(
@@ -250,7 +562,7 @@ class VocabularyCheckTest(unittest.TestCase):
                     name = "{term}"
                     source = "fava"
                     meaning = "An explicitly approved architectural term."
-                    owner = "sample"
+                    owner = "{approved_term_owner}"
                     nearest_nostr = "{term_name}"
                     distinction = "The fixture explicitly approves this distinct concept."
                     symbols = []
@@ -259,6 +571,7 @@ class VocabularyCheckTest(unittest.TestCase):
                 )
                 for term in approved_terms or []
             )
+            nearest_nostr = "" if omit_nearest_nostr else 'nearest_nostr = "Filter"\n'
             registry = textwrap.dedent(
                 f'''\
                 version = 1
@@ -268,10 +581,10 @@ class VocabularyCheckTest(unittest.TestCase):
                 source = "fava"
                 meaning = "A declarative request for events."
                 owner = "sample"
-                nearest_nostr = "Filter"
+                {nearest_nostr}\
                 distinction = "A Query also carries local acquisition and presentation rules."
                 symbols = [{rendered_symbols}]
-                crates = ["sample"]
+                crates = [{rendered_crates}]
                 spec_symbols = [{rendered_specification_symbols}]
                 spec_crates = [{rendered_specification_crates}]
                 '''
