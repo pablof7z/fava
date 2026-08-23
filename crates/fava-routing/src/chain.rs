@@ -1,13 +1,14 @@
 use std::collections::BTreeSet;
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::Arc;
 
 use tokio::sync::{mpsc, watch};
 
 use crate::{
-    CoverageState, RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
-    merge_coverage,
+    CoverageState, RouteContribution, RoutePlan, RouteRequest, RouteTarget, Router, RouterError,
+    RouterSession, merge_coverage,
 };
 
 const MAX_ROUTERS: usize = 32;
@@ -20,91 +21,206 @@ const MAX_TEXT_BYTES: usize = 4_096;
 
 /// Evaluate the ordered router chain without opening router sessions.
 ///
+/// One router's refusal or panic degrades the plan into an attributed shortfall;
+/// it never denies the caller the contributions of every other router.
+///
 /// # Errors
 ///
-/// Returns [`RouterError`] for invalid configuration, refusal, or bounded output.
+/// Returns [`RouterError`] only for invalid chain configuration.
 pub fn preview(
     routers: &[Arc<dyn Router>],
     request: &RouteRequest,
 ) -> Result<RoutePlan, RouterError> {
     validate_names(routers)?;
-    let mut contributions = Vec::with_capacity(routers.len());
-    let targets = request.targets();
-    for router in routers {
-        let upstream =
-            RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))?;
-        contributions.push(attribute(
-            router.preview(request, &upstream)?,
-            router.name(),
-        )?);
+    let mut composer = Composer::new(routers.len(), request.targets());
+    for (index, router) in routers.iter().enumerate() {
+        let upstream = composer.upstream_plan(index, 1);
+        match preview_router(router.as_ref(), request, &upstream)
+            .and_then(|contribution| attribute(contribution, router.name()))
+        {
+            Ok(contribution) => composer.accept(index, router.name(), contribution),
+            Err(error) => composer.record(&bounded_error(router.name(), &error)),
+        }
     }
-    RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))
+    composer.plan(1)
 }
 
 /// Open the ordered router chain as one complete-contribution sequence.
 ///
+/// One router's refusal, panic, or termination is isolated to that router
+/// instance: its last coherent contribution is retained and the failure becomes
+/// an attributed shortfall in every later plan revision.
+///
 /// # Errors
 ///
-/// Returns [`RouterError`] for invalid configuration, refusal, or bounded output.
+/// Returns [`RouterError`] only for invalid chain configuration.
 pub fn open(
     routers: &[Arc<dyn Router>],
     request: &RouteRequest,
 ) -> Result<Box<dyn RouterSession>, RouterError> {
     validate_names(routers)?;
     let targets = request.targets();
+    let mut composer = Composer::new(routers.len(), targets);
     let mut sessions = Vec::with_capacity(routers.len());
-    let mut contributions = Vec::with_capacity(routers.len());
     let mut upstream = Vec::with_capacity(routers.len());
-    for router in routers {
-        let plan =
-            RoutePlan::from_contribution(1, &complete_targets(combine(&contributions), &targets))?;
+    for (index, router) in routers.iter().enumerate() {
+        let plan = composer.upstream_plan(index, 1);
         let (upstream_tx, upstream_rx) = watch::channel(Arc::new(plan));
-        let mut session = match router.open(request.clone(), upstream_rx) {
-            Ok(session) => session,
-            Err(error) => {
-                close_sessions(&mut sessions);
-                return Err(error);
-            }
-        };
-        let contribution = match attribute(session.current(), router.name()) {
-            Ok(contribution) => contribution,
-            Err(error) => {
-                session.close();
-                close_sessions(&mut sessions);
-                return Err(error);
-            }
-        };
-        contributions.push(contribution);
         upstream.push(upstream_tx);
-        sessions.push((router.name().to_owned(), session));
+        match open_router(router.as_ref(), request, upstream_rx) {
+            Ok(mut session) => match current_contribution(session.as_mut(), router.name()) {
+                Ok(contribution) => {
+                    composer.accept(index, router.name(), contribution);
+                    sessions.push(Some((router.name().to_owned(), session)));
+                }
+                Err(error) => {
+                    close_session(session.as_mut());
+                    composer.record(&bounded_error(router.name(), &error));
+                    sessions.push(None);
+                }
+            },
+            Err(error) => {
+                composer.record(&bounded_error(router.name(), &error));
+                sessions.push(None);
+            }
+        }
     }
-    let initial = Arc::new(complete_targets(combine(&contributions), &targets));
-    let (latest_tx, latest) = watch::channel(initial);
+    let (latest_tx, latest) = watch::channel(Arc::new(composer.combined()));
     let (cancel, cancel_rx) = watch::channel(false);
     let (updates_tx, updates_rx) = mpsc::channel(routers.len().max(1));
-    for (index, (name, session)) in sessions.into_iter().enumerate() {
-        tokio::spawn(monitor_router(
-            index,
-            name,
-            session,
-            updates_tx.clone(),
-            cancel_rx.clone(),
-        ));
+    for (index, session) in sessions.into_iter().enumerate() {
+        if let Some((name, session)) = session {
+            tokio::spawn(monitor_router(
+                index,
+                name,
+                session,
+                updates_tx.clone(),
+                cancel_rx.clone(),
+            ));
+        }
     }
     drop(updates_tx);
     tokio::spawn(compose_updates(
-        contributions,
-        upstream,
-        updates_rx,
-        latest_tx,
-        cancel_rx,
-        targets,
+        composer, upstream, updates_rx, latest_tx, cancel_rx,
     ));
     Ok(Box::new(OpenedChain {
         latest,
         cancel,
         closed: false,
     }))
+}
+
+fn preview_router(
+    router: &dyn Router,
+    request: &RouteRequest,
+    upstream: &RoutePlan,
+) -> Result<RouteContribution, RouterError> {
+    isolate("previewing", || router.preview(request, upstream))
+}
+
+fn open_router(
+    router: &dyn Router,
+    request: &RouteRequest,
+    upstream: watch::Receiver<Arc<RoutePlan>>,
+) -> Result<Box<dyn RouterSession>, RouterError> {
+    isolate("opening", || router.open(request.clone(), upstream))
+}
+
+fn current_contribution(
+    session: &mut dyn RouterSession,
+    router: &str,
+) -> Result<RouteContribution, RouterError> {
+    isolate("reading its current contribution", || Ok(session.current()))
+        .and_then(|contribution| attribute(contribution, router))
+}
+
+fn close_session(session: &mut dyn RouterSession) {
+    drop(isolate("closing", || {
+        session.close();
+        Ok(())
+    }));
+}
+
+/// Run one provider call so a provider panic becomes a scoped typed refusal.
+fn isolate<T>(
+    action: &str,
+    call: impl FnOnce() -> Result<T, RouterError>,
+) -> Result<T, RouterError> {
+    std::panic::catch_unwind(AssertUnwindSafe(call)).unwrap_or_else(|_| {
+        Err(RouterError::Refused(format!(
+            "router panicked while {action}"
+        )))
+    })
+}
+
+/// Ordered per-router contributions plus the chain's own bounded shortfalls.
+struct Composer {
+    contributions: Vec<RouteContribution>,
+    shortfalls: Vec<String>,
+    discarded: usize,
+    targets: BTreeSet<RouteTarget>,
+}
+
+impl Composer {
+    fn new(routers: usize, targets: BTreeSet<RouteTarget>) -> Self {
+        Self {
+            contributions: vec![RouteContribution::default(); routers],
+            shortfalls: Vec::new(),
+            discarded: 0,
+            targets,
+        }
+    }
+
+    /// Record one chain-owned shortfall, counting exactly what the bound drops.
+    fn record(&mut self, shortfall: &str) {
+        if self.shortfalls.len() < MAX_SHORTFALLS {
+            self.shortfalls.push(shortfall.to_owned());
+        } else {
+            self.discarded = self.discarded.saturating_add(1);
+        }
+    }
+
+    /// Replace one router's contribution, keeping the previous one when the
+    /// combined result would leave routing bounds.
+    fn accept(&mut self, index: usize, router: &str, contribution: RouteContribution) {
+        let previous = std::mem::replace(&mut self.contributions[index], contribution);
+        if let Err(error) = validate_combined(&self.merged()) {
+            self.contributions[index] = previous;
+            self.record(&bounded_error(router, &error));
+        }
+    }
+
+    fn merged(&self) -> RouteContribution {
+        complete_targets(combine(&self.contributions), &self.targets)
+    }
+
+    /// Complete current chain contribution, always within routing bounds.
+    fn combined(&self) -> RouteContribution {
+        let mut combined = self.merged();
+        combined.shortfalls.extend(self.shortfalls.iter().cloned());
+        let mut discarded = self.discarded;
+        let maximum = MAX_SHORTFALLS * MAX_ROUTERS;
+        if combined.shortfalls.len() >= maximum {
+            discarded = discarded.saturating_add(combined.shortfalls.len() - maximum + 1);
+            combined.shortfalls.truncate(maximum - 1);
+        }
+        if discarded > 0 {
+            combined.shortfalls.push(format!(
+                "chain: {discarded} further route shortfalls discarded beyond the {maximum}-entry bound"
+            ));
+        }
+        combined
+    }
+
+    /// Plan visible to the router at `index`, built from earlier routers only.
+    fn upstream_plan(&self, index: usize, revision: u64) -> RoutePlan {
+        let upstream = complete_targets(combine(&self.contributions[..index]), &self.targets);
+        RoutePlan::from_contribution(revision, &upstream).unwrap_or_default()
+    }
+
+    fn plan(&self, revision: u64) -> Result<RoutePlan, RouterError> {
+        RoutePlan::from_contribution(revision, &self.combined())
+    }
 }
 
 struct OpenedChain {
@@ -167,7 +283,7 @@ async fn monitor_router(
             }
             contribution = session.next_change() => contribution,
         };
-        let closed = contribution.is_err();
+        let ended = contribution.is_err();
         if updates
             .send(RouterUpdate {
                 index,
@@ -176,21 +292,20 @@ async fn monitor_router(
             })
             .await
             .is_err()
-            || closed
+            || ended
         {
             break;
         }
     }
-    session.close();
+    close_session(session.as_mut());
 }
 
 async fn compose_updates(
-    mut contributions: Vec<RouteContribution>,
+    mut composer: Composer,
     upstream: Vec<watch::Sender<Arc<RoutePlan>>>,
     mut updates: mpsc::Receiver<RouterUpdate>,
     latest: watch::Sender<Arc<RouteContribution>>,
     mut cancel: watch::Receiver<bool>,
-    targets: BTreeSet<crate::RouteTarget>,
 ) {
     let mut revision = 1_u64;
     loop {
@@ -198,7 +313,7 @@ async fn compose_updates(
             biased;
             changed = cancel.changed() => {
                 if changed.is_err() || *cancel.borrow_and_update() {
-                    break;
+                    return;
                 }
                 continue;
             }
@@ -207,33 +322,28 @@ async fn compose_updates(
         let Some(update) = update else {
             break;
         };
-        contributions[update.index] = live_contribution(update.contribution, &update.name);
-        revision = revision.saturating_add(1);
-        for index in (update.index + 1)..upstream.len() {
-            let plan = RoutePlan::from_contribution(
-                revision,
-                &complete_targets(combine(&contributions[..index]), &targets),
-            )
-            .expect("validated router contributions remain bounded when combined");
-            upstream[index].send_replace(Arc::new(plan));
+        match update.contribution {
+            Ok(contribution) => match attribute(contribution, &update.name) {
+                // A later contribution replaces only its own router's demand.
+                Ok(contribution) => composer.accept(update.index, &update.name, contribution),
+                Err(error) => composer.record(&bounded_error(&update.name, &error)),
+            },
+            // A router that refuses or ends keeps its last coherent contribution:
+            // unchanged destinations stay running and the loss becomes a fact.
+            Err(error) => composer.record(&bounded_error(&update.name, &error)),
         }
-        latest.send_replace(Arc::new(complete_targets(
-            combine(&contributions),
-            &targets,
-        )));
+        revision = revision.saturating_add(1);
+        for (index, sender) in upstream.iter().enumerate().skip(update.index + 1) {
+            sender.send_replace(Arc::new(composer.upstream_plan(index, revision)));
+        }
+        latest.send_replace(Arc::new(composer.combined()));
     }
-}
-
-fn live_contribution(
-    contribution: Result<RouteContribution, RouterError>,
-    router: &str,
-) -> RouteContribution {
-    match contribution.and_then(|contribution| attribute(contribution, router)) {
-        Ok(contribution) => contribution,
-        Err(error) => RouteContribution {
-            shortfalls: vec![bounded_error(router, &error)],
-            ..RouteContribution::default()
-        },
+    // Every router instance has ended. The last composed plan stays current and
+    // its relay demand stays owned until the application cancels this chain.
+    while cancel.changed().await.is_ok() {
+        if *cancel.borrow_and_update() {
+            return;
+        }
     }
 }
 
@@ -253,6 +363,14 @@ fn attribute(
     validate_router_contribution(&contribution)?;
     for destination in &mut contribution.destinations {
         destination.set_router(router);
+    }
+    for shortfall in &mut contribution.shortfalls {
+        let attributed = format!("{router}: {shortfall}");
+        *shortfall = if attributed.len() <= MAX_TEXT_BYTES {
+            attributed
+        } else {
+            format!("{router}: route shortfall text exceeds {MAX_TEXT_BYTES}-byte bound")
+        };
     }
     Ok(contribution)
 }
@@ -285,7 +403,7 @@ fn combine(contributions: &[RouteContribution]) -> RouteContribution {
 
 fn complete_targets(
     mut contribution: RouteContribution,
-    targets: &BTreeSet<crate::RouteTarget>,
+    targets: &BTreeSet<RouteTarget>,
 ) -> RouteContribution {
     for target in targets {
         contribution
@@ -391,12 +509,6 @@ fn validate_names(routers: &[Arc<dyn Router>]) -> Result<(), RouterError> {
     Ok(())
 }
 
-fn close_sessions(sessions: &mut Vec<(String, Box<dyn RouterSession>)>) {
-    for (_, session) in sessions {
-        session.close();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -404,7 +516,7 @@ mod tests {
     use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 
     use super::*;
-    use crate::{RouteDestination, RouteTarget};
+    use crate::RouteDestination;
 
     #[test]
     fn refuses_router_contribution_over_destination_bound() {
@@ -439,6 +551,25 @@ mod tests {
             Err(RouterError::Refused(
                 "configured routers exceed bound: 33 > 32".to_owned()
             ))
+        );
+    }
+
+    #[test]
+    fn chain_shortfall_overflow_reports_the_exact_discarded_count() {
+        let mut composer = Composer::new(1, BTreeSet::new());
+        for index in 0..(MAX_SHORTFALLS + 3) {
+            composer.record(&format!("shortfall {index}"));
+        }
+
+        assert_eq!(composer.shortfalls.len(), MAX_SHORTFALLS);
+        assert_eq!(composer.discarded, 3);
+        assert!(
+            composer
+                .combined()
+                .shortfalls
+                .iter()
+                .any(|shortfall| shortfall
+                    == "chain: 3 further route shortfalls discarded beyond the 8192-entry bound")
         );
     }
 

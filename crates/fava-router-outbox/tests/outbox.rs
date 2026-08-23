@@ -9,7 +9,7 @@ use fava_query::{
     SourceStatus,
 };
 use fava_router_outbox::OutboxRouter;
-use fava_routing::{RoutePlan, RouteRequest, RouteTarget, Router};
+use fava_routing::{CoverageState, RoutePlan, RouteRequest, RouteTarget, Router};
 use fava_state::{CachedEvent, RelayEvidence, RelayUrl};
 use fava_write::{EventBuilder, EventValue, Kind, Tag, Timestamp};
 use nostr::event::FinalizeEvent;
@@ -136,6 +136,45 @@ impl WatchSource {
             ))],
         }));
     }
+
+    fn replace_all(&self, events: Vec<fava_write::Event>) {
+        let revision = self.latest.borrow().revision.0.saturating_add(1);
+        self.latest.send_replace(Arc::new(SourceSnapshot {
+            kind: SourceKind::EventCache,
+            revision: SourceRevision(revision),
+            status: SourceStatus::Open,
+            events: events
+                .into_iter()
+                .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
+                .collect(),
+        }));
+    }
+
+    fn replace_malformed(&self, count: usize) {
+        let keys = Keys::generate();
+        self.replace_all(
+            (0..count)
+                .map(|index| {
+                    EventBuilder::new(keys.public_key(), Kind::TextNote)
+                        .created_at(Timestamp::from(index as u64 + 1))
+                        .build()
+                        .unwrap()
+                        .finalize(&keys)
+                        .unwrap()
+                })
+                .collect(),
+        );
+    }
+
+    fn settle(&self) {
+        let revision = self.latest.borrow().revision.0.saturating_add(1);
+        self.latest.send_replace(Arc::new(SourceSnapshot {
+            kind: SourceKind::EventCache,
+            revision: SourceRevision(revision),
+            status: SourceStatus::Closed,
+            events: Vec::new(),
+        }));
+    }
 }
 
 impl QuerySource for WatchSource {
@@ -171,4 +210,109 @@ impl SourceChanges for WatchChanges {
     fn close(&mut self) {
         self.closed = true;
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closed_discovery_source_stays_unresolved_and_never_becomes_settled_absent() {
+    let author = Keys::generate();
+    let indexer = relay("indexer");
+    let source = Arc::new(ClosingSource);
+    let router = OutboxRouter::new("nip65", [indexer], source).unwrap();
+    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
+    let mut session = router.open(request, upstream).expect("router opens");
+
+    let changed = session
+        .next_change()
+        .await
+        .expect("source close is reported");
+    let plan = RoutePlan::from_contribution(2, &changed).unwrap();
+
+    assert_eq!(
+        plan.coverage.get(&RouteTarget::Author(author.public_key())),
+        Some(&CoverageState::Unresolved),
+        "a closed discovery source is not settled absence"
+    );
+    assert!(!plan.settled, "unanswered discovery must not settle");
+    assert!(
+        plan.shortfalls
+            .iter()
+            .any(|shortfall| shortfall.contains("closed")),
+        "the lost discovery source must be an exact shortfall: {:?}",
+        plan.shortfalls
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discovery_source_completing_without_a_relay_list_settles_absence() {
+    let author = Keys::generate();
+    let indexer = relay("indexer");
+    let source = Arc::new(WatchSource::new());
+    let router = OutboxRouter::new("nip65", [indexer], source.clone()).unwrap();
+    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
+    let mut session = router.open(request, upstream).expect("router opens");
+
+    source.settle();
+    let changed = session.next_change().await.expect("settlement is reported");
+    let plan = RoutePlan::from_contribution(2, &changed).unwrap();
+
+    assert_eq!(
+        plan.coverage.get(&RouteTarget::Author(author.public_key())),
+        Some(&CoverageState::SettledAbsent),
+        "a source that completes without a relay list settles absence"
+    );
+    assert!(plan.settled);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn discarded_relay_list_failures_are_reported_as_an_exact_overflow_shortfall() {
+    let author = Keys::generate();
+    let indexer = relay("indexer");
+    let source = Arc::new(WatchSource::new());
+    let router = OutboxRouter::new("nip65", [indexer], source.clone()).unwrap();
+    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
+    let mut session = router.open(request, upstream).expect("router opens");
+
+    source.replace_malformed(300);
+    let changed = session
+        .next_change()
+        .await
+        .expect("malformed batch reported");
+
+    assert!(
+        changed.shortfalls.len() <= 256,
+        "shortfalls must stay bounded: {}",
+        changed.shortfalls.len()
+    );
+    assert!(
+        changed
+            .shortfalls
+            .iter()
+            .any(|shortfall| shortfall.contains("discarded")),
+        "dropped input must never be silent: {}",
+        changed.shortfalls.len()
+    );
+}
+
+struct ClosingSource;
+
+impl QuerySource for ClosingSource {
+    fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
+        Ok(OpenedQuerySource {
+            initial: SourceSnapshot::empty(SourceKind::EventCache),
+            changes: Box::new(ClosedChanges),
+        })
+    }
+}
+
+struct ClosedChanges;
+
+impl SourceChanges for ClosedChanges {
+    fn next_change(&mut self) -> SourceChangeFuture<'_> {
+        Box::pin(async { Err(QuerySourceClosed) })
+    }
+
+    fn close(&mut self) {}
 }
