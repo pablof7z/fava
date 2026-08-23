@@ -15,7 +15,10 @@ use fava_routing::{
 use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
 use fava_write::{
     Event, EventBuilder, Kind, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, UnsignedEvent,
     WriteIntent, WriteRouting,
@@ -386,15 +389,21 @@ impl DeliveryPolicy for RecordingPolicy {
 struct RefusingTransport;
 
 impl Transport for RefusingTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, _request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
             Err(TransportError::ConnectionRefused(
-                "test transport opens no sessions".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("test transport opens no sessions"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<std::num::NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }

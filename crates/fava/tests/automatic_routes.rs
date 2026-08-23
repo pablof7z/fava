@@ -177,7 +177,7 @@ async fn immediate_route_starts_before_delayed_router_and_preview_opens_nothing(
         .await
         .expect("known route must not await delayed router")
         .expect("automatic query opens");
-    assert_eq!(transport.open_count(&app_relay), 1);
+    wait_until(|| transport.open_count(&app_relay) == 1).await;
     assert_eq!(transport.open_count(&later_relay), 0);
     delayed.replace(contribution(&[(
         later_relay.clone(),
@@ -225,7 +225,7 @@ async fn explicit_query_bypasses_every_automatic_router() {
         .await
         .expect("explicit query opens");
 
-    assert_eq!(transport.open_count(&explicit), 1);
+    wait_until(|| transport.open_count(&explicit) == 1).await;
     assert_eq!(delayed.open_count(), 0);
     observation.close();
 }

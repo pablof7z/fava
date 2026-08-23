@@ -13,12 +13,12 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    BoundedReason, HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration,
     RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
     RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
 };
-use fava_transport_testkit::detached_lease;
+use fava_transport_testkit::{FakeRelay, FakeTransport, detached_lease};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
@@ -124,10 +124,6 @@ struct ScriptedSession {
 }
 
 impl ScriptedSession {
-    fn generation(&self) -> u64 {
-        self.identity.generation.0
-    }
-
     fn receive(&self, message: &RelayMessage<'_>) {
         let frame = serde_json::to_string(message).expect("message encodes");
         self.mailbox
@@ -138,20 +134,6 @@ impl ScriptedSession {
                 identity: self.identity.clone(),
                 frame: frame.into_bytes(),
                 received_at: fava_state::Timestamp::now(),
-            }));
-        self.mailbox.changed.notify_one();
-    }
-
-    fn disconnect(&self) {
-        self.mailbox
-            .inbound
-            .lock()
-            .expect("session lock")
-            .push_back(Ok(RelayInbound::Disconnected {
-                identity: self.identity.clone(),
-                reason: TransportFailure::Disconnected {
-                    detail: BoundedReason::new("injected"),
-                },
             }));
         self.mailbox.changed.notify_one();
     }
@@ -269,9 +251,17 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let relay = relay_urls(1).remove(0);
-    let transport = Arc::new(ScriptedTransport::default());
+    let key = RelaySessionKey::new(relay.clone(), fava_state::RelayAccess::public());
+    let transport = Arc::new(FakeTransport::new());
     let cache = Arc::new(MemoryEventCache::default());
-    let fava = assembly(Arc::clone(&cache), Arc::clone(&transport));
+    let fava = Fava::builder()
+        .event_cache(Arc::clone(&cache))
+        .write_store(Arc::new(MemoryWriteStore::default()))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .subscription_planner(Arc::new(planner()))
+        .transport(Arc::clone(&transport))
+        .build()
+        .expect("assembly is complete");
     let mut observation = fava
         .observe(
             Query::events()
@@ -280,30 +270,86 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         )
         .await
         .expect("query opens");
-    let old = transport.session(&relay, 0).await;
-    let old_subscription = old.subscription();
-    old.receive(&RelayMessage::eose(old_subscription.clone()));
-    old.disconnect();
 
-    let current = transport.session(&relay, 1).await;
-    let current_subscription = current.subscription();
-    assert!(current.generation() > old.generation());
-    assert_ne!(current_subscription, old_subscription);
+    wait_until(|| transport.relay(&key).is_some()).await;
+    let peer = transport.relay(&key).expect("session established");
+    wait_until(|| !requests_of(&peer).is_empty()).await;
+    let subscription = requests_of(&peer)[0].clone();
+    peer.push_frame(encoded(&RelayMessage::eose(subscription.clone())));
+    wait_until(|| settled(&observation, &key)).await;
+    let settled_generation = evidence_of(&observation, &key).generation;
+
+    // A reconnect mints a new authority inside the session the holder already
+    // has. The demand is replayed and the earlier EOSE cannot settle it.
+    peer.reconnect();
+
+    wait_until(|| requests_of(&peer).len() == 2).await;
+    let replayed = evidence_of(&observation, &key);
+    assert!(
+        replayed.generation > settled_generation,
+        "a reconnected session is a new authority"
+    );
+    assert!(
+        !replayed.stored_events_complete(),
+        "the old EOSE must not settle the replayed request"
+    );
 
     let event = EventBuilder::new(Kind::TextNote, "current generation")
         .finalize(&Keys::generate())
         .expect("event signs");
-    current.receive(&RelayMessage::event(
-        old_subscription.clone(),
+    peer.push_frame(encoded(&RelayMessage::event(
+        subscription.clone(),
         event.clone(),
-    ));
-    settle().await;
-    assert_eq!(cache.len().expect("cache readable"), 0);
-
-    current.receive(&RelayMessage::event(current_subscription, event.clone()));
+    )));
     let latest = wait_for_snapshot(&mut observation, |snapshot| !snapshot.events.is_empty()).await;
     assert_eq!(latest.events[0].id(), event.id);
     assert_eq!(cache.len().expect("cache readable"), 1);
+
+    peer.push_frame(encoded(&RelayMessage::eose(subscription)));
+    wait_until(|| settled(&observation, &key)).await;
+    observation.close();
+}
+
+fn evidence_of(
+    observation: &fava::Observation,
+    key: &RelaySessionKey,
+) -> fava_query::RelayQueryEvidence {
+    observation
+        .current()
+        .evidence
+        .relay(key)
+        .cloned()
+        .expect("the observation reports evidence for every relay it uses")
+}
+
+fn settled(observation: &fava::Observation, key: &RelaySessionKey) -> bool {
+    observation
+        .current()
+        .evidence
+        .relay(key)
+        .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete)
+}
+
+fn encoded(message: &RelayMessage<'_>) -> Vec<u8> {
+    serde_json::to_string(message)
+        .expect("message encodes")
+        .into_bytes()
+}
+
+fn requests_of(peer: &FakeRelay) -> Vec<SubscriptionId> {
+    peer.delivered_frames()
+        .into_iter()
+        .filter_map(|frame| {
+            match serde_json::from_slice::<ClientMessage<'static>>(&frame)
+                .expect("client message decodes")
+            {
+                ClientMessage::Req {
+                    subscription_id, ..
+                } => Some(subscription_id.into_owned()),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -432,12 +478,6 @@ fn addressable_event(keys: &Keys, created_at: u64, content: &str, identifier: &s
         .custom_created_at(Timestamp::from(created_at))
         .finalize(keys)
         .expect("event signs")
-}
-
-async fn settle() {
-    for _ in 0..64 {
-        tokio::task::yield_now().await;
-    }
 }
 
 async fn wait_until(predicate: impl Fn() -> bool) {
