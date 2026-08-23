@@ -1,8 +1,9 @@
 //! Nostr event-state corpus shared by state and cache providers.
 
 use fava_state::{
-    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
-    admission_mutations, candidate_is_newer, expiration_mutations,
+    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
+    RetractionCause, Timestamp, admission_mutations, candidate_is_newer, coordinate_for_event,
+    expiration_mutations,
 };
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
@@ -35,7 +36,9 @@ fn apply_admission(current: &mut Vec<CachedEvent>, incoming: CachedEvent) -> boo
                     current.push(incoming);
                 }
             }
-            CacheMutation::Retract(id) => current.retain(|known| known.event.id != id),
+            CacheMutation::Retract { event_id, .. } => {
+                current.retain(|known| known.event.id != event_id);
+            }
         }
     }
     changed
@@ -98,8 +101,13 @@ fn authorized_deletion_retracts_and_prevents_resurrection() {
             Timestamp::from(20)
         ),
         vec![
+            CacheMutation::Retract {
+                event_id: target.id,
+                cause: RetractionCause::Deleted {
+                    deletion: deletion.id
+                },
+            },
             CacheMutation::Upsert(deletion_cached.clone()),
-            CacheMutation::Retract(target.id),
         ]
     );
     assert!(admission_mutations(&[deletion_cached], target_cached, Timestamp::from(21)).is_empty());
@@ -138,7 +146,91 @@ fn expiration_refuses_and_retracts_at_the_declared_timestamp() {
     assert!(admission_mutations(&[], expiring.clone(), Timestamp::from(20)).is_empty());
     assert_eq!(
         expiration_mutations(std::slice::from_ref(&expiring), Timestamp::from(20)),
-        vec![CacheMutation::Retract(expiring.event.id)]
+        vec![CacheMutation::Retract {
+            event_id: expiring.event.id,
+            cause: RetractionCause::Expired,
+        }]
+    );
+}
+
+#[test]
+fn deletion_retracts_before_recording_its_own_tombstone_event() {
+    let alice = Keys::generate();
+    let target = event(&alice, Kind::TextNote, 10, "target", Vec::new());
+    let deletion = event(
+        &alice,
+        Kind::EventDeletion,
+        20,
+        "",
+        vec![Tag::event(target.id)],
+    );
+    let target_cached = cached(target.clone());
+    let deletion_cached = cached(deletion.clone());
+
+    let mutations = admission_mutations(
+        std::slice::from_ref(&target_cached),
+        deletion_cached.clone(),
+        Timestamp::from(20),
+    );
+
+    assert_eq!(
+        mutations,
+        vec![
+            CacheMutation::Retract {
+                event_id: target.id,
+                cause: RetractionCause::Deleted {
+                    deletion: deletion.id
+                },
+            },
+            CacheMutation::Upsert(deletion_cached),
+        ],
+        "a bounded cache must free room before the kind-5 upsert"
+    );
+}
+
+#[test]
+fn every_retraction_names_its_cause() {
+    let keys = Keys::generate();
+    let kind = Kind::from_u16(30_001);
+    let older = cached(event(
+        &keys,
+        kind,
+        10,
+        "older",
+        vec![Tag::identifier("same")],
+    ));
+    let newer = cached(event(
+        &keys,
+        kind,
+        20,
+        "newer",
+        vec![Tag::identifier("same")],
+    ));
+    let coordinate = coordinate_for_event(&newer.event);
+
+    let superseded = admission_mutations(
+        std::slice::from_ref(&older),
+        newer.clone(),
+        Timestamp::from(21),
+    );
+    assert!(superseded.contains(&CacheMutation::Retract {
+        event_id: older.event.id,
+        cause: RetractionCause::Superseded { coordinate },
+    }));
+
+    let expiring = cached(event(
+        &keys,
+        Kind::TextNote,
+        10,
+        "temporary",
+        vec![Tag::expiration(Timestamp::from(20))],
+    ));
+    assert_eq!(
+        expiration_mutations(std::slice::from_ref(&expiring), Timestamp::from(20)),
+        vec![CacheMutation::Retract {
+            event_id: expiring.event.id,
+            cause: RetractionCause::Expired,
+        }]
     );
 }
 
