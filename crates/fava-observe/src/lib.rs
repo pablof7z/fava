@@ -14,15 +14,19 @@
 //! The connection is shared by the transport's lease registry, and a wire
 //! subscription survives until the last logical demand it serves withdraws.
 
+mod admission;
+mod completions;
 mod diagnostics;
 mod engine;
 mod error;
+mod facts;
 mod ingest;
 mod observation;
 mod observer;
 mod operations;
 mod registry;
 mod routes;
+mod slot;
 mod sources;
 
 pub use error::{ObservationClosed, ObserveError};

@@ -5,15 +5,17 @@ use std::sync::{Arc, OnceLock};
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_query::{
-    Freshness, ObservationId, Query, QueryAcquisition, QueryBranchId, QueryEvaluator,
-    QueryRevision, QuerySnapshot, QuerySource, RelayWithdrawal, SourceKind,
+    Freshness, ObservationId, Query, QueryBranchId, QueryEvaluator, QueryRevision, QuerySnapshot,
+    QuerySource, RelayWithdrawal, SourceKind,
 };
 use fava_routing::Router;
 use fava_runtime::Runtime;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::{Transport, TransportBounds, TransportDeadlines};
 
-use crate::engine::{Engine, RelayProviders, default_bounds, default_deadlines};
+use crate::admission::ADMISSION_WINDOW;
+use crate::engine::{Engine, RelayProviders};
+use crate::facts::{default_bounds, default_deadlines};
 use crate::error::ObserveError;
 use crate::observation::Observation;
 use crate::registry::Registry;
@@ -38,6 +40,7 @@ pub struct Observer {
     runtime: Runtime,
     deadlines: TransportDeadlines,
     bounds: TransportBounds,
+    admission_window: std::time::Duration,
     registry: Arc<Registry>,
     engine: Arc<OnceLock<()>>,
 }
@@ -63,6 +66,7 @@ impl Observer {
             runtime: Runtime::new(default_runtime_config()),
             deadlines: default_deadlines(),
             bounds: default_bounds(),
+            admission_window: ADMISSION_WINDOW,
             registry: Arc::new(Registry::default()),
             engine: Arc::new(OnceLock::new()),
         }
@@ -131,6 +135,15 @@ impl Observer {
         self
     }
 
+    /// Batch unsent relay demand for this long before compiling one cohort.
+    ///
+    /// The window is anchored at the first uncovered demand and never slides.
+    #[must_use]
+    pub const fn with_admission_window(mut self, window: std::time::Duration) -> Self {
+        self.admission_window = window;
+        self
+    }
+
     /// Install one observation and return an immediately readable handle.
     ///
     /// The sequence is total and synchronous: source boundary, route binding,
@@ -147,7 +160,6 @@ impl Observer {
         reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
     )]
     pub fn open(&self, query: Query) -> Result<Observation, ObserveError> {
-        validate(&query)?;
         let live = query.freshness() != Freshness::CacheOnly;
         if live {
             self.start_engine()?;
@@ -311,6 +323,7 @@ impl Observer {
             diagnostics: Arc::clone(&self.diagnostics),
             deadlines: self.deadlines,
             bounds: self.bounds,
+            admission_window: self.admission_window,
         };
         let mut started = Ok(());
         self.engine.get_or_init(|| {
@@ -331,23 +344,4 @@ fn default_runtime_config() -> fava_runtime::RuntimeConfig {
 
 fn nonzero(value: usize) -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(value).expect("constant is non-zero")
-}
-
-/// Refuse a query that cannot be represented as relay demand before opening work.
-#[allow(
-    clippy::result_large_err,
-    reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-)]
-fn validate(query: &Query) -> Result<(), ObserveError> {
-    if query.freshness() == Freshness::CacheOnly {
-        return Ok(());
-    }
-    if let QueryAcquisition::Explicit(relays) = query.source().acquisition()
-        && relays.is_empty()
-    {
-        return Err(ObserveError::InvalidQuery(
-            "a live explicit query requires at least one relay".to_owned(),
-        ));
-    }
-    Ok(())
 }

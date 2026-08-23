@@ -7,25 +7,29 @@
 //! is released rather than installed.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fava_query::{BoundedText, OperationGeneration};
-use fava_runtime::{OperationName, ProviderCompletion, Runtime, TaskName};
+use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
 use fava_state::RelaySessionKey;
-use fava_subscriptions::{PlanRevision, PlannedSubscription, WithdrawnSubscription};
+use fava_subscriptions::PlannedSubscription;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, Transport,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
+    Transport,
 };
-use fava_wire::{ClientMessage, encode_client};
+use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 
-use crate::engine::{Reports, Report};
+use crate::engine::{Report, Reports};
 
 const ACQUIRE: OperationName = OperationName("transport.acquire_session");
 const HANDOFF: OperationName = OperationName("transport.send");
 const RELEASE: OperationName = OperationName("transport.close");
 const ACQUIRE_TASK: TaskName = TaskName("observe.acquire");
-const APPLY_TASK: TaskName = TaskName("observe.apply");
-const LISTEN_TASK: TaskName = TaskName("observe.listen");
+const OPEN_TASK: TaskName = TaskName("observe.open");
 const WITHDRAW_TASK: TaskName = TaskName("observe.withdraw");
+const LISTEN_TASK: TaskName = TaskName("observe.listen");
+const RELEASE_TASK: TaskName = TaskName("observe.release");
+const ADMISSION_TASK: TaskName = TaskName("observe.admission");
 
 /// Acquire a lease on the current session for one relay.
 pub(crate) fn acquire(
@@ -34,7 +38,7 @@ pub(crate) fn acquire(
     reports: &Reports,
     request: OpenRelaySession,
     generation: OperationGeneration,
-    cancel: fava_runtime::CancellationToken,
+    cancel: CancellationToken,
 ) {
     let transport = Arc::clone(transport);
     let reports = reports.clone();
@@ -65,43 +69,46 @@ pub(crate) fn acquire(
             other => Report::Refused {
                 relay,
                 generation,
-                detail: BoundedText::new(format!("{:?}", ProviderName(&other))),
+                detail: BoundedText::new(describe(&other)),
             },
         };
         reports.send(report).await;
     });
 }
 
-/// Identity of the plan installation one apply carries out.
-pub(crate) struct Installing {
-    /// Relay session the plan applies to.
-    pub(crate) relay: RelaySessionKey,
-    /// Owner operation generation the frames are issued under.
-    pub(crate) generation: OperationGeneration,
-    /// Desired-plan revision being installed.
-    pub(crate) revision: PlanRevision,
-}
-
-/// Hand off the frames one plan delta requires, in add-then-withdraw order.
-pub(crate) fn apply(
+/// Close one fixed, first-arrival-anchored admission window.
+///
+/// Arming again while a window is pending never extends it: that decision is
+/// the owner's, taken before this is called.
+pub(crate) fn arm_admission(
     runtime: &Runtime,
     reports: &Reports,
-    installing: Installing,
-    session: Arc<dyn RelaySession>,
-    open: Vec<PlannedSubscription>,
-    close: Vec<WithdrawnSubscription>,
-    write_deadline: std::time::Duration,
+    relay: RelaySessionKey,
+    generation: OperationGeneration,
+    window: Duration,
 ) {
-    let Installing {
-        relay,
-        generation,
-        revision,
-    } = installing;
+    let reports = reports.clone();
+    let _ = runtime.spawn(ADMISSION_TASK, async move {
+        tokio::time::sleep(window).await;
+        reports.send(Report::Flush { relay, generation }).await;
+    });
+}
+
+/// Open the requests one frozen cohort produced, beside the incumbents.
+pub(crate) fn open_subscriptions(
+    runtime: &Runtime,
+    reports: &Reports,
+    relay: RelaySessionKey,
+    generation: OperationGeneration,
+    session: Arc<dyn RelaySession>,
+    opening: Vec<PlannedSubscription>,
+    write_deadline: Duration,
+) {
     let reports = reports.clone();
     let owner = runtime.clone();
-    let _ = runtime.spawn(APPLY_TASK, async move {
+    let _ = runtime.spawn(OPEN_TASK, async move {
         let mut correlation = 0_u64;
-        for planned in &open {
+        for planned in &opening {
             let message = ClientMessage::Req {
                 subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
                 filters: planned
@@ -132,11 +139,28 @@ pub(crate) fn apply(
                 return;
             }
         }
-        let mut withdrawn = Vec::with_capacity(close.len());
-        for entry in &close {
-            let message = ClientMessage::close(entry.id.clone());
+        reports.send(Report::Applied { relay, generation }).await;
+    });
+}
+
+/// Withdraw the requests whose last serving demand went away.
+pub(crate) fn withdraw_subscriptions(
+    runtime: &Runtime,
+    reports: &Reports,
+    relay: RelaySessionKey,
+    generation: OperationGeneration,
+    session: Arc<dyn RelaySession>,
+    closing: Vec<SubscriptionId>,
+    write_deadline: Duration,
+) {
+    let reports = reports.clone();
+    let owner = runtime.clone();
+    let _ = runtime.spawn(WITHDRAW_TASK, async move {
+        let mut correlation = u64::MAX / 2;
+        for id in closing {
             correlation = correlation.saturating_add(1);
-            if hand_off(
+            let message = ClientMessage::close(id);
+            let _ = hand_off(
                 &owner,
                 &session,
                 &message,
@@ -144,36 +168,25 @@ pub(crate) fn apply(
                 correlation,
                 write_deadline,
             )
-            .await
-            .is_ok()
-            {
-                withdrawn.push(entry.id.clone());
-            }
-        }
-        reports
-            .send(Report::Applied {
-                relay,
-                generation,
-                revision,
-                withdrawn,
-            })
             .await;
+        }
+        reports.send(Report::Applied { relay, generation }).await;
     });
 }
 
-/// Withdraw every installed subscription and release the lease.
-pub(crate) fn withdraw(
+/// Withdraw everything and release the relay's lease.
+pub(crate) fn release(
     runtime: &Runtime,
-    lease: Box<fava_transport::RelaySessionLease>,
-    subscriptions: Vec<fava_wire::SubscriptionId>,
+    lease: Box<RelaySessionLease>,
+    closing: Vec<SubscriptionId>,
     generation: OperationGeneration,
-    write_deadline: std::time::Duration,
-    close_deadline: std::time::Duration,
+    write_deadline: Duration,
+    close_deadline: Duration,
 ) {
     let owner = runtime.clone();
-    let _ = runtime.spawn(WITHDRAW_TASK, async move {
-        let mut correlation = u64::MAX / 2;
-        for id in subscriptions {
+    let _ = runtime.spawn(RELEASE_TASK, async move {
+        let mut correlation = u64::MAX / 4;
+        for id in closing {
             correlation = correlation.saturating_add(1);
             let message = ClientMessage::close(id);
             let _ = hand_off(
@@ -201,7 +214,7 @@ pub(crate) fn listen(
     relay: RelaySessionKey,
     generation: OperationGeneration,
     session: &Arc<dyn RelaySession>,
-    cancel: fava_runtime::CancellationToken,
+    cancel: CancellationToken,
 ) {
     let reports = reports.clone();
     let mut stream = session.messages();
@@ -239,7 +252,7 @@ async fn hand_off(
     message: &ClientMessage<'_>,
     generation: OperationGeneration,
     correlation: u64,
-    deadline: std::time::Duration,
+    deadline: Duration,
 ) -> Result<(), BoundedText> {
     let frame = encode_client(message)
         .map_err(|error| BoundedText::new(error.to_string()))?
@@ -263,31 +276,23 @@ async fn hand_off(
             value: HandoffOutcome::Ambiguous { reason, .. },
             ..
         } => Err(BoundedText::new(format!("{reason:?}"))),
-        other => Err(BoundedText::new(format!("{:?}", ProviderName(&other)))),
+        other => Err(BoundedText::new(describe(&other))),
     }
 }
 
-/// The scoped, bounded name of a non-completing provider outcome.
-struct ProviderName<'a, T>(&'a ProviderCompletion<T>);
-
-impl<T> std::fmt::Debug for ProviderName<'_, T> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.0 {
-            ProviderCompletion::Completed { operation, .. } => {
-                write!(formatter, "{operation} completed")
-            }
-            ProviderCompletion::TimedOut {
-                operation, after, ..
-            } => write!(formatter, "{operation} timed out after {after:?}"),
-            ProviderCompletion::Panicked {
-                operation, detail, ..
-            } => write!(formatter, "{operation} panicked: {detail}"),
-            ProviderCompletion::Cancelled { operation, .. } => {
-                write!(formatter, "{operation} was cancelled")
-            }
-            ProviderCompletion::Refused { operation, .. } => {
-                write!(formatter, "{operation} was refused by the runtime")
-            }
+/// The bounded, scoped name of one non-completing provider outcome.
+fn describe<T>(completion: &ProviderCompletion<T>) -> String {
+    match completion {
+        ProviderCompletion::Completed { operation, .. } => format!("{operation} completed"),
+        ProviderCompletion::TimedOut {
+            operation, after, ..
+        } => format!("{operation} timed out after {after:?}"),
+        ProviderCompletion::Panicked {
+            operation, detail, ..
+        } => format!("{operation} panicked: {detail}"),
+        ProviderCompletion::Cancelled { operation, .. } => format!("{operation} was cancelled"),
+        ProviderCompletion::Refused { operation, .. } => {
+            format!("{operation} was refused by the runtime")
         }
     }
 }

@@ -86,7 +86,7 @@ async fn equivalent_observations_share_one_relay_connection() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn grouping_is_the_planners_decision_and_never_the_owners() {
+async fn one_admission_cohort_groups_and_the_running_request_is_never_rewritten() {
     let relay = relay("grouped");
     let key = session_key(&relay);
     let alice = Keys::generate().public_key();
@@ -98,6 +98,7 @@ async fn grouping_is_the_planners_decision_and_never_the_owners() {
         &transport,
         Arc::new(StandardSubscriptionPlanner::new()),
     );
+    // One burst: three logical demands inside one admission window.
     let first = fava
         .observe(metadata_of(alice, &relay))
         .await
@@ -113,47 +114,89 @@ async fn grouping_is_the_planners_decision_and_never_the_owners() {
 
     wait_until(|| requests(session(&transport, &key)).len() == 1).await;
     settle().await;
-    let grouped = requests(session(&transport, &key));
+    let peer = established(&transport, &key);
+    let grouped = requests(Some(peer.clone()));
     assert_eq!(
         grouped.len(),
         1,
-        "the standard planner carries three logical demands in one REQ"
+        "the standard planner carries one cohort's three demands in one REQ"
     );
     let (merged, filters) = grouped[0].clone();
     let authors = filters[0].authors.clone().unwrap_or_default();
     assert!(authors.contains(&alice) && authors.contains(&bob));
     assert_eq!(transport.dials(&key), 1);
 
-    // The wire subscription is refcounted by the demand it serves, not by the
-    // observation count: closing one of two identical demands changes nothing.
+    // The refcount is the demand the request serves, not the observation
+    // count: losing one of two identical demands changes nothing.
     first.close();
     settle().await;
-    assert_eq!(requests(session(&transport, &key)).len(), 1);
-    assert!(withdrawals(session(&transport, &key)).is_empty());
+    assert_eq!(requests(Some(peer.clone())), grouped);
+    assert!(withdrawals(Some(peer.clone())).is_empty());
 
-    // Losing the last demand for one author regroups: the merged subscription
-    // is withdrawn and one narrower REQ replaces it, still serving the third.
+    // Losing the last demand for one author leaves the survivor running with
+    // its over-broad filter. Narrowing would cost a full relay re-serve.
     second.close();
-    wait_until(|| withdrawals(session(&transport, &key)) == vec![merged.clone()]).await;
-    wait_until(|| requests(session(&transport, &key)).len() == 2).await;
-    let narrowed = requests(session(&transport, &key))[1].clone();
-    let narrowed_authors = narrowed.1[0].authors.clone().unwrap_or_default();
-    assert_eq!(narrowed_authors.len(), 1);
-    assert!(narrowed_authors.contains(&bob));
+    settle().await;
     assert_eq!(
-        transport.holders(&key),
-        NonZeroUsize::new(1),
-        "the shared session survives a regroup"
+        requests(Some(peer.clone())),
+        grouped,
+        "a running request is never rewritten to narrow it"
     );
+    assert!(withdrawals(Some(peer.clone())).is_empty());
+    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+
     third.close();
+    wait_until(|| withdrawals(Some(peer.clone())) == vec![merged.clone()]).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_planner_that_never_groups_produces_one_request_per_logical_demand() {
+async fn demand_arriving_after_the_window_never_touches_the_running_request() {
+    let relay = relay("late");
+    let key = session_key(&relay);
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        Arc::new(StandardSubscriptionPlanner::new()),
+    );
+    let first = fava
+        .observe(metadata_of(alice, &relay))
+        .await
+        .expect("first query opens");
+    wait_until(|| requests(session(&transport, &key)).len() == 1).await;
+    let peer = established(&transport, &key);
+    let installed = requests(Some(peer.clone()))[0].clone();
+
+    // The cohort that carried the first demand is frozen. This one is late.
+    let second = fava
+        .observe(metadata_of(bob, &relay))
+        .await
+        .expect("second query opens");
+
+    wait_until(|| requests(Some(peer.clone())).len() == 2).await;
+    settle().await;
+    assert!(
+        withdrawals(Some(peer.clone())).is_empty(),
+        "a merge that widens a live REQ would make the relay re-serve its whole window"
+    );
+    let after = requests(Some(peer.clone()));
+    assert_eq!(after[0], installed, "the incumbent keeps its id and filter");
+    assert_ne!(after[1].0, installed.0);
+    assert_eq!(transport.dials(&key), 1);
+    first.close();
+    second.close();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_planner_that_never_groups_still_shares_one_connection() {
     let relay = relay("ungrouped");
     let key = session_key(&relay);
     let alice = Keys::generate().public_key();
     let bob = Keys::generate().public_key();
+    let carol = Keys::generate().public_key();
 
     let transport = Arc::new(FakeTransport::new());
     let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
@@ -162,28 +205,29 @@ async fn a_planner_that_never_groups_produces_one_request_per_logical_demand() {
         .await
         .expect("first query opens");
     let second = fava
-        .observe(metadata_of(alice, &relay))
+        .observe(metadata_of(bob, &relay))
         .await
         .expect("second query opens");
     let third = fava
-        .observe(metadata_of(bob, &relay))
+        .observe(metadata_of(carol, &relay))
         .await
         .expect("third query opens");
 
     wait_until(|| requests(session(&transport, &key)).len() == 3).await;
     settle().await;
+    let peer = established(&transport, &key);
     assert_eq!(
         transport.dials(&key),
         1,
-        "three logical demands still share one connection"
+        "three requests still share one connection"
     );
 
-    let installed = requests(session(&transport, &key));
+    let installed = requests(Some(peer.clone()));
     first.close();
     second.close();
-    wait_until(|| withdrawals(session(&transport, &key)).len() == 2).await;
+    wait_until(|| withdrawals(Some(peer.clone())).len() == 2).await;
     settle().await;
-    let withdrawn = withdrawals(session(&transport, &key));
+    let withdrawn = withdrawals(Some(peer.clone()));
     let surviving: Vec<SubscriptionId> = installed
         .iter()
         .map(|(id, _)| id.clone())

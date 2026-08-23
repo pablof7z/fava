@@ -155,6 +155,20 @@ impl ScriptedSession {
             })
             .expect("REQ was handed off")
     }
+
+    fn requested(&self) -> bool {
+        self.sent
+            .lock()
+            .expect("session lock")
+            .iter()
+            .any(|frame| frame.starts_with("[\"REQ\""))
+    }
+}
+
+/// Await the REQ this session's demand produced after its admission window.
+async fn subscription_of(session: &ScriptedSession) -> SubscriptionId {
+    wait_until(|| session.requested()).await;
+    session.subscription()
 }
 
 impl RelaySession for ScriptedSession {
@@ -225,9 +239,12 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
     let second = transport.session(&relays[1], 0).await;
     let third = transport.session(&relays[2], 0).await;
 
-    first.receive(&RelayMessage::event(first.subscription(), event.clone()));
-    second.receive(&RelayMessage::event(second.subscription(), event.clone()));
-    third.receive(&RelayMessage::eose(third.subscription()));
+    let first_subscription = subscription_of(&first).await;
+    let second_subscription = subscription_of(&second).await;
+    let third_subscription = subscription_of(&third).await;
+    first.receive(&RelayMessage::event(first_subscription, event.clone()));
+    second.receive(&RelayMessage::event(second_subscription, event.clone()));
+    third.receive(&RelayMessage::eose(third_subscription));
 
     let latest = wait_for_snapshot(&mut observation, |snapshot| {
         snapshot
@@ -374,8 +391,8 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
         .expect("query opens");
     let first = transport.session(&relays[0], 0).await;
     let second = transport.session(&relays[1], 0).await;
-    let first_subscription = first.subscription();
-    let second_subscription = second.subscription();
+    let first_subscription = subscription_of(&first).await;
+    let second_subscription = subscription_of(&second).await;
 
     first.receive(&RelayMessage::event(
         first_subscription.clone(),

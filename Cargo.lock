@@ -410,6 +410,8 @@ dependencies = [
  "fava-ingest",
  "fava-query",
  "fava-query-standard",
+ "fava-router-app-relays",
+ "fava-router-testkit",
  "fava-routing",
  "fava-runtime",
  "fava-state",

@@ -41,7 +41,7 @@ impl RecordingTransport {
             .count()
     }
 
-    fn close_seen(&self, relay: &RelayUrl) -> bool {
+    fn requested(&self, relay: &RelayUrl) -> bool {
         self.sessions
             .lock()
             .expect("transport lock")
@@ -56,7 +56,7 @@ impl RecordingTransport {
                     .any(|frame| {
                         matches!(
                             serde_json::from_str::<ClientMessage<'static>>(frame),
-                            Ok(ClientMessage::Close { .. })
+                            Ok(ClientMessage::Req { .. })
                         )
                     })
             })
@@ -252,15 +252,27 @@ async fn fallback_retracts_when_upstream_coverage_arrives_without_restarting_oth
         .observe(Query::events().authors(authors))
         .await
         .expect("automatic query opens");
-    wait_until(|| transport.open_count(&stable) == 1 && transport.open_count(&fallback) == 1).await;
+    wait_until(|| transport.requested(&stable) && transport.requested(&fallback)).await;
 
     delayed.replace(contribution(&[
         (stable.clone(), RouteTarget::Author(authors[0])),
         (later.clone(), RouteTarget::Author(authors[1])),
     ]));
-    wait_until(|| transport.open_count(&later) == 1 && transport.close_seen(&fallback)).await;
-    assert_eq!(transport.open_count(&stable), 1);
+    wait_until(|| transport.requested(&later) && !holds(&fava, &fallback)).await;
+    assert_eq!(
+        transport.open_count(&stable),
+        1,
+        "a retraction elsewhere never restarts a relay Fava already holds"
+    );
     observation.close();
+}
+
+/// Whether the owner still publishes a held session for one relay.
+fn holds(fava: &Fava, relay: &RelayUrl) -> bool {
+    fava.diagnostics()
+        .relays
+        .iter()
+        .any(|entry| &entry.session.relay == relay)
 }
 
 fn assembly(transport: Arc<RecordingTransport>) -> fava::FavaBuilder {

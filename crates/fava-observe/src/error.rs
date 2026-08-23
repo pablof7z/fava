@@ -10,9 +10,6 @@ use thiserror::Error;
 /// erase the distinction `GOALS:302` requires.
 #[derive(Debug, Error)]
 pub enum ObserveError {
-    /// The declarative query cannot be represented as relay demand.
-    #[error("query is invalid: {0}")]
-    InvalidQuery(String),
     /// One named local source could not establish its initial boundary.
     #[error("{role:?} failed to open: {error}")]
     SourceOpen {

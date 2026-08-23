@@ -24,8 +24,11 @@ fava-event-cache-memory.workspace = true
 fava-query-standard.workspace = true
 fava-subscriptions-no-grouping.workspace = true
 fava-subscriptions-standard.workspace = true
+fava-router-app-relays.workspace = true
+fava-router-testkit.workspace = true
 fava-transport-testkit.workspace = true
 fava-write-store-memory.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
 serde_json.workspace = true
 
 [lints]
