@@ -15,6 +15,11 @@ PUBLIC_NOUN = re.compile(
     r"^\s*pub\s+(?:unsafe\s+)?(?:struct|enum|trait|type)\s+([A-Z][A-Za-z0-9_]*)",
     re.MULTILINE,
 )
+NOMINAL_NOUN = re.compile(
+    r"^\s*(?:pub(?:\s*\([^\n)]*\))?\s+)?"
+    r"(?:unsafe\s+)?(?:struct|enum|trait|type)\s+([A-Z][A-Za-z0-9_]*)",
+    re.MULTILINE,
+)
 SPEC_CRATE = re.compile(r"\b(fava(?:-[a-z0-9]+)+)(?![-a-z0-9])")
 CAMEL_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 REQUIRED_TERM_FIELDS = {"name", "source", "meaning", "owner", "symbols", "crates"}
@@ -138,14 +143,22 @@ def crate_name(manifest: Path) -> str:
     return str(data["package"]["name"])
 
 
-def collect_public_symbols(root: Path) -> tuple[set[str], set[str], list[str]]:
-    """Collect public nominal Rust symbols and package names under crates/."""
-    symbols: set[str] = set()
+def collect_rust_vocabulary(
+    root: Path,
+) -> tuple[set[str], set[str], set[str], list[str]]:
+    """Collect public and internal nominal symbols and crates under crates/."""
+    public_symbols: set[str] = set()
+    nominal_symbols: set[str] = set()
     crates: set[str] = set()
     problems: list[str] = []
     crates_root = root / "crates"
     if not crates_root.is_dir():
-        return symbols, crates, [f"missing crates directory: {crates_root}"]
+        return (
+            public_symbols,
+            nominal_symbols,
+            crates,
+            [f"missing crates directory: {crates_root}"],
+        )
 
     for manifest in sorted(crates_root.glob("*/Cargo.toml")):
         try:
@@ -161,8 +174,13 @@ def collect_public_symbols(root: Path) -> tuple[set[str], set[str], list[str]]:
             except OSError as error:
                 problems.append(f"cannot read {source}: {error}")
                 continue
-            symbols.update(f"{rust_crate}::{name}" for name in PUBLIC_NOUN.findall(text))
-    return symbols, crates, problems
+            public_symbols.update(
+                f"{rust_crate}::{name}" for name in PUBLIC_NOUN.findall(text)
+            )
+            nominal_symbols.update(
+                f"{rust_crate}::{name}" for name in NOMINAL_NOUN.findall(text)
+            )
+    return public_symbols, nominal_symbols, crates, problems
 
 
 def is_structural_crate_metadata(line: str, candidate: re.Match[str]) -> bool:
@@ -230,14 +248,50 @@ def collect_spec_vocabulary(root: Path) -> tuple[set[str], set[str], list[str]]:
 
 def closest_registered_noun(symbol: str, registry: Registry) -> str | None:
     """Find an approved noun embedded in an unregistered symbol."""
-    candidate_words = set(words(symbol.rsplit("::", maxsplit=1)[-1]))
-    matches: list[str] = []
+    candidate_parts = CAMEL_WORD.findall(symbol.rsplit("::", maxsplit=1)[-1])
+    candidate_words = tuple(part.lower() for part in candidate_parts)
+    registered_names: list[str] = []
     for term in registry.terms:
-        name = str(term["name"])
-        term_words = words(name)
-        if term_words and set(term_words).issubset(candidate_words):
-            matches.append(name)
-    return max(matches, key=len, default=None)
+        registered_names.append(str(term["name"]))
+    registered_names.extend(
+        symbol.rsplit("::", maxsplit=1)[-1] for symbol in registry.symbols
+    )
+    registered_names.extend(registry.spec_symbols)
+
+    concept_matches: list[tuple[int, int, str]] = []
+    registered_parts: set[str] = set()
+    for name in registered_names:
+        name_parts = CAMEL_WORD.findall(name)
+        name_words = tuple(part.lower() for part in name_parts)
+        registered_parts.update(name_words)
+        if not name_words or len(name_words) > len(candidate_words):
+            continue
+        if any(
+            candidate_words[index : index + len(name_words)] == name_words
+            for index in range(len(candidate_words) - len(name_words) + 1)
+        ):
+            concept_matches.append((len(name_words), len(name), name))
+    if concept_matches:
+        return max(concept_matches)[2]
+
+    for part in reversed(candidate_parts):
+        if part.lower() in registered_parts:
+            return part
+    return None
+
+
+def approved_nominal_names(registry: Registry) -> set[str]:
+    """Return exact Rust nominal names approved by the registry."""
+    names = {
+        symbol.rsplit("::", maxsplit=1)[-1]
+        for symbol in (*registry.symbols, *registry.spec_symbols)
+    }
+    names.update(
+        str(term["name"])
+        for term in registry.terms
+        if re.fullmatch(r"[A-Z][A-Za-z0-9_]*", str(term["name"]))
+    )
+    return names
 
 
 def check(root: Path) -> list[str]:
@@ -247,7 +301,9 @@ def check(root: Path) -> list[str]:
     if registry is None:
         return problems
 
-    public_symbols, package_names, source_problems = collect_public_symbols(root)
+    public_symbols, nominal_symbols, package_names, source_problems = (
+        collect_rust_vocabulary(root)
+    )
     problems.extend(source_problems)
     spec_symbols, spec_crates, spec_problems = collect_spec_vocabulary(root)
     problems.extend(spec_problems)
@@ -259,6 +315,18 @@ def check(root: Path) -> list[str]:
         problems.append(message)
     for symbol in sorted(registry.symbols - public_symbols):
         problems.append(f"registered public symbol does not exist: {symbol}")
+    approved_names = approved_nominal_names(registry)
+    internal_symbols = nominal_symbols - public_symbols
+    for symbol in sorted(internal_symbols):
+        name = symbol.rsplit("::", maxsplit=1)[-1]
+        if name in approved_names or len(words(name)) < 2:
+            continue
+        noun = closest_registered_noun(symbol, registry)
+        if noun:
+            problems.append(
+                f"unapproved nominal vocabulary variant: {symbol} "
+                f"(existing noun: {noun})"
+            )
     for package in sorted(package_names - registry.crates):
         problems.append(f"undocumented architectural crate: {package}")
     for package in sorted(registry.crates - package_names):

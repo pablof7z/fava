@@ -32,6 +32,56 @@ class VocabularyCheckTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_rejects_unapproved_nominal_variants_at_every_visibility(self) -> None:
+        declarations = (
+            "struct OpenedRelay;",
+            "pub(crate) struct OpenedRelay;",
+            "pub(super) struct OpenedRelay;",
+            "pub(in crate) struct OpenedRelay;",
+        )
+
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                result = self.run_check(
+                    source=f"pub struct RelayUrl;\n{declaration}\n",
+                    symbols=["sample::RelayUrl"],
+                    term_name="RelayUrl",
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("sample::OpenedRelay", result.stderr)
+                self.assertIn("existing noun: Relay", result.stderr)
+
+    def test_accepts_a_nominal_variant_approved_as_its_own_term(self) -> None:
+        result = self.run_check(
+            source="pub struct RelayUrl;\npub(super) struct OpenedRelay;\n",
+            symbols=["sample::RelayUrl"],
+            term_name="RelayUrl",
+            approved_terms=["OpenedRelay"],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_an_unapproved_wrapper_around_registered_vocabulary(self) -> None:
+        result = self.run_check(
+            source="pub struct RelayUrl;\nstruct RelayWrapper;\n",
+            symbols=["sample::RelayUrl"],
+            term_name="RelayUrl",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sample::RelayWrapper", result.stderr)
+        self.assertIn("existing noun: Relay", result.stderr)
+
+    def test_accepts_an_unrelated_private_nominal_helper(self) -> None:
+        result = self.run_check(
+            source="pub struct RelayUrl;\nstruct ConnectionTask;\n",
+            symbols=["sample::RelayUrl"],
+            term_name="RelayUrl",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_an_undocumented_specification_symbol(self) -> None:
         result = self.run_check(
             source="pub struct Query;\n",
@@ -166,6 +216,8 @@ class VocabularyCheckTest(unittest.TestCase):
         *,
         source: str,
         symbols: list[str],
+        term_name: str = "Query",
+        approved_terms: list[str] | None = None,
         specification: str = "",
         specification_symbols: list[str] | None = None,
         specification_crates: list[str] | None = None,
@@ -190,12 +242,29 @@ class VocabularyCheckTest(unittest.TestCase):
             rendered_specification_crates = ", ".join(
                 f'"{crate}"' for crate in specification_crates or []
             )
+            rendered_approved_terms = "".join(
+                textwrap.dedent(
+                    f'''\
+
+                    [[term]]
+                    name = "{term}"
+                    source = "fava"
+                    meaning = "An explicitly approved architectural term."
+                    owner = "sample"
+                    nearest_nostr = "{term_name}"
+                    distinction = "The fixture explicitly approves this distinct concept."
+                    symbols = []
+                    crates = []
+                    '''
+                )
+                for term in approved_terms or []
+            )
             registry = textwrap.dedent(
                 f'''\
                 version = 1
 
                 [[term]]
-                name = "Query"
+                name = "{term_name}"
                 source = "fava"
                 meaning = "A declarative request for events."
                 owner = "sample"
@@ -206,7 +275,7 @@ class VocabularyCheckTest(unittest.TestCase):
                 spec_symbols = [{rendered_specification_symbols}]
                 spec_crates = [{rendered_specification_crates}]
                 '''
-            )
+            ) + rendered_approved_terms
             (root / "docs" / "internals" / "vocabulary.toml").write_text(
                 registry, encoding="utf-8"
             )
