@@ -19,6 +19,7 @@ use fava_subscriptions::{
     InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints, SubscriptionPlan,
     SubscriptionPlanError, SubscriptionPlanner,
 };
+use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::{Transport, TransportDeadlines};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
@@ -43,10 +44,29 @@ pub fn assemble() -> Assembly {
 /// Assemble the owner with an ordered automatic router chain.
 #[must_use]
 pub fn assemble_with(routers: Vec<Arc<dyn Router>>) -> Assembly {
+    assemble_planning(routers, RecordingPlanner::default())
+}
+
+/// Assemble the owner over the *grouping* planner.
+///
+/// Most owner-level evidence runs the no-grouping planner, because it makes one
+/// wire subscription per logical demand and so reads the owner's refcount
+/// directly. Grouping is the case where one request serves demands whose
+/// filters were never equal, so the attach path has to decide containment
+/// against a filter no demand ever asked for.
+#[must_use]
+pub fn assemble_grouping() -> Assembly {
+    assemble_planning(
+        Vec::new(),
+        RecordingPlanner::over(Arc::new(StandardSubscriptionPlanner::new())),
+    )
+}
+
+fn assemble_planning(routers: Vec<Arc<dyn Router>>, planner: RecordingPlanner) -> Assembly {
     let cache = Arc::new(MemoryEventCache::default());
     let writes = Arc::new(MemoryWriteStore::default());
     let transport = Arc::new(FakeTransport::new());
-    let planner = Arc::new(RecordingPlanner::default());
+    let planner = Arc::new(planner);
     let diagnostics = Arc::new(Diagnostics::default());
     let runtime = Runtime::new(RuntimeConfig {
         default_channel_depth: nonzero(1_024),
@@ -210,13 +230,28 @@ fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {
         .collect()
 }
 
-/// One wire subscription per logical demand, recording every planner input.
-#[derive(Default)]
+/// A real planner that records every input the owner hands it.
 pub(crate) struct RecordingPlanner {
+    inner: Arc<dyn SubscriptionPlanner>,
     inputs: Mutex<Vec<(RelaySessionKey, Vec<RelayDemand>)>>,
 }
 
+impl Default for RecordingPlanner {
+    fn default() -> Self {
+        Self::over(Arc::new(fava_subscriptions_no_grouping::planner()))
+    }
+}
+
 impl RecordingPlanner {
+    /// Record the inputs of one chosen planner without changing its answers.
+    #[must_use]
+    pub fn over(inner: Arc<dyn SubscriptionPlanner>) -> Self {
+        Self {
+            inner,
+            inputs: Mutex::new(Vec::new()),
+        }
+    }
+
     /// Every `plan` call this planner received, in order.
     #[must_use]
     pub fn inputs(&self) -> Vec<(RelaySessionKey, Vec<RelayDemand>)> {
@@ -248,13 +283,8 @@ impl SubscriptionPlanner for RecordingPlanner {
             .lock()
             .expect("planner lock")
             .push((relay.clone(), demand.to_vec()));
-        fava_subscriptions_no_grouping::planner().plan(
-            relay,
-            demand,
-            constraints,
-            installed,
-            revision,
-        )
+        self.inner
+            .plan(relay, demand, constraints, installed, revision)
     }
 }
 

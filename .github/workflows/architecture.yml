@@ -68,59 +68,16 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    env:
-      # The three live-query ownership falsifiers imported in `af2097a`. They
-      # encode the Wave 3 / Phase 07.6 target architecture — relay-independent
-      # local observation, shared relay work across equivalent observations, and
-      # exact cancellation of provisional relay work — and they are RED on
-      # purpose until 07.6 delivers it. They are not deleted, not weakened, and
-      # not `#[ignore]`d: an ignored test proves nothing and stops reporting.
-      #
-      # CI splits the corpus around them instead, so the expectation is
-      # falsifiable in both directions:
-      #
-      #   * the main run skips exactly these three, so every other test in the
-      #     workspace still gates the merge and any genuine regression is red;
-      #   * the second step runs exactly these three and requires the run to
-      #     report `0 passed; 3 failed`. If one starts passing, the count no
-      #     longer matches and the job fails loudly — which is the signal to
-      #     promote it out of this list, not to widen the list.
-      #
-      # Renaming or deleting one of the three also fails: the skip stops
-      # matching (main run turns red) and the filtered run reports a different
-      # count (second step turns red).
-      EXPECTED_RED_UNTIL_07_6: >-
-        relay_establishment_does_not_delay_the_coherent_local_observation
-        equivalent_observations_share_relay_work_until_the_last_handle_closes
-        cancelling_observe_while_another_relay_opens_closes_provisional_work
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.90.0"
       - uses: Swatinem/rust-cache@v2
+      # Every test in the workspace gates the merge. Nothing is skipped, nothing
+      # is `#[ignore]`d, and no test is expected to fail.
       - name: Test workspace
-        run: |
-          set -euo pipefail
-          skip=()
-          for name in $EXPECTED_RED_UNTIL_07_6; do
-            skip+=(--skip "$name")
-          done
-          cargo test --workspace --all-targets --locked -- "${skip[@]}"
-      - name: Assert the Phase 07.6 falsifiers are still red
-        run: |
-          set -euo pipefail
-          names=($EXPECTED_RED_UNTIL_07_6)
-          expected="test result: FAILED. 0 passed; ${#names[@]} failed"
-          output=$(cargo test --locked --package fava --test explicit_live \
-            -- --exact "${names[@]}" 2>&1) || true
-          echo "$output"
-          if ! printf '%s' "$output" | grep -qF "$expected"; then
-            echo "::error::expected '$expected' from the Phase 07.6 falsifiers." >&2
-            echo "If one now passes, Phase 07.6 landed for it: remove it from" >&2
-            echo "EXPECTED_RED_UNTIL_07_6 so the main run gates it from now on." >&2
-            exit 1
-          fi
+        run: cargo test --workspace --all-targets --locked
       # `--all-targets` skips doctests; the public API examples are behavioral
       # evidence too.
       - name: Test workspace doctests
