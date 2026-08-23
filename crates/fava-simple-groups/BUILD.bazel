@@ -67,9 +67,9 @@ rust_test(
     ],
     data = [
         ":architecture_sources",
-        "//crates/fava-query:simple_groups_architecture_sources",
-        "//crates/fava-state:simple_groups_architecture_sources",
-        "//crates/fava-write:simple_groups_architecture_sources",
-        "//crates/fava:simple_groups_architecture_sources",
+        "//crates/fava-query:architecture_sources",
+        "//crates/fava-state:architecture_sources",
+        "//crates/fava-write:architecture_sources",
+        "//crates/fava:architecture_sources",
     ],
 )

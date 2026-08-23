@@ -425,6 +425,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "thiserror",
@@ -436,6 +437,7 @@ version = "0.1.0"
 dependencies = [
  "fava-state",
  "fava-subscriptions",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "serde_json",

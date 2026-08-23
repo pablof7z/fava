@@ -5,9 +5,9 @@ load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 filegroup(
-    name = "simple_groups_architecture_sources",
+    name = "architecture_sources",
     srcs = glob(["src/**/*.rs"]),
-    visibility = ["//crates/fava-simple-groups:__pkg__"],
+    visibility = ["//visibility:public"],
 )
 
 rust_library(
@@ -32,6 +32,20 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "query_evidence",
+    srcs = ["tests/query_evidence.rs"],
+    crate_name = "query_evidence",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-state:lib",
+    ],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )

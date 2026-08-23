@@ -30,10 +30,21 @@ fn dependency_names(manifest: &str, header: &str) -> BTreeSet<String> {
 }
 
 fn crate_root() -> PathBuf {
-    std::env::var_os("BUILD_WORKSPACE_DIRECTORY").map_or_else(
-        || PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-        |workspace| PathBuf::from(workspace).join("crates/fava-nip02"),
-    )
+    if let Some(workspace) = std::env::var_os("BUILD_WORKSPACE_DIRECTORY") {
+        return PathBuf::from(workspace).join("crates/fava-nip02");
+    }
+    // Under `bazel test` the sources live in the runfiles tree, not in the
+    // source checkout. Same resolution order as
+    // `crates/fava-simple-groups/tests/architecture.rs`.
+    if let (Some(runfiles), Some(workspace)) = (
+        std::env::var_os("TEST_SRCDIR"),
+        std::env::var_os("TEST_WORKSPACE"),
+    ) {
+        return PathBuf::from(runfiles)
+            .join(workspace)
+            .join("crates/fava-nip02");
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 fn rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
