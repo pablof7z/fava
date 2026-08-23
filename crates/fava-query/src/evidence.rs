@@ -107,13 +107,13 @@ impl RelayQueryEvidence {
     /// The single predicate `GOALS:420-426` (QUERY-010) exists to protect: it
     /// is true only for [`RelaySourceState::StoredEventsComplete`].
     #[must_use]
-    pub const fn stored_events_complete(&self) -> bool {
+    pub fn stored_events_complete(&self) -> bool {
         matches!(self.state, RelaySourceState::StoredEventsComplete { .. })
     }
 
     /// Whether this relay is currently able to deliver new events.
     #[must_use]
-    pub const fn is_live(&self) -> bool {
+    pub fn is_live(&self) -> bool {
         matches!(
             self.state,
             RelaySourceState::Open { .. } | RelaySourceState::StoredEventsComplete { .. }
