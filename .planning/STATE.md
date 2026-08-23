@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 07.1.1
-current_phase_name: Multi-Relay Simple Groups
-status: complete
-stopped_at: Completed 07.1.1-12-PLAN.md
-last_updated: "2026-08-22T13:48:03Z"
-last_activity: 2026-08-22
-last_activity_desc: Phase 07.1.1 complete with retained controlled pair and all gates green
-state_head: 1cd0fb34a9f4ce8d2a9cbd31dcde60ba688dd90f
+current_phase: 07.3
+current_phase_name: Architecture Gate Integrity and Requirement Traceability
+status: not_started
+stopped_at: Remediation series 07.3-07.9 inserted from the 2026-08-23 architecture audit
+last_updated: "2026-08-23T13:24:09.391Z"
+last_activity: 2026-08-23
+last_activity_desc: Full-workspace architecture audit complete; remediation phases 07.3-07.9 inserted
+state_head: f5922f309507fc18685c81357159710a0db3c677
 progress:
-  total_phases: 14
-  completed_phases: 10
+  total_phases: 21
+  completed_phases: 9
   total_plans: 36
   completed_plans: 36
-  percent: 71
+  percent: 43
 ---
 
 # Project State
@@ -27,15 +27,24 @@ See: .planning/PROJECT.md (updated 2026-08-21)
 
 ## Current Position
 
-Phase: 07.1.1 (Multi-Relay Simple Groups) — COMPLETE
-Plan: 12 of 12
-Status: Complete
-Last activity: 2026-08-22 — Phase 07.1.1 completed with retained controlled pair and all gates green
+Phase: 07.3 (Architecture Gate Integrity and Requirement Traceability) — NOT STARTED
+Plan: none authored
+Status: not_started
+Last activity: 2026-08-23 — Full-workspace architecture audit complete; remediation series inserted
 
-Progress: [███████░░░] 71%
+Progress: [█████░░░░░] 48%
 
-Phase progress is 10/14. Phases 1-6 predate GSD plans; Phases 06.1, 7, 07.1,
-and 07.1.1 completed all authored plans and their review and verification gates.
+Phase progress is 10/21. A full-workspace architecture audit on 2026-08-23
+recorded 127 findings (39+ critical) in `.planning/audit/2026-08-23/LEDGER.md`
+and inserted the remediation series 07.3-07.9 before Phase 8.
+
+**Completion verdicts under revocation.** The audit established that
+`.planning/REQUIREMENTS.md` was authored after M6 shipped and reverse-engineered
+from finished code, that 113 of 131 authoritative spec requirement IDs appear
+nowhere in `.planning/`, and that the M2-M6 verification records cite evidence
+authored by the change they verify. Phase 07.9 revokes or re-earns the M1, M2,
+M3, M5, M6, and 07.1.1 verdicts, downgrades M4, and retains Phase 7. Until then
+the completed-phase counts above are provisional and must not be read as proof.
 
 ## Performance Metrics
 
@@ -191,6 +200,13 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Phase 06.1 inserted after Phase 6: Literal Tag-Value Query Semantics Remediation
 - Phase 07.1 inserted after Phase 7: Universal publication vocabulary and typed NIP-02 reads (URGENT)
 - Phase 07.1.1 inserted after Phase 07.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability
+- Phase 07.3 inserted after Phase 7: Make the vocabulary, requirement, and verification gates truthful (URGENT)
+- Phase 07.4 inserted after Phase 7: Reshape transport, subscription, evidence, and diagnostics contracts (URGENT)
+- Phase 07.5 inserted after Phase 7: Create the fava-runtime execution owner (URGENT)
+- Phase 07.6 inserted after Phase 7: Restore fava-observe live-query ownership and delete the facade relay layer (URGENT)
+- Phase 07.7 inserted after Phase 7: Facade lifecycle and fava-session signer ownership (URGENT)
+- Phase 07.8 inserted after Phase 7: Independent correctness defects in ingest, routing, and cache (URGENT)
+- Phase 07.9 inserted after Phase 7: Evidence reconstruction and milestone verdict revocation (URGENT)
 
 ## Deferred Items
 
