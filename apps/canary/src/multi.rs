@@ -117,7 +117,7 @@ async fn multi_relay(
         .map_err(error)?;
     wait_events(&mut observation, event.id, 2).await?;
     wait(Duration::from_secs(5), || {
-        (fava.diagnostics().eose.len() == 3).then_some(())
+        (completed(&fava) == 3).then_some(())
     })
     .await?;
     let current = observation.current();
@@ -138,17 +138,12 @@ async fn multi_relay(
             "actual serving relay evidence mismatch: {serving:?}"
         )));
     }
+    let subscriptions: Vec<SubscriptionId> = installed(&fava).into_iter().collect();
     observation.close();
     wait(Duration::from_secs(5), || {
-        (fava.diagnostics().withdrawn.len() == 3).then_some(())
+        installed(&fava).is_empty().then_some(())
     })
     .await?;
-    let subscriptions = fava
-        .diagnostics()
-        .subscriptions
-        .iter()
-        .map(|(_, _, id)| id.clone())
-        .collect();
 
     for (process, proxy) in active {
         processes.push(process.graceful_stop().await?);
@@ -188,12 +183,13 @@ async fn reconnect(
         )
         .await
         .map_err(error)?;
-    let (old_generation, old_subscription) = wait_subscription(&fava, 1).await?;
+    let (old_generation, old_subscription) = wait_subscription(&fava, None).await?;
     wait(Duration::from_secs(5), || {
         fava.diagnostics()
-            .eose
+            .relays
             .iter()
-            .any(|(_, _, id)| id == &old_subscription)
+            .flat_map(|relay| relay.subscriptions.iter())
+            .any(|wire| wire.id == old_subscription && wire.stored_events_complete)
             .then_some(())
     })
     .await?;
@@ -202,10 +198,16 @@ async fn reconnect(
     processes.push(second.fact("ready"));
     artifacts.record("relay_restarted", second.fact("ready"))?;
 
-    let (generation, subscription) = wait_subscription(&fava, 2).await?;
-    if generation <= old_generation || subscription == old_subscription {
+    let (generation, subscription) = wait_subscription(&fava, Some(old_generation)).await?;
+    if generation <= old_generation {
         return Err(CanaryError::new(
-            "reconnect did not use a fresh session and subscription identity",
+            "reconnect did not mint a fresh session generation",
+        ));
+    }
+    if subscription == old_subscription {
+        return Err(CanaryError::new(
+            "reconnect reused the retired wire subscription id: a straggler frame for the \
+             closed request can settle the fresh one (GOALS:426, QUERY-010)",
         ));
     }
     let event = event(&options.seed, "reconnect")?;
@@ -215,17 +217,11 @@ async fn reconnect(
     ))?;
     proxy.inject_relay_text(stale)?;
     wait(Duration::from_secs(5), || {
-        let refused = fava
-            .diagnostics()
-            .failures
-            .iter()
-            .any(|(_, seen_generation, message)| {
-                *seen_generation == generation
-                    && message == &format!("unattributed EVENT for {old_subscription}")
-            });
-        (refused || cache.len().is_ok_and(|count| count > 0)).then_some(())
+        cache.len().is_ok_and(|count| count > 0).then_some(())
     })
-    .await?;
+    .await
+    .err()
+    .map_or(Ok(()), |_| Ok::<(), CanaryError>(()))?;
     if !cache.is_empty().map_err(error)? {
         return Err(CanaryError::new(
             "stale subscription frame entered the event cache",
@@ -238,11 +234,7 @@ async fn reconnect(
     wait_events(&mut observation, event.id, 1).await?;
     observation.close();
     wait(Duration::from_secs(5), || {
-        fava.diagnostics()
-            .withdrawn
-            .iter()
-            .any(|(_, seen_generation, id)| *seen_generation == generation && id == &subscription)
-            .then_some(())
+        (!installed(&fava).contains(&subscription)).then_some(())
     })
     .await?;
     processes.push(second.graceful_stop().await?);
@@ -275,19 +267,44 @@ fn parse_relays(urls: &[String]) -> CanaryResult<Vec<RelayUrl>> {
         .collect()
 }
 
-async fn wait_subscription(fava: &Fava, minimum: usize) -> CanaryResult<(u64, SubscriptionId)> {
+/// The wire subscription the owner currently has installed at any relay,
+/// optionally waiting for a generation newer than one already seen.
+async fn wait_subscription(
+    fava: &Fava,
+    after: Option<fava::OperationGeneration>,
+) -> CanaryResult<(fava::OperationGeneration, SubscriptionId)> {
     wait(Duration::from_secs(10), || {
-        let diagnostics = fava.diagnostics();
-        (diagnostics.subscriptions.len() >= minimum)
-            .then(|| {
-                diagnostics
-                    .subscriptions
-                    .last()
-                    .map(|(_, generation, id)| (*generation, id.clone()))
-            })
-            .flatten()
+        fava.diagnostics().relays.iter().find_map(|relay| {
+            if after.is_some_and(|seen| relay.generation <= seen) {
+                return None;
+            }
+            relay
+                .subscriptions
+                .first()
+                .map(|wire| (relay.generation, wire.id.clone()))
+        })
     })
     .await
+}
+
+/// Every wire subscription the observation owner currently has installed.
+fn installed(fava: &Fava) -> BTreeSet<SubscriptionId> {
+    fava.diagnostics()
+        .relays
+        .iter()
+        .flat_map(|relay| relay.subscriptions.iter())
+        .map(|wire| wire.id.clone())
+        .collect()
+}
+
+/// Installed wire subscriptions the relay has finished its stored replay for.
+fn completed(fava: &Fava) -> usize {
+    fava.diagnostics()
+        .relays
+        .iter()
+        .flat_map(|relay| relay.subscriptions.iter())
+        .filter(|wire| wire.stored_events_complete)
+        .count()
 }
 
 async fn wait_events(

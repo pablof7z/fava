@@ -184,7 +184,7 @@ async fn explicit_bypass(seed: &str, relays: &[LabRelay]) -> CanaryResult<Comple
         .await
         .map_err(error)?;
     wait_events(&mut observation, 1).await?;
-    if delayed.open_count() != 0 || !fava.diagnostics().router_sessions.is_empty() {
+    if delayed.open_count() != 0 || !fava.diagnostics().relays.is_empty() {
         return Err(CanaryError::new("explicit query opened automatic routing"));
     }
     observation.close();

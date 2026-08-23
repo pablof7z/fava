@@ -26,8 +26,17 @@ impl EventCache for NullEventCache {
         Ok(None)
     }
 
-    fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError> {
-        Ok(Vec::new())
+    fn transact(
+        &self,
+        decide: &dyn for<'a> Fn(&'a [CachedEvent]) -> Vec<CacheMutation>,
+    ) -> Result<usize, EventCacheError> {
+        if decide(&[]).is_empty() {
+            Ok(0)
+        } else {
+            Err(EventCacheError::Refused(
+                "null cache retains no relay events".to_owned(),
+            ))
+        }
     }
 
     fn len(&self) -> Result<usize, EventCacheError> {

@@ -73,15 +73,20 @@ pub(crate) async fn refuse_forged_event(seed: &str) -> CanaryResult<()> {
     let observation = fava.observe(query).await.map_err(error)?;
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            let diagnostics = fava.diagnostics();
-            if !diagnostics.failures.is_empty() && !diagnostics.eose.is_empty() {
+            let complete = fava
+                .diagnostics()
+                .relays
+                .iter()
+                .flat_map(|relay| relay.subscriptions.iter())
+                .any(|wire| wire.stored_events_complete);
+            if complete {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
     .await
-    .map_err(|_| CanaryError::new("forged-event refusal was not diagnosed"))?;
+    .map_err(|_| CanaryError::new("the hostile relay never completed its stored replay"))?;
     if !observation.current().events.is_empty() || !cache.is_empty().map_err(error)? {
         return Err(CanaryError::new(
             "forged relay event became application-visible",

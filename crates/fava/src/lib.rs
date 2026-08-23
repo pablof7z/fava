@@ -10,7 +10,8 @@ use std::sync::Arc;
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::{
     BoundKind, DiagnosticsSnapshot, DroppedFacts, LimitDiagnostic, LimitScope,
-    LogicalDemandDiagnostic, ObservationWireBinding, ProviderDiagnostic, ProviderKind,
+    LogicalDemandDiagnostic, ObservationId, ObservationWireBinding, OperationGeneration,
+    ProviderDiagnostic, ProviderKind,
     ProviderOperation, ProviderOperationState, QueryDiagnostic, RelayDiagnostic, RelaySessionState,
     WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
 };

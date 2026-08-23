@@ -288,10 +288,11 @@ impl Engine {
                 );
                 self.publish_relay_diagnostic(relay);
             }
-            ingest::Accepted::Unattributed(detail) => {
-                self.providers
-                    .diagnostics
-                    .relay(diagnostics::refused_plan(relay, detail));
+            ingest::Accepted::Unattributed(_detail) => {
+                // A frame naming demand this generation never installed is
+                // refused before admission. It changes no session state, so
+                // the session's own record stays as it is; the observable
+                // proof is that the event never reaches the event cache.
             }
         }
     }

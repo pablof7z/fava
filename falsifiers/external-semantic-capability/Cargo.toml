@@ -21,6 +21,8 @@ fava-signer-local = { path = "../../crates/fava-signer-local" }
 fava-state = { path = "../../crates/fava-state" }
 fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
 fava-transport = { path = "../../crates/fava-transport" }
+fava-transport-testkit = { path = "../../crates/fava-transport-testkit" }
+fava-query = { path = "../../crates/fava-query" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 nostr = { version = "=0.45.3", default-features = false, features = ["std", "os-rng"] }
 serde_json = "=1.0.151"

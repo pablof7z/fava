@@ -349,18 +349,17 @@ dependencies = [
  "fava-delivery",
  "fava-diagnostics",
  "fava-event-cache",
- "fava-ingest",
  "fava-observe",
  "fava-publication",
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-runtime",
  "fava-session",
  "fava-signer",
  "fava-state",
  "fava-subscriptions",
  "fava-transport",
- "fava-wire",
  "fava-write",
  "fava-write-store",
  "nostr",
@@ -454,7 +453,17 @@ dependencies = [
 name = "fava-observe"
 version = "0.1.0"
 dependencies = [
+ "fava-diagnostics",
+ "fava-event-cache",
+ "fava-ingest",
  "fava-query",
+ "fava-routing",
+ "fava-runtime",
+ "fava-state",
+ "fava-subscriptions",
+ "fava-transport",
+ "fava-wire",
+ "nostr",
  "thiserror",
  "tokio",
 ]
@@ -491,6 +500,7 @@ name = "fava-publisher-nip01"
 version = "0.1.0"
 dependencies = [
  "fava-publisher",
+ "fava-state",
  "fava-transport",
  "fava-wire",
  "tokio",
@@ -573,6 +583,16 @@ dependencies = [
  "fava-query",
  "fava-state",
  "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-runtime"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "futures-util",
  "thiserror",
  "tokio",
 ]
@@ -661,6 +681,7 @@ dependencies = [
 name = "fava-transport"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "thiserror",
 ]
@@ -669,6 +690,7 @@ dependencies = [
 name = "fava-transport-websocket"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "fava-transport",
  "futures-util",

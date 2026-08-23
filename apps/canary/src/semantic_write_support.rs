@@ -15,7 +15,7 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey, Timestamp};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{Transport, TransportError};
 use nostr::event::UnsignedEvent as NostrUnsignedEvent;
 use nostr::key::Keys;
 use secp256k1::Secp256k1;
@@ -61,16 +61,25 @@ impl Publisher for RecordingPublisher {
 struct NoopTransport;
 
 impl Transport for NoopTransport {
-    fn open_session(
+    fn acquire_session(
         &self,
-        _session: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+        _request: fava_transport::OpenRelaySession,
+    ) -> fava_transport::RelaySessionFuture<'_> {
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "deterministic canary transport".to_owned(),
+                fava_transport::TransportFailure::Disconnected {
+                    detail: fava_transport::BoundedReason::new("deterministic canary transport"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<std::num::NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> fava_transport::TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
