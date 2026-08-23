@@ -1,38 +1,39 @@
 //! Standard exact grouping of compatible logical relay demand.
+//!
+//! This planner is told the complete current demand for one relay session and
+//! the set currently installed on it, and answers with a diff: what to open,
+//! what to retain untouched, and what to close. It invents no relay limit —
+//! every bound it honors is one the relay declared through
+//! [`RelayReadConstraints`], and demand it cannot carry becomes a typed
+//! [`SubscriptionShortfall`] inside a plan that still installs the rest.
 
-use std::collections::{BTreeMap, BTreeSet};
+mod diff;
+mod grouping;
+mod wire;
+
+use std::collections::{BTreeSet, VecDeque};
 use std::num::NonZeroUsize;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    RelayDemand, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    DemandId, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
+    ShortfallReason, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
+    SubscriptionShortfall,
 };
-use fava_wire::{ClientMessage, SubscriptionId, encode_client};
+use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
 
-/// Exact subscription planner that groups compatible author and tag filters.
-pub struct StandardSubscriptionPlanner {
-    max_subscriptions: NonZeroUsize,
-    max_frame_bytes: NonZeroUsize,
-}
+use crate::grouping::Group;
 
-impl Default for StandardSubscriptionPlanner {
-    fn default() -> Self {
-        Self::bounded(
-            NonZeroUsize::new(64).expect("constant is non-zero"),
-            NonZeroUsize::new(1_048_576).expect("constant is non-zero"),
-        )
-    }
-}
+/// Exact subscription planner that groups compatible author and tag filters.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StandardSubscriptionPlanner;
 
 impl StandardSubscriptionPlanner {
-    /// Configure exact relay subscription-count and frame-size limits.
+    /// The standard grouping policy.
     #[must_use]
-    pub const fn bounded(max_subscriptions: NonZeroUsize, max_frame_bytes: NonZeroUsize) -> Self {
-        Self {
-            max_subscriptions,
-            max_frame_bytes,
-        }
+    pub const fn new() -> Self {
+        Self
     }
 }
 
@@ -41,135 +42,175 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
         &self,
         relay: &RelaySessionKey,
         demand: &[RelayDemand],
+        constraints: &RelayReadConstraints,
+        installed: &InstalledSubscriptions,
+        revision: PlanRevision,
     ) -> Result<SubscriptionPlan, SubscriptionPlanError> {
-        if demand.is_empty() {
-            return Err(SubscriptionPlanError::EmptyDemand);
-        }
-        refuse_duplicate_ids(demand)?;
-        let mut groups: Vec<Group> = Vec::new();
-        for item in demand {
-            if let Some((index, merged)) =
-                groups.iter_mut().enumerate().find_map(|(index, group)| {
-                    merge_candidate(&group.filter, &item.filter).map(|merged| (index, merged))
-                })
-            {
-                let group = &mut groups[index];
-                group.filter = merged;
-                group.logical.push(item.subscription_id.clone());
-            } else {
-                groups.push(Group {
-                    wire_id: item.subscription_id.clone(),
-                    filter: item.filter.clone(),
-                    logical: vec![item.subscription_id.clone()],
-                });
-            }
-        }
-        if groups.len() > self.max_subscriptions.get() {
-            return Err(SubscriptionPlanError::TooManySubscriptions {
-                required: groups.len(),
-                maximum: self.max_subscriptions.get(),
-            });
-        }
-
-        let mut messages = Vec::with_capacity(groups.len());
-        let mut attribution = BTreeMap::new();
-        let mut logical = BTreeMap::new();
-        for group in groups {
-            let message = ClientMessage::req(group.wire_id.clone(), group.filter.clone());
-            let bytes = encode_client(&message)
-                .map_err(|error| SubscriptionPlanError::Encoding(error.to_string()))?
-                .len();
-            if bytes > self.max_frame_bytes.get() {
-                return Err(SubscriptionPlanError::FrameTooLarge {
-                    bytes,
-                    maximum: self.max_frame_bytes.get(),
-                });
-            }
-            attribution.insert(group.wire_id.clone(), group.filter);
-            logical.insert(group.wire_id, group.logical);
-            messages.push(message);
-        }
-        Ok(SubscriptionPlan {
-            relay: relay.clone(),
-            messages,
-            attribution,
-            demand: logical,
-        })
+        refuse_duplicate_demand(demand)?;
+        let mut shortfalls = Vec::new();
+        let admissible = admit_filter_limits(demand, constraints, &mut shortfalls);
+        let grouped = grouping::group(&admissible, constraints);
+        let candidates = fit_message_bound(grouped, constraints, &mut shortfalls)?;
+        let carried = fit_subscription_count(candidates, constraints, installed, &mut shortfalls);
+        Ok(diff::assemble(
+            relay,
+            revision,
+            carried,
+            constraints,
+            installed,
+            shortfalls,
+        ))
     }
 }
 
-struct Group {
-    wire_id: SubscriptionId,
-    filter: Filter,
-    logical: Vec<SubscriptionId>,
+/// One candidate wire subscription with its allocated identity.
+#[derive(Clone, Debug)]
+struct Candidate {
+    /// Wire id derived from this candidate's exact content.
+    id: SubscriptionId,
+    /// Filters this REQ will carry.
+    filters: Vec<Filter>,
+    /// Logical demand it serves.
+    serves: BTreeSet<DemandId>,
 }
 
-fn refuse_duplicate_ids(demand: &[RelayDemand]) -> Result<(), SubscriptionPlanError> {
-    let mut ids = BTreeSet::new();
+/// Two demands in one call may not carry the same logical identity.
+fn refuse_duplicate_demand(demand: &[RelayDemand]) -> Result<(), SubscriptionPlanError> {
+    let mut seen = BTreeSet::new();
     for item in demand {
-        if !ids.insert(item.subscription_id.clone()) {
-            return Err(SubscriptionPlanError::DuplicateSubscription(
-                item.subscription_id.clone(),
-            ));
+        if !seen.insert(item.id()) {
+            return Err(SubscriptionPlanError::DuplicateDemand(item.id()));
         }
     }
     Ok(())
 }
 
-fn merge_candidate(left: &Filter, right: &Filter) -> Option<Filter> {
-    if left == right {
-        return Some(left.clone());
+/// Set aside demand whose own `limit` exceeds a *declared* filter limit.
+fn admit_filter_limits(
+    demand: &[RelayDemand],
+    constraints: &RelayReadConstraints,
+    shortfalls: &mut Vec<SubscriptionShortfall>,
+) -> Vec<RelayDemand> {
+    let Some(maximum) = constraints.max_filter_limit.get() else {
+        return demand.to_vec();
+    };
+    let mut admissible = Vec::with_capacity(demand.len());
+    for item in demand {
+        match item.filter.limit {
+            Some(required) if required > maximum.get() => shortfalls.push(SubscriptionShortfall {
+                demand: item.id(),
+                reason: ShortfallReason::FilterLimitExceeded {
+                    required,
+                    maximum: maximum.get(),
+                },
+            }),
+            _ => admissible.push(item.clone()),
+        }
     }
-    if left.limit.is_some() || right.limit.is_some() {
-        return None;
-    }
-
-    merge_author_axis(left, right).or_else(|| merge_tag_axis(left, right))
+    admissible
 }
 
-fn merge_author_axis(left: &Filter, right: &Filter) -> Option<Filter> {
-    let mut left_base = left.clone();
-    let mut right_base = right.clone();
-    let left_authors = left_base.authors.take()?;
-    let right_authors = right_base.authors.take()?;
-    if left_authors.is_empty() || right_authors.is_empty() || left_base != right_base {
-        return None;
-    }
-
-    let mut merged = left.clone();
-    merged
-        .authors
-        .get_or_insert_with(BTreeSet::new)
-        .extend(right_authors);
-    Some(merged)
-}
-
-fn merge_tag_axis(left: &Filter, right: &Filter) -> Option<Filter> {
-    let mut left_base = left.clone();
-    let mut right_base = right.clone();
-    left_base.generic_tags.clear();
-    right_base.generic_tags.clear();
-    if left_base != right_base || left.generic_tags.len() != right.generic_tags.len() {
-        return None;
-    }
-
-    let mut differing_key = None;
-    for (key, left_values) in &left.generic_tags {
-        let right_values = right.generic_tags.get(key)?;
-        if left_values == right_values {
+/// Split every candidate until its exact REQ fits a *declared* message bound.
+///
+/// Splitting undoes a merge rather than truncating it: the members are halved
+/// and each half is regrouped, so every surviving REQ is still an exact
+/// encoding of the demand attributed to it.
+fn fit_message_bound(
+    grouped: Vec<Group>,
+    constraints: &RelayReadConstraints,
+    shortfalls: &mut Vec<SubscriptionShortfall>,
+) -> Result<Vec<Candidate>, SubscriptionPlanError> {
+    let mut queue: VecDeque<Group> = grouped.into();
+    let mut carried = Vec::new();
+    while let Some(group) = queue.pop_front() {
+        let filters = vec![group.filter.clone()];
+        let Some(id) = wire::identity(&filters, constraints, 0) else {
+            record_id_shortfall(&group, constraints, shortfalls);
+            continue;
+        };
+        let bytes = wire::encoded_bytes(&id, &filters)?;
+        let Some(maximum) = constraints.max_message_bytes.get().map(NonZeroUsize::get) else {
+            carried.push(candidate(id, filters, &group));
+            continue;
+        };
+        if bytes <= maximum {
+            carried.push(candidate(id, filters, &group));
             continue;
         }
-        if left_values.is_empty() || right_values.is_empty() || differing_key.is_some() {
-            return None;
+        if group.members.len() == 1 {
+            shortfalls.push(SubscriptionShortfall {
+                demand: group.members[0].id(),
+                reason: ShortfallReason::MessageTooLarge { bytes, maximum },
+            });
+            continue;
         }
-        differing_key = Some(*key);
+        let midpoint = group.members.len().div_ceil(2);
+        let (left, right) = group.members.split_at(midpoint);
+        queue.extend(grouping::group(left, constraints));
+        queue.extend(grouping::group(right, constraints));
     }
+    Ok(carried)
+}
 
-    let key = differing_key?;
-    let mut merged = left.clone();
-    merged
-        .generic_tags
-        .get_mut(&key)?
-        .extend(right.generic_tags.get(&key)?.iter().cloned());
-    Some(merged)
+/// Drop the candidates that do not fit a *declared* subscription count.
+///
+/// Already-installed candidates are kept first so a declared ceiling does not
+/// churn live subscriptions; ties break on wire id, so the demand that loses is
+/// the same on every replan with the same inputs.
+fn fit_subscription_count(
+    mut candidates: Vec<Candidate>,
+    constraints: &RelayReadConstraints,
+    installed: &InstalledSubscriptions,
+    shortfalls: &mut Vec<SubscriptionShortfall>,
+) -> Vec<Candidate> {
+    let Some(maximum) = constraints.max_subscriptions.get().map(NonZeroUsize::get) else {
+        return candidates;
+    };
+    let required = candidates.len();
+    if required <= maximum {
+        return candidates;
+    }
+    candidates.sort_by(|left, right| {
+        installed
+            .get(&left.id)
+            .is_none()
+            .cmp(&installed.get(&right.id).is_none())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    for dropped in candidates.split_off(maximum) {
+        for demand in dropped.serves {
+            shortfalls.push(SubscriptionShortfall {
+                demand,
+                reason: ShortfallReason::SubscriptionsExhausted { required, maximum },
+            });
+        }
+    }
+    candidates
+}
+
+/// Build one candidate from a group whose identity is already allocated.
+fn candidate(id: SubscriptionId, filters: Vec<Filter>, group: &Group) -> Candidate {
+    Candidate {
+        id,
+        filters,
+        serves: group.serves(),
+    }
+}
+
+/// Report every member of a group whose wire identity cannot be expressed.
+fn record_id_shortfall(
+    group: &Group,
+    constraints: &RelayReadConstraints,
+    shortfalls: &mut Vec<SubscriptionShortfall>,
+) {
+    let maximum = constraints
+        .max_subscription_id_chars
+        .get()
+        .map_or(0, NonZeroUsize::get);
+    for member in &group.members {
+        shortfalls.push(SubscriptionShortfall {
+            demand: member.id(),
+            reason: ShortfallReason::SubscriptionIdTooLong { maximum },
+        });
+    }
 }

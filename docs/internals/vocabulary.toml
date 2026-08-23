@@ -696,11 +696,14 @@ symbols = [
     "fava_subscriptions::WithdrawalReason",
     "fava_subscriptions::WithdrawnSubscription",
     "fava_subscriptions_standard::StandardSubscriptionPlanner",
+    "fava_subscriptions_testkit::DifferentialReport",
+    "fava_subscriptions_testkit::PlannerScenario",
 ]
 crates = [
     "fava-subscriptions",
     "fava-subscriptions-no-grouping",
     "fava-subscriptions-standard",
+    "fava-subscriptions-testkit",
 ]
 spec_symbols = ["RelayDemand", "SubscriptionPlan", "SubscriptionPlanner"]
 spec_crates = [

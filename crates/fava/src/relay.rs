@@ -8,7 +8,10 @@ use fava_event_cache::EventCache;
 use fava_ingest::{RelayIngestError, admit_subscription_event};
 use fava_query::Query;
 use fava_state::{RelaySessionKey, Timestamp};
-use fava_subscriptions::{SubscriptionPlan, SubscriptionPlanner, demand_for_query};
+use fava_subscriptions::{
+    InstalledSubscriptions, ObservationId, PlanRevision, QueryBranchId, RelayReadConstraints,
+    SubscriptionPlanner, demand_for_query, validate_plan,
+};
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
 use nostr::filter::Filter;
@@ -176,11 +179,21 @@ async fn establish(
     diagnostics: &Diagnostics,
     next_subscription: &AtomicU64,
 ) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Filter>), String> {
-    let subscription = allocate_subscription(next_subscription)?;
+    let owner = allocate_observation(next_subscription)?;
+    let demand = [demand_for_query(owner, QueryBranchId::ROOT, query)];
+    let constraints = RelayReadConstraints::unknown();
+    let installed = InstalledSubscriptions::empty();
     let plan = planner
-        .plan(session_key, &[demand_for_query(subscription, query)])
+        .plan(
+            session_key,
+            &demand,
+            &constraints,
+            &installed,
+            PlanRevision(1),
+        )
         .map_err(|error| error.to_string())?;
-    validate_plan(session_key, &plan)?;
+    validate_plan(session_key, &demand, &constraints, &installed, &plan)
+        .map_err(|error| error.to_string())?;
     let session = transport
         .open_session(session_key.clone())
         .await
@@ -191,8 +204,16 @@ async fn establish(
     }
     let generation = session.generation();
     diagnostics.session_opened(session_key.clone(), generation);
-    for message in &plan.messages {
-        let frame = encode_client(message).map_err(|error| error.to_string())?;
+    for planned in &plan.open {
+        let message = ClientMessage::Req {
+            subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
+            filters: planned
+                .filters
+                .iter()
+                .map(|filter| std::borrow::Cow::Owned(filter.clone()))
+                .collect(),
+        };
+        let frame = encode_client(&message).map_err(|error| error.to_string())?;
         match session.send(frame).await {
             HandoffOutcome::HandedOff => {}
             HandoffOutcome::NotHandedOff { reason } => {
@@ -205,46 +226,28 @@ async fn establish(
             }
         }
     }
-    for id in plan.attribution.keys() {
+    let mut attribution = BTreeMap::new();
+    for id in plan.attribution.ids() {
         diagnostics.subscription_opened(session_key.clone(), generation, id.clone());
+        if let Some(entry) = plan.attribution.get(id)
+            && let Some(filter) = entry.filters.first()
+        {
+            attribution.insert(id.clone(), filter.clone());
+        }
     }
-    Ok((session, plan.attribution))
+    Ok((session, attribution))
 }
 
-fn allocate_subscription(next: &AtomicU64) -> Result<SubscriptionId, String> {
+fn allocate_observation(next: &AtomicU64) -> Result<ObservationId, String> {
     let sequence = next
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
             value.checked_add(1)
         })
-        .map_err(|_| "subscription identity exhausted".to_owned())?
+        .map_err(|_| "observation identity exhausted".to_owned())?
         + 1;
-    Ok(SubscriptionId::new(format!("fava-{sequence}")))
-}
-
-fn validate_plan(expected: &RelaySessionKey, plan: &SubscriptionPlan) -> Result<(), String> {
-    if &plan.relay != expected
-        || plan.attribution.is_empty()
-        || plan.messages.is_empty()
-        || !plan.demand.keys().eq(plan.attribution.keys())
-        || plan.demand.values().any(Vec::is_empty)
-    {
-        return Err("subscription planner returned incomplete or mis-scoped work".to_owned());
-    }
-    for message in &plan.messages {
-        let ClientMessage::Req {
-            subscription_id,
-            filters,
-        } = message
-        else {
-            return Err("subscription planner returned a non-REQ message".to_owned());
-        };
-        if filters.len() != 1
-            || plan.attribution.get(subscription_id.as_ref()) != Some(filters[0].as_ref())
-        {
-            return Err("subscription planner attribution does not match its REQ".to_owned());
-        }
-    }
-    Ok(())
+    std::num::NonZeroU64::new(sequence)
+        .map(ObservationId::new)
+        .ok_or_else(|| "observation identity exhausted".to_owned())
 }
 
 fn handle_message(
