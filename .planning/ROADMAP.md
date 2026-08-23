@@ -269,7 +269,7 @@ Plans:
 **Plans:** TBD
 **Wave 1**
 
-- [ ] 07.2-01-PLAN.md
+- [x] 07.2-01-PLAN.md
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
