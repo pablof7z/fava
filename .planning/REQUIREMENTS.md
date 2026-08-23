@@ -122,6 +122,16 @@ Requirements for the Fava release. Every requirement is normative; mechanisms re
 - [x] **GROUP-11**: `fava-simple-groups` owns no observation, store, signer, router session, publisher, delivery, retry, receipt, runtime, or transport lifecycle, and universal owners contain no NIP-29 behavior switch.
 - [x] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
 
+### Runtime Signer Lifecycle
+
+- [ ] **SESSION-01**: A running Fava instance accepts a signer after build without replacing the engine, session, write store, or accepted write identity.
+- [ ] **SESSION-02**: Adding a signer wakes already accepted unsigned writes for that exact event pubkey and no other author.
+- [ ] **SESSION-03**: Adding a second signer for an attached pubkey refuses without mutation; replacement is an explicit separate operation.
+- [ ] **SESSION-04**: Removing a signer preserves accepted writes and receipts, cancels its current signer operation, and leaves matching unsigned work awaiting a signer until an exact signer is re-added.
+- [ ] **SESSION-05**: Signer completions from replaced, removed, or retired materialization generations are attributable and cannot install signed state or start delivery.
+- [ ] **SESSION-06**: Runtime signer attachment is bounded and capacity overflow returns typed refusal without partial mutation.
+- [ ] **SESSION-07**: `fava-session` exclusively owns mutable signer attachment; publication loads current exact attachments and invokes providers outside session/publication locks and write-store transactions.
+
 ### Authentication, Hostility, and Bounds
 
 - [ ] **HARD-01**: Relay NIP-42 authentication is explicit, generation-scoped, and separate from event authorship and query filter identity.
@@ -305,6 +315,13 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 | GROUP-10 | Phase 07.1.1 | Complete |
 | GROUP-11 | Phase 07.1.1 | Complete |
 | GROUP-12 | Phase 07.1.1 | Complete |
+| SESSION-01 | Phase 07.2 | Pending |
+| SESSION-02 | Phase 07.2 | Pending |
+| SESSION-03 | Phase 07.2 | Pending |
+| SESSION-04 | Phase 07.2 | Pending |
+| SESSION-05 | Phase 07.2 | Pending |
+| SESSION-06 | Phase 07.2 | Pending |
+| SESSION-07 | Phase 07.2 | Pending |
 | HARD-01 | Phase 8 | Pending |
 | HARD-02 | Phase 8 | Pending |
 | HARD-03 | Phase 8 | Pending |
@@ -343,11 +360,11 @@ Every v1 requirement maps to exactly one active phase. M0 remains a completed pr
 
 **Coverage:**
 
-- v1 requirements: 122 total
-- Mapped to phases: 122 ✓
+- v1 requirements: 129 total
+- Mapped to phases: 129 ✓
 - Unmapped: 0
 - Duplicate mappings: 0
 
 ---
 *Requirements defined: 2026-08-21*
-*Last updated: 2026-08-21 after roadmap generation*
+*Last updated: 2026-08-23 after insertion of Phase 07.2 runtime signer lifecycle*

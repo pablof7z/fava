@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 07.1.1
-current_phase_name: Multi-Relay Simple Groups
-status: complete
-stopped_at: Completed 07.1.1-12-PLAN.md
-last_updated: "2026-08-22T13:48:03Z"
-last_activity: 2026-08-22
-last_activity_desc: Phase 07.1.1 complete with retained controlled pair and all gates green
-state_head: 1cd0fb34a9f4ce8d2a9cbd31dcde60ba688dd90f
+current_phase: 07.2
+current_phase_name: Runtime Signer Lifecycle and Parked-Write Wakeup
+status: executing
+stopped_at: Inserted Phase 07.2; specification pending
+last_updated: "2026-08-23T12:32:56.077Z"
+last_activity: 2026-08-23
+last_activity_desc: Phase 07.2 execution started
+state_head: 04aa923abd11745cc8da4beb0a839750a6935cda
 progress:
-  total_phases: 14
-  completed_phases: 10
+  total_phases: 15
+  completed_phases: 9
   total_plans: 36
   completed_plans: 36
-  percent: 71
+  percent: 60
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 8 — Authentication, Hostile Boundaries, and Boundedness
+**Current focus:** Phase 07.2 — Runtime Signer Lifecycle and Parked-Write Wakeup
 
 ## Current Position
 
-Phase: 07.1.1 (Multi-Relay Simple Groups) — COMPLETE
-Plan: 12 of 12
-Status: Complete
-Last activity: 2026-08-22 — Phase 07.1.1 completed with retained controlled pair and all gates green
+Phase: 07.2 (Runtime Signer Lifecycle and Parked-Write Wakeup) — EXECUTING
+Plan: 1 of ?
+Status: Executing Phase 07.2
+Last activity: 2026-08-23 — Phase 07.2 execution started
 
 Progress: [███████░░░] 71%
 
@@ -191,6 +191,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - Phase 06.1 inserted after Phase 6: Literal Tag-Value Query Semantics Remediation
 - Phase 07.1 inserted after Phase 7: Universal publication vocabulary and typed NIP-02 reads (URGENT)
 - Phase 07.1.1 inserted after Phase 07.1: Deliver fava-simple-groups as the multi-relay NIP-29 capability
+- Phase 07.2 inserted after Phase 7: Runtime signer lifecycle and parked-write wakeup (URGENT)
 
 ## Deferred Items
 
@@ -202,6 +203,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-08-22T13:48:03Z
-Stopped at: Completed 07.1.1-12-PLAN.md
+Last session: 2026-08-23T12:32:55.999Z
+Stopped at: Inserted Phase 07.2; specification pending
 Resume file: None

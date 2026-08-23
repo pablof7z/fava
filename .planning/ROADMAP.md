@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7, the tag-value query slice, Phase 07.1, and the approved `fava-simple-groups` Phase 07.1.1 are complete before M8. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
+Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7, the tag-value query slice, Phase 07.1, and the approved `fava-simple-groups` Phase 07.1.1 are complete; urgent Phase 07.2 restores the specified runtime signer lifecycle before M8. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -25,6 +25,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
 - [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
 - [x] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
+- [ ] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava.
 - [ ] **Phase 8: Authentication, Hostile Boundaries, and Boundedness** - Complete M8's exact auth, hostile-input, limit, retry, ambiguity, isolation, and resource behavior.
 - [ ] **Phase 9: Truthful Profiles and Protocol Services** - Complete M9's persistent/ephemeral profiles, restart/reset guarantees, and service-owned cache semantics.
 - [ ] **Phase 10: Provider Substitution Qualification** - Complete M10's public-contract substitution matrix and architecture falsifiers.
@@ -252,11 +253,26 @@ Plans:
 - [x] 07.1.1-11-PLAN.md
 - [x] 07.1.1-12-PLAN.md
 
+### Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup (INSERTED)
+
+**Goal:** A running Fava instance accepts bounded signer add, explicit replacement, and removal operations, and exact matching accepted writes react to signer availability without engine rebuild or loss of durable write identity.
+**Mode:** mvp
+**Requirements:** SESSION-01, SESSION-02, SESSION-03, SESSION-04, SESSION-05, SESSION-06, SESSION-07
+**Depends on:** Phase 07.1.1
+**Success Criteria** (what must be TRUE):
+
+  1. An application adds a signer after Fava is built and an already accepted write awaiting that exact pubkey signs and continues under the same write and receipt identity.
+  2. Duplicate add refuses without mutation, replacement is explicit, removal preserves accepted writes, and re-add wakes only work for the exact restored pubkey.
+  3. A signer completion released after replacement or removal is attributable but inert by exact operation and materialization generation.
+  4. Signer registration is bounded with typed refusal, and signer provider execution occurs outside session/publication locks and store transactions.
+
+**Plans:** TBD
+
 ### Phase 8: Authentication, Hostile Boundaries, and Boundedness
 
 **Goal:** Applications receive exact, isolated outcomes under relay authentication, malformed or hostile input, overload, provider failure, retry, ambiguity, and shutdown pressure.
 **Mode:** mvp
-**Depends on:** Phase 07.1.1
+**Depends on:** Phase 07.2
 **Requirements:** HARD-01, HARD-02, HARD-03, HARD-04, HARD-05, HARD-06, HARD-07, HARD-08, HARD-09, HARD-10
 **Success Criteria** (what must be TRUE):
 
@@ -315,7 +331,7 @@ Plans:
 
 ## Progress
 
-**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 07.1 → Phase 07.1.1 (`fava-simple-groups`) → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
+**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 07.1 → Phase 07.1.1 (`fava-simple-groups`) → Phase 07.2 (runtime signer lifecycle) → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
