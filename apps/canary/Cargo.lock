@@ -355,6 +355,7 @@ dependencies = [
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-state",
  "fava-subscriptions",
@@ -394,8 +395,9 @@ dependencies = [
 name = "fava-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
- "nostr",
+ "fava-wire",
 ]
 
 [[package]]
@@ -465,6 +467,7 @@ dependencies = [
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-state",
  "fava-transport",
@@ -569,6 +572,16 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-session"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
  "fava-write",
  "thiserror",
  "tokio",

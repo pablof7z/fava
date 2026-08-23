@@ -32,7 +32,7 @@ impl OpenedRelay {
         transport: Arc<dyn Transport>,
         planner: Arc<dyn SubscriptionPlanner>,
         cache: Arc<dyn EventCache>,
-            next_subscription: Arc<AtomicU64>,
+        next_subscription: Arc<AtomicU64>,
     ) -> Result<Self, String> {
         let (session, attribution) = establish(
             &session_key,
@@ -55,11 +55,7 @@ impl OpenedRelay {
     }
 
     pub(super) async fn abort(self) {
-        withdraw(
-            self.session.as_ref(),
-            &self.attribution,
-        )
-        .await;
+        withdraw(self.session.as_ref(), &self.attribution).await;
     }
 
     pub(super) async fn run(mut self, mut cancel: watch::Receiver<bool>) {
@@ -91,9 +87,8 @@ impl OpenedRelay {
     }
 
     fn handle_frame(&self, frame: &str) {
-        let message = match decode_relay(frame) {
-            Ok(message) => message,
-            Err(_) => return,
+        let Ok(message) = decode_relay(frame) else {
+            return;
         };
         handle_message(
             self.session.as_ref(),
@@ -119,7 +114,7 @@ impl OpenedRelay {
                 &self.query,
                 self.transport.as_ref(),
                 self.planner.as_ref(),
-                    self.next_subscription.as_ref(),
+                self.next_subscription.as_ref(),
             );
             let established = tokio::select! {
                 biased;
@@ -131,13 +126,10 @@ impl OpenedRelay {
                 }
                 established = reconnect => established,
             };
-            match established {
-                Ok((session, attribution)) => {
-                    self.session = session;
-                    self.attribution = attribution;
-                    return true;
-                }
-                Err(_) => {}
+            if let Ok((session, attribution)) = established {
+                self.session = session;
+                self.attribution = attribution;
+                return true;
             }
         }
     }
@@ -248,22 +240,19 @@ fn handle_message(
         } => {
             let _ = (subscription_id.into_owned(), message.into_owned());
         }
-        RelayMessage::Auth { .. } | RelayMessage::Notice(_) => {}
-        RelayMessage::Ok { .. }
+        RelayMessage::Auth { .. }
+        | RelayMessage::Notice(_)
+        | RelayMessage::Ok { .. }
         | RelayMessage::Count { .. }
         | RelayMessage::NegMsg { .. }
         | RelayMessage::NegErr { .. } => {}
     }
 }
 
-async fn withdraw(
-    session: &dyn RelaySession,
-    attribution: &BTreeMap<SubscriptionId, Filter>,
-) {
+async fn withdraw(session: &dyn RelaySession, attribution: &BTreeMap<SubscriptionId, Filter>) {
     for id in attribution.keys() {
-        let frame = match encode_client(&ClientMessage::close(id.clone())) {
-            Ok(frame) => frame,
-            Err(_) => continue,
+        let Ok(frame) = encode_client(&ClientMessage::close(id.clone())) else {
+            continue;
         };
         let _ = session.send(frame).await;
     }

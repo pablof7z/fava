@@ -31,6 +31,73 @@ fn shared(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("non-zero holder count")
 }
 
+fn relay_fact(
+    session: RelaySessionKey,
+    generation: u64,
+    holders: usize,
+    subscription: SubscriptionId,
+    serves: Vec<ObservationId>,
+    stored_events_complete: bool,
+) -> RelayDiagnostic {
+    RelayDiagnostic {
+        session,
+        generation: OperationGeneration(generation),
+        state: RelaySessionState::Open,
+        holders,
+        subscriptions: vec![WireSubscriptionDiagnostic {
+            id: subscription,
+            serves,
+            stored_events_complete,
+            closed: None,
+        }],
+        reconnect_attempts: 0,
+    }
+}
+
+fn demand(
+    session: &RelaySessionKey,
+    branch: QueryBranchId,
+    state: RelaySourceState,
+) -> LogicalDemandDiagnostic {
+    LogicalDemandDiagnostic {
+        session: session.clone(),
+        branch,
+        state,
+    }
+}
+
+fn binding(
+    session: &RelaySessionKey,
+    subscription: &SubscriptionId,
+    holders: usize,
+) -> ObservationWireBinding {
+    ObservationWireBinding {
+        session: session.clone(),
+        subscription: subscription.clone(),
+        shared_holders: shared(holders),
+    }
+}
+
+fn query_fact(
+    observation: ObservationId,
+    route_relays: Vec<RelaySessionKey>,
+    demand: Vec<LogicalDemandDiagnostic>,
+    wire: Vec<ObservationWireBinding>,
+    coalesced_updates: u64,
+) -> QueryDiagnostic {
+    QueryDiagnostic {
+        observation,
+        route_revision: Some(7),
+        route_relays,
+        demand,
+        plan_revision: Some(2),
+        wire,
+        shortfalls: Vec::new(),
+        pending_operation: None,
+        coalesced_updates,
+    }
+}
+
 /// The snapshot names which relay session serves which observation, from both
 /// directions, without private inspection (ARCH:2320, ARCH:2072).
 #[test]
@@ -42,91 +109,52 @@ fn diagnostics_attribute_each_relay_session_to_its_observation() {
     let solo = SubscriptionId::new("solo");
     let first = observation(1);
     let second = observation(2);
+    let complete = RelaySourceState::StoredEventsComplete {
+        at: Timestamp::from_secs(100),
+    };
 
-    diagnostics.relay(RelayDiagnostic {
-        session: shared_relay.clone(),
-        generation: OperationGeneration(3),
-        state: RelaySessionState::Open,
-        holders: 2,
-        subscriptions: vec![WireSubscriptionDiagnostic {
-            id: grouped.clone(),
-            serves: vec![first, second],
-            stored_events_complete: true,
-            closed: None,
-        }],
-        reconnect_attempts: 0,
-    });
-    diagnostics.relay(RelayDiagnostic {
-        session: solo_relay.clone(),
-        generation: OperationGeneration(1),
-        state: RelaySessionState::Open,
-        holders: 1,
-        subscriptions: vec![WireSubscriptionDiagnostic {
-            id: solo.clone(),
-            serves: vec![second],
-            stored_events_complete: false,
-            closed: None,
-        }],
-        reconnect_attempts: 0,
-    });
-    diagnostics.query(QueryDiagnostic {
-        observation: first,
-        route_revision: Some(7),
-        route_relays: vec![shared_relay.clone()],
-        demand: vec![LogicalDemandDiagnostic {
-            session: shared_relay.clone(),
-            branch: QueryBranchId::ROOT,
-            state: RelaySourceState::StoredEventsComplete {
-                at: Timestamp::from_secs(100),
-            },
-        }],
-        plan_revision: Some(2),
-        wire: vec![ObservationWireBinding {
-            session: shared_relay.clone(),
-            subscription: grouped.clone(),
-            shared_holders: shared(2),
-        }],
-        shortfalls: Vec::new(),
-        pending_operation: None,
-        coalesced_updates: 0,
-    });
-    diagnostics.query(QueryDiagnostic {
-        observation: second,
-        route_revision: Some(7),
-        route_relays: vec![shared_relay.clone(), solo_relay.clone()],
-        demand: vec![
-            LogicalDemandDiagnostic {
-                session: shared_relay.clone(),
-                branch: QueryBranchId::ROOT,
-                state: RelaySourceState::StoredEventsComplete {
-                    at: Timestamp::from_secs(100),
-                },
-            },
-            LogicalDemandDiagnostic {
-                session: solo_relay.clone(),
-                branch: QueryBranchId(1),
-                state: RelaySourceState::Open {
+    diagnostics.relay(relay_fact(
+        shared_relay.clone(),
+        3,
+        2,
+        grouped.clone(),
+        vec![first, second],
+        true,
+    ));
+    diagnostics.relay(relay_fact(
+        solo_relay.clone(),
+        1,
+        1,
+        solo.clone(),
+        vec![second],
+        false,
+    ));
+    diagnostics.query(query_fact(
+        first,
+        vec![shared_relay.clone()],
+        vec![demand(&shared_relay, QueryBranchId::ROOT, complete.clone())],
+        vec![binding(&shared_relay, &grouped, 2)],
+        0,
+    ));
+    diagnostics.query(query_fact(
+        second,
+        vec![shared_relay.clone(), solo_relay.clone()],
+        vec![
+            demand(&shared_relay, QueryBranchId::ROOT, complete),
+            demand(
+                &solo_relay,
+                QueryBranchId(1),
+                RelaySourceState::Open {
                     requested_at: Timestamp::from_secs(90),
                 },
-            },
+            ),
         ],
-        plan_revision: Some(2),
-        wire: vec![
-            ObservationWireBinding {
-                session: shared_relay.clone(),
-                subscription: grouped.clone(),
-                shared_holders: shared(2),
-            },
-            ObservationWireBinding {
-                session: solo_relay.clone(),
-                subscription: solo,
-                shared_holders: shared(1),
-            },
+        vec![
+            binding(&shared_relay, &grouped, 2),
+            binding(&solo_relay, &solo, 1),
         ],
-        shortfalls: Vec::new(),
-        pending_operation: None,
-        coalesced_updates: 4,
-    });
+        4,
+    ));
 
     let snapshot = diagnostics.snapshot();
 
@@ -154,7 +182,7 @@ fn diagnostics_attribute_each_relay_session_to_its_observation() {
     assert_eq!(owner.demand.len(), 1);
     assert_eq!(peer.demand.len(), 2);
     assert_eq!(owner.route_relays, vec![shared_relay.clone()]);
-    assert_eq!(peer.route_relays, vec![shared_relay.clone(), solo_relay]);
+    assert_eq!(peer.route_relays, vec![shared_relay, solo_relay]);
     assert_eq!(owner.wire[0].shared_holders, shared(2));
     assert_eq!(owner.coalesced_updates, 0);
     assert_eq!(peer.coalesced_updates, 4);

@@ -81,14 +81,12 @@ async fn run(
             }
             changed = routes.next_change() => changed,
         };
-        let contribution = match changed {
-            Ok(contribution) => contribution,
-            Err(_) => break,
+        let Ok(contribution) = changed else {
+            break;
         };
         revision = revision.saturating_add(1);
-        let plan = match RoutePlan::from_contribution(revision, &contribution) {
-            Ok(plan) => plan,
-            Err(_) => break,
+        let Ok(plan) = RoutePlan::from_contribution(revision, &contribution) else {
+            break;
         };
         let desired: BTreeSet<_> = plan.destinations.keys().cloned().collect();
         let removed: Vec<_> = active
@@ -120,7 +118,7 @@ async fn add_relays(
     active: &mut BTreeMap<RelaySessionKey, watch::Sender<bool>>,
 ) {
     for relay in relays {
-        match OpenedRelay::open(
+        if let Ok(opened) = OpenedRelay::open(
             relay.clone(),
             query.clone(),
             Arc::clone(&providers.transport),
@@ -130,12 +128,9 @@ async fn add_relays(
         )
         .await
         {
-            Ok(opened) => {
-                let (cancel, cancel_rx) = watch::channel(false);
-                active.insert(relay, cancel);
-                tokio::spawn(opened.run(cancel_rx));
-            }
-            Err(_) => {}
+            let (cancel, cancel_rx) = watch::channel(false);
+            active.insert(relay, cancel);
+            tokio::spawn(opened.run(cancel_rx));
         }
     }
 }

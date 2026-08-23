@@ -339,8 +339,9 @@ dependencies = [
 name = "fava-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
- "nostr",
+ "fava-wire",
 ]
 
 [[package]]

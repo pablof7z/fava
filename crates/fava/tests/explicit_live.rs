@@ -36,7 +36,6 @@ impl Script {
     fn sent(&self) -> Vec<String> {
         self.sent.lock().expect("script lock").clone()
     }
-
 }
 
 struct ScriptedTransport {
