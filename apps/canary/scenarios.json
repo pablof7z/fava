@@ -3,169 +3,246 @@
     {
       "id": "lab-real-relay-smoke",
       "milestone": "M0",
-      "requirements": ["M0 evidence prerequisite"],
+      "requirements": [
+        "M0 evidence prerequisite"
+      ],
       "status": "enabled"
     },
     {
       "id": "public-relay-recon",
       "milestone": "M0+",
-      "requirements": ["reconnaissance only"],
+      "requirements": [
+        "reconnaissance only"
+      ],
       "status": "reconnaissance"
     },
     {
       "id": "local-source-merge",
       "milestone": "M1",
-      "requirements": ["M1 same-event source evidence merge"],
-      "status": "enabled"
+      "requirements": [
+        "M1 same-event source evidence merge"
+      ],
+      "status": "blocked",
+      "wall": "no public door for local state: EventCache::admit with fabricated RelayEvidence"
     },
     {
       "id": "local-replaceable-shadow-and-cancel",
       "milestone": "M1",
-      "requirements": ["M1 local replaceable event shadow and cancellation"],
-      "status": "enabled"
+      "requirements": [
+        "M1 local replaceable event shadow and cancellation"
+      ],
+      "status": "blocked",
+      "wall": "no public door for local state: EventCache::admit and WriteStore::accept_materialized"
     },
     {
       "id": "local-source-removal",
       "milestone": "M1",
-      "requirements": ["M1 deletion and expiration query retraction"],
-      "status": "enabled"
+      "requirements": [
+        "M1 deletion and expiration query retraction"
+      ],
+      "status": "blocked",
+      "wall": "no public door for local state or cache expiry"
     },
     {
       "id": "explicit-read-eose",
       "milestone": "M2",
-      "requirements": ["M2 stored events, exact relay evidence, and scoped EOSE"],
+      "requirements": [
+        "M2 stored events, exact relay evidence, and scoped EOSE"
+      ],
       "status": "enabled"
     },
     {
       "id": "explicit-read-live-after-eose",
       "milestone": "M2",
-      "requirements": ["M2 live event delivery after exact EOSE"],
+      "requirements": [
+        "M2 live event delivery after exact EOSE"
+      ],
       "status": "enabled"
     },
     {
       "id": "explicit-read-cancel",
       "milestone": "M2",
-      "requirements": ["M2 exact withdrawal and terminal observation close"],
+      "requirements": [
+        "M2 exact withdrawal and terminal observation close"
+      ],
       "status": "enabled"
     },
     {
       "id": "multi-relay-dedup-provenance",
       "milestone": "M3",
-      "requirements": ["M3 multi-relay deduplication and actual serving provenance"],
+      "requirements": [
+        "M3 multi-relay deduplication and actual serving provenance"
+      ],
       "status": "enabled"
     },
     {
       "id": "reconnect-generation",
       "milestone": "M3",
-      "requirements": ["M3 fresh reconnect request identity and stale-frame refusal"],
+      "requirements": [
+        "M3 fresh reconnect request identity and stale-frame refusal"
+      ],
       "status": "enabled"
     },
     {
       "id": "slow-consumer-latest-state",
       "milestone": "M3",
-      "requirements": ["M3 bounded coalesced latest-state observation"],
-      "status": "enabled"
+      "requirements": [
+        "M3 bounded coalesced latest-state observation"
+      ],
+      "status": "blocked",
+      "wall": "no public door for local state: WriteStore::accept_materialized"
     },
     {
       "id": "async-route-partial-read",
       "milestone": "M4",
-      "requirements": ["M4 immediate automatic route progress and later expansion"],
+      "requirements": [
+        "M4 immediate automatic route progress and later expansion"
+      ],
       "status": "enabled"
     },
     {
       "id": "explicit-route-bypass",
       "milestone": "M4",
-      "requirements": ["M4 exact explicit route bypasses automatic routers"],
+      "requirements": [
+        "M4 exact explicit route bypasses automatic routers"
+      ],
       "status": "enabled"
     },
     {
       "id": "fallback-reacts",
       "milestone": "M4",
-      "requirements": ["M4 fallback contribution reacts to upstream coverage"],
+      "requirements": [
+        "M4 fallback contribution reacts to upstream coverage"
+      ],
       "status": "enabled"
     },
     {
       "id": "subscription-grouping-equivalence",
       "milestone": "M4",
-      "requirements": ["D-12 300 literal tag-value queries prove 1-versus-300 exact result and relay-evidence equivalence"],
-      "status": "enabled"
+      "requirements": [
+        "D-12 300 literal tag-value queries prove 1-versus-300 exact result and relay-evidence equivalence"
+      ],
+      "status": "blocked",
+      "wall": "one connection and one REQ per observation, so grouping is unobservable through the facade, and the manifest asserted equivalence as a literal"
     },
     {
       "id": "explicit-publish-optimistic",
       "milestone": "M5",
-      "requirements": ["M5 durable acceptance, optimistic visibility, signing, publication, and relay echo"],
+      "requirements": [
+        "M5 durable acceptance, optimistic visibility, signing, publication, and relay echo"
+      ],
       "status": "enabled"
     },
     {
       "id": "mixed-relay-outcomes",
       "milestone": "M5",
-      "requirements": ["M5 exact accepting, rejecting, and unreachable relay outcomes"],
+      "requirements": [
+        "M5 exact accepting, rejecting, and unreachable relay outcomes"
+      ],
       "status": "enabled"
     },
     {
       "id": "cancel-pre-handoff",
       "milestone": "M5",
-      "requirements": ["M5 pre-handoff cancellation, query retraction, and receipt removal"],
+      "requirements": [
+        "M5 pre-handoff cancellation, query retraction, and receipt removal"
+      ],
       "status": "enabled"
     },
     {
       "id": "crash-after-acceptance",
       "milestone": "M5",
-      "requirements": ["M5 process-kill recovery of one obligation and the same receipt"],
+      "requirements": [
+        "M5 process-kill recovery of one obligation and the same receipt"
+      ],
       "status": "enabled"
     },
     {
       "id": "async-recipient-routing",
       "milestone": "M6",
-      "requirements": ["M6 immediate partial delivery and later NIP-65 route expansion under one receipt"],
-      "status": "enabled"
+      "requirements": [
+        "M6 immediate partial delivery and later NIP-65 route expansion under one receipt"
+      ],
+      "status": "blocked",
+      "wall": "OutboxRouter needs a QuerySource before the engine exists; only a second engine satisfies it"
     },
     {
       "id": "hint-routing",
       "milestone": "M6",
-      "requirements": ["M6 reference hint and admitted relay evidence routing"],
-      "status": "enabled"
+      "requirements": [
+        "M6 reference hint and admitted relay evidence routing"
+      ],
+      "status": "blocked",
+      "wall": "routers are never fed the engine's own ingested relay evidence"
     },
     {
       "id": "route-preview-parity",
       "milestone": "M6",
-      "requirements": ["M6 side-effect-free preview and initial publication route parity"],
-      "status": "enabled"
+      "requirements": [
+        "M6 side-effect-free preview and initial publication route parity"
+      ],
+      "status": "blocked",
+      "wall": "no public write-route preview"
     },
     {
       "id": "app-relay-versus-fallback-profile",
       "milestone": "M6",
-      "requirements": ["M6 independently selected app-relay and fallback write profiles"],
-      "status": "enabled"
+      "requirements": [
+        "M6 independently selected app-relay and fallback write profiles"
+      ],
+      "status": "blocked",
+      "wall": "no public write-route preview"
     },
     {
       "id": "replaceable-edit-first-value",
       "milestone": "M7",
-      "requirements": ["M7 first semantic value through public Fava"],
-      "status": "enabled"
+      "requirements": [
+        "M7 first semantic value through public Fava"
+      ],
+      "status": "blocked",
+      "wall": "no deterministic publication path without a stub transport and publisher"
     },
     {
       "id": "replaceable-edit-rematerialization",
       "milestone": "M7",
-      "requirements": ["M7 qualified successor and retired completion isolation"],
-      "status": "enabled"
+      "requirements": [
+        "M7 qualified successor and retired completion isolation"
+      ],
+      "status": "blocked",
+      "wall": "no public signal for publication lifecycle transitions"
     },
     {
       "id": "replaceable-edit-opposing-operations",
       "milestone": "M7",
-      "requirements": ["M7 public NIP-02 and bookmark opposing-operation composition"],
-      "status": "enabled"
+      "requirements": [
+        "M7 public NIP-02 and bookmark opposing-operation composition"
+      ],
+      "status": "blocked",
+      "wall": "no public signal for publication lifecycle transitions"
     },
     {
       "id": "protocol-crate-n-plus-one",
       "milestone": "M7",
-      "requirements": ["M7 external capability and raw future-kind proof"],
+      "requirements": [
+        "M7 external capability and raw future-kind proof"
+      ],
+      "status": "blocked",
+      "wall": "relay provenance can only be fabricated from outside the facade"
+    },
+    {
+      "id": "dx-flows",
+      "milestone": "DX",
+      "requirements": [
+        "ten ordinary-application flows through the public Fava facade only"
+      ],
       "status": "enabled"
     },
     {
       "id": "croissant-nip02-public-flow",
       "milestone": "M7.1",
-      "requirements": ["R1-R9 universal kind-9007 publication and typed lossless NIP-02 flow against controlled Croissant"],
+      "requirements": [
+        "R1-R9 universal kind-9007 publication and typed lossless NIP-02 flow against controlled Croissant"
+      ],
       "status": "enabled"
     }
   ]

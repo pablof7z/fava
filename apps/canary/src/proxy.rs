@@ -22,6 +22,7 @@ pub(crate) struct WireProxy {
     address: SocketAddr,
     stop: watch::Sender<bool>,
     inject: broadcast::Sender<String>,
+    connections: Arc<AtomicU64>,
     task: Option<JoinHandle<CanaryResult<()>>>,
 }
 
@@ -31,6 +32,7 @@ impl WireProxy {
         let address = listener.local_addr()?;
         let log = Arc::new(WireLog::new(path)?);
         let connection_sequence = Arc::new(AtomicU64::new(0));
+        let connections = Arc::clone(&connection_sequence);
         let (stop, mut stop_rx) = watch::channel(false);
         let (inject, _) = broadcast::channel(16);
         let task_inject = inject.clone();
@@ -73,8 +75,14 @@ impl WireProxy {
             address,
             stop,
             inject,
+            connections,
             task: Some(task),
         })
+    }
+
+    /// Exact number of downstream client connections accepted so far.
+    pub(crate) fn connection_count(&self) -> u64 {
+        self.connections.load(Ordering::Relaxed)
     }
 
     pub(crate) fn url(&self) -> String {

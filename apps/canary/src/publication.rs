@@ -5,17 +5,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Fava, Query, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome};
+use fava::{Fava, Query, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RelayUrl};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::RelayUrl;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
-use fava_write::{EventBuilder, Kind, Timestamp};
-use fava_write_store::WriteStore;
+use fava::{EventBuilder, Kind, Timestamp};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use serde::Deserialize;
@@ -347,19 +345,19 @@ async fn crash(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canary
     }
     let marker: AcceptedMarker = serde_json::from_slice(&fs::read(&marker)?)?;
     let store = Arc::new(RedbWriteStore::open(&database).map_err(error)?);
-    let recovered = store
-        .receipt(ReceiptId::from_u64(marker.receipt_id))
-        .map_err(error)?
-        .ok_or_else(|| CanaryError::new("accepted receipt missing after SIGKILL"))?;
-    if recovered.current.id().to_hex() != marker.event_id {
-        return Err(CanaryError::new("recovered event identity changed"));
-    }
     let keys = deterministic_keys(seed)?;
     let fava = assembly(
         Arc::new(MemoryEventCache::default()),
         store,
         Some(Arc::new(GatedSigner::new_released(keys))),
     )?;
+    let recovered = fava
+        .receipt(ReceiptId::from_u64(marker.receipt_id))
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("accepted receipt missing after SIGKILL"))?;
+    if recovered.current.id().to_hex() != marker.event_id {
+        return Err(CanaryError::new("recovered event identity changed"));
+    }
     let observation = fava
         .observe(Query::events().kind(Kind::TextNote).cache_only())
         .await

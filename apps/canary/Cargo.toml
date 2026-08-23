@@ -9,17 +9,24 @@ publish = false
 
 [dependencies]
 fava = { path = "../../crates/fava" }
-fava-bookmarks = { path = "../../crates/fava-bookmarks" }
+# Providers below are ordinary application selections.
+#
+# The five crates marked INTERNAL are Fava internals that the facade does not
+# re-export. Each one is a recorded hole in the public API, not a convenience:
+#   fava-event-cache  -- reading back what the engine ingested (no public door)
+#   fava-routing      -- writing a Router provider (trait is not re-exported)
+#   fava-signer       -- writing a Signer provider (trait is not re-exported)
+#   fava-state        -- naming RelaySessionKey and RelayAccess, which appear in
+#                        the public DiagnosticsSnapshot but are not re-exported
+#   fava-write        -- naming EventId, which is not re-exported
+# See .planning/audit/2026-08-23/dx-walls.md.
 fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
 fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
 fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
-fava-query = { path = "../../crates/fava-query" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
 fava-router-app-relays = { path = "../../crates/fava-router-app-relays" }
 fava-router-fallback-relays = { path = "../../crates/fava-router-fallback-relays" }
-fava-router-hints = { path = "../../crates/fava-router-hints" }
-fava-router-outbox = { path = "../../crates/fava-router-outbox" }
 fava-router-testkit = { path = "../../crates/fava-router-testkit" }
 fava-routing = { path = "../../crates/fava-routing" }
 fava-state = { path = "../../crates/fava-state" }
@@ -27,17 +34,11 @@ fava-signer = { path = "../../crates/fava-signer" }
 fava-signer-local = { path = "../../crates/fava-signer-local" }
 fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
 fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
-fava-subscriptions = { path = "../../crates/fava-subscriptions" }
-fava-transport = { path = "../../crates/fava-transport" }
 fava-transport-websocket = { path = "../../crates/fava-transport-websocket" }
-fava-ingest = { path = "../../crates/fava-ingest" }
 fava-nip02 = { path = "../../crates/fava-nip02" }
-fava-publisher = { path = "../../crates/fava-publisher" }
-fava-wire = { path = "../../crates/fava-wire" }
 fava-write = { path = "../../crates/fava-write" }
 fava-write-store-memory = { path = "../../crates/fava-write-store-memory" }
 fava-write-store-redb = { path = "../../crates/fava-write-store-redb" }
-fava-write-store = { path = "../../crates/fava-write-store" }
 futures-util = "=0.3.34"
 hex = "=0.4.3"
 nostr = { version = "=0.45.3", default-features = false, features = ["os-rng", "std"] }
