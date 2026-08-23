@@ -112,6 +112,7 @@ fn snapshot(kind: SourceKind, events: Vec<SourceEvent>) -> SourceSnapshot {
         kind,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events,
     }
 }

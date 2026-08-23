@@ -28,6 +28,7 @@ fn repeated_kind_local_selection_is_complete() {
         kind: SourceKind::EventCache,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events: vec![first, second, unrelated]
             .into_iter()
             .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))

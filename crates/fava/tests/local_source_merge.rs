@@ -449,3 +449,55 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
         .expect("present-empty query opens");
     assert!(empty.current().events.is_empty());
 }
+
+/// An application watching a query has to be able to tell an event that was
+/// deleted from one the provider merely stopped retaining: only one of the two
+/// may be re-acquired from a relay.
+#[tokio::test(flavor = "current_thread")]
+async fn a_removed_event_reaches_the_application_with_the_rule_that_removed_it() {
+    let (fava, cache, _writes) = assembly();
+    let keys = Keys::generate();
+    let doomed = signed_event(&keys, Kind::TextNote, 10, "doomed");
+    cache
+        .admit(
+            CachedEvent::new(doomed.clone(), evidence("wss://relay.example", 11)),
+            Timestamp::from(11),
+        )
+        .expect("event admits");
+
+    let mut feed = fava
+        .observe(Query::events().cache_only())
+        .await
+        .expect("query opens from local sources");
+    assert_eq!(feed.current().events.len(), 1);
+
+    let deletion = EventBuilder::new(Kind::EventDeletion, "")
+        .tag(Tag::event(doomed.id))
+        .custom_created_at(Timestamp::from(12))
+        .finalize(&keys)
+        .expect("test event signs");
+    cache
+        .admit(
+            CachedEvent::new(deletion.clone(), evidence("wss://relay.example", 12)),
+            Timestamp::from(12),
+        )
+        .expect("deletion admits");
+
+    let after = next_snapshot(&mut feed).await;
+    assert!(
+        !after.events.iter().any(|record| record.id() == doomed.id),
+        "the deleted event is gone from the result"
+    );
+    let source = after
+        .evidence
+        .source(&fava_query::SourceKind::EventCache)
+        .expect("the event cache contributed to this result");
+    assert_eq!(
+        source.retraction(&doomed.id),
+        Some(&fava_state::RetractionCause::Deleted {
+            deletion: deletion.id
+        }),
+        "the removal must reach the application as a NIP-09 deletion: {:?}",
+        source.retractions
+    );
+}

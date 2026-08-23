@@ -262,18 +262,30 @@ impl RouterSession for OutboxSession {
                 changed = next_source(&mut self.changes) => {
                     // Settled absence comes only from a source that reports it
                     // completed; a lost source is a shortfall, not a fact.
-                    if let Ok(snapshot) = changed {
-                        self.lists.ingest(&snapshot, &mut self.shortfalls);
-                        if settles_absence(&snapshot.status) {
-                            self.settled_absent.extend(self.queried.iter().copied());
-                            self.changes = None;
+                    match changed {
+                        Ok(snapshot) => {
+                            self.lists.ingest(&snapshot, &mut self.shortfalls);
+                            if settles_absence(&snapshot.status) {
+                                self.settled_absent.extend(self.queried.iter().copied());
+                                self.changes = None;
+                            }
                         }
-                    } else {
-                        self.changes = None;
-                        self.shortfalls.push(format!(
-                            "relay-list discovery source closed before settling; {} author relay lists remain unresolved",
-                            self.unresolved_count()
-                        ));
+                        Err(closed) => {
+                            // Termination reaches this consumer on the error
+                            // channel, never as a trailing `Ok`. The cause it
+                            // carries is what separates "the indexers had
+                            // nothing" from "we lost the indexers".
+                            self.changes = None;
+                            if settles_absence(&closed.status()) {
+                                self.settled_absent.extend(self.queried.iter().copied());
+                            } else {
+                                self.shortfalls.push(format!(
+                                    "relay-list discovery source ended before settling ({}); {} author relay lists remain unresolved",
+                                    closed.cause,
+                                    self.unresolved_count()
+                                ));
+                            }
+                        }
                     }
                     self.revision.borrow_and_update();
                 }

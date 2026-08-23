@@ -18,10 +18,10 @@ fn session() -> RelaySessionKey {
     )
 }
 
-fn accepted() -> BTreeMap<SubscriptionId, Filter> {
+fn accepted() -> BTreeMap<SubscriptionId, Vec<Filter>> {
     BTreeMap::from([(
         SubscriptionId::new("expected"),
-        Filter::new().kind(Kind::TextNote),
+        vec![Filter::new().kind(Kind::TextNote)],
     )])
 }
 
@@ -98,8 +98,8 @@ fn relay_cannot_admit_an_event_under_a_filter_it_was_not_attributed_to() {
     let narrow = SubscriptionId::new("a");
     let broad = SubscriptionId::new("b");
     let accepted = BTreeMap::from([
-        (narrow.clone(), Filter::new().kind(Kind::TextNote)),
-        (broad.clone(), Filter::new().kind(Kind::ContactList)),
+        (narrow.clone(), vec![Filter::new().kind(Kind::TextNote)]),
+        (broad.clone(), vec![Filter::new().kind(Kind::ContactList)]),
     ]);
 
     let only_matches_broad = EventBuilder::new(Kind::ContactList, "b")
@@ -132,4 +132,95 @@ fn relay_cannot_admit_an_event_under_a_filter_it_was_not_attributed_to() {
         Ok(true)
     );
     assert_eq!(cache.len().expect("cache readable"), 1);
+}
+
+/// A NIP-01 REQ carries one or more filters and the relay serves their union.
+/// Keeping only the first one silently drops every event the later filters
+/// asked for.
+#[test]
+fn every_filter_a_multi_filter_req_installed_still_authorizes_its_events() {
+    let cache = MemoryEventCache::default();
+    let keys = Keys::generate();
+    let id = SubscriptionId::new("multi");
+    let accepted = BTreeMap::from([(
+        id.clone(),
+        vec![
+            Filter::new().kind(Kind::TextNote),
+            Filter::new().kind(Kind::ContactList),
+        ],
+    )]);
+
+    let under_first = EventBuilder::new(Kind::TextNote, "first")
+        .finalize(&keys)
+        .expect("event signs");
+    let under_second = EventBuilder::new(Kind::ContactList, "second")
+        .finalize(&keys)
+        .expect("event signs");
+
+    assert_eq!(
+        admit_subscription_event(
+            &cache,
+            &session(),
+            &accepted,
+            &id,
+            under_first,
+            Timestamp::from(10),
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        admit_subscription_event(
+            &cache,
+            &session(),
+            &accepted,
+            &id,
+            under_second,
+            Timestamp::from(10),
+        ),
+        Ok(true),
+        "an event asked for by a later filter of the same REQ must not be dropped"
+    );
+    assert_eq!(cache.len().expect("cache readable"), 2);
+
+    let unasked = EventBuilder::new(Kind::Metadata, "unasked")
+        .finalize(&keys)
+        .expect("event signs");
+    assert_eq!(
+        admit_subscription_event(
+            &cache,
+            &session(),
+            &accepted,
+            &id,
+            unasked,
+            Timestamp::from(10),
+        ),
+        Err(RelayIngestError::OffFilter),
+        "the union of the installed filters is still an exact bound"
+    );
+}
+
+/// A subscription accepted with no filter authorizes nothing. Admitting under
+/// it would let a relay push anything it likes.
+#[test]
+fn a_subscription_accepted_with_no_filter_authorizes_nothing() {
+    let cache = MemoryEventCache::default();
+    let keys = Keys::generate();
+    let id = SubscriptionId::new("empty");
+    let accepted = BTreeMap::from([(id.clone(), Vec::new())]);
+    let event = EventBuilder::new(Kind::TextNote, "anything")
+        .finalize(&keys)
+        .expect("event signs");
+
+    assert_eq!(
+        admit_subscription_event(
+            &cache,
+            &session(),
+            &accepted,
+            &id,
+            event,
+            Timestamp::from(10),
+        ),
+        Err(RelayIngestError::UnauthorizedSubscription)
+    );
+    assert!(cache.is_empty().expect("cache readable"));
 }

@@ -9,7 +9,7 @@
 
 use std::num::NonZeroUsize;
 
-use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
+use fava_state::{EventId, RelaySessionKey, RelayUrl, RetractionCause, Timestamp};
 
 use crate::SourceRevision;
 use crate::identity::{ObservationId, OperationGeneration, QueryBranchId};
@@ -64,6 +64,53 @@ pub enum SourceTerminationCause {
     Shutdown,
 }
 
+impl core::fmt::Display for SourceTerminationCause {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::LocalClose => formatter.write_str("Fava closed the observation"),
+            Self::ProviderClosed => formatter.write_str("the provider closed cleanly"),
+            Self::ProviderFailed { detail } => {
+                write!(formatter, "the provider failed: {}", detail.as_str())
+            }
+            Self::Shutdown => formatter.write_str("the engine is shutting down"),
+        }
+    }
+}
+
+/// One retained event a source removed, and the exact rule that removed it.
+///
+/// A removal is not the absence of an event: `GOALS:422` requires an
+/// application to be able to tell a NIP-09 deletion from a supersession, an
+/// expiry, or a provider's own capacity eviction. Collapsing all four to "the
+/// id is gone from `events`" destroys that distinction at the source boundary,
+/// so the cause travels with the revision that applied it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceRetraction {
+    /// The retained event the source removed.
+    pub event_id: EventId,
+    /// The rule that removed it.
+    pub cause: RetractionCause,
+}
+
+impl SourceRetraction {
+    /// Record one retraction fact.
+    #[must_use]
+    pub const fn new(event_id: EventId, cause: RetractionCause) -> Self {
+        Self { event_id, cause }
+    }
+
+    /// Whether a Nostr event-state rule removed the event, as opposed to the
+    /// provider removing it under its own bound or maintenance.
+    ///
+    /// An application that lost a retained event to
+    /// [`RetractionCause::Evicted`] may still ask a relay for it; one that lost
+    /// it to [`RetractionCause::Deleted`] must not.
+    #[must_use]
+    pub const fn is_protocol_rule(&self) -> bool {
+        !matches!(self.cause, RetractionCause::Evicted)
+    }
+}
+
 /// Revision and lifecycle fact for one independent local source.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceEvidence {
@@ -73,6 +120,20 @@ pub struct SourceEvidence {
     pub revision: SourceRevision,
     /// Whether the continuous source observation remains open.
     pub status: SourceStatus,
+    /// Retained events this source removed to reach the included revision, and
+    /// why. Empty when the revision removed nothing.
+    pub retractions: Vec<SourceRetraction>,
+}
+
+impl SourceEvidence {
+    /// Why this source removed one exact event to reach the included revision.
+    #[must_use]
+    pub fn retraction(&self, event_id: &EventId) -> Option<&RetractionCause> {
+        self.retractions
+            .iter()
+            .find(|retraction| &retraction.event_id == event_id)
+            .map(|retraction| &retraction.cause)
+    }
 }
 
 // ------------------------------------------------------------ relay evidence

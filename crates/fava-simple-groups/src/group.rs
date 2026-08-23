@@ -24,6 +24,11 @@ pub enum GroupError {
     InvalidHost(String),
     /// A group requires at least one host relay.
     EmptyHosts,
+    /// The host set repeats one exact relay identity.
+    DuplicateHost {
+        /// Repeated exact relay identity.
+        relay: RelayUrl,
+    },
     /// Host input exceeds the shared explicit-route bound.
     TooManyHosts {
         /// Total host inputs observed before refusal.
@@ -150,6 +155,9 @@ impl fmt::Display for GroupError {
         match self {
             Self::InvalidHost(error) => write!(formatter, "invalid group host: {error}"),
             Self::EmptyHosts => formatter.write_str("a group requires at least one host"),
+            Self::DuplicateHost { relay } => {
+                write!(formatter, "group host set repeats relay identity {relay}")
+            }
             Self::TooManyHosts { actual, maximum } => {
                 write!(
                     formatter,
@@ -273,6 +281,10 @@ impl From<WriteIntentError> for GroupError {
             WriteIntentError::TooManyExplicitRelays { actual, maximum } => {
                 Self::TooManyHosts { actual, maximum }
             }
+            // The third relay-route refusal. Typing its two siblings and
+            // letting this one fall through to `Event` reports a bad host set
+            // as a malformed event.
+            WriteIntentError::DuplicateExplicitRelay { relay } => Self::DuplicateHost { relay },
             other => Self::Event(other.to_string()),
         }
     }

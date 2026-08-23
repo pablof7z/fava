@@ -215,6 +215,17 @@ pub enum ContactListError {
     },
     /// Exact event encoding could not be measured.
     Encoding(String),
+    /// The publication route repeats one exact relay identity.
+    ///
+    /// This is a route defect, not a malformed contact list. Reporting it as
+    /// [`Self::InvalidEvent`] sends the caller to fix the event it wrote
+    /// instead of the relay set it asked for.
+    DuplicateRelay {
+        /// Repeated exact relay identity.
+        relay: RelayUrl,
+    },
+    /// The publication route is empty or exceeds its bound.
+    InvalidRoute(String),
 }
 
 impl fmt::Display for ContactListError {
@@ -236,6 +247,16 @@ impl fmt::Display for ContactListError {
                 )
             }
             Self::Encoding(reason) => write!(formatter, "contact-list encoding failed: {reason}"),
+            Self::DuplicateRelay { relay } => write!(
+                formatter,
+                "contact-list publication route repeats relay identity {relay}"
+            ),
+            Self::InvalidRoute(reason) => {
+                write!(
+                    formatter,
+                    "contact-list publication route is invalid: {reason}"
+                )
+            }
         }
     }
 }
@@ -335,7 +356,7 @@ fn map_build_error(error: EventBuildError) -> ContactListError {
     }
 }
 
-fn map_write_error(error: WriteIntentError) -> ContactListError {
+pub(crate) fn map_write_error(error: WriteIntentError) -> ContactListError {
     match error {
         WriteIntentError::TooLarge { bytes, maximum } if maximum == bounds::MAX_TAGS => {
             ContactListError::TooManyTags {
@@ -347,6 +368,16 @@ fn map_write_error(error: WriteIntentError) -> ContactListError {
             ContactListError::TooLarge { bytes, maximum }
         }
         WriteIntentError::Encoding(reason) => ContactListError::Encoding(reason),
-        other => ContactListError::InvalidEvent(other.to_string()),
+        // Route refusals are about where the write goes, never about the event
+        // body. They must not arrive as `InvalidEvent`.
+        WriteIntentError::DuplicateExplicitRelay { relay } => {
+            ContactListError::DuplicateRelay { relay }
+        }
+        error @ (WriteIntentError::EmptyExplicitRelays
+        | WriteIntentError::TooManyExplicitRelays { .. }) => {
+            ContactListError::InvalidRoute(error.to_string())
+        }
+        WriteIntentError::InvalidEvent(reason) => ContactListError::InvalidEvent(reason),
+        other @ WriteIntentError::Expired => ContactListError::InvalidEvent(other.to_string()),
     }
 }

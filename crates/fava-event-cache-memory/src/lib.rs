@@ -7,9 +7,10 @@ use std::sync::{Arc, Mutex};
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
+    SourceChanges, SourceEvent, SourceKind, SourceRetraction, SourceRevision, SourceSnapshot,
+    SourceStatus,
 };
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::{CacheMutation, CachedEvent, RetractionCause};
 use nostr::event::{EventId, Kind};
 use tokio::sync::watch;
 
@@ -24,6 +25,9 @@ pub struct MemoryEventCache {
 struct CacheState {
     revision: u64,
     events: BTreeMap<EventId, CachedEvent>,
+    /// Retractions applied to reach `revision`. Reset by every commit, so a
+    /// snapshot reports exactly what its own revision removed.
+    retractions: Vec<SourceRetraction>,
 }
 
 impl Default for MemoryEventCache {
@@ -55,6 +59,7 @@ impl MemoryEventCache {
                 .cloned()
                 .map(SourceEvent::Cached)
                 .collect(),
+            retractions: state.retractions.clone(),
         }
     }
 
@@ -72,11 +77,18 @@ impl MemoryEventCache {
         mutations: Vec<CacheMutation>,
     ) -> Result<CacheState, EventCacheError> {
         let mut next = current.clone();
+        next.retractions = Vec::new();
         let mut upserts = Vec::new();
         for mutation in mutations {
             match mutation {
-                CacheMutation::Retract { event_id, .. } => {
-                    next.events.remove(&event_id);
+                CacheMutation::Retract { event_id, cause } => {
+                    // Report the removal only when this revision actually
+                    // removed something; a retraction for an id the cache never
+                    // retained is not a fact about this cache's state.
+                    if next.events.remove(&event_id).is_some() {
+                        next.retractions
+                            .push(SourceRetraction::new(event_id, cause));
+                    }
                 }
                 CacheMutation::Upsert(incoming) => upserts.push(incoming),
             }
@@ -115,6 +127,12 @@ impl MemoryEventCache {
                         ))
                     })?;
                 next.events.remove(&evicted);
+                // The provider removed retained state under its own bound, not
+                // under a Nostr rule. An application may still re-acquire this
+                // event from a relay, which is exactly what it must not do for
+                // a NIP-09 deletion, so the two can never be reported alike.
+                next.retractions
+                    .push(SourceRetraction::new(evicted, RetractionCause::Evicted));
             }
             next.events.insert(incoming.event.id, incoming);
         }
@@ -206,8 +224,15 @@ struct WatchChanges {
 impl SourceChanges for WatchChanges {
     fn next_change(&mut self) -> SourceChangeFuture<'_> {
         Box::pin(async move {
-            if self.closed || self.receiver.changed().await.is_err() {
-                return Err(QuerySourceClosed);
+            if self.closed {
+                return Err(QuerySourceClosed::local_close());
+            }
+            if self.receiver.changed().await.is_err() {
+                // The cache itself was dropped. That is a clean end of the
+                // provider, not a failure, and only a clean end is evidence
+                // that the provider had nothing further to say.
+                self.closed = true;
+                return Err(QuerySourceClosed::provider_closed());
             }
             Ok(self.receiver.borrow_and_update().as_ref().clone())
         })
@@ -226,6 +251,90 @@ mod tests {
     use nostr::key::Keys;
 
     use super::*;
+
+    /// A removed event is not the same fact as an event that was never there,
+    /// and a NIP-09 deletion is not the same fact as a capacity eviction. The
+    /// observed snapshot has to be able to say which.
+    #[tokio::test(flavor = "current_thread")]
+    async fn observed_snapshots_name_why_each_retained_event_was_removed() {
+        let cache = MemoryEventCache::bounded(NonZeroUsize::new(2).expect("non-zero"));
+        let keys = Keys::generate();
+        let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
+        let evidence = RelayEvidence::one(
+            RelaySessionKey::new(relay, RelayAccess::public()),
+            Timestamp::from(1),
+        );
+        let doomed = EventBuilder::new(Kind::TextNote, "doomed")
+            .custom_created_at(Timestamp::from(1))
+            .finalize(&keys)
+            .expect("event signs");
+        let filler = EventBuilder::new(Kind::TextNote, "filler")
+            .custom_created_at(Timestamp::from(2))
+            .finalize(&keys)
+            .expect("event signs");
+        cache
+            .commit(vec![
+                CacheMutation::Upsert(CachedEvent::new(doomed.clone(), evidence.clone())),
+                CacheMutation::Upsert(CachedEvent::new(filler.clone(), evidence.clone())),
+            ])
+            .expect("both admitted");
+
+        let opened = QuerySource::open(&cache, &fava_query::Query::events()).expect("source opens");
+        let mut changes = opened.changes;
+
+        // A NIP-09 deletion the author authorized.
+        let deletion = EventBuilder::new(Kind::EventDeletion, "")
+            .tag(nostr::event::Tag::event(doomed.id))
+            .custom_created_at(Timestamp::from(3))
+            .finalize(&keys)
+            .expect("event signs");
+        cache
+            .admit(
+                CachedEvent::new(deletion.clone(), evidence.clone()),
+                Timestamp::from(3),
+            )
+            .expect("deletion admitted");
+
+        let deleted = changes.next_change().await.expect("deletion revision");
+        assert_eq!(
+            deleted
+                .retractions
+                .iter()
+                .find(|retraction| retraction.event_id == doomed.id)
+                .map(|retraction| retraction.cause.clone()),
+            Some(RetractionCause::Deleted {
+                deletion: deletion.id
+            }),
+            "a NIP-09 deletion must reach the snapshot as a deletion: {:?}",
+            deleted.retractions
+        );
+
+        // A capacity eviction the provider decided on its own: a second
+        // tombstone must be retained even at capacity, which costs the oldest
+        // retained ordinary event.
+        let other = EventBuilder::new(Kind::EventDeletion, "")
+            .tag(nostr::event::Tag::event(filler.id))
+            .custom_created_at(Timestamp::from(4))
+            .finalize(&Keys::generate())
+            .expect("event signs");
+        cache
+            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+                other, evidence,
+            ))])
+            .expect("a tombstone is admitted by evicting");
+
+        let evicted = changes.next_change().await.expect("eviction revision");
+        let reported = evicted
+            .retractions
+            .iter()
+            .find(|retraction| retraction.event_id == filler.id)
+            .expect("the evicted event is named");
+        assert_eq!(reported.cause, RetractionCause::Evicted);
+        assert!(
+            !reported.is_protocol_rule(),
+            "an eviction is the provider's own bound, never a Nostr rule"
+        );
+    }
 
     #[test]
     fn failed_capacity_batch_is_atomic() {

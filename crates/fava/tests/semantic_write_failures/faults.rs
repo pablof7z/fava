@@ -42,7 +42,7 @@ impl SourceChanges for ControlledChanges {
         Box::pin(async move {
             tokio::select! {
                 biased;
-                _ = self.closed.recv() => Err(QuerySourceClosed),
+                _ = self.closed.recv() => Err(QuerySourceClosed::provider_closed()),
                 changed = self.inner.next_change() => changed,
             }
         })

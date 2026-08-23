@@ -234,3 +234,21 @@ fn readme_facade_flow_compiles_externally() {
     let _: fn(&Fava, &Observation, &Write) -> Result<(), fava::PublicationError> =
         readme_cancels_and_closes;
 }
+
+/// `GroupError` already names the empty and oversized host-set refusals
+/// exactly. A repeated host is the third refusal of the same kind and must
+/// not arrive as a malformed event.
+#[test]
+fn a_repeated_group_host_is_reported_as_a_host_set_defect() {
+    let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
+
+    let mapped = GroupError::from(fava_write::WriteIntentError::DuplicateExplicitRelay {
+        relay: relay.clone(),
+    });
+
+    assert_eq!(mapped, GroupError::DuplicateHost { relay });
+    assert!(
+        !matches!(mapped, GroupError::Event(_)),
+        "a bad host set is never a malformed event"
+    );
+}

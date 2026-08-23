@@ -39,6 +39,7 @@ fn live_relay(session: RelaySessionKey, events: Vec<SourceEvent>) -> SourceSnaps
         kind: SourceKind::LiveRelay { session },
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events,
     }
 }

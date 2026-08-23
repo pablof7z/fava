@@ -52,6 +52,7 @@ fn cache(events: Vec<(Event, RelayEvidence)>) -> SourceSnapshot {
         kind: SourceKind::EventCache,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events: events
             .into_iter()
             .map(|(event, evidence)| SourceEvent::Cached(CachedEvent::new(event, evidence)))
@@ -78,6 +79,7 @@ fn local(event: Event) -> SourceSnapshot {
         kind: SourceKind::WriteStore,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events: vec![SourceEvent::Local(local)],
     }
 }
@@ -101,6 +103,7 @@ fn local_unsigned(event: UnsignedEvent) -> SourceSnapshot {
         kind: SourceKind::WriteStore,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events: vec![SourceEvent::Local(local)],
     }
 }

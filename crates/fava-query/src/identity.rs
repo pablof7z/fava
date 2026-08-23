@@ -31,6 +31,50 @@ impl ObservationId {
     }
 }
 
+/// The single minting authority for [`ObservationId`].
+///
+/// One value is minted per *observation*, never per relay and never per
+/// reconnect. A logical query fanned out to N relays is still one observation:
+/// minting per relay would give the same query N owners, and grouped relay
+/// demand could then never be attributed back to one observation, so a
+/// grouped EOSE could not settle it. Reconnecting is a new *operation
+/// generation* ([`OperationGeneration`]), not a new observation.
+///
+/// The allocator therefore belongs to whatever owns observation lifecycle
+/// (`fava-observe`), and lives here only because [`ObservationId`] does.
+#[derive(Debug, Default)]
+pub struct ObservationIds {
+    next: core::sync::atomic::AtomicU64,
+}
+
+impl ObservationIds {
+    /// A fresh allocator.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            next: core::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// Mint the identity of one newly opened observation.
+    ///
+    /// Returns `None` only when the counter is exhausted, which callers must
+    /// refuse rather than wrap: reusing an identity would let one observation
+    /// settle another's demand.
+    pub fn allocate(&self) -> Option<ObservationId> {
+        let sequence = self
+            .next
+            .fetch_update(
+                core::sync::atomic::Ordering::SeqCst,
+                core::sync::atomic::Ordering::SeqCst,
+                |value| value.checked_add(1),
+            )
+            .ok()?
+            .checked_add(1)?;
+        NonZeroU64::new(sequence).map(ObservationId::new)
+    }
+}
+
 /// Identity of one branch of a composed Query within one Observation.
 ///
 /// Authority: `ARCH:1494` (`RelayDemand.branch: QueryBranchId`);

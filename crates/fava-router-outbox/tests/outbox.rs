@@ -4,9 +4,9 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use fava_query::{
-    OpenedQuerySource, Query, QueryAcquisition, QuerySource, QuerySourceClosed, QuerySourceError,
-    SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot,
-    SourceStatus, SourceTerminationCause,
+    BoundedText, OpenedQuerySource, Query, QueryAcquisition, QuerySource, QuerySourceClosed,
+    QuerySourceError, SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision,
+    SourceSnapshot, SourceStatus, SourceTerminationCause,
 };
 use fava_router_outbox::OutboxRouter;
 use fava_routing::{CoverageState, RoutePlan, RouteRequest, RouteTarget, Router};
@@ -130,6 +130,7 @@ impl WatchSource {
             kind: SourceKind::EventCache,
             revision: SourceRevision(revision),
             status: SourceStatus::Open,
+            retractions: Vec::new(),
             events: vec![SourceEvent::Cached(CachedEvent::new(
                 event,
                 RelayEvidence::default(),
@@ -143,6 +144,7 @@ impl WatchSource {
             kind: SourceKind::EventCache,
             revision: SourceRevision(revision),
             status: SourceStatus::Open,
+            retractions: Vec::new(),
             events: events
                 .into_iter()
                 .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
@@ -174,6 +176,7 @@ impl WatchSource {
             status: SourceStatus::Closed {
                 cause: SourceTerminationCause::ProviderClosed,
             },
+            retractions: Vec::new(),
             events: Vec::new(),
         }));
     }
@@ -202,8 +205,11 @@ struct WatchChanges {
 impl SourceChanges for WatchChanges {
     fn next_change(&mut self) -> SourceChangeFuture<'_> {
         Box::pin(async move {
-            if self.closed || self.receiver.changed().await.is_err() {
-                return Err(QuerySourceClosed);
+            if self.closed {
+                return Err(QuerySourceClosed::local_close());
+            }
+            if self.receiver.changed().await.is_err() {
+                return Err(QuerySourceClosed::provider_closed());
             }
             Ok(self.receiver.borrow_and_update().as_ref().clone())
         })
@@ -215,10 +221,12 @@ impl SourceChanges for WatchChanges {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn closed_discovery_source_stays_unresolved_and_never_becomes_settled_absent() {
+async fn failed_discovery_source_stays_unresolved_and_never_becomes_settled_absent() {
     let author = Keys::generate();
     let indexer = relay("indexer");
-    let source = Arc::new(ClosingSource);
+    let source = Arc::new(ClosingSource(SourceTerminationCause::ProviderFailed {
+        detail: BoundedText::new("indexer socket died"),
+    }));
     let router = OutboxRouter::new("nip65", [indexer], source).unwrap();
     let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
@@ -239,8 +247,8 @@ async fn closed_discovery_source_stays_unresolved_and_never_becomes_settled_abse
     assert!(
         plan.shortfalls
             .iter()
-            .any(|shortfall| shortfall.contains("closed")),
-        "the lost discovery source must be an exact shortfall: {:?}",
+            .any(|shortfall| shortfall.contains("indexer socket died")),
+        "the exact provider failure must survive as a shortfall: {:?}",
         plan.shortfalls
     );
 }
@@ -298,23 +306,51 @@ async fn discarded_relay_list_failures_are_reported_as_an_exact_overflow_shortfa
     );
 }
 
-struct ClosingSource;
+/// A discovery source whose observation ends through the error channel with an
+/// exact cause. The error channel is the only termination path production
+/// providers actually take, so it is the path that must carry the cause.
+struct ClosingSource(SourceTerminationCause);
 
 impl QuerySource for ClosingSource {
     fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
         Ok(OpenedQuerySource {
             initial: SourceSnapshot::empty(SourceKind::EventCache),
-            changes: Box::new(ClosedChanges),
+            changes: Box::new(ClosedChanges(self.0.clone())),
         })
     }
 }
 
-struct ClosedChanges;
+struct ClosedChanges(SourceTerminationCause);
 
 impl SourceChanges for ClosedChanges {
     fn next_change(&mut self) -> SourceChangeFuture<'_> {
-        Box::pin(async { Err(QuerySourceClosed) })
+        let cause = self.0.clone();
+        Box::pin(async move { Err(QuerySourceClosed::new(cause)) })
     }
 
     fn close(&mut self) {}
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_cleanly_closed_discovery_source_settles_absence_through_the_error_channel() {
+    let author = Keys::generate();
+    let indexer = relay("indexer");
+    let source = Arc::new(ClosingSource(SourceTerminationCause::ProviderClosed));
+    let router = OutboxRouter::new("nip65", [indexer], source).unwrap();
+    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
+    let mut session = router.open(request, upstream).expect("router opens");
+
+    let changed = session
+        .next_change()
+        .await
+        .expect("source termination is reported");
+    let plan = RoutePlan::from_contribution(2, &changed).unwrap();
+
+    assert_eq!(
+        plan.coverage.get(&RouteTarget::Author(author.public_key())),
+        Some(&CoverageState::SettledAbsent),
+        "a provider that closed cleanly proves the relay list is absent"
+    );
+    assert!(plan.settled, "settled absence terminates the route");
 }

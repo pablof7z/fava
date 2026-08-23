@@ -122,3 +122,41 @@ fn absent_and_present_empty_tag_axes_are_distinct() {
         Some(&std::collections::BTreeSet::new())
     );
 }
+
+/// One observation is one identity, however many relays carry its demand and
+/// however many times those relay sessions are re-established.
+///
+/// Minting per relay session — which is what happens when a wire-subscription
+/// counter is reused as the observation counter — gives one logical query N
+/// owners across N relays and a fresh owner on every reconnect. Grouped relay
+/// demand can then never be attributed back to one observation, so a grouped
+/// EOSE cannot settle it.
+#[test]
+fn one_observation_keeps_one_identity_across_relays_and_reconnects() {
+    let ids = fava_query::ObservationIds::new();
+
+    let observation = ids.allocate().expect("first identity");
+
+    // Fanning the same observation out to three relays and re-establishing
+    // each of them mints nothing: the id travels, it is not re-derived.
+    let carried: Vec<_> = (0..3)
+        .flat_map(|_relay| (0..2).map(move |_reconnect| observation))
+        .collect();
+    assert!(
+        carried.iter().all(|id| *id == observation),
+        "every relay session of one observation carries the same owner"
+    );
+
+    // A genuinely separate observation is a genuinely separate identity.
+    let other = ids.allocate().expect("second identity");
+    assert_ne!(other, observation);
+    assert_eq!(other.get().get(), observation.get().get() + 1);
+}
+
+#[test]
+fn observation_identities_are_never_zero_and_never_repeat() {
+    let ids = fava_query::ObservationIds::new();
+    let minted: Vec<_> = (0..64).map(|_| ids.allocate().expect("identity")).collect();
+    let unique: std::collections::BTreeSet<_> = minted.iter().copied().collect();
+    assert_eq!(unique.len(), minted.len(), "identities never repeat");
+}

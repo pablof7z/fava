@@ -69,6 +69,7 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
         kind: SourceKind::EventCache,
         revision: SourceRevision(1),
         status: SourceStatus::Open,
+        retractions: Vec::new(),
         events: vec![alice_old, bob_only.clone(), alice_new.clone()]
             .into_iter()
             .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
