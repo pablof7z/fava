@@ -10,7 +10,9 @@ use fava_write::{
     EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, SignatureState,
     WriteId,
 };
-use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
+use nostr::event::{
+    Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
+};
 use nostr::key::Keys;
 
 fn relay(url: &str) -> RelayUrl {
@@ -36,6 +38,15 @@ fn addressable(keys: &Keys, created_at: u64, content: &str) -> Event {
         .expect("event signs")
 }
 
+fn addressable_unsigned(keys: &Keys, created_at: u64, content: &str) -> UnsignedEvent {
+    let mut event = EventBuilder::new(Kind::from_u16(30_001), content)
+        .tags([Tag::identifier("same")])
+        .custom_created_at(Timestamp::from(created_at))
+        .finalize_unsigned(keys.public_key());
+    event.ensure_id();
+    event
+}
+
 fn cache(events: Vec<(Event, RelayEvidence)>) -> SourceSnapshot {
     SourceSnapshot {
         kind: SourceKind::EventCache,
@@ -59,6 +70,29 @@ fn local(event: Event) -> SourceSnapshot {
             materialization_failure: None,
             retired_materializations: Vec::new(),
             signature: SignatureState::Signed,
+            destinations: BTreeMap::new(),
+        },
+    )
+    .expect("local event is valid");
+    SourceSnapshot {
+        kind: SourceKind::WriteStore,
+        revision: SourceRevision(1),
+        status: SourceStatus::Open,
+        events: vec![SourceEvent::Local(local)],
+    }
+}
+
+fn local_unsigned(event: UnsignedEvent) -> SourceSnapshot {
+    let local = LocalWriteEvent::new(
+        EventValue::Unsigned(event),
+        PublicationEvidence {
+            receipt_id: ReceiptId::from_u64(1),
+            write_id: WriteId::from_u64(2),
+            materialization_id: MaterializationId::from_u64(3),
+            materialization_source: None,
+            materialization_failure: None,
+            retired_materializations: Vec::new(),
+            signature: SignatureState::Unsigned,
             destinations: BTreeMap::new(),
         },
     )
@@ -190,4 +224,93 @@ fn any_local_keeps_global_replaceable_semantics() {
     assert_eq!(result.events[0].id(), accepted_local.id);
     assert!(result.events[0].relay_evidence.is_empty());
     assert!(result.events[0].publication.is_some());
+}
+
+/// `docs/spec/partial-spec-api-semantics.md:200` — "An unpublished local event with no
+/// qualifying relay provenance MUST NOT appear." — with `:214`: two otherwise identical
+/// queries using different source modes "MUST NOT accidentally share evidence or
+/// local-result visibility in a way that changes either query's results". A
+/// write-store-only successor therefore has no standing in `only_from_relays`
+/// coordinate-winner selection: it may not appear, and it may not displace the
+/// relay-qualified event the query is actually asking for.
+#[test]
+fn unpublished_local_event_cannot_hide_a_relay_qualified_predecessor() {
+    let keys = Keys::generate();
+    let relay_a = "wss://relay-a.example";
+    let predecessor = addressable(&keys, 10, "relay-served predecessor");
+    let successor = addressable_unsigned(&keys, 20, "purely local successor");
+    let query = base_query()
+        .only_from_relays([relay(relay_a)])
+        .expect("relay A is selected");
+
+    let relay_only = StandardQueryEvaluator
+        .evaluate(
+            &query,
+            &[cache(vec![(predecessor.clone(), evidence(&[relay_a]))])],
+        )
+        .expect("relay-only evaluation succeeds");
+    assert_eq!(
+        relay_only
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect::<Vec<_>>(),
+        vec![predecessor.id]
+    );
+
+    let with_local_write = StandardQueryEvaluator
+        .evaluate(
+            &query,
+            &[
+                cache(vec![(predecessor.clone(), evidence(&[relay_a]))]),
+                local_unsigned(successor),
+            ],
+        )
+        .expect("evaluation with a local write succeeds");
+    assert_eq!(
+        with_local_write
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect::<Vec<_>>(),
+        vec![predecessor.id],
+        "a purely local unpublished write must neither appear nor erase the \
+         relay-qualified event at the same coordinate"
+    );
+}
+
+/// `docs/spec/partial-spec-api-semantics.md:202` — "If a locally published event later
+/// acquires qualifying provenance because one of the specified relays serves it, it may
+/// then enter the query result."
+#[test]
+fn local_event_wins_its_coordinate_once_a_selected_relay_serves_it() {
+    let keys = Keys::generate();
+    let relay_a = "wss://relay-a.example";
+    let predecessor = addressable(&keys, 10, "relay-served predecessor");
+    let successor = addressable(&keys, 20, "published successor");
+    let query = base_query()
+        .only_from_relays([relay(relay_a)])
+        .expect("relay A is selected");
+
+    let served = StandardQueryEvaluator
+        .evaluate(
+            &query,
+            &[
+                cache(vec![
+                    (predecessor, evidence(&[relay_a])),
+                    (successor.clone(), evidence(&[relay_a])),
+                ]),
+                local(successor.clone()),
+            ],
+        )
+        .expect("evaluation succeeds");
+    assert_eq!(
+        served
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect::<Vec<_>>(),
+        vec![successor.id]
+    );
+    assert!(served.events[0].publication.is_some());
 }
