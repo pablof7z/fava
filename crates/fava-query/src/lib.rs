@@ -1,5 +1,7 @@
 //! Declarative event queries, local source contracts, and application snapshots.
 
+mod evidence;
+mod identity;
 mod selection;
 
 use std::collections::BTreeSet;
@@ -8,8 +10,12 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
+pub use evidence::{
+    AuthenticationState, BoundedText, RelayDeadline, RelaySourceState, RelayWithdrawal,
+};
 use fava_state::{CachedEvent, RelayAccess, RelayEvidence};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
+pub use identity::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
 pub use nostr::event::{EventId, Kind};
 pub use nostr::key::PublicKey;
 pub use nostr::types::{RelayUrl, Timestamp};
