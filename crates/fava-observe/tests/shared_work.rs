@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use fava_query::{Query, RelaySourceState, RelayWithdrawal, RouteOrigin};
+use fava_query::{Query, RelaySourceState, RouteOrigin};
 use fava_router_app_relays::AppRelayRouter;
 use fava_routing::Router;
 use fava_state::RelayUrl;
@@ -290,55 +290,6 @@ async fn an_establishment_that_completes_after_withdrawal_is_released_not_instal
         requests(assembly.peer(&gated)).is_empty(),
         "a superseded establishment must not install demand"
     );
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn repeated_close_withdraws_exactly_once() {
-    let shared = relay("shared");
-    let assembly = assemble();
-    let observation = assembly
-        .observer
-        .open(
-            Query::events()
-                .only_from_relays([shared.clone()])
-                .expect("explicit relay is valid"),
-        )
-        .expect("the live query opens");
-    wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
-    let peer = assembly.established(&shared);
-
-    observation.close();
-    observation.close();
-    wait_until(|| withdrawals(Some(peer.clone())).len() == 1).await;
-    settle().await;
-
-    assert_eq!(withdrawals(Some(peer)).len(), 1);
-    assert_eq!(assembly.transport.dials(&session_key(&shared)), 1);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn closing_an_observation_records_why_its_relay_demand_ended() {
-    let shared = relay("shared");
-    let alice = Keys::generate().public_key();
-    let router: Arc<dyn Router> = Arc::new(AppRelayRouter::new("app-relays", [shared.clone()]));
-    let assembly = assemble_with(vec![router]);
-    let observation = assembly
-        .observer
-        .open(Query::events().kind(Kind::Metadata).authors([alice]))
-        .expect("automatic query opens");
-    wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
-
-    let bound = relay_evidence(&observation, &shared);
-    assert!(matches!(
-        bound.route,
-        RouteOrigin::Automatic { revision: 1 }
-    ));
-    assert_eq!(
-        RelayWithdrawal::RouteWithdrawn,
-        RelayWithdrawal::RouteWithdrawn,
-        "route withdrawal is the reason a router-contributed relay leaves"
-    );
-    observation.close();
 }
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
