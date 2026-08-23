@@ -788,8 +788,6 @@ forcing_requirement = "WRITE-007, WRITE-008, ID-001, ID-005, and ID-006 require 
 falsifier = "Accept an unsigned Alice write without a signer, attach Alice's signer without rebuilding Fava, and require the same write and receipt to continue; suppressing the exact session-change wakeup must fail."
 symbols = ["fava_session::Session", "fava_session::SessionError"]
 crates = ["fava-session"]
-spec_symbols = ["Session", "SessionError"]
-spec_crates = ["fava-session"]
 
 [[term]]
 name = "FetchCache"

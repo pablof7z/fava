@@ -816,7 +816,13 @@ Unavailable, rejected, invalid-output, cancelled, timed-out, and stale signer re
 
 If an accepted unsigned event has no available signer for its pubkey, it remains awaiting that signer without elapsed-time abandonment.
 
-A signer for another pubkey cannot satisfy it. Restart causes a fresh signer request when the correct provider becomes available; no durable “signer is still working” flag is assumed to survive process death.
+A signer for another pubkey cannot satisfy it. Attaching the exact signer to the running
+Fava instance wakes the same accepted write and receipt without rebuilding the engine.
+Removing or replacing an attachment cancels or detaches its in-flight operation; every
+completion is rechecked against the exact current attachment generation before it may
+change signing state. Restart causes a fresh signer request when the correct provider
+becomes available; no durable “signer is still working” flag is assumed to survive
+process death.
 
 Explicit cancellation or protocol expiry may terminate the write.
 
@@ -1181,6 +1187,11 @@ When upstream coverage changes, the fallback router recomputes its complete cont
 ## ID-001 — Session state and accepted-write state are separate
 
 A session contains accounts, current-account selection, and attached signer/crypto provider configuration.
+
+Signer attachment is mutable while Fava is running. Exactly one signer may be attached
+per public key; add, explicit replace, and remove operations are bounded to 64 attached
+public keys and refuse atomically. Builder-supplied signers seed this same runtime
+session rather than a publication-owned signer map.
 
 Accepted writes remain owned by the write store and are not rewritten when session state changes.
 

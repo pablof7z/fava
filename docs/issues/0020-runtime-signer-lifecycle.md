@@ -1,6 +1,6 @@
 # Runtime signer lifecycle
 
-**Status:** accepted
+**Status:** resolved
 **Approved by:** Pablo, 2026-08-23
 **Authority:** WRITE-003, WRITE-007, WRITE-008, ID-001, ID-005, ID-006;
 `docs/spec/ARCHITECTURE.md` `fava-session`, `fava-publication`, and authority ledger
@@ -79,6 +79,16 @@ fava-session
 
 No signer-registration wrapper, provider collection, account alias, options
 bag, compatibility path, or second lifecycle owner is approved.
+
+## Implemented result
+
+`fava-session` now owns one bounded runtime signer attachment per exact public
+key. `Fava::add_signer`, `Fava::replace_signer`, and `Fava::remove_signer`
+mutate the running instance. Publication observes that session, wakes only the
+matching parked pubkey, and rejects completions from stale attachment
+generations before they can change signing or delivery state. The attachment
+bound is 64 and every overflow, duplicate, or missing-target refusal is atomic
+and typed.
 
 ## Required public behavior
 
