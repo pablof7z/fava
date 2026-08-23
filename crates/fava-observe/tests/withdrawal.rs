@@ -1,0 +1,149 @@
+//! Why one relay's demand ended, and how many CLOSEs ending it costs.
+
+mod support;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+use fava_query::{Query, RelaySourceState, RelayWithdrawal, RouteOrigin};
+use fava_router_testkit::DelayedRouter;
+use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget, Router};
+use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_transport::Transport;
+use nostr::event::Kind;
+use nostr::key::{Keys, PublicKey};
+use support::{
+    assemble, assemble_with, relay, relay_evidence, requests, session_key, settle, wait_until,
+    withdrawals,
+};
+
+/// A relay the routers stop contributing leaves an attributed reason behind.
+///
+/// This is the one withdrawal an application can still read. A closing
+/// observation records nothing, because `Registry::withdraw` removes the whole
+/// installation and the handle that would read it is gone by construction —
+/// `RelayWithdrawal::ObservationClosed` names a state no reader can observe.
+/// The reason that *is* observable is `RouteWithdrawn` (QUERY-014,
+/// `GOALS:479`): the query stays open, its automatic route revision no longer
+/// names the relay, and the evidence for that relay is retained saying so.
+///
+/// Deliberate break: have `Registry::assign` drop the entry instead of
+/// retaining it (`retain_withdrawn` returning `false`), or record any other
+/// `RelayWithdrawal`.
+#[tokio::test(flavor = "current_thread")]
+async fn a_route_that_stops_contributing_a_relay_records_why_its_demand_ended() {
+    let dropped = relay("dropped");
+    let alice = Keys::generate().public_key();
+    let routes = Arc::new(DelayedRouter::new("routes", contribution(&dropped)));
+    let assembly = assemble_with(vec![Arc::clone(&routes) as Arc<dyn Router>]);
+
+    let observation = assembly
+        .observer
+        .open(automatic(alice))
+        .expect("the automatic query opens");
+    wait_until(|| requests(assembly.peer(&dropped)).len() == 1).await;
+    let peer = assembly.established(&dropped);
+    let installed = requests(Some(peer.clone()))[0].0.clone();
+    let bound = relay_evidence(&observation, &dropped);
+    assert!(matches!(
+        bound.route,
+        RouteOrigin::Automatic { revision: 1 }
+    ));
+    assert!(!matches!(bound.state, RelaySourceState::Withdrawn { .. }));
+
+    // The router replaces its complete contribution with one that no longer
+    // names the relay. Nothing about the query or the handle changed.
+    routes.replace(RouteContribution::default());
+
+    wait_until(|| withdrawals(Some(peer.clone())) == vec![installed.clone()]).await;
+    let ended = relay_evidence(&observation, &dropped);
+    assert_eq!(
+        ended.state,
+        RelaySourceState::Withdrawn {
+            reason: RelayWithdrawal::RouteWithdrawn
+        },
+        "the still-open observation must be able to read why Fava stopped asking this relay"
+    );
+    assert!(
+        matches!(ended.route, RouteOrigin::Automatic { .. }),
+        "withdrawn evidence keeps the acquisition that produced it, got {:?}",
+        ended.route
+    );
+    observation.close();
+}
+
+/// One shared request is withdrawn exactly once, however its holders leave.
+///
+/// The interesting case is not repeated `close()` on a single handle — that is
+/// `BTreeMap::remove` returning `None`. It is two holders of the *same* wire
+/// subscription leaving by different routes inside one scheduler turn: one
+/// explicitly, one by `Drop`, with the explicitly-closed handle then dropped as
+/// well. A refcount keyed on observation count, or a `Drop` that re-issues the
+/// withdrawal its explicit `close()` already performed, sends a second CLOSE
+/// for a subscription that is already gone.
+#[tokio::test(flavor = "current_thread")]
+async fn close_and_drop_in_one_turn_withdraw_a_shared_request_exactly_once() {
+    let shared = relay("shared");
+    let key = session_key(&shared);
+    let alice = Keys::generate().public_key();
+    let assembly = assemble();
+
+    let first = assembly
+        .observer
+        .open(explicit(alice, &shared))
+        .expect("the first query opens");
+    let second = assembly
+        .observer
+        .open(explicit(alice, &shared))
+        .expect("the second query opens");
+    wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
+    let peer = assembly.established(&shared);
+    let installed = requests(Some(peer.clone()))[0].0.clone();
+    wait_until(|| relay_evidence(&first, &shared).shared_with.len() == 2).await;
+
+    // No yield between the departures: the explicit close, the survivor's drop,
+    // and the drop of the already-closed handle all land in one turn.
+    first.close();
+    drop(second);
+    drop(first);
+
+    wait_until(|| !withdrawals(Some(peer.clone())).is_empty()).await;
+    settle().await;
+    assert_eq!(
+        withdrawals(Some(peer)),
+        vec![installed],
+        "one wire subscription earns exactly one CLOSE"
+    );
+    assert_eq!(assembly.transport.dials(&key), 1);
+    wait_until(|| assembly.transport.holders(&key).is_none()).await;
+}
+
+fn automatic(author: PublicKey) -> Query {
+    Query::events().kind(Kind::Metadata).authors([author])
+}
+
+fn explicit(author: PublicKey, relay: &RelayUrl) -> Query {
+    Query::events()
+        .kind(Kind::Metadata)
+        .authors([author])
+        .only_from_relays([relay.clone()])
+        .expect("explicit relay is valid")
+}
+
+/// A complete router contribution naming exactly one relay.
+fn contribution(relay: &RelayUrl) -> RouteContribution {
+    let session = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+    RouteContribution {
+        destinations: vec![RouteDestination::new(
+            session.clone(),
+            BTreeSet::from([RouteTarget::WholeRequest]),
+            "test route",
+        )],
+        coverage: BTreeMap::from([(
+            RouteTarget::WholeRequest,
+            CoverageState::Covered(BTreeSet::from([session])),
+        )]),
+        unresolved: BTreeSet::new(),
+        shortfalls: Vec::new(),
+    }
+}
