@@ -285,3 +285,57 @@ fn grouping_is_invariant_under_demand_permutation() {
         assert_eq!(plan, baseline, "rotation {rotation} changed the plan");
     }
 }
+
+/// C15, answered rather than left open: access-context partitioning already
+/// sits above the merge predicate, structurally.
+///
+/// `RelaySessionKey` is `(RelayUrl, RelayAccess)` and `plan` is scoped to one
+/// of them, so authenticated and unauthenticated demand for the same relay are
+/// two different sessions and two different plans. The merge predicate never
+/// learns that access exists, and cannot: there is no path by which demand
+/// under one access reaches a plan for another. No partition needs adding above
+/// `group()`, and this test exists so the question is not re-litigated.
+#[test]
+fn access_context_partitions_above_the_merge_predicate() {
+    use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+
+    let url = RelayUrl::parse("wss://relay.example").expect("relay URL");
+    let public = RelaySessionKey::new(url.clone(), RelayAccess::public());
+    let authenticated = RelaySessionKey::new(url, RelayAccess::named("nip42"));
+    assert_ne!(
+        public, authenticated,
+        "access is part of the session identity a plan is scoped to"
+    );
+
+    // The same filter under two accesses is planned twice, never merged once.
+    let filter = Filter::new().kind(Kind::from_u16(1));
+    let public_plan = assert_conformant(
+        &planner(),
+        &PlannerScenario::fresh("public", public.clone(), vec![demand(1, filter.clone())]),
+    );
+    let authenticated_plan = assert_conformant(
+        &planner(),
+        &PlannerScenario::fresh(
+            "authenticated",
+            authenticated.clone(),
+            vec![demand(2, filter)],
+        ),
+    );
+
+    assert_eq!(public_plan.relay, public);
+    assert_eq!(authenticated_plan.relay, authenticated);
+    assert_eq!(
+        public_plan
+            .attribution
+            .serves(&public_plan.open[0].id)
+            .len(),
+        1
+    );
+    assert_eq!(
+        authenticated_plan
+            .attribution
+            .serves(&authenticated_plan.open[0].id)
+            .len(),
+        1
+    );
+}
