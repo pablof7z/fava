@@ -37,7 +37,6 @@ async fn open_explicit(fava: &Fava, query: Query) -> Result<Observation, Observe
             Arc::clone(transport),
             Arc::clone(planner),
             Arc::clone(&fava.event_cache),
-            Arc::clone(&fava.diagnostics),
             Arc::clone(&fava.next_subscription),
         )
         .await

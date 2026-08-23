@@ -307,6 +307,11 @@ symbols = [
     "fava_query::QueryError",
     "fava_query::QueryBranchId",
     "fava_query::QueryBounds",
+    "fava_query::RelaySourceState",
+    "fava_query::RelayDeadline",
+    "fava_query::RelayWithdrawal",
+    "fava_query::AuthenticationState",
+    "fava_query::BoundedText",
 ]
 crates = ["fava-query"]
 spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
@@ -935,8 +940,24 @@ owner = "fava-diagnostics"
 nearest_nostr = "NOTICE and CLOSED messages"
 distinction = "Relay messages report relay facts; Diagnostics also reports scoped local source, routing, signing, storage, and resource facts."
 symbols = [
+    "fava_diagnostics::BoundKind",
     "fava_diagnostics::Diagnostics",
     "fava_diagnostics::DiagnosticsSnapshot",
+    "fava_diagnostics::DroppedFacts",
+    "fava_diagnostics::LimitDiagnostic",
+    "fava_diagnostics::LimitScope",
+    "fava_diagnostics::LogicalDemandDiagnostic",
+    "fava_diagnostics::ObservationWireBinding",
+    "fava_diagnostics::ProviderDiagnostic",
+    "fava_diagnostics::ProviderKind",
+    "fava_diagnostics::ProviderOperation",
+    "fava_diagnostics::ProviderOperationState",
+    "fava_diagnostics::QueryDiagnostic",
+    "fava_diagnostics::RelayDiagnostic",
+    "fava_diagnostics::RelaySessionState",
+    "fava_diagnostics::WireSubscriptionDiagnostic",
+    "fava_diagnostics::WriteDiagnostic",
+    "fava_diagnostics::WriteStall",
 ]
 crates = ["fava-diagnostics"]
 spec_symbols = ["DiagnosticsSnapshot"]

@@ -227,7 +227,6 @@ async fn explicit_query_bypasses_every_automatic_router() {
 
     assert_eq!(transport.open_count(&explicit), 1);
     assert_eq!(delayed.open_count(), 0);
-    assert!(fava.diagnostics().router_sessions.is_empty());
     observation.close();
 }
 
