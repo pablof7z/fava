@@ -381,7 +381,7 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 07.8-01-PLAN.md — Settled absence requires an answer: a failed router no longer fabricates `SettledAbsent`; resolves the LEDGER's WRITE-027 cross-owner question
+- [x] 07.8-01-PLAN.md — Settled absence requires an answer: a failed router no longer fabricates `SettledAbsent`; resolves the LEDGER's WRITE-027 cross-owner question
 - [ ] 07.8-02-PLAN.md — The router acquisition contract and its first real implementation on `Observer` (blocked on a vocabulary decision checkpoint)
 - [ ] 07.8-03-PLAN.md — `Router`/`RouterSession` signature change and all four `fava_routing::open`/`preview` call sites wired to real handles
 - [ ] 07.8-04-PLAN.md — Outbox reads the warm cache before asking a relay; settled absence from indexer evidence; ROUTER-001 re-specified at the wire
