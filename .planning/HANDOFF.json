@@ -1,93 +1,90 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-23T15:35:06.761Z",
-  "phase": "07.3-07.9",
-  "phase_name": "Architecture remediation series",
-  "phase_dir": ".planning/phases/",
-  "status": "in_progress",
-  "pad": ".planning/.continue-here.md",
-  "head": "dfec6d5 issue(0021): record the planner signature conflict with ARCHITECTURE.md",
+  "timestamp": "2026-08-23T19:05:00Z",
+  "phase": "07.7",
+  "phase_name": "Facade Lifecycle and fava-session Signer Ownership",
+  "phase_dir": ".planning/phases/07.7-facade-lifecycle-and-fava-session-signer-ownership",
+  "status": "paused",
+  "handoff": ".planning/.continue-here.md",
+  "head": "ac92bde",
+  "handoff_target": "agents on a different machine",
   "tests": {
-    "passing": 431,
-    "targets_green": 135,
-    "targets_total": 136,
-    "red": "crates/fava/tests/explicit_live.rs \u2014 3 live-query falsifiers, close when 07.6 merges"
+    "passing": 539,
+    "targets": "139/139",
+    "clippy": "clean",
+    "caveat": "a green suite proved nothing here for six milestones; require falsifiers"
   },
-  "decisions_pending": [
+  "blockers": [
     {
-      "id": "D1",
-      "topic": "planner plan() signature: does it receive installed?",
-      "status": "on_hold_pending_agent",
-      "issue": "docs/issues/0021"
+      "description": "Work is on main locally and unpushed; AGENTS.md forbids pushing without Pablo's explicit authorization. The other machine cannot receive it until he authorizes.",
+      "type": "human_action",
+      "blocking": true
     },
     {
-      "id": "D2",
-      "topic": "where the 10ms admission window lives (fava-observe vs planner side)",
-      "status": "answer_inbound"
+      "description": "07.8 plans 02-05 blocked on two new fava-routing nominals (RouterQueries, RouterObservation)",
+      "type": "human_action",
+      "blocking": true
     },
     {
-      "id": "D3",
-      "topic": "impl QuerySource for Fava \u2014 router acquisition recursion",
-      "recommendation": "delete it; give routers a non-recursive local-query service"
+      "description": "07.8 preview question: ARCHITECTURE:1290 forbids preview creating acquisition ownership, but outbox preview needs a warm cache read",
+      "type": "human_action",
+      "blocking": true
     },
     {
-      "id": "D4",
-      "topic": "WRITE-027: is a total router refusal terminal?",
-      "recommendation": "non-terminal with typed shortfall"
+      "description": "Whether NIP-11 producer and expiry sweep split into their own phases",
+      "type": "human_action",
+      "blocking": false
     },
     {
-      "id": "D5",
-      "topic": "ObserveError::Relay(String) replacement shape",
-      "recommendation": "none yet"
-    },
-    {
-      "id": "D6",
-      "topic": "five vocabulary items",
-      "recommendation": "see pad table"
-    },
-    {
-      "id": "D7",
-      "topic": "expiry sweep owner",
-      "recommendation": "maintain() driven by fava-runtime timers"
-    },
-    {
-      "id": "D8",
-      "topic": "TransportError::Disconnected/InboundLost unreachable \u2014 amendment",
-      "recommendation": "stream-carried is authoritative"
-    }
-  ],
-  "decisions_made": [
-    {
-      "decision": "Sharing is a planner decision, not an owner decision",
-      "rationale": "GOALS:296 forbids erasing distinctions merely because filters are equal; Pablo's A/B/C example produces a merged filter equal to no input, which an owner-side (relay,filter) key cannot represent"
-    },
-    {
-      "decision": "Refcount lives on the installed wire subscription, N-to-1 via attribution fan-out",
-      "rationale": "one grouped EOSE must settle several logical demands"
-    },
-    {
-      "decision": "Delete rather than adapt: OpenedRelay, fava/src/{relay,live,routes}.rs, next_subscription",
-      "rationale": "Pablo, explicitly; no shims"
-    },
-    {
-      "decision": "Grouping batches unsent demand only; a sent subscription is never rewritten",
-      "rationale": "Pablo + nmp; nmp measured 90% waste and 1-to-20 subscription growth in the rewrite model"
-    },
-    {
-      "decision": "Consolidated remediation onto main alongside the 07.2 merge",
-      "rationale": "07.2 landed there from another session mid-flight"
-    }
-  ],
-  "blockers": [],
-  "async_jobs": [],
-  "human_actions_pending": [
-    {
-      "action": "Rule on D3-D8",
-      "context": "none blocks the fleet; D1/D2 are awaiting agent input first",
+      "description": "RelayIngestError::WrongSubscription has no production producer; delete or make admit_subscription_event the sole resolver",
+      "type": "human_action",
       "blocking": false
     }
   ],
-  "uncommitted_files": [],
-  "next_action": "Reconcile the two agents' answers on D2, then merge observe (07.6) to close the three falsifiers.",
-  "context_notes": "Root cause is not the live-query path: fava-runtime/fava-session/fava-auth were named and approved but never built, so execution responsibilities fell to whoever held the call stack. CI never ran cargo test, which is why 306 green tests hid it. The pad at .planning/.continue-here.md is the live decision surface and must be kept current."
+  "in_flight_local_branches": [
+    {
+      "branch": "worktree-agent-a5a191f611626663f",
+      "work": "07.8 plan 01, complete_targets fabricating settled absence",
+      "commits": 3,
+      "merged": false
+    },
+    {
+      "branch": "worktree-agent-a4a24e3e9c382a6be",
+      "work": "07.6 verification gaps, QUERY-010 first",
+      "merged": false
+    },
+    {
+      "branch": "worktree-agent-adeb07cd770edf371",
+      "work": "canary teardown, remove every workaround",
+      "merged": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Sharing is a planner decision; refcount on the wire subscription",
+      "rationale": "GOALS:296 forbids erasing distinctions on filter equality; a merged filter equals none of its inputs"
+    },
+    {
+      "decision": "Grouping batches unsent demand only; a sent subscription is never rewritten",
+      "rationale": "nmp measured the alternative at 90% waste and 1-to-20 subscriptions at twenty growth steps"
+    },
+    {
+      "decision": "Routers get a one-method trait refusing non-Explicit/non-CacheOnly, running the exact same code path",
+      "rationale": "the concrete Fava would confer publish/close/reset, create an Arc cycle, and tie routers to one engine"
+    },
+    {
+      "decision": "WRITE-027: a healthy chain answering absence settles terminal; a failed router must not",
+      "rationale": "GOALS:1003 conditions the stay-open clause on unresolved, not empty"
+    },
+    {
+      "decision": "No backfilled PLAN/SUMMARY for 07.3-07.6",
+      "rationale": "a summary from what shipped describes the code instead of testing it; that is the M2-M4 artifact 07.9 revokes"
+    },
+    {
+      "decision": "Delete ObserveError::Relay rather than reshape it",
+      "rationale": "GOALS:325 permits only local-source failure and shutdown as open failures"
+    }
+  ],
+  "next_action": "Resolve the push authorization. Then Pablo's four answers unblock 07.8 plans 02-05; 07.7 can be planned in parallel; the 07.6 QUERY-010 gap is the highest-value fix.",
+  "context_notes": "Crisis closed but verification of 07.6 returned gaps_found 4/7 including a demonstrated QUERY-010 violation. Root cause was three named-but-unbuilt execution owners, not the live-query path. Two pad sessions under ~/pad/fava/ hold the narrative and do not travel with the repo."
 }
