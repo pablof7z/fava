@@ -9,9 +9,7 @@ use fava_query::{
     SourceStatus, SourceTerminationCause,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{
-    CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
-};
+use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
 
@@ -203,7 +201,11 @@ fn evaluation_is_pure_and_total_over_every_source_arrangement() {
     ];
 
     let ids = |snapshot: &QuerySnapshot| -> Vec<_> {
-        snapshot.events.iter().map(fava_query::EventRecord::id).collect()
+        snapshot
+            .events
+            .iter()
+            .map(fava_query::EventRecord::id)
+            .collect()
     };
 
     let query = Query::events();
