@@ -13,7 +13,12 @@ use std::sync::atomic::AtomicU64;
 
 use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
-pub use fava_diagnostics::DiagnosticsSnapshot;
+pub use fava_diagnostics::{
+    BoundKind, DiagnosticsSnapshot, DroppedFacts, LimitDiagnostic, LimitScope,
+    LogicalDemandDiagnostic, ObservationWireBinding, ProviderDiagnostic, ProviderKind,
+    ProviderOperation, ProviderOperationState, QueryDiagnostic, RelayDiagnostic, RelaySessionState,
+    WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
+};
 use fava_event_cache::EventCache;
 use fava_observe::Observer;
 pub use fava_observe::{Observation, ObservationClosed, ObserveError};
@@ -269,10 +274,7 @@ pub struct FavaBuilder {
 }
 
 impl FavaBuilder {
-    /// Retain at most `capacity` diagnostic facts per category.
-    ///
-    /// Defaults to 256. The bound is two-dimensional: this count bound and the
-    /// 512-byte cap every retained externally-supplied string already carries.
+    /// Retain at most `capacity` diagnostic facts per category. Defaults to 256.
     #[must_use]
     pub const fn diagnostics_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.diagnostics_capacity = Some(capacity);
