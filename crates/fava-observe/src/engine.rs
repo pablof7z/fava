@@ -28,7 +28,7 @@ use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
     InstalledSubscription, InstalledSubscriptions, RelayDemand, RelayReadConstraints,
-    SubscriptionPlan, SubscriptionPlanner, validate_plan,
+    SubscriptionPlan, SubscriptionPlanner, filter_covers, validate_plan,
 };
 use fava_transport::{
     OpenRelaySession, RelayInbound, RelaySession, RelaySessionLease, Transport, TransportBounds,
@@ -36,7 +36,6 @@ use fava_transport::{
 };
 use fava_wire::SubscriptionId;
 
-use crate::admission;
 use crate::diagnostics;
 use crate::operations;
 use crate::registry::Registry;
@@ -239,7 +238,7 @@ impl Engine {
                     entry
                         .filters
                         .iter()
-                        .any(|filter| admission::covers(filter, &item.filter))
+                        .any(|filter| filter_covers(filter, &item.filter))
                 }) else {
                     continue;
                 };
