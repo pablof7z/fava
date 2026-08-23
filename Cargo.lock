@@ -528,6 +528,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-runtime"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "fava-session"
 version = "0.1.0"
 dependencies = [

@@ -265,9 +265,27 @@ meaning = "One assembled Fava engine instance and its public facade."
 owner = "fava"
 nearest_nostr = "none"
 distinction = "Nostr defines protocol messages, not an application's assembled client lifecycle."
-symbols = ["fava::Fava", "fava::FavaBuilder", "fava::BuildError"]
-crates = ["fava"]
-spec_crates = ["fava-ffi", "fava-runtime", "fava-standard"]
+symbols = [
+    "fava::Fava",
+    "fava::FavaBuilder",
+    "fava::BuildError",
+    "fava_runtime::Runtime",
+    "fava_runtime::RuntimeConfig",
+    "fava_runtime::RuntimeError",
+    "fava_runtime::TaskName",
+    "fava_runtime::TaskHandle",
+    "fava_runtime::TaskFailure",
+    "fava_runtime::OperationName",
+    "fava_runtime::OperationGeneration",
+    "fava_runtime::ProviderCompletion",
+    "fava_runtime::CancellationToken",
+    "fava_runtime::Sender",
+    "fava_runtime::Receiver",
+    "fava_runtime::SendRefused",
+    "fava_runtime::SendRefusal",
+]
+crates = ["fava", "fava-runtime"]
+spec_crates = ["fava-ffi", "fava-standard"]
 
 [[term]]
 name = "Query"
