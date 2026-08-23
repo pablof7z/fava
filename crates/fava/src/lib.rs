@@ -7,6 +7,7 @@ mod relay;
 mod routes;
 mod session;
 
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
@@ -264,9 +265,20 @@ pub struct FavaBuilder {
     materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
+    diagnostics_capacity: Option<NonZeroUsize>,
 }
 
 impl FavaBuilder {
+    /// Retain at most `capacity` diagnostic facts per category.
+    ///
+    /// Defaults to 256. The bound is two-dimensional: this count bound and the
+    /// 512-byte cap every retained externally-supplied string already carries.
+    #[must_use]
+    pub const fn diagnostics_capacity(mut self, capacity: NonZeroUsize) -> Self {
+        self.diagnostics_capacity = Some(capacity);
+        self
+    }
+
     /// Select one event-cache provider.
     #[must_use]
     pub fn event_cache<T>(mut self, cache: Arc<T>) -> Self
@@ -403,11 +415,10 @@ impl FavaBuilder {
         let evaluator = self.evaluator.ok_or(BuildError::MissingQueryEvaluator)?;
         let event_source: Arc<dyn QuerySource> = event_cache.clone();
         let write_source: Arc<dyn QuerySource> = write_store.clone();
-        let diagnostics = Arc::new(Diagnostics::default());
-        let report = {
-            let diagnostics = Arc::clone(&diagnostics);
-            Arc::new(move |count| diagnostics.query_updates_coalesced(count))
-        };
+        let diagnostics = self.diagnostics_capacity.map_or_else(
+            || Arc::new(Diagnostics::default()),
+            |capacity| Arc::new(Diagnostics::bounded(capacity)),
+        );
         let publication_selected = self.publisher.is_some()
             || self.delivery.is_some()
             || !self.signers.is_empty()
@@ -440,7 +451,7 @@ impl FavaBuilder {
             None
         };
         Ok(Fava {
-            observer: Observer::new(event_source, write_source, evaluator).with_coalescing(report),
+            observer: Observer::new(event_source, write_source, evaluator),
             event_cache,
             write_store,
             subscription_planner: self.subscription_planner,

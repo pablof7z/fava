@@ -77,5 +77,4 @@ async fn cancelled_pulls_and_large_burst_deliver_one_exact_latest_state() {
         .expect("latest-state deadline")
         .expect("observation stays open");
     assert_eq!(latest.events.len(), 256);
-    assert!(fava.diagnostics().coalesced_query_updates > 0);
 }

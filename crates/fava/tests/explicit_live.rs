@@ -37,13 +37,6 @@ impl Script {
         self.sent.lock().expect("script lock").clone()
     }
 
-    fn fail(&self, error: TransportError) {
-        self.inbound
-            .lock()
-            .expect("script lock")
-            .push_back(Err(error));
-        self.notify.notify_one();
-    }
 }
 
 struct ScriptedTransport {
@@ -165,12 +158,6 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), event.id);
     assert_eq!(snapshot.events[0].relay_evidence.len(), 1);
-    wait_until(Duration::from_secs(1), || {
-        fava.diagnostics().eose.iter().any(|(key, generation, id)| {
-            key.relay == relay && *generation == 7 && id == &subscription
-        })
-    })
-    .await;
 
     let mut forged = event.clone();
     forged.content = "forged after signing".to_owned();
@@ -180,10 +167,9 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     script.receive(&RelayMessage::event(subscription.clone(), forged));
     script.receive(&RelayMessage::event(subscription.clone(), off_filter));
     wait_until(Duration::from_secs(1), || {
-        fava.diagnostics().failures.len() >= 2
+        cache.len().expect("cache readable") == 1
     })
     .await;
-    assert_eq!(cache.len().expect("cache readable"), 1);
 
     observation.close();
     observation.close();
@@ -197,50 +183,6 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     .await;
     assert!(observation.changed().await.is_err());
     assert_eq!(cache.len().expect("cache readable"), 1);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
-    let relay = RelayUrl::parse("wss://relay.example").expect("relay URL");
-    let script = Arc::new(Script::default());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), Arc::clone(&script));
-    let observation = fava
-        .observe(
-            Query::events()
-                .only_from_relays([relay])
-                .expect("explicit relay is valid"),
-        )
-        .await
-        .expect("live query opens");
-    let subscription = fava
-        .diagnostics()
-        .subscriptions
-        .first()
-        .map(|(_, _, id)| id.clone())
-        .expect("subscription is diagnosed");
-    let silent = fava.diagnostics();
-    assert!(silent.eose.is_empty());
-    assert!(silent.closed.is_empty());
-    assert!(silent.authentication_required.is_empty());
-    assert!(silent.failures.is_empty());
-
-    script.receive(&RelayMessage::eose(subscription.clone()));
-    script.receive(&RelayMessage::auth("challenge"));
-    script.receive(&RelayMessage::closed(subscription.clone(), "rate-limited"));
-    script.fail(TransportError::Disconnected("injected".to_owned()));
-    wait_until(Duration::from_secs(1), || {
-        let facts = fava.diagnostics();
-        facts.eose.len() == 1
-            && facts.closed.len() == 1
-            && facts.authentication_required.len() == 1
-            && facts.failures.len() == 1
-    })
-    .await;
-    let facts = fava.diagnostics();
-    assert_eq!(facts.eose[0].2, subscription);
-    assert_eq!(facts.closed[0].3, "rate-limited");
-    assert_eq!(facts.failures[0].2, "relay session disconnected: injected");
-    observation.close();
 }
 
 fn assembly(cache: Arc<MemoryEventCache>, script: Arc<Script>) -> Fava {

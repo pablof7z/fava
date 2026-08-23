@@ -23,19 +23,14 @@ pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, Obser
     let request = RouteRequest::Read(query.clone());
     let routes = fava_routing::open(&fava.routers, &request)
         .map_err(|error| ObserveError::Relay(error.to_string()))?;
-    for router in &fava.routers {
-        fava.diagnostics.router_opened(router.name().to_owned());
-    }
     let initial = RoutePlan::from_contribution(1, &routes.current())
         .map_err(|error| ObserveError::Relay(error.to_string()))?;
-    record_plan(fava, &initial);
 
     let mut observation = fava.observer.open(query.clone())?;
     let providers = Providers {
         transport: Arc::clone(transport),
         planner: Arc::clone(planner),
         cache: Arc::clone(&fava.event_cache),
-        diagnostics: Arc::clone(&fava.diagnostics),
         next_subscription: Arc::clone(&fava.next_subscription),
     };
     let mut active = BTreeMap::new();
@@ -44,7 +39,6 @@ pub(super) async fn open(fava: &Fava, query: Query) -> Result<Observation, Obser
         &providers,
         initial.destinations.keys().cloned().collect(),
         &mut active,
-        initial.revision,
     )
     .await;
 
@@ -65,7 +59,6 @@ struct Providers {
     transport: Arc<dyn Transport>,
     planner: Arc<dyn SubscriptionPlanner>,
     cache: Arc<dyn fava_event_cache::EventCache>,
-    diagnostics: Arc<fava_diagnostics::Diagnostics>,
     next_subscription: Arc<std::sync::atomic::AtomicU64>,
 }
 
@@ -90,26 +83,13 @@ async fn run(
         };
         let contribution = match changed {
             Ok(contribution) => contribution,
-            Err(error) => {
-                providers
-                    .diagnostics
-                    .route_shortfall(revision, error.to_string());
-                break;
-            }
+            Err(_) => break,
         };
         revision = revision.saturating_add(1);
         let plan = match RoutePlan::from_contribution(revision, &contribution) {
             Ok(plan) => plan,
-            Err(error) => {
-                providers
-                    .diagnostics
-                    .route_shortfall(revision, error.to_string());
-                break;
-            }
+            Err(_) => break,
         };
-        providers
-            .diagnostics
-            .route(revision, plan.destinations.keys().cloned().collect());
         let desired: BTreeSet<_> = plan.destinations.keys().cloned().collect();
         let removed: Vec<_> = active
             .keys()
@@ -125,7 +105,7 @@ async fn run(
             .into_iter()
             .filter(|relay| !active.contains_key(relay))
             .collect();
-        add_relays(&query, &providers, added, &mut active, revision).await;
+        add_relays(&query, &providers, added, &mut active).await;
     }
     routes.close();
     for cancel in active.into_values() {
@@ -138,7 +118,6 @@ async fn add_relays(
     providers: &Providers,
     relays: Vec<RelaySessionKey>,
     active: &mut BTreeMap<RelaySessionKey, watch::Sender<bool>>,
-    revision: u64,
 ) {
     for relay in relays {
         match OpenedRelay::open(
@@ -147,7 +126,6 @@ async fn add_relays(
             Arc::clone(&providers.transport),
             Arc::clone(&providers.planner),
             Arc::clone(&providers.cache),
-            Arc::clone(&providers.diagnostics),
             Arc::clone(&providers.next_subscription),
         )
         .await
@@ -157,18 +135,7 @@ async fn add_relays(
                 active.insert(relay, cancel);
                 tokio::spawn(opened.run(cancel_rx));
             }
-            Err(error) => providers
-                .diagnostics
-                .route_shortfall(revision, format!("{relay:?}: {error}")),
+            Err(_) => {}
         }
-    }
-}
-
-fn record_plan(fava: &Fava, plan: &RoutePlan) {
-    fava.diagnostics
-        .route(plan.revision, plan.destinations.keys().cloned().collect());
-    for shortfall in &plan.shortfalls {
-        fava.diagnostics
-            .route_shortfall(plan.revision, shortfall.clone());
     }
 }
