@@ -292,6 +292,7 @@ dependencies = [
  "fava-router-fallback-relays",
  "fava-router-testkit",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-signer-local",
  "fava-simple-groups",
@@ -413,6 +414,7 @@ dependencies = [
  "fava-publisher",
  "fava-query",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-state",
  "fava-transport",
@@ -521,6 +523,17 @@ dependencies = [
  "fava-query",
  "fava-state",
  "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-session"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
+ "fava-write",
+ "nostr",
  "thiserror",
  "tokio",
 ]

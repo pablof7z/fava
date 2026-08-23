@@ -13,6 +13,7 @@ fava-publication.workspace = true
 fava-publisher.workspace = true
 fava-query.workspace = true
 fava-routing.workspace = true
+fava-session.workspace = true
 fava-signer.workspace = true
 fava-state.workspace = true
 fava-subscriptions.workspace = true

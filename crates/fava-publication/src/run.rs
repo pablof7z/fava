@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use fava_query::SourceKind;
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
-use fava_signer::{SignerAvailability, SignerError};
 use fava_write::{EventValue, Receipt, ReceiptId, WriteIntent, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
@@ -53,8 +52,9 @@ impl Publication {
         else {
             return;
         };
+        let mut signer_changes = self.session.subscribe();
         let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
-        self.start_signing(&receipt, signing_cancel_rx);
+        let mut signing_generation = self.start_signing(&receipt, signing_cancel_rx);
         let mut materialization_id = receipt.current.publication.materialization_id;
 
         let mut receipt_changes = self.store.receipt_changes();
@@ -68,11 +68,18 @@ impl Publication {
             };
             let current_materialization = current.current.publication.materialization_id;
             if current_materialization > materialization_id {
-                route_revision =
-                    self.reopen_materialization(&current, &mut routes, &mut signing_cancel);
+                route_revision = self.reopen_materialization(
+                    &current,
+                    &mut routes,
+                    &mut signing_cancel,
+                    &mut signing_generation,
+                );
                 materialization_id = current_materialization;
             } else if current_materialization == materialization_id {
                 route_revision = route_revision.max(current.route_revision);
+            }
+            if !matches!(current.current.event, EventValue::Unsigned(_)) {
+                signing_generation = None;
             }
             self.start_lanes(&current, &mut active, &lane_finished, &cancel);
             if current.is_terminal() {
@@ -84,6 +91,18 @@ impl Publication {
                 changed = cancel.changed() => {
                     if changed.is_err() || *cancel.borrow_and_update() {
                         break;
+                    }
+                }
+                changed = signer_changes.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    let current_generation = self.signer_generation(&current);
+                    if current_generation != signing_generation {
+                        signing_cancel.send_replace(true);
+                        let (next_cancel, next_cancel_rx) = watch::channel(false);
+                        signing_cancel = next_cancel;
+                        signing_generation = self.start_signing(&current, next_cancel_rx);
                     }
                 }
                 route = next_route(&mut routes), if routes.is_some() => {
@@ -122,8 +141,12 @@ impl Publication {
                                     &latest,
                                     &mut routes,
                                     &mut signing_cancel,
+                                    &mut signing_generation,
                                 );
                                 materialization_id = next_materialization;
+                            }
+                            if !matches!(latest.current.event, EventValue::Unsigned(_)) {
+                                signing_generation = None;
                             }
                         }
                         Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
@@ -347,11 +370,12 @@ impl Publication {
         receipt: &Receipt,
         routes: &mut Option<Box<dyn RouterSession>>,
         signing_cancel: &mut watch::Sender<bool>,
+        signing_generation: &mut Option<u64>,
     ) -> u64 {
         signing_cancel.send_replace(true);
         let (next_cancel, next_cancel_rx) = watch::channel(false);
         *signing_cancel = next_cancel;
-        self.start_signing(receipt, next_cancel_rx);
+        *signing_generation = self.start_signing(receipt, next_cancel_rx);
         if let Some(open) = routes {
             open.close();
         }
@@ -417,53 +441,6 @@ impl Publication {
             }
             Ok(Some(_) | None) | Err(_) => receipt.route_revision,
         }
-    }
-
-    fn start_signing(&self, receipt: &Receipt, cancel: watch::Receiver<bool>) {
-        let EventValue::Unsigned(unsigned) = receipt.current.event.clone() else {
-            return;
-        };
-        let Some(signer) = self.signers.get(&unsigned.pubkey).cloned() else {
-            return;
-        };
-        if !matches!(signer.availability(), SignerAvailability::Available) {
-            return;
-        }
-        let publication = self.clone();
-        let write_id = receipt.write_id;
-        let receipt_id = receipt.receipt_id;
-        let materialization_id = receipt.current.publication.materialization_id;
-        let event_id = receipt.current.id();
-        tokio::spawn(async move {
-            match signer.sign_event(unsigned, cancel).await {
-                Ok(event) => {
-                    if publication
-                        .store
-                        .install_signed(write_id, receipt_id, materialization_id, event_id, event)
-                        .is_err()
-                    {
-                        let _ = publication.store.record_signer_refusal(
-                            write_id,
-                            receipt_id,
-                            materialization_id,
-                            event_id,
-                            "signer returned an event that did not match the accepted body"
-                                .to_owned(),
-                        );
-                    }
-                }
-                Err(SignerError::Cancelled) => {}
-                Err(error) => {
-                    let _ = publication.store.record_signer_refusal(
-                        write_id,
-                        receipt_id,
-                        materialization_id,
-                        event_id,
-                        error.to_string(),
-                    );
-                }
-            }
-        });
     }
 
     fn finished(&self, receipt_id: ReceiptId) {

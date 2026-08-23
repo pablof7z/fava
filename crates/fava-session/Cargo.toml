@@ -1,0 +1,17 @@
+[package]
+name = "fava-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-signer.workspace = true
+fava-write.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+
+[lints]
+workspace = true
