@@ -27,17 +27,18 @@ use fava_query::{
     BoundedText, OperationGeneration, RelaySourceState,
 };
 use fava_runtime::{CancellationToken, Runtime, TaskName};
-use fava_state::{RelaySessionKey, Timestamp};
+use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    DemandId, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
+    InstalledSubscription, InstalledSubscriptions, RelayDemand, RelayReadConstraints,
     SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
 use fava_transport::{
     OpenRelaySession, RelayInbound, RelaySession, RelaySessionLease, Transport, TransportBounds,
     TransportDeadlines,
 };
+use fava_wire::SubscriptionId;
 
-use crate::admission::{self, LiveSubscription};
+use crate::admission;
 use crate::slot::Slot;
 use crate::diagnostics;
 use crate::operations;
@@ -83,9 +84,13 @@ pub(crate) enum Report {
         generation: OperationGeneration,
         detail: BoundedText,
     },
-    Applied {
+    Installed {
         relay: RelaySessionKey,
         generation: OperationGeneration,
+        revision: fava_subscriptions::PlanRevision,
+        plan: Box<SubscriptionPlan>,
+        opened: BTreeSet<SubscriptionId>,
+        closed: BTreeSet<SubscriptionId>,
     },
     Flush {
         relay: RelaySessionKey,
@@ -163,6 +168,11 @@ impl Engine {
 
     /// Bring relay work into agreement with current demand, without ever
     /// rewriting a request that has already reached the wire.
+    ///
+    /// Withdrawal flushes immediately: a CLOSE costs the relay nothing and the
+    /// subscription slot it frees is budget a refused demand is waiting for.
+    /// New demand waits for its admission window, because grouping has nothing
+    /// to group until a cohort exists.
     fn reconcile(&mut self) {
         let desired = self.registry.desired();
         let removed: Vec<RelaySessionKey> = self
@@ -175,124 +185,100 @@ impl Engine {
             self.release(&relay);
         }
         for (relay, demand) in desired {
-            self.withdraw_departed(&relay, &demand);
-            self.admit(&relay, &demand);
             self.establish(&relay, &demand);
+            self.attach(&relay, &demand);
+            let Some(slot) = self.slots.get(&relay) else {
+                continue;
+            };
+            let generation = slot.generation;
+            if slot.orphaned(&demand) {
+                self.flush(&relay, generation);
+                continue;
+            }
+            if slot.uncovered(&demand).is_empty() {
+                continue;
+            }
+            let Some(slot) = self.slots.get_mut(&relay) else {
+                continue;
+            };
+            if slot.armed {
+                continue;
+            }
+            slot.armed = true;
+            self.arm(&relay, generation);
         }
     }
 
-    /// Close every request whose last serving demand has gone away.
-    fn withdraw_departed(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
-        let wanted = admission::identities(demand);
-        let mut closing = Vec::new();
-        let mut rearm = false;
+    /// Bind demand a running request already carries to that request.
+    ///
+    /// This is a refcount edit, not wire work: the subscription keeps its exact
+    /// id and its exact filters, and no plan is computed. A joiner attaching to
+    /// a request whose stored replay already ended is credited that completion
+    /// straight away — the rows are in the local store its own sources read.
+    fn attach(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
+        let mut credited = Vec::new();
         let generation;
-        let session;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
                 return;
             };
-            slot.pending.retain(|id, _| wanted.contains(id));
-            for (id, entry) in &mut slot.live {
-                entry.serves.retain(|held| wanted.contains(held));
-                if entry.serves.is_empty() {
-                    closing.push(id.clone());
-                }
-            }
-            if closing.is_empty() {
-                return;
-            }
-            for id in &closing {
-                slot.live.remove(id);
-                slot.retired.insert(id.clone());
-            }
             generation = slot.generation;
-            session = slot.session.clone();
-            // A withdrawal can free relay capacity a refused demand needs.
-            if !slot.pending.is_empty() && !slot.armed {
-                slot.armed = true;
-                rearm = true;
-            }
-        }
-        if let Some(session) = session {
-            operations::withdraw_subscriptions(
-                &self.runtime,
-                &self.reports,
-                relay.clone(),
-                generation,
-                session,
-                closing,
-                self.providers.deadlines.write,
-            );
-        }
-        if rearm {
-            self.arm(relay, generation);
-        }
-        self.publish_relay_diagnostic(relay);
-    }
-
-    /// Attach new demand to a covering request, or hold it for admission.
-    fn admit(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
-        let mut attached = Vec::new();
-        let mut arm = false;
-        let generation;
-        {
-            let slot = self
-                .slots
-                .entry(relay.clone())
-                .or_insert_with(|| Slot::new(self.root.child()));
-            generation = slot.generation;
-            let held = slot.held();
+            let mut entries: Vec<(SubscriptionId, InstalledSubscription)> = slot
+                .installed
+                .ids()
+                .filter_map(|id| {
+                    slot.installed
+                        .get(id)
+                        .map(|entry| (id.clone(), entry.clone()))
+                })
+                .collect();
+            let mut changed = false;
             for item in demand {
                 let id = item.id();
-                if held.contains(&id) {
+                if entries.iter().any(|(_, entry)| entry.serves.contains(&id)) {
                     continue;
                 }
-                let covering = slot
-                    .live
-                    .iter()
-                    .find(|(_, entry)| admission::attaches(entry, &item.filter))
-                    .map(|(wire, entry)| (wire.clone(), entry.stored_events_complete));
-                if let Some((wire, complete)) = covering {
-                    if let Some(entry) = slot.live.get_mut(&wire) {
-                        entry.serves.insert(id);
-                    }
-                    if complete {
-                        attached.push(id);
-                    }
+                let Some((wire, entry)) = entries.iter_mut().find(|(_, entry)| {
+                    entry
+                        .filters
+                        .iter()
+                        .any(|filter| admission::covers(filter, &item.filter))
+                }) else {
                     continue;
-                }
-                slot.pending.insert(id, item.clone());
-                if !slot.armed {
-                    slot.armed = true;
-                    arm = true;
+                };
+                entry.serves.insert(id);
+                changed = true;
+                if slot.settled.get(&*wire).copied().unwrap_or_default() {
+                    credited.push(id);
                 }
             }
+            if !changed {
+                return;
+            }
+            slot.installed = InstalledSubscriptions::from_entries(entries);
         }
-        // A late joiner missed the stored replay, but the rows are already in
-        // the local store its own sources read: credit it the earned fact.
-        for id in attached {
+        self.publish_plan(relay, demand, None);
+        for id in credited {
             self.registry.record_state(
                 id.owner,
                 relay,
                 generation,
                 RelaySourceState::StoredEventsComplete {
-                    at: Timestamp::now(),
+                    at: fava_state::Timestamp::now(),
                 },
             );
         }
-        if arm {
-            self.arm(relay, generation);
-        }
+        self.publish_relay_diagnostic(relay);
     }
 
     /// Acquire the relay session this slot needs, once.
     fn establish(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
         let generation;
         {
-            let Some(slot) = self.slots.get_mut(relay) else {
-                return;
-            };
+            let slot = self
+                .slots
+                .entry(relay.clone())
+                .or_insert_with(|| Slot::new(self.root.child()));
             if slot.busy || slot.session.is_some() {
                 return;
             }
@@ -315,7 +301,6 @@ impl Engine {
         }
         self.publish_states(relay, demand, generation, &RelaySourceState::Connecting);
     }
-
     /// Arm one fixed, first-arrival-anchored admission window.
     pub(crate) fn arm(&self, relay: &RelaySessionKey, generation: OperationGeneration) {
         operations::arm_admission(
@@ -327,10 +312,20 @@ impl Engine {
         );
     }
 
-    /// Freeze the pending cohort and compile it in an empty incumbent namespace.
-    pub(crate) fn flush(&mut self, relay: &RelaySessionKey, generation: OperationGeneration) -> bool {
-        let cohort;
+    /// Close the admission window and plan this relay session once.
+    ///
+    /// The planner receives the *complete* current demand for the session and
+    /// the plan the transport actually accepted, and answers with the diff. It
+    /// is the only component that decides grouping, wire identity, and which
+    /// running subscription has lost its last logical owner.
+    pub(crate) fn flush(
+        &mut self,
+        relay: &RelaySessionKey,
+        generation: OperationGeneration,
+    ) -> bool {
+        let demand = self.registry.desired().remove(relay).unwrap_or_default();
         let session;
+        let installed;
         let revision;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
@@ -340,30 +335,26 @@ impl Engine {
                 return false;
             }
             slot.armed = false;
-            if slot.pending.is_empty() {
+            // Demand cancelled before the deadline never reaches the planner.
+            if slot.uncovered(&demand).is_empty() && !slot.orphaned(&demand) {
                 return false;
             }
             let Some(live) = slot.session.clone() else {
-                // No session yet. The cohort waits; establishment re-arms.
                 slot.armed = true;
                 self.arm(relay, generation);
                 return false;
             };
-            slot.revision = PlanRevision(slot.revision.0.saturating_add(1));
-            revision = slot.revision;
-            cohort = slot.pending.values().cloned().collect::<Vec<_>>();
             session = live;
+            installed = slot.installed.clone();
+            revision = slot.next_revision();
         }
         let constraints = RelayReadConstraints::unknown();
-        // The incumbent namespace is empty by construction: the merge step can
-        // see only the cohort, so it cannot widen a request already on the wire.
-        let empty = InstalledSubscriptions::empty();
         let planned = self
             .providers
             .planner
-            .plan(relay, &cohort, &constraints, &empty, revision)
+            .plan(relay, &demand, &constraints, &installed, revision)
             .and_then(|plan| {
-                validate_plan(relay, &cohort, &constraints, &empty, &plan)
+                validate_plan(relay, &demand, &constraints, &installed, &plan)
                     .map(|()| plan)
                     .map_err(|error| {
                         fava_subscriptions::SubscriptionPlanError::Encoding(
@@ -372,7 +363,7 @@ impl Engine {
                     })
             });
         match planned {
-            Ok(planned) => self.install(relay, &cohort, &session, &planned),
+            Ok(planned) => self.execute(relay, &demand, &session, &planned),
             Err(error) => {
                 self.providers.diagnostics.relay(diagnostics::refused_plan(
                     relay,
@@ -383,92 +374,101 @@ impl Engine {
         false
     }
 
-    /// Append the cohort's requests beside the incumbents, never over them.
-    fn install(
+    /// Hand the plan's diff to the wire, opening before closing.
+    fn execute(
         &mut self,
         relay: &RelaySessionKey,
-        cohort: &[RelayDemand],
+        demand: &[RelayDemand],
         session: &Arc<dyn RelaySession>,
         planned: &SubscriptionPlan,
     ) {
-        let mut opening = Vec::new();
-        let mut settled = Vec::new();
-        let mut reused = Vec::new();
-        let generation;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
                 return;
             };
-            generation = slot.generation;
-            let mut carried = BTreeSet::new();
-            for candidate in &planned.open {
-                let serves: BTreeSet<DemandId> = planned
-                    .attribution
-                    .get(&candidate.id)
-                    .map(|entry| entry.serves.clone())
-                    .unwrap_or_default();
-                carried.extend(serves.iter().copied());
-                let covering = slot
-                    .live
-                    .iter()
-                    .find(|(_, entry)| admission::attaches_all(entry, &candidate.filters))
-                    .map(|(wire, entry)| (wire.clone(), entry.stored_events_complete));
-                if let Some((wire, complete)) = covering {
-                    if let Some(entry) = slot.live.get_mut(&wire) {
-                        entry.serves.extend(serves.iter().copied());
-                    }
-                    if complete {
-                        settled.extend(serves.iter().copied());
-                    }
-                    continue;
+            for id in planned.attribution.ids() {
+                if let Some(entry) = planned.attribution.get(id) {
+                    slot.completeness.insert(id.clone(), entry.completeness);
                 }
-                if admission::is_retired(&slot.retired, &candidate.id) {
-                    reused.push(candidate.id.clone());
-                }
-                slot.live.insert(
-                    candidate.id.clone(),
-                    LiveSubscription {
-                        filters: candidate.filters.clone(),
-                        serves,
-                        stored_events_complete: false,
-                    },
-                );
-                opening.push(candidate.clone());
             }
-            // Demand the plan carried leaves the cohort; demand it refused for
-            // a declared limit stays pending and is retried in a later window.
-            slot.pending.retain(|id, _| !carried.contains(id));
         }
-        for id in reused {
-            self.providers.diagnostics.relay(diagnostics::refused_plan(
-                relay,
-                BoundedText::new(format!(
-                    "subscription planner reused the retired wire id {id}"
-                )),
+        if planned.is_noop() {
+            self.record_installed(relay, planned, &BTreeSet::new(), &BTreeSet::new());
+            self.publish_plan(relay, demand, Some(planned));
+            self.publish_relay_diagnostic(relay);
+            return;
+        }
+        let Some(slot) = self.slots.get(relay) else {
+            return;
+        };
+        operations::install_plan(
+            &self.runtime,
+            &self.reports,
+            operations::Installing {
+                relay: relay.clone(),
+                generation: slot.generation,
+                revision: planned.revision,
+            },
+            Arc::clone(session),
+            planned.clone(),
+            self.providers.deadlines.write,
+        );
+        self.publish_relay_diagnostic(relay);
+    }
+
+    /// Record exactly what the transport accepted as the next baseline.
+    ///
+    /// On a plan the transport accepted in full this is
+    /// `fava_subscriptions_testkit::apply_plan`, which the owner's own evidence
+    /// asserts against. It differs only when a REQ was refused: the successor
+    /// never opened, so its predecessor stays live and no CLOSE was sent.
+    pub(crate) fn record_installed(
+        &mut self,
+        relay: &RelaySessionKey,
+        planned: &SubscriptionPlan,
+        opened: &BTreeSet<SubscriptionId>,
+        closed: &BTreeSet<SubscriptionId>,
+    ) {
+        let Some(slot) = self.slots.get_mut(relay) else {
+            return;
+        };
+        let mut entries = Vec::new();
+        for id in slot.installed.ids() {
+            if closed.contains(id) {
+                continue;
+            }
+            let Some(current) = slot.installed.get(id) else {
+                continue;
+            };
+            // A retained subscription keeps its exact filters; only the demand
+            // it serves may change, and that is a refcount, not wire work.
+            let serves = planned
+                .attribution
+                .get(id)
+                .map_or_else(|| current.serves.clone(), |entry| entry.serves.clone());
+            entries.push((
+                id.clone(),
+                InstalledSubscription {
+                    filters: current.filters.clone(),
+                    serves,
+                },
             ));
         }
-        for demand in settled {
-            self.registry.record_state(
-                demand.owner,
-                relay,
-                generation,
-                RelaySourceState::StoredEventsComplete {
-                    at: Timestamp::now(),
+        for candidate in &planned.open {
+            if !opened.contains(&candidate.id) {
+                continue;
+            }
+            entries.push((
+                candidate.id.clone(),
+                InstalledSubscription {
+                    filters: candidate.filters.clone(),
+                    serves: candidate.serves.clone(),
                 },
-            );
+            ));
         }
-        self.publish_plan(relay, cohort, planned);
-        self.publish_relay_diagnostic(relay);
-        if !opening.is_empty() {
-            operations::open_subscriptions(
-                &self.runtime,
-                &self.reports,
-                relay.clone(),
-                generation,
-                Arc::clone(session),
-                opening,
-                self.providers.deadlines.write,
-            );
-        }
+        slot.installed = InstalledSubscriptions::from_entries(entries);
+        let live: BTreeSet<SubscriptionId> = slot.installed.ids().cloned().collect();
+        slot.settled.retain(|id, _| live.contains(id));
+        slot.completeness.retain(|id, _| live.contains(id));
     }
 }

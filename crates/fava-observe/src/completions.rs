@@ -31,7 +31,14 @@ impl Engine {
                 generation,
                 detail,
             } => self.refused(&relay, generation, &detail),
-            Report::Applied { relay, generation } => self.applied(&relay, generation),
+            Report::Installed {
+                relay,
+                generation,
+                revision,
+                plan,
+                opened,
+                closed,
+            } => self.installed(&relay, generation, revision, &plan, &opened, &closed),
             Report::Flush { relay, generation } => self.flush(&relay, generation),
             Report::Inbound {
                 relay,
@@ -62,7 +69,7 @@ impl Engine {
             slot.session = Some(Arc::clone(&session));
             slot.busy = false;
             slot.state = fava_diagnostics::RelaySessionState::Open;
-            rearm = !slot.pending.is_empty() && !slot.armed;
+            rearm = !slot.armed;
             if rearm {
                 slot.armed = true;
             }
@@ -103,7 +110,6 @@ impl Engine {
             slot.session = None;
             slot.advance(&self.root);
         }
-        self.replay(relay);
         {
             if let Some(lease) = lease {
                 self.release_lease(lease);
@@ -114,31 +120,36 @@ impl Engine {
         true
     }
 
-    /// Restore this relay's pending cohort from the demand the registry holds.
-    ///
-    /// Every request on the previous generation is void, so all of this
-    /// relay's current demand is unsent again and re-enters admission.
-    fn replay(&mut self, relay: &RelaySessionKey) {
-        let demand = self.registry.desired().remove(relay).unwrap_or_default();
-        if let Some(slot) = self.slots.get_mut(relay) {
-            slot.pending = demand
-                .into_iter()
-                .map(|item| (item.id(), item))
-                .collect();
+    /// Install exactly what the transport accepted, and report the request as
+    /// open to every observation the accepted subscriptions now serve.
+    fn installed(
+        &mut self,
+        relay: &RelaySessionKey,
+        generation: OperationGeneration,
+        revision: fava_subscriptions::PlanRevision,
+        plan: &fava_subscriptions::SubscriptionPlan,
+        opened: &std::collections::BTreeSet<fava_wire::SubscriptionId>,
+        closed: &std::collections::BTreeSet<fava_wire::SubscriptionId>,
+    ) -> bool {
+        {
+            let Some(slot) = self.slots.get(relay) else {
+                return false;
+            };
+            if slot.generation != generation || slot.revision != revision {
+                return false;
+            }
         }
-    }
-
-    fn applied(&mut self, relay: &RelaySessionKey, generation: OperationGeneration) -> bool {
+        self.record_installed(relay, plan, opened, closed);
+        let demand = self.registry.desired().remove(relay).unwrap_or_default();
+        self.publish_plan(relay, &demand, Some(plan));
         let Some(slot) = self.slots.get(relay) else {
             return false;
         };
-        if slot.generation != generation {
-            return false;
-        }
         let requested_at = Timestamp::now();
         let owners: Vec<ObservationId> = slot
-            .live
-            .values()
+            .installed
+            .ids()
+            .filter_map(|id| slot.installed.get(id))
             .flat_map(|entry| entry.serves.iter().map(|demand| demand.owner))
             .collect();
         for owner in owners {
@@ -230,12 +241,14 @@ impl Engine {
                 );
             }
         }
-        self.replay(relay);
         {
+            let demand = self.registry.desired().remove(relay).unwrap_or_default();
             let Some(slot) = self.slots.get_mut(relay) else {
                 return false;
             };
-            slot.armed = !slot.pending.is_empty();
+            // Every request on the previous generation is void, so all of this
+            // relay's demand is unsent again and re-enters admission.
+            slot.armed = !slot.uncovered(&demand).is_empty();
             armed = slot.armed;
         }
         if armed {
@@ -250,22 +263,32 @@ impl Engine {
         let Some(slot) = self.slots.get(relay) else {
             return;
         };
-        let installed = slot.installed();
+        let installed = slot.installed.clone();
         let outcome = ingest::accept(self.providers.cache.as_ref(), relay, &installed, frame);
         match outcome {
             ingest::Accepted::Nothing | ingest::Accepted::Event => {}
             ingest::Accepted::StoredEventsComplete(id) => {
                 let at = Timestamp::now();
-                if let Some(slot) = self.slots.get_mut(relay)
-                    && let Some(entry) = slot.live.get_mut(&id)
-                {
-                    entry.stored_events_complete = true;
+                let proves = self
+                    .slots
+                    .get(relay)
+                    .map(|slot| slot.proves_completeness(&id))
+                    .unwrap_or_default();
+                if let Some(slot) = self.slots.get_mut(relay) {
+                    slot.settled.insert(id.clone(), true);
                 }
-                self.publish_for_subscription(
-                    relay,
-                    &id,
-                    &RelaySourceState::StoredEventsComplete { at },
-                );
+                if proves == fava_subscriptions::EoseCompleteness::Proven {
+                    self.publish_for_subscription(
+                        relay,
+                        &id,
+                        &RelaySourceState::StoredEventsComplete { at },
+                    );
+                } else {
+                    // The relay ended a bounded request, not the stored window.
+                    // Claiming completeness would claim omitted work was
+                    // completed (GOALS:1066).
+                    self.publish_shortfall(relay, &id, proves);
+                }
                 self.publish_relay_diagnostic(relay);
             }
             ingest::Accepted::Refused { id, message } => {
@@ -303,7 +326,7 @@ impl Engine {
             return;
         };
         slot.cancel.cancel();
-        let subscriptions: Vec<SubscriptionId> = slot.live.keys().cloned().collect();
+        let subscriptions: Vec<SubscriptionId> = slot.installed.ids().cloned().collect();
         let generation = slot.generation;
         if let Some(lease) = slot.lease.take() {
             operations::release(

@@ -10,12 +10,15 @@
 //! Rewriting a running subscription costs the relay a full re-serve of the
 //! window it already served, and the cost is quadratic in the number of growth
 //! steps. It is never taken.
+//!
+//! The coverage test here decides only *whether a window must be armed* and
+//! which running request a joiner attaches to. What a plan does with demand is
+//! the planner's decision, taken from the installed set.
 
 use std::collections::BTreeSet;
 use std::time::Duration;
 
 use fava_subscriptions::{DemandId, RelayDemand};
-use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
 
 /// Fixed wire-admission window, anchored at the first uncovered demand.
@@ -24,21 +27,7 @@ use nostr::filter::Filter;
 /// deadline starves under a steady arrival stream.
 pub(crate) const ADMISSION_WINDOW: Duration = Duration::from_millis(10);
 
-/// One wire subscription currently live on a relay session generation.
-///
-/// The filter is immutable for the life of the subscription. `serves` is the
-/// refcount: the subscription is withdrawn when, and only when, it empties.
-#[derive(Clone, Debug)]
-pub(crate) struct LiveSubscription {
-    /// Filters the REQ carries. Never rewritten.
-    pub(crate) filters: Vec<Filter>,
-    /// Logical demand this subscription serves.
-    pub(crate) serves: BTreeSet<DemandId>,
-    /// Whether the relay has sent EOSE for this exact request.
-    pub(crate) stored_events_complete: bool,
-}
-
-/// Whether one incumbent request can serve a later demand without any wire work.
+/// Whether one running request already carries a later demand's traffic.
 ///
 /// Exact filter equality always attaches. Beyond that this is a real
 /// containment test: the incumbent must be unconstrained wherever the candidate
@@ -63,33 +52,9 @@ pub(crate) fn covers(incumbent: &Filter, candidate: &Filter) -> bool {
         && covers_until(incumbent, candidate)
 }
 
-/// Whether any filter of one incumbent request covers the candidate filter.
-pub(crate) fn attaches(incumbent: &LiveSubscription, candidate: &Filter) -> bool {
-    incumbent
-        .filters
-        .iter()
-        .any(|filter| covers(filter, candidate))
-}
-
-/// Whether every filter of one planned request is already covered.
-pub(crate) fn attaches_all(incumbent: &LiveSubscription, candidates: &[Filter]) -> bool {
-    !candidates.is_empty()
-        && candidates
-            .iter()
-            .all(|candidate| attaches(incumbent, candidate))
-}
-
 /// The demand identities one cohort carries.
 pub(crate) fn identities(cohort: &[RelayDemand]) -> BTreeSet<DemandId> {
     cohort.iter().map(RelayDemand::id).collect()
-}
-
-/// A wire id this slot has already retired.
-///
-/// Reusing one would let a straggler EOSE for the closed request settle the
-/// fresh one, which `GOALS:426` (QUERY-010) forbids by name.
-pub(crate) fn is_retired(retired: &BTreeSet<SubscriptionId>, id: &SubscriptionId) -> bool {
-    retired.contains(id)
 }
 
 fn covers_set<T: Ord>(incumbent: Option<&BTreeSet<T>>, candidate: Option<&BTreeSet<T>>) -> bool {

@@ -62,26 +62,27 @@ impl Engine {
         &self,
         relay: &RelaySessionKey,
         cohort: &[RelayDemand],
-        planned: &SubscriptionPlan,
+        planned: Option<&SubscriptionPlan>,
     ) {
         let Some(slot) = self.slots.get(relay) else {
             return;
         };
-        let revision = planned.revision.0;
+        let revision = planned.map_or(slot.revision.0, |plan| plan.revision.0);
         for item in cohort {
             let id = item.id();
             let shared_with = slot
                 .serving(id)
                 .map(|wire| slot.owners(wire))
                 .unwrap_or_default();
-            let shortfall = planned
-                .shortfalls
-                .iter()
-                .find(|entry| entry.demand == id)
-                .map(|entry| RelayShortfall {
-                    branches: vec![item.branch],
-                    detail: BoundedText::new(format!("{:?}", entry.reason)),
-                });
+            let shortfall = planned.and_then(|plan| {
+                plan.shortfalls
+                    .iter()
+                    .find(|entry| entry.demand == id)
+                    .map(|entry| RelayShortfall {
+                        branches: vec![item.branch],
+                        detail: BoundedText::new(format!("{:?}", entry.reason)),
+                    })
+            });
             self.registry
                 .record_sharing(item.owner, relay, revision, shared_with, shortfall);
             self.registry.record_plan(
@@ -89,7 +90,47 @@ impl Engine {
                 fava_query::DesiredPlanEvidence {
                     revision,
                     relays: vec![relay.clone()],
-                    installed: slot.live.len(),
+                    installed: slot.installed.len(),
+                },
+            );
+        }
+    }
+
+    /// Report that an EOSE on one wire subscription proved less than the
+    /// stored window, so no observation may read it as completeness.
+    pub(crate) fn publish_shortfall(
+        &self,
+        relay: &RelaySessionKey,
+        id: &fava_wire::SubscriptionId,
+        completeness: fava_subscriptions::EoseCompleteness,
+    ) {
+        let Some(slot) = self.slots.get(relay) else {
+            return;
+        };
+        let generation = slot.generation;
+        let detail = BoundedText::new(format!("{completeness:?}"));
+        for owner in slot.owners(id) {
+            let branches = self
+                .registry
+                .demand_id(owner, relay)
+                .map(|demand| vec![demand.branch])
+                .unwrap_or_default();
+            self.registry.record_sharing(
+                owner,
+                relay,
+                slot.revision.0,
+                slot.owners(id),
+                Some(RelayShortfall {
+                    branches,
+                    detail: detail.clone(),
+                }),
+            );
+            self.registry.record_state(
+                owner,
+                relay,
+                generation,
+                RelaySourceState::Open {
+                    requested_at: fava_state::Timestamp::now(),
                 },
             );
         }
@@ -104,13 +145,13 @@ impl Engine {
             slot.generation,
             slot.state.clone(),
             usize::from(slot.lease.is_some()),
-            slot.live
-                .iter()
-                .map(|(id, entry)| {
+            slot.installed
+                .ids()
+                .map(|id| {
                     diagnostics::wire_fact(
                         id.clone(),
                         slot.owners(id),
-                        entry.stored_events_complete,
+                        slot.settled.get(id).copied().unwrap_or_default(),
                     )
                 })
                 .collect(),

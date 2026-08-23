@@ -311,6 +311,12 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         "the old EOSE must not settle the replayed request"
     );
 
+    let replacement = requests_of(&peer)[1].clone();
+    assert_ne!(
+        replacement, subscription,
+        "the replayed request must not reuse the retired wire id"
+    );
+
     let event = EventBuilder::new(Kind::TextNote, "current generation")
         .finalize(&Keys::generate())
         .expect("event signs");
@@ -318,11 +324,22 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         subscription.clone(),
         event.clone(),
     )));
+    settle().await;
+    assert_eq!(
+        cache.len().expect("cache readable"),
+        0,
+        "a frame naming the retired request is refused, not admitted"
+    );
+
+    peer.push_frame(encoded(&RelayMessage::event(
+        replacement.clone(),
+        event.clone(),
+    )));
     let latest = wait_for_snapshot(&mut observation, |snapshot| !snapshot.events.is_empty()).await;
     assert_eq!(latest.events[0].id(), event.id);
     assert_eq!(cache.len().expect("cache readable"), 1);
 
-    peer.push_frame(encoded(&RelayMessage::eose(subscription)));
+    peer.push_frame(encoded(&RelayMessage::eose(replacement)));
     wait_until(|| settled(&observation, &key)).await;
     observation.close();
 }
@@ -345,6 +362,12 @@ fn settled(observation: &fava::Observation, key: &RelaySessionKey) -> bool {
         .evidence
         .relay(key)
         .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete)
+}
+
+async fn settle() {
+    for _ in 0..256 {
+        tokio::task::yield_now().await;
+    }
 }
 
 fn encoded(message: &RelayMessage<'_>) -> Vec<u8> {

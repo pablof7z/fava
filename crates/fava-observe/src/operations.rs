@@ -6,13 +6,14 @@
 //! generation was superseded is refused by the owner and whatever it produced
 //! is released rather than installed.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
 use fava_query::{BoundedText, OperationGeneration};
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
 use fava_state::RelaySessionKey;
-use fava_subscriptions::PlannedSubscription;
+use fava_subscriptions::{PlanRevision, SubscriptionPlan, WithdrawalReason};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
     Transport,
@@ -26,7 +27,6 @@ const HANDOFF: OperationName = OperationName("transport.send");
 const RELEASE: OperationName = OperationName("transport.close");
 const ACQUIRE_TASK: TaskName = TaskName("observe.acquire");
 const OPEN_TASK: TaskName = TaskName("observe.open");
-const WITHDRAW_TASK: TaskName = TaskName("observe.withdraw");
 const LISTEN_TASK: TaskName = TaskName("observe.listen");
 const RELEASE_TASK: TaskName = TaskName("observe.release");
 const ADMISSION_TASK: TaskName = TaskName("observe.admission");
@@ -94,21 +94,41 @@ pub(crate) fn arm_admission(
     });
 }
 
-/// Open the requests one frozen cohort produced, beside the incumbents.
-pub(crate) fn open_subscriptions(
+/// Identity of the plan installation one execution carries out.
+pub(crate) struct Installing {
+    /// Relay session the plan applies to.
+    pub(crate) relay: RelaySessionKey,
+    /// Owner operation generation the frames are issued under.
+    pub(crate) generation: OperationGeneration,
+    /// Desired-plan revision being installed.
+    pub(crate) revision: PlanRevision,
+}
+
+/// Install one plan on the wire: every REQ first, then the CLOSEs it earned.
+///
+/// A withdrawal whose reason names a successor waits for that successor to be
+/// locally accepted. If the successor is refused the predecessor stays live and
+/// no CLOSE is sent for it, because an EOSE naming a shared id cannot say which
+/// filter generation it completed.
+pub(crate) fn install_plan(
     runtime: &Runtime,
     reports: &Reports,
-    relay: RelaySessionKey,
-    generation: OperationGeneration,
+    installing: Installing,
     session: Arc<dyn RelaySession>,
-    opening: Vec<PlannedSubscription>,
+    plan: SubscriptionPlan,
     write_deadline: Duration,
 ) {
+    let Installing {
+        relay,
+        generation,
+        revision,
+    } = installing;
     let reports = reports.clone();
     let owner = runtime.clone();
     let _ = runtime.spawn(OPEN_TASK, async move {
+        let mut opened = BTreeSet::new();
         let mut correlation = 0_u64;
-        for planned in &opening {
+        for planned in &plan.open {
             let message = ClientMessage::Req {
                 subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
                 filters: planned
@@ -119,7 +139,7 @@ pub(crate) fn open_subscriptions(
                     .collect(),
             };
             correlation = correlation.saturating_add(1);
-            if let Err(detail) = hand_off(
+            if hand_off(
                 &owner,
                 &session,
                 &message,
@@ -128,39 +148,22 @@ pub(crate) fn open_subscriptions(
                 write_deadline,
             )
             .await
+            .is_ok()
             {
-                reports
-                    .send(Report::Refused {
-                        relay,
-                        generation,
-                        detail,
-                    })
-                    .await;
-                return;
+                opened.insert(planned.id.clone());
             }
         }
-        reports.send(Report::Applied { relay, generation }).await;
-    });
-}
-
-/// Withdraw the requests whose last serving demand went away.
-pub(crate) fn withdraw_subscriptions(
-    runtime: &Runtime,
-    reports: &Reports,
-    relay: RelaySessionKey,
-    generation: OperationGeneration,
-    session: Arc<dyn RelaySession>,
-    closing: Vec<SubscriptionId>,
-    write_deadline: Duration,
-) {
-    let reports = reports.clone();
-    let owner = runtime.clone();
-    let _ = runtime.spawn(WITHDRAW_TASK, async move {
-        let mut correlation = u64::MAX / 2;
-        for id in closing {
+        let mut closed = BTreeSet::new();
+        for entry in &plan.close {
+            if let WithdrawalReason::Regrouped { into } = &entry.reason
+                && !opened.contains(into)
+            {
+                // The successor never opened. Keep the predecessor live.
+                continue;
+            }
             correlation = correlation.saturating_add(1);
-            let message = ClientMessage::close(id);
-            let _ = hand_off(
+            let message = ClientMessage::close(entry.id.clone());
+            if hand_off(
                 &owner,
                 &session,
                 &message,
@@ -168,9 +171,22 @@ pub(crate) fn withdraw_subscriptions(
                 correlation,
                 write_deadline,
             )
-            .await;
+            .await
+            .is_ok()
+            {
+                closed.insert(entry.id.clone());
+            }
         }
-        reports.send(Report::Applied { relay, generation }).await;
+        reports
+            .send(Report::Installed {
+                relay,
+                generation,
+                revision,
+                plan: Box::new(plan),
+                opened,
+                closed,
+            })
+            .await;
     });
 }
 

@@ -25,7 +25,7 @@ use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
 
 /// Complete owner assembly plus the scripted providers it was given.
-pub struct Assembly {
+pub(crate) struct Assembly {
     pub observer: Observer,
     pub transport: Arc<FakeTransport>,
     pub planner: Arc<RecordingPlanner>,
@@ -213,7 +213,7 @@ fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {
 
 /// One wire subscription per logical demand, recording every planner input.
 #[derive(Default)]
-pub struct RecordingPlanner {
+pub(crate) struct RecordingPlanner {
     inputs: Mutex<Vec<(RelaySessionKey, Vec<RelayDemand>)>>,
 }
 
