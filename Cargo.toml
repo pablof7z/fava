@@ -37,6 +37,7 @@ members = [
     "crates/fava-delivery-standard",
     "crates/fava-publication",
     "crates/fava-write-store-redb",
+    "crates/fava-runtime",
     "crates/fava",
 ]
 
@@ -76,6 +77,7 @@ fava-delivery = { path = "crates/fava-delivery" }
 fava-delivery-standard = { path = "crates/fava-delivery-standard" }
 fava-publication = { path = "crates/fava-publication" }
 fava-write-store-redb = { path = "crates/fava-write-store-redb" }
+fava-runtime = { path = "crates/fava-runtime" }
 fava-query = { path = "crates/fava-query" }
 fava-query-standard = { path = "crates/fava-query-standard" }
 fava-state = { path = "crates/fava-state" }
