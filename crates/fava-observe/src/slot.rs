@@ -7,7 +7,7 @@ use std::sync::Arc;
 use fava_query::{ObservationId, OperationGeneration};
 use fava_runtime::CancellationToken;
 use fava_subscriptions::{
-    DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand,
+    DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand, filter_covers,
 };
 use fava_transport::{RelaySession, RelaySessionLease};
 use fava_wire::SubscriptionId;
@@ -102,7 +102,7 @@ impl Slot {
                     || entry
                         .filters
                         .iter()
-                        .any(|filter| admission::covers(filter, &demand.filter))
+                        .any(|filter| filter_covers(filter, &demand.filter))
             })
         })
     }
