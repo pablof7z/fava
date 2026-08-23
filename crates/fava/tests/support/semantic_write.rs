@@ -20,6 +20,7 @@ use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
 };
+use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey};
@@ -128,12 +129,13 @@ where
     let event_source: Arc<dyn QuerySource> = cache;
     let evaluator: Arc<dyn QueryEvaluator> = Arc::new(StandardQueryEvaluator);
     let signer: Arc<dyn Signer> = signer;
+    let session = Session::new([signer]).expect("signer session");
     Publication::new(
         store,
         event_source,
         evaluator,
         materializers,
-        [signer],
+        session,
         publisher,
         Arc::new(StandardDeliveryPolicy::default()),
         Arc::new(NoopTransport),

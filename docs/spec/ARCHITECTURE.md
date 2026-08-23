@@ -2203,26 +2203,92 @@ retention.rs        terminal receipt retention
 
 ## `fava-session`
 
-**Responsibility:** own the application-visible account set and current-account input.
+**Responsibility:** own the bounded runtime signer attachment for each exact account
+public key. It uses the existing signer contract and protocol `PublicKey`; it
+introduces no signer wrapper or second write lifecycle.
+
+### Runtime signer contract
+
+```rust
+#[derive(Clone)]
+pub struct Session { /* private shared state */ }
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum SessionError {
+    DuplicateSigner(PublicKey),
+    MissingSigner(PublicKey),
+    SignerCapacityExceeded { limit: usize },
+    GenerationExhausted,
+}
+
+impl Session {
+    pub fn new(
+        signers: impl IntoIterator<Item = Arc<dyn Signer>>,
+    ) -> Result<Self, SessionError>;
+
+    pub fn add_signer(
+        &self,
+        signer: Arc<dyn Signer>,
+    ) -> Result<(), SessionError>;
+
+    pub fn replace_signer(
+        &self,
+        signer: Arc<dyn Signer>,
+    ) -> Result<(), SessionError>;
+
+    pub fn remove_signer(
+        &self,
+        public_key: PublicKey,
+    ) -> Result<(), SessionError>;
+
+    pub fn signer(
+        &self,
+        public_key: PublicKey,
+    ) -> Option<(u64, Arc<dyn Signer>)>;
+
+    pub fn is_current(
+        &self,
+        public_key: PublicKey,
+        generation: u64,
+    ) -> bool;
+
+    pub fn subscribe(&self) -> watch::Receiver<u64>;
+}
+```
+
+At most 64 distinct public keys may have an attached signer. The 64th attachment
+succeeds; a 65th distinct attachment is refused atomically. Duplicate add and missing
+replace/remove operations are typed refusals without mutation. Replacement is explicit
+and remains valid at capacity.
+
+The returned signer generation identifies one exact attachment. Publication re-checks
+that generation immediately before installing a signer completion or recording its
+refusal. A completion from a replaced or removed generation is inert even if the
+provider ignored cancellation and returned a valid signature. The watch revision is
+only a coalescing change signal: after any change, each publication obligation reloads
+the signer for its own exact event pubkey and acts only when that attachment generation
+changed.
+
+The public `Fava` facade delegates runtime `add_signer`, explicit
+`replace_signer`, and `remove_signer` operations to this owner. Builder-supplied
+signers seed the same `Session`; they are not copied into publication-owned state.
+These operations mutate the running instance; they do not rebuild `Fava`, replace the
+write store, or change accepted write and receipt identity.
 
 ### Owned state
 
-- account identities;
-- current account;
-- signer and crypto provider attachment to accounts;
-- account addition, removal, and replacement;
-- all-or-nothing session import/export;
-- provider-specific session reconstruction data;
-- reactive current-account changes used by queries and write-construction conveniences.
+- one signer attachment for each exact public key;
+- the global checked generation used to identify attachment revisions; and
+- the bounded coalescing change signal consumed by publication.
 
 ### Write relationship
 
-A convenience API may resolve `CurrentAccount` through `fava-session`. Before acceptance, it constructs either:
-
-- an `UnsignedEvent` whose `pubkey` is the resolved account; or
-- a `ReplaceableEventEdit`, whose accepted write records the resolved account as its author.
-
-Accepted write state is then self-identifying and independent of later current-account changes.
+Accepted write state remains owned by the selected write store. An unsigned write with
+no exact signer attachment remains parked under the same write and receipt identity.
+Adding that public key wakes it; adding another key does not. Removal cancels or detaches
+the current provider operation and returns matching work to awaiting-signer state. A
+later exact re-add resumes the current materialization without recreating the engine or
+accepted write.
 
 ---
 
@@ -3566,7 +3632,7 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 | `fava-ingest` | Admission of attributed, verified relay events. |
 | `fava-observe` | Live-query lifecycle, source merge, routing, relay demand, and bounded result delivery. |
 | `fava-publication` | Accepted-write lifecycle across materialization, signing, routing, delivery, and receipts. |
-| `fava-session` | Accounts, current-account input, signer registrations, and session restore. |
+| `fava-session` | Bounded runtime signer attachment for exact account public keys. |
 | `fava-auth` | NIP-42 challenge and authentication lifecycle. |
 | `fava-diagnostics` | Bounded current diagnostic facts and explanations. |
 | `fava-runtime` | Execution resources, provider isolation, cancellation, timers, and shutdown joins. |
