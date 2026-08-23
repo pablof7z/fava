@@ -285,6 +285,8 @@ symbols = [
     "fava_query::QueryOrdering",
     "fava_query::Query",
     "fava_query::QueryError",
+    "fava_query::QueryBranchId",
+    "fava_query::QueryBounds",
 ]
 crates = ["fava-query"]
 spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
@@ -363,6 +365,8 @@ symbols = [
     "fava_observe::Observation",
     "fava_observe::ObserveError",
     "fava_observe::ObservationClosed",
+    "fava_query::ObservationId",
+    "fava_query::OperationGeneration",
 ]
 crates = ["fava-observe"]
 
