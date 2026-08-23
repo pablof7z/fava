@@ -1,87 +1,71 @@
+# First-party BUILD for the `fava-runtime` crate. Third-party deps come from
+# @crates via all_crate_deps(); this crate has no first-party path deps — it is
+# the execution owner and owns no meaning.
+
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "lib",
-    crate_name = "fava_subscriptions",
+    crate_name = "fava_runtime",
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(),
-    deps = all_crate_deps(normal = True) + [
-        "//crates/fava-query:lib",
-        "//crates/fava-state:lib",
-        "//crates/fava-transport:lib",
-        "//crates/fava-wire:lib",
-    ],
+    deps = all_crate_deps(normal = True),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],
 )
 
 rust_test(
-    name = "tag_values",
-    crate_name = "tag_values",
-    srcs = ["tests/tag_values.rs"],
+    name = "unit_tests",
+    crate_name = "fava_runtime_tests",
+    srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [
-        ":lib",
-        "//crates/fava-query:lib",
-        "//crates/fava-wire:lib",
-    ],
+    deps = all_crate_deps(normal = True, normal_dev = True),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )
 
 rust_test(
-    name = "kinds",
-    crate_name = "kinds",
-    srcs = ["tests/kinds.rs"],
-    edition = crate_edition(),
-    aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [
-        ":lib",
-        "//crates/fava-query:lib",
-        "//crates/fava-wire:lib",
-    ],
-    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
-    compile_data = ["Cargo.toml"],
-)
-
-rust_test(
-    name = "conformance",
-    crate_name = "conformance",
+    name = "bounded_channel",
     srcs = [
-        "tests/conformance.rs",
+        "tests/bounded_channel.rs",
         "tests/support/mod.rs",
     ],
+    crate_name = "bounded_channel",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [
-        ":lib",
-        "//crates/fava-query:lib",
-        "//crates/fava-state:lib",
-        "//crates/fava-wire:lib",
-    ],
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )
 
 rust_test(
-    name = "running",
-    crate_name = "running",
+    name = "provider_isolation",
     srcs = [
-        "tests/running.rs",
+        "tests/provider_isolation.rs",
         "tests/support/mod.rs",
     ],
+    crate_name = "provider_isolation",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [
-        ":lib",
-        "//crates/fava-query:lib",
-        "//crates/fava-state:lib",
-        "//crates/fava-wire:lib",
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "task_lifecycle",
+    srcs = [
+        "tests/task_lifecycle.rs",
+        "tests/support/mod.rs",
     ],
+    crate_name = "task_lifecycle",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )

@@ -1,48 +1,93 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-22T05:57:06.611Z",
-  "phase": "07.1.1",
-  "phase_name": "deliver-fava-simple-groups-as-the-multi-relay-nip-29-capabil",
-  "phase_dir": ".planning/phases/07.1.1-deliver-fava-simple-groups-as-the-multi-relay-nip-29-capabil",
-  "plan": null,
-  "task": 1,
-  "total_tasks": 4,
-  "status": "paused",
-  "completed_tasks": [
-    {"id": 0, "name": "Complete and independently verify Phase 07.1", "status": "done", "commit": "ed7aad6"},
-    {"id": 1, "name": "Establish Phase 07.1.1 accepted context and requirements", "status": "done", "commit": "a074246"}
+  "timestamp": "2026-08-23T15:35:06.761Z",
+  "phase": "07.3-07.9",
+  "phase_name": "Architecture remediation series",
+  "phase_dir": ".planning/phases/",
+  "status": "in_progress",
+  "pad": ".planning/.continue-here.md",
+  "head": "dfec6d5 issue(0021): record the planner signature conflict with ARCHITECTURE.md",
+  "tests": {
+    "passing": 431,
+    "targets_green": 135,
+    "targets_total": 136,
+    "red": "crates/fava/tests/explicit_live.rs \u2014 3 live-query falsifiers, close when 07.6 merges"
+  },
+  "decisions_pending": [
+    {
+      "id": "D1",
+      "topic": "planner plan() signature: does it receive installed?",
+      "status": "on_hold_pending_agent",
+      "issue": "docs/issues/0021"
+    },
+    {
+      "id": "D2",
+      "topic": "where the 10ms admission window lives (fava-observe vs planner side)",
+      "status": "answer_inbound"
+    },
+    {
+      "id": "D3",
+      "topic": "impl QuerySource for Fava \u2014 router acquisition recursion",
+      "recommendation": "delete it; give routers a non-recursive local-query service"
+    },
+    {
+      "id": "D4",
+      "topic": "WRITE-027: is a total router refusal terminal?",
+      "recommendation": "non-terminal with typed shortfall"
+    },
+    {
+      "id": "D5",
+      "topic": "ObserveError::Relay(String) replacement shape",
+      "recommendation": "none yet"
+    },
+    {
+      "id": "D6",
+      "topic": "five vocabulary items",
+      "recommendation": "see pad table"
+    },
+    {
+      "id": "D7",
+      "topic": "expiry sweep owner",
+      "recommendation": "maintain() driven by fava-runtime timers"
+    },
+    {
+      "id": "D8",
+      "topic": "TransportError::Disconnected/InboundLost unreachable \u2014 amendment",
+      "recommendation": "stream-carried is authoritative"
+    }
   ],
-  "remaining_tasks": [
-    {"id": 2, "name": "Regenerate Phase 07.1.1 RESEARCH.md and PATTERNS.md", "status": "not_started"},
-    {"id": 3, "name": "Create VALIDATION.md and checked executable plans for GROUP-01 through GROUP-12", "status": "not_started"},
-    {"id": 4, "name": "Execute, review, verify, and complete Phase 07.1.1", "status": "not_started"}
+  "decisions_made": [
+    {
+      "decision": "Sharing is a planner decision, not an owner decision",
+      "rationale": "GOALS:296 forbids erasing distinctions merely because filters are equal; Pablo's A/B/C example produces a merged filter equal to no input, which an owner-side (relay,filter) key cannot represent"
+    },
+    {
+      "decision": "Refcount lives on the installed wire subscription, N-to-1 via attribution fan-out",
+      "rationale": "one grouped EOSE must settle several logical demands"
+    },
+    {
+      "decision": "Delete rather than adapt: OpenedRelay, fava/src/{relay,live,routes}.rs, next_subscription",
+      "rationale": "Pablo, explicitly; no shims"
+    },
+    {
+      "decision": "Grouping batches unsent demand only; a sent subscription is never rewritten",
+      "rationale": "Pablo + nmp; nmp measured 90% waste and 1-to-20 subscription growth in the rewrite model"
+    },
+    {
+      "decision": "Consolidated remediation onto main alongside the 07.2 merge",
+      "rationale": "07.2 landed there from another session mid-flight"
+    }
   ],
   "blockers": [],
   "async_jobs": [],
-  "human_actions_pending": [],
-  "decisions": [
+  "human_actions_pending": [
     {
-      "decision": "Phase 07.1 is complete only at the final independently verified implementation, not its initial 12-plan sign-off.",
-      "rationale": "Three review/fix iterations repaired facade, store, recovery, boundedness, evidence-sealing, secret-retention, and readiness defects; the final verifier passed 9/9 requirements, 28/28 edges, and 8/8 prohibitions.",
-      "phase": "07.1"
-    },
-    {
-      "decision": "The final retained Phase 07.1 Croissant evidence is phase-07.1-pair.9EyxBY.",
-      "rationale": "Earlier pairs were superseded by staged secret-safe promotion, signed claims, complete secret scans, and stable child readiness.",
-      "phase": "07.1"
-    },
-    {
-      "decision": "Phase 07.1.1 keeps the README's app-first multi-relay NIP-29 model but consumes the delivered publish/by/to/Write vocabulary.",
-      "rationale": "The README predates Phase 07.1 and contains stale WriteIntent/accepted wording; planning must update vocabulary without shrinking DX or adding compatibility paths.",
-      "phase": "07.1.1"
-    },
-    {
-      "decision": "Phase 07.1.1 planning must restart research and pattern mapping.",
-      "rationale": "The planning agents returned useful partial findings inline, but WorktreeGuard and the immediate handoff prevented materializing RESEARCH.md or PATTERNS.md.",
-      "phase": "07.1.1"
+      "action": "Rule on D3-D8",
+      "context": "none blocks the fleet; D1/D2 are awaiting agent input first",
+      "blocking": false
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Run $gsd-resume-work, acknowledge the blocking constraints, regenerate current RESEARCH.md and PATTERNS.md, then run $gsd-plan-phase 07.1.1 and require a clean plan checker before execution.",
-  "context_notes": "Main contains complete Phase 07.1 code, review trail, verification, and Phase 07.1.1 context. Preserve neighboring worktrees and unrelated Croissant PID 75649. Final ignored canary evidence is a separate GitHub handoff release asset. Partial planning findings are preserved in the phase .continue-here.md."
+  "next_action": "Reconcile the two agents' answers on D2, then merge observe (07.6) to close the three falsifiers.",
+  "context_notes": "Root cause is not the live-query path: fava-runtime/fava-session/fava-auth were named and approved but never built, so execution responsibilities fell to whoever held the call stack. CI never ran cargo test, which is why 306 green tests hid it. The pad at .planning/.continue-here.md is the live decision surface and must be kept current."
 }

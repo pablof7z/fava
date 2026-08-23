@@ -511,7 +511,7 @@
           "FILE:@@//crates/fava-write-store-memory/Cargo.toml f4c404e481e6fc5f2d0d4a6a4d455219b387ad1ea5371357463e790ea38a279a",
           "FILE:@@//crates/fava-observe/Cargo.toml 4b294942c48dbe5726d4d91a8b124e3917b0178adccfe1a9ef11307e92284204",
           "FILE:@@//crates/fava-wire/Cargo.toml c149c9137127330a6a06658b99802a0b043d17a7e49440ba1523095732b32e83",
-          "FILE:@@//crates/fava-subscriptions/Cargo.toml c4d97e1954e1ebd741fe614567b60291d1ee11491397d5cc874e87e371c78383",
+          "FILE:@@//crates/fava-subscriptions/Cargo.toml 806249c55d796fa96bb5df40bb5576941ae3ccd9c00917e88e4b859e0fac942a",
           "FILE:@@//crates/fava-transport/Cargo.toml 2813046d86f5dbf4751c1e4a3990dd707a0e2956e702cf8fd24f7989ef4e2f72",
           "FILE:@@//crates/fava-subscriptions-no-grouping/Cargo.toml 76638155e640f7893b3b3d6318f2380c7cc54ac3f052345da23ed775eaa03d06",
           "FILE:@@//crates/fava-transport-websocket/Cargo.toml a22667ba849790872fa5e0f16adbc9ec1af022bbddd7c63e6db5a302e8081571",

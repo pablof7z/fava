@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
-    InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
-    SubscriptionPlan, SubscriptionPlanner, validate_plan,
+    DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand,
+    RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
 
 /// One complete planning situation: the relay, the demand, what the relay
@@ -67,19 +67,44 @@ impl PlannerScenario {
 
 /// Plan the scenario and prove the answer conforms.
 ///
+/// Every rule in [`validate_plan`] is checked, and so is CR-3, which
+/// `validate_plan` structurally cannot see: order invariance is a property of
+/// *two* plans, so it is proved here by replanning a reversed demand slice and
+/// requiring the identical answer. A planner whose grouping first-fits in slice
+/// order churns the wire for demand that has not changed.
+///
 /// # Panics
 ///
-/// Panics when the planner refuses input it should have understood, or when the
-/// plan violates any rule in [`validate_plan`].
+/// Panics when the planner refuses input it should have understood, when the
+/// plan violates any rule in [`validate_plan`], or when the answer depends on
+/// the order of the demand slice.
 #[must_use]
 pub fn assert_conformant(
     planner: &dyn SubscriptionPlanner,
     scenario: &PlannerScenario,
 ) -> SubscriptionPlan {
+    let plan = plan_once(planner, scenario, &scenario.demand);
+    let mut reversed = scenario.demand.clone();
+    reversed.reverse();
+    let permuted = plan_once(planner, scenario, &reversed);
+    assert_eq!(
+        plan, permuted,
+        "{}: the plan depends on the order of the demand slice, not the demand set",
+        scenario.name
+    );
+    plan
+}
+
+/// Plan one demand ordering and check every rule `validate_plan` owns.
+fn plan_once(
+    planner: &dyn SubscriptionPlanner,
+    scenario: &PlannerScenario,
+    demand: &[RelayDemand],
+) -> SubscriptionPlan {
     let plan = planner
         .plan(
             &scenario.relay,
-            &scenario.demand,
+            demand,
             &scenario.constraints,
             &scenario.installed,
             scenario.revision,
@@ -92,7 +117,7 @@ pub fn assert_conformant(
         });
     if let Err(violation) = validate_plan(
         &scenario.relay,
-        &scenario.demand,
+        demand,
         &scenario.constraints,
         &scenario.installed,
         &plan,
@@ -138,4 +163,118 @@ pub fn apply_plan(
         ));
     }
     InstalledSubscriptions::from_entries(entries)
+}
+
+/// Prove that demand joining a live session never disturbs what is running.
+///
+/// The scenario is planned and executed; `arriving` is then added to the demand
+/// set and the session is replanned. Whatever the planner does with the
+/// newcomer it may not touch the incumbents: every running subscription keeps
+/// its exact wire id and its exact filters, and none of them is closed.
+///
+/// A planner that recomputes a desired wire set and diffs it against what is
+/// installed fails here, because merging the newcomer changes the incumbent's
+/// filter bytes — and the relay then re-serves a stored window it had already
+/// finished.
+///
+/// # Panics
+///
+/// Panics on the first incumbent the replan disturbs.
+pub fn assert_running_subscriptions_are_immutable(
+    planner: &dyn SubscriptionPlanner,
+    scenario: &PlannerScenario,
+    arriving: &[RelayDemand],
+) -> SubscriptionPlan {
+    let first = assert_conformant(planner, scenario);
+    let installed = apply_plan(&scenario.installed, &first);
+    assert!(
+        !installed.is_empty(),
+        "{}: nothing was installed, so immutability is not being tested",
+        scenario.name
+    );
+
+    let mut joined = scenario.demand.clone();
+    joined.extend(arriving.iter().cloned());
+    let next = scenario
+        .clone()
+        .demanding(joined)
+        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+    let replan = assert_conformant(planner, &next);
+
+    for id in installed.ids() {
+        assert!(
+            !replan.close.iter().any(|withdrawn| &withdrawn.id == id),
+            "{}: arriving demand closed running subscription {id}",
+            scenario.name
+        );
+        assert!(
+            replan.retain.contains(id),
+            "{}: arriving demand stopped retaining running subscription {id}",
+            scenario.name
+        );
+        let before = installed.get(id).expect("installed entry");
+        let after = replan
+            .attribution
+            .get(id)
+            .unwrap_or_else(|| panic!("{}: retained {id} lost its attribution", scenario.name));
+        assert_eq!(
+            before.filters, after.filters,
+            "{}: arriving demand rewrote the filters of running subscription {id}",
+            scenario.name
+        );
+    }
+    replan
+}
+
+/// Prove that demand leaving never narrows a subscription others still hold.
+///
+/// A grouped subscription that loses one of two owners keeps running unchanged
+/// and over-broad; the surplus is discarded by the local per-demand re-match.
+/// Narrowing it would cost a full re-serve of the stored window and buy nothing.
+///
+/// # Panics
+///
+/// Panics if the replan closes or rewrites a subscription that still has an
+/// owner, or if a retained subscription still serves demand that left.
+pub fn assert_partial_withdrawal_leaves_the_wire_alone(
+    planner: &dyn SubscriptionPlanner,
+    scenario: &PlannerScenario,
+    surviving: &[RelayDemand],
+) -> SubscriptionPlan {
+    let first = assert_conformant(planner, scenario);
+    let installed = apply_plan(&scenario.installed, &first);
+    let alive: BTreeSet<DemandId> = surviving.iter().map(RelayDemand::id).collect();
+
+    let next = scenario
+        .clone()
+        .demanding(surviving.to_vec())
+        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+    let replan = assert_conformant(planner, &next);
+
+    for id in installed.ids() {
+        let before = installed.get(id).expect("installed entry");
+        if !before.serves.iter().any(|demand| alive.contains(demand)) {
+            continue;
+        }
+        assert!(
+            !replan.close.iter().any(|withdrawn| &withdrawn.id == id),
+            "{}: withdrawal closed {id}, which another owner still holds",
+            scenario.name
+        );
+        let after = replan
+            .attribution
+            .get(id)
+            .unwrap_or_else(|| panic!("{}: retained {id} lost its attribution", scenario.name));
+        assert_eq!(
+            before.filters, after.filters,
+            "{}: withdrawal narrowed running subscription {id}",
+            scenario.name
+        );
+        assert!(
+            after.serves.iter().all(|demand| alive.contains(demand)),
+            "{}: {id} still serves demand that was withdrawn",
+            scenario.name
+        );
+    }
+    replan
 }

@@ -2748,5 +2748,73 @@ Each is written against the signatures above and must compile after Wave 1.
 
 ## 9. Amendments
 
-None. Append here with date, author, and the authority line that forced the
-change. Do not edit sections 0-8 in place.
+Append here with date, author, and the authority line that forced the change.
+Do not edit sections 0-8 in place.
+
+### A1 — 2026-08-23, §2 implementer — grouping compiles unsent demand only
+
+**Forced by:** `GOALS:1049` (RELAY-003) read together with the measured cost in
+`.planning/audit/2026-08-23/nmp-filter-merge-comparison.md` §A.5 and §11.1 —
+recomputing a desired wire set and diffing it rewrites a running subscription
+every time demand grows, wasting `0.6%` at one growth step and **90%, with
+1 -> 20 concurrent subscriptions, at twenty**. Quadratic in growth steps.
+Also `GOALS:426` (QUERY-010), which §2.2's identity scheme violated outright.
+
+§2.2's signature is unchanged. What changes is what a conformant planner may do
+with each argument, and four new conformance rules.
+
+1. **`installed` never reaches grouping or identity.** It answers exactly four
+   questions: attach, residual budget, refcount, and which wire ids are taken.
+   Demand a running subscription already carries is *served*; only the rest is
+   grouped. A running subscription is immutable — demand joining never widens
+   it, demand leaving never narrows it, and it closes only when its last
+   logical owner is gone.
+2. **CR-1 `RunningSubscriptionWithdrawn`** — no installed id may appear in
+   `close` while any demand it serves is still in the input demand set.
+3. **CR-2 `DuplicateFilters`** — no entry in `open` may carry filters equal to
+   another `open` entry's or to a retained subscription's. Two byte-identical
+   REQs make the relay double-deliver forever and split completion evidence
+   across two identities.
+4. **CR-3 order invariance** — the plan is a function of the demand *set*, not
+   the sequence. `validate_plan` structurally cannot see this (it is a property
+   of two plans), so the conformance kit proves it by replanning a permuted
+   demand slice; `fava_subscriptions_testkit::assert_conformant` does this on
+   every call.
+5. **C5 splits.** `AttributionMismatch` keeps the key-set rule.
+   `ServedDemandDisagrees` is new and covers the hole the §2 implementer
+   reported: nothing related `PlannedSubscription.serves` to
+   `AttributedSubscription.serves`. `UnknownSuccessor` is new and requires a
+   `WithdrawalReason::Regrouped { into }` to name an id the plan installs.
+6. **C10 becomes a residual-budget rule.** A relay that lowers its declared
+   ceiling below the count already running does not thereby authorize closing a
+   running subscription (CR-1), so the plan is answerable only for what it
+   opened: violation iff `open.len() > maximum - retain.len()`.
+7. **Wire identity is minted, never derived.** A content digest recycles by
+   construction, so reopening a filter reuses the closed request's id and a
+   late EOSE settles the new one — `GOALS:426` forbids this by name. Identity
+   is minted from the owner's monotonic `revision` and the candidate's ordinal.
+   Nothing the relay advertises feeds it, so a NIP-11 refetch cannot move an
+   established id, and no network-controlled bytes enter it.
+8. **New caller obligations**, documented on `SubscriptionPlanner` and
+   undetectable by a planner: `revision` strictly increases and is never reused
+   within a transport session; `installed` is exactly what the transport
+   accepted on the current generation; a `Regrouped` close is executed
+   open-before-close, its CLOSE withheld until the successor is locally
+   accepted.
+9. **`AttributedSubscription` gains `completeness: EoseCompleteness`.** The
+   planner is the only component that sees both the filter it sent and what the
+   relay declared, so it records whether an EOSE proves the stored window
+   complete rather than leaving the evidence layer to re-derive it
+   (`GOALS:1066`).
+10. **The admission cohort belongs to the demand owner, not the planner.** A
+    fixed 10ms, first-arrival-anchored, non-sliding window, armed by the first
+    demand not already covered, flushed with one `plan` call per relay session.
+    The planner stays a pure function; a timer inside it would break CR-3.
+
+**Merge predicate additions** (unchanged in spirit, wider in reach): the `kinds`
+and `ids` axes join `authors` and one-tag-name under a single sole-differing-axis
+rule; merging runs to a fixed point, because a merge can unlock a pairing
+neither operand qualified for; an empty tag value set may be unioned in, while
+an absent tag name may not. `search`, `since`/`until`, the `limit` rule
+including the equal-limits case, the `QueryBounds` gate, the cross-product
+refusal, and the `default_filter_limit` guard are unchanged.
