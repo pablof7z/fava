@@ -33,6 +33,7 @@ pub fn validate_receipt_text(value: &str) -> Result<(), WriteStoreError> {
 pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), WriteStoreError> {
     match outcome {
         RelayDeliveryOutcome::Retryable { reason }
+        | RelayDeliveryOutcome::AuthenticationDenied { reason }
         | RelayDeliveryOutcome::GivenUp { reason }
         | RelayDeliveryOutcome::Unknown { reason } => validate_receipt_text(reason),
         RelayDeliveryOutcome::Acknowledged { message }
@@ -142,6 +143,7 @@ pub fn apply_route_to_receipt(
                 RelayDeliveryOutcome::Attempting
                 | RelayDeliveryOutcome::Acknowledged { .. }
                 | RelayDeliveryOutcome::Rejected { .. }
+                | RelayDeliveryOutcome::AuthenticationDenied { .. }
                 | RelayDeliveryOutcome::GivenUp { .. }
                 | RelayDeliveryOutcome::Unknown { .. }
                 | RelayDeliveryOutcome::CancelledBeforeHandoff,

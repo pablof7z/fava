@@ -42,6 +42,7 @@ impl DeliveryPolicy for StandardDeliveryPolicy {
             | RelayDeliveryOutcome::Attempting
             | RelayDeliveryOutcome::Acknowledged { .. }
             | RelayDeliveryOutcome::Rejected { .. }
+            | RelayDeliveryOutcome::AuthenticationDenied { .. }
             | RelayDeliveryOutcome::GivenUp { .. }
             | RelayDeliveryOutcome::Unknown { .. }
             | RelayDeliveryOutcome::CancelledBeforeHandoff => DeliveryDecision::Settled,
@@ -74,6 +75,22 @@ mod tests {
             DeliveryDecision::GiveUp {
                 reason: "attempt ceiling 2 reached after: offline".to_owned(),
             }
+        );
+    }
+
+    #[test]
+    fn authentication_denial_is_terminal_and_distinct_from_a_give_up() {
+        let policy = StandardDeliveryPolicy::new(NonZeroU32::new(3).unwrap());
+        let denied = RelayDeliveryOutcome::AuthenticationDenied {
+            reason: "relay demanded authentication this attempt did not satisfy".to_owned(),
+        };
+        assert_eq!(
+            policy.decide(DeliveryFacts {
+                attempts: 1,
+                outcome: &denied,
+            }),
+            DeliveryDecision::Settled,
+            "this policy does not arrange authentication, so it stops without retrying"
         );
     }
 

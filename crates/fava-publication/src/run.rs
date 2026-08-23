@@ -199,14 +199,10 @@ impl Publication {
             };
             receipt = current;
         }
+        // Route acquisition begins independently of signer acquisition: a refused
+        // router chain commits a typed route shortfall on the receipt and the write
+        // stays open, but it never gates signing or abandons durable custody.
         let (routes, _) = self.open_routes(&receipt);
-        if matches!(receipt.routing, WriteRouting::Automatic)
-            && routes.is_none()
-            && semantic.is_none()
-        {
-            self.finished(receipt_id);
-            return None;
-        }
         let Some(current) = self.read_receipt(receipt_id, cancel).await else {
             if let Some(semantic) = semantic {
                 semantic.close();

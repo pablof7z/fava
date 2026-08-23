@@ -411,8 +411,10 @@ name = "fava-publication"
 version = "0.1.0"
 dependencies = [
  "fava-delivery",
+ "fava-delivery-standard",
  "fava-publisher",
  "fava-query",
+ "fava-query-standard",
  "fava-routing",
  "fava-session",
  "fava-signer",
@@ -420,6 +422,8 @@ dependencies = [
  "fava-transport",
  "fava-write",
  "fava-write-store",
+ "fava-write-store-memory",
+ "nostr",
  "thiserror",
  "tokio",
 ]
