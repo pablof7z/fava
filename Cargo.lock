@@ -281,7 +281,6 @@ dependencies = [
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
- "fava-ingest",
  "fava-nip02",
  "fava-observe",
  "fava-publication",
@@ -292,6 +291,7 @@ dependencies = [
  "fava-router-fallback-relays",
  "fava-router-testkit",
  "fava-routing",
+ "fava-runtime",
  "fava-session",
  "fava-signer",
  "fava-signer-local",
@@ -299,7 +299,9 @@ dependencies = [
  "fava-state",
  "fava-subscriptions",
  "fava-subscriptions-no-grouping",
+ "fava-subscriptions-standard",
  "fava-transport",
+ "fava-transport-testkit",
  "fava-wire",
  "fava-write",
  "fava-write-store",
@@ -339,8 +341,9 @@ dependencies = [
 name = "fava-diagnostics"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
- "nostr",
+ "fava-wire",
 ]
 
 [[package]]
@@ -401,7 +404,27 @@ dependencies = [
 name = "fava-observe"
 version = "0.1.0"
 dependencies = [
+ "fava-diagnostics",
+ "fava-event-cache",
+ "fava-event-cache-memory",
+ "fava-ingest",
  "fava-query",
+ "fava-query-standard",
+ "fava-router-app-relays",
+ "fava-router-testkit",
+ "fava-routing",
+ "fava-runtime",
+ "fava-state",
+ "fava-subscriptions",
+ "fava-subscriptions-no-grouping",
+ "fava-subscriptions-standard",
+ "fava-subscriptions-testkit",
+ "fava-transport",
+ "fava-transport-testkit",
+ "fava-wire",
+ "fava-write-store-memory",
+ "nostr",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -442,6 +465,7 @@ name = "fava-publisher-nip01"
 version = "0.1.0"
 dependencies = [
  "fava-publisher",
+ "fava-state",
  "fava-transport",
  "fava-wire",
  "tokio",
@@ -535,6 +559,7 @@ dependencies = [
 name = "fava-runtime"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "futures-util",
  "thiserror",
  "tokio",
@@ -641,6 +666,7 @@ dependencies = [
 name = "fava-transport"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "thiserror",
 ]
@@ -649,13 +675,17 @@ dependencies = [
 name = "fava-transport-testkit"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
+ "fava-state",
  "fava-transport",
+ "tokio",
 ]
 
 [[package]]
 name = "fava-transport-websocket"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "fava-transport",
  "fava-transport-testkit",

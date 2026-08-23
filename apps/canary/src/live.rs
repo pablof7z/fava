@@ -175,12 +175,13 @@ async fn execute(id: &str, seed: &str, proxy_url: &str) -> CanaryResult<Scenario
     observation.close();
     wait_withdrawal(&fava, &subscription).await?;
     let diagnostics = fava.diagnostics();
-    if !diagnostics
-        .subscriptions
-        .contains(&(session, generation, subscription.clone()))
+    if diagnostics
+        .relays
+        .iter()
+        .any(|entry| entry.session == session && entry.generation == generation)
     {
         return Err(CanaryError::new(
-            "subscription identity disappeared from diagnostics",
+            "the owner still holds a relay session no observation demands",
         ));
     }
     Ok(ScenarioResult {
@@ -190,33 +191,48 @@ async fn execute(id: &str, seed: &str, proxy_url: &str) -> CanaryResult<Scenario
     })
 }
 
+/// The first wire subscription the observation owner reports as installed.
 async fn wait_subscription(
     fava: &Fava,
-) -> CanaryResult<(fava_state::RelaySessionKey, u64, SubscriptionId)> {
+) -> CanaryResult<(
+    fava_state::RelaySessionKey,
+    fava::OperationGeneration,
+    SubscriptionId,
+)> {
     wait(Duration::from_secs(5), || {
-        fava.diagnostics().subscriptions.first().cloned()
+        fava.diagnostics().relays.iter().find_map(|relay| {
+            relay
+                .subscriptions
+                .first()
+                .map(|wire| (relay.session.clone(), relay.generation, wire.id.clone()))
+        })
     })
     .await
 }
 
+/// The owner records EOSE on the exact wire subscription it installed.
 async fn wait_eose(fava: &Fava, subscription: &SubscriptionId) -> CanaryResult<()> {
     wait(Duration::from_secs(5), || {
         fava.diagnostics()
-            .eose
+            .relays
             .iter()
-            .any(|(_, _, id)| id == subscription)
+            .flat_map(|relay| relay.subscriptions.iter())
+            .any(|wire| &wire.id == subscription && wire.stored_events_complete)
             .then_some(())
     })
     .await
 }
 
+/// The subscription leaves the owner's installed set when its last demand goes.
 async fn wait_withdrawal(fava: &Fava, subscription: &SubscriptionId) -> CanaryResult<()> {
     wait(Duration::from_secs(5), || {
-        fava.diagnostics()
-            .withdrawn
+        (!fava
+            .diagnostics()
+            .relays
             .iter()
-            .any(|(_, _, id)| id == subscription)
-            .then_some(())
+            .flat_map(|relay| relay.subscriptions.iter())
+            .any(|wire| &wire.id == subscription))
+        .then_some(())
     })
     .await
 }
@@ -327,8 +343,8 @@ fn finish(
             "scenario": scenario,
             "event_id": result.event_id.map(|id| id.to_hex()),
             "subscription": result.subscription.as_str(),
-            "eose_count": result.diagnostics.eose.len(),
-            "withdrawn_count": result.diagnostics.withdrawn.len(),
+            "relay_sessions_held": result.diagnostics.relays.len(),
+            "open_observations": result.diagnostics.queries.len(),
         }),
     )?;
     artifacts.write_json("relays/nostr-rs-relay/process.json", &completed.processes)?;

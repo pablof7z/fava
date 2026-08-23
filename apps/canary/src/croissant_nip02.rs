@@ -145,7 +145,12 @@ async fn run_croissant_nip02_scenario_inner(
     let proxy_url = proxy.url();
     let flow = tokio::time::timeout(
         Duration::from_millis(OPERATION_MS),
-        execute_flow(&artifacts, &options.scenario_seed, keys, &proxy_url),
+        Box::pin(execute_flow(
+            &artifacts,
+            &options.scenario_seed,
+            keys,
+            &proxy_url,
+        )),
     )
     .await
     .map_err(|_| CanaryError::new("Croissant NIP-02 operation deadline elapsed"));

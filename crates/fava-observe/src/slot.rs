@@ -1,0 +1,134 @@
+//! One relay session's owned state: its lease, the plan the transport actually
+//! accepted, and whether a demand cohort is waiting for its admission window.
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use fava_query::{ObservationId, OperationGeneration};
+use fava_runtime::CancellationToken;
+use fava_subscriptions::{
+    DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand,
+};
+use fava_transport::{RelaySession, RelaySessionLease};
+use fava_wire::SubscriptionId;
+
+use crate::admission;
+
+pub(crate) struct Slot {
+    pub(crate) generation: OperationGeneration,
+    pub(crate) cancel: CancellationToken,
+    pub(crate) lease: Option<Box<RelaySessionLease>>,
+    pub(crate) session: Option<Arc<dyn RelaySession>>,
+    /// Exactly what the transport accepted on the current generation.
+    pub(crate) installed: InstalledSubscriptions,
+    /// What an EOSE on each installed wire subscription actually proves.
+    pub(crate) completeness: BTreeMap<SubscriptionId, EoseCompleteness>,
+    /// Wire subscriptions the relay has sent EOSE for on this generation.
+    pub(crate) settled: BTreeMap<SubscriptionId, bool>,
+    /// Strictly increasing across this transport session and never reused,
+    /// because wire identity is minted from it.
+    pub(crate) revision: PlanRevision,
+    /// A fixed admission window is pending for this relay.
+    pub(crate) armed: bool,
+    pub(crate) busy: bool,
+    pub(crate) state: fava_diagnostics::RelaySessionState,
+    pub(crate) reconnects: usize,
+}
+
+impl Slot {
+    pub(crate) fn new(cancel: CancellationToken) -> Self {
+        Self {
+            generation: OperationGeneration(1),
+            cancel,
+            lease: None,
+            session: None,
+            installed: InstalledSubscriptions::empty(),
+            completeness: BTreeMap::new(),
+            settled: BTreeMap::new(),
+            revision: PlanRevision(0),
+            armed: false,
+            busy: false,
+            state: fava_diagnostics::RelaySessionState::Connecting,
+            reconnects: 0,
+        }
+    }
+
+    /// Void everything installed on the previous generation.
+    ///
+    /// Work already issued is cancelled at its next boundary rather than
+    /// aborted, so an operation that produced a provider resource always
+    /// reaches the owner and the owner always releases it. The plan revision
+    /// keeps climbing: an id minted for a closed request must never come back.
+    pub(crate) fn advance(&mut self, root: &CancellationToken) -> OperationGeneration {
+        self.cancel.cancel();
+        self.cancel = root.child();
+        self.installed = InstalledSubscriptions::empty();
+        self.completeness.clear();
+        self.settled.clear();
+        self.armed = false;
+        self.busy = false;
+        self.generation = self.generation.next();
+        self.generation
+    }
+
+    /// The next plan revision for this transport session.
+    pub(crate) fn next_revision(&mut self) -> PlanRevision {
+        self.revision = PlanRevision(self.revision.0.saturating_add(1));
+        self.revision
+    }
+
+    /// Demand whose traffic no running subscription already carries.
+    ///
+    /// This is what arms the admission window: work that has not reached the
+    /// wire, and only that.
+    pub(crate) fn uncovered<'a>(&'a self, demand: &'a [RelayDemand]) -> Vec<&'a RelayDemand> {
+        demand.iter().filter(|item| !self.covers(item)).collect()
+    }
+
+    /// Whether any running subscription has lost its last serving demand.
+    pub(crate) fn orphaned(&self, demand: &[RelayDemand]) -> bool {
+        let wanted = admission::identities(demand);
+        self.installed.ids().any(|id| {
+            self.installed
+                .get(id)
+                .is_some_and(|entry| entry.serves.iter().all(|held| !wanted.contains(held)))
+        })
+    }
+
+    fn covers(&self, demand: &RelayDemand) -> bool {
+        self.installed.ids().any(|id| {
+            self.installed.get(id).is_some_and(|entry| {
+                entry.serves.contains(&demand.id())
+                    || entry
+                        .filters
+                        .iter()
+                        .any(|filter| admission::covers(filter, &demand.filter))
+            })
+        })
+    }
+
+    pub(crate) fn owners(&self, id: &SubscriptionId) -> Vec<ObservationId> {
+        let mut owners: Vec<ObservationId> = self
+            .installed
+            .get(id)
+            .into_iter()
+            .flat_map(|entry| entry.serves.iter().map(|demand| demand.owner))
+            .collect();
+        owners.sort_unstable();
+        owners.dedup();
+        owners
+    }
+
+    pub(crate) fn serving(&self, demand: DemandId) -> Option<&SubscriptionId> {
+        self.installed.ids().find(|id| {
+            self.installed
+                .get(id)
+                .is_some_and(|entry| entry.serves.contains(&demand))
+        })
+    }
+
+    /// Whether an EOSE on one wire subscription proves its stored window ended.
+    pub(crate) fn proves_completeness(&self, id: &SubscriptionId) -> EoseCompleteness {
+        self.completeness.get(id).copied().unwrap_or_default()
+    }
+}

@@ -1,207 +1,42 @@
-//! Public-facade explicit live-query evidence over a scripted transport.
+//! Public-facade explicit live-query evidence over the neutral transport fake.
 
-use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_query::{
+    AuthenticationState, ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin,
+};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
-use fava_subscriptions_no_grouping::planner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
-use fava_wire::{ClientMessage, RelayMessage, encode_client};
+use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
+use fava_subscriptions::SubscriptionPlanner;
+use fava_subscriptions_standard::StandardSubscriptionPlanner;
+use fava_transport::Transport;
+use fava_transport_testkit::{FakeRelay, FakeTransport};
+use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
-use nostr::event::{EventBuilder, FinalizeEvent, Kind};
-use nostr::key::Keys;
-use tokio::sync::Notify;
-
-#[derive(Default)]
-struct Script {
-    inbound: Mutex<VecDeque<Result<String, TransportError>>>,
-    sent: Mutex<Vec<String>>,
-    opens: AtomicUsize,
-    notify: Notify,
-}
-
-impl Script {
-    fn receive(&self, message: &RelayMessage<'_>) {
-        self.inbound
-            .lock()
-            .expect("script lock")
-            .push_back(Ok(serde_json::to_string(&message).expect("message encodes")));
-        self.notify.notify_one();
-    }
-
-    fn sent(&self) -> Vec<String> {
-        self.sent.lock().expect("script lock").clone()
-    }
-
-    fn fail(&self, error: TransportError) {
-        self.inbound
-            .lock()
-            .expect("script lock")
-            .push_back(Err(error));
-        self.notify.notify_one();
-    }
-}
-
-struct ScriptedTransport {
-    script: Arc<Script>,
-}
-
-struct PendingTransport;
-
-impl Transport for PendingTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
-        Box::pin(std::future::pending())
-    }
-}
-
-#[derive(Default)]
-struct FirstOpenThenPendingTransport {
-    calls: AtomicUsize,
-    opened: Mutex<Vec<Arc<ScriptedSession>>>,
-}
-
-impl Transport for FirstOpenThenPendingTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
-        Box::pin(async move {
-            if self.calls.fetch_add(1, Ordering::SeqCst) > 0 {
-                return std::future::pending().await;
-            }
-            let session = Arc::new(ScriptedSession {
-                key,
-                script: Arc::new(Script::default()),
-                closed: std::sync::atomic::AtomicBool::new(false),
-            });
-            self.opened
-                .lock()
-                .expect("transport lock")
-                .push(Arc::clone(&session));
-            Ok(session as Arc<dyn RelaySession>)
-        })
-    }
-}
-
-impl Transport for ScriptedTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
-        let script = Arc::clone(&self.script);
-        Box::pin(async move {
-            script.opens.fetch_add(1, Ordering::SeqCst);
-            Ok(Arc::new(ScriptedSession {
-                key,
-                script,
-                closed: std::sync::atomic::AtomicBool::new(false),
-            }) as Arc<dyn RelaySession>)
-        })
-    }
-}
-
-struct ScriptedSession {
-    key: RelaySessionKey,
-    script: Arc<Script>,
-    closed: std::sync::atomic::AtomicBool,
-}
-
-impl RelaySession for ScriptedSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
-
-    fn generation(&self) -> u64 {
-        7
-    }
-
-    fn send(
-        &self,
-        frame: String,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
-        Box::pin(async move {
-            if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
-                return HandoffOutcome::NotHandedOff {
-                    reason: "closed".to_owned(),
-                };
-            }
-            self.script.sent.lock().expect("script lock").push(frame);
-            HandoffOutcome::HandedOff
-        })
-    }
-
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
-        Box::pin(async move {
-            loop {
-                if let Some(message) = self.script.inbound.lock().expect("script lock").pop_front()
-                {
-                    return message;
-                }
-                self.script.notify.notified().await;
-            }
-        })
-    }
-
-    fn close(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
-        Box::pin(async move {
-            self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
-            self.script.notify.notify_waiters();
-            Ok(())
-        })
-    }
-}
+use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
+use nostr::key::{Keys, PublicKey};
 
 #[tokio::test(flavor = "current_thread")]
 async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
-    let relay = RelayUrl::parse("wss://pending.example").expect("relay URL");
-    let fava = Fava::builder()
-        .event_cache(Arc::new(MemoryEventCache::default()))
-        .write_store(Arc::new(MemoryWriteStore::default()))
-        .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .subscription_planner(Arc::new(planner()))
-        .transport(Arc::new(PendingTransport))
-        .build()
-        .expect("assembly is complete");
+    let relay = relay("pending");
+    let transport = Arc::new(FakeTransport::new());
+    transport.hold_establishment(&session_key(&relay));
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
 
     let observation = tokio::time::timeout(
         Duration::from_millis(50),
         fava.observe(
             Query::events()
-                .only_from_relays([relay])
+                .only_from_relays([relay.clone()])
                 .expect("explicit relay is valid"),
         ),
     )
@@ -210,16 +45,28 @@ async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
     .expect("local observation opens");
 
     assert!(observation.current().events.is_empty());
+    assert_eq!(transport.dials(&session_key(&relay)), 0);
+    let planned = relay_evidence(&observation.current(), &session_key(&relay));
+    assert!(matches!(
+        planned.state,
+        RelaySourceState::Planned | RelaySourceState::Connecting
+    ));
+    assert_eq!(planned.route, RouteOrigin::Explicit);
     observation.close();
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn equivalent_observations_share_relay_work_until_the_last_handle_closes() {
-    let relay = RelayUrl::parse("wss://shared.example").expect("relay URL");
-    let script = Arc::new(Script::default());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), Arc::clone(&script));
+async fn equivalent_observations_share_one_relay_connection() {
+    let relay = relay("shared");
+    let key = session_key(&relay);
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let query = Query::events()
-        .only_from_relays([relay])
+        .only_from_relays([relay.clone()])
         .expect("explicit relay is valid");
 
     let first = fava
@@ -228,53 +75,224 @@ async fn equivalent_observations_share_relay_work_until_the_last_handle_closes()
         .expect("first query opens");
     let second = fava.observe(query).await.expect("second query opens");
 
-    assert_eq!(script.opens.load(Ordering::SeqCst), 1);
-    assert_eq!(script.sent().len(), 1);
+    assert_ne!(first.id(), second.id());
+    wait_until(|| transport.holders(&key) == NonZeroUsize::new(1)).await;
+    settle().await;
+    assert_eq!(
+        transport.dials(&key),
+        1,
+        "the second observation must reuse the session Fava already holds"
+    );
+
     first.close();
-    assert_eq!(script.sent().len(), 1);
+    settle().await;
+    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+
+    second.close();
+    wait_until(|| transport.holders(&key).is_none()).await;
+    assert_eq!(transport.dials(&key), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn one_admission_cohort_groups_and_the_running_request_is_never_rewritten() {
+    let relay = relay("grouped");
+    let key = session_key(&relay);
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        Arc::new(StandardSubscriptionPlanner::new()),
+    );
+    // One burst: three logical demands inside one admission window.
+    let first = fava
+        .observe(metadata_of(alice, &relay))
+        .await
+        .expect("first query opens");
+    let second = fava
+        .observe(metadata_of(alice, &relay))
+        .await
+        .expect("second query opens");
+    let third = fava
+        .observe(metadata_of(bob, &relay))
+        .await
+        .expect("third query opens");
+
+    wait_until(|| requests(session(&transport, &key)).len() == 1).await;
+    settle().await;
+    let peer = established(&transport, &key);
+    let grouped = requests(Some(peer.clone()));
+    assert_eq!(
+        grouped.len(),
+        1,
+        "the standard planner carries one cohort's three demands in one REQ"
+    );
+    let (merged, filters) = grouped[0].clone();
+    let authors = filters[0].authors.clone().unwrap_or_default();
+    assert!(authors.contains(&alice) && authors.contains(&bob));
+    assert_eq!(transport.dials(&key), 1);
+
+    // The refcount is the demand the request serves, not the observation
+    // count: losing one of two identical demands changes nothing.
+    first.close();
+    settle().await;
+    assert_eq!(requests(Some(peer.clone())), grouped);
+    assert!(withdrawals(Some(peer.clone())).is_empty());
+
+    // Losing the last demand for one author leaves the survivor running with
+    // its over-broad filter. Narrowing would cost a full relay re-serve.
+    second.close();
+    settle().await;
+    assert_eq!(
+        requests(Some(peer.clone())),
+        grouped,
+        "a running request is never rewritten to narrow it"
+    );
+    assert!(withdrawals(Some(peer.clone())).is_empty());
+    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+
+    third.close();
+    wait_until(|| withdrawals(Some(peer.clone())) == vec![merged.clone()]).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn demand_arriving_after_the_window_never_touches_the_running_request() {
+    let relay = relay("late");
+    let key = session_key(&relay);
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        Arc::new(StandardSubscriptionPlanner::new()),
+    );
+    let first = fava
+        .observe(metadata_of(alice, &relay))
+        .await
+        .expect("first query opens");
+    wait_until(|| requests(session(&transport, &key)).len() == 1).await;
+    let peer = established(&transport, &key);
+    let installed = requests(Some(peer.clone()))[0].clone();
+
+    // The cohort that carried the first demand is frozen. This one is late.
+    let second = fava
+        .observe(metadata_of(bob, &relay))
+        .await
+        .expect("second query opens");
+
+    wait_until(|| requests(Some(peer.clone())).len() == 2).await;
+    settle().await;
+    assert!(
+        withdrawals(Some(peer.clone())).is_empty(),
+        "a merge that widens a live REQ would make the relay re-serve its whole window"
+    );
+    let after = requests(Some(peer.clone()));
+    assert_eq!(after[0], installed, "the incumbent keeps its id and filter");
+    assert_ne!(after[1].0, installed.0);
+    assert_eq!(transport.dials(&key), 1);
+    first.close();
     second.close();
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_planner_that_never_groups_still_shares_one_connection() {
+    let relay = relay("ungrouped");
+    let key = session_key(&relay);
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let carol = Keys::generate().public_key();
+
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
+    let first = fava
+        .observe(metadata_of(alice, &relay))
+        .await
+        .expect("first query opens");
+    let second = fava
+        .observe(metadata_of(bob, &relay))
+        .await
+        .expect("second query opens");
+    let third = fava
+        .observe(metadata_of(carol, &relay))
+        .await
+        .expect("third query opens");
+
+    wait_until(|| requests(session(&transport, &key)).len() == 3).await;
+    settle().await;
+    let peer = established(&transport, &key);
+    assert_eq!(
+        transport.dials(&key),
+        1,
+        "three requests still share one connection"
+    );
+
+    let installed = requests(Some(peer.clone()));
+    first.close();
+    second.close();
+    wait_until(|| withdrawals(Some(peer.clone())).len() == 2).await;
+    settle().await;
+    let withdrawn = withdrawals(Some(peer.clone()));
+    let surviving: Vec<SubscriptionId> = installed
+        .iter()
+        .map(|(id, _)| id.clone())
+        .filter(|id| !withdrawn.contains(id))
+        .collect();
+    assert_eq!(surviving.len(), 1, "the third demand keeps its own request");
+    assert_eq!(transport.holders(&key), NonZeroUsize::new(1));
+    third.close();
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn cancelling_observe_while_another_relay_opens_closes_provisional_work() {
-    let transport = Arc::new(FirstOpenThenPendingTransport::default());
-    let fava = Fava::builder()
-        .event_cache(Arc::new(MemoryEventCache::default()))
-        .write_store(Arc::new(MemoryWriteStore::default()))
-        .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .subscription_planner(Arc::new(planner()))
-        .transport(Arc::clone(&transport))
-        .build()
-        .expect("assembly is complete");
+    let reachable = relay("a-open");
+    let stalled = relay("b-pending");
+    let transport = Arc::new(FakeTransport::new());
+    transport.hold_establishment(&session_key(&stalled));
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let query = Query::events()
-        .only_from_relays([
-            RelayUrl::parse("wss://a-open.example").expect("relay URL"),
-            RelayUrl::parse("wss://b-pending.example").expect("relay URL"),
-        ])
+        .only_from_relays([reachable.clone(), stalled.clone()])
         .expect("explicit relays are valid");
 
+    let observation = tokio::time::timeout(Duration::from_millis(50), fava.observe(query))
+        .await
+        .expect("a stalled relay must not delay the handle")
+        .expect("local observation opens");
+
+    let key = session_key(&reachable);
+    wait_until(|| !requests(session(&transport, &key)).is_empty()).await;
+    let peer = established(&transport, &key);
+    let installed = requests(Some(peer.clone()))[0].0.clone();
     assert!(
-        tokio::time::timeout(Duration::from_millis(50), fava.observe(query))
-            .await
-            .is_err()
+        transport.relay(&session_key(&stalled)).is_none(),
+        "the stalled relay never established"
     );
-    assert_eq!(transport.calls.load(Ordering::SeqCst), 2);
-    let first = transport
-        .opened
-        .lock()
-        .expect("transport lock")
-        .first()
-        .cloned()
-        .expect("first relay opened");
-    assert!(first.closed.load(Ordering::SeqCst));
+
+    drop(observation);
+
+    wait_until(|| withdrawals(Some(peer.clone())) == vec![installed.clone()]).await;
+    wait_until(|| transport.holders(&key).is_none()).await;
+    assert_eq!(transport.dials(&key), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
-    let relay = RelayUrl::parse("wss://relay.example").expect("relay URL");
-    let script = Arc::new(Script::default());
+    let relay = relay("relay");
+    let key = session_key(&relay);
+    let transport = Arc::new(FakeTransport::new());
     let cache = Arc::new(MemoryEventCache::default());
-    let fava = assembly(Arc::clone(&cache), Arc::clone(&script));
+    let fava = assembly(Arc::clone(&cache), &transport, no_grouping());
     let keys = Keys::generate();
     let event = EventBuilder::new(Kind::TextNote, "stored")
         .custom_created_at(Timestamp::from(10))
@@ -286,115 +304,268 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
         .expect("explicit relay is valid");
 
     let mut observation = fava.observe(query).await.expect("live query opens");
-    let req = script.sent().first().cloned().expect("REQ handed off");
-    let subscription =
-        match serde_json::from_str::<ClientMessage<'static>>(&req).expect("REQ decodes") {
-            ClientMessage::Req {
-                subscription_id, ..
-            } => subscription_id.into_owned(),
-            other => panic!("expected REQ, got {other:?}"),
-        };
-    script.receive(&RelayMessage::event(subscription.clone(), event.clone()));
-    script.receive(&RelayMessage::eose(subscription.clone()));
+    wait_until(|| !requests(session(&transport, &key)).is_empty()).await;
+    let subscription = requests(session(&transport, &key))[0].0.clone();
+    let peer = established(&transport, &key);
+    push(
+        &peer,
+        &RelayMessage::event(subscription.clone(), event.clone()),
+    );
+    push(&peer, &RelayMessage::eose(subscription.clone()));
 
-    let snapshot = tokio::time::timeout(Duration::from_secs(1), observation.changed())
-        .await
-        .expect("event deadline")
-        .expect("query stays open");
+    let snapshot = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let snapshot = observation.changed().await.expect("query stays open");
+            if !snapshot.events.is_empty() {
+                return snapshot;
+            }
+        }
+    })
+    .await
+    .expect("event deadline");
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), event.id);
     assert_eq!(snapshot.events[0].relay_evidence.len(), 1);
-    wait_until(Duration::from_secs(1), || {
-        fava.diagnostics().eose.iter().any(|(key, generation, id)| {
-            key.relay == relay && *generation == 7 && id == &subscription
-        })
-    })
-    .await;
+    wait_until(|| relay_evidence(&observation.current(), &key).stored_events_complete()).await;
 
     let mut forged = event.clone();
     forged.content = "forged after signing".to_owned();
     let off_filter = EventBuilder::new(Kind::TextNote, "other author")
         .finalize(&Keys::generate())
         .expect("event signs");
-    script.receive(&RelayMessage::event(subscription.clone(), forged));
-    script.receive(&RelayMessage::event(subscription.clone(), off_filter));
-    wait_until(Duration::from_secs(1), || {
-        fava.diagnostics().failures.len() >= 2
-    })
-    .await;
+    push(&peer, &RelayMessage::event(subscription.clone(), forged));
+    push(
+        &peer,
+        &RelayMessage::event(subscription.clone(), off_filter),
+    );
+    settle().await;
     assert_eq!(cache.len().expect("cache readable"), 1);
 
     observation.close();
     observation.close();
-    wait_until(Duration::from_secs(1), || {
-        script.sent().iter().any(|frame| {
-            frame
-                == &encode_client(&ClientMessage::close(subscription.clone()))
-                    .expect("CLOSE encodes")
-        })
-    })
-    .await;
+    wait_until(|| withdrawals(Some(peer.clone())) == vec![subscription.clone()]).await;
     assert!(observation.changed().await.is_err());
     assert_eq!(cache.len().expect("cache readable"), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
-    let relay = RelayUrl::parse("wss://relay.example").expect("relay URL");
-    let script = Arc::new(Script::default());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), Arc::clone(&script));
-    let observation = fava
+    let relay = relay("relay");
+    let key = session_key(&relay);
+    let transport = Arc::new(FakeTransport::new());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
+    let mut observation = fava
         .observe(
             Query::events()
-                .only_from_relays([relay])
+                .only_from_relays([relay.clone()])
                 .expect("explicit relay is valid"),
         )
         .await
         .expect("live query opens");
-    let subscription = fava
-        .diagnostics()
-        .subscriptions
-        .first()
-        .map(|(_, _, id)| id.clone())
-        .expect("subscription is diagnosed");
-    let silent = fava.diagnostics();
-    assert!(silent.eose.is_empty());
-    assert!(silent.closed.is_empty());
-    assert!(silent.authentication_required.is_empty());
-    assert!(silent.failures.is_empty());
+    wait_until(|| !requests(session(&transport, &key)).is_empty()).await;
+    let subscription = requests(session(&transport, &key))[0].0.clone();
+    let peer = established(&transport, &key);
 
-    script.receive(&RelayMessage::eose(subscription.clone()));
-    script.receive(&RelayMessage::auth("challenge"));
-    script.receive(&RelayMessage::closed(subscription.clone(), "rate-limited"));
-    script.fail(TransportError::Disconnected("injected".to_owned()));
-    wait_until(Duration::from_secs(1), || {
-        let facts = fava.diagnostics();
-        facts.eose.len() == 1
-            && facts.closed.len() == 1
-            && facts.authentication_required.len() == 1
-            && facts.failures.len() == 1
+    wait_until(|| {
+        matches!(
+            relay_evidence(&observation.current(), &key).state,
+            RelaySourceState::Open { .. }
+        )
     })
     .await;
-    let facts = fava.diagnostics();
-    assert_eq!(facts.eose[0].2, subscription);
-    assert_eq!(facts.closed[0].3, "rate-limited");
-    assert_eq!(facts.failures[0].2, "relay session disconnected: injected");
+    let silent = relay_evidence(&observation.current(), &key);
+    assert!(
+        !silent.stored_events_complete(),
+        "silence is not completeness"
+    );
+    assert!(silent.is_live());
+
+    push(&peer, &RelayMessage::eose(subscription.clone()));
+    let complete = await_state(&mut observation, &key, |state| {
+        matches!(state, RelaySourceState::StoredEventsComplete { .. })
+    })
+    .await;
+    assert!(complete.stored_events_complete());
+
+    push(&peer, &RelayMessage::auth("challenge"));
+    let challenged = await_state(&mut observation, &key, |state| {
+        matches!(state, RelaySourceState::AuthenticationRequired { .. })
+    })
+    .await;
+    assert!(matches!(
+        challenged.state,
+        RelaySourceState::AuthenticationRequired {
+            state: AuthenticationState::ChallengeReceived,
+            ..
+        }
+    ));
+    assert!(!challenged.stored_events_complete());
+
+    push(
+        &peer,
+        &RelayMessage::closed(subscription.clone(), "rate-limited"),
+    );
+    let refused = await_state(&mut observation, &key, |state| {
+        matches!(state, RelaySourceState::Refused { .. })
+    })
+    .await;
+    let RelaySourceState::Refused { message, .. } = &refused.state else {
+        panic!("expected a refusal, got {:?}", refused.state);
+    };
+    assert_eq!(message.as_str(), "rate-limited");
+
+    peer.fail_now("injected");
+    let dropped = await_state(&mut observation, &key, |state| {
+        matches!(
+            state,
+            RelaySourceState::Disconnected { .. } | RelaySourceState::Unreachable { .. }
+        )
+    })
+    .await;
+    match &dropped.state {
+        RelaySourceState::Disconnected { detail }
+        | RelaySourceState::Unreachable { detail, .. } => {
+            assert!(
+                detail.as_str().contains("injected"),
+                "a disconnect must carry the relay's own verbatim reason, got {detail:?}"
+            );
+        }
+        other => panic!("expected a disconnect, got {other:?}"),
+    }
     observation.close();
 }
 
-fn assembly(cache: Arc<MemoryEventCache>, script: Arc<Script>) -> Fava {
+// ----------------------------------------------------------------- harness
+
+fn assembly<P>(
+    cache: Arc<MemoryEventCache>,
+    transport: &Arc<FakeTransport>,
+    planner: Arc<P>,
+) -> Fava
+where
+    P: SubscriptionPlanner + 'static,
+{
     Fava::builder()
         .event_cache(cache)
         .write_store(Arc::new(MemoryWriteStore::default()))
         .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .subscription_planner(Arc::new(planner()))
-        .transport(Arc::new(ScriptedTransport { script }))
+        .subscription_planner(planner)
+        .transport(Arc::clone(transport))
         .build()
         .expect("assembly is complete")
 }
 
-async fn wait_until(deadline: Duration, predicate: impl Fn() -> bool) {
-    tokio::time::timeout(deadline, async {
+fn no_grouping() -> Arc<impl SubscriptionPlanner> {
+    Arc::new(fava_subscriptions_no_grouping::planner())
+}
+
+fn relay(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
+}
+
+fn session_key(relay: &RelayUrl) -> RelaySessionKey {
+    RelaySessionKey::new(relay.clone(), RelayAccess::public())
+}
+
+fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
+    Query::events()
+        .kind(Kind::Metadata)
+        .authors([author])
+        .only_from_relays([relay.clone()])
+        .expect("explicit relay is valid")
+}
+
+fn session(transport: &FakeTransport, key: &RelaySessionKey) -> Option<FakeRelay> {
+    transport.relay(key)
+}
+
+fn established(transport: &FakeTransport, key: &RelaySessionKey) -> FakeRelay {
+    transport.relay(key).expect("the relay session established")
+}
+
+fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
+    peer.push_frame(
+        serde_json::to_string(message)
+            .expect("message encodes")
+            .into_bytes(),
+    );
+}
+
+fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {
+    peer.map(|peer| peer.delivered_frames())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|frame| {
+            serde_json::from_slice::<ClientMessage<'static>>(&frame)
+                .expect("client message decodes")
+        })
+        .collect()
+}
+
+fn requests(peer: Option<FakeRelay>) -> Vec<(SubscriptionId, Vec<nostr::filter::Filter>)> {
+    client_messages(peer)
+        .into_iter()
+        .filter_map(|message| match message {
+            ClientMessage::Req {
+                subscription_id,
+                filters,
+            } => Some((
+                subscription_id.into_owned(),
+                filters
+                    .into_iter()
+                    .map(std::borrow::Cow::into_owned)
+                    .collect(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn withdrawals(peer: Option<FakeRelay>) -> Vec<SubscriptionId> {
+    client_messages(peer)
+        .into_iter()
+        .filter_map(|message| match message {
+            ClientMessage::Close(id) => Some(id.into_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn relay_evidence(
+    snapshot: &QuerySnapshot,
+    key: &RelaySessionKey,
+) -> fava_query::RelayQueryEvidence {
+    snapshot
+        .evidence
+        .relay(key)
+        .cloned()
+        .expect("the observation reports evidence for every relay it uses")
+}
+
+async fn await_state(
+    observation: &mut fava::Observation,
+    key: &RelaySessionKey,
+    predicate: impl Fn(&RelaySourceState) -> bool,
+) -> fava_query::RelayQueryEvidence {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let current = relay_evidence(&observation.current(), key);
+            if predicate(&current.state) {
+                return current;
+            }
+            observation.changed().await.expect("query stays open");
+        }
+    })
+    .await
+    .expect("relay state deadline elapsed")
+}
+
+async fn wait_until(predicate: impl Fn() -> bool) {
+    tokio::time::timeout(Duration::from_secs(1), async {
         while !predicate() {
             tokio::task::yield_now().await;
         }
@@ -402,3 +573,12 @@ async fn wait_until(deadline: Duration, predicate: impl Fn() -> bool) {
     .await
     .expect("condition deadline elapsed");
 }
+
+/// Let every owner-held task reach quiescence without advancing wall time.
+async fn settle() {
+    for _ in 0..256 {
+        tokio::task::yield_now().await;
+    }
+}
+
+fn _unused(_: ObservationId, _: Event) {}

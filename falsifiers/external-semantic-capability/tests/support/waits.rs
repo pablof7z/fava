@@ -126,9 +126,10 @@ pub async fn wait_eose(fava: &Fava, subscription: &str) {
             loop {
                 if fava
                     .diagnostics()
-                    .eose
+                    .relays
                     .iter()
-                    .any(|(_, _, observed)| observed.as_str() == subscription)
+                    .flat_map(|relay| relay.subscriptions.iter())
+                    .any(|wire| wire.id.as_str() == subscription && wire.stored_events_complete)
                 {
                     return;
                 }

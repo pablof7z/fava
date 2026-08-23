@@ -1,6 +1,7 @@
 //! Multi-relay provenance and reconnect-generation evidence through the public facade.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -11,7 +12,13 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
+use fava_transport::{
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
+    RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity,
+    ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
+};
+use fava_transport_testkit::{FakeRelay, FakeTransport, detached_lease};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
@@ -48,26 +55,17 @@ impl ScriptedTransport {
 }
 
 impl Transport for ScriptedTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
             let generation = self.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
-            let relay = key.relay.clone();
+            let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
-                key,
-                generation,
-                inbound: Mutex::new(VecDeque::new()),
+                identity: RelaySessionIdentity {
+                    key: request.key,
+                    generation: OperationGeneration(generation),
+                },
+                mailbox: Arc::new(Mailbox::default()),
                 sent: Mutex::new(Vec::new()),
-                changed: Notify::new(),
-                closed: AtomicBool::new(false),
             });
             self.sessions
                 .lock()
@@ -76,35 +74,74 @@ impl Transport for ScriptedTransport {
                 .or_default()
                 .push(Arc::clone(&session));
             self.changed.notify_waiters();
-            Ok(session as Arc<dyn RelaySession>)
+            Ok(detached_lease(session as Arc<dyn RelaySession>))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
-struct ScriptedSession {
-    key: RelaySessionKey,
-    generation: u64,
-    inbound: Mutex<VecDeque<Result<String, TransportError>>>,
-    sent: Mutex<Vec<String>>,
+#[derive(Default)]
+struct Mailbox {
+    inbound: Mutex<VecDeque<Result<RelayInbound, TransportError>>>,
     changed: Notify,
     closed: AtomicBool,
 }
 
-impl ScriptedSession {
-    fn receive(&self, message: &RelayMessage<'_>) {
-        self.inbound
-            .lock()
-            .expect("session lock")
-            .push_back(Ok(serde_json::to_string(message).expect("message encodes")));
-        self.changed.notify_one();
+struct ScriptedStream {
+    mailbox: Arc<Mailbox>,
+    identity: RelaySessionIdentity,
+}
+
+impl RelayMessageStream for ScriptedStream {
+    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
+        Box::pin(async move {
+            loop {
+                if let Some(item) = self
+                    .mailbox
+                    .inbound
+                    .lock()
+                    .expect("session lock")
+                    .pop_front()
+                {
+                    return item;
+                }
+                if self.mailbox.closed.load(Ordering::SeqCst) {
+                    return Err(TransportError::Closed(self.identity.clone()));
+                }
+                self.mailbox.changed.notified().await;
+            }
+        })
     }
 
-    fn disconnect(&self) {
-        self.inbound
+    fn close(&mut self) {}
+}
+
+struct ScriptedSession {
+    identity: RelaySessionIdentity,
+    mailbox: Arc<Mailbox>,
+    sent: Mutex<Vec<String>>,
+}
+
+impl ScriptedSession {
+    fn receive(&self, message: &RelayMessage<'_>) {
+        let frame = serde_json::to_string(message).expect("message encodes");
+        self.mailbox
+            .inbound
             .lock()
             .expect("session lock")
-            .push_back(Err(TransportError::Disconnected("injected".to_owned())));
-        self.changed.notify_one();
+            .push_back(Ok(RelayInbound::Frame {
+                identity: self.identity.clone(),
+                frame: frame.into_bytes(),
+                received_at: fava_state::Timestamp::now(),
+            }));
+        self.mailbox.changed.notify_one();
     }
 
     fn subscription(&self) -> SubscriptionId {
@@ -124,58 +161,63 @@ impl ScriptedSession {
             })
             .expect("REQ was handed off")
     }
+
+    fn requested(&self) -> bool {
+        self.sent
+            .lock()
+            .expect("session lock")
+            .iter()
+            .any(|frame| frame.starts_with("[\"REQ\""))
+    }
+}
+
+/// Await the REQ this session's demand produced after its admission window.
+async fn subscription_of(session: &ScriptedSession) -> SubscriptionId {
+    wait_until(|| session.requested()).await;
+    session.subscription()
 }
 
 impl RelaySession for ScriptedSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
-
-    fn generation(&self) -> u64 {
-        self.generation
+    fn identity(&self) -> RelaySessionIdentity {
+        self.identity.clone()
     }
 
     fn send(
         &self,
-        frame: String,
+        frame: Vec<u8>,
+        correlation: HandoffCorrelation,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
         Box::pin(async move {
-            if self.closed.load(Ordering::SeqCst) {
+            if self.mailbox.closed.load(Ordering::SeqCst) {
                 return HandoffOutcome::NotHandedOff {
-                    reason: "closed".to_owned(),
+                    identity: self.identity.clone(),
+                    correlation,
+                    reason: TransportFailure::SessionClosed,
                 };
             }
-            self.sent.lock().expect("session lock").push(frame);
-            HandoffOutcome::HandedOff
-        })
-    }
-
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
-        Box::pin(async move {
-            loop {
-                if let Some(message) = self.inbound.lock().expect("session lock").pop_front() {
-                    return message;
-                }
-                if self.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed);
-                }
-                self.changed.notified().await;
+            self.sent
+                .lock()
+                .expect("session lock")
+                .push(String::from_utf8_lossy(&frame).into_owned());
+            HandoffOutcome::HandedOff {
+                identity: self.identity.clone(),
+                correlation,
             }
         })
     }
 
-    fn close(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
+    fn messages(&self) -> Box<dyn RelayMessageStream> {
+        Box::new(ScriptedStream {
+            mailbox: Arc::clone(&self.mailbox),
+            identity: self.identity.clone(),
+        })
+    }
+
+    fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
-            self.closed.store(true, Ordering::SeqCst);
-            self.changed.notify_waiters();
-            Ok(())
+            self.mailbox.closed.store(true, Ordering::SeqCst);
+            self.mailbox.changed.notify_waiters();
+            Ok(ReleaseOutcome::Closed)
         })
     }
 }
@@ -203,9 +245,12 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
     let second = transport.session(&relays[1], 0).await;
     let third = transport.session(&relays[2], 0).await;
 
-    first.receive(&RelayMessage::event(first.subscription(), event.clone()));
-    second.receive(&RelayMessage::event(second.subscription(), event.clone()));
-    third.receive(&RelayMessage::eose(third.subscription()));
+    let first_subscription = subscription_of(&first).await;
+    let second_subscription = subscription_of(&second).await;
+    let third_subscription = subscription_of(&third).await;
+    first.receive(&RelayMessage::event(first_subscription, event.clone()));
+    second.receive(&RelayMessage::event(second_subscription, event.clone()));
+    third.receive(&RelayMessage::eose(third_subscription));
 
     let latest = wait_for_snapshot(&mut observation, |snapshot| {
         snapshot
@@ -229,9 +274,17 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let relay = relay_urls(1).remove(0);
-    let transport = Arc::new(ScriptedTransport::default());
+    let key = RelaySessionKey::new(relay.clone(), fava_state::RelayAccess::public());
+    let transport = Arc::new(FakeTransport::new());
     let cache = Arc::new(MemoryEventCache::default());
-    let fava = assembly(Arc::clone(&cache), Arc::clone(&transport));
+    let fava = Fava::builder()
+        .event_cache(Arc::clone(&cache))
+        .write_store(Arc::new(MemoryWriteStore::default()))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .subscription_planner(Arc::new(planner()))
+        .transport(Arc::clone(&transport))
+        .build()
+        .expect("assembly is complete");
     let mut observation = fava
         .observe(
             Query::events()
@@ -240,41 +293,109 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         )
         .await
         .expect("query opens");
-    let old = transport.session(&relay, 0).await;
-    let old_subscription = old.subscription();
-    old.receive(&RelayMessage::eose(old_subscription.clone()));
-    wait_until(|| fava.diagnostics().eose.len() == 1).await;
-    old.disconnect();
 
-    let current = transport.session(&relay, 1).await;
-    let current_subscription = current.subscription();
-    assert!(current.generation() > old.generation());
-    assert_ne!(current_subscription, old_subscription);
-    assert_eq!(fava.diagnostics().eose.len(), 1);
+    wait_until(|| transport.relay(&key).is_some()).await;
+    let peer = transport.relay(&key).expect("session established");
+    wait_until(|| !requests_of(&peer).is_empty()).await;
+    let subscription = requests_of(&peer)[0].clone();
+    peer.push_frame(encoded(&RelayMessage::eose(subscription.clone())));
+    wait_until(|| settled(&observation, &key)).await;
+    let settled_generation = evidence_of(&observation, &key).generation;
+
+    // A reconnect mints a new authority inside the session the holder already
+    // has. The demand is replayed and the earlier EOSE cannot settle it.
+    peer.reconnect();
+
+    wait_until(|| requests_of(&peer).len() == 2).await;
+    let replayed = evidence_of(&observation, &key);
+    assert!(
+        replayed.generation > settled_generation,
+        "a reconnected session is a new authority"
+    );
+    assert!(
+        !replayed.stored_events_complete(),
+        "the old EOSE must not settle the replayed request"
+    );
+
+    let replacement = requests_of(&peer)[1].clone();
+    assert_ne!(
+        replacement, subscription,
+        "the replayed request must not reuse the retired wire id"
+    );
 
     let event = EventBuilder::new(Kind::TextNote, "current generation")
         .finalize(&Keys::generate())
         .expect("event signs");
-    current.receive(&RelayMessage::event(
-        old_subscription.clone(),
+    peer.push_frame(encoded(&RelayMessage::event(
+        subscription.clone(),
         event.clone(),
-    ));
-    wait_until(|| {
-        fava.diagnostics()
-            .failures
-            .iter()
-            .any(|(_, generation, message)| {
-                *generation == current.generation()
-                    && message == &format!("unattributed EVENT for {old_subscription}")
-            })
-    })
-    .await;
-    assert_eq!(cache.len().expect("cache readable"), 0);
+    )));
+    settle().await;
+    assert_eq!(
+        cache.len().expect("cache readable"),
+        0,
+        "a frame naming the retired request is refused, not admitted"
+    );
 
-    current.receive(&RelayMessage::event(current_subscription, event.clone()));
+    peer.push_frame(encoded(&RelayMessage::event(
+        replacement.clone(),
+        event.clone(),
+    )));
     let latest = wait_for_snapshot(&mut observation, |snapshot| !snapshot.events.is_empty()).await;
     assert_eq!(latest.events[0].id(), event.id);
     assert_eq!(cache.len().expect("cache readable"), 1);
+
+    peer.push_frame(encoded(&RelayMessage::eose(replacement)));
+    wait_until(|| settled(&observation, &key)).await;
+    observation.close();
+}
+
+fn evidence_of(
+    observation: &fava::Observation,
+    key: &RelaySessionKey,
+) -> fava_query::RelayQueryEvidence {
+    observation
+        .current()
+        .evidence
+        .relay(key)
+        .cloned()
+        .expect("the observation reports evidence for every relay it uses")
+}
+
+fn settled(observation: &fava::Observation, key: &RelaySessionKey) -> bool {
+    observation
+        .current()
+        .evidence
+        .relay(key)
+        .is_some_and(fava_query::RelayQueryEvidence::stored_events_complete)
+}
+
+async fn settle() {
+    for _ in 0..256 {
+        tokio::task::yield_now().await;
+    }
+}
+
+fn encoded(message: &RelayMessage<'_>) -> Vec<u8> {
+    serde_json::to_string(message)
+        .expect("message encodes")
+        .into_bytes()
+}
+
+fn requests_of(peer: &FakeRelay) -> Vec<SubscriptionId> {
+    peer.delivered_frames()
+        .into_iter()
+        .filter_map(|frame| {
+            match serde_json::from_slice::<ClientMessage<'static>>(&frame)
+                .expect("client message decodes")
+            {
+                ClientMessage::Req {
+                    subscription_id, ..
+                } => Some(subscription_id.into_owned()),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -299,8 +420,8 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
         .expect("query opens");
     let first = transport.session(&relays[0], 0).await;
     let second = transport.session(&relays[1], 0).await;
-    let first_subscription = first.subscription();
-    let second_subscription = second.subscription();
+    let first_subscription = subscription_of(&first).await;
+    let second_subscription = subscription_of(&second).await;
 
     first.receive(&RelayMessage::event(
         first_subscription.clone(),

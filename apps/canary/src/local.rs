@@ -80,7 +80,10 @@ async fn slow_consumer(fava: &Fava, writes: &MemoryWriteStore, keys: &Keys) -> C
         "slow observer did not receive one exact latest state",
     )?;
     require(
-        fava.diagnostics().coalesced_query_updates > 0,
+        fava.diagnostics()
+            .queries
+            .iter()
+            .any(|query| query.coalesced_updates > 0),
         "coalesced current-state updates were not measured",
     )?;
     Ok(current.events.len())

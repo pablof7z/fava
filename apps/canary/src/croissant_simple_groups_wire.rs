@@ -151,9 +151,12 @@ fn query_completion(
         let direction = required_str(&frame, "direction")?;
         let frame_type = required_str(&frame, "frame_type")?;
         if frame_type == "close" && direction == "client_to_relay" {
-            if let Some(state) = queries
+            // One connection now carries every query routed to that relay, so
+            // the socket closes once, after the last query withdrew its text
+            // CLOSE.
+            for state in queries
                 .values_mut()
-                .find(|state| state.connection == connection)
+                .filter(|state| state.connection == connection)
             {
                 if !state.saw_text_close || state.saw_socket_close {
                     return Err(CanaryError::new(
@@ -176,20 +179,23 @@ fn query_completion(
             ("client_to_relay", Some("REQ")) => {
                 let (role, subscription) =
                     classify_request(array, group_id, bootstrap_event_id, bootstrap_subscription)?;
-                if queries.values().any(|state| {
-                    state.connection == connection || state.subscription == subscription
-                }) || queries
-                    .insert(
-                        role,
-                        QueryState {
-                            connection,
-                            subscription,
-                            saw_eose: false,
-                            saw_text_close: false,
-                            saw_socket_close: false,
-                        },
-                    )
-                    .is_some()
+                // Distinct query roles legitimately share one connection; what
+                // must stay unique is the wire subscription each role owns.
+                if queries
+                    .values()
+                    .any(|state| state.subscription == subscription)
+                    || queries
+                        .insert(
+                            role,
+                            QueryState {
+                                connection,
+                                subscription,
+                                saw_eose: false,
+                                saw_text_close: false,
+                                saw_socket_close: false,
+                            },
+                        )
+                        .is_some()
                 {
                     return Err(CanaryError::new("wire repeated an exact query role"));
                 }

@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -14,7 +12,13 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
 use fava_state::RelaySessionKey;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
+    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
+    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
+use fava_transport_testkit::detached_lease;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventId};
 use nostr::key::Keys;
@@ -220,23 +224,30 @@ impl Shared {
         )
     }
 
-    fn sent(&self, inbox: &Arc<Inbox>, frame: &str) -> HandoffOutcome {
+    fn sent(
+        &self,
+        inbox: &Arc<Inbox>,
+        identity: &RelaySessionIdentity,
+        correlation: HandoffCorrelation,
+        frame: &str,
+    ) -> HandoffOutcome {
+        let refuse = |reason: &str| HandoffOutcome::NotHandedOff {
+            identity: identity.clone(),
+            correlation,
+            reason: TransportFailure::Disconnected {
+                detail: BoundedReason::new(reason),
+            },
+        };
         let Ok(value) = serde_json::from_str::<Value>(frame) else {
-            return HandoffOutcome::NotHandedOff {
-                reason: "script received invalid JSON".to_owned(),
-            };
+            return refuse("script received invalid JSON");
         };
         let Some(command) = value.get(0).and_then(Value::as_str) else {
-            return HandoffOutcome::NotHandedOff {
-                reason: "script received untyped frame".to_owned(),
-            };
+            return refuse("script received untyped frame");
         };
         match command {
             "REQ" => {
                 let Some(subscription) = value.get(1).and_then(Value::as_str) else {
-                    return HandoffOutcome::NotHandedOff {
-                        reason: "REQ omitted subscription id".to_owned(),
-                    };
+                    return refuse("REQ omitted subscription id");
                 };
                 self.state
                     .lock()
@@ -251,9 +262,7 @@ impl Shared {
                     .cloned()
                     .and_then(|value| serde_json::from_value::<Event>(value).ok());
                 let Some(event) = event else {
-                    return HandoffOutcome::NotHandedOff {
-                        reason: "EVENT omitted a valid signed event".to_owned(),
-                    };
+                    return refuse("EVENT omitted a valid signed event");
                 };
                 *inbox.publication.lock().expect("publication lock") = Some(event.id);
                 self.state
@@ -267,89 +276,116 @@ impl Shared {
                 self.changed.notify_waiters();
             }
             "CLOSE" => {}
-            _ => {
-                return HandoffOutcome::NotHandedOff {
-                    reason: "script received an unsupported command".to_owned(),
-                };
-            }
+            _ => return refuse("script received an unsupported command"),
         }
-        HandoffOutcome::HandedOff
+        HandoffOutcome::HandedOff {
+            identity: identity.clone(),
+            correlation,
+        }
     }
 }
 
 impl Transport for ScriptedTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         let generation = self.shared.opens.fetch_add(1, Ordering::SeqCst) + 1;
         let inbox = Arc::new(Inbox::new());
         let owner = Arc::clone(&self.shared);
         Box::pin(async move {
-            Ok(Arc::new(ScriptedSession {
-                key,
-                generation,
+            let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
+                identity: RelaySessionIdentity {
+                    key: request.key,
+                    generation: fava_query::OperationGeneration(generation),
+                },
                 owner,
                 inbox,
-            }) as Arc<dyn RelaySession>)
+            });
+            Ok(detached_lease(session))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<std::num::NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 
 struct ScriptedSession {
-    key: RelaySessionKey,
-    generation: u64,
+    identity: RelaySessionIdentity,
     owner: Arc<Shared>,
     inbox: Arc<Inbox>,
 }
 
-impl RelaySession for ScriptedSession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
+/// One consumer's view of a scripted session's inbound frames.
+struct ScriptedStream {
+    identity: RelaySessionIdentity,
+    inbox: Arc<Inbox>,
+}
 
-    fn generation(&self) -> u64 {
-        self.generation
-    }
-
-    fn send(&self, frame: String) -> Pin<Box<dyn Future<Output = HandoffOutcome> + Send + '_>> {
-        Box::pin(async move {
-            if self.inbox.closed.load(Ordering::SeqCst) {
-                HandoffOutcome::NotHandedOff {
-                    reason: "scripted session is closed".to_owned(),
-                }
-            } else {
-                self.owner.sent(&self.inbox, &frame)
-            }
-        })
-    }
-
-    fn next_message(
-        &self,
-    ) -> Pin<Box<dyn Future<Output = Result<String, TransportError>> + Send + '_>> {
+impl RelayMessageStream for ScriptedStream {
+    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
         Box::pin(async move {
             loop {
                 let notified = self.inbox.notify.notified();
                 if let Some(frame) = self.inbox.frames.lock().expect("inbox lock").pop_front() {
-                    return frame;
+                    return frame.map(|text| RelayInbound::Frame {
+                        identity: self.identity.clone(),
+                        frame: text.into_bytes(),
+                        received_at: fava_state::Timestamp::now(),
+                    });
                 }
                 if self.inbox.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed);
+                    return Err(TransportError::Closed(self.identity.clone()));
                 }
                 if tokio::time::timeout(DEADLINE, notified).await.is_err() {
                     let queued = self.inbox.frames.lock().expect("inbox lock").len();
                     let publication = *self.inbox.publication.lock().expect("publication lock");
-                    return Err(TransportError::Disconnected(format!(
-                        "script inbound deadline exceeded {DEADLINE:?}; last state: queued={queued}, closed={}, publication={publication:?}",
-                        self.inbox.closed.load(Ordering::SeqCst)
-                    )));
+                    return Err(TransportError::Disconnected(
+                        TransportFailure::Disconnected {
+                            detail: BoundedReason::new(format!(
+                                "script inbound deadline exceeded {DEADLINE:?}; last state: queued={queued}, closed={}, publication={publication:?}",
+                                self.inbox.closed.load(Ordering::SeqCst)
+                            )),
+                        },
+                    ));
                 }
             }
         })
     }
 
-    fn close(&self) -> Pin<Box<dyn Future<Output = Result<(), TransportError>> + Send + '_>> {
+    fn close(&mut self) {}
+}
+
+impl RelaySession for ScriptedSession {
+    fn identity(&self) -> RelaySessionIdentity {
+        self.identity.clone()
+    }
+
+    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
+        Box::pin(async move {
+            if self.inbox.closed.load(Ordering::SeqCst) {
+                return HandoffOutcome::NotHandedOff {
+                    identity: self.identity.clone(),
+                    correlation,
+                    reason: TransportFailure::SessionClosed,
+                };
+            }
+            let text = String::from_utf8(frame).unwrap_or_default();
+            self.owner
+                .sent(&self.inbox, &self.identity, correlation, &text)
+        })
+    }
+
+    fn messages(&self) -> Box<dyn RelayMessageStream> {
+        Box::new(ScriptedStream {
+            identity: self.identity.clone(),
+            inbox: Arc::clone(&self.inbox),
+        })
+    }
+
+    fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
             self.inbox.closed.store(true, Ordering::SeqCst);
             if let Some(event_id) = *self.inbox.publication.lock().expect("publication lock") {
@@ -362,7 +398,7 @@ impl RelaySession for ScriptedSession {
             }
             self.owner.changed.notify_waiters();
             self.inbox.notify.notify_waiters();
-            Ok(())
+            Ok(ReleaseOutcome::Closed)
         })
     }
 }

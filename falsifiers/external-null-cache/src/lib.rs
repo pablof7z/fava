@@ -44,6 +44,19 @@ impl EventCache for NullEventCache {
         Ok(None)
     }
 
+    fn transact(
+        &self,
+        decide: &dyn for<'a> Fn(&'a [CachedEvent]) -> Vec<CacheMutation>,
+    ) -> Result<usize, EventCacheError> {
+        if decide(&[]).is_empty() {
+            Ok(0)
+        } else {
+            Err(EventCacheError::Refused(
+                "null cache retains no relay events".to_owned(),
+            ))
+        }
+    }
+
     fn len(&self) -> Result<usize, EventCacheError> {
         Ok(0)
     }
@@ -101,7 +114,9 @@ mod tests {
     async fn external_cache_assembles_without_private_access() {
         let engine = Fava::builder()
             .event_cache(Arc::new(NullEventCache))
-            .write_store(Arc::new(fava_write_store_memory::MemoryWriteStore::default()))
+            .write_store(Arc::new(
+                fava_write_store_memory::MemoryWriteStore::default(),
+            ))
             .query_evaluator(Arc::new(fava_query_standard::StandardQueryEvaluator))
             .build()
             .expect("public contracts are sufficient for external assembly");

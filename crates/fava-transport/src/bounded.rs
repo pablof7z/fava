@@ -1,8 +1,8 @@
-//! Fava-owned byte bound on relay- and OS-supplied text.
+//! Relay- and OS-supplied text retained under a Fava-owned byte bound.
 
 /// Relay- or OS-supplied text retained under a Fava-owned byte bound.
 ///
-/// Authority: GOALS:1428 (OPS-004, "frame and message sizes"), GOALS:1105
+/// Authority: GOALS:1439 (OPS-004, "frame and message sizes"), GOALS:1111
 /// (RELAY-008, verbatim evidence). Truncation is recorded, never silent.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BoundedReason {
@@ -11,7 +11,9 @@ pub struct BoundedReason {
 }
 
 impl BoundedReason {
-    /// Maximum retained bytes.
+    /// Maximum retained bytes. Long enough for every NIP-01 `CLOSED`/`NOTICE`
+    /// prefix that carries a machine-readable reason word, short enough that
+    /// 256 retained facts per diagnostics category is a real memory bound.
     pub const MAX_BYTES: usize = 512;
 
     /// Retain at most `MAX_BYTES`, recording how many were dropped.

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -24,7 +25,10 @@ use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
 use fava_write::WriteIntent;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -411,16 +415,23 @@ impl RouterSession for StaticRouterSession {
 pub struct NoopTransport;
 
 impl Transport for NoopTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let _ = request;
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "not used by recording publisher".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("not used by recording publisher"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 

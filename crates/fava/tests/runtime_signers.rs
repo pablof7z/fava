@@ -1,6 +1,7 @@
 //! Public-facade evidence for runtime signer attachment and exact-key wakeup.
 
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,7 +15,10 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelaySessionKey, RelayUrl};
-use fava_transport::{RelaySession, Transport, TransportError};
+use fava_transport::{
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
+};
 use fava_write::{Event, PublicKey, UnsignedEvent};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
@@ -214,16 +218,23 @@ async fn wait_until(predicate: impl Fn() -> bool) {
 struct NoopTransport;
 
 impl Transport for NoopTransport {
-    fn open_session(
-        &self,
-        _key: RelaySessionKey,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn RelaySession>, TransportError>> + Send + '_>>
-    {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
+        let _ = request;
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
-                "not used by recording publisher".to_owned(),
+                TransportFailure::Disconnected {
+                    detail: BoundedReason::new("not used by recording publisher"),
+                },
             ))
         })
+    }
+
+    fn holders(&self, _key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        None
+    }
+
+    fn shutdown(&self, _deadline: Duration) -> TransportShutdownFuture<'_> {
+        Box::pin(async { Ok(()) })
     }
 }
 

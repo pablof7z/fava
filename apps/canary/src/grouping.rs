@@ -16,7 +16,9 @@ use fava_subscriptions::{
 };
 use fava_subscriptions_no_grouping::planner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
-use fava_transport::{HandoffOutcome, RelaySession, Transport};
+use fava_transport::{
+    HandoffCorrelation, HandoffOutcome, RelayMessageStream, RelaySession, Transport,
+};
 use fava_transport_websocket::WebSocketTransport;
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, decode_relay, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
@@ -281,10 +283,13 @@ async fn execute_plan(
             PlanRevision(1),
         )
         .map_err(error)?;
-    let session = WebSocketTransport::default()
-        .open_session(key)
+    let transport = WebSocketTransport::default();
+    let lease = transport
+        .acquire_session(canary_session_request(key))
         .await
         .map_err(error)?;
+    let session = std::sync::Arc::clone(lease.session());
+    let mut inbound = session.messages();
     for planned in &plan.open {
         let message = ClientMessage::Req {
             subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
@@ -294,17 +299,23 @@ async fn execute_plan(
                 .map(|filter| std::borrow::Cow::Owned(filter.clone()))
                 .collect(),
         };
-        let frame = encode_client(&message).map_err(error)?;
-        if session.send(frame).await != HandoffOutcome::HandedOff {
+        let frame = encode_client(&message).map_err(error)?.into_bytes();
+        if !matches!(
+            session.send(frame, HandoffCorrelation(0)).await,
+            HandoffOutcome::HandedOff { .. }
+        ) {
             return Err(CanaryError::new("planner REQ was not handed off"));
         }
     }
-    let capacity_refusal = read_until_terminal(session.as_ref(), &plan, cache).await?;
+    let capacity_refusal =
+        read_until_terminal(session.as_ref(), inbound.as_mut(), &plan, cache).await?;
     for id in plan.attribution.ids() {
-        let frame = encode_client(&ClientMessage::close(id.clone())).map_err(error)?;
-        let _ = session.send(frame).await;
+        let frame = encode_client(&ClientMessage::close(id.clone()))
+            .map_err(error)?
+            .into_bytes();
+        let _ = session.send(frame, HandoffCorrelation(1)).await;
     }
-    session.close().await.map_err(error)?;
+    lease.release().await.map_err(error)?;
     Ok(PlanExecution {
         request_count: plan.open.len(),
         mode: "single-plan",
@@ -315,6 +326,7 @@ async fn execute_plan(
 
 async fn read_until_terminal(
     session: &dyn RelaySession,
+    inbound: &mut dyn RelayMessageStream,
     plan: &SubscriptionPlan,
     cache: &MemoryEventCache,
 ) -> CanaryResult<Option<String>> {
@@ -322,7 +334,7 @@ async fn read_until_terminal(
     tokio::time::timeout(Duration::from_secs(20), async {
         let mut complete = BTreeSet::new();
         while complete.len() < plan.attribution.len() {
-            match decode_relay(&session.next_message().await.map_err(error)?).map_err(error)? {
+            match decode_relay(&next_frame(inbound).await?).map_err(error)? {
                 RelayMessage::Event {
                     subscription_id,
                     event,
@@ -330,7 +342,7 @@ async fn read_until_terminal(
                     let id = subscription_id.into_owned();
                     admit_subscription_event(
                         cache,
-                        session.key(),
+                        &session.identity().key,
                         &accepted,
                         &id,
                         event.into_owned(),
@@ -684,3 +696,44 @@ fn error(value: impl std::fmt::Display) -> CanaryError {
 #[cfg(test)]
 #[path = "grouping_tests.rs"]
 mod tests;
+
+/// The Fava-owned deadlines and bounds this canary applies to one session.
+fn canary_session_request(key: fava_state::RelaySessionKey) -> fava_transport::OpenRelaySession {
+    fava_transport::OpenRelaySession {
+        key,
+        deadlines: fava_transport::TransportDeadlines {
+            establish: Duration::from_secs(10),
+            write: Duration::from_secs(5),
+            idle: Duration::from_secs(60),
+            close: Duration::from_secs(5),
+        },
+        bounds: fava_transport::TransportBounds {
+            inbound_frames: nonzero(256),
+            outbound_frames: nonzero(256),
+            max_frame_bytes: nonzero(512 * 1024),
+        },
+        reconnect_attempts: None,
+    }
+}
+
+fn nonzero(value: usize) -> std::num::NonZeroUsize {
+    std::num::NonZeroUsize::new(value).expect("constant is non-zero")
+}
+
+/// The next complete relay frame this consumer sees.
+async fn next_frame(inbound: &mut dyn fava_transport::RelayMessageStream) -> CanaryResult<String> {
+    loop {
+        match inbound.next_inbound().await.map_err(error)? {
+            fava_transport::RelayInbound::Frame { frame, .. } => {
+                return String::from_utf8(frame)
+                    .map_err(|failure| CanaryError::new(failure.to_string()));
+            }
+            fava_transport::RelayInbound::Disconnected { reason, .. }
+            | fava_transport::RelayInbound::ReconnectExhausted { reason, .. } => {
+                return Err(CanaryError::new(format!("relay session ended: {reason:?}")));
+            }
+            fava_transport::RelayInbound::Reconnected { .. }
+            | fava_transport::RelayInbound::Lost { .. } => {}
+        }
+    }
+}

@@ -1,188 +1,218 @@
 //! WebSocket implementation of the Fava transport contract.
+//!
+//! One socket per [`RelaySessionKey`], shared by every lease holder. The
+//! registry, the refcount, the four deadlines, the two bounded queues, and
+//! reconnect pacing all live here, because that is what `ARCH:1588-1594` and
+//! `GOALS:936` assign to the transport implementer.
 
+mod backoff;
+mod driver;
+mod fanout;
+mod session;
+
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use fava_state::RelaySessionKey;
-use fava_transport::{HandoffOutcome, RelaySession, Transport, TransportError};
-use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use fava_transport::{
+    LeaseRelease, OpenRelaySession, RelaySession, RelaySessionFuture, RelaySessionIdentity,
+    RelaySessionLease, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportShutdownFuture,
+};
+use tokio::sync::mpsc;
 
-type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
-type SocketSink = SplitSink<Socket, Message>;
-type SocketStream = SplitStream<Socket>;
+use crate::driver::establish;
+use crate::session::{SessionShared, WebSocketRelaySession};
 
-/// WebSocket relay transport with an exact text-frame size bound.
+/// WebSocket relay transport with one shared session per relay-access identity.
+#[derive(Default)]
 pub struct WebSocketTransport {
-    max_frame_bytes: NonZeroUsize,
-    next_generation: AtomicU64,
+    registry: Arc<Registry>,
 }
 
-impl Default for WebSocketTransport {
-    fn default() -> Self {
-        Self::bounded(NonZeroUsize::new(1_048_576).expect("constant is non-zero"))
-    }
+#[derive(Default)]
+struct Registry {
+    entries: Mutex<BTreeMap<RelaySessionKey, Entry>>,
+    shutting_down: AtomicBool,
+    entropy: AtomicU64,
+}
+
+struct Entry {
+    session: Arc<WebSocketRelaySession>,
+    holders: usize,
 }
 
 impl WebSocketTransport {
-    /// Construct a WebSocket transport with one exact text-frame size bound.
+    /// Construct a transport with an empty session registry.
     #[must_use]
-    pub const fn bounded(max_frame_bytes: NonZeroUsize) -> Self {
-        Self {
-            max_frame_bytes,
-            next_generation: AtomicU64::new(0),
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reuse the live session for `key`, if one is registered.
+    ///
+    /// # Panics
+    ///
+    /// If a thread panicked while holding the session registry.
+    fn reuse(&self, key: &RelaySessionKey) -> Option<RelaySessionLease> {
+        let mut entries = self
+            .registry
+            .entries
+            .lock()
+            .expect("registry is not poisoned");
+        let entry = entries.get_mut(key)?;
+        entry.holders += 1;
+        let session = Arc::clone(&entry.session);
+        let identity = session.identity();
+        Some(RelaySessionLease::new(
+            session,
+            Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
+            identity,
+        ))
     }
 }
 
 impl Transport for WebSocketTransport {
-    fn open_session(
-        &self,
-        key: RelaySessionKey,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<Arc<dyn RelaySession>, TransportError>>
-                + Send
-                + '_,
-        >,
-    > {
+    fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
-            let generation = self
-                .next_generation
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-                    current.checked_add(1)
-                })
-                .map_err(|_| {
-                    TransportError::ConnectionRefused(
-                        "relay session generation exhausted".to_owned(),
-                    )
-                })?
-                + 1;
-            let (socket, _) = connect_async(key.relay.as_str())
+            if self.registry.shutting_down.load(Ordering::SeqCst) {
+                return Err(TransportError::ShuttingDown);
+            }
+            if let Some(lease) = self.reuse(&request.key) {
+                return Ok(lease);
+            }
+
+            let entropy = self
+                .registry
+                .entropy
+                .fetch_add(0x9E37_79B9, Ordering::SeqCst);
+            let shared = Arc::new(SessionShared::new(&request, entropy));
+            let socket = establish(&shared)
                 .await
-                .map_err(|error| TransportError::ConnectionRefused(error.to_string()))?;
-            let (sink, stream) = socket.split();
-            Ok(Arc::new(WebSocketRelaySession {
-                key,
-                generation,
-                max_frame_bytes: self.max_frame_bytes,
-                closed: AtomicBool::new(false),
-                sink: Mutex::new(sink),
-                stream: Mutex::new(stream),
-            }) as Arc<dyn RelaySession>)
-        })
-    }
-}
+                .map_err(TransportError::ConnectionRefused)?;
+            let (outbound, inbound) = mpsc::channel(request.bounds.outbound_frames.get());
+            tokio::spawn(driver::drive(Arc::clone(&shared), inbound, socket));
 
-struct WebSocketRelaySession {
-    key: RelaySessionKey,
-    generation: u64,
-    max_frame_bytes: NonZeroUsize,
-    closed: AtomicBool,
-    sink: Mutex<SocketSink>,
-    stream: Mutex<SocketStream>,
-}
-
-impl RelaySession for WebSocketRelaySession {
-    fn key(&self) -> &RelaySessionKey {
-        &self.key
-    }
-
-    fn generation(&self) -> u64 {
-        self.generation
-    }
-
-    fn send(
-        &self,
-        frame: String,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
-        Box::pin(async move {
-            if self.closed.load(Ordering::SeqCst) {
-                return HandoffOutcome::NotHandedOff {
-                    reason: "relay session is closed".to_owned(),
-                };
-            }
-            if frame.len() > self.max_frame_bytes.get() {
-                return HandoffOutcome::NotHandedOff {
-                    reason: format!(
-                        "frame size {} exceeds bound {}",
-                        frame.len(),
-                        self.max_frame_bytes
-                    ),
-                };
-            }
-            match self
-                .sink
+            let session = Arc::new(WebSocketRelaySession { shared, outbound });
+            let identity = session.identity();
+            // Another acquire may have dialled the same key while this one was
+            // establishing. The first registration wins; this socket is closed
+            // rather than leaked, so the key keeps exactly one live session.
+            let mut entries = self
+                .registry
+                .entries
                 .lock()
-                .await
-                .send(Message::Text(frame.into()))
-                .await
-            {
-                Ok(()) => HandoffOutcome::HandedOff,
-                Err(error) => HandoffOutcome::Ambiguous {
-                    reason: error.to_string(),
+                .expect("registry is not poisoned");
+            if let Some(existing) = entries.get_mut(&request.key) {
+                existing.holders += 1;
+                let winner = Arc::clone(&existing.session);
+                drop(entries);
+                let loser = session;
+                tokio::spawn(async move { loser.close().await });
+                let identity = winner.identity();
+                return Ok(RelaySessionLease::new(
+                    winner,
+                    Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
+                    identity,
+                ));
+            }
+            entries.insert(
+                request.key.clone(),
+                Entry {
+                    session: Arc::clone(&session),
+                    holders: 1,
                 },
-            }
+            );
+            drop(entries);
+            Ok(RelaySessionLease::new(
+                session,
+                Arc::clone(&self.registry) as Arc<dyn LeaseRelease>,
+                identity,
+            ))
         })
     }
 
-    fn next_message(
-        &self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, TransportError>> + Send + '_>,
-    > {
-        Box::pin(async move {
-            loop {
-                if self.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed);
-                }
-                let message = self.stream.lock().await.next().await;
-                match message {
-                    Some(Ok(Message::Text(text))) => return Ok(text.to_string()),
-                    Some(Ok(Message::Close(frame))) => {
-                        self.closed.store(true, Ordering::SeqCst);
-                        return Err(TransportError::Disconnected(format!("{frame:?}")));
-                    }
-                    Some(Ok(Message::Binary(_))) => {
-                        return Err(TransportError::InvalidFrame(
-                            "binary WebSocket frame".to_owned(),
-                        ));
-                    }
-                    Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => {}
-                    Some(Err(error)) => {
-                        self.closed.store(true, Ordering::SeqCst);
-                        return Err(TransportError::Disconnected(error.to_string()));
-                    }
-                    None => {
-                        self.closed.store(true, Ordering::SeqCst);
-                        return Err(TransportError::Disconnected(
-                            "WebSocket stream ended".to_owned(),
-                        ));
-                    }
-                }
-            }
-        })
+    fn holders(&self, key: &RelaySessionKey) -> Option<NonZeroUsize> {
+        let entries = self
+            .registry
+            .entries
+            .lock()
+            .expect("registry is not poisoned");
+        entries
+            .get(key)
+            .and_then(|entry| NonZeroUsize::new(entry.holders))
     }
 
-    fn close(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), TransportError>> + Send + '_>>
-    {
+    fn shutdown(&self, deadline: Duration) -> TransportShutdownFuture<'_> {
         Box::pin(async move {
-            if self.closed.swap(true, Ordering::SeqCst) {
-                return Ok(());
+            self.registry.shutting_down.store(true, Ordering::SeqCst);
+            let closing: Vec<_> = {
+                let mut entries = self
+                    .registry
+                    .entries
+                    .lock()
+                    .expect("registry is not poisoned");
+                std::mem::take(&mut *entries)
+                    .into_values()
+                    .map(|entry| entry.session)
+                    .collect()
+            };
+            let remaining = closing.len();
+            let joined = tokio::time::timeout(deadline, async {
+                for session in closing {
+                    let _ = session.close().await;
+                }
+            })
+            .await;
+            if joined.is_err() {
+                return Err(TransportError::ShutdownIncomplete { remaining });
             }
-            self.sink
-                .lock()
-                .await
-                .close()
-                .await
-                .map_err(|error| TransportError::Disconnected(error.to_string()))
+            Ok(())
+        })
+    }
+}
+
+impl Registry {
+    fn decrement(
+        &self,
+        key: &RelaySessionKey,
+    ) -> Option<(Arc<WebSocketRelaySession>, ReleaseOutcome)> {
+        let mut entries = self.entries.lock().expect("registry is not poisoned");
+        let entry = entries.get_mut(key)?;
+        entry.holders = entry.holders.saturating_sub(1);
+        if let Some(holders) = NonZeroUsize::new(entry.holders) {
+            return Some((
+                Arc::clone(&entry.session),
+                ReleaseOutcome::Retained { holders },
+            ));
+        }
+        let entry = entries.remove(key)?;
+        Some((entry.session, ReleaseOutcome::Closed))
+    }
+}
+
+impl LeaseRelease for Registry {
+    fn release_now(&self, identity: &RelaySessionIdentity) {
+        if let Some((session, ReleaseOutcome::Closed)) = self.decrement(&identity.key) {
+            tokio::spawn(async move { session.close().await });
+        }
+    }
+
+    fn release_deterministically<'a>(
+        &'a self,
+        identity: &'a RelaySessionIdentity,
+    ) -> ReleaseFuture<'a> {
+        Box::pin(async move {
+            let Some((session, outcome)) = self.decrement(&identity.key) else {
+                return Err(TransportError::Closed(identity.clone()));
+            };
+            if outcome == ReleaseOutcome::Closed {
+                session.close().await?;
+            }
+            Ok(outcome)
         })
     }
 }
