@@ -3,10 +3,10 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
-use fava_query::{SourceTerminationCause, 
+use fava_query::{
     OpenedQuerySource, Query, QueryAcquisition, QuerySource, QuerySourceClosed, QuerySourceError,
     SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot,
-    SourceStatus,
+    SourceStatus, SourceTerminationCause,
 };
 use fava_router_outbox::OutboxRouter;
 use fava_routing::{CoverageState, RoutePlan, RouteRequest, RouteTarget, Router};

@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 fava-query.workspace = true
 fava-state.workspace = true
+fava-transport.workspace = true
 fava-wire.workspace = true
 nostr.workspace = true
 thiserror.workspace = true

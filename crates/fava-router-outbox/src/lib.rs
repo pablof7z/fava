@@ -6,9 +6,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use fava_nip65::{RelayList, RelayListError};
-use fava_query::{SourceTerminationCause, 
+use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, SourceChanges, SourceEvent,
-    SourceSnapshot, SourceStatus,
+    SourceSnapshot, SourceStatus, SourceTerminationCause,
 };
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,

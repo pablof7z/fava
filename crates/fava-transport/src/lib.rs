@@ -1,9 +1,12 @@
 //! Replaceable relay-session transport contracts.
 
+mod bounded;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+pub use bounded::BoundedReason;
 use fava_state::RelaySessionKey;
 use thiserror::Error;
 

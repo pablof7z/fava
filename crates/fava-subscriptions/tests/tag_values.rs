@@ -1,6 +1,8 @@
 //! Exact custom-tag Query-to-wire evidence.
 
-use fava_query::{Query, SingleLetterTag};
+use std::num::NonZeroU64;
+
+use fava_query::{ObservationId, Query, QueryBranchId, SingleLetterTag};
 use fava_subscriptions::demand_for_query;
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 
@@ -9,8 +11,10 @@ fn tag(key: char) -> SingleLetterTag {
 }
 
 fn encode_query(id: &str, query: &Query) -> String {
-    let demand = demand_for_query(SubscriptionId::new(id), query);
-    encode_client(&ClientMessage::req(demand.subscription_id, demand.filter)).expect("REQ encodes")
+    let observation =
+        ObservationId::new(NonZeroU64::new(1).expect("non-zero observation identity"));
+    let demand = demand_for_query(observation, QueryBranchId::ROOT, query);
+    encode_client(&ClientMessage::req(SubscriptionId::new(id), demand.filter)).expect("REQ encodes")
 }
 
 #[test]

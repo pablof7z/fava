@@ -10,7 +10,10 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_ingest::admit_subscription_event;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
-use fava_subscriptions::{RelayDemand, SubscriptionPlan, SubscriptionPlanner, demand_for_query};
+use fava_subscriptions::{
+    InstalledSubscriptions, ObservationId, PlanRevision, QueryBranchId, RelayDemand,
+    RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, demand_for_query,
+};
 use fava_subscriptions_no_grouping::planner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::{HandoffOutcome, RelaySession, Transport};
@@ -69,19 +72,14 @@ pub async fn run_grouping_scenario(options: SmokeOptions) -> CanaryResult<PathBu
     let demand = corpus
         .iter()
         .enumerate()
-        .map(|(index, item)| {
-            demand_for_query(
-                SubscriptionId::new(format!("tag-logical-{index:03}")),
-                &item.query,
-            )
-        })
+        .map(|(index, item)| demand_for_query(observation(index), QueryBranchId::ROOT, &item.query))
         .collect::<Vec<_>>();
 
     let standard_cache = Arc::new(MemoryEventCache::default());
     let standard = execute_plan(
         &relay,
         &demand,
-        &StandardSubscriptionPlanner::default(),
+        &StandardSubscriptionPlanner::new(),
         standard_cache.as_ref(),
     )
     .await?;
@@ -128,25 +126,54 @@ fn prove_case_isolation(relay: &RelaySessionKey) -> CanaryResult<()> {
     let uppercase = literal_key('D')?;
     let demand = [
         demand_for_query(
-            SubscriptionId::new("case-lowercase"),
+            observation(0),
+            QueryBranchId::ROOT,
             &Query::events().tag_values(lowercase, ["case-isolation"]),
         ),
         demand_for_query(
-            SubscriptionId::new("case-uppercase"),
+            observation(1),
+            QueryBranchId::ROOT,
             &Query::events().tag_values(uppercase, ["case-isolation"]),
         ),
     ];
-    let plan = StandardSubscriptionPlanner::default()
-        .plan(relay, &demand)
+    let plan = StandardSubscriptionPlanner::new()
+        .plan(
+            relay,
+            &demand,
+            &RelayReadConstraints::unknown(),
+            &InstalledSubscriptions::empty(),
+            PlanRevision(1),
+        )
         .map_err(error)?;
-    if plan.messages.len() != 2 || plan.attribution.len() != 2 {
+    if plan.open.len() != 2 || plan.attribution.len() != 2 {
         return Err(CanaryError::new(format!(
-            "opposite-case tag axes were not isolated: messages={}, attribution={}",
-            plan.messages.len(),
+            "opposite-case tag axes were not isolated: requests={}, attribution={}",
+            plan.open.len(),
             plan.attribution.len()
         )));
     }
     Ok(())
+}
+
+/// One canary observation identity. Index zero is the first observation.
+fn observation(index: usize) -> ObservationId {
+    let sequence = u64::try_from(index).unwrap_or(u64::MAX).saturating_add(1);
+    ObservationId::new(
+        std::num::NonZeroU64::new(sequence).expect("saturating_add(1) is never zero"),
+    )
+}
+
+/// Exact wire filters the plan accepted, keyed by the wire id that carries them.
+fn accepted_filters(plan: &SubscriptionPlan) -> BTreeMap<SubscriptionId, Filter> {
+    let mut accepted = BTreeMap::new();
+    for id in plan.attribution.ids() {
+        if let Some(entry) = plan.attribution.get(id)
+            && let Some(filter) = entry.filters.first()
+        {
+            accepted.insert(id.clone(), filter.clone());
+        }
+    }
+    accepted
 }
 
 #[derive(Clone)]
@@ -245,25 +272,41 @@ async fn execute_plan(
     cache: &MemoryEventCache,
 ) -> CanaryResult<PlanExecution> {
     let key = RelaySessionKey::new(relay.clone(), RelayAccess::public());
-    let plan = planner.plan(&key, demand).map_err(error)?;
+    let plan = planner
+        .plan(
+            &key,
+            demand,
+            &RelayReadConstraints::unknown(),
+            &InstalledSubscriptions::empty(),
+            PlanRevision(1),
+        )
+        .map_err(error)?;
     let session = WebSocketTransport::default()
         .open_session(key)
         .await
         .map_err(error)?;
-    for message in &plan.messages {
-        let frame = encode_client(message).map_err(error)?;
+    for planned in &plan.open {
+        let message = ClientMessage::Req {
+            subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
+            filters: planned
+                .filters
+                .iter()
+                .map(|filter| std::borrow::Cow::Owned(filter.clone()))
+                .collect(),
+        };
+        let frame = encode_client(&message).map_err(error)?;
         if session.send(frame).await != HandoffOutcome::HandedOff {
             return Err(CanaryError::new("planner REQ was not handed off"));
         }
     }
     let capacity_refusal = read_until_terminal(session.as_ref(), &plan, cache).await?;
-    for id in plan.attribution.keys() {
+    for id in plan.attribution.ids() {
         let frame = encode_client(&ClientMessage::close(id.clone())).map_err(error)?;
         let _ = session.send(frame).await;
     }
     session.close().await.map_err(error)?;
     Ok(PlanExecution {
-        request_count: plan.messages.len(),
+        request_count: plan.open.len(),
         mode: "single-plan",
         concurrent_attempt_requests: 0,
         capacity_refusal,
@@ -275,6 +318,7 @@ async fn read_until_terminal(
     plan: &SubscriptionPlan,
     cache: &MemoryEventCache,
 ) -> CanaryResult<Option<String>> {
+    let accepted = accepted_filters(plan);
     tokio::time::timeout(Duration::from_secs(20), async {
         let mut complete = BTreeSet::new();
         while complete.len() < plan.attribution.len() {
@@ -287,7 +331,7 @@ async fn read_until_terminal(
                     admit_subscription_event(
                         cache,
                         session.key(),
-                        &plan.attribution,
+                        &accepted,
                         &id,
                         event.into_owned(),
                         Timestamp::now(),
@@ -296,7 +340,7 @@ async fn read_until_terminal(
                 }
                 RelayMessage::EndOfStoredEvents(id) => {
                     let id = id.into_owned();
-                    if plan.attribution.contains_key(&id) {
+                    if plan.attribution.get(&id).is_some() {
                         complete.insert(id);
                     }
                 }

@@ -29,6 +29,7 @@ members = [
     "crates/fava-router-hints",
     "crates/fava-router-testkit",
     "crates/fava-subscriptions-standard",
+    "crates/fava-subscriptions-testkit",
     "crates/fava-signer",
     "crates/fava-signer-local",
     "crates/fava-session",
@@ -70,6 +71,7 @@ fava-router-fallback-relays = { path = "crates/fava-router-fallback-relays" }
 fava-router-hints = { path = "crates/fava-router-hints" }
 fava-router-testkit = { path = "crates/fava-router-testkit" }
 fava-subscriptions-standard = { path = "crates/fava-subscriptions-standard" }
+fava-subscriptions-testkit = { path = "crates/fava-subscriptions-testkit" }
 fava-signer = { path = "crates/fava-signer" }
 fava-signer-local = { path = "crates/fava-signer-local" }
 fava-session = { path = "crates/fava-session" }

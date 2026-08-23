@@ -595,6 +595,7 @@ version = "0.1.0"
 dependencies = [
  "fava-query",
  "fava-state",
+ "fava-transport",
  "fava-wire",
  "nostr",
  "thiserror",
@@ -604,6 +605,7 @@ dependencies = [
 name = "fava-subscriptions-no-grouping"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-state",
  "fava-subscriptions",
  "fava-wire",
@@ -614,11 +616,25 @@ dependencies = [
 name = "fava-subscriptions-standard"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
+ "fava-state",
+ "fava-subscriptions",
+ "fava-subscriptions-no-grouping",
+ "fava-subscriptions-testkit",
+ "fava-transport",
+ "fava-wire",
+ "nostr",
+ "serde_json",
+]
+
+[[package]]
+name = "fava-subscriptions-testkit"
+version = "0.1.0"
+dependencies = [
  "fava-state",
  "fava-subscriptions",
  "fava-wire",
  "nostr",
- "serde_json",
 ]
 
 [[package]]

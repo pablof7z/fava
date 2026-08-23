@@ -1,102 +1,48 @@
 //! Exact mapping from logical relay demand to Nostr subscriptions.
+//!
+//! The planner owns the whole mapping from *logical* demand to *wire*
+//! subscriptions and nothing else: it allocates every wire [`SubscriptionId`],
+//! decides grouping and splitting, and proves grouping did not change meaning
+//! (RELAY-003). It owns the diff — given the complete current demand for one
+//! relay and the set currently installed on that relay's session, it decides
+//! what to open, what to leave untouched, and what to close, and the close list
+//! *is* withdrawal identity. It owns typed in-plan shortfall: a plan that
+//! carries 60 of 64 filters is a [`SubscriptionPlan`] with four
+//! [`SubscriptionShortfall`] entries, not an `Err`. It owns [`validate_plan`],
+//! the conformance rules that define semantic equivalence for any planner.
+//!
+//! It owns no socket, no route policy, no observation state, and no refcount:
+//! the planner is told the truth about demand and answers.
 
-use std::collections::BTreeMap;
+mod conformance;
+mod constraints;
+mod demand;
+mod installed;
+mod plan;
+mod planner;
 
+use std::num::{NonZeroU32, NonZeroUsize};
+
+pub use conformance::{PlanConformanceError, validate_plan};
+pub use constraints::{DeclaredLimit, RelayReadConstraints};
+pub use demand::{DemandId, RelayDemand};
 use fava_query::Query;
-use fava_state::RelaySessionKey;
-use fava_wire::{ClientMessage, SubscriptionId};
+/// Cross-crate read-side identity, re-exported from its neutral home so a
+/// planner never has to depend on the lifecycle owner that mints it.
+pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
+pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
-use thiserror::Error;
+pub use plan::{
+    AttributedSubscription, PlanRevision, PlannedSubscription, ShortfallReason,
+    SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall, WithdrawalReason,
+    WithdrawnSubscription,
+};
+pub use planner::{SubscriptionPlanError, SubscriptionPlanner};
 
-/// One logical filter assigned to an exact Nostr subscription ID.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RelayDemand {
-    /// ID used to correlate wire EVENT, EOSE, and CLOSED messages.
-    pub subscription_id: SubscriptionId,
-    /// Exact NIP-01 filter requested from the relay.
-    pub filter: Filter,
-}
-
-impl RelayDemand {
-    /// Construct one exact logical relay demand.
-    #[must_use]
-    pub const fn new(subscription_id: SubscriptionId, filter: Filter) -> Self {
-        Self {
-            subscription_id,
-            filter,
-        }
-    }
-}
-
-/// Complete wire subscriptions and inbound attribution for one relay session.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SubscriptionPlan {
-    /// Exact relay session receiving the messages.
-    pub relay: RelaySessionKey,
-    /// Exact NIP-01 messages to hand off.
-    pub messages: Vec<ClientMessage<'static>>,
-    /// Accepted subscription IDs and their exact filters.
-    pub attribution: BTreeMap<SubscriptionId, Filter>,
-    /// Logical subscription IDs represented by each exact wire subscription.
-    pub demand: BTreeMap<SubscriptionId, Vec<SubscriptionId>>,
-}
-
-impl SubscriptionPlan {
-    /// Filter that authorizes inbound events for one subscription ID.
-    #[must_use]
-    pub fn filter(&self, id: &SubscriptionId) -> Option<&Filter> {
-        self.attribution.get(id)
-    }
-}
-
-/// Replaceable mapping from logical demand to exact Nostr subscriptions.
-pub trait SubscriptionPlanner: Send + Sync {
-    /// Produce a complete exact plan for one relay session.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SubscriptionPlanError`] when demand is empty, ambiguous, or
-    /// cannot be represented exactly.
-    fn plan(
-        &self,
-        relay: &RelaySessionKey,
-        demand: &[RelayDemand],
-    ) -> Result<SubscriptionPlan, SubscriptionPlanError>;
-}
-
-/// Exact subscription planning refusal.
-#[derive(Clone, Debug, Error, Eq, PartialEq)]
-pub enum SubscriptionPlanError {
-    /// No wire subscription corresponds to empty relay demand.
-    #[error("subscription planning requires non-empty demand")]
-    EmptyDemand,
-    /// Subscription IDs must be unique within one relay session plan.
-    #[error("duplicate subscription id: {0}")]
-    DuplicateSubscription(SubscriptionId),
-    /// Exact logical demand requires more subscriptions than the relay permits.
-    #[error("relay allows {maximum} subscriptions but exact demand requires {required}")]
-    TooManySubscriptions {
-        /// Exact wire subscription count required.
-        required: usize,
-        /// Declared maximum wire subscription count.
-        maximum: usize,
-    },
-    /// One exact REQ frame exceeds the relay's declared message-size limit.
-    #[error("REQ frame uses {bytes} bytes but relay allows {maximum}")]
-    FrameTooLarge {
-        /// Exact encoded frame size.
-        bytes: usize,
-        /// Declared maximum frame size.
-        maximum: usize,
-    },
-    /// Exact Nostr REQ encoding failed before handoff.
-    #[error("REQ encoding failed: {0}")]
-    Encoding(String),
-}
-
-/// Convert one public Query into one exact NIP-01 relay demand.
+/// Convert one public Query into the exact NIP-01 relay demand of one
+/// observation branch.
 #[must_use]
-pub fn demand_for_query(subscription_id: SubscriptionId, query: &Query) -> RelayDemand {
+pub fn demand_for_query(owner: ObservationId, branch: QueryBranchId, query: &Query) -> RelayDemand {
     let mut filter = Filter::new();
     if let Some(ids) = &query.selection().ids {
         filter = filter.ids(ids.iter().copied());
@@ -113,5 +59,19 @@ pub fn demand_for_query(subscription_id: SubscriptionId, query: &Query) -> Relay
     if let Some(limit) = query.result_limit() {
         filter = filter.limit(limit.get());
     }
-    RelayDemand::new(subscription_id, filter)
+    RelayDemand::new(owner, branch, filter, bounds_for_query(query))
+}
+
+/// Whole-query bounds a planner must not merge across.
+fn bounds_for_query(query: &Query) -> QueryBounds {
+    QueryBounds {
+        since: None,
+        until: None,
+        limit: query.result_limit().and_then(narrow_limit),
+    }
+}
+
+/// Narrow a whole-query result bound into the wire's 32-bit limit space.
+fn narrow_limit(limit: NonZeroUsize) -> Option<NonZeroU32> {
+    NonZeroU32::new(u32::try_from(limit.get()).unwrap_or(u32::MAX))
 }

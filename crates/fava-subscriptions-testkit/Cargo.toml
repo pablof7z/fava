@@ -1,5 +1,5 @@
 [package]
-name = "fava-subscriptions-no-grouping"
+name = "fava-subscriptions-testkit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,6 @@ fava-state.workspace = true
 fava-subscriptions.workspace = true
 fava-wire.workspace = true
 nostr.workspace = true
-
-[dev-dependencies]
-fava-query.workspace = true
-nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]
 workspace = true
