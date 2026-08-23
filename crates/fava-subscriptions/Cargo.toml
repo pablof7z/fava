@@ -12,5 +12,8 @@ fava-wire.workspace = true
 nostr.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+
 [lints]
 workspace = true

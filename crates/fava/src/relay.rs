@@ -180,17 +180,15 @@ async fn establish(
     next_subscription: &AtomicU64,
 ) -> Result<(Arc<dyn RelaySession>, BTreeMap<SubscriptionId, Filter>), String> {
     let owner = allocate_observation(next_subscription)?;
+    // The planner mints wire identity from the revision, so a reconnect must
+    // carry a fresh one or the new session would reuse the retired session's
+    // subscription ids (GOALS:426, QUERY-010).
+    let revision = PlanRevision(owner.get().get());
     let demand = [demand_for_query(owner, QueryBranchId::ROOT, query)];
     let constraints = RelayReadConstraints::unknown();
     let installed = InstalledSubscriptions::empty();
     let plan = planner
-        .plan(
-            session_key,
-            &demand,
-            &constraints,
-            &installed,
-            PlanRevision(1),
-        )
+        .plan(session_key, &demand, &constraints, &installed, revision)
         .map_err(|error| error.to_string())?;
     validate_plan(session_key, &demand, &constraints, &installed, &plan)
         .map_err(|error| error.to_string())?;

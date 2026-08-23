@@ -6,8 +6,8 @@ use std::num::NonZeroU64;
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions::{
-    AttributedSubscription, DemandId, PlanRevision, PlannedSubscription, RelayDemand,
-    SubscriptionAttribution, SubscriptionPlan,
+    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlannedSubscription,
+    RelayDemand, SubscriptionAttribution, SubscriptionPlan,
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
@@ -55,6 +55,10 @@ pub fn wire(name: &str) -> SubscriptionId {
 
 /// A plan that opens one wire subscription carrying `filters` for `serves`.
 #[must_use]
+#[allow(
+    dead_code,
+    reason = "shared fixture; not every test file uses every helper"
+)]
 pub fn opening(
     id: &SubscriptionId,
     filters: Vec<Filter>,
@@ -72,7 +76,11 @@ pub fn opening(
         close: Vec::new(),
         attribution: SubscriptionAttribution::from_entries([(
             id.clone(),
-            AttributedSubscription { filters, serves },
+            AttributedSubscription {
+                filters,
+                serves,
+                completeness: EoseCompleteness::Proven,
+            },
         )]),
         shortfalls: Vec::new(),
     }

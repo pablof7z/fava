@@ -76,6 +76,30 @@ pub struct AttributedSubscription {
     /// Every logical demand this wire subscription serves. An EOSE on this
     /// wire id settles every one of them.
     pub serves: BTreeSet<DemandId>,
+    /// Whether an EOSE on this wire id is proof the stored window is complete.
+    pub completeness: EoseCompleteness,
+}
+
+/// What an EOSE on one wire subscription actually proves.
+///
+/// The planner is the only component that knows both the filter it sent and
+/// what the relay declared, so it records the fact here rather than leaving the
+/// evidence layer to re-derive it from a filter it never saw.
+///
+/// Authority: GOALS:1066 (RELAY-004) "MUST NOT ... claim omitted work was
+/// completed."
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum EoseCompleteness {
+    /// The relay finished the complete stored window for every demand served.
+    #[default]
+    Proven,
+    /// The request carries a result-count bound, so the relay stopped at that
+    /// count rather than at the end of the window. EOSE proves nothing about
+    /// completeness for any demand this subscription serves.
+    LimitedRequest,
+    /// The relay declared a default filter limit, so even an unbounded request
+    /// is truncated at a count the client never chose.
+    RelayDefaultLimit,
 }
 
 impl SubscriptionAttribution {

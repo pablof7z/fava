@@ -12,10 +12,10 @@ use std::num::NonZeroUsize;
 
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions::{
-    AttributedSubscription, DeclaredLimit, InstalledSubscription, InstalledSubscriptions,
-    PlanConformanceError, PlanRevision, PlannedSubscription, RelayReadConstraints, ShortfallReason,
-    SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall, WithdrawalReason,
-    WithdrawnSubscription, validate_plan,
+    AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
+    InstalledSubscriptions, PlanConformanceError, PlanRevision, PlannedSubscription,
+    RelayReadConstraints, ShortfallReason, SubscriptionAttribution, SubscriptionPlan,
+    SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription, validate_plan,
 };
 use nostr::event::Kind;
 use nostr::filter::Filter;
@@ -194,6 +194,7 @@ fn retaining_a_subscription_that_is_not_installed_is_refused() {
             AttributedSubscription {
                 filters: vec![asked.filter.clone()],
                 serves: [demand_id(1)].into_iter().collect(),
+                completeness: EoseCompleteness::Proven,
             },
         )]),
         shortfalls: Vec::new(),
@@ -240,6 +241,7 @@ fn attribution_that_drops_a_filter_is_refused() {
         AttributedSubscription {
             filters: vec![first.filter.clone()],
             serves: [demand_id(1), demand_id(2)].into_iter().collect(),
+            completeness: EoseCompleteness::Proven,
         },
     )]);
 
@@ -313,6 +315,7 @@ fn exceeding_a_declared_subscription_count_is_refused() {
                 AttributedSubscription {
                     filters: vec![first.filter.clone()],
                     serves: [demand_id(1)].into_iter().collect(),
+                    completeness: EoseCompleteness::Proven,
                 },
             ),
             (
@@ -320,6 +323,7 @@ fn exceeding_a_declared_subscription_count_is_refused() {
                 AttributedSubscription {
                     filters: vec![second.filter.clone()],
                     serves: [demand_id(2)].into_iter().collect(),
+                    completeness: EoseCompleteness::Proven,
                 },
             ),
         ]),
@@ -381,6 +385,7 @@ fn unknown_declared_limits_constrain_nothing() {
             AttributedSubscription {
                 filters: vec![item.filter.clone()],
                 serves,
+                completeness: EoseCompleteness::Proven,
             },
         ));
     }
@@ -399,8 +404,9 @@ fn unknown_declared_limits_constrain_nothing() {
         .expect("200 subscriptions are conformant when the relay declared nothing");
 }
 
-/// Attribution `serves` and the planned subscription's own `serves` describe
-/// the same fact; disagreement makes ingest and settlement contradict.
+/// C5b: attribution `serves` and the planned subscription's own `serves`
+/// describe one fact. Ingest reads the attribution and settlement reads the
+/// plan, so a plan whose two answers disagree makes them contradict.
 #[test]
 fn attribution_that_contradicts_its_planned_subscription_is_refused() {
     let first = demand(1, Filter::new().kind(Kind::from_u16(1)));
@@ -415,7 +421,7 @@ fn attribution_that_contradicts_its_planned_subscription_is_refused() {
 
     assert_eq!(
         validate_plan(&relay(), &[first, second], &unknown(), &nothing(), &plan),
-        Err(PlanConformanceError::AttributionMismatch)
+        Err(PlanConformanceError::ServedDemandDisagrees(id))
     );
 }
 

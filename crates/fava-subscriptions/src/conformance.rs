@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::constraints::RelayReadConstraints;
 use crate::demand::{DemandId, RelayDemand};
 use crate::installed::InstalledSubscriptions;
-use crate::plan::SubscriptionPlan;
+use crate::plan::{SubscriptionPlan, WithdrawalReason};
 
 /// Conformance rules that define semantic equivalence for any planner.
 ///
@@ -38,7 +38,72 @@ pub fn validate_plan(
     check_attribution_keys(&resulting, plan)?;
     check_filters(installed, plan)?;
     check_demand(demand, plan)?;
+    check_running_subscriptions(demand, installed, plan)?;
+    check_distinct_filters(installed, plan)?;
     check_declared_limits(constraints, plan)
+}
+
+/// CR-1: a running subscription is never withdrawn while it is still wanted.
+///
+/// Grouping compiles unsent demand. A demand joining or leaving the relay must
+/// never rewrite a subscription the relay is already serving: the relay would
+/// re-serve the entire stored window for demand that was already settled, and
+/// the waste is quadratic in the number of times demand grows. A subscription
+/// closes when its last logical owner is gone and at no other time.
+fn check_running_subscriptions(
+    demand: &[RelayDemand],
+    installed: &InstalledSubscriptions,
+    plan: &SubscriptionPlan,
+) -> Result<(), PlanConformanceError> {
+    let requested: BTreeSet<DemandId> = demand.iter().map(RelayDemand::id).collect();
+    for withdrawn in &plan.close {
+        let Some(entry) = installed.get(&withdrawn.id) else {
+            continue;
+        };
+        if let Some(retained) = entry
+            .serves
+            .iter()
+            .find(|served| requested.contains(served))
+        {
+            return Err(PlanConformanceError::RunningSubscriptionWithdrawn {
+                id: withdrawn.id.clone(),
+                still_wanted: *retained,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// CR-2: the plan never opens a second subscription for filters already on the
+/// wire.
+///
+/// Two byte-identical REQs cannot be told apart by any identity scheme. The
+/// relay double-delivers every matching event forever, a subscription slot is
+/// burned, and completion evidence splits across two identities so neither is
+/// credited. Byte-identical candidates belong in one subscription.
+fn check_distinct_filters(
+    installed: &InstalledSubscriptions,
+    plan: &SubscriptionPlan,
+) -> Result<(), PlanConformanceError> {
+    let mut seen: Vec<(&SubscriptionId, &[Filter])> = Vec::new();
+    for id in &plan.retain {
+        if let Some(entry) = installed.get(id) {
+            seen.push((id, &entry.filters));
+        }
+    }
+    for planned in &plan.open {
+        if let Some((first, _)) = seen
+            .iter()
+            .find(|(_, filters)| *filters == planned.filters.as_slice())
+        {
+            return Err(PlanConformanceError::DuplicateFilters {
+                first: (*first).clone(),
+                second: planned.id.clone(),
+            });
+        }
+        seen.push((&planned.id, &planned.filters));
+    }
+    Ok(())
 }
 
 /// C1: the plan is scoped to the relay session it was asked about.
@@ -103,8 +168,26 @@ fn check_attribution_keys(
         let Some(entry) = plan.attribution.get(&planned.id) else {
             return Err(PlanConformanceError::AttributionMismatch);
         };
+        // C5b: the two records of what one subscription serves are one fact.
+        // Ingest reads the attribution and settlement reads the plan; a plan
+        // whose own two answers disagree makes them contradict.
         if entry.serves != planned.serves {
-            return Err(PlanConformanceError::AttributionMismatch);
+            return Err(PlanConformanceError::ServedDemandDisagrees(
+                planned.id.clone(),
+            ));
+        }
+    }
+    // C5c: a withdrawal that names a successor must name one this plan
+    // actually produces. The executor withholds the CLOSE until that successor
+    // is accepted, so a successor that never arrives strands the CLOSE.
+    for withdrawn in &plan.close {
+        if let WithdrawalReason::Regrouped { into } = &withdrawn.reason
+            && !resulting.contains(into)
+        {
+            return Err(PlanConformanceError::UnknownSuccessor {
+                id: withdrawn.id.clone(),
+                successor: into.clone(),
+            });
         }
     }
     Ok(())
@@ -176,13 +259,19 @@ fn check_declared_limits(
     plan: &SubscriptionPlan,
 ) -> Result<(), PlanConformanceError> {
     let resulting = plan.installed_after().count();
-    if let Some(maximum) = constraints.max_subscriptions.get()
-        && resulting > maximum.get()
-    {
-        return Err(PlanConformanceError::DeclaredSubscriptionsExceeded {
-            installed: resulting,
-            maximum: maximum.get(),
-        });
+    // The budget a plan may spend is the *residual*: the declared maximum less
+    // what is already running and still wanted. A relay that lowers its
+    // advertisement below the count already live does not authorize closing a
+    // running subscription (CR-1), so the plan is answerable only for what it
+    // opened.
+    if let Some(maximum) = constraints.max_subscriptions.get() {
+        let residual = maximum.get().saturating_sub(plan.retain.len());
+        if plan.open.len() > residual {
+            return Err(PlanConformanceError::DeclaredSubscriptionsExceeded {
+                installed: resulting,
+                maximum: maximum.get(),
+            });
+        }
     }
     if let Some(maximum) = constraints.max_subscription_id_chars.get() {
         for id in plan.installed_after() {
@@ -243,5 +332,34 @@ pub enum PlanConformanceError {
         id: SubscriptionId,
         /// Declared maximum.
         maximum: usize,
+    },
+    /// C5b: a planned subscription and its attribution disagree about which
+    /// logical demand it serves.
+    #[error("planned subscription {0} and its attribution disagree about what it serves")]
+    ServedDemandDisagrees(SubscriptionId),
+    /// C5c: a withdrawal names a successor the plan does not produce.
+    #[error("withdrawal of {id} names successor {successor}, which the plan does not install")]
+    UnknownSuccessor {
+        /// Wire id being withdrawn.
+        id: SubscriptionId,
+        /// Successor it named.
+        successor: SubscriptionId,
+    },
+    /// CR-1: the plan withdraws a running subscription that still has an owner.
+    #[error("plan closes running subscription {id}, still wanted by {:?}/{:?}", .still_wanted.owner, .still_wanted.branch)]
+    RunningSubscriptionWithdrawn {
+        /// Wire id the plan wants closed.
+        id: SubscriptionId,
+        /// A demand in the input set that this subscription still serves.
+        still_wanted: DemandId,
+    },
+    /// CR-2: two subscriptions in the resulting installed set carry the same
+    /// filters.
+    #[error("subscriptions {first} and {second} carry byte-identical filters")]
+    DuplicateFilters {
+        /// Wire id that already carries these filters.
+        first: SubscriptionId,
+        /// Wire id that duplicates them.
+        second: SubscriptionId,
     },
 }
