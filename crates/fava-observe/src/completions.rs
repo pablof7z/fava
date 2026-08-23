@@ -350,4 +350,5 @@ impl Engine {
             self.providers.deadlines.write,
             self.providers.deadlines.close,
         );
-    }}
+    }
+}

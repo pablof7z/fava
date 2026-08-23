@@ -208,11 +208,7 @@ impl FakeState {
                     holders: 1,
                 },
             );
-        RelaySessionLease::new(
-            session,
-            Arc::clone(self) as Arc<dyn LeaseRelease>,
-            identity,
-        )
+        RelaySessionLease::new(session, Arc::clone(self) as Arc<dyn LeaseRelease>, identity)
     }
 
     fn decrement(&self, key: &RelaySessionKey) -> Option<(Arc<FakeSession>, ReleaseOutcome)> {

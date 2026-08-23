@@ -7,13 +7,13 @@ mod session;
 
 use std::sync::Arc;
 
+pub use builder::{BuildError, FavaBuilder};
 use fava_diagnostics::Diagnostics;
 pub use fava_diagnostics::{
     BoundKind, DiagnosticsSnapshot, DroppedFacts, LimitDiagnostic, LimitScope,
     LogicalDemandDiagnostic, ObservationId, ObservationWireBinding, OperationGeneration,
-    ProviderDiagnostic, ProviderKind,
-    ProviderOperation, ProviderOperationState, QueryDiagnostic, RelayDiagnostic, RelaySessionState,
-    WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
+    ProviderDiagnostic, ProviderKind, ProviderOperation, ProviderOperationState, QueryDiagnostic,
+    RelayDiagnostic, RelaySessionState, WireSubscriptionDiagnostic, WriteDiagnostic, WriteStall,
 };
 use fava_observe::Observer;
 pub use fava_observe::{Observation, ObservationClosed, ObserveError};
@@ -24,7 +24,6 @@ pub use fava_query::{
 };
 pub use fava_routing::RoutePlan;
 use fava_routing::{RouteRequest, Router};
-pub use builder::{BuildError, FavaBuilder};
 pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;

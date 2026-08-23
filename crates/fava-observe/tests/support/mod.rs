@@ -154,8 +154,7 @@ pub fn evidence(observation: &Observation, relay: &RelayUrl) -> Option<RelayQuer
 /// If the observation reports no evidence for `relay`.
 #[must_use]
 pub fn relay_evidence(observation: &Observation, relay: &RelayUrl) -> RelayQueryEvidence {
-    evidence(observation, relay)
-        .expect("the observation reports evidence for every relay it uses")
+    evidence(observation, relay).expect("the observation reports evidence for every relay it uses")
 }
 
 /// Deliver one relay message to every consumer of a session.

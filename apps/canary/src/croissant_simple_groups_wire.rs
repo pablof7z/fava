@@ -185,17 +185,17 @@ fn query_completion(
                     .values()
                     .any(|state| state.subscription == subscription)
                     || queries
-                    .insert(
-                        role,
-                        QueryState {
-                            connection,
-                            subscription,
-                            saw_eose: false,
-                            saw_text_close: false,
-                            saw_socket_close: false,
-                        },
-                    )
-                    .is_some()
+                        .insert(
+                            role,
+                            QueryState {
+                                connection,
+                                subscription,
+                                saw_eose: false,
+                                saw_text_close: false,
+                                saw_socket_close: false,
+                            },
+                        )
+                        .is_some()
                 {
                     return Err(CanaryError::new("wire repeated an exact query role"));
                 }

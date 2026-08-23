@@ -104,12 +104,7 @@ pub(crate) fn demand_for(
     let demand = demand_for_query(id, branch, query);
     plan.destinations
         .keys()
-        .map(|relay| {
-            (
-                relay.clone(),
-                (demand.clone(), origin.at(plan.revision)),
-            )
-        })
+        .map(|relay| (relay.clone(), (demand.clone(), origin.at(plan.revision))))
         .collect()
 }
 

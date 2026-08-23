@@ -125,11 +125,8 @@ impl RelaySession for WebSocketRelaySession {
             // The driver owns the handshake and its deadline. Fava reports the
             // session closed once that deadline passes, whatever the peer does.
             self.shared.close_requested.notify_one();
-            let _ = tokio::time::timeout(
-                self.shared.deadlines.close.saturating_mul(2),
-                finished,
-            )
-            .await;
+            let _ =
+                tokio::time::timeout(self.shared.deadlines.close.saturating_mul(2), finished).await;
             self.shared.consumers.detach_all();
             Ok(ReleaseOutcome::Closed)
         })

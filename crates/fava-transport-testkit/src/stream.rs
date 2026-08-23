@@ -1,9 +1,9 @@
 //! One consumer's bounded view of a fake session's inbound items.
 
 use std::collections::VecDeque;
-use std::time::Duration;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use fava_query::OperationGeneration;
 use fava_state::RelaySessionKey;

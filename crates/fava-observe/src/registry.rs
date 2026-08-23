@@ -189,7 +189,8 @@ impl Registry {
             let Some(assigned) = installed.relays.get_mut(session) else {
                 return false;
             };
-            let changed = assigned.evidence.state != next || assigned.evidence.generation != generation;
+            let changed =
+                assigned.evidence.state != next || assigned.evidence.generation != generation;
             assigned.evidence.generation = generation;
             assigned.evidence.state = next;
             changed
@@ -260,7 +261,11 @@ impl Registry {
     }
 
     /// The demand identity one observation holds at one relay.
-    pub(crate) fn demand_id(&self, id: ObservationId, session: &RelaySessionKey) -> Option<DemandId> {
+    pub(crate) fn demand_id(
+        &self,
+        id: ObservationId,
+        session: &RelaySessionKey,
+    ) -> Option<DemandId> {
         self.lock()
             .observations
             .get(&id)

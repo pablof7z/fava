@@ -26,7 +26,11 @@ async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
     let relay = relay("pending");
     let transport = Arc::new(FakeTransport::new());
     transport.hold_establishment(&session_key(&relay));
-    let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
 
     let observation = tokio::time::timeout(
         Duration::from_millis(50),
@@ -56,7 +60,11 @@ async fn equivalent_observations_share_one_relay_connection() {
     let relay = relay("shared");
     let key = session_key(&relay);
     let transport = Arc::new(FakeTransport::new());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let query = Query::events()
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid");
@@ -199,7 +207,11 @@ async fn a_planner_that_never_groups_still_shares_one_connection() {
     let carol = Keys::generate().public_key();
 
     let transport = Arc::new(FakeTransport::new());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let first = fava
         .observe(metadata_of(alice, &relay))
         .await
@@ -244,7 +256,11 @@ async fn cancelling_observe_while_another_relay_opens_closes_provisional_work() 
     let stalled = relay("b-pending");
     let transport = Arc::new(FakeTransport::new());
     transport.hold_establishment(&session_key(&stalled));
-    let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let query = Query::events()
         .only_from_relays([reachable.clone(), stalled.clone()])
         .expect("explicit relays are valid");
@@ -291,7 +307,10 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     wait_until(|| !requests(session(&transport, &key)).is_empty()).await;
     let subscription = requests(session(&transport, &key))[0].0.clone();
     let peer = established(&transport, &key);
-    push(&peer, &RelayMessage::event(subscription.clone(), event.clone()));
+    push(
+        &peer,
+        &RelayMessage::event(subscription.clone(), event.clone()),
+    );
     push(&peer, &RelayMessage::eose(subscription.clone()));
 
     let snapshot = tokio::time::timeout(Duration::from_secs(1), async {
@@ -307,10 +326,7 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), event.id);
     assert_eq!(snapshot.events[0].relay_evidence.len(), 1);
-    wait_until(|| {
-        relay_evidence(&observation.current(), &key).stored_events_complete()
-    })
-    .await;
+    wait_until(|| relay_evidence(&observation.current(), &key).stored_events_complete()).await;
 
     let mut forged = event.clone();
     forged.content = "forged after signing".to_owned();
@@ -318,7 +334,10 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
         .finalize(&Keys::generate())
         .expect("event signs");
     push(&peer, &RelayMessage::event(subscription.clone(), forged));
-    push(&peer, &RelayMessage::event(subscription.clone(), off_filter));
+    push(
+        &peer,
+        &RelayMessage::event(subscription.clone(), off_filter),
+    );
     settle().await;
     assert_eq!(cache.len().expect("cache readable"), 1);
 
@@ -334,7 +353,11 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
     let relay = relay("relay");
     let key = session_key(&relay);
     let transport = Arc::new(FakeTransport::new());
-    let fava = assembly(Arc::new(MemoryEventCache::default()), &transport, no_grouping());
+    let fava = assembly(
+        Arc::new(MemoryEventCache::default()),
+        &transport,
+        no_grouping(),
+    );
     let mut observation = fava
         .observe(
             Query::events()
@@ -404,7 +427,8 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
     })
     .await;
     match &dropped.state {
-        RelaySourceState::Disconnected { detail } | RelaySourceState::Unreachable { detail, .. } => {
+        RelaySourceState::Disconnected { detail }
+        | RelaySourceState::Unreachable { detail, .. } => {
             assert!(
                 detail.as_str().contains("injected"),
                 "a disconnect must carry the relay's own verbatim reason, got {detail:?}"
@@ -417,7 +441,11 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
 
 // ----------------------------------------------------------------- harness
 
-fn assembly<P>(cache: Arc<MemoryEventCache>, transport: &Arc<FakeTransport>, planner: Arc<P>) -> Fava
+fn assembly<P>(
+    cache: Arc<MemoryEventCache>,
+    transport: &Arc<FakeTransport>,
+    planner: Arc<P>,
+) -> Fava
 where
     P: SubscriptionPlanner + 'static,
 {
@@ -487,7 +515,10 @@ fn requests(peer: Option<FakeRelay>) -> Vec<(SubscriptionId, Vec<nostr::filter::
                 filters,
             } => Some((
                 subscription_id.into_owned(),
-                filters.into_iter().map(std::borrow::Cow::into_owned).collect(),
+                filters
+                    .into_iter()
+                    .map(std::borrow::Cow::into_owned)
+                    .collect(),
             )),
             _ => None,
         })

@@ -7,8 +7,8 @@ use fava_query::{
     BoundedText, OperationGeneration, RelayDeadline, RelayShortfall, RelaySourceState,
 };
 use fava_state::RelaySessionKey;
-use fava_transport::{TransportBounds, TransportDeadlines};
 use fava_subscriptions::{RelayDemand, SubscriptionPlan};
+use fava_transport::{TransportBounds, TransportDeadlines};
 use fava_wire::SubscriptionId;
 
 use crate::diagnostics;
@@ -28,7 +28,11 @@ impl Engine {
         }
     }
 
-    pub(crate) fn publish_state_for_relay(&self, relay: &RelaySessionKey, state: &RelaySourceState) {
+    pub(crate) fn publish_state_for_relay(
+        &self,
+        relay: &RelaySessionKey,
+        state: &RelaySourceState,
+    ) {
         let Some(slot) = self.slots.get(relay) else {
             return;
         };
@@ -157,8 +161,8 @@ impl Engine {
                 .collect(),
             slot.reconnects,
         ));
-    }}
-
+    }
+}
 
 pub(crate) fn failure_state(detail: &BoundedText) -> RelaySourceState {
     if detail.as_str().contains("EstablishTimeout") {
@@ -200,4 +204,3 @@ pub(crate) fn default_bounds() -> TransportBounds {
 fn nonzero(value: usize) -> std::num::NonZeroUsize {
     std::num::NonZeroUsize::new(value).expect("constant is non-zero")
 }
-

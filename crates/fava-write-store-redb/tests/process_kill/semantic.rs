@@ -1,8 +1,8 @@
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
@@ -22,8 +22,8 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
 use fava_state::{CacheMutation, CachedEvent, RelayEvidence, RelaySessionKey};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{Receipt, ReceiptId, WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;

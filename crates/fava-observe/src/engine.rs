@@ -23,9 +23,7 @@ use std::time::Duration;
 
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
-use fava_query::{
-    BoundedText, OperationGeneration, RelaySourceState,
-};
+use fava_query::{BoundedText, OperationGeneration, RelaySourceState};
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_state::RelaySessionKey;
 use fava_subscriptions::{
@@ -39,10 +37,10 @@ use fava_transport::{
 use fava_wire::SubscriptionId;
 
 use crate::admission;
-use crate::slot::Slot;
 use crate::diagnostics;
 use crate::operations;
 use crate::registry::Registry;
+use crate::slot::Slot;
 
 /// Bounded report queue between provider work and the reconciliation owner.
 const REPORTS: usize = 1_024;
@@ -102,7 +100,6 @@ pub(crate) enum Report {
         item: Box<RelayInbound>,
     },
 }
-
 
 /// Single reconciliation owner for one engine instance.
 pub(crate) struct Engine {

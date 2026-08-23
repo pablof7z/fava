@@ -1,7 +1,7 @@
 //! Public-facade evidence for runtime signer attachment and exact-key wakeup.
 
-use std::num::NonZeroUsize;
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -16,8 +16,8 @@ use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelaySessionKey, RelayUrl};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{Event, PublicKey, UnsignedEvent};
 use fava_write_store_memory::MemoryWriteStore;

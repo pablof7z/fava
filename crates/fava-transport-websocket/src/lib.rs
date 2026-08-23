@@ -58,7 +58,11 @@ impl WebSocketTransport {
     ///
     /// If a thread panicked while holding the session registry.
     fn reuse(&self, key: &RelaySessionKey) -> Option<RelaySessionLease> {
-        let mut entries = self.registry.entries.lock().expect("registry is not poisoned");
+        let mut entries = self
+            .registry
+            .entries
+            .lock()
+            .expect("registry is not poisoned");
         let entry = entries.get_mut(key)?;
         entry.holders += 1;
         let session = Arc::clone(&entry.session);
@@ -81,7 +85,10 @@ impl Transport for WebSocketTransport {
                 return Ok(lease);
             }
 
-            let entropy = self.registry.entropy.fetch_add(0x9E37_79B9, Ordering::SeqCst);
+            let entropy = self
+                .registry
+                .entropy
+                .fetch_add(0x9E37_79B9, Ordering::SeqCst);
             let shared = Arc::new(SessionShared::new(&request, entropy));
             let socket = establish(&shared)
                 .await

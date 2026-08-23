@@ -210,7 +210,9 @@ async fn a_stalled_relay_never_delays_a_reachable_one() {
     let reachable = relay("reachable");
     let stalled = relay("stalled");
     let assembly = assemble();
-    assembly.transport.hold_establishment(&session_key(&stalled));
+    assembly
+        .transport
+        .hold_establishment(&session_key(&stalled));
 
     let observation = assembly
         .observer
@@ -235,7 +237,9 @@ async fn dropping_the_handle_closes_established_work_while_another_relay_stalls(
     let reachable = relay("reachable");
     let stalled = relay("stalled");
     let assembly = assemble();
-    assembly.transport.hold_establishment(&session_key(&stalled));
+    assembly
+        .transport
+        .hold_establishment(&session_key(&stalled));
     let observation = assembly
         .observer
         .open(
@@ -325,7 +329,10 @@ async fn closing_an_observation_records_why_its_relay_demand_ended() {
     wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
 
     let bound = relay_evidence(&observation, &shared);
-    assert!(matches!(bound.route, RouteOrigin::Automatic { revision: 1 }));
+    assert!(matches!(
+        bound.route,
+        RouteOrigin::Automatic { revision: 1 }
+    ));
     assert_eq!(
         RelayWithdrawal::RouteWithdrawn,
         RelayWithdrawal::RouteWithdrawn,

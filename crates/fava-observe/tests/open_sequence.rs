@@ -20,7 +20,9 @@ use support::{
 async fn opening_a_live_query_never_awaits_the_transport() {
     let stalled = relay("stalled");
     let assembly = assemble();
-    assembly.transport.hold_establishment(&session_key(&stalled));
+    assembly
+        .transport
+        .hold_establishment(&session_key(&stalled));
     let query = Query::events()
         .only_from_relays([stalled.clone()])
         .expect("explicit relay is valid");
@@ -138,7 +140,10 @@ async fn a_refused_local_source_leaves_no_relay_work_behind() {
     ));
     settle().await;
     assert!(assembly.planner.inputs().is_empty());
-    assert_eq!(assembly.transport.dials(&session_key(&relay("reachable"))), 0);
+    assert_eq!(
+        assembly.transport.dials(&session_key(&relay("reachable"))),
+        0
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -159,14 +164,19 @@ async fn initial_evaluation_failure_opens_no_relay_work() {
 
     assert!(matches!(error, ObserveError::Evaluation(_)));
     settle().await;
-    assert_eq!(assembly.transport.dials(&session_key(&relay("reachable"))), 0);
+    assert_eq!(
+        assembly.transport.dials(&session_key(&relay("reachable"))),
+        0
+    );
 }
 
 struct RefusingSource;
 
 impl QuerySource for RefusingSource {
     fn open(&self, _query: &Query) -> Result<OpenedQuerySource, QuerySourceError> {
-        Err(QuerySourceError::Refused(fava_query::BoundedText::new("injected")))
+        Err(QuerySourceError::Refused(fava_query::BoundedText::new(
+            "injected",
+        )))
     }
 }
 
@@ -178,6 +188,8 @@ impl QueryEvaluator for RefusingEvaluator {
         _query: &Query,
         _sources: &[fava_query::SourceSnapshot],
     ) -> Result<QuerySnapshot, QueryEvaluationError> {
-        Err(QueryEvaluationError::Refused(fava_query::BoundedText::new("injected")))
+        Err(QueryEvaluationError::Refused(fava_query::BoundedText::new(
+            "injected",
+        )))
     }
 }

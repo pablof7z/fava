@@ -227,7 +227,10 @@ async fn a_remote_close_reaches_every_consumer_as_an_attributed_disconnect() {
     let identity = lease.session().identity();
     let mut stream = lease.session().messages();
 
-    let item = stream.next_inbound().await.expect("a lifecycle item arrives");
+    let item = stream
+        .next_inbound()
+        .await
+        .expect("a lifecycle item arrives");
     assert!(
         matches!(item, RelayInbound::Disconnected { identity: ref reported, .. } if *reported == identity),
         "expected an attributed disconnect, got {item:?}"
@@ -276,9 +279,7 @@ async fn the_last_release_closes_deterministically() {
 
     assert_eq!(
         second.release().await.expect("releases"),
-        ReleaseOutcome::Retained {
-            holders: frames(1)
-        }
+        ReleaseOutcome::Retained { holders: frames(1) }
     );
     assert_eq!(
         first.release().await.expect("releases"),
@@ -327,7 +328,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         // The first generation is closed by the relay; the second survives.
         let (stream, _) = listener.accept().await.expect("first connection");
         let mut socket = accept_async(stream).await.expect("WebSocket accepts");
-        socket.close(None).await.expect("relay closes generation one");
+        socket
+            .close(None)
+            .await
+            .expect("relay closes generation one");
         let (stream, _) = listener.accept().await.expect("second connection");
         let mut socket = accept_async(stream).await.expect("WebSocket accepts");
         while socket.next().await.is_some() {}
@@ -344,7 +348,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     let mut stream = lease.session().messages();
 
     let item = loop {
-        let next = stream.next_inbound().await.expect("a lifecycle item arrives");
+        let next = stream
+            .next_inbound()
+            .await
+            .expect("a lifecycle item arrives");
         if !matches!(next, RelayInbound::Disconnected { .. }) {
             break next;
         }
@@ -367,7 +374,10 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         // every reconnect attempt fails and the budget runs out.
         let (stream, _) = listener.accept().await.expect("first connection");
         let mut socket = accept_async(stream).await.expect("WebSocket accepts");
-        socket.close(None).await.expect("relay closes generation one");
+        socket
+            .close(None)
+            .await
+            .expect("relay closes generation one");
     });
 
     let transport = WebSocketTransport::new();
@@ -382,8 +392,10 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     server.await.expect("server joins");
 
     let exhausted = loop {
-        if let RelayInbound::ReconnectExhausted { attempts, .. } =
-            stream.next_inbound().await.expect("a lifecycle item arrives")
+        if let RelayInbound::ReconnectExhausted { attempts, .. } = stream
+            .next_inbound()
+            .await
+            .expect("a lifecycle item arrives")
         {
             break attempts;
         }

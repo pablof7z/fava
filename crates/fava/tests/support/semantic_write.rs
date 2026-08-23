@@ -1,6 +1,6 @@
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -26,8 +26,8 @@ use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::WriteIntent;
 use fava_write_store::WriteStore;

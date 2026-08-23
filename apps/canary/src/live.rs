@@ -201,9 +201,10 @@ async fn wait_subscription(
 )> {
     wait(Duration::from_secs(5), || {
         fava.diagnostics().relays.iter().find_map(|relay| {
-            relay.subscriptions.first().map(|wire| {
-                (relay.session.clone(), relay.generation, wire.id.clone())
-            })
+            relay
+                .subscriptions
+                .first()
+                .map(|wire| (relay.session.clone(), relay.generation, wire.id.clone()))
         })
     })
     .await

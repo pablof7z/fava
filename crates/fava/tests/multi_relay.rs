@@ -1,7 +1,7 @@
 //! Multi-relay provenance and reconnect-generation evidence through the public facade.
 
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, VecDeque};
+use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -13,10 +13,10 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration,
-    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture,
-    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
+    RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity,
+    ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use fava_transport_testkit::{FakeRelay, FakeTransport, detached_lease};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
@@ -103,7 +103,13 @@ impl RelayMessageStream for ScriptedStream {
     fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
         Box::pin(async move {
             loop {
-                if let Some(item) = self.mailbox.inbound.lock().expect("session lock").pop_front() {
+                if let Some(item) = self
+                    .mailbox
+                    .inbound
+                    .lock()
+                    .expect("session lock")
+                    .pop_front()
+                {
                     return item;
                 }
                 if self.mailbox.closed.load(Ordering::SeqCst) {

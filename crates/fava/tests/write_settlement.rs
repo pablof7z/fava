@@ -1,8 +1,8 @@
 //! Public receipt-summary and write-settlement evidence.
 
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,8 +15,8 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{
     EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, ReceiptOutcome,

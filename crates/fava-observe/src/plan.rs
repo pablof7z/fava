@@ -97,7 +97,10 @@ mod tests {
     fn a_fully_accepted_plan_installs_exactly_what_the_reference_reducer_says() {
         let planner = StandardSubscriptionPlanner::new();
         let constraints = RelayReadConstraints::unknown();
-        let first = vec![demand(1, Filter::new().author(Keys::generate().public_key()))];
+        let first = vec![demand(
+            1,
+            Filter::new().author(Keys::generate().public_key()),
+        )];
         let opening = planner
             .plan(
                 &relay(),
@@ -126,13 +129,7 @@ mod tests {
             demand(2, Filter::new().kind(Kind::Metadata)),
         ];
         let growing = planner
-            .plan(
-                &relay(),
-                &second,
-                &constraints,
-                &installed,
-                PlanRevision(2),
-            )
+            .plan(&relay(), &second, &constraints, &installed, PlanRevision(2))
             .expect("the planner accepts the second cohort");
         let opened: BTreeSet<SubscriptionId> =
             growing.open.iter().map(|entry| entry.id.clone()).collect();
@@ -149,7 +146,10 @@ mod tests {
     fn a_refused_request_is_not_installed_and_closes_nothing() {
         let planner = StandardSubscriptionPlanner::new();
         let constraints = RelayReadConstraints::unknown();
-        let cohort = vec![demand(1, Filter::new().author(Keys::generate().public_key()))];
+        let cohort = vec![demand(
+            1,
+            Filter::new().author(Keys::generate().public_key()),
+        )];
         let opening = planner
             .plan(
                 &relay(),

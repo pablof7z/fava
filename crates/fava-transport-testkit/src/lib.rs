@@ -12,8 +12,7 @@ use std::num::NonZeroUsize;
 
 pub use fake::{FakeRelay, FakeTransport, detached_lease};
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport,
-    TransportFailure,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportFailure,
 };
 
 /// Require that one physical session fans every inbound frame out to every
@@ -121,7 +120,9 @@ pub async fn require_bounded_outbound_refusal<T: Transport>(
             return Ok(());
         }
     }
-    Err(format!("no attempt in {attempts} produced a bounded refusal"))
+    Err(format!(
+        "no attempt in {attempts} produced a bounded refusal"
+    ))
 }
 
 /// Require that a handoff completion names the exact generation that made it.

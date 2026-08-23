@@ -245,13 +245,18 @@ pub(crate) fn report_delivery_gap(
     current: u64,
 ) {
     let skipped = current.saturating_sub(previous).saturating_sub(1);
-    if skipped > 0 && let Some(report) = report {
+    if skipped > 0
+        && let Some(report) = report
+    {
         report(skipped);
     }
 }
 
 fn replace_source(sources: &mut [SourceSnapshot], changed: SourceSnapshot) {
-    if let Some(source) = sources.iter_mut().find(|source| source.kind == changed.kind) {
+    if let Some(source) = sources
+        .iter_mut()
+        .find(|source| source.kind == changed.kind)
+    {
         *source = changed;
     }
 }

@@ -79,7 +79,10 @@ impl Publisher for Nip01Publisher {
                 }
             };
             match session
-                .send(frame.into_bytes(), HandoffCorrelation(u64::from(attempt.number)))
+                .send(
+                    frame.into_bytes(),
+                    HandoffCorrelation(u64::from(attempt.number)),
+                )
                 .await
             {
                 HandoffOutcome::NotHandedOff { reason, .. } => {

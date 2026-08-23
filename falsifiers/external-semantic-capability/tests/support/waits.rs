@@ -129,9 +129,7 @@ pub async fn wait_eose(fava: &Fava, subscription: &str) {
                     .relays
                     .iter()
                     .flat_map(|relay| relay.subscriptions.iter())
-                    .any(|wire| {
-                        wire.id.as_str() == subscription && wire.stored_events_complete
-                    })
+                    .any(|wire| wire.id.as_str() == subscription && wire.stored_events_complete)
                 {
                     return;
                 }

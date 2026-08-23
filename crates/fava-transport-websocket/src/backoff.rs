@@ -32,7 +32,11 @@ impl ReconnectBackoff {
             base: Self::BASE,
             ceiling: Self::CEILING,
             attempt: 0,
-            entropy: if entropy == 0 { 0x9E37_79B9_7F4A_7C15 } else { entropy },
+            entropy: if entropy == 0 {
+                0x9E37_79B9_7F4A_7C15
+            } else {
+                entropy
+            },
         }
     }
 

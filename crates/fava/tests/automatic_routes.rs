@@ -1,7 +1,7 @@
 //! Public-facade evidence for ordered asynchronous automatic routing.
 
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

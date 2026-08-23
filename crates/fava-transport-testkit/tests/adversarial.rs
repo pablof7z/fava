@@ -86,7 +86,10 @@ async fn pending_establishment_that_completes_is_not_a_refusal() {
 #[tokio::test(flavor = "current_thread")]
 async fn mid_operation_failure_reaches_every_consumer_as_an_attributed_disconnect() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let identity = lease.session().identity();
     let mut stream = lease.session().messages();
 
@@ -95,7 +98,10 @@ async fn mid_operation_failure_reaches_every_consumer_as_an_attributed_disconnec
         .expect("relay is registered")
         .fail_now("relay closed the connection");
 
-    let item = stream.next_inbound().await.expect("a lifecycle item arrives");
+    let item = stream
+        .next_inbound()
+        .await
+        .expect("a lifecycle item arrives");
     match item {
         RelayInbound::Disconnected {
             identity: reported,
@@ -111,7 +117,10 @@ async fn mid_operation_failure_reaches_every_consumer_as_an_attributed_disconnec
 #[tokio::test(flavor = "current_thread")]
 async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.stall_writer();
 
@@ -140,7 +149,10 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn cancelling_a_handoff_mid_operation_leaves_no_half_frame() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.stall_writer();
     relay.block_queue();
@@ -160,7 +172,10 @@ async fn cancelling_a_handoff_mid_operation_leaves_no_half_frame() {
 #[tokio::test(flavor = "current_thread")]
 async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let before = lease.session().identity();
     let mut stream = lease.session().messages();
 
@@ -170,7 +185,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .reconnect();
 
     let item = loop {
-        let next = stream.next_inbound().await.expect("a lifecycle item arrives");
+        let next = stream
+            .next_inbound()
+            .await
+            .expect("a lifecycle item arrives");
         if !matches!(next, RelayInbound::Disconnected { .. }) {
             break next;
         }
@@ -189,7 +207,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
 #[tokio::test(flavor = "current_thread")]
 async fn a_stale_generation_completion_is_attributable_to_the_generation_that_made_it() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let stale = lease.session().identity();
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.stall_writer();
@@ -214,7 +235,10 @@ async fn a_stale_generation_completion_is_attributable_to_the_generation_that_ma
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let mut stream = lease.session().messages();
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.refuse_reconnects("relay refuses");
@@ -224,7 +248,10 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
     let exhausted = loop {
         if let RelayInbound::ReconnectExhausted {
             attempts, reason, ..
-        } = stream.next_inbound().await.expect("a lifecycle item arrives")
+        } = stream
+            .next_inbound()
+            .await
+            .expect("a lifecycle item arrives")
         {
             break (attempts, reason);
         }
@@ -238,7 +265,10 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
 #[tokio::test(flavor = "current_thread")]
 async fn a_slow_consumer_loses_bounded_inbound_items_and_is_told_exactly() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let mut fast = lease.session().messages();
     let slow = lease.session().messages();
     let relay = transport.relay(&key()).expect("relay is registered");
@@ -265,7 +295,10 @@ async fn a_slow_consumer_loses_bounded_inbound_items_and_is_told_exactly() {
 #[tokio::test(flavor = "current_thread")]
 async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
     let transport = FakeTransport::new();
-    let first = transport.acquire_session(request()).await.expect("acquires");
+    let first = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let second = transport.acquire_session(request()).await.expect("reuses");
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.stall_writer();
@@ -298,14 +331,15 @@ async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
 #[tokio::test(flavor = "current_thread")]
 async fn the_last_release_closes_deterministically() {
     let transport = FakeTransport::new();
-    let first = transport.acquire_session(request()).await.expect("acquires");
+    let first = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
     let second = transport.acquire_session(request()).await.expect("reuses");
 
     assert_eq!(
         second.release().await.expect("releases"),
-        ReleaseOutcome::Retained {
-            holders: frames(1)
-        }
+        ReleaseOutcome::Retained { holders: frames(1) }
     );
     assert_eq!(
         first.release().await.expect("releases"),
@@ -317,7 +351,10 @@ async fn the_last_release_closes_deterministically() {
 #[tokio::test(flavor = "current_thread")]
 async fn shutdown_closes_every_registered_session() {
     let transport = FakeTransport::new();
-    let lease = transport.acquire_session(request()).await.expect("acquires");
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("acquires");
 
     transport
         .shutdown(Duration::from_millis(50))

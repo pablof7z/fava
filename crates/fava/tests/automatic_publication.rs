@@ -1,8 +1,8 @@
 //! Public-facade evidence for partial automatic publication routing.
 
-use std::num::NonZeroUsize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -20,8 +20,8 @@ use fava_routing::{
 use fava_signer_local::LocalSigner;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{Kind, Tag};
 use fava_write_store::WriteStore;

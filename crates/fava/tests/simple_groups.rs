@@ -3,9 +3,9 @@
 //! Cohesion: one facade target shares the same custody, signer, router, publisher,
 //! and transport spies across query, publication, refusal, and lifecycle descriptors.
 
-use std::num::NonZeroUsize;
 use std::collections::BTreeSet;
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -29,8 +29,8 @@ use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
 };
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, TransportError,
-    TransportFailure, TransportShutdownFuture, Transport,
+    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{Event, EventValue, PublicKey, UnsignedEvent};
 use fava_write_store::WriteStore;

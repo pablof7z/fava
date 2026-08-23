@@ -114,7 +114,9 @@ mod tests {
     async fn external_cache_assembles_without_private_access() {
         let engine = Fava::builder()
             .event_cache(Arc::new(NullEventCache))
-            .write_store(Arc::new(fava_write_store_memory::MemoryWriteStore::default()))
+            .write_store(Arc::new(
+                fava_write_store_memory::MemoryWriteStore::default(),
+            ))
             .query_evaluator(Arc::new(fava_query_standard::StandardQueryEvaluator))
             .build()
             .expect("public contracts are sufficient for external assembly");

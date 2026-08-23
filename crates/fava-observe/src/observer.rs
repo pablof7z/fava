@@ -15,8 +15,8 @@ use fava_transport::{Transport, TransportBounds, TransportDeadlines};
 
 use crate::admission::ADMISSION_WINDOW;
 use crate::engine::{Engine, RelayProviders};
-use crate::facts::{default_bounds, default_deadlines};
 use crate::error::ObserveError;
+use crate::facts::{default_bounds, default_deadlines};
 use crate::observation::Observation;
 use crate::registry::Registry;
 use crate::routes::{self, RouteBinding};
@@ -211,7 +211,13 @@ impl Observer {
         let installation = self.registry.install(self.runtime.cancellation_token());
         let branch = QueryBranchId::ROOT;
         if let Some(binding) = binding {
-            self.retain(installation.id, branch, &query, binding, &installation.cancel);
+            self.retain(
+                installation.id,
+                branch,
+                &query,
+                binding,
+                &installation.cancel,
+            );
         }
         let mut initial = initial;
         decorate(&self.registry, installation.id, &mut initial.evidence);
@@ -310,10 +316,9 @@ impl Observer {
             return Ok(());
         }
         let providers = RelayProviders {
-            transport: self
-                .transport
-                .clone()
-                .ok_or_else(|| ObserveError::Relay("live queries require a transport".to_owned()))?,
+            transport: self.transport.clone().ok_or_else(|| {
+                ObserveError::Relay("live queries require a transport".to_owned())
+            })?,
             planner: self.planner.clone().ok_or_else(|| {
                 ObserveError::Relay("live queries require a subscription planner".to_owned())
             })?,
