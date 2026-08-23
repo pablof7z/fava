@@ -1,143 +1,125 @@
-//! Deadline-wrapped provider invocation and correlated completions.
+//! Typed completions of deadline-wrapped provider calls.
+//!
+//! Authority: ARCH:2366 "The runtime performs the work and returns typed
+//! completions."
 
-use std::marker::PhantomData;
+use std::any::Any;
 use std::time::Duration;
 
-use thiserror::Error;
+use crate::generation::OperationGeneration;
+use crate::name::OperationName;
 
-/// Monotonic identity of one owner operation.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Generation(u64);
+/// Longest retained panic payload, in bytes.
+pub(crate) const PANIC_DETAIL_CAPACITY: usize = 512;
 
-impl Generation {
-    /// First generation of any operation.
-    pub const FIRST: Self = Self(0);
-
-    /// Generation that supersedes this one.
-    #[must_use]
-    pub fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-
-    /// Underlying counter value.
-    #[must_use]
-    pub fn value(self) -> u64 {
-        self.0
-    }
-}
-
-/// One authorised provider operation and the bound the runtime enforces on it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProviderCall {
-    _placeholder: (),
-}
-
-impl ProviderCall {
-    /// Describe one authorised provider operation.
-    #[must_use]
-    pub fn new(
-        _provider: &'static str,
-        _operation: &'static str,
-        _deadline: Duration,
-        _generation: Generation,
-    ) -> Self {
-        todo!()
-    }
-
-    /// Provider this call is attributed to.
-    #[must_use]
-    pub fn provider(&self) -> &'static str {
-        todo!()
-    }
-
-    /// Operation this call performs.
-    #[must_use]
-    pub fn operation(&self) -> &'static str {
-        todo!()
-    }
-
-    /// Deadline the runtime enforces.
-    #[must_use]
-    pub fn deadline(&self) -> Duration {
-        todo!()
-    }
-
-    /// Generation the completion will carry.
-    #[must_use]
-    pub fn generation(&self) -> Generation {
-        todo!()
-    }
-}
-
-/// Scoped, attributable provider refusal.
-#[derive(Clone, Debug, Error, Eq, PartialEq)]
-pub enum ProviderFailure {
-    /// The provider did not answer within its deadline.
-    #[error("provider exceeded its {deadline:?} deadline")]
-    TimedOut {
-        /// Deadline that was exceeded.
-        deadline: Duration,
+/// Typed completion of one deadline-wrapped provider call.
+///
+/// Every variant carries the operation slot and the generation the owner
+/// authorised, so an owner that has moved on can reject the completion instead
+/// of installing it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProviderCompletion<T> {
+    /// The provider returned within its deadline.
+    Completed {
+        /// Operation slot.
+        operation: OperationName,
+        /// Generation this completion belongs to.
+        generation: OperationGeneration,
+        /// The provider's value.
+        value: T,
     },
-    /// The provider panicked.
-    #[error("provider panicked: {detail}")]
+    /// The deadline expired. The provider may still be running; the runtime
+    /// owns detaching it and it can no longer affect the owner.
+    TimedOut {
+        /// Operation slot.
+        operation: OperationName,
+        /// Generation this completion belongs to.
+        generation: OperationGeneration,
+        /// The deadline that expired.
+        after: Duration,
+    },
+    /// The provider panicked and was isolated.
     Panicked {
-        /// Bounded panic detail.
+        /// Operation slot.
+        operation: OperationName,
+        /// Generation this completion belongs to.
+        generation: OperationGeneration,
+        /// Bounded panic payload.
         detail: String,
     },
-    /// The owning token cancelled the call.
-    #[error("provider call cancelled")]
-    Cancelled,
+    /// The owner's cancellation token fired.
+    Cancelled {
+        /// Operation slot.
+        operation: OperationName,
+        /// Generation this completion belongs to.
+        generation: OperationGeneration,
+    },
+    /// The runtime is shutting down and refused the call.
+    Refused {
+        /// Operation slot.
+        operation: OperationName,
+        /// Generation this completion belongs to.
+        generation: OperationGeneration,
+    },
 }
 
-/// Result of one provider operation, correlated to the operation that authorised it.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Completion<T> {
-    _placeholder: PhantomData<T>,
+impl<T> ProviderCompletion<T> {
+    /// Generation this completion belongs to. An owner MUST compare this
+    /// against its current generation and discard stale completions.
+    #[must_use]
+    pub fn generation(&self) -> OperationGeneration {
+        match self {
+            Self::Completed { generation, .. }
+            | Self::TimedOut { generation, .. }
+            | Self::Panicked { generation, .. }
+            | Self::Cancelled { generation, .. }
+            | Self::Refused { generation, .. } => *generation,
+        }
+    }
+
+    /// Operation slot this completion belongs to.
+    #[must_use]
+    pub fn operation(&self) -> OperationName {
+        match self {
+            Self::Completed { operation, .. }
+            | Self::TimedOut { operation, .. }
+            | Self::Panicked { operation, .. }
+            | Self::Cancelled { operation, .. }
+            | Self::Refused { operation, .. } => *operation,
+        }
+    }
+
+    /// The value, when the provider completed.
+    #[must_use]
+    pub fn value(self) -> Option<T> {
+        match self {
+            Self::Completed { value, .. } => Some(value),
+            _ => None,
+        }
+    }
 }
 
-impl<T> Completion<T> {
-    /// Build a failed completion for one authorised call.
-    #[must_use]
-    pub fn failed(_call: &ProviderCall, _failure: ProviderFailure) -> Self {
-        todo!()
-    }
+/// Render an unwind payload as bounded, attributable text.
+pub(crate) fn panic_detail(payload: &(dyn Any + Send)) -> String {
+    let detail = if let Some(text) = payload.downcast_ref::<&'static str>() {
+        (*text).to_owned()
+    } else if let Some(text) = payload.downcast_ref::<String>() {
+        text.clone()
+    } else {
+        "unknown panic payload".to_owned()
+    };
+    truncate(detail)
+}
 
-    /// Provider this completion is attributed to.
-    #[must_use]
-    pub fn provider(&self) -> &'static str {
-        todo!()
+/// Keep retained panic evidence bounded on a character boundary.
+fn truncate(mut detail: String) -> String {
+    if detail.len() <= PANIC_DETAIL_CAPACITY {
+        return detail;
     }
-
-    /// Operation this completion answers.
-    #[must_use]
-    pub fn operation(&self) -> &'static str {
-        todo!()
+    let mut end = PANIC_DETAIL_CAPACITY;
+    while end > 0 && !detail.is_char_boundary(end) {
+        end -= 1;
     }
-
-    /// Generation this completion answers.
-    #[must_use]
-    pub fn generation(&self) -> Generation {
-        todo!()
-    }
-
-    /// Whether this completion answers the owner's current generation.
-    #[must_use]
-    pub fn is_current(&self, _expected: Generation) -> bool {
-        todo!()
-    }
-
-    /// Borrow the outcome.
-    pub fn outcome(&self) -> Result<&T, &ProviderFailure> {
-        todo!()
-    }
-
-    /// Take the outcome regardless of generation.
-    pub fn into_outcome(self) -> Result<T, ProviderFailure> {
-        todo!()
-    }
-
-    /// Take the outcome only when it answers the owner's current generation.
-    pub fn accept_if_current(self, _expected: Generation) -> Option<Result<T, ProviderFailure>> {
-        todo!()
-    }
+    detail.truncate(end);
+    detail
 }

@@ -1,22 +1,34 @@
 //! Fava execution owner.
 //!
-//! `fava-runtime` performs the asynchronous work that universal owners
-//! authorise and returns typed completions. It owns task execution, timers,
-//! bounded command/completion channels, cancellation propagation, provider
-//! panic and stall isolation, the bounded reconnect policy, and the joining of
-//! every owned resource within a declared shutdown deadline.
+//! `fava-runtime` owns every task Fava starts and every task Fava must join,
+//! the join registry that lets close prove no Fava-started task outlives it,
+//! bounded command channels whose full state is a typed refusal rather than a
+//! park, the deadline wrapped around every application-supplied provider call,
+//! the panic isolation that turns a provider unwind into a typed completion,
+//! and cancellation tokens and their propagation.
 //!
-//! It interprets no event-kind meaning, chooses no route, calculates no query
-//! result, and updates no durable state.
+//! It owns no meaning: it never inspects an event kind, chooses a route,
+//! evaluates a query, or writes durable state.
+//!
+//! `fava-runtime` is a universal owner, not a replaceable provider. It exposes
+//! concrete types, not a trait to implement.
+//!
+//! Authority: `docs/spec/ARCHITECTURE.md` §`fava-runtime` (owned resources,
+//! owner relationship, provider isolation) and
+//! `.planning/audit/2026-08-23/FROZEN-CONTRACTS.md` §5.
 
-mod backoff;
 mod cancel;
 mod channel;
+mod generation;
+mod name;
 mod provider;
+mod runtime;
 mod task;
 
-pub use backoff::{Backoff, BackoffShortfall};
-pub use cancel::Cancellation;
-pub use channel::{Backpressure, BoundedReceiver, BoundedSender, bounded_channel};
-pub use provider::{Completion, Generation, ProviderCall, ProviderFailure};
-pub use task::{Runtime, ShutdownReport, SpawnRefusal, TaskId};
+pub use cancel::CancellationToken;
+pub use channel::{Receiver, SendRefusal, SendRefused, Sender};
+pub use generation::OperationGeneration;
+pub use name::{OperationName, TaskName};
+pub use provider::ProviderCompletion;
+pub use runtime::{Runtime, RuntimeConfig, RuntimeError};
+pub use task::{TaskFailure, TaskHandle};

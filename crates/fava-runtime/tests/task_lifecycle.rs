@@ -1,10 +1,14 @@
 //! Owner-level evidence for task ownership, cancellation, and shutdown joins.
 
+mod support;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use fava_runtime::{Cancellation, Runtime, SpawnRefusal};
+use fava_runtime::{Runtime, RuntimeError, TaskFailure, TaskName};
+
+use support::{config, runtime};
 
 /// Poll a condition until it holds or a bounded wall-clock budget expires.
 async fn settle(mut condition: impl FnMut() -> bool) -> bool {
@@ -19,33 +23,33 @@ async fn settle(mut condition: impl FnMut() -> bool) -> bool {
 
 #[tokio::test]
 async fn shutdown_joins_every_owned_task_within_the_deadline() {
-    let runtime = Runtime::new();
+    let runtime = runtime();
     let ticks = Arc::new(AtomicUsize::new(0));
 
     for _ in 0..3 {
-        let cancel = runtime.cancellation().child();
+        let token = runtime.cancellation_token();
         let ticks = Arc::clone(&ticks);
         runtime
-            .spawn("cooperative", async move {
+            .spawn(TaskName("cooperative"), async move {
                 loop {
                     ticks.fetch_add(1, Ordering::SeqCst);
                     tokio::select! {
-                        () = cancel.cancelled() => break,
+                        () = token.cancelled() => break,
                         () = tokio::time::sleep(Duration::from_millis(1)) => {}
                     }
                 }
             })
-            .expect("runtime accepts owned work");
+            .expect("runtime admits owned work");
     }
 
     assert!(settle(|| ticks.load(Ordering::SeqCst) > 3).await);
-    assert_eq!(runtime.live_tasks(), 3);
+    assert_eq!(runtime.outstanding_tasks().len(), 3);
 
-    let report = runtime.shutdown(Duration::from_secs(2)).await;
-    assert_eq!(report.joined(), 3, "every owned task is joined");
-    assert_eq!(report.unjoined(), 0);
-    assert!(report.is_clean());
-    assert_eq!(runtime.live_tasks(), 0);
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("every owned task joins");
+    assert!(runtime.outstanding_tasks().is_empty());
 
     let after = ticks.load(Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -57,91 +61,222 @@ async fn shutdown_joins_every_owned_task_within_the_deadline() {
 }
 
 #[tokio::test]
-async fn repeated_shutdown_is_harmless() {
-    let runtime = Runtime::new();
-    runtime.spawn("brief", async {}).expect("spawn accepted");
-
-    let first = runtime.shutdown(Duration::from_secs(2)).await;
-    assert!(first.is_clean());
-    let second = runtime.shutdown(Duration::from_secs(2)).await;
-    assert!(second.is_clean());
-    assert_eq!(second.joined(), 0);
+async fn a_task_whose_handle_was_dropped_is_still_joined() {
+    let runtime = runtime();
+    let token = runtime.cancellation_token();
+    drop(
+        runtime
+            .spawn(TaskName("orphan"), async move { token.cancelled().await })
+            .expect("admitted"),
+    );
+    assert_eq!(runtime.outstanding_tasks(), vec![TaskName("orphan")]);
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("the registry keeps its own grip");
 }
 
 #[tokio::test]
-async fn shutdown_attributes_the_exact_task_that_outlived_the_deadline() {
-    let runtime = Runtime::new();
-
-    let cancel = runtime.cancellation().child();
+async fn repeated_shutdown_is_harmless() {
+    let runtime = runtime();
     runtime
-        .spawn("cooperative", async move { cancel.cancelled().await })
-        .expect("spawn accepted");
-    runtime
-        .spawn("stubborn", std::future::pending::<()>())
-        .expect("spawn accepted");
+        .spawn(TaskName("brief"), async {})
+        .expect("admitted");
 
-    let report = runtime.shutdown(Duration::from_millis(100)).await;
-    assert_eq!(report.joined(), 1);
-    assert_eq!(report.unjoined(), 1);
-    assert!(!report.is_clean());
-    let unjoined: Vec<&'static str> = report.unjoined_tasks().iter().map(|id| id.label()).collect();
-    assert_eq!(unjoined, vec!["stubborn"]);
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("first close");
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("repeat close");
+}
+
+#[tokio::test]
+async fn shutdown_names_the_exact_task_that_outlived_the_deadline() {
+    let runtime = runtime();
+
+    let token = runtime.cancellation_token();
+    runtime
+        .spawn(
+            TaskName("cooperative"),
+            async move { token.cancelled().await },
+        )
+        .expect("admitted");
+    runtime
+        .spawn(TaskName("stubborn"), std::future::pending::<()>())
+        .expect("admitted");
+
+    let started = Instant::now();
+    let failure = runtime
+        .shutdown(Duration::from_millis(100))
+        .await
+        .expect_err("a task that ignores cancellation is reported");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "shutdown stays bounded"
+    );
+    assert_eq!(
+        failure,
+        RuntimeError::ShutdownIncomplete {
+            tasks: vec![TaskName("stubborn")]
+        }
+    );
 }
 
 #[tokio::test]
 async fn spawn_after_shutdown_is_refused() {
-    let runtime = Runtime::new();
-    runtime.shutdown(Duration::from_secs(1)).await;
-    assert_eq!(
-        runtime.spawn("late", async {}).unwrap_err(),
-        SpawnRefusal::Closed
-    );
-}
-
-#[tokio::test]
-async fn spawn_beyond_the_declared_task_capacity_is_refused() {
-    let runtime = Runtime::with_task_capacity(1);
-    let cancel = runtime.cancellation().child();
+    let runtime = runtime();
     runtime
-        .spawn("first", async move { cancel.cancelled().await })
-        .expect("spawn accepted");
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
     assert_eq!(
-        runtime.spawn("second", std::future::pending::<()>()).unwrap_err(),
-        SpawnRefusal::AtCapacity { capacity: 1 }
+        runtime.spawn(TaskName("late"), async {}).unwrap_err(),
+        RuntimeError::ShuttingDown
     );
-    runtime.shutdown(Duration::from_secs(1)).await;
 }
 
 #[tokio::test]
-async fn panicking_task_is_attributed_and_leaves_unrelated_work_running() {
-    let runtime = Runtime::new();
+async fn spawn_beyond_the_declared_task_limit_is_refused() {
+    let runtime = Runtime::new(config(4, 1, 4));
+    let token = runtime.cancellation_token();
+    runtime
+        .spawn(TaskName("first"), async move { token.cancelled().await })
+        .expect("admitted");
+    assert_eq!(
+        runtime
+            .spawn(TaskName("second"), std::future::pending::<()>())
+            .unwrap_err(),
+        RuntimeError::TaskLimit { limit: 1 }
+    );
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn a_completed_task_frees_its_registry_slot() {
+    let runtime = Runtime::new(config(4, 1, 4));
+    let handle = runtime
+        .spawn(TaskName("brief"), async { 5_u8 })
+        .expect("admitted");
+    assert_eq!(handle.join().await, Ok(5));
+    assert!(settle(|| runtime.outstanding_tasks().is_empty()).await);
+    runtime
+        .spawn(TaskName("next"), async {})
+        .expect("the freed slot is reusable");
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn a_panicking_task_becomes_a_typed_failure_and_frees_shutdown() {
+    let runtime = runtime();
     let done = Arc::new(AtomicUsize::new(0));
 
-    runtime
-        .spawn("panicking", async { panic!("provider task exploded") })
-        .expect("spawn accepted");
+    let panicking = runtime
+        .spawn(TaskName("panicking"), async {
+            panic!("owned task exploded")
+        })
+        .expect("admitted");
 
     let unrelated = Arc::clone(&done);
     runtime
-        .spawn("unrelated", async move {
+        .spawn(TaskName("unrelated"), async move {
             unrelated.fetch_add(1, Ordering::SeqCst);
         })
-        .expect("spawn accepted");
+        .expect("admitted");
 
-    assert!(settle(|| runtime.panicked_tasks().len() == 1).await);
-    let panicked = runtime.panicked_tasks();
-    assert_eq!(panicked[0].label(), "panicking");
+    match panicking.join().await {
+        Err(TaskFailure::Panicked { name, detail }) => {
+            assert_eq!(name, TaskName("panicking"));
+            assert!(detail.contains("owned task exploded"), "detail: {detail}");
+        }
+        other => panic!("expected an attributed panic, got {other:?}"),
+    }
 
     assert!(settle(|| done.load(Ordering::SeqCst) == 1).await);
-
-    let report = runtime.shutdown(Duration::from_secs(2)).await;
-    assert_eq!(report.panicked(), 1);
-    assert_eq!(report.unjoined(), 0, "a panicking task never blocks shutdown");
+    runtime
+        .shutdown(Duration::from_secs(2))
+        .await
+        .expect("a panicking task never blocks shutdown");
 }
 
 #[tokio::test]
-async fn cancellation_propagates_from_the_owner_token_to_its_children() {
-    let owner = Cancellation::new();
+async fn a_task_aborted_at_shutdown_reports_abortion_to_its_owner() {
+    let runtime = runtime();
+    let handle = runtime
+        .spawn(TaskName("stubborn"), std::future::pending::<u8>())
+        .expect("admitted");
+    runtime
+        .shutdown(Duration::from_millis(60))
+        .await
+        .expect_err("the task outlives the deadline");
+    assert_eq!(
+        handle.join().await,
+        Err(TaskFailure::Aborted {
+            name: TaskName("stubborn")
+        })
+    );
+}
+
+#[tokio::test]
+async fn a_cancellable_task_ends_with_none_when_its_token_fires() {
+    let runtime = runtime();
+    let token = runtime.cancellation_token();
+    let handle = runtime
+        .spawn_cancellable(
+            TaskName("lane"),
+            token.clone(),
+            std::future::pending::<u8>(),
+        )
+        .expect("admitted");
+    token.cancel();
+    assert_eq!(handle.join().await, Ok(None));
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn a_cancellable_task_that_finishes_first_keeps_its_value() {
+    let runtime = runtime();
+    let handle = runtime
+        .spawn_cancellable(TaskName("lane"), runtime.cancellation_token(), async {
+            9_u8
+        })
+        .expect("admitted");
+    assert_eq!(handle.join().await, Ok(Some(9)));
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn is_finished_reports_completion_before_the_owner_joins() {
+    let runtime = runtime();
+    let handle = runtime
+        .spawn(TaskName("brief"), async { 1_u8 })
+        .expect("admitted");
+    assert!(settle(|| handle.is_finished()).await);
+    assert_eq!(handle.join().await, Ok(1));
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn cancellation_propagates_from_an_owner_token_to_its_children() {
+    let runtime = runtime();
+    let owner = runtime.cancellation_token();
     let child = owner.child();
     let grandchild = child.child();
 
@@ -152,19 +287,21 @@ async fn cancellation_propagates_from_the_owner_token_to_its_children() {
 
     tokio::time::timeout(Duration::from_secs(1), grandchild.cancelled())
         .await
-        .expect("a cancelled token wakes its waiters");
+        .expect("a fired token wakes its waiters");
 }
 
 #[tokio::test]
-async fn a_child_created_after_cancellation_is_already_cancelled() {
-    let owner = Cancellation::new();
+async fn a_child_derived_after_cancellation_is_already_cancelled() {
+    let runtime = runtime();
+    let owner = runtime.cancellation_token();
     owner.cancel();
     assert!(owner.child().is_cancelled());
 }
 
 #[tokio::test]
-async fn cancelling_a_child_leaves_the_owner_and_its_siblings_running() {
-    let owner = Cancellation::new();
+async fn cancelling_a_child_leaves_its_parent_and_siblings_running() {
+    let runtime = runtime();
+    let owner = runtime.cancellation_token();
     let first = owner.child();
     let second = owner.child();
 
@@ -175,10 +312,30 @@ async fn cancelling_a_child_leaves_the_owner_and_its_siblings_running() {
 }
 
 #[tokio::test]
-async fn shutdown_cancels_the_runtime_root_token() {
-    let runtime = Runtime::new();
-    let token = runtime.cancellation().child();
+async fn propagation_does_not_depend_on_holding_intermediate_tokens() {
+    let runtime = runtime();
+    let leaf = {
+        let intermediate = runtime.cancellation_token();
+        intermediate.child()
+        // `intermediate` is dropped here; the leaf must still be reachable
+        // from the runtime root.
+    };
+    assert!(!leaf.is_cancelled());
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+    assert!(leaf.is_cancelled());
+}
+
+#[tokio::test]
+async fn shutdown_fires_every_token_rooted_in_the_runtime() {
+    let runtime = runtime();
+    let token = runtime.cancellation_token().child();
     assert!(!token.is_cancelled());
-    runtime.shutdown(Duration::from_secs(1)).await;
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
     assert!(token.is_cancelled());
 }

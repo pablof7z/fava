@@ -1,100 +1,191 @@
 //! Owner-level evidence that provider calls are deadline-bounded, panic-isolated,
 //! and carry enough identity for a late completion to be rejected.
+//!
+//! Falsifier obligations from `FROZEN-CONTRACTS.md` §8:
+//! `stalled_provider_yields_timed_out_completion_and_shutdown_still_joins` and
+//! `panicking_provider_becomes_a_typed_completion`.
+
+mod support;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use fava_runtime::{Completion, Generation, ProviderCall, ProviderFailure, Runtime};
+use fava_runtime::{
+    OperationGeneration, OperationName, ProviderCompletion, Runtime, RuntimeError, TaskName,
+};
 
-fn call(operation: &'static str, deadline: Duration, generation: Generation) -> ProviderCall {
-    ProviderCall::new("test-signer", operation, deadline, generation)
+use support::{config, runtime};
+
+const SIGN: OperationName = OperationName("sign_event");
+
+fn generation(value: u64) -> OperationGeneration {
+    OperationGeneration(value)
 }
 
 #[tokio::test]
-async fn a_blocked_provider_completes_as_a_typed_timeout_within_its_deadline() {
-    let runtime = Runtime::new();
-    let started = Instant::now();
+async fn stalled_provider_yields_timed_out_completion_and_shutdown_still_joins() {
+    let runtime = runtime();
+    let unrelated_ran = Arc::new(AtomicUsize::new(0));
 
-    let completion: Completion<u8> = runtime
-        .invoke(
-            call("sign_event", Duration::from_millis(60), Generation::FIRST),
+    let counter = Arc::clone(&unrelated_ran);
+    let token = runtime.cancellation_token();
+    runtime
+        .spawn(TaskName("unrelated"), async move {
+            counter.fetch_add(1, Ordering::SeqCst);
+            token.cancelled().await;
+        })
+        .expect("admitted");
+
+    let started = Instant::now();
+    let completion: ProviderCompletion<u8> = runtime
+        .call_provider(
+            SIGN,
+            generation(1),
+            Duration::from_millis(60),
             std::future::pending::<u8>(),
         )
         .await;
 
-    assert!(started.elapsed() < Duration::from_secs(2), "deadline enforced");
-    assert_eq!(
-        completion.outcome().err(),
-        Some(&ProviderFailure::TimedOut {
-            deadline: Duration::from_millis(60)
-        })
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the deadline is enforced"
     );
-    assert_eq!(completion.provider(), "test-signer");
-    assert_eq!(completion.operation(), "sign_event");
-    assert_eq!(completion.generation(), Generation::FIRST);
+    assert_eq!(
+        completion,
+        ProviderCompletion::TimedOut {
+            operation: SIGN,
+            generation: generation(1),
+            after: Duration::from_millis(60),
+        }
+    );
+    assert_eq!(unrelated_ran.load(Ordering::SeqCst), 1);
+
+    // The stalled provider is detached, not aborted: it stays registered, and
+    // shutdown either joins it or names it. Either way shutdown returns within
+    // its own deadline and unrelated owned work is joined.
+    let closing = Instant::now();
+    let outcome = runtime.shutdown(Duration::from_millis(300)).await;
+    assert!(
+        closing.elapsed() < Duration::from_secs(2),
+        "shutdown stays bounded"
+    );
+    assert_eq!(
+        outcome,
+        Err(RuntimeError::ShutdownIncomplete {
+            tasks: vec![TaskName("sign_event")]
+        }),
+        "the stalled provider is named, and only the stalled provider"
+    );
+    assert!(runtime.outstanding_tasks().is_empty());
+}
+
+#[tokio::test]
+async fn panicking_provider_becomes_a_typed_completion() {
+    let runtime = runtime();
+
+    let completion: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, generation(1), Duration::from_secs(1), async {
+            panic!("substituted signer exploded")
+        })
+        .await;
+
+    match &completion {
+        ProviderCompletion::Panicked {
+            operation,
+            generation: seen,
+            detail,
+        } => {
+            assert_eq!(*operation, SIGN);
+            assert_eq!(*seen, generation(1));
+            assert!(
+                detail.contains("substituted signer exploded"),
+                "detail: {detail}"
+            );
+        }
+        other => panic!("expected an attributed panic completion, got {other:?}"),
+    }
+
+    let next: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, generation(2), Duration::from_secs(1), async { 3 })
+        .await;
+    assert_eq!(
+        next.value(),
+        Some(3),
+        "the runtime survives a provider panic"
+    );
+
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn a_panicking_provider_does_not_poison_the_registry_or_shutdown() {
+    let runtime = runtime();
+    for attempt in 0..4 {
+        let completion: ProviderCompletion<u8> = runtime
+            .call_provider(SIGN, generation(attempt), Duration::from_secs(1), async {
+                panic!("boom")
+            })
+            .await;
+        assert!(matches!(completion, ProviderCompletion::Panicked { .. }));
+    }
+    assert_eq!(runtime.running_provider_operations(), 0);
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
 }
 
 #[tokio::test]
 async fn a_blocked_provider_cannot_block_unrelated_owner_progress() {
-    let runtime = Runtime::new();
-
-    let blocked = runtime.spawn("blocked-lane", {
-        let runtime = runtime.clone();
-        async move {
-            let _: Completion<u8> = runtime
-                .invoke(
-                    call("sign_event", Duration::from_secs(3_600), Generation::FIRST),
-                    std::future::pending::<u8>(),
-                )
-                .await;
-        }
-    });
-    blocked.expect("spawn accepted");
-
-    let unrelated: Completion<u8> = runtime
-        .invoke(
-            call("get_public_key", Duration::from_secs(1), Generation::FIRST),
-            async { 7 },
-        )
-        .await;
-    assert_eq!(unrelated.into_outcome(), Ok(7));
-}
-
-#[tokio::test]
-async fn a_blocked_provider_cannot_block_shutdown() {
-    let runtime = Runtime::new();
+    let runtime = runtime();
 
     runtime
-        .spawn("blocked-lane", {
+        .spawn(TaskName("blocked-lane"), {
             let runtime = runtime.clone();
             async move {
-                let _: Completion<u8> = runtime
-                    .invoke(
-                        call("sign_event", Duration::from_secs(3_600), Generation::FIRST),
+                let _: ProviderCompletion<u8> = runtime
+                    .call_provider(
+                        SIGN,
+                        generation(1),
+                        Duration::from_secs(3_600),
                         std::future::pending::<u8>(),
                     )
                     .await;
             }
         })
-        .expect("spawn accepted");
+        .expect("admitted");
 
-    let started = Instant::now();
-    let report = runtime.shutdown(Duration::from_millis(500)).await;
-    assert!(started.elapsed() < Duration::from_secs(2));
-    assert_eq!(report.unjoined(), 0, "the stalled provider call is cancelled, not awaited");
-    assert!(report.is_clean());
+    let unrelated: ProviderCompletion<u8> = runtime
+        .call_provider(
+            OperationName("get_public_key"),
+            generation(1),
+            Duration::from_secs(1),
+            async { 7 },
+        )
+        .await;
+    assert_eq!(unrelated.value(), Some(7));
+
+    runtime
+        .shutdown(Duration::from_millis(300))
+        .await
+        .expect_err("the blocked provider is still named");
 }
 
 #[tokio::test]
-async fn a_cancelled_provider_call_is_typed_and_distinct_from_a_timeout() {
-    let runtime = Runtime::new();
-    let handle = tokio::spawn({
+async fn a_provider_call_in_flight_at_shutdown_completes_as_cancelled() {
+    let runtime = runtime();
+    let inflight = tokio::spawn({
         let runtime = runtime.clone();
         async move {
             runtime
-                .invoke(
-                    call("sign_event", Duration::from_secs(3_600), Generation::FIRST),
+                .call_provider(
+                    SIGN,
+                    generation(1),
+                    Duration::from_secs(3_600),
                     std::future::pending::<u8>(),
                 )
                 .await
@@ -102,132 +193,161 @@ async fn a_cancelled_provider_call_is_typed_and_distinct_from_a_timeout() {
     });
 
     tokio::time::sleep(Duration::from_millis(20)).await;
-    runtime.shutdown(Duration::from_secs(1)).await;
+    runtime
+        .shutdown(Duration::from_millis(200))
+        .await
+        .expect_err("the stalled provider is named");
 
-    let completion = handle.await.expect("call returns a completion");
-    assert_eq!(completion.into_outcome(), Err(ProviderFailure::Cancelled));
-}
-
-#[tokio::test]
-async fn a_panicking_provider_is_isolated_and_attributed() {
-    let runtime = Runtime::new();
-
-    let completion: Completion<u8> = runtime
-        .invoke(
-            call("sign_event", Duration::from_secs(1), Generation::FIRST),
-            async { panic!("substituted signer exploded") },
-        )
-        .await;
-
-    match completion.outcome() {
-        Err(ProviderFailure::Panicked { detail }) => {
-            assert!(detail.contains("substituted signer exploded"), "detail: {detail}");
-        }
-        other => panic!("expected an attributed panic, got {other:?}"),
-    }
-
-    let next: Completion<u8> = runtime
-        .invoke(
-            call("sign_event", Duration::from_secs(1), Generation::FIRST.next()),
-            async { 3 },
-        )
-        .await;
-    assert_eq!(next.into_outcome(), Ok(3), "the runtime survives a provider panic");
-}
-
-#[tokio::test]
-async fn a_panicking_provider_does_not_poison_the_owner_lock_or_shutdown() {
-    let runtime = Runtime::new();
-    for _ in 0..4 {
-        let _: Completion<u8> = runtime
-            .invoke(
-                call("sign_event", Duration::from_secs(1), Generation::FIRST),
-                async { panic!("boom") },
-            )
-            .await;
-    }
-    let report = runtime.shutdown(Duration::from_secs(1)).await;
-    assert!(report.is_clean());
-}
-
-#[tokio::test]
-async fn a_stale_completion_is_rejected_rather_than_installed() {
-    let runtime = Runtime::new();
-    let opened = Generation::FIRST;
-    let current = opened.next();
-
-    let completion: Completion<u8> = runtime
-        .invoke(
-            call("sign_event", Duration::from_secs(1), opened),
-            async { 9 },
-        )
-        .await;
-
-    assert!(!completion.is_current(current));
-    assert!(completion.is_current(opened));
+    let completion = inflight.await.expect("the call answers");
     assert_eq!(
-        completion.accept_if_current(current),
-        None,
-        "a completion from a superseded generation is refused"
+        completion,
+        ProviderCompletion::Cancelled {
+            operation: SIGN,
+            generation: generation(1),
+        }
     );
 }
 
 #[tokio::test]
-async fn a_current_completion_is_accepted() {
-    let runtime = Runtime::new();
-    let current = Generation::FIRST.next().next();
-    let completion: Completion<u8> = runtime
-        .invoke(call("sign_event", Duration::from_secs(1), current), async { 11 })
+async fn a_provider_call_after_shutdown_is_refused() {
+    let runtime = runtime();
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+    let completion: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, generation(4), Duration::from_secs(1), async { 1 })
         .await;
-    assert_eq!(completion.accept_if_current(current), Some(Ok(11)));
+    assert_eq!(
+        completion,
+        ProviderCompletion::Refused {
+            operation: SIGN,
+            generation: generation(4),
+        }
+    );
 }
 
 #[tokio::test]
-async fn a_late_timeout_from_a_superseded_generation_is_rejectable() {
-    let runtime = Runtime::new();
-    let superseded = Generation::FIRST;
-    let completion: Completion<u8> = runtime
-        .invoke(
-            call("sign_event", Duration::from_millis(30), superseded),
+async fn provider_calls_beyond_the_declared_operation_bound_are_refused() {
+    let runtime = Runtime::new(config(4, 16, 1));
+
+    let holder = tokio::spawn({
+        let runtime = runtime.clone();
+        async move {
+            runtime
+                .call_provider(
+                    SIGN,
+                    generation(1),
+                    Duration::from_secs(3_600),
+                    std::future::pending::<u8>(),
+                )
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(runtime.running_provider_operations(), 1);
+
+    let refused: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, generation(2), Duration::from_secs(1), async { 1 })
+        .await;
+    assert_eq!(
+        refused,
+        ProviderCompletion::Refused {
+            operation: SIGN,
+            generation: generation(2),
+        }
+    );
+
+    runtime
+        .shutdown(Duration::from_millis(200))
+        .await
+        .expect_err("the holder is named");
+    drop(holder.await);
+}
+
+#[tokio::test]
+async fn a_stale_completion_is_rejectable_by_generation() {
+    let runtime = runtime();
+    let superseded = generation(1);
+    let current = superseded.next();
+
+    let completion: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, superseded, Duration::from_secs(1), async { 9 })
+        .await;
+
+    assert_eq!(completion.generation(), superseded);
+    assert_ne!(
+        completion.generation(),
+        current,
+        "an owner that moved on can tell this completion is stale"
+    );
+    assert_eq!(completion.operation(), SIGN);
+
+    let fresh: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, current, Duration::from_secs(1), async { 10 })
+        .await;
+    assert_eq!(fresh.generation(), current);
+    assert_eq!(fresh.value(), Some(10));
+
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
+}
+
+#[tokio::test]
+async fn every_completion_variant_carries_its_authorising_identity() {
+    let runtime = runtime();
+    let asked = generation(7);
+
+    let completed: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, asked, Duration::from_secs(1), async { 1 })
+        .await;
+    let timed_out: ProviderCompletion<u8> = runtime
+        .call_provider(
+            SIGN,
+            asked,
+            Duration::from_millis(40),
             std::future::pending::<u8>(),
         )
         .await;
-    assert!(completion.outcome().is_err());
-    assert_eq!(completion.accept_if_current(superseded.next()), None);
-}
+    let panicked: ProviderCompletion<u8> = runtime
+        .call_provider(SIGN, asked, Duration::from_secs(1), async {
+            panic!("boom")
+        })
+        .await;
 
-#[tokio::test]
-async fn generations_are_monotonic_and_comparable() {
-    let first = Generation::FIRST;
-    let second = first.next();
-    assert!(second > first);
-    assert_eq!(second.value(), first.value() + 1);
-}
+    for completion in [&completed, &timed_out, &panicked] {
+        assert_eq!(completion.generation(), asked);
+        assert_eq!(completion.operation(), SIGN);
+    }
+    assert_eq!(timed_out.value(), None);
+    assert_eq!(panicked.value(), None);
 
-#[tokio::test]
-async fn a_provider_call_observes_cancellation_before_its_deadline() {
-    let runtime = Runtime::new();
-    let observed = Arc::new(AtomicBool::new(false));
-
-    let handle = tokio::spawn({
-        let runtime = runtime.clone();
-        let observed = Arc::clone(&observed);
-        async move {
-            let completion: Completion<u8> = runtime
-                .invoke(
-                    call("open_session", Duration::from_secs(3_600), Generation::FIRST),
-                    std::future::pending::<u8>(),
-                )
-                .await;
-            observed.store(completion.outcome().is_err(), Ordering::SeqCst);
-        }
-    });
-
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    runtime.cancellation().cancel();
-    tokio::time::timeout(Duration::from_secs(1), handle)
+    runtime
+        .shutdown(Duration::from_millis(200))
         .await
-        .expect("cancellation ends the call")
-        .expect("task completes");
-    assert!(observed.load(Ordering::SeqCst));
+        .expect_err("the detached stalled provider is named");
+}
+
+#[tokio::test]
+async fn generations_advance_monotonically_and_saturate() {
+    assert_eq!(OperationGeneration::default(), generation(0));
+    assert!(generation(1).next() > generation(1));
+    assert_eq!(
+        OperationGeneration(u64::MAX).next(),
+        OperationGeneration(u64::MAX)
+    );
+}
+
+#[tokio::test]
+async fn the_runtime_clock_sleeps_for_owners() {
+    let runtime = runtime();
+    let started = Instant::now();
+    runtime.sleep(Duration::from_millis(20)).await;
+    assert!(started.elapsed() >= Duration::from_millis(15));
+    runtime
+        .shutdown(Duration::from_secs(1))
+        .await
+        .expect("close");
 }
