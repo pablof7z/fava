@@ -5,14 +5,14 @@ use fava_query::{
     SingleLetterTag,
 };
 
-use crate::{Group, GroupError, GroupRecords, SimpleGroups};
+use crate::{SimpleGroup, SimpleGroupError, SimpleGroupRecords, SimpleGroups};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
 }
 
-fn group() -> Group {
-    Group::on(
+fn simple_group() -> SimpleGroup {
+    SimpleGroup::on(
         [relay("wss://z.example"), relay("wss://a.example")],
         "photos",
     )
@@ -21,18 +21,18 @@ fn group() -> Group {
 
 #[test]
 fn content_query_refuses_unbounded_and_oversized_results() {
-    let group = group();
+    let simple_group = simple_group();
 
     assert!(matches!(
-        group.events(Query::events()),
-        Err(GroupError::Query(_))
+        simple_group.events(Query::events()),
+        Err(SimpleGroupError::Query(_))
     ));
     assert!(matches!(
-        group.events(Query::events().limit(4_097).expect("positive limit")),
-        Err(GroupError::Query(_))
+        simple_group.events(Query::events().limit(4_097).expect("positive limit")),
+        Err(SimpleGroupError::Query(_))
     ));
     assert_eq!(
-        group
+        simple_group
             .events(Query::events().limit(1).expect("positive limit"))
             .expect("minimum result bound")
             .result_limit()
@@ -41,7 +41,7 @@ fn content_query_refuses_unbounded_and_oversized_results() {
         1
     );
     assert_eq!(
-        group
+        simple_group
             .events(Query::events().limit(4_096).expect("positive limit"))
             .expect("maximum result bound")
             .result_limit()
@@ -53,7 +53,7 @@ fn content_query_refuses_unbounded_and_oversized_results() {
 
 #[test]
 fn content_query_preserves_any_local_visibility() {
-    let group = group();
+    let simple_group = simple_group();
     let hosts = BTreeSet::from([relay("wss://z.example"), relay("wss://a.example")]);
     let h = SingleLetterTag::from_char('h').expect("tag key");
     let selection = Query::events()
@@ -66,7 +66,7 @@ fn content_query_preserves_any_local_visibility() {
         .expect("positive limit")
         .cache_only()
         .oldest_first();
-    let content = group.events(selection).expect("bounded content query");
+    let content = simple_group.events(selection).expect("bounded content query");
 
     assert_eq!(
         content.selection().kinds,
@@ -95,34 +95,34 @@ fn content_query_preserves_any_local_visibility() {
 
 #[test]
 fn content_query_refuses_every_preexisting_group_context() {
-    let group = group();
+    let simple_group = simple_group();
     let h = SingleLetterTag::from_char('h').expect("tag key");
     let bounded = || Query::events().limit(16).expect("positive limit");
 
     assert_eq!(
-        group.events(bounded().tag_values(h, ["photos"])),
-        Err(GroupError::ConflictingGroupContext),
+        simple_group.events(bounded().tag_values(h, ["photos"])),
+        Err(SimpleGroupError::ConflictingSimpleGroupContext),
         "the capability alone owns insertion of the exact h axis"
     );
     assert_eq!(
-        group.events(bounded().tag_values(h, ["photos", "elsewhere"])),
-        Err(GroupError::ConflictingGroupContext)
+        simple_group.events(bounded().tag_values(h, ["photos", "elsewhere"])),
+        Err(SimpleGroupError::ConflictingSimpleGroupContext)
     );
     assert_eq!(
-        group.events(bounded().tag_values(h, ["elsewhere"])),
-        Err(GroupError::ConflictingGroupContext)
+        simple_group.events(bounded().tag_values(h, ["elsewhere"])),
+        Err(SimpleGroupError::ConflictingSimpleGroupContext)
     );
     assert_eq!(
-        group.events(bounded().tag_values(h, std::iter::empty::<String>())),
-        Err(GroupError::EmptyGroupContext)
+        simple_group.events(bounded().tag_values(h, std::iter::empty::<String>())),
+        Err(SimpleGroupError::EmptySimpleGroupContext)
     );
 }
 
 #[test]
 fn record_query_uses_exact_relay_authority() {
-    let group = group();
+    let simple_group = simple_group();
     let hosts = BTreeSet::from([relay("wss://z.example"), relay("wss://a.example")]);
-    let records = group.records(GroupRecords::all()).expect("record query");
+    let records = simple_group.records(SimpleGroupRecords::all()).expect("record query");
 
     assert_eq!(
         records.source().acquisition(),
@@ -136,13 +136,13 @@ fn record_query_uses_exact_relay_authority() {
 
 #[test]
 fn group_queries_have_explicit_result_bounds() {
-    let group = group();
+    let simple_group = simple_group();
     let queries = [
-        group.records(GroupRecords::all()).expect("record query"),
-        SimpleGroups::saved_groups(Vec::<PublicKey>::new()).expect("saved-group query"),
+        simple_group.records(SimpleGroupRecords::all()).expect("record query"),
+        SimpleGroups::saved_simple_groups(Vec::<PublicKey>::new()).expect("saved-group query"),
         SimpleGroups::saved_relays(Vec::<PublicKey>::new()).expect("saved-relay query"),
-        SimpleGroups::groups_where_admin(Vec::<PublicKey>::new()).expect("admin query"),
-        SimpleGroups::groups_where_member(Vec::<PublicKey>::new()).expect("member query"),
+        SimpleGroups::simple_groups_where_admin(Vec::<PublicKey>::new()).expect("admin query"),
+        SimpleGroups::simple_groups_where_member(Vec::<PublicKey>::new()).expect("member query"),
     ];
 
     for query in queries {

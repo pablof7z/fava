@@ -1,10 +1,10 @@
 # fava-simple-groups
 
-Pure multi-relay NIP-29 values for Fava. A `Group` is one opaque group id over
-an application-selected, non-empty host set. Each host remains independently
-authoritative for the records it served. The crate prepares ordinary queries,
-events, and saved-list edits; Fava owns observation, signing, routing,
-publication, delivery, cancellation, and receipts.
+Pure multi-relay NIP-29 values for Fava. A `SimpleGroup` is one opaque simple
+group id over an application-selected, non-empty host set. Each host remains
+independently authoritative for the records it served. The crate prepares
+ordinary queries, events, and saved-list edits; Fava owns observation,
+signing, routing, publication, delivery, cancellation, and receipts.
 
 ## Feed and publication
 
@@ -14,9 +14,9 @@ and discovery helpers carry the same explicit whole-query bound.
 
 ```rust
 use fava::{EventBuilder, Kind, Query, Timestamp, Write};
-use fava_simple_groups::Group;
+use fava_simple_groups::SimpleGroup;
 
-let photos = Group::on(
+let photos = SimpleGroup::on(
     ["wss://bob.groups.example", "wss://alice.groups.example"],
     "photos",
 )?;
@@ -39,7 +39,7 @@ let write: Write = fava.to(photos.hosts())?.publish(prepared)?;
 ```
 
 `prepare` is pure and kind-blind. `to` is an inert exact-route scope, and only
-`publish` opens ordinary Fava work. `Group` has no publication method.
+`publish` opens ordinary Fava work. `SimpleGroup` has no publication method.
 
 ## Records and fork visibility
 
@@ -48,9 +48,9 @@ Relay-authored kinds 39000 through 39005 use exact `d` selection and
 record for an unobserved host and never lets one host speak for another.
 
 ```rust
-use fava_simple_groups::GroupRecords;
+use fava_simple_groups::SimpleGroupRecords;
 
-let records = photos.records(GroupRecords::all())?;
+let records = photos.records(SimpleGroupRecords::all())?;
 let observation = fava.observe(records).await?;
 let snapshot = photos.project(&observation.current())?;
 
@@ -71,7 +71,7 @@ if snapshot.metadata_differ() {
 }
 ```
 
-`GroupSnapshot::at` is an explicit application choice. An empty host view is
+`SimpleGroupSnapshot::at` is an explicit application choice. An empty host view is
 only an empty positive-evidence view; it is not an absence or completeness
 claim. Disagreement compares complete optional host-local records. Projection
 refuses a 4,097th input row after examining at most the bound plus one; it never
@@ -83,26 +83,26 @@ Discovery is an ordinary bounded `Query`. Saved rows retain their author and
 exact relay URL.
 
 ```rust
-use fava_simple_groups::{SavedGroup, SimpleGroups};
+use fava_simple_groups::{SavedSimpleGroup, SimpleGroups};
 
-let query = SimpleGroups::saved_groups([me])?;
+let query = SimpleGroups::saved_simple_groups([me])?;
 let observation = fava.observe(query).await?;
 for record in &observation.current().events {
-    for row in SavedGroup::from_event(&record.event)? {
+    for row in SavedSimpleGroup::from_event(&record.event)? {
         let saved = row?;
         println!("{} @ {} {:?}", saved.id(), saved.relay(), saved.name());
     }
 }
 
-let admin_query = SimpleGroups::groups_where_admin([me])?;
-let member_query = SimpleGroups::groups_where_member([me])?;
-let saving_authors = SimpleGroups::groups_saved_by(
+let admin_query = SimpleGroups::simple_groups_where_admin([me])?;
+let member_query = SimpleGroups::simple_groups_where_member([me])?;
+let saving_authors = SimpleGroups::simple_groups_saved_by(
     &observation.current(),
     &photos,
 )?;
 ```
 
-Saved group and relay changes are pure kind-10009 semantic edits. The
+Saved simple group and relay changes are pure kind-10009 semantic edits. The
 application supplies the author with `by`, the complete destination set with
 `to`, and receives an ordinary `Write` from `publish`.
 
@@ -110,7 +110,7 @@ application supplies the author with `by`, the complete destination set with
 use fava::Write;
 use fava_simple_groups::SimpleGroups;
 
-let edit = SimpleGroups::save_group(&photos, Some("Photography"))?;
+let edit = SimpleGroups::save_simple_group(&photos, Some("Photography"))?;
 let write: Write = fava
     .by(me)
     .to(photos.hosts())?
@@ -164,13 +164,13 @@ ordinary receipt and its current publication phase.
 
 ## Public values
 
-- `Group`, `GroupRecords`, `GroupSnapshot`, `SimpleGroups`, and `GroupError`.
-- `GroupMetadata`, `GroupAdmins`, `GroupMembers`, `GroupRoles`,
-  `GroupParticipants`, and `GroupPins` for exact relay-authored records.
-- `PinnedItem`, `SavedGroup`, and `SavedRelay` for bounded typed rows.
+- `SimpleGroup`, `SimpleGroupRecords`, `SimpleGroupSnapshot`, `SimpleGroups`, and `SimpleGroupError`.
+- `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`, `SimpleGroupRoles`,
+  `SimpleGroupParticipants`, and `SimpleGroupPins` for exact relay-authored records.
+- `PinnedItem`, `SavedSimpleGroup`, and `SavedRelay` for bounded typed rows.
 
 The crate's normal dependencies are exactly `fava-query`, `fava-state`, and
 `fava-write`. It owns no engine, provider, signer, router, store, publisher,
 transport, runtime, observation, delivery, cancellation, or receipt state.
-Universal Fava owners contain no NIP-29 kind switch, group-id branch, or
+Universal Fava owners contain no NIP-29 kind switch, simple-group-id branch, or
 production dependency on this capability.

@@ -3,8 +3,8 @@ use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
 use crate::{
-    GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins, GroupRoles,
-    PinnedItem, SavedGroup, SavedRelay,
+    SimpleGroupAdmins, SimpleGroupError, SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupParticipants, SimpleGroupPins, SimpleGroupRoles,
+    PinnedItem, SavedSimpleGroup, SavedRelay,
 };
 
 fn tag(values: &[&str]) -> Tag {
@@ -44,7 +44,7 @@ fn metadata_parser_conserves_complete_record() {
         ],
         "opaque",
     );
-    let metadata = GroupMetadata::from_event(&EventValue::Signed(event)).expect("metadata");
+    let metadata = SimpleGroupMetadata::from_event(&EventValue::Signed(event)).expect("metadata");
 
     assert_eq!(metadata.id(), " photos ");
     assert_eq!(metadata.author(), keys.public_key());
@@ -75,13 +75,13 @@ fn metadata_parser_conserves_complete_record() {
         "",
     );
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(absent))
+        SimpleGroupMetadata::from_event(&EventValue::Signed(absent))
             .expect("absent supported kinds")
             .supported_kinds(),
         None
     );
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(empty))
+        SimpleGroupMetadata::from_event(&EventValue::Signed(empty))
             .expect("present-empty supported kinds")
             .supported_kinds(),
         Some([].as_slice())
@@ -94,7 +94,7 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
     let keys = Keys::generate();
     let minimal = source(&keys, 39_000, vec![tag(&["d", "g"])], "");
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(minimal))
+        SimpleGroupMetadata::from_event(&EventValue::Signed(minimal))
             .expect("narrow valid record")
             .id(),
         "g"
@@ -102,8 +102,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
 
     let wrong_kind = source(&keys, 39_001, vec![tag(&["d", "g"])], "");
     assert!(matches!(
-        GroupMetadata::from_event(&EventValue::Signed(wrong_kind)),
-        Err(GroupError::WrongRecordKind {
+        SimpleGroupMetadata::from_event(&EventValue::Signed(wrong_kind)),
+        Err(SimpleGroupError::WrongRecordKind {
             expected: 39_000,
             actual: 39_001
         })
@@ -115,15 +115,15 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         .build()
         .expect("bounded unsigned record");
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Unsigned(unsigned)),
-        Err(GroupError::UnsignedRecord)
+        SimpleGroupMetadata::from_event(&EventValue::Unsigned(unsigned)),
+        Err(SimpleGroupError::UnsignedRecord)
     );
 
     let mut invalid_id = source(&keys, 39_000, vec![tag(&["d", "g"])], "before");
     invalid_id.content = "after".to_owned();
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(invalid_id)),
-        Err(GroupError::InvalidRecordId)
+        SimpleGroupMetadata::from_event(&EventValue::Signed(invalid_id)),
+        Err(SimpleGroupError::InvalidRecordId)
     );
 
     let valid = source(&keys, 39_000, vec![tag(&["d", "g"])], "");
@@ -132,26 +132,26 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         .parse()
         .expect("shape-valid signature");
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(invalid_signature)),
-        Err(GroupError::InvalidRecordSignature)
+        SimpleGroupMetadata::from_event(&EventValue::Signed(invalid_signature)),
+        Err(SimpleGroupError::InvalidRecordSignature)
     );
 
     let cases = [
         (
             source(&keys, 39_000, vec![], ""),
-            GroupError::MissingRecordId,
+            SimpleGroupError::MissingRecordId,
         ),
         (
             source(&keys, 39_000, vec![tag(&["d"])], ""),
-            GroupError::EmptyRecordId,
+            SimpleGroupError::EmptyRecordId,
         ),
         (
             source(&keys, 39_000, vec![tag(&["d", ""])], ""),
-            GroupError::EmptyRecordId,
+            SimpleGroupError::EmptyRecordId,
         ),
         (
             source(&keys, 39_000, vec![tag(&["d", "g"]), tag(&["d", "g"])], ""),
-            GroupError::DuplicateRecordId,
+            SimpleGroupError::DuplicateRecordId,
         ),
         (
             source(
@@ -160,12 +160,12 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
                 vec![tag(&["d", "g"]), tag(&["d", "other"])],
                 "",
             ),
-            GroupError::ConflictingRecordId,
+            SimpleGroupError::ConflictingRecordId,
         ),
     ];
     for (event, expected) in cases {
         assert_eq!(
-            GroupMetadata::from_event(&EventValue::Signed(event)),
+            SimpleGroupMetadata::from_event(&EventValue::Signed(event)),
             Err(expected)
         );
     }
@@ -181,8 +181,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         "",
     );
     assert_eq!(
-        GroupMetadata::from_event(&EventValue::Signed(duplicate_name)),
-        Err(GroupError::AmbiguousRecordField("name"))
+        SimpleGroupMetadata::from_event(&EventValue::Signed(duplicate_name)),
+        Err(SimpleGroupError::AmbiguousRecordField("name"))
     );
 
     let too_many_tags = source(
@@ -194,8 +194,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         "",
     );
     assert!(matches!(
-        GroupMetadata::from_event(&EventValue::Signed(too_many_tags)),
-        Err(GroupError::TooManyRecordTags {
+        SimpleGroupMetadata::from_event(&EventValue::Signed(too_many_tags)),
+        Err(SimpleGroupError::TooManyRecordTags {
             actual: 2_001,
             maximum: 2_000
         })
@@ -203,8 +203,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
 
     let oversized_event = source(&keys, 39_000, vec![tag(&["d", "g"])], &"x".repeat(131_073));
     assert!(matches!(
-        GroupMetadata::from_event(&EventValue::Signed(oversized_event)),
-        Err(GroupError::RecordTooLarge {
+        SimpleGroupMetadata::from_event(&EventValue::Signed(oversized_event)),
+        Err(SimpleGroupError::RecordTooLarge {
             maximum: 131_072,
             ..
         })
@@ -218,8 +218,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         "",
     );
     assert!(matches!(
-        GroupMetadata::from_event(&EventValue::Signed(oversized_value)),
-        Err(GroupError::RecordValueTooLong {
+        SimpleGroupMetadata::from_event(&EventValue::Signed(oversized_value)),
+        Err(SimpleGroupError::RecordValueTooLong {
             tag_index: 1,
             value_index: 1,
             bytes: 4_097,
@@ -237,8 +237,8 @@ fn record_boundary_refuses_ambiguous_or_oversized_input() {
         "",
     );
     assert!(matches!(
-        GroupMetadata::from_event(&EventValue::Signed(oversized_row)),
-        Err(GroupError::TooManyRecordTagValues {
+        SimpleGroupMetadata::from_event(&EventValue::Signed(oversized_row)),
+        Err(SimpleGroupError::TooManyRecordTagValues {
             tag_index: 1,
             actual: 257,
             maximum: 256
@@ -272,25 +272,25 @@ fn people_parser_signatures_accept_one_valid_row() {
     );
 
     assert_eq!(
-        GroupAdmins::from_event(&EventValue::Signed(admins))
+        SimpleGroupAdmins::from_event(&EventValue::Signed(admins))
             .expect("admins")
             .admins(),
         [Ok((subject, vec!["admin".to_owned()]))]
     );
     assert_eq!(
-        GroupMembers::from_event(&EventValue::Signed(members))
+        SimpleGroupMembers::from_event(&EventValue::Signed(members))
             .expect("members")
             .members(),
         [Ok(subject)]
     );
     assert_eq!(
-        GroupRoles::from_event(&EventValue::Signed(roles))
+        SimpleGroupRoles::from_event(&EventValue::Signed(roles))
             .expect("roles")
             .roles(),
         [Ok(("admin".to_owned(), Some("all".to_owned())))]
     );
     assert_eq!(
-        GroupParticipants::from_event(&EventValue::Signed(participants))
+        SimpleGroupParticipants::from_event(&EventValue::Signed(participants))
             .expect("participants")
             .participants(),
         [Ok(subject)]
@@ -316,7 +316,7 @@ fn people_records_preserve_positive_order_and_attribution() {
         ],
         "",
     );
-    let admins = GroupAdmins::from_event(&EventValue::Signed(admins_event)).expect("admins");
+    let admins = SimpleGroupAdmins::from_event(&EventValue::Signed(admins_event)).expect("admins");
     assert_eq!(admins.id(), "g");
     assert_eq!(admins.author(), keys.public_key());
     assert_eq!(
@@ -337,7 +337,7 @@ fn people_records_preserve_positive_order_and_attribution() {
         ],
         "",
     );
-    let members = GroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    let members = SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
     assert_eq!(members.id(), "g");
     assert_eq!(members.author(), keys.public_key());
     assert_eq!(members.members(), [Ok(alice), Ok(bob)]);
@@ -353,7 +353,7 @@ fn people_records_preserve_positive_order_and_attribution() {
         ],
         "",
     );
-    let roles = GroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
+    let roles = SimpleGroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
     assert_eq!(roles.id(), "g");
     assert_eq!(roles.author(), keys.public_key());
     assert_eq!(
@@ -376,20 +376,20 @@ fn people_records_preserve_positive_order_and_attribution() {
         "",
     );
     let participants =
-        GroupParticipants::from_event(&EventValue::Signed(participants_event.clone()))
+        SimpleGroupParticipants::from_event(&EventValue::Signed(participants_event.clone()))
             .expect("participants");
     assert_eq!(participants.id(), "g");
     assert_eq!(participants.author(), keys.public_key());
     assert_eq!(participants.participants(), [Ok(bob), Ok(alice)]);
     assert_eq!(
-        GroupParticipants::from_event(&EventValue::Signed(participants_event))
+        SimpleGroupParticipants::from_event(&EventValue::Signed(participants_event))
             .expect("repeated parsing is inert"),
         participants
     );
 
     let empty = source(&keys, 39_002, vec![tag(&["d", "g"])], "");
     assert!(
-        GroupMembers::from_event(&EventValue::Signed(empty))
+        SimpleGroupMembers::from_event(&EventValue::Signed(empty))
             .expect("empty positive evidence")
             .members()
             .is_empty()
@@ -412,15 +412,15 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
         ],
         "",
     );
-    let members = GroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    let members = SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
     assert!(matches!(
         &members.members()[0],
-        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 1, .. })
     ));
     assert_eq!(members.members()[1], Ok(member));
     assert_eq!(
         members.members()[2],
-        Err(GroupError::DuplicateRecordRow { tag_index: 3 })
+        Err(SimpleGroupError::DuplicateRecordRow { tag_index: 3 })
     );
 
     let participant = Keys::generate().public_key();
@@ -436,11 +436,11 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
         ],
         "",
     );
-    let participants = GroupParticipants::from_event(&EventValue::Signed(participants_event))
+    let participants = SimpleGroupParticipants::from_event(&EventValue::Signed(participants_event))
         .expect("participants");
     assert!(matches!(
         &participants.participants()[0],
-        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 1, .. })
     ));
     assert_eq!(participants.participants()[1], Ok(participant));
 
@@ -455,10 +455,10 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
         ],
         "",
     );
-    let roles = GroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
+    let roles = SimpleGroupRoles::from_event(&EventValue::Signed(roles_event)).expect("roles");
     assert!(matches!(
         &roles.roles()[0],
-        Err(GroupError::MalformedRecordRow { tag_index: 1, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 1, .. })
     ));
     assert_eq!(
         roles.roles()[1],
@@ -466,7 +466,7 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
     );
     assert_eq!(
         roles.roles()[2],
-        Err(GroupError::DuplicateRecordRow { tag_index: 3 })
+        Err(SimpleGroupError::DuplicateRecordRow { tag_index: 3 })
     );
 }
 
@@ -489,13 +489,13 @@ fn pin_and_saved_parser_signatures_accept_one_valid_row() {
     let relays = source(&keys, 10_009, vec![tag(&["r", "wss://a.example"])], "");
 
     assert!(matches!(
-        GroupPins::from_event(&EventValue::Signed(pins))
+        SimpleGroupPins::from_event(&EventValue::Signed(pins))
             .expect("pins")
             .items(),
         [Ok(PinnedItem::Event(_))]
     ));
     assert_eq!(
-        SavedGroup::from_event(&EventValue::Signed(groups)).expect("saved groups")[0]
+        SavedSimpleGroup::from_event(&EventValue::Signed(groups)).expect("saved groups")[0]
             .as_ref()
             .expect("valid group")
             .id(),
@@ -530,7 +530,7 @@ fn pins_preserve_interleaved_source_order() {
         ],
         "",
     );
-    let pins = GroupPins::from_event(&EventValue::Signed(event.clone())).expect("pins");
+    let pins = SimpleGroupPins::from_event(&EventValue::Signed(event.clone())).expect("pins");
 
     assert_eq!(pins.id(), "g");
     assert_eq!(pins.author(), keys.public_key());
@@ -547,11 +547,11 @@ fn pins_preserve_interleaved_source_order() {
     );
     assert!(matches!(
         &pins.items()[2],
-        Err(GroupError::MalformedRecordRow { tag_index: 3, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 3, .. })
     ));
     assert_eq!(pins.items()[3], Ok(PinnedItem::Event(second)));
     assert_eq!(
-        GroupPins::from_event(&EventValue::Signed(event)).expect("repeated parse"),
+        SimpleGroupPins::from_event(&EventValue::Signed(event)).expect("repeated parse"),
         pins
     );
 }
@@ -581,7 +581,7 @@ fn saved_rows_preserve_host_and_author_evidence() {
         "opaque encrypted content",
     );
     let value = EventValue::Signed(event.clone());
-    let groups = SavedGroup::from_event(&value).expect("saved groups");
+    let groups = SavedSimpleGroup::from_event(&value).expect("saved groups");
     let relays = SavedRelay::from_event(&value).expect("saved relays");
 
     let first = groups[0].as_ref().expect("first host");
@@ -591,7 +591,7 @@ fn saved_rows_preserve_host_and_author_evidence() {
     assert_eq!(first.author(), keys.public_key());
     assert!(matches!(
         &groups[1],
-        Err(GroupError::MalformedRecordRow { tag_index: 2, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 2, .. })
     ));
     let second = groups[2].as_ref().expect("second host after invalid row");
     assert_eq!(second.id(), "photos");
@@ -600,35 +600,35 @@ fn saved_rows_preserve_host_and_author_evidence() {
     assert_eq!(second.author(), keys.public_key());
     assert_eq!(
         groups[3],
-        Err(GroupError::DuplicateRecordRow { tag_index: 4 })
+        Err(SimpleGroupError::DuplicateRecordRow { tag_index: 4 })
     );
     assert!(groups[4..].iter().all(Result::is_err));
 
     assert!(matches!(
         &relays[0],
-        Err(GroupError::MalformedRecordRow { tag_index: 8, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 8, .. })
     ));
     assert!(matches!(
         &relays[1],
-        Err(GroupError::MalformedRecordRow { tag_index: 9, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 9, .. })
     ));
     assert!(matches!(
         &relays[2],
-        Err(GroupError::MalformedRecordRow { tag_index: 10, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 10, .. })
     ));
     assert!(matches!(
         &relays[3],
-        Err(GroupError::MalformedRecordRow { tag_index: 11, .. })
+        Err(SimpleGroupError::MalformedRecordRow { tag_index: 11, .. })
     ));
     let relay = relays[4].as_ref().expect("valid relay after invalid rows");
     assert_eq!(relay.relay().to_string(), "wss://relay.example");
     assert_eq!(relay.author(), keys.public_key());
     assert_eq!(
         relays[5],
-        Err(GroupError::DuplicateRecordRow { tag_index: 13 })
+        Err(SimpleGroupError::DuplicateRecordRow { tag_index: 13 })
     );
     assert_eq!(
-        SavedGroup::from_event(&EventValue::Signed(event)).expect("repeated parse"),
+        SavedSimpleGroup::from_event(&EventValue::Signed(event)).expect("repeated parse"),
         groups
     );
 }

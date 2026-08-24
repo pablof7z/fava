@@ -1,7 +1,7 @@
 use fava_state::EventCoordinate;
 use fava_write::{EventId, EventValue, Kind, PublicKey};
 
-use crate::GroupError;
+use crate::SimpleGroupError;
 use crate::records::record_boundary;
 
 /// One typed event or addressable-event pin target.
@@ -15,19 +15,19 @@ pub enum PinnedItem {
 
 /// Ordered pin rows from one signed kind-39005 record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupPins {
+pub struct SimpleGroupPins {
     id: String,
     author: PublicKey,
-    items: Vec<Result<PinnedItem, GroupError>>,
+    items: Vec<Result<PinnedItem, SimpleGroupError>>,
 }
 
-impl GroupPins {
+impl SimpleGroupPins {
     /// Parse one signed kind-39005 record.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_005)?;
         let author = boundary.author();
         let items = boundary
@@ -50,7 +50,7 @@ impl GroupPins {
         })
     }
 
-    /// Exact group id.
+    /// Exact simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -63,29 +63,29 @@ impl GroupPins {
     }
 
     /// Source-ordered pin targets and row-local failures.
-    pub fn items(&self) -> &[Result<PinnedItem, GroupError>] {
+    pub fn items(&self) -> &[Result<PinnedItem, SimpleGroupError>] {
         &self.items
     }
 }
 
-fn parse_event(tag_index: usize, values: &[String]) -> Result<PinnedItem, GroupError> {
+fn parse_event(tag_index: usize, values: &[String]) -> Result<PinnedItem, SimpleGroupError> {
     if values.len() != 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "event pin must contain exactly one id",
         });
     }
     EventId::from_hex(&values[1])
         .map(PinnedItem::Event)
-        .map_err(|_| GroupError::MalformedRecordRow {
+        .map_err(|_| SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "event pin id is invalid",
         })
 }
 
-fn parse_address(tag_index: usize, values: &[String]) -> Result<PinnedItem, GroupError> {
+fn parse_address(tag_index: usize, values: &[String]) -> Result<PinnedItem, SimpleGroupError> {
     if values.len() != 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "address pin must contain exactly one coordinate",
         });
@@ -104,7 +104,7 @@ fn parse_address(tag_index: usize, values: &[String]) -> Result<PinnedItem, Grou
                 identifier: Some(identifier.to_owned()),
             }))
         }
-        _ => Err(GroupError::MalformedRecordRow {
+        _ => Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "address pin coordinate is invalid",
         }),

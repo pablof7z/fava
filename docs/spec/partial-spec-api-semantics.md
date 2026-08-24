@@ -568,49 +568,50 @@ No current NIP-02 or simple-groups API is documented as returning it.
 
 ### Multi-relay simple groups
 
-`fava-simple-groups` applies the same rule to NIP-29. A `Group` is an inert
-query/write description over one group id and a non-empty host-relay set:
+`fava-simple-groups` applies the same rule to NIP-29. A `SimpleGroup` is an
+inert query/write description over one simple group id and a non-empty
+host-relay set:
 
 ```rust
-let photos = Group::on(
+let photos = SimpleGroup::on(
     ["wss://bob.relay.example", "wss://alice.relay.example"],
     "photos",
 )?;
 
 let feed = photos.events(Query::events().kind(Kind::from(9)).limit(50)?)?;
-let records = photos.records(GroupRecords::metadata())?;
+let records = photos.records(SimpleGroupRecords::metadata())?;
 ```
 
 `feed` lowers to the ordinary exact `h` tag-value axis plus
 `from_relays(hosts)`. This keeps explicit acquisition and optimistic local write
 visibility. `records` lowers to kinds 39000 through 39005, the exact `d`
-tag-value axis, and `only_from_relays(hosts)` because relay-authored group state
-is authoritative per host.
+tag-value axis, and `only_from_relays(hosts)` because relay-authored simple
+group state is authoritative per host.
 
 Several hosts do not become one protocol authority. The final content snapshot
 deduplicates identical event ids and retains exact serving-relay evidence. A
-pure `GroupSnapshot` projection exposes each host's records and explicit
+pure `SimpleGroupSnapshot` projection exposes each host's records and explicit
 `metadata_differ`, member/admin attribution, and `at(host)` views. It never
 opens another observation or chooses the winning fork.
 
 Discovery helpers return ordinary core queries and pure projections:
 
 ```text
-SimpleGroups::saved_groups(authors)          -> Query
-SimpleGroups::saved_relays(authors)          -> Query
-SimpleGroups::groups_where_admin(subjects)   -> Query
-SimpleGroups::groups_where_member(subjects)  -> Query
-SimpleGroups::groups_saved_by(snapshot, group) -> Vec<PublicKey>
+SimpleGroups::saved_simple_groups(authors)          -> Query
+SimpleGroups::saved_relays(authors)                 -> Query
+SimpleGroups::simple_groups_where_admin(subjects)   -> Query
+SimpleGroups::simple_groups_where_member(subjects)  -> Query
+SimpleGroups::simple_groups_saved_by(snapshot, simple_group) -> Vec<PublicKey>
 ```
 
 Typed projections turn matching records and kind-10009 rows into bounded
 protocol values without opening private observations.
 
-Group publication produces an ordinary event or replaceable edit. The
+Simple group publication produces an ordinary event or replaceable edit. The
 application supplies the selected hosts to the universal door with
-`fava.to(group.hosts()).publish(payload)`. The protocol helper supplies or
-validates the group tag but does not create a protocol-specific publication or
-receipt lifecycle.
+`fava.to(simple_group.hosts()).publish(payload)`. The protocol helper supplies
+or validates the simple group tag but does not create a protocol-specific
+publication or receipt lifecycle.
 
 ---
 

@@ -51,11 +51,11 @@ fn pair_verifier_rejects_noncausal_wire_mutations() {
 fn pair_verifier_rejects_wrong_author_and_unready_children() {
     let wrong_author = PairEvidenceFixture::new();
     let attacker = Keys::generate();
-    let group = read_manifest(&wrong_author.roots[0])["group_id"]
+    let simple_group = read_manifest(&wrong_author.roots[0])["simple_group_id"]
         .as_str()
         .expect("group")
         .to_owned();
-    let event = signed_fixture_event(&attacker, 9007, &group, "attacker bootstrap");
+    let event = signed_fixture_event(&attacker, 9007, &simple_group, "attacker bootstrap");
     wrong_author.rewrite_wire_values(0, "a", |frames| {
         let frame = frames
             .iter_mut()

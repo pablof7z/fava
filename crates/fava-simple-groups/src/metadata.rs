@@ -1,12 +1,12 @@
 use fava_write::{EventValue, Kind, PublicKey};
 
-use crate::GroupError;
+use crate::SimpleGroupError;
 use crate::records::record_boundary;
 
-/// Complete typed kind-39000 group metadata from one relay-authored event.
+/// Complete typed kind-39000 simple group metadata from one relay-authored event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::struct_excessive_bools)] // NIP-29 defines five independent presence flags.
-pub struct GroupMetadata {
+pub struct SimpleGroupMetadata {
     id: String,
     author: PublicKey,
     name: Option<String>,
@@ -23,13 +23,13 @@ pub struct GroupMetadata {
     children: Vec<String>,
 }
 
-impl GroupMetadata {
+impl SimpleGroupMetadata {
     /// Parse one exact signed kind-39000 record without opening work.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the event boundary or typed record is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the event boundary or typed record is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_000)?;
         let author = boundary.author();
         let mut name = None;
@@ -64,13 +64,13 @@ impl GroupMetadata {
                 "livekit" => set_flag(&mut livekit, values, tag_index, "livekit")?,
                 "supported_kinds" => {
                     if supported_kinds.is_some() {
-                        return Err(GroupError::AmbiguousRecordField("supported_kinds"));
+                        return Err(SimpleGroupError::AmbiguousRecordField("supported_kinds"));
                     }
                     let kinds = values[1..]
                         .iter()
                         .map(|value| {
                             value.parse::<u16>().map(Kind::from_u16).map_err(|_| {
-                                GroupError::MalformedRecordRow {
+                                SimpleGroupError::MalformedRecordRow {
                                     tag_index,
                                     reason: "supported kind is not a decimal u16",
                                 }
@@ -82,7 +82,7 @@ impl GroupMetadata {
                 "parent" => set_scalar(&mut parent, values, tag_index, "parent")?,
                 "child" => {
                     if values.len() != 2 {
-                        return Err(GroupError::MalformedRecordRow {
+                        return Err(SimpleGroupError::MalformedRecordRow {
                             tag_index,
                             reason: "child row must contain exactly one value",
                         });
@@ -111,7 +111,7 @@ impl GroupMetadata {
         })
     }
 
-    /// Exact opaque group id from the `d` row.
+    /// Exact opaque simple group id from the `d` row.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -183,13 +183,13 @@ impl GroupMetadata {
         self.supported_kinds.as_deref()
     }
 
-    /// Optional exact parent group id.
+    /// Optional exact parent simple group id.
     #[must_use]
     pub fn parent(&self) -> Option<&str> {
         self.parent.as_deref()
     }
 
-    /// Ordered exact child group ids.
+    /// Ordered exact child simple group ids.
     #[must_use]
     pub fn children(&self) -> &[String] {
         &self.children
@@ -201,12 +201,12 @@ fn set_scalar(
     values: &[String],
     tag_index: usize,
     name: &'static str,
-) -> Result<(), GroupError> {
+) -> Result<(), SimpleGroupError> {
     if field.is_some() {
-        return Err(GroupError::AmbiguousRecordField(name));
+        return Err(SimpleGroupError::AmbiguousRecordField(name));
     }
     if values.len() != 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "scalar row must contain exactly one value",
         });
@@ -220,12 +220,12 @@ fn set_flag(
     values: &[String],
     tag_index: usize,
     name: &'static str,
-) -> Result<(), GroupError> {
+) -> Result<(), SimpleGroupError> {
     if *field {
-        return Err(GroupError::AmbiguousRecordField(name));
+        return Err(SimpleGroupError::AmbiguousRecordField(name));
     }
     if values.len() != 1 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "flag row must not contain values",
         });

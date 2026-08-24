@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use fava_state::RelayUrl;
 use fava_write::{EventValue, PublicKey};
 
-use crate::GroupError;
+use crate::SimpleGroupError;
 use crate::records::saved_boundary;
 
-/// One public saved-group row from a signed kind-10009 list.
+/// One public saved-simple-group row from a signed kind-10009 list.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SavedGroup {
+pub struct SavedSimpleGroup {
     id: String,
     relay: RelayUrl,
     name: Option<String>,
@@ -22,13 +22,15 @@ pub struct SavedRelay {
     author: PublicKey,
 }
 
-impl SavedGroup {
+impl SavedSimpleGroup {
     /// Parse bounded public `group` rows while conserving row-local failures.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed kind-10009 boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Vec<Result<Self, GroupError>>, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed kind-10009 boundary is invalid.
+    pub fn from_event(
+        event: &EventValue,
+    ) -> Result<Vec<Result<Self, SimpleGroupError>>, SimpleGroupError> {
         let event = saved_boundary(event)?;
         let mut seen = BTreeSet::new();
         Ok(event
@@ -36,17 +38,21 @@ impl SavedGroup {
             .iter()
             .enumerate()
             .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("group"))
-            .map(
-                |(tag_index, tag)| match parse_group(tag_index, tag.as_slice(), event.pubkey) {
-                    Ok(group) if seen.insert((group.id.clone(), group.relay.clone())) => Ok(group),
-                    Ok(_) => Err(GroupError::DuplicateRecordRow { tag_index }),
+            .map(|(tag_index, tag)| {
+                match parse_simple_group(tag_index, tag.as_slice(), event.pubkey) {
+                    Ok(simple_group)
+                        if seen.insert((simple_group.id.clone(), simple_group.relay.clone())) =>
+                    {
+                        Ok(simple_group)
+                    }
+                    Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
                     Err(error) => Err(error),
-                },
-            )
+                }
+            })
             .collect())
     }
 
-    /// Exact opaque group id.
+    /// Exact opaque simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -76,8 +82,10 @@ impl SavedRelay {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed kind-10009 boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Vec<Result<Self, GroupError>>, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed kind-10009 boundary is invalid.
+    pub fn from_event(
+        event: &EventValue,
+    ) -> Result<Vec<Result<Self, SimpleGroupError>>, SimpleGroupError> {
         let event = saved_boundary(event)?;
         let mut seen = BTreeSet::new();
         Ok(event
@@ -88,7 +96,7 @@ impl SavedRelay {
             .map(
                 |(tag_index, tag)| match parse_relay(tag_index, tag.as_slice(), event.pubkey) {
                     Ok(relay) if seen.insert(relay.relay.clone()) => Ok(relay),
-                    Ok(_) => Err(GroupError::DuplicateRecordRow { tag_index }),
+                    Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
                     Err(error) => Err(error),
                 },
             )
@@ -108,40 +116,40 @@ impl SavedRelay {
     }
 }
 
-fn parse_group(
+fn parse_simple_group(
     tag_index: usize,
     values: &[String],
     author: PublicKey,
-) -> Result<SavedGroup, GroupError> {
+) -> Result<SavedSimpleGroup, SimpleGroupError> {
     if values.len() < 3 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
-            reason: "saved group row is missing id or relay",
+            reason: "saved simple group row is missing id or relay",
         });
     }
     if values.len() > 4 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
-            reason: "saved group row has extra columns",
+            reason: "saved simple group row has extra columns",
         });
     }
     if values[1].is_empty() {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
-            reason: "saved group id is empty",
+            reason: "saved simple group id is empty",
         });
     }
     if values[2].is_empty() {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
-            reason: "saved group relay is empty",
+            reason: "saved simple group relay is empty",
         });
     }
-    let relay = RelayUrl::parse(&values[2]).map_err(|_| GroupError::MalformedRecordRow {
+    let relay = RelayUrl::parse(&values[2]).map_err(|_| SimpleGroupError::MalformedRecordRow {
         tag_index,
-        reason: "saved group relay is invalid",
+        reason: "saved simple group relay is invalid",
     })?;
-    Ok(SavedGroup {
+    Ok(SavedSimpleGroup {
         id: values[1].clone(),
         relay,
         name: values.get(3).cloned(),
@@ -153,26 +161,26 @@ fn parse_relay(
     tag_index: usize,
     values: &[String],
     author: PublicKey,
-) -> Result<SavedRelay, GroupError> {
+) -> Result<SavedRelay, SimpleGroupError> {
     if values.len() < 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "saved relay row is missing its URL",
         });
     }
     if values.len() > 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "saved relay row has extra columns",
         });
     }
     if values[1].is_empty() {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "saved relay URL is empty",
         });
     }
-    let relay = RelayUrl::parse(&values[1]).map_err(|_| GroupError::MalformedRecordRow {
+    let relay = RelayUrl::parse(&values[1]).map_err(|_| SimpleGroupError::MalformedRecordRow {
         tag_index,
         reason: "saved relay URL is invalid",
     })?;

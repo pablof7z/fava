@@ -1305,26 +1305,28 @@ When constructing a pointer-like relationship to an event or address, the owning
 
 Reply, reaction, repost, quote, and comment crates each own their exact protocol tagging. Non-pointer semantics such as list entries or deletion targets are not forced through pointer tagging.
 
-## PROTO-006 — `fava-simple-groups` preserves multi-relay group truth
+## PROTO-006 — `fava-simple-groups` preserves multi-relay simple group truth
 
-`fava-simple-groups` MUST expose a pure `Group` value over one opaque NIP-29
-group id and an application-selected non-empty, bounded set of host relays.
-One host is the ordinary case; several hosts are a required application
-aggregation for independently authoritative relay-local forks.
+`fava-simple-groups` MUST expose a pure `SimpleGroup` value over one opaque
+NIP-29 simple group id and an application-selected non-empty, bounded set of
+host relays. One host is the ordinary case; several hosts are a required
+application aggregation for independently authoritative relay-local forks.
 
-Group content reads MUST add the exact `h` constraint and ask the complete host
-set through an ordinary `Query`. Relay-authored group-record reads MUST add the
-exact `d` constraint, retain actual per-host relay evidence, and expose record
-disagreement rather than field-merging it or silently selecting a winner. The
-same event id served by several selected hosts appears once with every actual
-serving-relay contribution.
+Simple group content reads MUST add the exact `h` constraint and ask the
+complete host set through an ordinary `Query`. Relay-authored
+simple-group-record reads MUST add the exact `d` constraint, retain actual
+per-host relay evidence, and expose record disagreement rather than
+field-merging it or silently selecting a winner. The same event id served by
+several selected hosts appears once with every actual serving-relay
+contribution.
 
-Group publication MUST prepare the exact group context without restricting the
-carried event to a fixed set of event kinds. The application then publishes the
-prepared payload through `fava.to(group.hosts()).publish(payload)`, which gives
-the universal publication owner the complete selected host set as its exact
-explicit route. Custom event kinds MUST use the same path. A pre-signed event
-is verified unchanged and MUST already carry the exact group context; adding
+Simple group publication MUST prepare the exact simple group context without
+restricting the carried event to a fixed set of event kinds. The application
+then publishes the prepared payload through
+`fava.to(simple_group.hosts()).publish(payload)`, which gives the universal
+publication owner the complete selected host set as its exact explicit route.
+Custom event kinds MUST use the same path. A pre-signed event is verified
+unchanged and MUST already carry the exact simple group context; adding
 routing cannot rewrite its tags.
 
 The capability MUST return ordinary `Query`, event, or

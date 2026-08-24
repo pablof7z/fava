@@ -1,4 +1,4 @@
-//! Public-facade evidence for pure multi-relay simple-group values.
+//! Public-facade evidence for pure multi-relay simple-simple_group values.
 //!
 //! Cohesion: one facade target shares the same custody, signer, router, publisher,
 //! and transport spies across query, publication, refusal, and lifecycle descriptors.
@@ -24,7 +24,7 @@ use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_simple_groups::{Group, GroupRecords, SavedRelay, SimpleGroups};
+use fava_simple_groups::{SimpleGroup, SimpleGroupRecords, SavedRelay, SimpleGroups};
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
 };
@@ -45,8 +45,8 @@ include!("simple_groups/saved.rs");
 async fn simple_group_content_preserves_local_visibility() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
-    let group = group();
-    let query = group
+    let simple_group = simple_group();
+    let query = simple_group
         .events(
             Query::events()
                 .limit(16)
@@ -62,11 +62,11 @@ async fn simple_group_content_preserves_local_visibility() {
         .content("accepted local content")
         .build()
         .expect("payload builds");
-    let prepared = group.prepare(payload).expect("group context prepares");
+    let prepared = simple_group.prepare(payload).expect("group context prepares");
     let id = prepared.id.expect("prepared id");
     let _write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("exact hosts")
         .publish(prepared)
         .expect("local custody accepts");
@@ -83,9 +83,9 @@ async fn simple_group_content_preserves_local_visibility() {
 async fn simple_group_records_require_actual_host_evidence() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
-    let group = group();
-    let query = group
-        .records(GroupRecords::all())
+    let simple_group = simple_group();
+    let query = simple_group
+        .records(SimpleGroupRecords::all())
         .expect("record query")
         .cache_only();
     let mut observation = harness.fava.observe(query).await.expect("query opens");
@@ -94,7 +94,7 @@ async fn simple_group_records_require_actual_host_evidence() {
     let local = signed_record(&Keys::generate(), 39_001, 10, "write-store only");
     let _write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("exact hosts")
         .publish(local)
         .expect("local record custody accepts");
@@ -134,8 +134,8 @@ async fn simple_group_records_require_actual_host_evidence() {
 async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
-    let group = group();
-    let query = group
+    let simple_group = simple_group();
+    let query = simple_group
         .events(
             Query::events()
                 .limit(16)
@@ -169,7 +169,7 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
                 .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
     })
     .await;
-    let projected = group.project(&current).expect("bounded projection");
+    let projected = simple_group.project(&current).expect("bounded projection");
 
     assert_eq!(
         projected
@@ -201,9 +201,9 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
 async fn single_host_group_is_explicit_fork_choice() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
-    let multi = group();
+    let multi = simple_group();
     let query = multi
-        .records(GroupRecords::metadata())
+        .records(SimpleGroupRecords::metadata())
         .expect("record query")
         .cache_only();
     let mut observation = harness.fava.observe(query).await.expect("query opens");
@@ -219,11 +219,11 @@ async fn single_host_group_is_explicit_fork_choice() {
             .expect("fork commits");
     }
     let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 2).await;
-    let a = Group::on([host("a")], "group-29")
+    let a = SimpleGroup::on([host("a")], "group-29")
         .expect("A group")
         .project(&current)
         .expect("bounded A projection");
-    let b = Group::on([host("b")], "group-29")
+    let b = SimpleGroup::on([host("b")], "group-29")
         .expect("B group")
         .project(&current)
         .expect("bounded B projection");
@@ -244,9 +244,9 @@ async fn single_host_group_is_explicit_fork_choice() {
 async fn single_host_empty_is_no_positive_evidence() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
-    let multi = group();
+    let multi = simple_group();
     let query = multi
-        .records(GroupRecords::metadata())
+        .records(SimpleGroupRecords::metadata())
         .expect("record query")
         .cache_only();
     let mut observation = harness.fava.observe(query).await.expect("query opens");
@@ -259,7 +259,7 @@ async fn single_host_empty_is_no_positive_evidence() {
         ))])
         .expect("record commits");
     let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 1).await;
-    let empty = Group::on([host("contacted-but-not-serving")], "group-29")
+    let empty = SimpleGroup::on([host("contacted-but-not-serving")], "group-29")
         .expect("single host")
         .project(&current)
         .expect("bounded empty projection");
@@ -275,7 +275,7 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
     let keys = Keys::generate();
     let signer = Arc::new(ExactSigner::new(keys.clone()));
     let harness = Harness::new(Arc::clone(&signer) as Arc<dyn Signer>);
-    let group = Group::on(
+    let simple_group = SimpleGroup::on(
         [host("z"), host("a"), host("z"), host("m")],
         "publication-group",
     )
@@ -286,8 +286,8 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
         .content("kind-blind payload")
         .build()
         .expect("payload builds");
-    let prepared_once = group.prepare(payload.clone()).expect("first preparation");
-    let prepared_twice = group.prepare(payload).expect("repeated preparation");
+    let prepared_once = simple_group.prepare(payload.clone()).expect("first preparation");
+    let prepared_twice = simple_group.prepare(payload).expect("repeated preparation");
 
     assert_eq!(
         serde_json::to_vec(&prepared_once).expect("prepared event encodes"),
@@ -306,7 +306,7 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
     assert_eq!(harness.router.calls.load(Ordering::SeqCst), 0);
     assert_eq!(harness.store.len().expect("store readable"), 0);
 
-    let query = group
+    let query = simple_group
         .events(
             Query::events()
                 .limit(8)
@@ -318,7 +318,7 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
     let prepared_id = prepared_once.id.expect("prepared id");
     let write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("exact route")
         .publish(prepared_once)
         .expect("ordinary publication accepts");
@@ -368,7 +368,7 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn simple_group_presigned_context_refuses_before_custody() {
-    let group = group();
+    let simple_group = simple_group();
     let keys = Keys::generate();
     let valid_signer = Arc::new(ExactSigner::new(keys.clone()));
     let valid = Harness::new(Arc::clone(&valid_signer) as Arc<dyn Signer>);
@@ -384,14 +384,14 @@ async fn simple_group_presigned_context_refuses_before_custody() {
     let original_bytes = serde_json::to_vec(&signed).expect("signed event encodes");
     let original_id = signed.id;
     let original_signature = signed.sig;
-    let prepared = group.prepare(signed).expect("valid context passes purely");
+    let prepared = simple_group.prepare(signed).expect("valid context passes purely");
 
     assert_eq!(serde_json::to_vec(&prepared).unwrap(), original_bytes);
     assert_eq!(prepared.id, original_id);
     assert_eq!(prepared.sig, original_signature);
     let _write = valid
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("exact route")
         .publish(prepared)
         .expect("presigned custody accepts");
@@ -422,11 +422,11 @@ async fn simple_group_presigned_context_refuses_before_custody() {
             .custom_created_at(Timestamp::from(90))
             .finalize(&invalid_keys)
             .expect("hostile context still signs");
-        let result = group.prepare(event);
+        let result = simple_group.prepare(event);
         if let Ok(admitted) = result.as_ref() {
             let _ = invalid
                 .fava
-                .to(group.hosts())
+                .to(simple_group.hosts())
                 .expect("route remains valid")
                 .publish(admitted.clone());
         }
@@ -452,8 +452,8 @@ async fn simple_group_uses_ordinary_lifecycle_isolation() {
     let keys = Keys::generate();
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
     let harness = Harness::new(Arc::clone(&signer) as Arc<dyn Signer>);
-    let group = group();
-    let query = group
+    let simple_group = simple_group();
+    let query = simple_group
         .events(
             Query::events()
                 .limit(8)
@@ -462,7 +462,7 @@ async fn simple_group_uses_ordinary_lifecycle_isolation() {
         )
         .expect("group content query");
     let mut observation = harness.fava.observe(query).await.expect("query opens");
-    let first = group
+    let first = simple_group
         .prepare(
             EventBuilder::new(keys.public_key(), Kind::from_u16(50_029))
                 .created_at(Timestamp::from(101))
@@ -471,7 +471,7 @@ async fn simple_group_uses_ordinary_lifecycle_isolation() {
                 .expect("first builds"),
         )
         .expect("first prepares");
-    let second = group
+    let second = simple_group
         .prepare(
             EventBuilder::new(keys.public_key(), Kind::from_u16(50_029))
                 .created_at(Timestamp::from(102))
@@ -485,13 +485,13 @@ async fn simple_group_uses_ordinary_lifecycle_isolation() {
     assert_ne!(first_id, second_id);
     let first_write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("first route")
         .publish(first)
         .expect("first custody");
     let second_write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("second route")
         .publish(second)
         .expect("second custody");

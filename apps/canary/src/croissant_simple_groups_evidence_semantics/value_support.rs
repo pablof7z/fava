@@ -33,12 +33,12 @@ fn wire_frames(snapshot: &EvidenceSnapshot, label: &str) -> CanaryResult<(Vec<Va
 fn exact_filter(
     filter: &Map<String, Value>,
     axis: &str,
-    group: &str,
+    simple_group: &str,
     kinds: &[u64],
     limit: u64,
 ) -> bool {
     filter.len() == 3
-        && filter.get(axis) == Some(&json!([group]))
+        && filter.get(axis) == Some(&json!([simple_group]))
         && filter.get("kinds") == Some(&json!(kinds))
         && filter.get("limit").and_then(Value::as_u64) == Some(limit)
 }

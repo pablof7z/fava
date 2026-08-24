@@ -176,7 +176,7 @@ fn validate_manifest(
         "scenario_seed_sha256",
         "author_public_key",
         "relay_signer_public_key",
-        "group_id",
+        "simple_group_id",
         "shared_event_id",
         "custom_event_id",
         "write_id",
@@ -465,7 +465,7 @@ fn verify_pair_identity(runs: &[(EvidenceSnapshot, Value)]) -> CanaryResult<()> 
         "run_id",
         "scenario_seed_sha256",
         "author_public_key",
-        "group_id",
+        "simple_group_id",
         "write_id",
         "receipt_id",
     ] {
@@ -504,8 +504,8 @@ fn reject_cross_run_data(
     first: &(EvidenceSnapshot, Value),
     second: &(EvidenceSnapshot, Value),
 ) -> CanaryResult<()> {
-    let first_group = required_string(&first.1, "group_id")?.to_owned();
-    let second_group = required_string(&second.1, "group_id")?.to_owned();
+    let first_group = required_string(&first.1, "simple_group_id")?.to_owned();
+    let second_group = required_string(&second.1, "simple_group_id")?.to_owned();
     let first_run = required_string(&first.1, "run_id")?.to_owned();
     let second_run = required_string(&second.1, "run_id")?.to_owned();
     let first_identities = event_identities(&first.1)?;

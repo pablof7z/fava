@@ -8,7 +8,7 @@ use fava_write::{EventValue, Kind, PublicKey, ReplaceableEventEdit, Tag, Timesta
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::{Group, GroupError, SimpleGroups};
+use crate::{SimpleGroup, SimpleGroupError, SimpleGroups};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay")
@@ -39,8 +39,8 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     let canonical = BTreeSet::from([alice, bob]);
     let p = SingleLetterTag::LOWERCASE_P;
 
-    let saved = SimpleGroups::saved_groups([bob, alice, bob]).expect("bounded authors");
-    let reordered = SimpleGroups::saved_groups([alice, bob]).expect("bounded authors");
+    let saved = SimpleGroups::saved_simple_groups([bob, alice, bob]).expect("bounded authors");
+    let reordered = SimpleGroups::saved_simple_groups([alice, bob]).expect("bounded authors");
     let relays = SimpleGroups::saved_relays([alice, bob]).expect("bounded authors");
     assert_eq!(saved, reordered);
     assert_eq!(
@@ -50,8 +50,8 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     assert_eq!(saved.selection().authors.as_ref(), Some(&canonical));
     assert_eq!(relays, saved);
 
-    let admins = SimpleGroups::groups_where_admin([bob, alice, bob]).expect("bounded subjects");
-    let members = SimpleGroups::groups_where_member([alice, bob]).expect("bounded subjects");
+    let admins = SimpleGroups::simple_groups_where_admin([bob, alice, bob]).expect("bounded subjects");
+    let members = SimpleGroups::simple_groups_where_member([alice, bob]).expect("bounded subjects");
     assert_eq!(
         admins.selection().kinds,
         Some(BTreeSet::from([Kind::from_u16(39_001)]))
@@ -64,21 +64,21 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     assert_eq!(admins.selection().tag_values.get(&p), Some(&subject_hex));
     assert_eq!(members.selection().tag_values.get(&p), Some(&subject_hex));
 
-    let empty_saved = SimpleGroups::saved_groups(Vec::<PublicKey>::new()).expect("empty is valid");
+    let empty_saved = SimpleGroups::saved_simple_groups(Vec::<PublicKey>::new()).expect("empty is valid");
     let empty_admins =
-        SimpleGroups::groups_where_admin(Vec::<PublicKey>::new()).expect("empty is valid");
+        SimpleGroups::simple_groups_where_admin(Vec::<PublicKey>::new()).expect("empty is valid");
     assert_eq!(empty_saved.selection().authors, Some(BTreeSet::new()));
     assert_eq!(
         empty_admins.selection().tag_values.get(&p),
         Some(&BTreeSet::new())
     );
     assert_eq!(
-        SimpleGroups::saved_groups([alice]).unwrap(),
-        SimpleGroups::saved_groups([alice]).unwrap()
+        SimpleGroups::saved_simple_groups([alice]).unwrap(),
+        SimpleGroups::saved_simple_groups([alice]).unwrap()
     );
 
     let signing_keys = Keys::generate();
-    let group = Group::on([relay("wss://a.example")], "photos").expect("group");
+    let simple_group = SimpleGroup::on([relay("wss://a.example")], "photos").expect("group");
     let snapshot = QuerySnapshot::evaluated(
         vec![record(saved_event(
             &signing_keys,
@@ -91,7 +91,7 @@ fn discovery_queries_are_ordinary_canonical_queries() {
         &[],
     );
     assert_eq!(
-        SimpleGroups::groups_saved_by(&snapshot, &group).expect("pure projection"),
+        SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("pure projection"),
         [signing_keys.public_key()]
     );
 }
@@ -115,10 +115,10 @@ impl Iterator for PanicAfter {
 #[test]
 fn discovery_refuses_oversized_and_infinite_inputs() {
     let key = Keys::generate().public_key();
-    assert!(SimpleGroups::saved_groups(std::iter::repeat_n(key, 256)).is_ok());
+    assert!(SimpleGroups::saved_simple_groups(std::iter::repeat_n(key, 256)).is_ok());
     assert_eq!(
-        SimpleGroups::saved_groups(std::iter::repeat_n(key, 257)),
-        Err(GroupError::TooManyDiscoveryItems {
+        SimpleGroups::saved_simple_groups(std::iter::repeat_n(key, 257)),
+        Err(SimpleGroupError::TooManyDiscoveryItems {
             actual: 257,
             maximum: 256
         })
@@ -126,11 +126,11 @@ fn discovery_refuses_oversized_and_infinite_inputs() {
 
     let pulls = Rc::new(Cell::new(0));
     assert_eq!(
-        SimpleGroups::groups_where_member(PanicAfter {
+        SimpleGroups::simple_groups_where_member(PanicAfter {
             value: key,
             pulls: Rc::clone(&pulls)
         }),
-        Err(GroupError::TooManyDiscoveryItems {
+        Err(SimpleGroupError::TooManyDiscoveryItems {
             actual: 257,
             maximum: 256
         })
@@ -143,7 +143,7 @@ fn groups_saved_by_is_bounded_pure_projection() {
     let alice = Keys::generate();
     let bob = Keys::generate();
     let other = Keys::generate();
-    let group = Group::on(
+    let simple_group = SimpleGroup::on(
         [relay("wss://a.example"), relay("wss://b.example")],
         "photos",
     )
@@ -176,8 +176,8 @@ fn groups_saved_by_is_bounded_pure_projection() {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let first = SimpleGroups::groups_saved_by(&snapshot, &group).expect("bounded projection");
-    let second = SimpleGroups::groups_saved_by(&snapshot, &group).expect("pure repeat");
+    let first = SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("bounded projection");
+    let second = SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("pure repeat");
     assert_eq!(first, expected);
     assert_eq!(second, first);
 }
@@ -254,7 +254,7 @@ fn signed_source(keys: &Keys, created_at: u64, content: &str, tags: Vec<Tag>) ->
 #[test]
 fn multi_host_save_is_deterministic_and_idempotent() {
     let actor = Keys::generate();
-    let group = Group::on(
+    let simple_group = SimpleGroup::on(
         [
             relay("wss://z.example"),
             relay("wss://a.example"),
@@ -264,7 +264,7 @@ fn multi_host_save_is_deterministic_and_idempotent() {
         "photos",
     )
     .expect("bounded hosts");
-    let edit = SimpleGroups::save_group(&group, Some("Photos")).expect("bounded edit");
+    let edit = SimpleGroups::save_simple_group(&simple_group, Some("Photos")).expect("bounded edit");
     assert_eq!(edit.kind(), Kind::from_u16(10_009));
     assert_eq!(edit.identifier(), None);
     assert!(SimpleGroups::materializer().supports(&edit));
@@ -297,12 +297,12 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         tag(&["x", "after"]),
     ];
     let source = signed_source(&actor, 20, "opaque encrypted bytes", source_tags.clone());
-    let group = Group::on(
+    let simple_group = SimpleGroup::on(
         [relay("wss://a.example"), relay("wss://b.example")],
         "photos",
     )
     .expect("group");
-    let rename = SimpleGroups::rename_saved_group(&group, "renamed").expect("rename edit");
+    let rename = SimpleGroups::rename_saved_simple_group(&simple_group, "renamed").expect("rename edit");
     let renamed = materialize(&rename, actor.public_key(), Some(&source), 21);
 
     assert_eq!(renamed.content, "opaque encrypted bytes");
@@ -319,7 +319,7 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         ]
     );
 
-    let save = SimpleGroups::save_group(&group, Some("ignored for existing")).expect("save edit");
+    let save = SimpleGroups::save_simple_group(&simple_group, Some("ignored for existing")).expect("save edit");
     let saved = materialize(&save, actor.public_key(), Some(&source), 21);
     assert_eq!(saved.tags[1], source_tags[1]);
     assert_eq!(
@@ -341,7 +341,7 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         "one valid row plus the malformed extension row survive"
     );
 
-    let remove = SimpleGroups::remove_group(&group).expect("remove edit");
+    let remove = SimpleGroups::remove_simple_group(&simple_group).expect("remove edit");
     let removed = materialize(&remove, actor.public_key(), Some(&source), 21);
     assert_eq!(
         removed.tags.as_slice(),
@@ -366,8 +366,8 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
 #[test]
 fn saved_edit_rebases_on_newer_qualified_source() {
     let actor = Keys::generate();
-    let group = Group::on([relay("wss://a.example")], "photos").expect("group");
-    let edit = SimpleGroups::save_group(&group, None).expect("save edit");
+    let simple_group = SimpleGroup::on([relay("wss://a.example")], "photos").expect("group");
+    let edit = SimpleGroups::save_simple_group(&simple_group, None).expect("save edit");
     let older = signed_source(&actor, 30, "older opaque", vec![tag(&["x", "older"])]);
     let newer = signed_source(
         &actor,
@@ -388,7 +388,7 @@ fn saved_edit_rebases_on_newer_qualified_source() {
             tag(&["group", "photos", "wss://a.example"]),
         ]
     );
-    assert!(SimpleGroups::save_group(&group, Some(&"x".repeat(4_097))).is_err());
+    assert!(SimpleGroups::save_simple_group(&simple_group, Some(&"x".repeat(4_097))).is_err());
     assert!(
         SimpleGroups::materializer()
             .materialize(

@@ -4,14 +4,14 @@ use fava_write::{Event, EventValue, Kind, Tag, Timestamp};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::{Group, GroupError, GroupSnapshot};
+use crate::{SimpleGroup, SimpleGroupError, SimpleGroupSnapshot};
 
 fn host(name: &str) -> RelayUrl {
     RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }
 
-fn group(names: &[&str]) -> Group {
-    Group::on(names.iter().map(|name| host(name)), "photos").expect("group")
+fn simple_group(names: &[&str]) -> SimpleGroup {
+    SimpleGroup::on(names.iter().map(|name| host(name)), "photos").expect("group")
 }
 
 fn tag(values: &[&str]) -> Tag {
@@ -49,16 +49,16 @@ trait ProjectionOutcome {
     fn bounded_refusal(self) -> Option<(usize, usize)>;
 }
 
-impl ProjectionOutcome for GroupSnapshot {
+impl ProjectionOutcome for SimpleGroupSnapshot {
     fn bounded_refusal(self) -> Option<(usize, usize)> {
         None
     }
 }
 
-impl ProjectionOutcome for Result<GroupSnapshot, GroupError> {
+impl ProjectionOutcome for Result<SimpleGroupSnapshot, SimpleGroupError> {
     fn bounded_refusal(self) -> Option<(usize, usize)> {
         match self {
-            Err(GroupError::TooManyDiscoveryItems { actual, maximum }) => Some((actual, maximum)),
+            Err(SimpleGroupError::TooManyDiscoveryItems { actual, maximum }) => Some((actual, maximum)),
             Ok(_) | Err(_) => None,
         }
     }
@@ -81,15 +81,15 @@ fn snapshot_projection_refuses_bound_plus_one() {
     let input = snapshot(vec![event; 4_097]);
 
     assert_eq!(
-        group(&["a"]).project(&input).bounded_refusal(),
+        simple_group(&["a"]).project(&input).bounded_refusal(),
         Some((4_097, 4_096))
     );
 }
 
 #[test]
 fn empty_snapshot_is_empty_positive_evidence() {
-    let group = group(&["b", "a"]);
-    let projected = group
+    let simple_group = simple_group(&["b", "a"]);
+    let projected = simple_group
         .project(&snapshot(Vec::new()))
         .expect("empty input is bounded");
 
@@ -128,10 +128,10 @@ fn snapshot_projection_is_deterministic() {
         record(shared.clone(), std::slice::from_ref(&a)),
         record(unique.clone(), std::slice::from_ref(&a)),
     ]);
-    let group = group(&["b", "a"]);
+    let simple_group = simple_group(&["b", "a"]);
 
-    let first = group.project(&input).expect("input is bounded");
-    let second = group.project(&input).expect("input is bounded");
+    let first = simple_group.project(&input).expect("input is bounded");
+    let second = simple_group.project(&input).expect("input is bounded");
     assert_eq!(first, second);
     assert_eq!(
         first
@@ -178,7 +178,7 @@ fn snapshot_preserves_same_signer_per_host_forks() {
         ],
         "",
     );
-    let projected = group(&["a", "b"])
+    let projected = simple_group(&["a", "b"])
         .project(&snapshot(vec![
             record(left, std::slice::from_ref(&a)),
             record(right, std::slice::from_ref(&b)),
@@ -243,7 +243,7 @@ fn snapshot_attribution_uses_actual_relay_evidence() {
         vec![tag(&["d", "photos"]), tag(&["p", &listed_hex])],
         "",
     );
-    let projected = group(&["a", "b", "contacted-but-not-serving"])
+    let projected = simple_group(&["a", "b", "contacted-but-not-serving"])
         .project(&snapshot(vec![
             record(admins, std::slice::from_ref(&a)),
             record(members, std::slice::from_ref(&a)),
@@ -412,7 +412,7 @@ fn snapshot_disagreement_compares_complete_values() {
             ]
         })
         .collect();
-    let projected = group(&["b", "a"])
+    let projected = simple_group(&["b", "a"])
         .project(&snapshot(records))
         .expect("input is bounded");
 

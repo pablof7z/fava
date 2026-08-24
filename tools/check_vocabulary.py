@@ -317,9 +317,9 @@ def approved_nominal_names(registry: Registry) -> dict[str, set[str]]:
     """Return the nominal names each crate is approved to declare.
 
     Approval is crate-scoped. A name registered for one owner does not approve
-    a homonym in an unrelated crate: `Group` is an approved NIP-29 noun owned
-    by `fava-simple-groups`, and a struct of the same name in another crate is
-    a distinct concept wearing an approved spelling.
+    a homonym in an unrelated crate: `SimpleGroup` is an approved NIP-29 noun
+    owned by `fava-simple-groups`, and a struct of the same name in another
+    crate is a distinct concept wearing an approved spelling.
     """
     approved: dict[str, set[str]] = {}
     for symbol in registry.symbols:
@@ -375,8 +375,8 @@ def check(root: Path) -> list[str]:
             continue
         # Vocabulary is closed by default: a single-word name and a name that
         # embeds no registered noun are both unapproved nominal vocabulary.
-        # Filtering either one silenced the `Group` homonym and two of the nine
-        # unapproved lifecycle owners.
+        # Filtering either one silenced the `SimpleGroup` homonym and two of
+        # the nine unapproved lifecycle owners.
         message = f"unapproved nominal vocabulary variant: {symbol}"
         noun = closest_registered_noun(symbol, registry)
         if noun:

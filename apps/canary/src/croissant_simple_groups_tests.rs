@@ -104,7 +104,7 @@ impl PairEvidenceFixture {
                 let second = read_manifest(&self.roots[1]);
                 fs::write(
                     self.roots[0].join("cross-run.txt"),
-                    second["group_id"].as_str().expect("group id"),
+                    second["simple_group_id"].as_str().expect("group id"),
                 )
                 .expect("cross-run artifact");
                 self.mutate(0, true, |_| {});
@@ -203,13 +203,13 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         format!("ws://127.0.0.1:{}", port + 1),
     ];
     let relay_signer = relay_keys.public_key().to_hex();
-    let group_id = format!("group-{index}");
-    let shared = signed_fixture_event(author, 9, &group_id, "shared");
+    let simple_group_id = format!("group-{index}");
+    let shared = signed_fixture_event(author, 9, &simple_group_id, "shared");
     let unique_events = [
-        signed_fixture_event(author, 9, &group_id, &format!("unique-a-{index}")),
-        signed_fixture_event(author, 9, &group_id, &format!("unique-b-{index}")),
+        signed_fixture_event(author, 9, &simple_group_id, &format!("unique-a-{index}")),
+        signed_fixture_event(author, 9, &simple_group_id, &format!("unique-b-{index}")),
     ];
-    let custom = signed_fixture_event(author, 50_029, &group_id, "custom");
+    let custom = signed_fixture_event(author, 50_029, &simple_group_id, "custom");
     let metadata_names = [format!("metadata-a-{index}"), format!("metadata-b-{index}")];
     let admin_targets = [
         Keys::generate().public_key().to_hex(),
@@ -248,7 +248,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         })
     });
     let flow = json!({
-        "group_id": group_id,
+        "simple_group_id": simple_group_id,
         "relay_urls": relay_urls,
         "shared_event_id": shared.id.to_hex(),
         "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
@@ -352,7 +352,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             label,
             author,
             relay_keys,
-            &group_id,
+            &simple_group_id,
             &shared,
             &unique_events[label],
             &custom,
@@ -375,7 +375,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "author_public_key": author.public_key().to_hex(),
         "relay_signer_public_key": relay_signer.clone(),
         "relay_owner_public_keys": [Keys::generate().public_key().to_hex(), Keys::generate().public_key().to_hex()],
-        "group_id": group_id,
+        "simple_group_id": simple_group_id,
         "relay_urls": relay_urls,
         "shared_event_id": shared.id.to_hex(),
         "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
@@ -445,7 +445,7 @@ fn write_wire_fixture(
     index: usize,
     author: &Keys,
     relay: &Keys,
-    group: &str,
+    simple_group: &str,
     shared: &Event,
     unique: &Event,
     custom: &Event,
@@ -464,7 +464,7 @@ fn write_wire_fixture(
                 },
             ])
             .expect("about tag"),
-            Tag::parse(["h", group]).expect("h tag"),
+            Tag::parse(["h", simple_group]).expect("h tag"),
         ])
         .custom_created_at(Timestamp::from(9_003))
         .finalize(author)
@@ -472,15 +472,15 @@ fn write_wire_fixture(
     let admin_seed = EventBuilder::new(Kind::from(9000), "")
         .tags([
             Tag::parse(["p", admin_target, "admin"]).expect("admin tag"),
-            Tag::parse(["h", group]).expect("h tag"),
+            Tag::parse(["h", simple_group]).expect("h tag"),
         ])
         .custom_created_at(Timestamp::from(9_001))
         .finalize(author)
         .expect("admin command");
-    let bootstrap = signed_fixture_event(author, 9007, group, "controlled group bootstrap");
+    let bootstrap = signed_fixture_event(author, 9007, simple_group, "controlled group bootstrap");
     let metadata = EventBuilder::new(Kind::from(39000), "")
         .tags([
-            Tag::parse(["d", group]).expect("d tag"),
+            Tag::parse(["d", simple_group]).expect("d tag"),
             Tag::parse(["name", metadata_name]).expect("name tag"),
         ])
         .custom_created_at(Timestamp::from(39_001))
@@ -488,7 +488,7 @@ fn write_wire_fixture(
         .expect("metadata fixture event");
     let admin = EventBuilder::new(Kind::from(39001), "")
         .tags([
-            Tag::parse(["d", group]).expect("d tag"),
+            Tag::parse(["d", simple_group]).expect("d tag"),
             Tag::parse(["p", admin_target, "admin"]).expect("admin tag"),
         ])
         .custom_created_at(Timestamp::from(39_002))
@@ -557,7 +557,7 @@ fn write_wire_fixture(
         (
             7,
             "client_to_relay",
-            json!(["REQ", content_subscription, {"kinds": [9], "limit": 16, "#h": [group]}]),
+            json!(["REQ", content_subscription, {"kinds": [9], "limit": 16, "#h": [simple_group]}]),
         ),
         (
             7,
@@ -574,7 +574,7 @@ fn write_wire_fixture(
         (
             8,
             "client_to_relay",
-            json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [group]}]),
+            json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [simple_group]}]),
         ),
         (
             8,

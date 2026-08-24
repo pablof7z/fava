@@ -219,7 +219,7 @@ pub async fn run_croissant_simple_groups_scenario(
         "author_public_key": author.public_key().to_hex(),
         "relay_signer_public_key": relay.public_key().to_hex(),
         "relay_owner_public_keys": [owner_a.public_key().to_hex(), owner_b.public_key().to_hex()],
-        "group_id": completion.flow.group_id,
+        "simple_group_id": completion.flow.simple_group_id,
         "relay_urls": completion.flow.relay_urls,
         "shared_event_id": completion.flow.shared_event_id,
         "unique_event_ids": completion.flow.unique_event_ids,

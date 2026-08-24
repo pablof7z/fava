@@ -88,7 +88,7 @@ fn verify_flow(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()
     let flow: Value =
         serde_json::from_slice(snapshot.read(Path::new("flow.json"), FLOW_LIMIT, "flow")?)?;
     for field in [
-        "group_id",
+        "simple_group_id",
         "relay_urls",
         "shared_event_id",
         "unique_event_ids",

@@ -71,7 +71,7 @@ async fn croissant_simple_groups_public_flow() {
     assert_ne!(facts.admin_targets[0], facts.admin_targets[1]);
     assert_eq!(facts.admin_authors[0], relay_keys.public_key().to_hex());
     assert_eq!(facts.admin_authors[0], facts.admin_authors[1]);
-    assert!(!facts.group_id.is_empty());
+    assert!(!facts.simple_group_id.is_empty());
     assert!(!facts.custom_event_id.is_empty());
     assert_ne!(facts.write_id, 0);
     assert_ne!(facts.receipt_id, 0);

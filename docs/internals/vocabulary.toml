@@ -188,29 +188,29 @@ crates = ["fava-bookmarks"]
 spec_crates = ["fava-bookmarks"]
 
 [[term]]
-name = "Group"
+name = "SimpleGroup"
 source = "nostr"
 protocol = "NIP-29"
-meaning = "A relay-based Nostr group; Fava's Group value presents one opaque group id over an application-selected non-empty host-relay set while each relay remains independently authoritative."
+meaning = "A relay-based Nostr group; Fava's SimpleGroup value presents one opaque simple group id over an application-selected non-empty host-relay set while each relay remains independently authoritative."
 owner = "fava-simple-groups"
-counterexample = "A value that lets one host's record answer for another host or silently selects one host is not Fava's Group."
-lifecycle = "Group and every capability helper are immutable or pure values; ordinary Fava query and publication owners retain all work and state."
+counterexample = "A value that lets one host's record answer for another host or silently selects one host is not Fava's SimpleGroup."
+lifecycle = "SimpleGroup and every capability helper are immutable or pure values; ordinary Fava query and publication owners retain all work and state."
 forcing_requirement = "Applications must read and publish across selected NIP-29 hosts while keeping exact relay-local record authority and explicit destinations."
 falsifier = "The public API and architecture targets must fail if per-host authority collapses, a helper retains state, or a universal owner gains an NIP-29 branch."
 symbols = [
-    "fava_simple_groups::Group",
-    "fava_simple_groups::GroupAdmins",
-    "fava_simple_groups::GroupError",
-    "fava_simple_groups::GroupMembers",
-    "fava_simple_groups::GroupMetadata",
-    "fava_simple_groups::GroupParticipants",
-    "fava_simple_groups::GroupPins",
-    "fava_simple_groups::GroupRecords",
-    "fava_simple_groups::GroupRoles",
-    "fava_simple_groups::GroupSnapshot",
     "fava_simple_groups::PinnedItem",
-    "fava_simple_groups::SavedGroup",
     "fava_simple_groups::SavedRelay",
+    "fava_simple_groups::SavedSimpleGroup",
+    "fava_simple_groups::SimpleGroup",
+    "fava_simple_groups::SimpleGroupAdmins",
+    "fava_simple_groups::SimpleGroupError",
+    "fava_simple_groups::SimpleGroupMembers",
+    "fava_simple_groups::SimpleGroupMetadata",
+    "fava_simple_groups::SimpleGroupParticipants",
+    "fava_simple_groups::SimpleGroupPins",
+    "fava_simple_groups::SimpleGroupRecords",
+    "fava_simple_groups::SimpleGroupRoles",
+    "fava_simple_groups::SimpleGroupSnapshot",
     "fava_simple_groups::SimpleGroups",
 ]
 crates = ["fava-simple-groups"]

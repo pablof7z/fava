@@ -791,13 +791,13 @@ Have the protocol crate call a signer or publisher directly. A dependency-negati
 
 As a Fava application developer, I can use the README-shaped
 `fava-simple-groups` capability to read, project, discover, and publish NIP-29
-groups across one or several host relays without losing relay-local authority
-or creating a second query/publication lifecycle.
+simple groups across one or several host relays without losing relay-local
+authority or creating a second query/publication lifecycle.
 
 ### Crates/slices
 
 - `fava-simple-groups`
-- `Group`, `GroupRecords`, and bounded pure `GroupSnapshot` projection
+- `SimpleGroup`, `SimpleGroupRecords`, and bounded pure `SimpleGroupSnapshot` projection
 - typed NIP-29 record and kind-10009 row parsing
 - ordinary query combinators over literal tag-value filters
 - ordinary discovery queries and bounded pure snapshot projections
@@ -807,8 +807,9 @@ or creating a second query/publication lifecycle.
 
 ### Required behavior
 
-- `Group::on(hosts, id)` accepts one opaque id and an explicit non-empty,
-  bounded host set; one host and several hosts use the same value and methods.
+- `SimpleGroup::on(hosts, id)` accepts one opaque id and an explicit
+  non-empty, bounded host set; one host and several hosts use the same value
+  and methods.
 - Content queries add the exact `h` value and ask every selected host through an
   ordinary `Query`, retaining accepted local write visibility.
 - Record queries select kinds 39000 through 39005 with the exact `d` value and
@@ -818,16 +819,17 @@ or creating a second query/publication lifecycle.
 - Each host retains independent record authority. Typed projections expose
   per-host state, member/admin attribution, and disagreement; metadata is never
   field-merged across hosts and no host wins silently.
-- The application chooses a fork by using a single-host `Group`; the capability
-  does not declare a canonical host or migration.
+- The application chooses a fork by using a single-host `SimpleGroup`; the
+  capability does not declare a canonical host or migration.
 - Publication is kind-blind and routes to the exact complete selected host set,
   bypassing automatic routers.
 - Unsigned author-bearing drafts receive exactly one matching `h` tag.
-  Pre-signed events are unchanged and are refused unless their existing group
-  context is exact.
-- Group management operations create ordinary NIP-29 events. Saved-group and
-  saved-relay list changes use one `ReplaceableEventEdit` materializer through
-  the ordinary durable write lifecycle.
+  Pre-signed events are unchanged and are refused unless their existing simple
+  group context is exact.
+- Simple group management operations create ordinary NIP-29 events.
+  Saved-simple-group and saved-relay list changes use one
+  `ReplaceableEventEdit` materializer through the ordinary durable write
+  lifecycle.
 - Discovery helpers return ordinary `Query` values or bounded pure projections and make
   no global completeness, existence, negative-membership, or canonical-fork
   claim.
@@ -840,26 +842,28 @@ or creating a second query/publication lifecycle.
 
 `simple-group-one-host`
 
-- Construct one group from a string relay URL and opaque id.
+- Construct one simple group from a string relay URL and opaque id.
 - Observe kind-9 content and typed metadata/members through public Fava.
 - Publish an arbitrary custom kind through the exact host and inspect the
   ordinary receipt.
 
 `simple-group-multi-host-fork`
 
-- Run two controlled real relays with the same group id and divergent metadata,
-  admins, and content.
-- Open one multi-host group feed; duplicate one event across both relays.
+- Run two controlled real relays with the same simple group id and divergent
+  metadata, admins, and content.
+- Open one multi-host simple group feed; duplicate one event across both
+  relays.
 - Observe one event record with both serving-relay contributions, unique events
   from each host, and explicit typed record disagreement.
-- Publish through the multi-host group and prove one exact handoff per selected
-  host under one receipt.
-- Construct a single-host group and prove the application can choose one side
-  without hidden canonicalization.
+- Publish through the multi-host simple group and prove one exact handoff per
+  selected host under one receipt.
+- Construct a single-host simple group and prove the application can choose
+  one side without hidden canonicalization.
 
 `simple-group-discovery`
 
-- Parse several saved-group and relay-in-use rows from one kind-10009 event.
+- Parse several saved-simple-group and relay-in-use rows from one kind-10009
+  event.
 - Compose saved-by/admin/member discovery through ordinary query/value
   expressions as inputs change.
 - Preserve saving authors, relay identity, partial-list caveats, and bounds.
@@ -867,9 +871,9 @@ or creating a second query/publication lifecycle.
 `simple-group-presigned-context`
 
 - Accept a valid pre-signed custom event with the exact `h` tag and explicit
-  group route.
-- Refuse missing, duplicate, or contradictory group context before custody and
-  emit zero EVENT frames.
+  simple group route.
+- Refuse missing, duplicate, or contradictory simple group context before
+  custody and emit zero EVENT frames.
 
 ### Exit gates
 
@@ -877,7 +881,8 @@ or creating a second query/publication lifecycle.
   example is covered by a compile test or explicitly marked prospective until
   its owning plan lands.
 - `fava-simple-groups` depends only on neutral query/state/write contracts;
-  universal owners and the facade contain no NIP-29 kind or group-id switch.
+  universal owners and the facade contain no NIP-29 kind or simple-group-id
+  switch.
 - Host sets, ids, tags, decoded rows, projections, discovery values, and
   evidence artifacts are bounded with typed refusal/shortfall.
 - Pure parsers/construction, public facade, cancellation/close, deliberate
@@ -1164,7 +1169,7 @@ Ship selected, ordinary external artifacts and prove behavioral equivalence acro
 - iOS suspension/resume behavior is proven on a physical device for any profile that claims transparency.
 - Resource use returns to baseline after repeated lifecycle cycles.
 - Public operation inventory is structural, not heuristic word matching.
-- Native products selected with `fava-simple-groups` preserve multi-host Group construction, per-host record disagreement, kind-blind exact-host publication, and ordinary query/write lifecycles.
+- Native products selected with `fava-simple-groups` preserve multi-host SimpleGroup construction, per-host record disagreement, kind-blind exact-host publication, and ordinary query/write lifecycles.
 
 ### Canary relationship
 
@@ -1299,7 +1304,7 @@ The canary should be a small social client with enough ordinary product behavior
 - follows feed;
 - note/reply/reaction;
 - bookmarks or a second replaceable-event-edit protocol crate;
-- one `fava-simple-groups` multi-relay room/group flow with visible per-host disagreement;
+- one `fava-simple-groups` multi-relay room/simple-group flow with visible per-host disagreement;
 - route preview;
 - outbox/receipt inspection;
 - NIP-05 resolution;

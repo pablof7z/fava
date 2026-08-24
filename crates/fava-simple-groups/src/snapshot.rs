@@ -4,21 +4,21 @@ use fava_query::{EventRecord, QuerySnapshot};
 use fava_state::RelayUrl;
 use fava_write::{EventId, EventValue, PublicKey, Timestamp};
 
-use crate::bounds::{MAX_GROUP_QUERY_RESULTS, collect_at_most};
+use crate::bounds::{MAX_SIMPLE_GROUP_QUERY_RESULTS, collect_at_most};
 use crate::{
-    Group, GroupAdmins, GroupError, GroupMembers, GroupMetadata, GroupParticipants, GroupPins,
-    GroupRoles,
+    SimpleGroup, SimpleGroupAdmins, SimpleGroupError, SimpleGroupMembers, SimpleGroupMetadata,
+    SimpleGroupParticipants, SimpleGroupPins, SimpleGroupRoles,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct HostRecords {
     host: RelayUrl,
-    metadata: Option<Selected<GroupMetadata>>,
-    admins: Option<Selected<GroupAdmins>>,
-    members: Option<Selected<GroupMembers>>,
-    roles: Option<Selected<GroupRoles>>,
-    participants: Option<Selected<GroupParticipants>>,
-    pins: Option<Selected<GroupPins>>,
+    metadata: Option<Selected<SimpleGroupMetadata>>,
+    admins: Option<Selected<SimpleGroupAdmins>>,
+    members: Option<Selected<SimpleGroupMembers>>,
+    roles: Option<Selected<SimpleGroupRoles>>,
+    participants: Option<Selected<SimpleGroupParticipants>>,
+    pins: Option<Selected<SimpleGroupPins>>,
 }
 
 impl HostRecords {
@@ -57,12 +57,12 @@ struct Selected<T> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ParsedRecord {
-    Metadata(GroupMetadata),
-    Admins(GroupAdmins),
-    Members(GroupMembers),
-    Roles(GroupRoles),
-    Participants(GroupParticipants),
-    Pins(GroupPins),
+    Metadata(SimpleGroupMetadata),
+    Admins(SimpleGroupAdmins),
+    Members(SimpleGroupMembers),
+    Roles(SimpleGroupRoles),
+    Participants(SimpleGroupParticipants),
+    Pins(SimpleGroupPins),
 }
 
 impl ParsedRecord {
@@ -78,26 +78,27 @@ impl ParsedRecord {
     }
 }
 
-/// Pure bounded projection of ordinary query results into exact relay-local group truth.
+/// Pure bounded projection of ordinary query results into exact relay-local simple group truth.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupSnapshot {
+pub struct SimpleGroupSnapshot {
     events: Vec<EventRecord>,
     hosts: Vec<HostRecords>,
 }
 
-impl GroupSnapshot {
-    pub(crate) fn project(group: &Group, snapshot: &QuerySnapshot) -> Result<Self, GroupError> {
-        let input =
-            collect_at_most(snapshot.events.iter(), MAX_GROUP_QUERY_RESULTS).map_err(|actual| {
-                GroupError::TooManyDiscoveryItems {
-                    actual,
-                    maximum: MAX_GROUP_QUERY_RESULTS,
-                }
+impl SimpleGroupSnapshot {
+    pub(crate) fn project(
+        simple_group: &SimpleGroup,
+        snapshot: &QuerySnapshot,
+    ) -> Result<Self, SimpleGroupError> {
+        let input = collect_at_most(snapshot.events.iter(), MAX_SIMPLE_GROUP_QUERY_RESULTS)
+            .map_err(|actual| SimpleGroupError::TooManyDiscoveryItems {
+                actual,
+                maximum: MAX_SIMPLE_GROUP_QUERY_RESULTS,
             })?;
         let events = deduplicate_events(input);
-        let mut hosts: Vec<_> = group.hosts().map(HostRecords::empty).collect();
+        let mut hosts: Vec<_> = simple_group.hosts().map(HostRecords::empty).collect();
         for event in &events {
-            let Some(parsed) = parse_record(&event.event, group.id()) else {
+            let Some(parsed) = parse_record(&event.event, simple_group.id()) else {
                 continue;
             };
             let actual_hosts: BTreeSet<_> = event
@@ -121,7 +122,7 @@ impl GroupSnapshot {
         &self.events
     }
 
-    /// Configured hosts in the group's deterministic first-occurrence order.
+    /// Configured hosts in the simple group's deterministic first-occurrence order.
     pub fn hosts(&self) -> impl Iterator<Item = &RelayUrl> {
         self.hosts.iter().map(|records| &records.host)
     }
@@ -140,7 +141,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local metadata values in configured host order.
-    pub fn metadata(&self) -> impl Iterator<Item = (&RelayUrl, &GroupMetadata)> {
+    pub fn metadata(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupMetadata)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .metadata
@@ -150,7 +151,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local administrator records in configured host order.
-    pub fn admin_records(&self) -> impl Iterator<Item = (&RelayUrl, &GroupAdmins)> {
+    pub fn admin_records(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupAdmins)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .admins
@@ -160,7 +161,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local member records in configured host order.
-    pub fn member_records(&self) -> impl Iterator<Item = (&RelayUrl, &GroupMembers)> {
+    pub fn member_records(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupMembers)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .members
@@ -170,7 +171,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local role records in configured host order.
-    pub fn role_records(&self) -> impl Iterator<Item = (&RelayUrl, &GroupRoles)> {
+    pub fn role_records(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupRoles)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .roles
@@ -180,7 +181,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local participant records in configured host order.
-    pub fn participant_records(&self) -> impl Iterator<Item = (&RelayUrl, &GroupParticipants)> {
+    pub fn participant_records(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupParticipants)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .participants
@@ -190,7 +191,7 @@ impl GroupSnapshot {
     }
 
     /// Complete host-local pin records in configured host order.
-    pub fn pin_records(&self) -> impl Iterator<Item = (&RelayUrl, &GroupPins)> {
+    pub fn pin_records(&self) -> impl Iterator<Item = (&RelayUrl, &SimpleGroupPins)> {
         self.hosts.iter().filter_map(|records| {
             records
                 .pins
@@ -298,25 +299,29 @@ fn deduplicate_events(input: Vec<&EventRecord>) -> Vec<EventRecord> {
     events
 }
 
-fn parse_record(event: &EventValue, group_id: &str) -> Option<ParsedRecord> {
+fn parse_record(event: &EventValue, simple_group_id: &str) -> Option<ParsedRecord> {
     let record = match event.kind().as_u16() {
-        39_000 => GroupMetadata::from_event(event)
+        39_000 => SimpleGroupMetadata::from_event(event)
             .ok()
             .map(ParsedRecord::Metadata),
-        39_001 => GroupAdmins::from_event(event)
+        39_001 => SimpleGroupAdmins::from_event(event)
             .ok()
             .map(ParsedRecord::Admins),
-        39_002 => GroupMembers::from_event(event)
+        39_002 => SimpleGroupMembers::from_event(event)
             .ok()
             .map(ParsedRecord::Members),
-        39_003 => GroupRoles::from_event(event).ok().map(ParsedRecord::Roles),
-        39_004 => GroupParticipants::from_event(event)
+        39_003 => SimpleGroupRoles::from_event(event)
+            .ok()
+            .map(ParsedRecord::Roles),
+        39_004 => SimpleGroupParticipants::from_event(event)
             .ok()
             .map(ParsedRecord::Participants),
-        39_005 => GroupPins::from_event(event).ok().map(ParsedRecord::Pins),
+        39_005 => SimpleGroupPins::from_event(event)
+            .ok()
+            .map(ParsedRecord::Pins),
         _ => None,
     }?;
-    (record.id() == group_id).then_some(record)
+    (record.id() == simple_group_id).then_some(record)
 }
 
 fn consider<T>(slot: &mut Option<Selected<T>>, id: EventId, created_at: Timestamp, value: T) {

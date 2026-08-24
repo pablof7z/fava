@@ -1,6 +1,6 @@
-fn signed_fixture_event(keys: &Keys, kind: u16, group: &str, content: &str) -> Event {
+fn signed_fixture_event(keys: &Keys, kind: u16, simple_group: &str, content: &str) -> Event {
     EventBuilder::new(Kind::from(kind), content)
-        .tags([Tag::parse(["h", group]).expect("h tag")])
+        .tags([Tag::parse(["h", simple_group]).expect("h tag")])
         .custom_created_at(Timestamp::from(u64::from(kind) + 1))
         .finalize(keys)
         .expect("signed fixture event")
@@ -60,9 +60,9 @@ impl PairEvidenceFixture {
 fn pair_verifier_binds_every_publication_and_bootstrap_result() {
     let publication = PairEvidenceFixture::new();
     let manifest = read_manifest(&publication.roots[0]);
-    let group = manifest["group_id"].as_str().expect("group");
+    let simple_group = manifest["simple_group_id"].as_str().expect("group");
     let shared = manifest["shared_event_id"].as_str().expect("shared id");
-    let replacement = signed_fixture_event(&publication.authors[0], 9, group, "arbitrary-valid");
+    let replacement = signed_fixture_event(&publication.authors[0], 9, simple_group, "arbitrary-valid");
     publication.rewrite_wire_values(0, "a", |frames| {
         let event = frames
             .iter_mut()
@@ -89,11 +89,11 @@ fn pair_verifier_binds_every_publication_and_bootstrap_result() {
     );
 
     let bootstrap = PairEvidenceFixture::new();
-    let group = read_manifest(&bootstrap.roots[0])["group_id"]
+    let simple_group = read_manifest(&bootstrap.roots[0])["simple_group_id"]
         .as_str()
         .expect("group")
         .to_owned();
-    let replacement = signed_fixture_event(&bootstrap.authors[0], 9007, &group, "not-published");
+    let replacement = signed_fixture_event(&bootstrap.authors[0], 9007, &simple_group, "not-published");
     bootstrap.rewrite_wire_values(0, "a", |frames| {
         let response = frames
             .iter_mut()
@@ -116,12 +116,12 @@ fn pair_verifier_binds_metadata_and_admin_command_semantics() {
     for kind in [9002_u16, 9000] {
         let fixture = PairEvidenceFixture::new();
         let manifest = read_manifest(&fixture.roots[0]);
-        let group = manifest["group_id"].as_str().expect("group");
+        let simple_group = manifest["simple_group_id"].as_str().expect("group");
         let wrong = if kind == 9002 {
             EventBuilder::new(Kind::from(kind), "")
                 .tags([
                     Tag::parse(["name", "wrong-metadata-command"]).expect("name tag"),
-                    Tag::parse(["h", group]).expect("h tag"),
+                    Tag::parse(["h", simple_group]).expect("h tag"),
                 ])
                 .custom_created_at(Timestamp::from(19_002))
                 .finalize(&fixture.authors[0])
@@ -131,7 +131,7 @@ fn pair_verifier_binds_metadata_and_admin_command_semantics() {
                 .tags([
                     Tag::parse(["p", &Keys::generate().public_key().to_hex(), "admin"])
                         .expect("admin tag"),
-                    Tag::parse(["h", group]).expect("h tag"),
+                    Tag::parse(["h", simple_group]).expect("h tag"),
                 ])
                 .custom_created_at(Timestamp::from(19_000))
                 .finalize(&fixture.authors[0])
@@ -174,10 +174,10 @@ fn pair_verifier_binds_metadata_and_admin_command_semantics() {
 fn pair_verifier_derives_the_current_replacement_winner() {
     let fixture = PairEvidenceFixture::new();
     let manifest = read_manifest(&fixture.roots[0]);
-    let group = manifest["group_id"].as_str().expect("group");
+    let simple_group = manifest["simple_group_id"].as_str().expect("group");
     let wrong = EventBuilder::new(Kind::from(39000), "")
         .tags([
-            Tag::parse(["d", group]).expect("d tag"),
+            Tag::parse(["d", simple_group]).expect("d tag"),
             Tag::parse(["name", "wrong-newer-winner"]).expect("name tag"),
         ])
         .custom_created_at(Timestamp::from(99_999))

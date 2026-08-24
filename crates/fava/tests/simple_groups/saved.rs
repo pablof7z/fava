@@ -11,21 +11,21 @@ async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
         ],
         [SimpleGroups::materializer()],
     );
-    let group = Group::on([host("saved")], "photos").expect("group");
-    let first_edit = SimpleGroups::save_group(&group, Some("Photos")).expect("save edit");
+    let simple_group = SimpleGroup::on([host("saved")], "photos").expect("group");
+    let first_edit = SimpleGroups::save_simple_group(&simple_group, Some("Photos")).expect("save edit");
     let second_edit = SimpleGroups::save_relay(host("inert-saved")).expect("relay edit");
 
     let first = harness
         .fava
         .by(first_keys.public_key())
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("first exact route")
         .publish(first_edit)
         .expect("first semantic custody");
     let second = harness
         .fava
         .by(second_keys.public_key())
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("second exact route")
         .publish(second_edit)
         .expect("second semantic custody");
@@ -57,7 +57,7 @@ async fn simple_group_saved_edit_uses_ordinary_semantic_lifecycle() {
     assert_eq!(harness.transport.opens.load(Ordering::SeqCst), 0);
 
     let before = harness.store.len().expect("store readable");
-    assert!(SimpleGroups::save_group(&group, Some(&"x".repeat(4_097))).is_err());
+    assert!(SimpleGroups::save_simple_group(&simple_group, Some(&"x".repeat(4_097))).is_err());
     let saved = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags([tag(&["r", "wss://parsed-only.example"])])
         .custom_created_at(Timestamp::from(90))
@@ -84,8 +84,8 @@ async fn simple_group_management_events_are_author_bearing() {
     let keys = Keys::generate();
     let signer = Arc::new(ExactSigner::new(keys.clone()));
     let harness = Harness::new(Arc::clone(&signer) as Arc<dyn Signer>);
-    let group = Group::on([host("management")], "photos").expect("group");
-    let metadata = group
+    let simple_group = SimpleGroup::on([host("management")], "photos").expect("group");
+    let metadata = simple_group
         .edit_metadata(
             EventBuilder::new(keys.public_key(), Kind::from_u16(9_002))
                 .created_at(Timestamp::from(9_002))
@@ -94,7 +94,7 @@ async fn simple_group_management_events_are_author_bearing() {
                 .expect("metadata draft"),
         )
         .expect("metadata context");
-    let pins = group
+    let pins = simple_group
         .set_pins(
             EventBuilder::new(keys.public_key(), Kind::from_u16(9_010))
                 .created_at(Timestamp::from(9_010))
@@ -122,13 +122,13 @@ async fn simple_group_management_events_are_author_bearing() {
 
     let metadata_write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("metadata route")
         .publish(metadata)
         .expect("ordinary metadata custody");
     let pins_write = harness
         .fava
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .expect("pins route")
         .publish(pins)
         .expect("ordinary pins custody");
@@ -165,8 +165,8 @@ fn operation_generation(
 
 fn assert_ordinary_write(_write: &fava::Write) {}
 
-fn group() -> Group {
-    Group::on(
+fn simple_group() -> SimpleGroup {
+    SimpleGroup::on(
         [host("a"), host("b"), host("contacted-but-not-serving")],
         "group-29",
     )

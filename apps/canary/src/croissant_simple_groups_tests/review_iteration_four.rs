@@ -4,14 +4,14 @@ fn verifier_refuses_extra_metadata_and_admin_command_effects() {
         let fixture = PairEvidenceFixture::new();
         let root = &fixture.roots[0];
         let manifest = read_manifest(root);
-        let group = manifest["group_id"].as_str().expect("group");
+        let simple_group = manifest["simple_group_id"].as_str().expect("group");
         let event = if metadata {
             EventBuilder::new(Kind::from(9002), "")
                 .tags([
                     Tag::parse(["name", manifest["metadata_names"][0].as_str().unwrap()]).unwrap(),
                     Tag::parse(["about", "A-only metadata"]).unwrap(),
                     Tag::parse(["picture", "https://example.invalid/extra.png"]).unwrap(),
-                    Tag::parse(["h", group]).unwrap(),
+                    Tag::parse(["h", simple_group]).unwrap(),
                 ])
                 .custom_created_at(Timestamp::from(9_003))
                 .finalize(&fixture.authors[0])
@@ -26,7 +26,7 @@ fn verifier_refuses_extra_metadata_and_admin_command_effects() {
                     ])
                     .unwrap(),
                     Tag::parse(["p", &Keys::generate().public_key().to_hex(), "admin"]).unwrap(),
-                    Tag::parse(["h", group]).unwrap(),
+                    Tag::parse(["h", simple_group]).unwrap(),
                 ])
                 .custom_created_at(Timestamp::from(9_001))
                 .finalize(&fixture.authors[0])

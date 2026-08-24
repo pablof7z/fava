@@ -2,8 +2,8 @@ use std::borrow::Borrow;
 
 use fava_query::{Kind, PublicKey, Query, QuerySnapshot, SingleLetterTag};
 
-use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_GROUP_QUERY_RESULTS, collect_at_most};
-use crate::{Group, GroupError};
+use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_SIMPLE_GROUP_QUERY_RESULTS, collect_at_most};
+use crate::{SimpleGroup, SimpleGroupError};
 
 const RECORD_KINDS: [u16; 6] = [39_000, 39_001, 39_002, 39_003, 39_004, 39_005];
 
@@ -12,10 +12,10 @@ pub struct SimpleGroups;
 
 /// Relay-authored NIP-29 record selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GroupRecords {
+pub enum SimpleGroupRecords {
     /// All six relay-authored record kinds.
     All,
-    /// Kind 39000 group metadata.
+    /// Kind 39000 simple group metadata.
     Metadata,
     /// Kind 39001 administrator list.
     Admins,
@@ -29,14 +29,14 @@ pub enum GroupRecords {
     Pins,
 }
 
-impl GroupRecords {
-    /// Select all six group record kinds.
+impl SimpleGroupRecords {
+    /// Select all six simple group record kinds.
     #[must_use]
     pub const fn all() -> Self {
         Self::All
     }
 
-    /// Select group metadata.
+    /// Select simple group metadata.
     #[must_use]
     pub const fn metadata() -> Self {
         Self::Metadata
@@ -86,12 +86,12 @@ impl GroupRecords {
 }
 
 impl SimpleGroups {
-    /// Query kind-10009 saved-group rows by exact saving authors.
+    /// Query kind-10009 saved-simple-group rows by exact saving authors.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
-    pub fn saved_groups<I>(authors: I) -> Result<Query, GroupError>
+    /// Returns [`SimpleGroupError`] after consuming at most the declared bound plus one.
+    pub fn saved_simple_groups<I>(authors: I) -> Result<Query, SimpleGroupError>
     where
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
@@ -107,8 +107,8 @@ impl SimpleGroups {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
-    pub fn saved_relays<I>(authors: I) -> Result<Query, GroupError>
+    /// Returns [`SimpleGroupError`] after consuming at most the declared bound plus one.
+    pub fn saved_relays<I>(authors: I) -> Result<Query, SimpleGroupError>
     where
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
@@ -124,8 +124,8 @@ impl SimpleGroups {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
-    pub fn groups_where_admin<I>(subjects: I) -> Result<Query, GroupError>
+    /// Returns [`SimpleGroupError`] after consuming at most the declared bound plus one.
+    pub fn simple_groups_where_admin<I>(subjects: I) -> Result<Query, SimpleGroupError>
     where
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
@@ -137,8 +137,8 @@ impl SimpleGroups {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] after consuming at most the declared bound plus one.
-    pub fn groups_where_member<I>(subjects: I) -> Result<Query, GroupError>
+    /// Returns [`SimpleGroupError`] after consuming at most the declared bound plus one.
+    pub fn simple_groups_where_member<I>(subjects: I) -> Result<Query, SimpleGroupError>
     where
         I: IntoIterator,
         I::Item: Borrow<PublicKey>,
@@ -146,29 +146,32 @@ impl SimpleGroups {
         bounded_query(discovery_by_subject(39_002, bounded_keys(subjects)?))
     }
 
-    /// Project exact saving authors for one group's selected id-host pairs.
+    /// Project exact saving authors for one simple group's selected id-host pairs.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the supplied snapshot exceeds the projection bound.
-    pub fn groups_saved_by(
+    /// Returns [`SimpleGroupError`] when the supplied snapshot exceeds the projection bound.
+    pub fn simple_groups_saved_by(
         snapshot: &QuerySnapshot,
-        group: &Group,
-    ) -> Result<Vec<PublicKey>, GroupError> {
+        simple_group: &SimpleGroup,
+    ) -> Result<Vec<PublicKey>, SimpleGroupError> {
         let records = collect_at_most(snapshot.events.iter(), MAX_DISCOVERY_INPUT_ITEMS).map_err(
-            |actual| GroupError::TooManyDiscoveryItems {
+            |actual| SimpleGroupError::TooManyDiscoveryItems {
                 actual,
                 maximum: MAX_DISCOVERY_INPUT_ITEMS,
             },
         )?;
-        let hosts = group.hosts().collect::<std::collections::BTreeSet<_>>();
+        let hosts = simple_group
+            .hosts()
+            .collect::<std::collections::BTreeSet<_>>();
         let mut authors = std::collections::BTreeSet::new();
         for record in records {
-            let Ok(rows) = crate::SavedGroup::from_event(&record.event) else {
+            let Ok(rows) = crate::SavedSimpleGroup::from_event(&record.event) else {
                 continue;
             };
             if let Some(author) = rows.into_iter().flatten().find_map(|saved| {
-                (saved.id() == group.id() && hosts.contains(saved.relay())).then(|| saved.author())
+                (saved.id() == simple_group.id() && hosts.contains(saved.relay()))
+                    .then(|| saved.author())
             }) {
                 authors.insert(author);
             }
@@ -177,14 +180,14 @@ impl SimpleGroups {
     }
 }
 
-fn bounded_keys<I>(input: I) -> Result<Vec<PublicKey>, GroupError>
+fn bounded_keys<I>(input: I) -> Result<Vec<PublicKey>, SimpleGroupError>
 where
     I: IntoIterator,
     I::Item: Borrow<PublicKey>,
 {
     collect_at_most(input, MAX_DISCOVERY_INPUT_ITEMS)
         .map(|values| values.into_iter().map(|value| *value.borrow()).collect())
-        .map_err(|actual| GroupError::TooManyDiscoveryItems {
+        .map_err(|actual| SimpleGroupError::TooManyDiscoveryItems {
             actual,
             maximum: MAX_DISCOVERY_INPUT_ITEMS,
         })
@@ -197,37 +200,47 @@ fn discovery_by_subject(kind: u16, subjects: Vec<PublicKey>) -> Query {
     )
 }
 
-fn bounded_query(query: Query) -> Result<Query, GroupError> {
-    query.limit(MAX_GROUP_QUERY_RESULTS).map_err(Into::into)
+fn bounded_query(query: Query) -> Result<Query, SimpleGroupError> {
+    query
+        .limit(MAX_SIMPLE_GROUP_QUERY_RESULTS)
+        .map_err(Into::into)
 }
 
-pub(crate) fn content(group: &Group, selection: Query) -> Result<Query, GroupError> {
+pub(crate) fn content(
+    simple_group: &SimpleGroup,
+    selection: Query,
+) -> Result<Query, SimpleGroupError> {
     let limit = selection.result_limit().ok_or_else(|| {
-        GroupError::Query("group content requires an explicit result bound".to_owned())
+        SimpleGroupError::Query("simple group content requires an explicit result bound".to_owned())
     })?;
-    if limit.get() > MAX_GROUP_QUERY_RESULTS {
-        return Err(GroupError::Query(format!(
-            "group content result bound exceeds limit: {} > {MAX_GROUP_QUERY_RESULTS}",
+    if limit.get() > MAX_SIMPLE_GROUP_QUERY_RESULTS {
+        return Err(SimpleGroupError::Query(format!(
+            "simple group content result bound exceeds limit: {} > {MAX_SIMPLE_GROUP_QUERY_RESULTS}",
             limit.get()
         )));
     }
     let h = SingleLetterTag::from_char('h').expect("lowercase h is a valid tag key");
     let selection = match selection.selection().tag_values.get(&h) {
-        None => selection.tag_values(h, [group.id()]),
-        Some(values) if values.is_empty() => return Err(GroupError::EmptyGroupContext),
-        Some(_) => return Err(GroupError::ConflictingGroupContext),
+        None => selection.tag_values(h, [simple_group.id()]),
+        Some(values) if values.is_empty() => {
+            return Err(SimpleGroupError::EmptySimpleGroupContext);
+        }
+        Some(_) => return Err(SimpleGroupError::ConflictingSimpleGroupContext),
     };
-    Ok(selection.from_relays(group.hosts())?)
+    Ok(selection.from_relays(simple_group.hosts())?)
 }
 
-pub(crate) fn records(group: &Group, records: GroupRecords) -> Result<Query, GroupError> {
+pub(crate) fn records(
+    simple_group: &SimpleGroup,
+    records: SimpleGroupRecords,
+) -> Result<Query, SimpleGroupError> {
     let d = SingleLetterTag::from_char('d').expect("lowercase d is a valid tag key");
     let query = records.kinds().iter().fold(Query::events(), |query, kind| {
         query.kind(Kind::from_u16(*kind))
     });
     bounded_query(
         query
-            .tag_values(d, [group.id()])
-            .only_from_relays(group.hosts())?,
+            .tag_values(d, [simple_group.id()])
+            .only_from_relays(simple_group.hosts())?,
     )
 }

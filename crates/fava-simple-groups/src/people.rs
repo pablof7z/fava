@@ -2,48 +2,48 @@ use std::collections::BTreeSet;
 
 use fava_write::{EventValue, PublicKey, Tag};
 
-use crate::GroupError;
+use crate::SimpleGroupError;
 use crate::records::record_boundary;
 
 /// Positive administrator rows from one signed kind-39001 record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupAdmins {
+pub struct SimpleGroupAdmins {
     id: String,
     author: PublicKey,
-    admins: Vec<Result<(PublicKey, Vec<String>), GroupError>>,
+    admins: Vec<Result<(PublicKey, Vec<String>), SimpleGroupError>>,
 }
 
 /// Positive member rows from one signed kind-39002 record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupMembers {
+pub struct SimpleGroupMembers {
     id: String,
     author: PublicKey,
-    members: Vec<Result<PublicKey, GroupError>>,
+    members: Vec<Result<PublicKey, SimpleGroupError>>,
 }
 
 /// Role definitions from one signed kind-39003 record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupRoles {
+pub struct SimpleGroupRoles {
     id: String,
     author: PublicKey,
-    roles: Vec<Result<(String, Option<String>), GroupError>>,
+    roles: Vec<Result<(String, Option<String>), SimpleGroupError>>,
 }
 
 /// Positive live participant rows from one signed kind-39004 record.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupParticipants {
+pub struct SimpleGroupParticipants {
     id: String,
     author: PublicKey,
-    participants: Vec<Result<PublicKey, GroupError>>,
+    participants: Vec<Result<PublicKey, SimpleGroupError>>,
 }
 
-impl GroupAdmins {
+impl SimpleGroupAdmins {
     /// Parse one signed kind-39001 record.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_001)?;
         let author = boundary.author();
         let admins = collect_rows(
@@ -59,7 +59,7 @@ impl GroupAdmins {
         })
     }
 
-    /// Exact group id.
+    /// Exact simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -72,18 +72,18 @@ impl GroupAdmins {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), GroupError>] {
+    pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), SimpleGroupError>] {
         &self.admins
     }
 }
 
-impl GroupMembers {
+impl SimpleGroupMembers {
     /// Parse one signed kind-39002 record.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_002)?;
         let author = boundary.author();
         let members = collect_rows(
@@ -99,7 +99,7 @@ impl GroupMembers {
         })
     }
 
-    /// Exact group id.
+    /// Exact simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -112,18 +112,18 @@ impl GroupMembers {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    pub fn members(&self) -> &[Result<PublicKey, GroupError>] {
+    pub fn members(&self) -> &[Result<PublicKey, SimpleGroupError>] {
         &self.members
     }
 }
 
-impl GroupRoles {
+impl SimpleGroupRoles {
     /// Parse one signed kind-39003 record.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_003)?;
         let author = boundary.author();
         let roles = collect_rows(
@@ -139,7 +139,7 @@ impl GroupRoles {
         })
     }
 
-    /// Exact group id.
+    /// Exact simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -152,18 +152,18 @@ impl GroupRoles {
     }
 
     /// Source-ordered role names and optional descriptions with row-local failures.
-    pub fn roles(&self) -> &[Result<(String, Option<String>), GroupError>] {
+    pub fn roles(&self) -> &[Result<(String, Option<String>), SimpleGroupError>] {
         &self.roles
     }
 }
 
-impl GroupParticipants {
+impl SimpleGroupParticipants {
     /// Parse one signed kind-39004 record.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, GroupError> {
+    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
         let boundary = record_boundary(event, 39_004)?;
         let author = boundary.author();
         let participants = collect_rows(
@@ -179,7 +179,7 @@ impl GroupParticipants {
         })
     }
 
-    /// Exact group id.
+    /// Exact simple group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -192,7 +192,7 @@ impl GroupParticipants {
     }
 
     /// Source-ordered positive rows and row-local failures.
-    pub fn participants(&self) -> &[Result<PublicKey, GroupError>] {
+    pub fn participants(&self) -> &[Result<PublicKey, SimpleGroupError>] {
         &self.participants
     }
 }
@@ -200,9 +200,9 @@ impl GroupParticipants {
 fn parse_admin(
     tag_index: usize,
     values: &[String],
-) -> Result<(PublicKey, Vec<String>), GroupError> {
+) -> Result<(PublicKey, Vec<String>), SimpleGroupError> {
     if values.len() < 3 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "admin row requires a public key and at least one role",
         });
@@ -215,9 +215,9 @@ fn parse_key(
     tag_index: usize,
     values: &[String],
     require_lowercase: bool,
-) -> Result<PublicKey, GroupError> {
+) -> Result<PublicKey, SimpleGroupError> {
     if values.len() != 2 {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "public-key row must contain exactly one value",
         });
@@ -229,34 +229,37 @@ fn parse_key_prefix(
     tag_index: usize,
     values: &[String],
     require_lowercase: bool,
-) -> Result<PublicKey, GroupError> {
-    let value = values.get(1).ok_or(GroupError::MalformedRecordRow {
+) -> Result<PublicKey, SimpleGroupError> {
+    let value = values.get(1).ok_or(SimpleGroupError::MalformedRecordRow {
         tag_index,
         reason: "public key is missing or invalid",
     })?;
     if require_lowercase
         && (value.len() != 64 || value.bytes().any(|byte| byte.is_ascii_uppercase()))
     {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "participant public key must be lowercase hex",
         });
     }
-    PublicKey::from_hex(value).map_err(|_| GroupError::MalformedRecordRow {
+    PublicKey::from_hex(value).map_err(|_| SimpleGroupError::MalformedRecordRow {
         tag_index,
         reason: "public key is missing or invalid",
     })
 }
 
-fn parse_role(tag_index: usize, values: &[String]) -> Result<(String, Option<String>), GroupError> {
+fn parse_role(
+    tag_index: usize,
+    values: &[String],
+) -> Result<(String, Option<String>), SimpleGroupError> {
     if !(2..=3).contains(&values.len()) {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "role row requires a name and optional description",
         });
     }
     if values[1].is_empty() {
-        return Err(GroupError::MalformedRecordRow {
+        return Err(SimpleGroupError::MalformedRecordRow {
             tag_index,
             reason: "role name must not be empty",
         });
@@ -267,9 +270,9 @@ fn parse_role(tag_index: usize, values: &[String]) -> Result<(String, Option<Str
 fn collect_rows<T, K>(
     tags: &[Tag],
     row_name: &str,
-    parse: impl Fn(usize, &[String]) -> Result<T, GroupError>,
+    parse: impl Fn(usize, &[String]) -> Result<T, SimpleGroupError>,
     key: impl Fn(&T) -> K,
-) -> Vec<Result<T, GroupError>>
+) -> Vec<Result<T, SimpleGroupError>>
 where
     K: Ord,
 {
@@ -279,7 +282,7 @@ where
         .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some(row_name))
         .map(|(tag_index, tag)| match parse(tag_index, tag.as_slice()) {
             Ok(value) if seen.insert(key(&value)) => Ok(value),
-            Ok(_) => Err(GroupError::DuplicateRecordRow { tag_index }),
+            Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
             Err(error) => Err(error),
         })
         .collect()

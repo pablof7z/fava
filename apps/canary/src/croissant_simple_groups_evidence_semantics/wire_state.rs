@@ -30,7 +30,7 @@ enum ConnectionState {
 }
 
 struct WireClaims<'a> {
-    group: &'a str,
+    simple_group: &'a str,
     shared: &'a str,
     unique: String,
     custom: &'a str,
@@ -53,7 +53,7 @@ fn verify_one_wire(
 ) -> CanaryResult<u64> {
     let (frames, wire_bytes) = wire_frames(snapshot, label)?;
     let claims = WireClaims {
-        group: string(manifest, "group_id")?,
+        simple_group: string(manifest, "simple_group_id")?,
         shared: string(manifest, "shared_event_id")?,
         unique: strings(manifest, "unique_event_ids", 2)?[index].clone(),
         custom: string(manifest, "custom_event_id")?,
@@ -121,7 +121,7 @@ fn verify_one_wire(
                 let event = event_at(payload, 1)?;
                 event.verify().map_err(error)?;
                 if event.pubkey.to_hex() != claims.author
-                    || !has_exact_tag(&event, "h", claims.group)
+                    || !has_exact_tag(&event, "h", claims.simple_group)
                 {
                     return Err(CanaryError::new(
                         "simple-groups client EVENT escaped its author or h authority",
@@ -222,7 +222,7 @@ fn verify_req(
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
     let filter = payload.get(2).and_then(Value::as_object);
     let query_kind =
-        if filter.is_some_and(|filter| exact_filter(filter, "#h", claims.group, &[9], 16)) {
+        if filter.is_some_and(|filter| exact_filter(filter, "#h", claims.simple_group, &[9], 16)) {
             require_acked(
                 connections,
                 [PublicationRole::Shared, PublicationRole::Unique],
@@ -233,7 +233,7 @@ fn verify_req(
             exact_filter(
                 filter,
                 "#d",
-                claims.group,
+                claims.simple_group,
                 &[39000, 39001, 39002, 39003, 39004, 39005],
                 4096,
             )
@@ -289,7 +289,7 @@ fn publication_role(event: &Event, claims: &WireClaims<'_>) -> CanaryResult<Publ
             event,
             &[
                 ["about", claims.metadata_about, ""],
-                ["h", claims.group, ""],
+                ["h", claims.simple_group, ""],
                 ["name", &claims.metadata_name, ""],
             ],
         )
@@ -300,7 +300,7 @@ fn publication_role(event: &Event, claims: &WireClaims<'_>) -> CanaryResult<Publ
         && has_exact_command_tags(
             event,
             &[
-                ["h", claims.group, ""],
+                ["h", claims.simple_group, ""],
                 ["p", &claims.admin_target, "admin"],
             ],
         )
@@ -353,7 +353,7 @@ fn verify_response(
             if event.id.to_hex() != expected_id
                 || event.pubkey.to_hex() != claims.author
                 || event.kind.as_u16() != 9007
-                || !has_exact_tag(&event, "h", claims.group)
+                || !has_exact_tag(&event, "h", claims.simple_group)
                 || bootstrap_result.replace(event.id.to_hex()).is_some()
             {
                 return Err(CanaryError::new(
@@ -363,7 +363,7 @@ fn verify_response(
         }
         QueryKind::Content => {
             if event.pubkey.to_hex() != claims.author
-                || !has_exact_tag(&event, "h", claims.group)
+                || !has_exact_tag(&event, "h", claims.simple_group)
                 || event.kind.as_u16() != 9
                 || !content_events.insert(event.id.to_hex())
             {
@@ -373,7 +373,7 @@ fn verify_response(
             }
         }
         QueryKind::Records => {
-            if !has_exact_tag(&event, "d", claims.group) {
+            if !has_exact_tag(&event, "d", claims.simple_group) {
                 return Err(CanaryError::new(
                     "simple-groups record result escaped its exact group query",
                 ));

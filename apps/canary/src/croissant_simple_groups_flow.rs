@@ -14,7 +14,7 @@ use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
-use fava_simple_groups::{Group, GroupRecords};
+use fava_simple_groups::{SimpleGroup, SimpleGroupRecords};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write::{Event, ReceiptOutcome};
@@ -36,7 +36,7 @@ const CUSTOM_KIND: u16 = 50_029;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct SimpleGroupsFlowFacts {
-    pub(crate) group_id: String,
+    pub(crate) simple_group_id: String,
     pub(crate) relay_urls: [String; 2],
     pub(crate) shared_event_id: String,
     pub(crate) unique_event_ids: [String; 2],
@@ -77,7 +77,7 @@ pub(crate) async fn execute_public_flow(
     let (facts, bootstrap_event_id) = result??;
     verify_query_completion(
         &[root.join("wire/a.jsonl"), root.join("wire/b.jsonl")],
-        &facts.group_id,
+        &facts.simple_group_id,
         &bootstrap_event_id,
     )?;
     Ok(facts)
@@ -99,9 +99,9 @@ async fn execute_with_proxies(
         RelayUrl::parse(&urls[0]).map_err(error)?,
         RelayUrl::parse(&urls[1]).map_err(error)?,
     ];
-    let group_id = hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
+    let simple_group_id = hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
 
-    let group = Group::on(relays.clone(), &group_id).map_err(error)?;
+    let simple_group = SimpleGroup::on(relays.clone(), &simple_group_id).map_err(error)?;
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(author.clone()));
     let publisher = assembly(root.join("children/publisher.redb"), signer)?;
     let observer = assembly(
@@ -110,7 +110,7 @@ async fn execute_with_proxies(
     )?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-    let create = group
+    let create = simple_group
         .prepare(
             EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
                 .created_at(Timestamp::from(now))
@@ -140,7 +140,7 @@ async fn execute_with_proxies(
     .into_iter()
     .enumerate()
     {
-        let metadata = group
+        let metadata = simple_group
             .edit_metadata(
                 EventBuilder::new(author.public_key(), Kind::from_u16(9_002))
                     .created_at(Timestamp::from(now + 1 + index as u64))
@@ -158,7 +158,7 @@ async fn execute_with_proxies(
         .into_iter()
         .enumerate()
     {
-        let admin = group
+        let admin = simple_group
             .prepare(
                 EventBuilder::new(author.public_key(), Kind::from_u16(9_000))
                     .created_at(Timestamp::from(now + 3 + index as u64))
@@ -173,9 +173,9 @@ async fn execute_with_proxies(
         )?;
     }
 
-    let shared = signed_group_event(&group, &author, now + 5, "shared-content")?;
-    let unique_a = signed_group_event(&group, &author, now + 6, "unique-A")?;
-    let unique_b = signed_group_event(&group, &author, now + 7, "unique-B")?;
+    let shared = signed_group_event(&simple_group, &author, now + 5, "shared-content")?;
+    let unique_a = signed_group_event(&simple_group, &author, now + 6, "unique-A")?;
+    let unique_b = signed_group_event(&simple_group, &author, now + 7, "unique-B")?;
     require_terminal(
         &publish_signed(&publisher, relays.clone(), shared.clone()).await?,
         2,
@@ -191,7 +191,7 @@ async fn execute_with_proxies(
 
     let mut content = observer
         .observe(
-            group
+            simple_group
                 .events(
                     Query::events()
                         .kind(Kind::from_u16(9))
@@ -203,10 +203,10 @@ async fn execute_with_proxies(
         .await
         .map_err(error)?;
     let mut records = observer
-        .observe(group.records(GroupRecords::all()).map_err(error)?)
+        .observe(simple_group.records(SimpleGroupRecords::all()).map_err(error)?)
         .await
         .map_err(error)?;
-    let selected_hosts = group.hosts().count();
+    let selected_hosts = simple_group.hosts().count();
     let content_snapshot = wait_observation(&mut content, |current| {
         current.events.len() == selected_hosts + 1
             && current.events.iter().any(|record| {
@@ -215,14 +215,14 @@ async fn execute_with_proxies(
     })
     .await?;
     let record_snapshot = wait_observation(&mut records, |current| {
-        let Ok(projected) = group.project(current) else {
+        let Ok(projected) = simple_group.project(current) else {
             return false;
         };
         projected.metadata().count() == selected_hosts
             && projected.admin_records().count() == selected_hosts
     })
     .await?;
-    let projected = group.project(&record_snapshot).map_err(error)?;
+    let projected = simple_group.project(&record_snapshot).map_err(error)?;
     if selected_hosts == 2 && (!projected.metadata_differ() || !projected.admins_differ()) {
         return Err(CanaryError::new(
             "host-local metadata/admin forks did not disagree",
@@ -282,7 +282,7 @@ async fn execute_with_proxies(
         .into_iter()
         .take(selected_hosts)
     {
-        let selected = Group::on([relay.clone()], &group_id)
+        let selected = SimpleGroup::on([relay.clone()], &simple_group_id)
             .map_err(error)?
             .project(&record_snapshot)
             .map_err(error)?;
@@ -298,7 +298,7 @@ async fn execute_with_proxies(
         }
     }
 
-    let custom = group
+    let custom = simple_group
         .prepare(
             EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND))
                 .created_at(Timestamp::from(now + 8))
@@ -308,7 +308,7 @@ async fn execute_with_proxies(
         )
         .map_err(error)?;
     let custom_write = publisher
-        .to(group.hosts())
+        .to(simple_group.hosts())
         .map_err(error)?
         .publish(custom)
         .map_err(error)?;
@@ -326,13 +326,13 @@ async fn execute_with_proxies(
         signed_raw(
             &author,
             now + 10,
-            vec![tag(&["h", &group_id])?, tag(&["h", &group_id])?],
+            vec![tag(&["h", &simple_group_id])?, tag(&["h", &simple_group_id])?],
         )?,
         signed_raw(&author, now + 11, vec![tag(&["h", "other-group"])?])?,
     ];
     let mut signed_refusals = 0;
     for invalid in invalids {
-        if group.prepare(invalid).is_err() {
+        if simple_group.prepare(invalid).is_err() {
             signed_refusals += 1;
         }
     }
@@ -349,7 +349,7 @@ async fn execute_with_proxies(
     let observation_closed = content.changed().await.is_err() && records.changed().await.is_err();
     wait_for_query_completion(
         &[root.join("wire/a.jsonl"), root.join("wire/b.jsonl")],
-        &group_id,
+        &simple_group_id,
         &create.id.to_hex(),
     )
     .await?;
@@ -357,7 +357,7 @@ async fn execute_with_proxies(
     let bootstrap_event_id = create.id.to_hex();
     Ok((
         SimpleGroupsFlowFacts {
-            group_id,
+            simple_group_id,
             relay_urls: [relays[0].to_string(), relays[1].to_string()],
             shared_event_id: shared.id.to_hex(),
             unique_event_ids: [unique_a.id.to_hex(), unique_b.id.to_hex()],
@@ -437,12 +437,12 @@ fn require_terminal(receipt: &Receipt, destinations: usize) -> CanaryResult<()> 
 }
 
 fn signed_group_event(
-    group: &Group,
+    simple_group: &SimpleGroup,
     keys: &Keys,
     created: u64,
     content: &str,
 ) -> CanaryResult<Event> {
-    group
+    simple_group
         .prepare(
             EventBuilder::new(keys.public_key(), Kind::from_u16(9))
                 .created_at(Timestamp::from(created))

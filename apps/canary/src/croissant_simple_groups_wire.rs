@@ -34,14 +34,14 @@ struct QueryState {
 
 pub(crate) async fn wait_for_query_completion(
     paths: &[PathBuf; 2],
-    group_id: &str,
+    simple_group_id: &str,
     bootstrap_event_id: &str,
 ) -> CanaryResult<()> {
     tokio::time::timeout(COMPLETION_DEADLINE, async {
         loop {
             let wire_a = read_wire(&paths[0])?;
             let wire_b = read_wire(&paths[1])?;
-            if pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id, false)? {
+            if pair_query_completion([&wire_a, &wire_b], simple_group_id, bootstrap_event_id, false)? {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -53,12 +53,12 @@ pub(crate) async fn wait_for_query_completion(
 
 pub(crate) fn verify_query_completion(
     paths: &[PathBuf; 2],
-    group_id: &str,
+    simple_group_id: &str,
     bootstrap_event_id: &str,
 ) -> CanaryResult<()> {
     let wire_a = read_wire(&paths[0])?;
     let wire_b = read_wire(&paths[1])?;
-    if !pair_query_completion([&wire_a, &wire_b], group_id, bootstrap_event_id, true)? {
+    if !pair_query_completion([&wire_a, &wire_b], simple_group_id, bootstrap_event_id, true)? {
         return Err(CanaryError::new(
             "both final wire logs must carry exact terminal query completion",
         ));
@@ -104,7 +104,7 @@ fn read_wire(path: &Path) -> CanaryResult<String> {
 
 fn pair_query_completion(
     wires: [&str; 2],
-    group_id: &str,
+    simple_group_id: &str,
     bootstrap_event_id: &str,
     require_terminated: bool,
 ) -> CanaryResult<bool> {
@@ -112,7 +112,7 @@ fn pair_query_completion(
     for (relay_index, wire) in wires.into_iter().enumerate() {
         complete &= query_completion(
             wire,
-            group_id,
+            simple_group_id,
             bootstrap_event_id,
             &format!("group-create-{relay_index}"),
             require_terminated,
@@ -123,7 +123,7 @@ fn pair_query_completion(
 
 fn query_completion(
     wire: &str,
-    group_id: &str,
+    simple_group_id: &str,
     bootstrap_event_id: &str,
     bootstrap_subscription: &str,
     require_terminated: bool,
@@ -178,7 +178,7 @@ fn query_completion(
         match (direction, array.first().and_then(Value::as_str)) {
             ("client_to_relay", Some("REQ")) => {
                 let (role, subscription) =
-                    classify_request(array, group_id, bootstrap_event_id, bootstrap_subscription)?;
+                    classify_request(array, simple_group_id, bootstrap_event_id, bootstrap_subscription)?;
                 // Distinct query roles legitimately share one connection; what
                 // must stay unique is the wire subscription each role owns.
                 if queries
@@ -235,7 +235,7 @@ fn query_completion(
 
 fn classify_request(
     array: &[Value],
-    group_id: &str,
+    simple_group_id: &str,
     bootstrap_event_id: &str,
     bootstrap_subscription: &str,
 ) -> CanaryResult<(QueryRole, String)> {
@@ -252,13 +252,13 @@ fn classify_request(
         && subscription == bootstrap_subscription
     {
         QueryRole::Bootstrap
-    } else if filter == &json!({"kinds": [9], "limit": 16, "#h": [group_id]}) {
+    } else if filter == &json!({"kinds": [9], "limit": 16, "#h": [simple_group_id]}) {
         QueryRole::Content
     } else if filter
         == &json!({
             "kinds": [39000, 39001, 39002, 39003, 39004, 39005],
             "limit": 4096,
-            "#d": [group_id]
+            "#d": [simple_group_id]
         })
     {
         QueryRole::Records

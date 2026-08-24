@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fava_query::{Kind, Query, RelayUrl};
-use fava_simple_groups::{Group, GroupRecords, SimpleGroups};
+use fava_simple_groups::{SimpleGroup, SimpleGroupRecords, SimpleGroups};
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 const CARGO_MANIFEST: &str = include_str!("../Cargo.toml");
@@ -214,7 +214,7 @@ fn pure_helpers_have_no_lifecycle_owner() {
     }
 
     let host = RelayUrl::parse("wss://groups.example").expect("relay URL");
-    let group = Group::on([host.clone()], "photos").expect("group");
+    let simple_group = SimpleGroup::on([host.clone()], "photos").expect("group");
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
             .expect("generator public key");
@@ -222,15 +222,15 @@ fn pure_helpers_have_no_lifecycle_owner() {
         .created_at(Timestamp::from(7))
         .build()
         .expect("bounded draft");
-    let prepared = group.prepare(draft).expect("first preparation");
-    assert_eq!(group.prepare(prepared.clone()), Ok(prepared));
+    let prepared = simple_group.prepare(draft).expect("first preparation");
+    assert_eq!(simple_group.prepare(prepared.clone()), Ok(prepared));
     let query = Query::events().limit(8).expect("positive limit");
-    assert_eq!(group.events(query.clone()), group.events(query));
+    assert_eq!(simple_group.events(query.clone()), simple_group.events(query));
     assert_eq!(
-        group.records(GroupRecords::all()),
-        group.records(GroupRecords::all())
+        simple_group.records(SimpleGroupRecords::all()),
+        simple_group.records(SimpleGroupRecords::all())
     );
-    assert_eq!(group.hosts().collect::<Vec<_>>(), vec![host]);
+    assert_eq!(simple_group.hosts().collect::<Vec<_>>(), vec![host]);
     let first = SimpleGroups::materializer();
     let second = SimpleGroups::materializer();
     assert!(!Arc::ptr_eq(&first, &second));
@@ -250,13 +250,13 @@ fn capability_sources_and_exports_own_no_lifecycle() {
             "fava_publisher",
             "fava_delivery",
             "fava_transport",
-            "GroupObservation",
-            "GroupPublication",
-            "GroupReceipt",
-            "GroupRuntime",
-            "GroupProvider",
-            "GroupStore",
-            "GroupLifecycle",
+            "SimpleGroupObservation",
+            "SimpleGroupPublication",
+            "SimpleGroupReceipt",
+            "SimpleGroupRuntime",
+            "SimpleGroupProvider",
+            "SimpleGroupStore",
+            "SimpleGroupLifecycle",
         ] {
             assert!(
                 !code.contains(forbidden),
@@ -266,19 +266,19 @@ fn capability_sources_and_exports_own_no_lifecycle() {
         }
     }
     let approved = BTreeSet::from([
-        "Group".to_owned(),
-        "GroupAdmins".to_owned(),
-        "GroupError".to_owned(),
-        "GroupMembers".to_owned(),
-        "GroupMetadata".to_owned(),
-        "GroupParticipants".to_owned(),
-        "GroupPins".to_owned(),
-        "GroupRecords".to_owned(),
-        "GroupRoles".to_owned(),
-        "GroupSnapshot".to_owned(),
         "PinnedItem".to_owned(),
-        "SavedGroup".to_owned(),
         "SavedRelay".to_owned(),
+        "SavedSimpleGroup".to_owned(),
+        "SimpleGroup".to_owned(),
+        "SimpleGroupAdmins".to_owned(),
+        "SimpleGroupError".to_owned(),
+        "SimpleGroupMembers".to_owned(),
+        "SimpleGroupMetadata".to_owned(),
+        "SimpleGroupParticipants".to_owned(),
+        "SimpleGroupPins".to_owned(),
+        "SimpleGroupRecords".to_owned(),
+        "SimpleGroupRoles".to_owned(),
+        "SimpleGroupSnapshot".to_owned(),
         "SimpleGroups".to_owned(),
     ]);
     assert_eq!(public_exports(PUBLIC_ROOT), approved);

@@ -7,27 +7,27 @@ use fava_write::{
 };
 
 use crate::records::MAX_RECORD_VALUE_BYTES;
-use crate::{Group, GroupError, SimpleGroups};
+use crate::{SimpleGroup, SimpleGroupError, SimpleGroups};
 
 const SAVED_KIND: u16 = 10_009;
-const SAVE_GROUP: u8 = 1;
-const REMOVE_GROUP: u8 = 2;
-const RENAME_GROUP: u8 = 3;
+const SAVE_SIMPLE_GROUP: u8 = 1;
+const REMOVE_SIMPLE_GROUP: u8 = 2;
+const RENAME_SIMPLE_GROUP: u8 = 3;
 const SAVE_RELAY: u8 = 4;
 const REMOVE_RELAY: u8 = 5;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum Change {
-    SaveGroup {
+    SaveSimpleGroup {
         id: String,
         hosts: Vec<RelayUrl>,
         name: Option<String>,
     },
-    RemoveGroup {
+    RemoveSimpleGroup {
         id: String,
         hosts: Vec<RelayUrl>,
     },
-    RenameGroup {
+    RenameSimpleGroup {
         id: String,
         hosts: Vec<RelayUrl>,
         name: String,
@@ -37,48 +37,50 @@ enum Change {
 }
 
 impl SimpleGroups {
-    /// Produce one bounded edit that saves every selected group host.
+    /// Produce one bounded edit that saves every selected simple group host.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the change cannot fit the bounded private codec.
-    pub fn save_group(
-        group: &Group,
+    /// Returns [`SimpleGroupError`] when the change cannot fit the bounded private codec.
+    pub fn save_simple_group(
+        simple_group: &SimpleGroup,
         name: Option<&str>,
-    ) -> Result<ReplaceableEventEdit, GroupError> {
-        edit(&Change::SaveGroup {
-            id: group.id().to_owned(),
-            hosts: group.hosts().collect(),
+    ) -> Result<ReplaceableEventEdit, SimpleGroupError> {
+        edit(&Change::SaveSimpleGroup {
+            id: simple_group.id().to_owned(),
+            hosts: simple_group.hosts().collect(),
             name: name.map(str::to_owned),
         })
         .map_err(Into::into)
     }
 
-    /// Produce one bounded edit that removes every selected group host row.
+    /// Produce one bounded edit that removes every selected simple group host row.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the change cannot fit the bounded private codec.
-    pub fn remove_group(group: &Group) -> Result<ReplaceableEventEdit, GroupError> {
-        edit(&Change::RemoveGroup {
-            id: group.id().to_owned(),
-            hosts: group.hosts().collect(),
+    /// Returns [`SimpleGroupError`] when the change cannot fit the bounded private codec.
+    pub fn remove_simple_group(
+        simple_group: &SimpleGroup,
+    ) -> Result<ReplaceableEventEdit, SimpleGroupError> {
+        edit(&Change::RemoveSimpleGroup {
+            id: simple_group.id().to_owned(),
+            hosts: simple_group.hosts().collect(),
         })
         .map_err(Into::into)
     }
 
-    /// Produce one bounded edit that renames every selected group host row.
+    /// Produce one bounded edit that renames every selected simple group host row.
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the name or change exceeds its declared bound.
-    pub fn rename_saved_group(
-        group: &Group,
+    /// Returns [`SimpleGroupError`] when the name or change exceeds its declared bound.
+    pub fn rename_saved_simple_group(
+        simple_group: &SimpleGroup,
         name: &str,
-    ) -> Result<ReplaceableEventEdit, GroupError> {
-        edit(&Change::RenameGroup {
-            id: group.id().to_owned(),
-            hosts: group.hosts().collect(),
+    ) -> Result<ReplaceableEventEdit, SimpleGroupError> {
+        edit(&Change::RenameSimpleGroup {
+            id: simple_group.id().to_owned(),
+            hosts: simple_group.hosts().collect(),
             name: name.to_owned(),
         })
         .map_err(Into::into)
@@ -88,8 +90,8 @@ impl SimpleGroups {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the relay cannot fit the bounded private codec.
-    pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, GroupError> {
+    /// Returns [`SimpleGroupError`] when the relay cannot fit the bounded private codec.
+    pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, SimpleGroupError> {
         edit(&Change::SaveRelay(relay)).map_err(Into::into)
     }
 
@@ -97,8 +99,8 @@ impl SimpleGroups {
     ///
     /// # Errors
     ///
-    /// Returns [`GroupError`] when the relay cannot fit the bounded private codec.
-    pub fn remove_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, GroupError> {
+    /// Returns [`SimpleGroupError`] when the relay cannot fit the bounded private codec.
+    pub fn remove_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, SimpleGroupError> {
         edit(&Change::RemoveRelay(relay)).map_err(Into::into)
     }
 
@@ -116,18 +118,18 @@ fn edit(change: &Change) -> Result<ReplaceableEventEdit, WriteIntentError> {
 fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
     let mut bytes = Vec::new();
     match change {
-        Change::SaveGroup { id, hosts, name } => {
-            bytes.push(SAVE_GROUP);
-            encode_group(&mut bytes, id, hosts)?;
+        Change::SaveSimpleGroup { id, hosts, name } => {
+            bytes.push(SAVE_SIMPLE_GROUP);
+            encode_simple_group(&mut bytes, id, hosts)?;
             encode_optional(&mut bytes, name.as_deref())?;
         }
-        Change::RemoveGroup { id, hosts } => {
-            bytes.push(REMOVE_GROUP);
-            encode_group(&mut bytes, id, hosts)?;
+        Change::RemoveSimpleGroup { id, hosts } => {
+            bytes.push(REMOVE_SIMPLE_GROUP);
+            encode_simple_group(&mut bytes, id, hosts)?;
         }
-        Change::RenameGroup { id, hosts, name } => {
-            bytes.push(RENAME_GROUP);
-            encode_group(&mut bytes, id, hosts)?;
+        Change::RenameSimpleGroup { id, hosts, name } => {
+            bytes.push(RENAME_SIMPLE_GROUP);
+            encode_simple_group(&mut bytes, id, hosts)?;
             encode_text(&mut bytes, name)?;
         }
         Change::SaveRelay(relay) => {
@@ -142,9 +144,14 @@ fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
     Ok(bytes)
 }
 
-fn encode_group(bytes: &mut Vec<u8>, id: &str, hosts: &[RelayUrl]) -> Result<(), WriteIntentError> {
+fn encode_simple_group(
+    bytes: &mut Vec<u8>,
+    id: &str,
+    hosts: &[RelayUrl],
+) -> Result<(), WriteIntentError> {
     encode_text(bytes, id)?;
-    let count = u16::try_from(hosts.len()).map_err(|_| codec_refusal("too many group hosts"))?;
+    let count =
+        u16::try_from(hosts.len()).map_err(|_| codec_refusal("too many simple group hosts"))?;
     bytes.extend_from_slice(&count.to_be_bytes());
     for host in hosts {
         encode_text(bytes, host.as_str())?;
@@ -184,19 +191,19 @@ fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> 
     let mut input = Input::new(edit.change());
     let operation = input.byte()?;
     let change = match operation {
-        SAVE_GROUP => {
-            let (id, hosts) = input.group()?;
+        SAVE_SIMPLE_GROUP => {
+            let (id, hosts) = input.simple_group()?;
             let name = input.optional_text()?;
-            Change::SaveGroup { id, hosts, name }
+            Change::SaveSimpleGroup { id, hosts, name }
         }
-        REMOVE_GROUP => {
-            let (id, hosts) = input.group()?;
-            Change::RemoveGroup { id, hosts }
+        REMOVE_SIMPLE_GROUP => {
+            let (id, hosts) = input.simple_group()?;
+            Change::RemoveSimpleGroup { id, hosts }
         }
-        RENAME_GROUP => {
-            let (id, hosts) = input.group()?;
+        RENAME_SIMPLE_GROUP => {
+            let (id, hosts) = input.simple_group()?;
             let name = input.text()?;
-            Change::RenameGroup { id, hosts, name }
+            Change::RenameSimpleGroup { id, hosts, name }
         }
         SAVE_RELAY => Change::SaveRelay(input.relay()?),
         REMOVE_RELAY => Change::RemoveRelay(input.relay()?),
@@ -266,10 +273,10 @@ impl<'a> Input<'a> {
         RelayUrl::parse(&self.text()?).map_err(|_| codec_refusal("invalid saved-list relay"))
     }
 
-    fn group(&mut self) -> Result<(String, Vec<RelayUrl>), WriteIntentError> {
+    fn simple_group(&mut self) -> Result<(String, Vec<RelayUrl>), WriteIntentError> {
         let id = self.text()?;
         if id.is_empty() {
-            return Err(codec_refusal("saved-list group id is empty"));
+            return Err(codec_refusal("saved-list simple group id is empty"));
         }
         let count_bytes: [u8; 2] = self
             .bytes
@@ -279,7 +286,7 @@ impl<'a> Input<'a> {
             .map_err(|_| codec_refusal("invalid saved-list host count"))?;
         self.bytes = &self.bytes[2..];
         let count = usize::from(u16::from_be_bytes(count_bytes));
-        if count == 0 || count > crate::bounds::MAX_GROUP_HOST_INPUT_ITEMS {
+        if count == 0 || count > crate::bounds::MAX_SIMPLE_GROUP_HOST_INPUT_ITEMS {
             return Err(codec_refusal("invalid saved-list host count"));
         }
         let mut hosts = Vec::with_capacity(count);
@@ -287,7 +294,7 @@ impl<'a> Input<'a> {
         for _ in 0..count {
             let host = self.relay()?;
             if !seen.insert(host.clone()) {
-                return Err(codec_refusal("duplicate saved-list group host"));
+                return Err(codec_refusal("duplicate saved-list simple group host"));
             }
             hosts.push(host);
         }
@@ -335,7 +342,8 @@ fn qualified_source(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    crate::records::validate_structure(source).map_err(|error| group_refusal(&error))?;
+    crate::records::validate_structure(source)
+        .map_err(|error| simple_group_refusal(&error))?;
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
@@ -354,12 +362,17 @@ fn qualified_source(
 
 fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
     match change {
-        Change::SaveGroup { id, hosts, name } => {
-            apply_group(source, id, hosts, GroupOperation::Save(name.as_deref()))
+        Change::SaveSimpleGroup { id, hosts, name } => apply_simple_group(
+            source,
+            id,
+            hosts,
+            SimpleGroupOperation::Save(name.as_deref()),
+        ),
+        Change::RemoveSimpleGroup { id, hosts } => {
+            apply_simple_group(source, id, hosts, SimpleGroupOperation::Remove)
         }
-        Change::RemoveGroup { id, hosts } => apply_group(source, id, hosts, GroupOperation::Remove),
-        Change::RenameGroup { id, hosts, name } => {
-            apply_group(source, id, hosts, GroupOperation::Rename(name))
+        Change::RenameSimpleGroup { id, hosts, name } => {
+            apply_simple_group(source, id, hosts, SimpleGroupOperation::Rename(name))
         }
         Change::SaveRelay(relay) => apply_relay(source, relay, true),
         Change::RemoveRelay(relay) => apply_relay(source, relay, false),
@@ -367,17 +380,17 @@ fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> 
 }
 
 #[derive(Clone, Copy)]
-enum GroupOperation<'a> {
+enum SimpleGroupOperation<'a> {
     Save(Option<&'a str>),
     Remove,
     Rename(&'a str),
 }
 
-fn apply_group(
+fn apply_simple_group(
     source: &[Tag],
     id: &str,
     hosts: &[RelayUrl],
-    operation: GroupOperation<'_>,
+    operation: SimpleGroupOperation<'_>,
 ) -> Result<Vec<Tag>, WriteIntentError> {
     let selected = hosts
         .iter()
@@ -386,7 +399,8 @@ fn apply_group(
     let mut found = std::collections::BTreeSet::new();
     let mut tags = Vec::with_capacity(source.len().saturating_add(hosts.len()));
     for tag in source {
-        let Some(host) = group_target(tag, id).filter(|host| selected.contains(host)) else {
+        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host))
+        else {
             tags.push(tag.clone());
             continue;
         };
@@ -394,27 +408,27 @@ fn apply_group(
             continue;
         }
         match operation {
-            GroupOperation::Save(_) => tags.push(tag.clone()),
-            GroupOperation::Remove => {}
-            GroupOperation::Rename(name) => tags.push(renamed_row(tag, name)?),
+            SimpleGroupOperation::Save(_) => tags.push(tag.clone()),
+            SimpleGroupOperation::Remove => {}
+            SimpleGroupOperation::Rename(name) => tags.push(renamed_row(tag, name)?),
         }
     }
     match operation {
-        GroupOperation::Save(name) => {
+        SimpleGroupOperation::Save(name) => {
             for host in hosts {
                 if found.insert(host.clone()) {
-                    tags.push(group_row(id, host, name)?);
+                    tags.push(simple_group_row(id, host, name)?);
                 }
             }
         }
-        GroupOperation::Rename(name) => {
+        SimpleGroupOperation::Rename(name) => {
             for host in hosts {
                 if found.insert(host.clone()) {
-                    tags.push(group_row(id, host, Some(name))?);
+                    tags.push(simple_group_row(id, host, Some(name))?);
                 }
             }
         }
-        GroupOperation::Remove => {}
+        SimpleGroupOperation::Remove => {}
     }
     Ok(tags)
 }
@@ -440,7 +454,7 @@ fn apply_relay(source: &[Tag], relay: &RelayUrl, save: bool) -> Result<Vec<Tag>,
     Ok(tags)
 }
 
-fn group_target(tag: &Tag, id: &str) -> Option<RelayUrl> {
+fn simple_group_target(tag: &Tag, id: &str) -> Option<RelayUrl> {
     let values = tag.as_slice();
     ((values.len() == 3 || values.len() == 4)
         && values.first().map(String::as_str) == Some("group")
@@ -462,7 +476,7 @@ fn renamed_row(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     Tag::parse(values).map_err(|error| codec_refusal(&error.to_string()))
 }
 
-fn group_row(id: &str, host: &RelayUrl, name: Option<&str>) -> Result<Tag, WriteIntentError> {
+fn simple_group_row(id: &str, host: &RelayUrl, name: Option<&str>) -> Result<Tag, WriteIntentError> {
     let mut values = vec!["group".to_owned(), id.to_owned(), host.as_str().to_owned()];
     if let Some(name) = name {
         values.push(name.to_owned());
@@ -491,6 +505,6 @@ fn codec_refusal(reason: &str) -> WriteIntentError {
     WriteIntentError::Encoding(reason.to_owned())
 }
 
-fn group_refusal(error: &GroupError) -> WriteIntentError {
+fn simple_group_refusal(error: &SimpleGroupError) -> WriteIntentError {
     WriteIntentError::InvalidEvent(error.to_string())
 }
