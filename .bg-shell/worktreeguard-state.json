@@ -1,0 +1,14 @@
+{
+  "grants": [
+    {
+      "base_path": "/Users/pablofernandez/Work/fava",
+      "created_at": 1787560750,
+      "expires_at": 1787562550,
+      "id": "grant-1787560750-56676",
+      "reason": "User explicitly requested updating the current uncommitted vocabulary candidate data/app in this base checkout; creating a separate worktree would omit and diverge from that dirty candidate apparatus.",
+      "scope": "session",
+      "session_id": "01a032e6-4d54-7401-ae49-bba1fb80a7a4"
+    }
+  ],
+  "version": 6
+}

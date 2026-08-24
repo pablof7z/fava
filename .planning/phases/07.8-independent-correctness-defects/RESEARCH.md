@@ -1,451 +1,503 @@
-# Phase 07.8 — Router engine access and the recursion guard
+# Phase 07.8 Research: MaxAge, Source Coverage, and Declarative Router Inputs
 
-**Researched:** 2026-08-23
-**Tree read:** `87c3688` (`main`, post-07.6 — `crates/fava/src/{relay,live,routes}.rs` no longer exist)
-**Domain:** router input acquisition, automatic-routing recursion, engine construction order
-**Confidence:** HIGH — every claim below is a file read this session with a line range and a verbatim quote.
+**Phase:** 07.8 — Independent correctness defects
+**Researched against:** HEAD `44ea2d4fe2ce6acc7c828d378dd1e40454877ce1` on 2026-08-24
+**Status:** Ready for replacement planning, with one mandatory Pablo vocabulary checkpoint before implementation
 
----
+## User Constraints
 
-## Verdict first
+The following is copied verbatim from the locked current phase context. It supersedes the previous `RESEARCH.md` and Plans 02–05.
 
-**Pablo's model tracks on substance and over-reaches on wording.**
+DATA_R8T4V2NK_START
+## Decision taken by Pablo — use the ordinary query model
 
-What holds: one engine, one transport stack, one event cache, one registry, one admission window. No narrow purpose-built *read service*. Explicit-or-cached is the entire read-acquisition constraint, and it is sufficient **for reads**. `ARCHITECTURE.md`'s two-service noun split (`local_queries` / `explicit_queries`) is not load-bearing and can be dropped — and dropping it costs nothing against *authority 1*, because `GOALS:878` states the same thing without inventing service nouns:
+The outbox router needs ordinary Fava query results for authors' NIP-65 relay
+lists. That need does not justify a router-owned cache, a router-specific
+observation, or an imperative query-opening capability.
 
-> "It may request ordinary local reads and explicitly-routed queries through Fava-provided services."
-> — `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:878` [VERIFIED: read this session]
+The corrected behavior is:
 
-What does not hold: **"the only constraint is explicit relays" is false if "the engine" means the `Fava` type.** There are exactly two other doors into the router chain that an explicit-relay constraint on a *query* says nothing about — route preview and the write path. Both are synchronous or asynchronous re-entry into `fava_routing::open`/`preview` reached without issuing a query at all. Details in Q1.
+1. The router declares a bounded ordinary `Query` for the complete requested
+   author set and its configured indexers.
+2. The query declares the maximum acceptable age of source-scoped completion
+   evidence.
+3. The engine evaluates that freshness policy when the query opens, owns the
+   resulting `Observation`, and supplies current `QuerySnapshot` replacements.
+4. A recent completion fact suppresses redundant acquisition only for the
+   exact indexer/access and every requested filter semantically contained by
+   the completed filter. For example, completed `{kind: 0, authors: [1, 2]}`
+   covers requested `{kind: 0, authors: [1]}`. Missing, stale, non-covering, or
+   unsafe limited facts cause acquisition for that source while the local
+   result remains immediately usable.
+5. App-relay, outbox, hints, fallback, and other routers retain independent
+   contributions. The routing core unions them by destination and withdraws a
+   destination only when every contributing router has withdrawn it.
 
-Nearest workable variant, and the recommendation: **full read access to the real engine, handed to the router at `open()`/`preview()` time, through a contract whose acquisition argument makes `QueryAcquisition::Automatic` unrepresentable.** That keeps everything Pablo wants (same machinery, no separate stack, no purpose-built read interface) and closes all three doors by construction rather than by refusal.
+`Freshness::MaxAge(Duration)` is already required by
+`partial-spec-api-semantics.md:106-115`. `QUERY-013A` requires open-time
+evaluation and forbids turning maximum-age queries into implicit polling loops.
+`EVENT-007` permits cache-owned coverage facts keyed to relay, request shape,
+access, and interval. Reuse follows semantic query containment, not filter
+equality.
 
-One correction to the brief's premise that changes the stakes: **the failure mode of an unguarded automatic router query is no longer unbounded task spawning. It is unbounded synchronous recursion.** 07.6 made `Observer::open` total and synchronous, and the router chain's panic isolation cannot contain a stack overflow. See Q1.
+The current Rust implementation is incomplete: `Freshness` contains only
+`CacheOnly` and `Live`, and the event-cache contract retains no reusable
+query-completion coverage after an observation closes.
 
----
+## Ownership and lifecycle
 
-## Q1 — Does explicit-only suffice as the recursion guard?
+- `Query` owns the requested freshness policy.
+- The event-cache contract owns reusable source-scoped coverage and keeps it
+  coherent with event, tombstone, expiry, eviction, reset, and restart
+  guarantees.
+- `fava-observe` remains the sole owner of ordinary observation identity,
+  source merge, relay demand, evidence, cancellation, and close.
+- The routing engine hosts and bounds router input observations. Routers consume
+  current `QuerySnapshot` values and replace only their own contribution.
+- The outbox router owns neither a second `KnownLists` truth nor a `last_checked`
+  map.
 
-### Every production entry point into the router chain
+An event's `created_at` or `RelayEvidence.observed_at` is not query-freshness
+proof. Positive and empty results require an actual source-complete fact whose
+filter contains the requested filter. Containment means every event matching
+the requested filter also matched the completed filter: author/kind/tag sets
+are supersets, the completed interval encloses the requested interval, and
+relay access is identical. A limited or otherwise non-exhaustive broader query
+does not cover a narrower query. One fresh indexer cannot suppress work against
+another indexer.
 
-Complete enumeration, `grep 'fava_routing::open\|fava_routing::preview'` over `crates/` and `apps/`, production paths only:
+Maximum age is evaluated at open. An observation continues reacting to local
+source changes but does not start a timer-driven refresh when the age expires.
+A continuously live remote view uses live freshness instead; no hidden polling
+policy is introduced here.
 
-| # | Call site | Trigger condition | Re-entry shape |
-|---|-----------|-------------------|----------------|
-| 1 | `crates/fava-observe/src/routes.rs:78` `fava_routing::open(routers, &request)` | read query, `Freshness::Live` **and** `QueryAcquisition::Automatic` | **synchronous** |
-| 2 | `crates/fava/src/lib.rs:247` `fava_routing::preview(&self.routers, &request)` | `Fava::preview_routes` with `QueryAcquisition::Automatic` | **synchronous** |
-| 3 | `crates/fava-publication/src/run.rs:337` `fava_routing::open(self.routers.as_slice(), &request)` | publication run loop, `WriteRouting::Automatic` | asynchronous |
-| 4 | `crates/fava-publication/src/materialization.rs:344` `fava_routing::preview(self.routers.as_slice(), &request)` | write route preview, `WriteRouting::Automatic` | synchronous |
+## Required public behavior
 
-Verbatim guards, so the conditions above are checkable:
+- Fresh covering coverage returns the immediate local result and opens no new
+  work against the covered indexer, including narrower author subsets.
+- Stale, absent, non-covering, cross-access, or unsafe limited coverage returns
+  the same immediate local result and opens only the required relay work.
+- Recent empty-with-EOSE is reusable; silence, timeout, refusal, authentication
+  requirement, disconnect, or observation close is not converted to absence.
+- A newer relay list replaces its predecessor. Cancellation, deletion, expiry,
+  or cache removal reveals the next qualified current answer or unresolved
+  absence through the ordinary `QuerySnapshot` path.
+- Preview reads local state only, opens no relay acquisition, and retains no
+  observation.
+- When app-relay and outbox both contribute one destination, the combined route
+  contains it once and retains it until both contributions withdraw it.
+- Router-input count, query shape, result size, retained coverage, and evidence
+  are bounded or produce typed refusal/shortfall.
 
-- `crates/fava-observe/src/observer.rs:163-166` — `let live = query.freshness() != Freshness::CacheOnly;` / `if live {` / `self.start_engine()?;` / `}` [VERIFIED: crates/fava-observe/src/observer.rs:163-166]
-- `crates/fava-observe/src/observer.rs:188-198` — `let binding = if live {` / `match routes::bind(&query, &self.routers) {` … `} else {` / `None` / `};` [VERIFIED: crates/fava-observe/src/observer.rs:188-198]
-- `crates/fava-observe/src/routes.rs:67-78` — `QueryAcquisition::Explicit(relays) => {` / `RoutePlan::explicit(relays.iter().cloned(), query.access(), &request.targets())` … `QueryAcquisition::Automatic => {` / `let session = fava_routing::open(routers, &request)` [VERIFIED: crates/fava-observe/src/routes.rs:67-78]
-- `crates/fava-publication/src/run.rs:332-337` — `fn open_routes(&self, receipt: &Receipt) -> (Option<Box<dyn RouterSession>>, u64) {` / `let WriteRouting::Automatic = receipt.routing else {` / `return (None, receipt.route_revision);` / `};` / `let request = RouteRequest::Write(receipt.current.event.clone());` / `match fava_routing::open(self.routers.as_slice(), &request) {` [VERIFIED: crates/fava-publication/src/run.rs:332-337]
-- `crates/fava-publication/src/materialization.rs:337-345` — `match routing {` / `WriteRouting::Explicit(relays) => RoutePlan::explicit(` … `WriteRouting::Automatic => fava_routing::preview(self.routers.as_slice(), &request)` [VERIFIED: crates/fava-publication/src/materialization.rs:337-345]
+## Subtractive consequences
 
-### Door-by-door
+- Delete `KnownLists`, `OutboxRouter::remember`, and cumulative snapshot
+  ingestion when the outbox migration lands.
+- Do not introduce `RouterQueries`, `RouterObservation`, `OpenedQuery`, an
+  imperative opener, or another source of query truth merely to preserve the
+  rejected plan.
+- Do not restore `impl QuerySource for Fava`, the canary's second engine or
+  transport, or any files removed by the merged canary teardown.
+- Replace superseded router-query scaffolding completely in authoritative docs;
+  do not preserve aliases or migration narration.
 
-**Door 1 — read acquisition. Closed by `Explicit` or `CacheOnly`.**
-`routes::bind` reaches the chain only on the `Automatic` arm, and `bind` itself is reached only when `live`. So the pair *(acquisition, freshness)* is the whole gate on this door, and either half suffices. `Explicit` alone closes it; `CacheOnly` alone closes it.
+## Plan sequence
 
-**Door 2 — route preview. NOT closed by explicit relays.**
-`Fava::preview_routes(&Query)` takes a query but issues no acquisition. A router given the `Fava` type could call it, and a router whose `preview` calls `preview_routes` recurses synchronously into itself with no relay set involved anywhere. `OutboxRouter::preview` happens to be safe — `crates/fava-router-outbox/src/lib.rs:159-165` returns `Ok(self.contribution(request, &BTreeSet::new(), &Shortfalls::default()))` and touches no source [VERIFIED: crates/fava-router-outbox/src/lib.rs:159-165] — but that is the same *voluntary* safety the brief already identified as unacceptable in `from_relays`. A third-party router closes this door only if the door does not exist on its handle.
+`07.8-01` is complete and remains unchanged. Replace Plans 02 through 05:
 
-**Door 3 — the write path. NOT closed by explicit relays.**
-`Fava::publish` with default routing produces `WriteRouting::Automatic`, which reaches `fava_routing::open` at `run.rs:337` from inside the publication run loop. A constraint stated over `QueryAcquisition` has no jurisdiction over `WriteRouting`; they are separate enums. `Fava::to(relays)` is the write-side explicit narrowing, and nothing ties the two. This recursion is asynchronous (the publication loop), so it degrades into unbounded write lifecycles rather than a stack overflow — slower, and harder to attribute.
+1. **07.8-02 — MaxAge and source-coverage architecture.** Architecture,
+   vocabulary, and falsifier contract only; no production implementation.
+2. **07.8-03 — MaxAge vertical implementation.** Public-`fava` RED evidence,
+   then the contract/default implementation, containment-aware coverage
+   invalidation, and deliberate-break proof.
+3. **07.8-04 — engine-owned router inputs architecture.** Define the smallest
+   bounded declarative contract using ordinary `Query` and `QuerySnapshot`
+   values; do not assume a router-owned observation or imperative opener.
+4. **07.8-05 — outbox migration and subtraction.** Prove simultaneous routers,
+   warm/cold/stale/negative behavior, replacement/cancellation, failure,
+   preview, and close; then remove the superseded outbox state and paths.
 
-**Door 4 — write route preview.** Same as door 2, via `materialization.rs:344`.
+Each item is one focused local issue, branch, validation set, and commit series.
+Architecture/vocabulary plans must be approved by Pablo before their dependent
+feature plan executes.
 
-**Not doors (checked, negative claims):**
+## Vocabulary constraints
 
-- *Derived queries in publication.* The semantic materializer opens `self.event_source` and `self.store` directly, never the engine: `crates/fava-publication/src/materialization.rs:269-274` — `let query = exact_query(edit, author);` / `let cache = self.event_source.open(&query)` / `let writes = match self.store.open(&query)`, and `exact_query` ends `.cache_only()` at `:404-410` [VERIFIED: crates/fava-publication/src/materialization.rs:269-274, 404-410]. No routing.
-- *The route-revision loop.* `routes::follow` consumes `session.next_change()`, builds a `RoutePlan`, and calls `registry.assign` (`crates/fava-observe/src/routes.rs:137-161`). It never calls a router. Demand changes wake the reconciliation engine, which opens relay work, not routers.
-- *Ingest.* `crates/fava-observe/src/ingest.rs:41-105` admits frames into the event cache. A cache change wakes the projection loop, which re-evaluates the query. No routing.
-- *The outbox's own knowledge feedback.* `KnownLists::remember` bumps a watch revision only when the candidate supersedes (`crates/fava-router-outbox/src/lib.rs:126-141`), and `OutboxSession::contribution` is a pure function of `lists` + `request`. The loop is convergent and bounded by the missing-author set. Not recursion.
-- *`Engine::start` re-entrancy.* `start_engine` runs at `observer.rs:164-166`, strictly **before** `routes::bind` at `:188`, so the `OnceLock::get_or_init` at `observer.rs:339-341` has already returned by the time any router runs. No `OnceLock` re-entrancy deadlock. This is order-dependent and fragile: moving `start_engine` after `bind` would introduce a re-entrant `get_or_init` — that is a deadlock or panic depending on std version.
-- *Lock inversion.* `KnownLists::values()` clones under a short mutex and drops it (`lib.rs:117-123`); `remember` explicitly `drop(values)` before `send_replace` (`lib.rs:136-139`); `Registry::install` is called *after* `bind` (`observer.rs:206`). No lock crosses the router boundary. The brief's "no deadlock" finding still holds.
+`Freshness`, `Query`, `QuerySnapshot`, `Observation`, `Router`, and
+`RouterSession` are existing concepts. Do not approve adjective-qualified
+router query synonyms merely because the old plan expected them.
 
-### The failure mode changed under 07.6
+Any unavoidable new public or cross-crate coverage type, persisted coverage
+entity, router configuration concept, or provider-contract change must use its
+own focused architecture change. Its proposal must include the closest existing
+concept, observable distinction, counterexample, owner/lifecycle, forcing
+requirement, reason existing state is insufficient, and executable falsifier.
 
-The brief says the failure of an unguarded automatic query is unbounded task spawning, because `tokio::spawn` breaks the stack unconditionally. That was true when `impl QuerySource for Fava` was the only door. It is no longer the general case:
+The next Pablo checkpoint is that concrete vocabulary proposal. Naming the
+router boundary waits until working `MaxAge` evidence exists.
 
-- `Fava::observe` is `crates/fava/src/lib.rs:112` `pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError>` whose body is `self.observer.open(query)` — documented `"opening is total and synchronous; the async signature is the public door and never awaits a provider"` [VERIFIED: crates/fava/src/lib.rs:105-113].
-- So `Observer::open → routes::bind → fava_routing::open → Router::open → Observer::open` is a **synchronous** cycle with no yield point.
+## Constraints
 
-And the chain's isolation cannot contain it:
+- Preserve `07.8-01` and its settled-absence behavior.
+- Re-research current `44ea2d4`; the previous `RESEARCH.md` and Plans 02-05 are
+  based on the rejected imperative-opener premise.
+- No shims, adapters, feature flags, compatibility paths, or alternate query
+  execution path.
+- Observable behavior first, RED evidence before implementation, and one named
+  deliberate break per protection.
+- Public promises must be proved through the public `fava` path and at their
+  owning component.
+- Run `python3 tools/check_vocabulary.py` and
+  `python3 -m unittest tools.tests.test_vocabulary_check` for every
+  architecture or public-API slice. The repository-wide gate remains
+  intentionally red for unrelated unapproved vocabulary; each slice must prove
+  its own delta without laundering existing diagnostics.
+- Preserve the untracked vocabulary-approval tool files in the main worktree.
+DATA_R8T4V2NK_END
+
+[VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:6-149]
+
+### The agent's discretion
+
+None. The four replacement slices, order, gates, and subtractive constraints are locked. Research discretion is limited to the smallest sound architecture and executable proof within them. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:98-149]
+
+### Deferred ideas
+
+Naming any router-input boundary is deliberately deferred until `MaxAge` has working evidence. Timer-driven refresh and shared router-specific observations remain outside Phase 07.8; semantic containment for reusable source coverage is locked inside 07.8-02/03. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:30-35,54-66,98-131]
+
+## Phase Requirements
+
+| Requirement | Phase relevance |
+|---|---|
+| `QUERY-009` / `QUERY-010` | Completion evidence remains exact per relay/request/generation; only actual EOSE proves the completed predicate, including an empty result. Reuse may then prove a contained request without changing the original attribution. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:403-428] |
+| `QUERY-013A` | `MaxAge` is evaluated once when opening against source-scoped covering completion; it neither sweeps unrelated state nor polls. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:465-471] |
+| `EVENT-005` / `EVENT-007` | Coverage must fall when bounded cache retention invalidates its proof; records remain keyed exactly by relay/access and completed predicate, while lookup may reuse one for a semantically contained requested predicate. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:580-606] |
+| `WRITE-012` / `WRITE-013` | Routers contribute independently and asynchronously; replacements retract only the owning router's contribution. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:852-874] |
+| `WRITE-014` / `WRITE-015` / `WRITE-016` | Router inputs use ordinary explicit/local Fava queries, absence remains distinct from unresolved, and preview performs no acquisition. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:876-900] |
+| `ROUTER-001` | Outbox discovery uses configured indexers, source-complete evidence, coalesced needs, and no invented absence when no authoritative source answers. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1150-1163] |
+
+Planning requirements `LOCAL-08`, `READ-06`, `READ-07`, `READ-10`, `ROUTE-02`, `ROUTE-05`, `ROUTE-07`, `ROUTE-08`, `WRITE-13`, and `WRITE-15` provide corresponding public-path acceptance vocabulary. [VERIFIED: .planning/REQUIREMENTS.md:65-68,89-97,132-145,153-158]
+
+The roadmap entry and old Plans 02–05 still describe the rejected imperative opener. They are stale planning artifacts, not implementation authority; replace them rather than reconciling their type names into the new design. [VERIFIED: .planning/ROADMAP.md:368-394] [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-02-PLAN.md:102-175]
+
+## Summary
+
+The stale premise is rejected: a router must not receive a capability that can imperatively open queries. `RouterQueries`, `RouterObservation`, `OpenedQuery`, `CachedQueries`, or a renamed equivalent would create a second query-opening surface, put `Observation` ownership outside `fava-observe`, and preserve the architecture Pablo removed. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:78-88]
+
+Current implementation has two concrete gaps:
+
+1. `Query` can request only local-only or continuously live behavior; it cannot express a bounded acceptable completion age. [VERIFIED: crates/fava-query/src/lib.rs:81-89]
+2. EOSE completeness exists only in a running relay slot and per-observation evidence. The event-cache contract has no retained completion operation, and the memory cache stores only events, revision, and retractions. [VERIFIED: crates/fava-event-cache/src/lib.rs:13-105] [VERIFIED: crates/fava-event-cache-memory/src/lib.rs:24-31]
+
+The smallest sound path is: approve one source-coverage value, one shared semantic-containment rule, and the `Freshness::MaxAge` extension in 07.8-02; implement and prove them through public `fava` in 07.8-03; approve the declarative engine-owned router-input shape in 07.8-04; migrate outbox and delete its parallel truth in 07.8-05. No compatibility layer is needed. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:98-131]
+
+## Current-HEAD Findings
+
+### Query freshness is incomplete
+
+The complete current enum is:
+
+DATA_H4V8N1RC_START
 
 ```rust
-fn isolate<T>(
-    action: &str,
-    call: impl FnOnce() -> Result<T, RouterError>,
-) -> Result<T, RouterError> {
-    std::panic::catch_unwind(AssertUnwindSafe(call)).unwrap_or_else(|_| {
-```
-— `crates/fava-routing/src/chain.rs:141-146` [VERIFIED: crates/fava-routing/src/chain.rs:141-146]
-
-`catch_unwind` catches unwinding panics. A stack overflow is not an unwinding panic; it aborts the process. Gate 4 (failure isolation) therefore does **not** hold for this class. That is the concrete reason "unrepresentable" is not a style preference here: the difference between the two enforcement options is a typed `RouterError::Refused` versus process abort.
-
-Non-termination is real, not theoretical: the recursive query's targets are `RouteTarget::Author(missing…)` (`crates/fava-routing/src/lib.rs:33-53`), so each level re-derives the same missing set at `crates/fava-router-outbox/src/lib.rs:176-181` and opens the same query again.
-
-### Answer
-
-`QueryAcquisition::Explicit` **is** sufficient for door 1 — the only door reachable by issuing a read query. It is **not** sufficient for doors 2, 3, 4, which are not queries. Explicit-only is a complete guard over *reads*; it is not a complete guard over *the engine*. The guard must therefore be located on the handle's shape, not only on the query's acquisition field.
-
----
-
-## Q2 — Is the cache read expressible without triggering automatic routing?
-
-Yes, and `Freshness::CacheOnly` is exactly that expression. No exemption clause is needed — the guard never fires because the code path never reaches routing.
-
-`crates/fava-observe/src/observer.rs:163-166, 188-198` (quoted above) gate *both* `start_engine()` and `routes::bind` on `live`. With `CacheOnly`:
-
-- no transport is required (`start_engine` is skipped, so the three `ok_or_else` refusals at `observer.rs:322-336` never run);
-- no router is consulted;
-- both local sources still open (`observer.rs:168-186`), so the merged event-cache + write-store view is delivered;
-- `evaluate_initial` runs and `revision = QueryRevision(1)` carries real content (`observer.rs:246-255`).
-
-Existing evidence, already green:
-
-```rust
-async fn a_cache_only_query_opens_no_relay_work() {
-    let assembly = assemble();
-    let observation = assembly
-        .observer
-        .open(Query::events().cache_only())
-        .expect("the cache-only query opens");
-    settle().await;
-    assert!(assembly.planner.inputs().is_empty());
-    assert!(observation.current().evidence.relays.is_empty());
-```
-— `crates/fava-observe/tests/open_sequence.rs:61-74` [VERIFIED: crates/fava-observe/tests/open_sequence.rs:61-74]
-
-**Gap:** that test asserts no *relay* work. It does not assert no *router* work. The load-bearing claim for this phase is "`CacheOnly` never calls `Router::open`", and no test states it. Falsifier F2 below.
-
-**Right expression for the outbox's warm-cache read:** `Query::events().kind(10002).authors(known_or_wanted).cache_only()`. Note that `cache_only()` leaves `acquisition` at its default `Automatic` (`crates/fava-query/src/lib.rs:59-64, 166-171`), and that is harmless *today* because `live` gates routing before acquisition is ever inspected. If the guard is implemented as "acquisition must be Explicit", a cache read would be wrongly rejected. The guard must be **`Explicit` OR `CacheOnly`**, expressed as two constructors, not one predicate.
-
-**Second-order note the plan must not skip:** the outbox does not read the cache at all today. `grep 'cache_only' crates/fava-router-*` returns empty; its only relay-list inputs are `OutboxRouter::remember` (a public out-of-contract method, `lib.rs:94-97`) and `self.lists.ingest(&initial, …)` on the discovery query's initial snapshot (`lib.rs:196`). Giving it engine access does not by itself fix `router-source-fabricates-empty-initial`; the router must additionally issue the cache read. See Q5.
-
----
-
-## Q3 — How is the constraint enforced?
-
-Three candidates, plus a fourth that emerged from the dependency-direction gate.
-
-### (a) Runtime refusal inside `impl QuerySource for Fava`
-
-Reject `QueryAcquisition::Automatic` at `crates/fava/src/query_source.rs:15`.
-
-- **Closes:** door 1 only.
-- **Cost:** ~5 lines. No vocabulary change.
-- **Room to get it wrong:** maximal. A third-party router discovers the constraint at runtime, on the unhappy path, as a `QuerySourceError::Refused` string. And the handle is still `Fava`, so doors 2–4 stay wide open. Contradicts `AGENTS.md:72` — "Make invalid use unrepresentable or refuse it before opening work" — only in its weaker half.
-- **Verdict:** insufficient. It is what the codebase would get by accident; it should not be what it gets by choice.
-
-### (b) A router-facing handle contract whose acquisition argument is a required relay set
-
-A trait declared in `fava-routing` (the contract crate every router already depends on) and implemented by the engine:
-
-```rust
-pub trait RouterQueries: Send + Sync {
-    fn cached(&self, query: &Query) -> Result<Box<dyn RouterObservation>, RouterQueryError>;
-    fn from_relays(
-        &self,
-        query: &Query,
-        relays: &BTreeSet<RelayUrl>,
-    ) -> Result<Box<dyn RouterObservation>, RouterQueryError>;
+pub enum Freshness {
+    /// Use configured local sources only.
+    CacheOnly,
+    /// Keep relay demand live. This is the ordinary default.
+    #[default]
+    Live,
 }
 ```
 
-The engine applies `query.cache_only()` / `query.from_relays(relays)` itself and ignores whatever acquisition the caller's `Query` carried. `Automatic + Live` is then **unrepresentable**: there is no method that produces it, and there is no third method. No new *query* type is required — the relay set being a required positional argument is the whole mechanism, which is also literally the shape `ARCHITECTURE.md:1312` sketches (`explicit_queries.open(query, exact_relays)`).
+DATA_H4V8N1RC_END
 
-- **Closes:** doors 1–4. Doors 2–4 close because the handle has no preview method and no publish method — they are not refused, they are absent.
-- **Cost:** one new trait + one new return nominal + one new error nominal in `fava-routing`. `AGENTS.md` classifies "a new … provider contract" and "cross-crate nominal type" as a **vocabulary change**, and "a feature change cannot approve its own new vocabulary." So this needs a separate Pablo-approved architecture change before 07.8 can land it. That is a real sequencing cost and the main argument against.
-- **Room to get it wrong:** near zero. The only mistake left is a router opening an unbounded *number* of explicit queries — a boundedness problem, not a recursion problem (see "Residual risk").
+[VERIFIED: crates/fava-query/src/lib.rs:81-89]
 
-### (c) `Query` type-state
+`Observer::open` reduces this enum to `query.freshness() != Freshness::CacheOnly`; every non-cache-only query starts the engine and binds every route destination. There is no per-source freshness partition before demand retention. [VERIFIED: crates/fava-observe/src/observer.rs:162-221]
 
-`Query<Explicit>` / `Query<Automatic>`.
+The specification already shows `Freshness::MaxAge(Duration)` as an ordinary query policy and says nested queries own freshness independently. [VERIFIED: docs/spec/partial-spec-api-semantics.md:92-123]
 
-- **Cost:** `Query` is a spec'd public symbol (`docs/internals/vocabulary.toml:301`, `fava_query::QuerySourcePolicy`; `Query` itself is exported from `crates/fava/src/lib.rs:22-24`). It appears in `RouteRequest::Read(Query)`, `RelayDemand`, `QueryEvaluator::evaluate`, `QuerySource::open(&Query)`, every application call, and every test. `QuerySource` is object-safe today (`Arc<dyn QuerySource>` at `crates/fava-observe/src/observer.rs:31-32`); a generic `Query<S>` parameter breaks that unless the trait is also split.
-- **Verdict:** reject. Enormous blast radius across the entire public surface for one predicate that (b) enforces with two method names.
+### Completion is live evidence, not retained coverage
 
-### (d) The dependency-direction constraint that rules out the literal reading
+EOSE is accepted only after the planner classifies the wire request. The complete current classification is:
 
-`fava-router-outbox` currently depends on contracts only:
-
-```toml
-fava-nip65.workspace = true
-fava-query.workspace = true
-fava-routing.workspace = true
-fava-state.workspace = true
-fava-write.workspace = true
-```
-— `crates/fava-router-outbox/Cargo.toml:7-13` [VERIFIED: crates/fava-router-outbox/Cargo.toml:7-13]
-
-Handing it the `Fava` type adds a dependency on the facade crate; handing it `Observer` adds a dependency on `fava-observe`. Both invert gate 2 — `AGENTS.md:47`: "**Dependency direction:** domain values -> neutral contracts -> providers; universal owners use contracts, not standard implementations." A provider depending on the universal owner is the inversion this gate exists to catch, and the `public-surface` audit records that this gate currently *holds* workspace-wide ("no universal owner or facade depends on any … implementation crate; no contract crate depends on an implementation; no dependency cycles").
-
-**So "routers get full access to the engine" cannot be implemented by handing over a concrete engine type at all.** It has to be a contract the engine implements. Which is (b). The narrowing is not a design preference — it is forced by the gate that is currently green.
-
-### Recommendation
-
-**(b), with (d) as the reason it is the only shape available.** Escalate the vocabulary change as its own architecture slice before 07.8 plans against it.
-
----
-
-## Q4 — Construction order
-
-The circularity is real today: `OutboxRouter::new(name, indexers, queries: Arc<dyn QuerySource>)` at `crates/fava-router-outbox/src/lib.rs:71-75` needs a source before `FavaBuilder::router` (`crates/fava/src/builder.rs:100-107`) can take the router, and `build(self)` (`builder.rs:178`) consumes the builder.
-
-A fact that decides three of the four options, and which the brief does not mention:
-
-**A strong engine reference held by a `Router` is an unbreakable `Arc` cycle.** `Observer` holds `routers: Vec<Arc<dyn Router>>` (`crates/fava-observe/src/observer.rs:35`) and `Fava` holds `routers: Vec<Arc<dyn Router>>` (`crates/fava/src/lib.rs:85`). If the router stores a clone of either, the graph is engine → `Arc<dyn Router>` → engine, refcount never reaches zero, and the whole engine — registry, slots, transport leases, tasks — leaks for the process lifetime. This is not hypothetical: it is the direct consequence of every construction-time injection option.
-
-| Option | Partially-initialised engine visible to application code? | Cycle? | Other cost |
-|--------|-----------------------------------------------------------|--------|------------|
-| `Arc::new_cyclic` | **Yes.** Inside the closure `Weak::upgrade()` returns `None`; a router that touches the engine during its own construction observes an engine that exists and cannot be used. | No (Weak) | Forces `Arc<Fava>` as the public built value; `build()` returns `Fava` by value today (`builder.rs:178`). Public-surface change. Every router call site pays an `upgrade().ok_or(...)` refusal that can fire during shutdown. |
-| Late-bound setter (`router.attach(engine)`) | **Yes**, in the router: between `new()` and `attach()` the router is a public value whose `open()` cannot acquire, and nothing prevents `FavaBuilder::router()` accepting it in that state. | Yes, if strong | Needs interior mutability (`OnceLock`) on a `Send + Sync` router; a second `attach` is either a silent overwrite or a runtime refusal. |
-| Lazy handle (`Arc<OnceLock<Handle>>` given at construction, filled by `build()`) | **Yes**, same window, relocated into a cell. The application holds the `Arc<OutboxRouter>` and can call `Router::open` on it before `build()`. | Yes, if strong | Adds a nominal type whose only purpose is the window it fails to eliminate. |
-| **Handle passed at `open()` / `preview()` time** | **No.** The router has no engine-shaped field, so there is nothing to be partially initialised. The handle exists only inside a call the engine itself initiated, which is by construction after `build()`. | Bounded — only a `RouterSession` may retain it, and the session is dropped when `Registry::withdraw` releases the observation's tasks (`crates/fava-observe/src/registry.rs:150-159`). | Changes the spec-named `Router` / `RouterSession` trait shape (`docs/spec/ARCHITECTURE.md:1204-1216`, `vocabulary.toml:678 spec_symbols = ["Router", "RouterSession"]`). That is an approved-vocabulary edit. |
-
-**Answer: passing the engine at `open()` time is the only one that does not introduce a partially-initialised engine visible to application code**, and it is also the only one that bounds the reference cycle without `Weak`.
-
-It composes with Q3(b): `Router::open(request, upstream, queries: &dyn RouterQueries)` and `Router::preview(request, upstream, cached: &dyn CachedQueries)`. Preview gets the strictly weaker handle, and that split is forced independently by preview's own requirement —
-
-> "Preview never creates publication or relay-acquisition ownership merely because an application asks where an operation would currently go."
-> — `docs/spec/ARCHITECTURE.md:1290` [VERIFIED: read this session]
-
-— not by the recursion guard. So the two capability levels are not `ARCHITECTURE.md`'s two injected services smuggled back in; they are one door observed from two lifecycles.
-
-A retained handle must be `Send + Sync + 'static` (the `RouterSession` is moved into `observe.routes`, a `spawn_cancellable` future — `crates/fava-observe/src/routes.rs:142-147`), so the concrete type is `Arc`-backed and cheap to clone.
-
----
-
-## Q5 — What this deletes
-
-| Item | Disposition |
-|------|-------------|
-| Canary's second engine | **Deleted.** |
-| `impl QuerySource for Fava` | **Deleted.** |
-| `router-source-fabricates-empty-initial` | **Fixed, but only with a router change too.** |
-| `outbox-does-not-coalesce-discovery` | **Mostly fixed by the engine; the finding needs restating, not just closing.** |
-| `source-role-impersonation` | **This instance deleted; the general contract question survives and needs a decision in this phase.** |
-| `OutboxRouter::remember` | **Should be deleted** — separate call. |
-
-### The canary's second engine
-
-`apps/canary/src/automatic_support.rs:68-79` builds a whole second `Fava` with its own `MemoryWriteStore` and its own `WebSocketTransport::default()`; `apps/canary/src/automatic_publication.rs:94-96` is its only consumer:
+DATA_B3K6T2WF_START
 
 ```rust
-let queries: Arc<dyn QuerySource> = Arc::new(query_fava(Arc::clone(&cache))?);
-let outbox = Arc::new(OutboxRouter::new("nip65", [urls[4].clone()], queries).map_err(error)?);
-```
-[VERIFIED: apps/canary/src/automatic_publication.rs:94-96; apps/canary/src/automatic_support.rs:68-79]
-
-Under open()-time passing, `OutboxRouter::new` loses its third parameter entirely and `query_fava` has no callers. Both go. This is exactly WRITE-014's acceptance — "through explicit query machinery **and no separate transport stack**" (`GOALS:882`) — satisfied structurally rather than by inspection. `router-acquisition-starts-from-fabricated-empty-state` closes.
-
-### `impl QuerySource for Fava`
-
-Whole-workspace consumer count: **one**, `automatic_publication.rs:95` above. Test count: **zero** — `crates/fava/tests/source_contract.rs:1` is the "Shared query-source behavior corpus for the two M1 memory providers" and exercises `MemoryEventCache` and `MemoryWriteStore`, not `Fava`. Deleting the impl breaks nothing that survives the canary change.
-
-Deleting it also removes the last bare `tokio::spawn` in the facade (`crates/fava/src/query_source.rs:30`), which 07.5 created `fava-runtime` to eliminate and 07.6 did not reach.
-
-### `router-source-fabricates-empty-initial`
-
-Two independent causes, and the engine change fixes only one:
-
-1. `crates/fava/src/query_source.rs:21` — `let initial = SourceSnapshot::empty(SourceKind::EventCache);` returned before any observation exists, with the real state pushed later from the spawned task at `:39`. **Fixed by deletion.** The replacement handle returns a real snapshot because `Observer::open` is synchronous and `Observation::current()` (`crates/fava-observe/src/observation.rs:46-49`) is readable immediately.
-2. The outbox never reads the cache. `crates/fava-router-outbox/src/lib.rs:176-181` computes `missing` from `self.lists` only, and `self.lists` is populated exclusively by `remember` and by the discovery query's own results. **Not fixed by the engine change.** The plan must add the warm-cache read (Q2) or the finding survives with a new cause.
-
-Both must be in the same slice or the finding is closed on a false premise.
-
-### `outbox-does-not-coalesce-discovery`
-
-The requirement text is *identical* needs, not author-granular needs:
-
-> "The router shares/coalesces identical discovery needs across queries and writes and releases acquisition when nothing needs it."
-> — `GOALS:1161` (ROUTER-001) [VERIFIED: read this session]
-
-`ARCHITECTURE.md:1369`'s author-granular phrasing is permissive ("**may** share one discovery observation"). See Q6 — the engine already delivers both, at the wire layer. What survives is that the *test oracle* in the audit (`counting_source.open_count() == 1`) becomes the wrong instrument: under full engine access there legitimately are two observations and one REQ. The finding must be re-specified against indexer wire frames.
-
-### `source-role-impersonation`
-
-Half of this finding is already stale on `87c3688`. `SourceKind` is no longer a closed two-variant enum:
-
-```rust
-pub enum SourceKind {
-    /// Signed relay-observed cache state.
-    EventCache,
-    /// Current accepted local materializations.
-    WriteStore,
-    /// Verified live occurrences admitted from one relay session, retained by
-    /// no store.
-    LiveRelay {
-        /// Relay session that served them.
-        session: RelaySessionKey,
-    },
+pub enum EoseCompleteness {
+    Proven,
+    LimitedRequest,
+    RelayDefaultLimit,
 }
 ```
-— `crates/fava-query/src/evidence.rs:23-35` [VERIFIED: crates/fava-query/src/evidence.rs:23-35]
 
-The live half is the nested-Fava instance specifically: `query_source.rs:21` and `:122` stamp `kind: SourceKind::EventCache` on a snapshot whose events include `SourceEvent::Local(LocalWriteEvent…)` produced at `:139-142`. Deleting the impl deletes that instance.
+DATA_B3K6T2WF_END
 
-**What survives is the contract question, and this phase must answer it:** what provenance does a merged engine view carry when handed to a router? There is no correct `SourceKind` for "the merged result of two sources" — any choice impersonates one of them. The clean answer is to **not return a `SourceSnapshot` at all.** If the router handle returns an `Observation`, the router receives a `QuerySnapshot` whose `evidence.sources` retains per-role evidence (`crates/fava-observe/src/sources.rs:172-185` decorates, `crates/fava-query/src/evidence.rs:385` `fn source(&self, kind: &SourceKind)` reads it back), and nothing has to invent a role. This is a design fork the planner must decide explicitly:
+[VERIFIED: crates/fava-subscriptions/src/plan.rs:83-103]
 
-- `Box<dyn RouterObservation>` wrapping `Observation` — role-preserving, real initial snapshot, refcount released on drop. **Recommended.**
-- `OpenedQuerySource` — source-shaped, forces a fabricated `SourceKind`, re-creates the impersonation under a new name.
+`fava-observe` publishes `StoredEventsComplete` only for `Proven`; bounded/default-limited requests become shortfalls instead. That is the correct producer gate for retained coverage. [VERIFIED: crates/fava-observe/src/completions.rs:262-292]
 
-The outbox consumes only `.events` today (`lib.rs:143-155` `KnownLists::ingest`), so the migration from `SourceSnapshot`/`SourceEvent` to `QuerySnapshot`/`EventRecord` is mechanical.
+Today a relay slot remembers only a `bool` per installed subscription. A late joiner to a still-running request is credited with `Timestamp::now()` rather than the original EOSE time, so that replay path cannot establish historical completion age. When the slot closes, the fact disappears. [VERIFIED: crates/fava-observe/src/slot.rs:17-31] [VERIFIED: crates/fava-observe/src/engine.rs:224-283]
 
-### `OutboxRouter::remember`
+`RelayQueryEvidence` is observation-scoped and distinguishes EOSE from refusal, authentication, timeout, disconnect, unreachable, and withdrawal. Reusing `observed_at`, event `created_at`, or a generic source-open state would collapse distinctions the current type preserves. [VERIFIED: crates/fava-query/src/evidence.rs:141-243]
 
-Public, out-of-contract, and the only reason the canary can hand-feed relay lists at `automatic_publication.rs:97-107`. Once the cache read exists it has no legitimate caller. Removing it is a public-API deletion in an approved-vocabulary crate — flag it, do not fold it in silently.
+### The event cache lacks the required owner contract
 
----
+The complete `EventCache` surface covers event transactions, admission, expiry, commits, lookup, and count only; it has no completion-coverage read or write. [VERIFIED: crates/fava-event-cache/src/lib.rs:13-105]
 
-## Q6 — Coalescing
+`MemoryEventCache` has one bounded event capacity and atomically publishes event/retraction state. Capacity-driven event eviction is explicitly reported as `RetractionCause::Evicted`, supplying the invalidation hook for coverage whose filter could have matched the evicted event. [VERIFIED: crates/fava-event-cache-memory/src/lib.rs:33-49,66-155]
 
-**Where it lives: the engine, not the router. It is already built.** The unit is not "the author" or "the query" — it is the `RelayDemand` filter at one `RelaySessionKey`, which for the outbox's discovery query is `{kind: 10002, authors: […]}` at the configured indexer. That is author-granular in practice, because authors is the only axis that varies.
+Architecture already assigns optional historical acquisition records and cache-profile retention to `EventCache`; it does not authorize an outbox-owned historical cache. [VERIFIED: docs/spec/ARCHITECTURE.md:761-847]
 
-Four mechanisms, all present on `87c3688`:
+### Existing `filter_covers` is a pattern, not the retained-coverage contract
 
-**1. The registry keeps every demand distinct and hands all of them to the planner.**
-> "It never merges two observations' demand: two equivalent queries are two `DemandId`s with their own bounds, route origin, and evidence (`GOALS:296`, QUERY-002 — sharing is permitted, erasing distinct evidence is not). Merging is the planner's decision, made later, with every logical demand still visible to it."
-> — `crates/fava-observe/src/registry.rs:5-9` [VERIFIED: crates/fava-observe/src/registry.rs:5-9]
+`fava-subscriptions::filter_covers(wide, narrow)` already implements conservative predicate containment for ids, authors, kinds, inclusive `since`/`until`, and conjunctive tag names with disjunctive values. Its three production consumers answer a different question: whether a currently running wire subscription can carry a newly arriving live demand. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:13-48,80-130] [VERIFIED: crates/fava-subscriptions-standard/src/attach.rs:54-77] [VERIFIED: crates/fava-observe/src/engine.rs:224-283] [VERIFIED: crates/fava-observe/src/slot.rs:74-101]
 
-`Registry::desired()` (`registry.rs:163-180`) returns `BTreeMap<RelaySessionKey, Vec<RelayDemand>>` — the aggregate the planner sees.
+It is not sufficient unchanged for reusable completion:
 
-**2. The admission window batches unsent demand into one cohort.**
-`pub(crate) const ADMISSION_WINDOW: Duration = Duration::from_millis(10);` — `crates/fava-observe/src/admission.rs:28`, "anchored at the first uncovered demand and never slides" [VERIFIED: crates/fava-observe/src/admission.rs:22-28].
+- It returns `true` for byte-identical limited filters before its limit guard. That is correct for two live owners sharing the same already-running bounded REQ, but an EOSE for that REQ is `LimitedRequest`, never source-complete. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:20-38] [VERIFIED: crates/fava-subscriptions-standard/src/lib.rs:292-305]
+- It refuses an unlimited completed filter covering a requested filter with a local result limit. Live attachment cannot reproduce the relay's limited row choice from a wider stream, but retained exhaustive data can: `fava-query-standard` performs deterministic ordering and truncation after local matching. Therefore the completed side must be unlimited; the requested presentation limit need not defeat coverage. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:23-38] [VERIFIED: crates/fava-query-standard/src/lib.rs:30-50]
+- It deliberately treats `None` and `Some(empty)` as the same unconstrained wire axis because current `nostr::Filter::match_event` does. Fava's query contract says a present-empty ids/authors/kinds/tag set matches nothing, so a match-nothing `Query` must be resolved before wire compilation rather than widened and then judged by this helper. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:80-97,114-130] [VERIFIED: crates/fava-query/src/selection.rs:7-19] [VERIFIED: crates/fava-query-standard/src/lib.rs:171-189]
+- It knows no relay/access identity, completion classification, cache coherence, or freshness. Those are mandatory independent gates around predicate containment. [VERIFIED: crates/fava-state/src/lib.rs:11-49] [VERIFIED: crates/fava-subscriptions/src/plan.rs:83-103]
 
-**3. The grouping planner merges on the sole differing axis and folds duplicates.**
-`crates/fava-subscriptions-standard/src/grouping.rs:22-47` — "bucket byte-identical filters together … two demands asking the relay for exactly the same bytes are one request"; "merge to a **fixed point**"; "fold byte-identical survivors". `merge_authors` at `:273-278` unions the authors axis. So `{10002, [alice]}` + `{10002, [bob]}` in one cohort become one REQ `{10002, [alice, bob]}`, and `{10002,[alice]}` twice become one REQ.
+Place one pure axis-containment implementation in `fava-query` beside `SourceCoverage`, the lowest neutral crate already depended on by both `fava-subscriptions` and `fava-event-cache`. Keep the existing `fava-subscriptions::filter_covers` surface as the live-attachment wrapper with its current limit/equality rule; make it delegate the axis work. Event-cache covering lookup delegates the same axis work but requires an exhaustive completed side, ignores only the requested local presentation limit, and returns no cross-session candidate. This gives the predicate relation one owner without copying authors/kinds/tags/window logic into a provider. [VERIFIED: crates/fava-subscriptions/Cargo.toml:7-13] [VERIFIED: crates/fava-event-cache/Cargo.toml:7-13]
 
-**4. Late joiners attach to a running request by containment, refcounted.**
-`Engine::attach` (`crates/fava-observe/src/engine.rs:215-260`) finds an installed subscription whose filter `admission::covers` the joiner's, inserts the joiner's `DemandId` into `entry.serves`, and does no wire work —
-> "This is a refcount edit, not wire work: the subscription keeps its exact id and its exact filters, and no plan is computed."
-> — `crates/fava-observe/src/engine.rs:209-213`
+### The current outbox is the parallel truth to delete
 
-and release is the same refcount inverted:
-> "The refcount that decides withdrawal is the attribution fan-out on each live request: it closes when, and only when, the last demand it serves goes away."
-> — `crates/fava-observe/src/engine.rs:15-17`
+`OutboxRouter` owns an `Arc<dyn QuerySource>` and `KnownLists`. Its public `remember` path mutates that second map, source snapshots are cumulatively ingested into it, and a route session queries only authors missing from the map. [VERIFIED: crates/fava-router-outbox/src/lib.rs:51-62,94-155,171-212]
 
-That is ROUTER-001's "releases acquisition when nothing needs it", delivered by the engine, for free, the moment the router's discovery query runs on the real registry.
+That shape cannot express removal: once copied into `KnownLists`, an event disappearing from a current source snapshot does not remove the derived relay list. It also changes query scope from the complete requested author set to a history-dependent missing subset. [VERIFIED: crates/fava-router-outbox/src/lib.rs:118-155,176-207]
 
-### What the router still does not get
+The `impl QuerySource for Fava` adapter opens a nested public observation, converts its merged result back into a source snapshot, and labels it `EventCache`. This is source-identity impersonation and an alternate query execution path; Phase 07.8 must remove, not restore or rename, it. [VERIFIED: crates/fava/src/query_source.rs:14-72,120-150]
 
-- **Coalescing is order- and window-dependent.** `covers` (`admission.rs:36-53`) is containment, so an incumbent `{[alice, bob]}` absorbs a later `{[alice]}`, but an incumbent `{[alice]}` does **not** absorb a later `{[alice, bob]}` — that opens a second REQ beside it. Outside the 10 ms window, two route sessions for disjoint authors produce two REQs. This is a deliberate design choice ("Rewriting a running subscription costs the relay a full re-serve … It is never taken", `admission.rs:9-12`), not a defect, but the acceptance for ROUTER-001 must be written against *identical* needs, which always coalesce, and not against arbitrary author overlap, which sometimes will not.
-- **Duplicate observation cost.** Two route sessions needing alice still install two `ObservationId`s, two projection tasks, two evaluator runs, two `KnownLists::ingest` passes. Cheap and local; no relay sees it. If Pablo wants literal single-observation sharing per `ARCHITECTURE.md:1369`, that is router-owned in-flight-need bookkeeping and is *additional* work on top of everything above. Recommendation: do not build it. The engine already meets the requirement text.
-- **Router demand is indistinguishable from application demand in diagnostics.** Router observations become ordinary `ObservationId`s in `Registry::open_observations()` and in `QueryDiagnostic`. Arguably correct against RELAY-001 ("every contacted relay MUST be explainable by current demand"), but OPS consumers will see indexer traffic attributed to no application query. Small, and worth a `RouteOrigin`-carried attribution note in the plan.
+### 07.8-01 is complete and orthogonal
 
----
+07.8-01 made settled absence depend on an actual answer from every router. A failed, panicked, cancelled, or silent router leaves the target unresolved; zero-router and all-answered-absent cases still settle. The completed slice did not change publication, the write store, or this phase's query/coverage architecture. Preserve it unchanged. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-01-SUMMARY.md:48-307] [VERIFIED: crates/fava-routing/src/chain.rs:156-253,433-460]
 
-## Implementation shape
+## Architecture Responsibility Map
 
-Assumes the Q3(b)/Q4 vocabulary slice is approved first.
+| Fact or lifecycle | Sole owner after Phase 07.8 | Consumers |
+|---|---|---|
+| Requested maximum acceptable age | `Query` / `Freshness` in `fava-query` | `fava-observe` at open [VERIFIED: docs/spec/partial-spec-api-semantics.md:92-123] |
+| Meaning of a source-complete predicate and semantic containment | neutral query domain value in `fava-query` | subscriptions, event-cache contract, observation evidence |
+| Retention, bounds, invalidation, reset, restart behavior | selected `EventCache` provider | `fava-observe` [VERIFIED: docs/spec/ARCHITECTURE.md:761-847] |
+| Actual EOSE attribution and exact request/generation check | `fava-observe` with subscription planner evidence | event cache, `QuerySnapshot.evidence` [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:403-428] |
+| Covering-record lookup under exact relay/access | `EventCache` contract using the shared query-domain predicate | `fava-observe` |
+| Open-time freshness decision | `fava-observe`, using one captured open timestamp | relay-demand compiler |
+| Observation identity, source merge, current snapshot, cancellation, close | `fava-observe` | routing engine, application [VERIFIED: docs/spec/ARCHITECTURE.md:2059-2092] |
+| Router-input observation hosting and bounds | routing engine, using `fava-observe` | routers receive current snapshots |
+| One router's replacement contribution | that router session | routing chain [VERIFIED: docs/spec/ARCHITECTURE.md:1197-1225] |
+| Merged/deduplicated destination | routing chain | observe/publication [VERIFIED: docs/spec/ARCHITECTURE.md:1247-1280] |
 
-**1. New contract in `fava-routing`** (`crates/fava-routing/src/queries.rs`)
-- `trait CachedQueries: Send + Sync` — `fn cached(&self, query: &Query) -> Result<Box<dyn RouterObservation>, RouterQueryError>`.
-- `trait RouterQueries: CachedQueries` — `fn from_relays(&self, query: &Query, relays: &BTreeSet<RelayUrl>) -> Result<Box<dyn RouterObservation>, RouterQueryError>`.
-- `trait RouterObservation: Send` — `fn current(&self) -> Arc<QuerySnapshot>`, `fn changed(&mut self) -> …`, `fn close(&mut self)`. Object-safe, `'static`.
-- Implementations must apply `query.cache_only()` / `query.from_relays(relays)` themselves and discard the caller's acquisition field. No method produces `Automatic + Live`.
+## Mandatory Pablo Checkpoint: Concrete MaxAge / Source-Coverage Vocabulary Proposal
 
-**2. `Router` trait shape** (`crates/fava-routing/src/lib.rs:317-342`)
-- `fn preview(&self, request: &RouteRequest, upstream: &RoutePlan, cached: &dyn CachedQueries) -> …`
-- `fn open(&self, request: RouteRequest, upstream: watch::Receiver<Arc<RoutePlan>>, queries: &dyn RouterQueries) -> …`
-- `chain::open` / `chain::preview` gain the handle parameter and forward it inside `isolate`.
+07.8-02 must present this as a focused architecture/vocabulary change and stop for Pablo's approve/rename/reject decision. It contains no production implementation. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:98-131]
 
-**3. Engine side**
-- `impl CachedQueries + RouterQueries for Observer` in `fava-observe`, wrapping `Observer::open`.
-- `crates/fava-observe/src/routes.rs:78` passes `self` (an `Observer` clone or a thin `&dyn` view) into `fava_routing::open`. `crates/fava/src/lib.rs:247` and the two `fava-publication` sites pass a cache-only view.
-- **Do not** give the engine handle to the router at construction. Q4.
+### Existing-vocabulary extension
 
-**4. Delete**
-- `crates/fava/src/query_source.rs` entirely, and its `mod query_source;` at `crates/fava/src/lib.rs:5`.
-- `apps/canary/src/automatic_support.rs::query_fava` and `automatic_publication.rs:94-96`.
-- `OutboxRouter::new`'s `queries` parameter and the `queries` field (`crates/fava-router-outbox/src/lib.rs:55, 74`).
-- `OutboxRouter::remember` (separate approval).
+- Add `Freshness::MaxAge(Duration)` to existing `Freshness`.
+- Add ordinary `Query::max_age(Duration) -> Query`; retain `Query::freshness()` as accessor.
+- Compute age once at `Observation` open; coverage is fresh when `open_time - completed_at <= max_age`; never schedule an age-expiry timer.
 
-**5. Outbox changes**
-- In `open`: first `queries.cached(&Query::events().kind(10002).authors(all_requested))` and `ingest` its `current()`, *then* compute `missing`, *then* `queries.from_relays(&discovery_query, &self.indexers)` only if `missing` is non-empty.
-- In `preview`: the same cache read via `cached`, no acquisition.
-- `KnownLists::ingest` migrates from `SourceSnapshot`/`SourceEvent` to `QuerySnapshot`/`EventRecord`.
+This adds a policy value, not a lifecycle owner. The required semantics already exist in the authoritative partial API and `QUERY-013A`. [VERIFIED: docs/spec/partial-spec-api-semantics.md:106-115] [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:465-471]
 
-**6. Order the phase must respect**
-- `start_engine()` must stay before `routes::bind` in `Observer::open` (`:164` before `:188`) or `OnceLock::get_or_init` becomes re-entrant. Add a comment; the current ordering is load-bearing and unremarked.
+### New domain value: `SourceCoverage`
 
----
+| Proposal field | Decision |
+|---|---|
+| Closest existing concepts | `RelayQueryEvidence`, `RelaySourceState::StoredEventsComplete`, and `EoseCompleteness::Proven`. They describe current observation/wire evidence; none survives observation lifetime. [VERIFIED: crates/fava-query/src/evidence.rs:141-203] [VERIFIED: crates/fava-subscriptions/src/plan.rs:83-103] |
+| Observable distinction | `SourceCoverage` means one exact relay session actually sent EOSE for one exhaustive admitted filter at `completed_at`, and the selected cache still retains coherent reusable proof for every requested predicate contained by that completed predicate. It is not routing `CoverageState`, event provenance, or a generic “source checked” timestamp. |
+| Fields | Keep fields private: `session: RelaySessionKey`, `completed_filter: nostr::Filter`, `completed_at: Timestamp`. `session` carries exact relay plus access; `completed_filter` is the actual attributed wire predicate and must have no limit by construction. The more explicit field name prevents callers from mistaking it for the requested filter. Do not add `exhaustive: bool` or a second scope nominal: `SourceCoverage` itself means the producer already proved exhaustiveness. [VERIFIED: crates/fava-state/src/lib.rs:11-49] [VERIFIED: crates/fava-subscriptions/src/demand.rs:22-61] [VERIFIED: crates/fava-subscriptions/src/plan.rs:83-103] |
+| Domain location | Define immutable `SourceCoverage` in `fava-query`, beside query evidence. The `EventCache` contract exclusively owns retention/lifecycle. This keeps the value neutral while preserving the cache as mutable-fact owner. [VERIFIED: docs/spec/ARCHITECTURE.md:3096-3115] |
+| Contract change | Add covering lookup and retention operations to `EventCache`, conceptually `source_coverage(session, requested_filter) -> Option<SourceCoverage>` and `retain_source_coverage(coverage)`, both returning existing `EventCacheError`. Lookup matches `session` exactly, applies the single shared containment rule, and returns the newest valid covering record rather than an unbounded collection. `fava-observe` evaluates its age against the captured open time. Expose the applied fact in bounded `QueryEvidence`, using the same value rather than a second evidence type. |
+| Match rule | A record covers a request iff session/access are equal, the completed filter is exhaustive, and every event matching the requested predicate also matched the completed predicate. Filter equality is one case, not the rule. One record must cover the whole requested filter; do not subtract residuals or synthesize a union across records in this slice. |
+| Producer rule | Retain only after attributed EOSE whose current wire classification is `EoseCompleteness::Proven`; store actual EOSE time. Refusal, timeout, authentication, silence, disconnect, unreachable, close, and limited EOSE never produce `SourceCoverage`. [VERIFIED: crates/fava-observe/src/completions.rs:262-305] |
+| Bounds | Default memory provider uses existing non-zero capacity as both maximum event count and maximum coverage-record count, deduplicates by exact `(session, completed_filter)`, and evicts oldest coverage deterministically. Bound filter axis counts/encoded size and lookup work; refuse an over-bound record before retention. Retention failure becomes a scoped query shortfall and causes future acquisition, never false completeness. [VERIFIED: crates/fava-event-cache-memory/src/lib.rs:33-49] |
+| Invalidation | Capacity eviction of an event invalidates every record for an exact session present in that event's relay evidence whose `completed_filter` could match the event. If exact dependency cannot be proved cheaply, removing more records is safe; retaining one that may have lost a matching event is not. Evicting a tombstone or other state needed to prevent resurrection likewise removes affected records. Reset clears all coverage; the volatile provider retains neither events nor coverage across restart. Deletion, supersession, and expiry may preserve coverage only while their coherent tombstone/current-state facts remain retained. Do not attempt filter subtraction: remove the whole affected record. [VERIFIED: crates/fava-state/src/lib.rs:52-118,129-172] [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:580-606] |
+| Counterexample | Proven EOSE from indexer A for `{authors: [alice,bob], kind: 10002}` covers A/public `{authors: [alice], kind: 10002}` while fresh, but not indexer B, A under another access, `{authors: [alice,carol]}`, an enclosing interval, a request with a different constrained tag, or the same request after maximum age. A limited EOSE from the broader filter covers nothing after close. Empty-result EOSE is reusable under the same containment rule; it is not restricted to filter equality. |
+| Forcing requirements | `QUERY-013A`, `EVENT-005`, `EVENT-007`, and locked fresh/stale/mismatch/negative behavior. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:465-471,580-606] |
+| Existing state insufficient | `RelayQueryEvidence` ends with observation; `Slot::settled` stores only boolean; late attachment fabricates a new timestamp; `EventCache` has no retained-coverage API. [VERIFIED: crates/fava-query/src/evidence.rs:141-183] [VERIFIED: crates/fava-observe/src/slot.rs:17-31] [VERIFIED: crates/fava-observe/src/engine.rs:224-283] [VERIFIED: crates/fava-event-cache/src/lib.rs:13-105] |
+| Executable falsifier | After relay sends proven EOSE for `{kind:0, authors:[alice,bob]}` and the first observation closes, opening `{kind:0, authors:[alice]}` through public `fava` returns the immediate local snapshot and emits zero new REQ work for that exact session. Replace containment with equality: the narrower-reuse test fails. Reverse any set/window polarity, ignore access, retain limited EOSE, or retain coverage after matching eviction: the independently causal matrix case for that defect fails. |
 
-## Falsifiers
+`SourceCoverage` is the only recommended new nominal term for 07.8-02. A provider-specific persisted entity uses the same concept; do not introduce `QueryCoverage`, `FreshCoverage`, `CoverageRecord`, or synonyms. Shortfall, error, and evidence additions extend existing nominal types unless Pablo approves another term.
 
-Each must fail before the change and pass after.
+### Precise safe containment
 
-- **F1 — automatic is unrepresentable.** A `compile_fail` doctest on `RouterQueries` proving no method call can produce a `Query` with `QueryAcquisition::Automatic` and `Freshness::Live`. Home: `crates/fava-routing/src/queries.rs`.
-- **F2 — a cache-only query consults no router.** `crates/fava-observe/tests/open_sequence.rs`: assemble with a counting router; `observer.open(Query::events().cache_only())`; assert `router.open_count() == 0` **and** `router.preview_count() == 0`. Closes the untested half of `a_cache_only_query_opens_no_relay_work`.
-- **F3 — one transport stack.** `crates/fava/tests/automatic_routes.rs`: one `Fava` with one transport, an `OutboxRouter` and an unknown author; assert the indexer REQ appears on **that** transport's frame log. Deliberate break: reintroduce a second transport in the assembly and assert the test goes red.
-- **F4 — warm cache routes immediately with no indexer traffic.** Commit alice's kind-10002 to the event cache before `build()`; `preview_routes` reports alice's write relay covered; `observe` opens; `transport.open_count(&indexer) == 0`. This is the audit's proposed falsifier for `router-source-fabricates-empty-initial`, now runnable against one engine.
-- **F5 — identical discovery needs are one REQ.** Two route sessions (one read, one write p-tagging) needing the same unknown author against the same indexer; assert exactly one `REQ` frame reaches the indexer and its filter is `{kinds:[10002], authors:[alice]}`. Replaces the audit's `open_count() == 1` oracle, which is wrong under this model.
-- **F6 — releasing the last session closes the discovery subscription.** Close both sessions from F5; assert one `CLOSE` frame and that it is emitted only after the second close.
-- **F7 — the write door is absent.** `compile_fail`: a `Router` implementation attempting `queries.publish(...)` or `queries.preview_routes(...)` does not compile. This is the falsifier for the two doors that explicit-only does not close.
-- **F8 — a router refusal is still isolated.** Existing `crates/fava-routing/tests/failure_isolation.rs` must stay green with the new parameter; add a case where the router's `from_relays` returns `Err` and assert the chain returns `Ok` with an attributed shortfall (interacts with `router-open-failure-kills-whole-query`, same phase).
+Let `C` be the completed filter and `R` the requested filter. Reuse requires `matches(R) ⊆ matches(C)` after resolving Fava match-nothing queries locally. Every axis is conjunctive with every other axis; one failed axis makes the whole relation false.
 
-**What would refute Pablo's model:** F1 passing while F7 fails would mean the handle is still too wide. F3 failing would mean the single-stack claim is unimplementable at open() time. F5 failing after F3 passes would mean the engine's admission/grouping does not in fact coalesce router demand and the router needs its own registry after all — the one outcome that would justify reopening `outbox-does-not-coalesce-discovery` as router work.
+| Axis | Safe condition for `C` to cover `R` |
+|---|---|
+| Authors, kinds, ids | An absent/unconstrained `C` axis covers any `R`; a constrained `C` never covers an absent/unconstrained `R`; otherwise `R.values ⊆ C.values`. Thus `{authors:[1,2]}` covers `{authors:[1]}`, not the reverse. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:80-97] |
+| Tag values | Tag names are ANDed; values under one name are ORed. For every tag name constrained by `C`, `R` must constrain the same name and `R.values ⊆ C.values`. A name absent from `C` is unconstrained and covers a constraint added only by `R`; a name present only in `C` cannot cover an unconstrained `R`. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:114-130] |
+| Time interval | Bounds are inclusive. `C.since` is absent or `C.since <= R.since`; `C.until` is absent or `C.until >= R.until`. If `R` omits a side, `C` must omit that side. Equal endpoints cover. A reversed `since > until` interval is match-nothing: resolve/refuse it before acquisition and never use it to cover a nonempty request. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:99-112] |
+| Completed limit | `C.limit` must be absent, and the relay must not have imposed a default limit. Any explicit or relay-default limit makes EOSE non-exhaustive and forbids retaining `SourceCoverage`, even when filters are byte-identical. [VERIFIED: crates/fava-subscriptions-standard/src/lib.rs:292-305] |
+| Requested limit | A requested local result limit does not narrow the predicate proof and may consume an unlimited covering record because the evaluator applies deterministic ordering/truncation locally. If acquisition is still required, the limited REQ remains non-exhaustive and cannot produce future coverage. [VERIFIED: crates/fava-query-standard/src/lib.rs:30-50] |
+| Present-empty query axis | Fava defines it as match-nothing. Resolve it before relay demand and return the local empty result; do not serialize it into `nostr::Filter` and inherit that crate's empty-means-unconstrained wire behavior. [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:282-288] [VERIFIED: crates/fava-query/src/selection.rs:7-19] |
+| Search or a future filter field | Require equality or typed refusal until a sound containment rule is approved. Keep exhaustive `Filter` destructuring so an upstream field addition fails compilation instead of silently widening reuse. The current helper already treats search conservatively. [VERIFIED: crates/fava-subscriptions/src/coverage.rs:50-78] |
 
----
+Relay/access is not a filter axis: `SourceCoverage.session == requested_session` is mandatory before the table is evaluated. Freshness is not containment: after a covering record is found, `fava-observe` separately requires `open_time - completed_at <= max_age`. [VERIFIED: crates/fava-state/src/lib.rs:11-49] [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:54-66]
 
-## Residual risk the guard does not cover
+## Implementation Architecture by Locked Slice
 
-`Explicit` bounds *recursion*, not *fan-out*. A router may open one explicit query per author per route session, unboundedly. The chain bounds contributions (`MAX_DESTINATIONS = 256`, `MAX_TARGETS = 256`, `crates/fava-routing/src/chain.rs:13-20`) but nothing bounds the number of router-issued observations. Gate 5 (boundedness) requires "explicit bounds or typed refusal/shortfall". Recommend a per-router installed-observation cap enforced by the engine's handle implementation, with a typed refusal. This is new scope; name it rather than let it ride along.
+### 07.8-02 — MaxAge and source-coverage architecture only
 
-Related, out of this brief's scope but adjacent and unresolved: the LEDGER's open cross-owner question on WRITE-027 (total router refusal making an automatic write terminal) is scheduled for this phase or 07.9 and touches the same `run.rs:337` call site.
+Deliver one architecture/vocabulary change containing the proposal above, containment-aware open-time flow, coherence table, bounds, and executable falsifiers. Replace superseded architecture text completely. Run both vocabulary commands, report known baseline diagnostics separately, and stop at Pablo's checkpoint. No Rust production code belongs here. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:98-149]
 
----
+### 07.8-03 — MaxAge vertical implementation
 
-## Assumptions Log
+```text
+validate ordinary Query
+  -> resolve present-empty match-nothing without relay demand
+  -> open EventCache and WriteStore for immediate local state
+  -> compile route to exact per-session filters
+  -> lookup newest covering SourceCoverage for each exact session/filter
+  -> evaluate all covering records at one captured open timestamp
+  -> retain whole demand only for missing, stale, non-covering, or cross-access sessions
+  -> publish immediate QuerySnapshot with applied coverage/shortfalls
+  -> on actual Proven EOSE, atomically retain actual completed filter/time
+  -> react to local revisions; never create an age timer
+```
 
-| # | Claim | Section | Risk if wrong |
-|---|-------|---------|---------------|
-| A1 | A Rust stack overflow aborts rather than unwinding, so `catch_unwind` at `chain.rs:141` cannot contain the recursion. | Q1 | If a future toolchain made this recoverable, option (a) would be merely bad rather than unsafe. Does not change the recommendation. |
-| A2 | Introducing `RouterQueries` / `RouterObservation` / `RouterQueryError` requires a separate Pablo-approved vocabulary change under `AGENTS.md`. Read from the rule text; not confirmed against a precedent in `docs/internals/vocabulary.toml`'s change history. | Q3 | If it can ride inside 07.8, the sequencing cost disappears and (b) gets cheaper. |
-| A3 | No application currently depends on `impl QuerySource for Fava` outside this repository. Verified inside the repo (one consumer, zero tests); the crate is unpublished and has no Git remote (`AGENTS.md:38`), so external breakage is assumed impossible. | Q5 | None, given no remote. |
-| A4 | `Query::cache_only()` leaving `acquisition` at `Automatic` is safe *only because* `Observer::open` gates on `freshness` first. This is implementation, not contract — no test states it. | Q2 | F2 converts this from assumption to evidence; until then a reordering in `Observer::open` silently reopens door 1. |
+Work belongs in `fava-query`, `fava-event-cache`, default memory provider, and `fava-observe`; it requires no router API or outbox change. `Observer::open` currently sequences sources, routes, demand, initial evaluation, installation, and handle release. [VERIFIED: crates/fava-observe/src/observer.rs:147-254]
 
----
+Preserve partial acquisition: fresh covering coverage for indexer A suppresses only A while missing/stale/non-covering B opens B. A non-covering predicate executes whole; never subtract a residual filter. `Live` remains continuous and `CacheOnly` local-only. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:14-25,54-73]
+
+### 07.8-04 — engine-owned router inputs architecture only
+
+Do not name a router-specific observation or opener. Define these semantics using existing nouns until Pablo approves an unavoidable cross-crate shape:
+
+1. Router declaratively returns a bounded set of ordinary `Query` values required for current route request.
+2. Routing engine validates query count and shape before work opens.
+3. Engine asks `fava-observe` to own each ordinary `Observation`; router never receives opener or handle.
+4. Engine supplies complete current `QuerySnapshot` replacements to router contribution calculation.
+5. Router returns complete replacement `RouteContribution`; routing unions independent contributors.
+6. Preview evaluates inputs as one-shot local-only snapshots, closes immediately, and retains no observation/acquisition.
+7. Outbox inputs are explicitly routed to configured indexers, so engine ownership cannot recurse through automatic routing.
+
+Bound router-input count, authors/filter shape, result size, retained observations, and evidence, or return typed refusal/shortfall before opening. Do not add a provider framework, second evaluator, or router cache. Current `ARCHITECTURE.md:1294-1369` still describes imperative services and router-owned discovery state; replace it completely. [VERIFIED: docs/spec/ARCHITECTURE.md:1294-1379]
+
+### 07.8-05 — outbox migration and subtraction
+
+Outbox declares one bounded ordinary query for kind `10002`, complete requested authors, all configured indexers, and approved `MaxAge`. It consumes current `QuerySnapshot` as a replacement, parses current newest qualified NIP-65 event per author, and derives its whole contribution without cumulative state. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:8-25,90-108]
+
+After public behavior is green, delete `KnownLists`, `OutboxRouter::remember`, cumulative `SourceSnapshot` ingestion, `Arc<dyn QuerySource>`, missing-author narrowing, `impl QuerySource for Fava`, and tests/docs existing only for those paths. Do not replace them with adapters or aliases. [VERIFIED: crates/fava-router-outbox/src/lib.rs:51-62,94-155,171-223] [VERIFIED: crates/fava/src/query_source.rs:14-150]
+
+App-relay and outbox remain simultaneous independent routers. Routing already deduplicates identical sessions while retaining attributed reasons; prove withdrawing one contribution does not remove destination until the other withdraws. [VERIFIED: docs/spec/ARCHITECTURE.md:1247-1280] [VERIFIED: crates/fava-routing/src/chain.rs:156-253]
+
+## Validation Architecture
+
+Repository guidance requires behavior first, RED evidence, smallest implementation, named deliberate break, and public-path capstones. Test doubles cause observable protocol/cache facts rather than set internal coverage flags. [VERIFIED: docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md:32-116,207-227]
+
+### 07.8-02 gates
+
+- Architecture diff contains no production implementation.
+- Proposal includes closest concept, distinction, counterexample, owner/lifecycle, forcing requirement, insufficiency, bound, and falsifier.
+- `python3 tools/check_vocabulary.py`: capture pre-existing red baseline and prove only expected delta.
+- `python3 -m unittest tools.tests.test_vocabulary_check`: green.
+- Pablo approves or renames proposal before 07.8-03.
+
+### 07.8-03 owner and public RED cases
+
+- Event-cache conformance: exact `(session, completed_filter)` retention/deduplication; newest covering lookup; positive/empty retention; own bound; session-attributed invalidation on matching eviction/tombstone loss; reset/restart profile; no retention on refusal.
+- Containment matrix: authors, kinds, and ids supersets cover subsets but not the reverse; unconstrained completed axes cover constrained requests; constrained completed axes do not cover unconstrained requests; tag-name/value polarity; enclosing inclusive time windows; one mismatching axis defeats the whole relation; unsupported/search fields require equality or refusal.
+- Limit matrix: explicit-limit and relay-default-limit EOSE retain nothing, including byte-identical reopen; an unlimited completed predicate may cover a requested local result limit; present-empty match-nothing queries open no relay work.
+- Observation owner: exact relay/access fresh covering record; stale, cross-relay, cross-access, and non-covering cases; mixed fresh/stale/covering indexers; no expiry timer; local replacements continue.
+- Protocol cause: scripted relay sends event(s)+EOSE or empty EOSE. Silence, CLOSED, authentication, timeout, disconnect, and close never create coverage.
+- Public `fava`: close a completed `{kind:0, authors:[alice,bob]}` observation, open `{kind:0, authors:[alice]}` with `MaxAge`, and assert immediate local result plus zero additional REQ frames for only that covered session.
+- Independently causal deliberate breaks: replace containment with equality -> narrower-author public case fails; reverse set/tag/window polarity -> its focused matrix case fails; ignore access -> cross-access case fails; treat either limited EOSE as complete -> limited case fails; skip matching eviction invalidation -> eviction case fails; stamp late attachment with current time -> controlled-clock age case fails.
+
+### 07.8-04 gates
+
+- Architecture maps every mutable fact/lifecycle to one owner.
+- Dependency graph remains domain values -> neutral contracts -> providers.
+- Falsifier rejects automatic router input before observation opens.
+- Falsifiers cover query count/shape, result/evidence, and retained-observation bounds.
+- No `RouterQueries`, `RouterObservation`, `OpenedQuery`, or qualified synonym.
+- Pablo approves architecture before 07.8-05.
+
+### 07.8-05 owner and public RED cases
+
+- Warm: fresh covering coverage, including a broader completed author set, uses current relay lists and emits no indexer REQ.
+- Cold: immediate local snapshot while only configured indexers acquire complete author set.
+- Stale/non-covering/cross-access: local result remains immediate; only affected indexer acquires.
+- Negative: empty proven EOSE settles absence; failure/close remains unresolved.
+- Replacement: newer list replaces predecessor; deletion, expiry, cancellation, or cache removal reveals next current answer or unresolved.
+- Preview: local contribution only; zero retained observations/acquisition.
+- Simultaneous app-relay/outbox: one destination; withdrawing either alone retains it; withdrawing both removes it.
+- Close: input observations and relay demand drain exactly once.
+- Subtraction search: no `KnownLists`, `OutboxRouter::remember`, `impl QuerySource for Fava`, `RouterQueries`, `RouterObservation`, or `OpenedQuery` in production/authoritative docs.
+- Deliberate breaks: restore missing-author narrowing; replacement/removal fails. Restore cumulative ingestion; deletion/cache-removal fails. Withdraw on first contributor; simultaneous-router fails.
+
+Current focused baseline is green:
+
+```text
+cargo test -p fava-query -p fava-event-cache-memory -p fava-observe -p fava-routing -p fava-router-outbox --no-fail-fast
+```
+
+Vocabulary unit suite passes 33 tests. Repository-wide vocabulary checker is intentionally red with unrelated diagnostics; compare it as a delta. [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:133-149]
+
+## Standard Stack
+
+No external dependency is required. Use current Rust 1.90 workspace package set (`0.1.0`): `fava-query`, `fava-event-cache`, `fava-event-cache-memory`, `fava-subscriptions`, `fava-observe`, `fava-routing`, `fava-router-outbox`, and public `fava`. [VERIFIED: Cargo.toml:46-50]
+
+The testing guide places cache coverage in provider conformance, composition in routing tests, protocol causes in scripted-relay tests, and public promises through `fava`. [VERIFIED: docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md:233-310]
+
+## Common Pitfalls
+
+- Treating event `created_at`, relay observation time, source-open time, or cache revision as completion time.
+- Recording limited EOSE, silence, refusal, or close as coverage.
+- Stamping historical completion with reopen time.
+- Applying one indexer's completion to another relay/access.
+- Requiring filter equality and therefore reacquiring semantically contained author/kind/tag/time subsets.
+- Calling live-attachment `filter_covers` as if it also proved exhaustive completion, freshness, access identity, and cache coherence.
+- Letting a requested local result limit defeat an unlimited completed predicate, or letting a limited completed query cover anything after close.
+- Widening a Fava present-empty match-nothing axis through `nostr::Filter`'s empty-as-unconstrained wire behavior.
+- Reversing tag polarity: an absent completed tag name is broad; a tag name present only on the completed side is narrow.
+- Polling when `MaxAge` expires after open.
+- Retaining coverage after backing eviction or volatile restart.
+- Querying only authors absent from derived state.
+- Keeping `KnownLists` “temporarily”.
+- Giving routers an opener/observation under another name.
+- Letting preview retain an observation or acquire.
+- Restoring Fava-as-`QuerySource` or canary second engine.
+- Editing 07.8-01.
+
+[VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:30-96,118-149]
+
+## Security Domain
+
+Applicable domain is input/resource validation. Authentication, credential storage, session management, cryptography, and authorization policy are unchanged. Exact `RelaySessionKey` matching preserves access identity; bounded query/filter/evidence/coverage protects memory. [VERIFIED: crates/fava-query/src/lib.rs:101-127]
+
+| Threat | Protection | Proof home |
+|---|---|---|
+| Spoofed freshness | Only exact attributed `Proven` EOSE creates a record; reuse separately checks containment and age | `fava-observe` protocol-cause tests |
+| Cross-access/relay reuse | Exact `RelaySessionKey` | cache conformance + public mismatch |
+| Silent under-fetch | Shared semantic containment with correct set/tag/window polarity; whole-filter acquisition on miss | containment matrix + public narrower-reuse case |
+| Truncated history claimed complete | Completed side must be unlimited and classified `Proven`; relay-default limits also refuse retention | protocol + cache conformance |
+| False negative | Failures never become completion/absence | evidence + outbox negative tests |
+| Resource exhaustion | Bound queries, shape, results, observations, coverage, evidence | contract/engine tests |
+| Stale proof after loss | Invalidate on eviction/reset; declare restart profile | provider conformance |
+
+## Open Questions and Assumptions
+
+### Blocking checkpoint
+
+Pablo must approve, rename, or reject the proposed `SourceCoverage` packet and `Freshness::MaxAge` extension in 07.8-02. 07.8-03 must not implement before that decision. This is the only implementation blocker.
+
+### Assumptions
+
+None. Recommendations are proposals, not claims of approved vocabulary. Router-boundary naming remains intentionally deferred.
 
 ## Sources
 
-All primary, all read this session at `87c3688`.
+- Context: `.planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md` [VERIFIED: .planning/phases/07.8-independent-correctness-defects/07.8-CONTEXT.md:1-149]
+- Goals: `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` [VERIFIED: docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:403-481,580-616,852-900,1150-1163]
+- Architecture: `docs/spec/ARCHITECTURE.md` [VERIFIED: docs/spec/ARCHITECTURE.md:761-847,1032-1059,1119-1379,2059-2092,2968-3002,3096-3118]
+- API semantics: `docs/spec/partial-spec-api-semantics.md` [VERIFIED: docs/spec/partial-spec-api-semantics.md:8-24,92-172,282-330,518-534]
+- Proof method: `docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md` [VERIFIED: docs/spec/FAVA_TDD_BDD_TESTING_GUIDE.md:32-116,207-310]
+- Current code: `fava-query`, `fava-event-cache`, `fava-event-cache-memory`, `fava-subscriptions`, `fava-observe`, `fava-routing`, `fava-router-outbox`, and `fava/src/query_source.rs`.
+- Preserved slice: `.planning/phases/07.8-independent-correctness-defects/07.8-01-SUMMARY.md`.
 
-**Source**
-`crates/fava/src/lib.rs`, `crates/fava/src/builder.rs`, `crates/fava/src/query_source.rs`,
-`crates/fava-observe/src/{observer,routes,sources,registry,engine,admission,ingest,observation,plan}.rs`,
-`crates/fava-query/src/{lib,evidence}.rs`,
-`crates/fava-routing/src/{lib,chain}.rs`,
-`crates/fava-router-outbox/src/lib.rs`, `crates/fava-router-outbox/Cargo.toml`, `crates/fava-router-outbox/tests/outbox.rs`,
-`crates/fava-publication/src/{run,materialization}.rs`,
-`crates/fava-subscriptions-standard/src/grouping.rs`,
-`crates/fava-observe/tests/open_sequence.rs`, `crates/fava/tests/source_contract.rs`,
-`apps/canary/src/{automatic_support,automatic_publication}.rs`
+## Research Verdict
 
-**Authority**
-`docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:876-882` (WRITE-014), `:1150-1163` (ROUTER-001)
-`docs/spec/ARCHITECTURE.md:1204-1216` (Router contract), `:1290` (preview), `:1296-1327` (router input queries), `:1341-1371` (`fava-router-outbox`)
-`AGENTS.md:44-49` (gates), `:72` (unrepresentable), `:56-63` (vocabulary)
-`docs/internals/vocabulary.toml:320-338, 393-404, 654-678`
-
-**Prior findings re-checked, not re-derived**
-`.planning/audit/2026-08-23/LEDGER.md`, `routing.md:342-420, 625-680, 1030-1060`, `observe-facade.md:211-230, 303, 585-587, 727`, `public-surface.md:152`
-
----
-
-## Metadata
-
-**Confidence breakdown**
-- Re-entry path enumeration: HIGH — exhaustive grep plus read of all four call sites and their guards.
-- `CacheOnly` behaviour: HIGH — guard read verbatim, existing green test cited, gap in that test named.
-- Enforcement comparison: HIGH on mechanism, MEDIUM on cost — A2 is unconfirmed.
-- Construction order: HIGH — the `Arc` cycle is read off the two `routers:` fields.
-- Coalescing: HIGH — four mechanisms read in source with their own doc comments.
-
-**Research date:** 2026-08-23
-**Valid until:** invalidated by any change to `Observer::open`, the `Router` trait, or `fava_routing::chain`.
+Ready to replace Plans 02–05 exactly as locked. 07.8-02 is next and must end at Pablo's concrete `Freshness::MaxAge` / `SourceCoverage` checkpoint. Stale imperative-opener research is not reusable.

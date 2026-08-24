@@ -370,24 +370,27 @@ Plans:
 **Goal:** The confirmed correctness defects that are not consequences of the ownership inversion are fixed, so they do not survive the remediation unnoticed.
 **Mode:** remediation
 **Depends on:** Phase 07.4
-**Requirements:** WRITE-014, WRITE-015, WRITE-027, WRITE-028, ROUTER-001, QUERY-004, QUERY-009, RELAY-001. Mapping produced during planning 2026-08-23: WRITE-014/WRITE-027 added (router acquisition with no separate transport stack; settled-empty routing), EVENT-014/RELAY-012/WRITE-018/WRITE-019 removed (verified already satisfied on `87c3688`, or evidence-only and owned by Phase 07.9 / Phase 8), RELAY-004 (NIP-11 declared limits) split out — see Deferred below.
+**Requirements:** QUERY-004, QUERY-009, QUERY-010, QUERY-013A, EVENT-005, EVENT-007, WRITE-012, WRITE-013, WRITE-014, WRITE-015, WRITE-016, WRITE-027, WRITE-028, RELAY-001, ROUTER-001. Scope reconciled to Pablo's locked `07.8-CONTEXT.md`: QUERY-009 owns the six forbidden global-completeness claims, while QUERY-010 alone owns exact current-request EOSE. Relay attribution was already verified and is not replanned. Expiry sweeping and RELAY-004 are outside this phase.
 **Success Criteria** (what must be TRUE):
 
-  1. Relay-issued attribution is checked against the accepted subscription that actually carries the filter; a relay cannot choose which accepted filter validates its event, and `WrongSubscription` is reachable through the real path.
+  1. `Freshness::MaxAge` reuses only exact source-scoped completion produced by actual current-request EOSE; empty or indefinitely waiting queries expose none of QUERY-009's six forbidden global claims.
   2. A router refusal, closure, or panic produces typed shortfall scoped to that router; it never denies the application its local view, never aborts the chain, and never tears down unchanged relay demand. A settled-absent routing fact can only be produced by settled absence, never by a query failure.
-  3. A bounded event cache at capacity can still apply a deletion, and expiry is swept by a named production owner rather than by tests alone.
-  4. A purely local write cannot empty a relay-qualified query. An authentication outcome reaches the replaceable delivery policy and is reported truthfully with respect to whether bytes left Fava. Relay-declared limits come from the relay, not from invented constants.
+  3. The standard outbox router uses one bounded ordinary query over the complete author/indexer need, coalesces identical needs, reports unknown with zero configured indexers and no retained list, and replaces only its own contribution from complete current snapshots.
+  4. Open automatic writes re-evaluate current router snapshots after router change, restart recovery, signer availability, reconnect, and queue drain; explicit routes remain fixed and acknowledged destinations are not resent without a corrected event generation.
+  5. Preview is local-only, independent routers deduplicate without losing contribution ownership, and the outbox parallel state plus every QuerySource-family/alternate facade path is subtracted completely.
 
 **Plans:** 5 plans
 
 Plans:
 - [x] 07.8-01-PLAN.md — Settled absence requires an answer: a failed router no longer fabricates `SettledAbsent`; resolves the LEDGER's WRITE-027 cross-owner question
-- [ ] 07.8-02-PLAN.md — The router acquisition contract and its first real implementation on `Observer` (blocked on a vocabulary decision checkpoint)
-- [ ] 07.8-03-PLAN.md — `Router`/`RouterSession` signature change and all four `fava_routing::open`/`preview` call sites wired to real handles
-- [ ] 07.8-04-PLAN.md — Outbox reads the warm cache before asking a relay; settled absence from indexer evidence; ROUTER-001 re-specified at the wire
-- [ ] 07.8-05-PLAN.md — Delete `impl QuerySource for Fava`, the canary's second engine, and `ARCHITECTURE.md`'s two invented query services
+- [ ] 07.8-02-PLAN.md — MaxAge/source-coverage architecture and concrete vocabulary packet only; ends at Pablo's non-bypassable approve/rename/reject checkpoint
+- [ ] 07.8-03-PLAN.md — RED-first public-`fava` MaxAge vertical implementation with exact coverage coherence, negative evidence, and named deliberate breaks
+- [ ] 07.8-04-PLAN.md — Engine-owned bounded declarative ordinary `Query`/`QuerySnapshot` router-input architecture only; approval gate after working MaxAge evidence
+- [ ] 07.8-05-PLAN.md — Outbox migration to complete snapshot replacement, simultaneous-router proof, and full subtraction of parallel state and alternate query paths
 
-**Deferred out of this phase** (planning judgement 2026-08-23, awaiting Pablo):
+**Locked scope reconciliation:** Plan 01 and `07.8-01-SUMMARY.md` are immutable completed evidence; the summary proves the stronger all-answered/failed-router behavior and closes the WRITE-027 cross-owner question. The earlier relay-attribution finding was verified before this plan set and is excluded from Plans 02–05.
+
+**Deferred out of this phase** (locked by Pablo in `07.8-CONTEXT.md`):
 - `no-nip11-invented-planner-limits` (RELAY-004) — relay-declared constraints have no producer; needs a NIP-11 acquisition capability the transport contract does not have, plus its own vocabulary approval. Success criterion 4's last sentence moves with it.
 - `expiry-is-never-swept` — `EventCache::expire` still has no production caller; needs a named sweep owner and a cadence. Success criterion 3's second half moves with it. The first half (deletion at capacity) is already satisfied.
 

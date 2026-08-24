@@ -375,11 +375,15 @@ class VocabularyCheckTest(unittest.TestCase):
         self.assertIn("MysteryManager", result.stderr)
 
     def test_accepts_a_registered_specification_symbol(self) -> None:
+        # The spec_symbol must equal the term name (invariant); "Query" is valid
+        # under the "Query" term.  This also verifies the acceptance path: when
+        # the spec document declares a symbol that the registry has registered,
+        # no "undocumented specified architectural symbol" diagnostic fires.
         result = self.run_check(
-            source="pub struct Query;\nstruct ReplaceableEventEdit;\n",
+            source="pub struct Query;\n",
             symbols=["sample::Query"],
-            specification="pub struct ReplaceableEventEdit;\n",
-            specification_symbols=["ReplaceableEventEdit"],
+            specification="pub struct Query;\n",
+            specification_symbols=["Query"],
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -496,6 +500,43 @@ class VocabularyCheckTest(unittest.TestCase):
             "undocumented specified architectural crate: fava-unregistered",
             control.stderr,
         )
+
+    def test_rejects_symbols_with_terminal_name_differing_from_term_name(self) -> None:
+        """ShortfallReason under SubscriptionPlanner is the canonical counter-example."""
+        result = self.run_check(
+            source="pub struct SubscriptionPlanner;\npub struct ShortfallReason;\n",
+            symbols=["sample::SubscriptionPlanner", "sample::ShortfallReason"],
+            term_name="SubscriptionPlanner",
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ShortfallReason", result.stderr)
+        self.assertIn("SubscriptionPlanner", result.stderr)
+
+    def test_rejects_spec_symbols_with_value_not_equal_to_term_name(self) -> None:
+        """RouterSession in spec_symbols under Router hides a differently named concept."""
+        result = self.run_check(
+            source="pub struct Router;\n",
+            symbols=["sample::Router"],
+            term_name="Router",
+            specification="pub struct Router;\npub struct RouterSession;\n",
+            specification_symbols=["Router", "RouterSession"],
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RouterSession", result.stderr)
+        self.assertIn("Router", result.stderr)
+
+    def test_accepts_multiple_module_paths_with_same_terminal_name(self) -> None:
+        """fava_a::Query and fava_b::Query are both valid under a Query term."""
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query", "sample_extra::Query"],
+            extra_packages={"crates/sample-extra": ("sample-extra", "pub struct Query;\n")},
+            registry_crates=["sample", "sample-extra"],
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def run_check(
         self,

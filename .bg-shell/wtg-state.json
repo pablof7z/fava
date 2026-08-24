@@ -1,0 +1,14 @@
+{
+  "grants": [
+    {
+      "base_path": "/Users/pablofernandez/Work/fava",
+      "created_at": 1787560520,
+      "expires_at": 1787562320,
+      "id": "grant-1787560520-50966",
+      "reason": "Replace rejected generated vocabulary prose with explicit researched candidates and quality gates; no commit",
+      "scope": "session",
+      "session_id": "01a032d0-5640-78b2-bcfc-50e34bb9ef31"
+    }
+  ],
+  "version": 6
+}
