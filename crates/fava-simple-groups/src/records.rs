@@ -1,15 +1,61 @@
-use fava_write::{Event, EventValue, PublicKey, Tag};
+use std::fmt;
 
-use crate::SimpleGroupError;
+use fava_write::{EventValue, Kind, PublicKey, Tag};
 
-pub(crate) const MAX_RECORD_TAGS: usize = 2_000;
-pub(crate) const MAX_RECORD_BYTES: usize = 131_072;
-pub(crate) const MAX_RECORD_TAG_VALUES: usize = 256;
-pub(crate) const MAX_RECORD_VALUE_BYTES: usize = 4_096;
-
-pub(crate) struct RecordBoundary<'a> {
-    pub(crate) event: &'a Event,
-    pub(crate) id: String,
+/// A source-positioned semantic failure while decoding a NIP-29 state event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SimpleGroupDecodeError {
+    /// The selected decoder does not own the supplied kind.
+    WrongEventKind {
+        /// Required kind.
+        expected: Kind,
+        /// Supplied kind.
+        actual: Kind,
+    },
+    /// No `d` tag exists.
+    MissingIdentifierTag,
+    /// A recognized tag lacks a required position.
+    MissingTagValue {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based index in `Tag::as_slice()`.
+        value_index: usize,
+    },
+    /// An administrator or member key is invalid.
+    InvalidPublicKey {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
+    /// A `LiveKit` participant key is not exact lowercase hex.
+    InvalidLivekitParticipantPublicKey {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
+    /// A `supported_kinds` value is not a decimal `u16`.
+    InvalidKind {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
+    /// An `e` pin value is not an event id.
+    InvalidEventId {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
+    /// An `a` pin value is not an addressable event coordinate.
+    InvalidEventCoordinate {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
 }
 
 impl RecordBoundary<'_> {
@@ -134,25 +180,91 @@ fn validate_structure_parts(content: &str, tags: &[Tag]) -> Result<(), SimpleGro
                     maximum: MAX_RECORD_VALUE_BYTES,
                 });
             }
-            add_bytes(&mut bytes, value.len())?;
-            add_bytes(&mut bytes, 1)?;
+            Self::MissingIdentifierTag => formatter.write_str("event has no d identifier tag"),
+            Self::MissingTagValue {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has no value at position {value_index}"
+            ),
+            Self::InvalidPublicKey {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid public key at position {value_index}"
+            ),
+            Self::InvalidLivekitParticipantPublicKey {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid LiveKit participant key at position {value_index}"
+            ),
+            Self::InvalidKind {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid kind at position {value_index}"
+            ),
+            Self::InvalidEventId {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid event id at position {value_index}"
+            ),
+            Self::InvalidEventCoordinate {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid event coordinate at position {value_index}"
+            ),
         }
     }
-    Ok(())
 }
 
-fn add_bytes(bytes: &mut usize, amount: usize) -> Result<(), SimpleGroupError> {
-    *bytes = bytes
-        .checked_add(amount)
-        .ok_or(SimpleGroupError::RecordTooLarge {
-            bytes: MAX_RECORD_BYTES.saturating_add(1),
-            maximum: MAX_RECORD_BYTES,
-        })?;
-    if *bytes > MAX_RECORD_BYTES {
-        return Err(SimpleGroupError::RecordTooLarge {
-            bytes: (*bytes).min(MAX_RECORD_BYTES.saturating_add(1)),
-            maximum: MAX_RECORD_BYTES,
-        });
+impl std::error::Error for SimpleGroupDecodeError {}
+
+pub(crate) fn state_event(
+    event: &EventValue,
+    expected: u16,
+) -> Result<(&str, PublicKey, &[Tag]), SimpleGroupDecodeError> {
+    let expected = Kind::from_u16(expected);
+    let actual = event.kind();
+    if actual != expected {
+        return Err(SimpleGroupDecodeError::WrongEventKind { expected, actual });
     }
-    Ok(())
+    let tags = event.tags();
+    let Some((tag_index, tag)) = tags
+        .iter()
+        .enumerate()
+        .find(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("d"))
+    else {
+        return Err(SimpleGroupDecodeError::MissingIdentifierTag);
+    };
+    let id = tag.as_slice().get(1).map(String::as_str).ok_or(
+        SimpleGroupDecodeError::MissingTagValue {
+            tag_index,
+            value_index: 1,
+        },
+    )?;
+    Ok((id, event.author(), tags))
+}
+
+pub(crate) fn required_value(
+    values: &[String],
+    tag_index: usize,
+    value_index: usize,
+) -> Result<&str, SimpleGroupDecodeError> {
+    values
+        .get(value_index)
+        .map(String::as_str)
+        .ok_or(SimpleGroupDecodeError::MissingTagValue {
+            tag_index,
+            value_index,
+        })
 }

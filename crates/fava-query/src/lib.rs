@@ -28,6 +28,10 @@ pub use identity::{
 };
 use thiserror::Error;
 
+// Provisional implementation resource-safety cap. This is not a Nostr limit or
+// query-domain semantic; fava-query owns and may revise the shortcut.
+const PROVISIONAL_MAX_QUERY_INPUTS: usize = 4_096;
+
 /// Relays Fava should ask for acquisition.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum QueryAcquisition {
@@ -133,7 +137,10 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set.
+    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set and
+    /// [`QueryError::TooManyExplicitRelays`] before consuming more than the
+    /// provisional query resource cap. This cap is not a protocol fact or
+    /// query-domain semantic.
     pub fn from_relays(
         mut self,
         relays: impl IntoIterator<Item = RelayUrl>,
@@ -150,7 +157,10 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set.
+    /// Returns [`QueryError::EmptyExplicitRelays`] for an empty relay set and
+    /// [`QueryError::TooManyExplicitRelays`] before consuming more than the
+    /// provisional query resource cap. This cap is not a protocol fact or
+    /// query-domain semantic.
     pub fn only_from_relays(
         mut self,
         relays: impl IntoIterator<Item = RelayUrl>,
@@ -221,12 +231,80 @@ impl Query {
 fn non_empty_relays(
     relays: impl IntoIterator<Item = RelayUrl>,
 ) -> Result<BTreeSet<RelayUrl>, QueryError> {
-    let relays: BTreeSet<_> = relays.into_iter().collect();
+    let relays = bounded_set(relays, PROVISIONAL_MAX_QUERY_INPUTS, |actual, maximum| {
+        QueryError::TooManyExplicitRelays { actual, maximum }
+    })?;
     if relays.is_empty() {
         Err(QueryError::EmptyExplicitRelays)
     } else {
         Ok(relays)
     }
+}
+
+pub(crate) fn bounded_authors(
+    values: impl IntoIterator<Item = PublicKey>,
+) -> Result<BTreeSet<PublicKey>, QueryError> {
+    bounded_set(values, PROVISIONAL_MAX_QUERY_INPUTS, |actual, maximum| {
+        QueryError::TooManyAuthors { actual, maximum }
+    })
+}
+
+pub(crate) fn bounded_ids(
+    values: impl IntoIterator<Item = EventId>,
+) -> Result<BTreeSet<EventId>, QueryError> {
+    bounded_set(values, PROVISIONAL_MAX_QUERY_INPUTS, |actual, maximum| {
+        QueryError::TooManyIds { actual, maximum }
+    })
+}
+
+pub(crate) fn bounded_kinds(
+    values: impl IntoIterator<Item = Kind>,
+) -> Result<BTreeSet<Kind>, QueryError> {
+    bounded_set(values, PROVISIONAL_MAX_QUERY_INPUTS, |actual, maximum| {
+        QueryError::TooManyKinds { actual, maximum }
+    })
+}
+
+pub(crate) fn bounded_tag_values(
+    values: impl IntoIterator<Item = String>,
+) -> Result<BTreeSet<String>, QueryError> {
+    bounded_set(values, PROVISIONAL_MAX_QUERY_INPUTS, |actual, maximum| {
+        QueryError::TooManyTagValues { actual, maximum }
+    })
+}
+
+pub(crate) fn extend_bounded<T: Ord>(
+    values: impl IntoIterator<Item = T>,
+    target: &mut BTreeSet<T>,
+    refusal: impl Fn(usize, usize) -> QueryError,
+) -> Result<(), QueryError> {
+    for (index, value) in values.into_iter().enumerate() {
+        let consumed = index.saturating_add(1);
+        if consumed > PROVISIONAL_MAX_QUERY_INPUTS {
+            return Err(refusal(consumed, PROVISIONAL_MAX_QUERY_INPUTS));
+        }
+        target.insert(value);
+        if target.len() > PROVISIONAL_MAX_QUERY_INPUTS {
+            return Err(refusal(target.len(), PROVISIONAL_MAX_QUERY_INPUTS));
+        }
+    }
+    Ok(())
+}
+
+fn bounded_set<T: Ord>(
+    values: impl IntoIterator<Item = T>,
+    maximum: usize,
+    refusal: impl Fn(usize, usize) -> QueryError,
+) -> Result<BTreeSet<T>, QueryError> {
+    let mut collected = BTreeSet::new();
+    for (index, value) in values.into_iter().enumerate() {
+        let actual = index.saturating_add(1);
+        if actual > maximum {
+            return Err(refusal(actual, maximum));
+        }
+        collected.insert(value);
+    }
+    Ok(collected)
 }
 
 /// Query refusal before any source or relay work opens.
@@ -235,6 +313,46 @@ pub enum QueryError {
     /// Explicit acquisition requires at least one relay.
     #[error("explicit relay acquisition requires a non-empty relay set")]
     EmptyExplicitRelays,
+    /// Explicit relay input exceeded the provisional query resource cap.
+    #[error("explicit query relay input count exceeds bound: {actual} > {maximum}")]
+    TooManyExplicitRelays {
+        /// Values consumed before refusal.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
+    /// Author input exceeded the provisional query resource cap.
+    #[error("query author input count exceeds bound: {actual} > {maximum}")]
+    TooManyAuthors {
+        /// Values consumed before refusal.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
+    /// Event-id input exceeded the provisional query resource cap.
+    #[error("query event-id input count exceeds bound: {actual} > {maximum}")]
+    TooManyIds {
+        /// Values consumed or retained before refusal.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
+    /// Kind input exceeded the provisional query resource cap.
+    #[error("query kind input count exceeds bound: {actual} > {maximum}")]
+    TooManyKinds {
+        /// Values consumed before refusal.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
+    /// Literal tag-value input exceeded the provisional query resource cap.
+    #[error("query tag-value input count exceeds bound: {actual} > {maximum}")]
+    TooManyTagValues {
+        /// Values consumed or retained before refusal.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
     /// Whole-query limits must be positive.
     #[error("query limit must be greater than zero")]
     ZeroLimit,

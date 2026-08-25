@@ -76,8 +76,10 @@ async fn first_value_edit_publishes_through_public_fava() {
     let mut observation = fava
         .observe(
             fava::Query::events()
+                .kinds([Kind::ContactList])
+                .expect("one kind is bounded")
                 .authors([keys.public_key()])
-                .kind(Kind::ContactList)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await

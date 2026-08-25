@@ -40,7 +40,12 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
     );
     let mut receipt_changes = fava.receipt_changes();
     let mut observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded")
+                .cache_only(),
+        )
         .await
         .expect("query opens");
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
@@ -163,7 +168,12 @@ async fn pre_handoff_cancel_retracts_query_and_is_idempotent_and_removable() {
     );
     let mut receipt_changes = fava.receipt_changes();
     let mut observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded")
+                .cache_only(),
+        )
         .await
         .expect("query opens");
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)

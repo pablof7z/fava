@@ -424,8 +424,10 @@ pub(super) const fn edit_kind(edit: &ReplaceableEventEdit) -> Kind {
 
 fn exact_query(edit: &ReplaceableEventEdit, author: PublicKey) -> Query {
     Query::events()
+        .kinds([edit_kind(edit)])
+        .expect("one materialization kind is within the query bound")
         .authors([author])
-        .kind(edit_kind(edit))
+        .expect("one materialization author is within the query bound")
         .cache_only()
 }
 

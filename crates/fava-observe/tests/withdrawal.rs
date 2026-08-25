@@ -119,13 +119,19 @@ async fn close_and_drop_in_one_turn_withdraw_a_shared_request_exactly_once() {
 }
 
 fn automatic(author: PublicKey) -> Query {
-    Query::events().kind(Kind::Metadata).authors([author])
+    Query::events()
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
+        .authors([author])
+        .expect("one author is bounded")
 }
 
 fn explicit(author: PublicKey, relay: &RelayUrl) -> Query {
     Query::events()
-        .kind(Kind::Metadata)
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
         .authors([author])
+        .expect("one author is bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid")
 }

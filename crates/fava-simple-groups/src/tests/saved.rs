@@ -1,36 +1,15 @@
-use std::cell::Cell;
-use std::collections::BTreeSet;
-use std::rc::Rc;
-
-use fava_query::{EventRecord, QuerySnapshot, SingleLetterTag};
-use fava_state::{RelayEvidence, RelayUrl};
-use fava_write::{EventValue, Kind, PublicKey, ReplaceableEventEdit, Tag, Timestamp};
-use nostr::event::{EventBuilder, FinalizeEvent};
+use fava_state::RelayUrl;
+use fava_write::{EventValue, Kind, ReplaceableEventMaterializer, Tag, Timestamp};
+use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
-use crate::{SimpleGroup, SimpleGroupError, SimpleGroups};
+use crate::{
+    SavedGroupList, SavedGroupListDecodeError, SimpleGroup, remove_saved_relay,
+    remove_saved_simple_group, rename_saved_simple_group, save_relay, save_simple_group,
+    saved_group_list_materializer,
+};
 
-fn relay(url: &str) -> RelayUrl {
-    RelayUrl::parse(url).expect("test relay")
-}
-
-fn tag(values: &[&str]) -> Tag {
-    Tag::parse(values.iter().copied()).expect("test tag")
-}
-
-fn saved_event(keys: &Keys, created_at: u64, tags: Vec<Tag>) -> EventValue {
-    EventValue::Signed(
-        EventBuilder::new(Kind::from_u16(10_009), "opaque encrypted content")
-            .tags(tags)
-            .custom_created_at(Timestamp::from(created_at))
-            .finalize(keys)
-            .expect("test event signs"),
-    )
-}
-
-fn record(event: EventValue) -> EventRecord {
-    EventRecord::new(event, RelayEvidence::default(), None).expect("stable event id")
-}
+use super::{public_key, tag, value};
 
 #[test]
 fn discovery_queries_are_ordinary_canonical_queries() {
@@ -152,31 +131,15 @@ fn groups_saved_by_is_bounded_pure_projection() {
     .expect("group");
     let snapshot = QuerySnapshot::evaluated(
         vec![
-            record(saved_event(
-                &alice,
-                1,
-                vec![tag(&["group", "photos", "wss://a.example"])],
-            )),
-            record(saved_event(
-                &bob,
-                2,
-                vec![
-                    tag(&["group", "photos", "wss://c.example"]),
-                    tag(&["group", "photos", "wss://b.example"]),
-                    tag(&["group", "photos", "wss://b.example", "duplicate"]),
-                ],
-            )),
-            record(saved_event(
-                &other,
-                3,
-                vec![tag(&["group", "other", "wss://a.example"])],
-            )),
+            tag(&["group", "", "wss://a.example", "", "ignored"]),
+            tag(&["r", "wss://b.example", "ignored"]),
+            tag(&["group", "missing-relay"]),
+            tag(&["r"]),
+            tag(&["group", "", "wss://a.example"]),
+            tag(&["x", "ignored"]),
         ],
-        &[],
-    );
-    let expected = BTreeSet::from([alice.public_key(), bob.public_key()])
-        .into_iter()
-        .collect::<Vec<_>>();
+    ))
+    .expect("saved list");
 
     let first =
         SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("bounded projection");
@@ -187,10 +150,9 @@ fn groups_saved_by_is_bounded_pure_projection() {
 }
 
 fn materialize(
+    materializer: &dyn ReplaceableEventMaterializer,
     edit: &fava_write::ReplaceableEventEdit,
-    author: PublicKey,
     source: Option<&fava_write::Event>,
-    created_at: u64,
 ) -> fava_write::UnsignedEvent {
     let source = source.cloned().map(EventValue::Signed);
     SimpleGroups::materializer()
@@ -198,43 +160,52 @@ fn materialize(
         .expect("saved-list materializes")
 }
 
-fn duplicate_host_edit() -> ReplaceableEventEdit {
-    fn text(bytes: &mut Vec<u8>, value: &str) {
-        bytes.extend_from_slice(
-            &u32::try_from(value.len())
-                .expect("fixture length")
-                .to_be_bytes(),
-        );
-        bytes.extend_from_slice(value.as_bytes());
-    }
-
-    let mut bytes = vec![1];
-    text(&mut bytes, "photos");
-    bytes.extend_from_slice(&2_u16.to_be_bytes());
-    text(&mut bytes, "wss://a.example");
-    text(&mut bytes, "wss://a.example");
-    bytes.push(0);
-    ReplaceableEventEdit::new(Kind::from_u16(10_009), None, bytes)
-        .expect("neutral edit accepts bounded opaque bytes")
+fn has_tag(tags: &[Tag], expected: &[&str]) -> bool {
+    tags.iter().any(|tag| {
+        tag.as_slice()
+            .iter()
+            .map(String::as_str)
+            .eq(expected.iter().copied())
+    })
 }
 
 #[test]
-fn saved_materializer_refuses_duplicate_encoded_hosts() {
-    let actor = Keys::generate();
-    let edit = duplicate_host_edit();
-    let materializer = SimpleGroups::materializer();
-    assert!(!materializer.supports(&edit));
-    assert!(
-        materializer
-            .materialize(&edit, actor.public_key(), None, Timestamp::from(10))
-            .is_err()
+fn saved_edits_preserve_unrelated_and_unused_values() {
+    let keys = Keys::generate();
+    let source = source(&keys);
+    let relay_a = RelayUrl::parse("wss://a.example").unwrap();
+    let relay_b = RelayUrl::parse("wss://b.example").unwrap();
+    let group = SimpleGroup::from_relays("photos", relay_a.clone(), vec![relay_b.clone()]);
+    let materializer = saved_group_list_materializer();
+
+    let renamed = materialize(
+        materializer.as_ref(),
+        &rename_saved_simple_group(&group, "Renamed").unwrap(),
+        Some(&source),
+    );
+    assert_eq!(renamed.content, "opaque");
+    assert!(has_tag(&renamed.tags, &["x", "preserved"]));
+    assert!(has_tag(
+        &renamed.tags,
+        &["group", "photos", "wss://a.example", "Renamed", "tail"]
+    ));
+    assert!(has_tag(
+        &renamed.tags,
+        &["group", "photos", "wss://b.example", "Renamed"]
+    ));
+    assert_eq!(
+        renamed
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("group"))
+            .count(),
+        2
     );
 
-    let source = signed_source(
-        &actor,
-        10,
-        "opaque encrypted bytes",
-        vec![tag(&["group", "photos", "wss://a.example", "existing"])],
+    let saved = materialize(
+        materializer.as_ref(),
+        &save_simple_group(&group, Some("Ignored for existing")).unwrap(),
+        Some(&source),
     );
     assert!(
         materializer
@@ -246,20 +217,92 @@ fn saved_materializer_refuses_duplicate_encoded_hosts() {
             )
             .is_err()
     );
+    assert!(!removed.tags.iter().any(|tag| {
+        let values = tag.as_slice();
+        values.first().map(String::as_str) == Some("group")
+            && values.get(1).map(String::as_str) == Some("photos")
+    }));
+}
+
+#[test]
+fn relay_edits_match_semantic_first_values_and_keep_one() {
+    let keys = Keys::generate();
+    let source = source(&keys);
+    let relay_a = RelayUrl::parse("wss://a.example").unwrap();
+    let relay_b = RelayUrl::parse("wss://b.example").unwrap();
+    let materializer = saved_group_list_materializer();
+
+    let saved = materialize(
+        materializer.as_ref(),
+        &save_relay(relay_a.clone()).unwrap(),
+        Some(&source),
+    );
+    assert_eq!(
+        saved
+            .tags
+            .iter()
+            .filter(|tag| {
+                let values = tag.as_slice();
+                values.first().map(String::as_str) == Some("r")
+                    && values.get(1).map(String::as_str) == Some("wss://a.example")
+            })
+            .count(),
+        1
+    );
+    assert!(has_tag(&saved.tags, &["r", "wss://a.example", "tail"]));
+
+    let added = materialize(
+        materializer.as_ref(),
+        &save_relay(relay_b).unwrap(),
+        Some(&source),
+    );
+    assert!(has_tag(&added.tags, &["r", "wss://b.example"]));
+
+    let removed = materialize(
+        materializer.as_ref(),
+        &remove_saved_relay(relay_a).unwrap(),
+        Some(&source),
+    );
+    assert!(!removed.tags.iter().any(|tag| {
+        tag.as_slice().first().map(String::as_str) == Some("r")
+            && tag.as_slice().get(1).map(String::as_str) == Some("wss://a.example")
+    }));
+}
+
+#[test]
+fn materializer_supports_only_its_private_edits() {
+    let group = SimpleGroup::from_relays(
+        "photos",
+        RelayUrl::parse("wss://a.example").expect("relay"),
+        Vec::new(),
+    );
+    let edit = save_simple_group(&group, None).unwrap();
+    let materializer = saved_group_list_materializer();
+    assert_eq!(materializer.kind(), Kind::from_u16(10_009));
+    assert!(materializer.supports(&edit));
+
+    let decoded = SavedGroupList::from_event(&EventValue::Unsigned(materialize(
+        materializer.as_ref(),
+        &edit,
+        None,
+    )))
+    .unwrap();
+    assert_eq!(decoded.simple_groups()[0].as_ref().unwrap().id(), "photos");
 }
 
 #[test]
 fn materializer_preserves_the_exact_event_builder_tag_refusal() {
     let keys = Keys::generate();
-    let source = EventBuilder::new(Kind::from_u16(10_009), "opaque")
-        .tags((0..2_000).map(|index| Tag::parse(["x", &index.to_string()]).expect("ordinary tag")))
+    let source = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
+        .tags((0..2_001).map(|index| Tag::parse(["x", &index.to_string()]).expect("ordinary tag")))
         .custom_created_at(Timestamp::from(1))
         .finalize(&keys)
         .expect("source signs");
-    let edit = SimpleGroups::save_relay(relay("wss://absent.example")).expect("relay edit");
+    let relay = RelayUrl::parse("wss://absent.example").expect("relay");
+    let edit = remove_saved_relay(relay).expect("remove relay edit");
 
     assert_eq!(
-        SimpleGroups::materializer().materialize(
+        saved_group_list_materializer().materialize(
             &edit,
             keys.public_key(),
             Some(&EventValue::Signed(source.clone())),

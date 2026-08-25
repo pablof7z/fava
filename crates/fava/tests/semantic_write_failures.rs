@@ -171,8 +171,10 @@ async fn materializer_error_is_bounded_and_preserves_current() {
     let mut observation = fava
         .observe(
             fava::Query::events()
+                .kinds([Kind::ContactList])
+                .expect("one kind is bounded")
                 .authors([keys.public_key()])
-                .kind(Kind::ContactList)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await

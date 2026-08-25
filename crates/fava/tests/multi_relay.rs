@@ -412,7 +412,8 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
     let mut observation = fava
         .observe(
             Query::events()
-                .kind(kind)
+                .kinds([kind])
+                .expect("one kind is bounded")
                 .only_from_relays(relays.clone())
                 .expect("explicit relays are valid"),
         )

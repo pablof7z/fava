@@ -181,8 +181,10 @@ async fn prove_first_value<Add>(
     let mut observation = empty
         .observe(
             fava::Query::events()
+                .kinds([kind])
+                .expect("one kind is bounded")
                 .authors([actor])
-                .kind(kind)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await
