@@ -1,108 +1,116 @@
-# `fava-simple-groups` multi-relay NIP-29 capability
+# `fava-simple-groups` NIP-29 value capability
 
-**Approved by:** Pablo, 2026-08-21
+**Status:** implementation reconciled; signed vocabulary approval pending
 **Owning phase:** 07.1.1
+
+This issue records the implemented event-local, saved-list, and operation
+composition boundaries. It is not an approval source. The approved constructor
+boundary is recorded in
+`docs/issues/0027-simple-group-relay-input-boundary.md`.
+
+The current nominal model is recorded in `docs/internals/vocabulary.toml`.
+All 13 simple-groups nominal entries remain absent from the signed
+`docs/internals/approvals.jsonl` ledger: `SimpleGroup`,
+`SimpleGroupStateEventKind`, the six event projections, `SimpleGroupDecodeError`,
+`SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
+`SavedGroupListDecodeError`. Their signed approvals are an external governance
+gate. This issue and commit series do not fabricate or claim them.
 
 ## Delivered model
 
-`SimpleGroup` is a pure value containing one opaque NIP-29 simple group id and
-an application-selected, non-empty, bounded host-relay set. One host is the
-ordinary relay-local case. Several hosts let an application present related
-relay-local forks together while each relay remains independently authoritative
-for the records it served.
+`SimpleGroup` retains an opaque id plus normalized application-selected relays.
+`from_relays(id, first, rest)` requires one parsed `RelayUrl` and a finite owned
+`Vec<RelayUrl>` tail, so empty and arbitrary-iterator construction are
+unrepresentable. Later duplicates collapse in first-occurrence order. Empty ids
+are valid. Parsing remains with `RelayUrl`; there is no construction error,
+shared relay owner, or private numeric bound.
 
-- Content queries add exact lowercase `h`, request the complete host set, and
-  retain `AnyLocal` authority so local write-store events stay visible.
-- Record queries add exact lowercase `d`, select kinds 39000 through 39005,
-  and use `OnlyRelays` authority for the configured host set.
-- `SimpleGroupSnapshot` deduplicates content by event id while retaining every
-  actual `RelayEvidence` observation.
-- Each host's newest valid complete record is selected independently by Nostr
-  timestamp and event id.
-- Disagreement compares complete optional per-host records. An unobserved host
-  supplies no positive record and makes no absence or completeness claim.
-- `SimpleGroupSnapshot::at` applies an explicit application host choice; no
-  helper lets one relay speak for another.
+- `events` must preserve an ordinary query, constrain lowercase `h` to exactly
+  the group id without broadening an existing axis, and use `from_relays`.
+  It delegates exact narrowing to query-owned `Query::intersect_tag_values`;
+  disjoint axes remain present-empty match-nothing queries. Issue 0028 records
+  Pablo's architecture approval, not vocabulary approval.
+- `state_events` delegates its kind input to `Query::kinds`, adds exact
+  `d = id`, and uses `only_from_relays` without a private limit.
+- `prepare` accepts only `UnsignedEvent`, preserves all existing tags, and
+  appends one matching `h` tag only when no first value already matches.
+- Applications publish with `fava.to(simple_group.relays()).publish(payload)`;
+  the capability owns no work or lifecycle.
 
-## Query and publication composition
+## Event-local decoding
 
-Every helper is inert. Reads return ordinary `Query` values. Unsigned and
-signed events pass through pure `SimpleGroup::prepare`. Saved-list changes
-return ordinary `ReplaceableEventEdit` values.
+`SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
+`SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, and `SimpleGroupPins`
+decode one ordinary `EventValue` each. They check the exact kind and the first
+`d` tag's first value. Unknown tags, unused extras, and later `d` tags are
+ignored. Repeated semantic entries remain ordered; malformed entries remain
+local `Result` failures. Pin `e` and `a` tag entries remain interleaved as
+the existing `EventCoordinate` value.
 
-Applications compose publication only through the facade:
+The decoders do not verify ids or signatures, interpret relay evidence, choose
+replacement winners, project snapshots, compare relays, or impose generic
+bounds.
 
-```rust
-let prepared = simple_group.prepare(payload)?;
-let write: Write = fava.to(simple_group.hosts())?.publish(prepared)?;
+## Saved group lists
 
-let edit = SimpleGroups::save_simple_group(&simple_group, Some("Photography"))?;
-let write: Write = fava
-    .by(author)
-    .to(simple_group.hosts())?
-    .publish(edit)?;
-```
+`saved_group_lists(authors)` returns the ordinary kind-10009 query or the query
+owner's exact provisional resource refusal.
+`SavedGroupList::from_event` creates one list per event and exposes ordered
+saved-group and relay entry results. Repetitions survive and malformed siblings
+do not erase valid entries.
 
-The complete first-occurrence host sequence is the exact explicit destination
-set. Publication remains kind-blind. Invalid signed simple group context is
-refused by pure preparation before Fava custody or wire interaction. Kinds
-9002 and 9010 remain complete author-bearing events and never enter
-`ReplaceableEventEdit`.
+Crate-root save, rename, remove, and relay functions return pure
+`ReplaceableEventEdit` values. `saved_group_list_materializer()` integrates the
+private edit codec with Fava's ordinary semantic-write lifecycle. Edits
+preserve opaque content, foreign tags, malformed entries, unused trailing
+values, repetitions according to the exact operation, and unrelated order.
 
-## Typed records, discovery, and edits
+## Current nominal vocabulary
 
+- `SimpleGroup` and `SimpleGroupStateEventKind`.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
-  `SimpleGroupRoles`, `SimpleGroupParticipants`, and `SimpleGroupPins` decode
-  signed relay-authored records.
-- `PinnedItem`, `SavedSimpleGroup`, and `SavedRelay` retain source order and
-  exact protocol values without presentation or routing policy.
-- `SimpleGroups` creates bounded ordinary saved/admin/member discovery queries
-  and projects saving authors from exact simple-group-id and selected-host
-  pairs.
-- Kind-10009 saved-simple-group and saved-relay changes preserve opaque
-  content, foreign and malformed rows, unrelated order, and exact other-host
-  rows.
+  `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
+  `SimpleGroupDecodeError`.
+- `SavedSimpleGroup`, `SavedGroupList`, and `SavedGroupListDecodeError`.
 
-All externally influenced host, id, query, tag, row, string, projection, and
-discovery inputs have explicit bounds or typed refusal.
-
-## Approved vocabulary
-
-The capability owns exactly these public nominal values:
-
-- `SimpleGroup`, `SimpleGroupError`, `SimpleGroupRecords`,
-  `SimpleGroupSnapshot`, and `SimpleGroups`.
-- `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
-  `SimpleGroupRoles`, `SimpleGroupParticipants`, and `SimpleGroupPins`.
-- `PinnedItem`, `SavedSimpleGroup`, and `SavedRelay`.
-
-`RelayUrl`, `Query`, `QuerySnapshot`, `EventCoordinate`, `PublicKey`, `Write`,
-`ReplaceableEventEdit`, and the event values remain owned by their established
-crates. No simple-group-specific row wrapper, relay role, provider,
-configuration, runtime, observation, publication, delivery, cancellation, or
-receipt value is approved.
+`RelayUrl`, `Query`, `QuerySnapshot`, `EventCoordinate`, `PublicKey`,
+`UnsignedEvent`, `Write`, and `ReplaceableEventEdit` remain owned by their
+established crates. No compatibility aliases, group-specific provider,
+snapshot, projection, disagreement, management, discovery, verification,
+bounds, observation, publication, cancellation, or receipt value exists.
 
 ## Architecture boundaries
 
-1. `fava-simple-groups` normal dependencies are exactly `fava-query`,
-   `fava-state`, and `fava-write` in Cargo and Bazel.
-2. The capability owns no engine, signer, router, store, publisher, transport,
-   runtime, observation, publication, delivery, cancellation, or receipt
-   lifecycle.
-3. Repeated preparation, query, record, projection, parser, discovery, and edit
-   helpers retain no hidden mutable state or provider handle.
-4. Universal Fava owners have no production capability dependency, NIP-29
-   constant branch, or simple-group-id semantic branch. Generic kind and tag
-   handling remains protocol-neutral.
-5. Application and canary edges are test-only or app-owned.
+1. Normal dependencies are exactly `fava-query`, `fava-state`, `fava-write`,
+   and `nostr`; callers use the established `RelayUrl` parser.
+2. Generic owners retain bounds, verification, provenance, replacement,
+   projection, routing, storage, signing, delivery, and lifecycle policy.
+   Query builders delegate kind, tag-value, exact tag-axis intersection, and
+   relay inputs to bounded `fava-query` constructors and return the resulting
+   `QueryError` directly.
+   Write routing independently owns its operation bound and exact
+   `WriteIntentError`. The capability defines no construction or query-refusal
+   wrapper, and `fava-state` owns no application relay-selection value.
+3. Universal Fava owners contain no NIP-29 semantic branch or production
+   dependency on this capability.
+4. The facade and canary consume only the ordinary queries, event values,
+   edits, observations, writes, and receipts.
+
+## Query-error ownership
+
+`events` and `state_events` return `QueryError` from the query owner without
+translation. No group-owned conflict error is permitted. The README catalog is
+compiler-derived from the current surface and does not constrain architecture.
 
 ## Executable falsifiers
 
-- `cargo test -p fava-simple-groups --test public_api`
-- `cargo test -p fava-simple-groups --test architecture`
+- `cargo test -p fava-simple-groups`
 - `cargo test -p fava --test simple_groups`
+- `cargo check --manifest-path apps/canary/Cargo.toml --all-targets`
+- `python3 tools/crate_readme_api.py check fava-simple-groups`
 - `python3 tools/check_vocabulary.py`
 
-The architecture target fails if a normal facade dependency, retained helper
-state, protocol-specific universal branch, wrong management edit path, simple
-group lifecycle value, or unregistered public export appears.
+The architecture target fails when a removed nominal surface, duplicate
+generic owner, private bound, verification path, or lifecycle value appears.
+Constructor compile-fail and first-occurrence evidence is included in the crate
+tests and rustdoc examples required by Pablo's decision recorded in issue 0027.
