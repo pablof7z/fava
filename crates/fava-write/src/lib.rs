@@ -154,7 +154,11 @@ impl WriteIntent {
     }
 }
 
-/// Refusal before durable write custody.
+/// Refusal while validating or materializing a write intent.
+///
+/// Before durable custody, the caller receives this value directly. After an
+/// accepted edit enters custody, the same value is retained as bounded
+/// materialization-failure evidence on that write generation.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum WriteIntentError {
     /// Explicit publication requires at least one relay.
@@ -180,6 +184,14 @@ pub enum WriteIntentError {
     /// Complete event is already expired.
     #[error("event is already expired")]
     Expired,
+    /// Event contains too many tags.
+    #[error("event tags exceed bound: {actual} > {maximum}")]
+    TooManyTags {
+        /// Actual tag count.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
     /// Event exceeds the declared byte bound.
     #[error("event bytes exceed bound: {bytes} > {maximum}")]
     TooLarge {
@@ -191,6 +203,18 @@ pub enum WriteIntentError {
     /// Exact serialization failed.
     #[error("event encoding failed: {0}")]
     Encoding(String),
+}
+
+impl From<EventBuildError> for WriteIntentError {
+    fn from(error: EventBuildError) -> Self {
+        match error {
+            EventBuildError::TooManyTags { actual, maximum } => {
+                Self::TooManyTags { actual, maximum }
+            }
+            EventBuildError::TooLarge { bytes, maximum } => Self::TooLarge { bytes, maximum },
+            EventBuildError::Encoding(reason) => Self::Encoding(reason),
+        }
+    }
 }
 
 fn validate_event_size(event: &impl Serialize) -> Result<(), WriteIntentError> {

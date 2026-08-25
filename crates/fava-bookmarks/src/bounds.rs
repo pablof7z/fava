@@ -1,6 +1,4 @@
-use fava_write::{Event, EventBuildError, WriteIntentError};
-
-pub(super) const MAX_TAGS: usize = 2_000;
+use fava_write::{Event, WriteIntentError};
 
 const MAX_EVENT_BYTES: usize = 131_072;
 const MIN_EVENT_WITH_ONE_TAG_BYTES: usize = 334;
@@ -9,12 +7,6 @@ const EMPTY_EVENT_OBJECT_BYTES: usize = 71;
 const FIXED_HEX_BYTES: usize = 64 + 64 + 128;
 
 pub(super) fn validate_source(source: &Event) -> Result<(), WriteIntentError> {
-    if source.tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: source.tags.len(),
-            maximum: MAX_TAGS,
-        });
-    }
     encoded_len(source).map(|_| ())
 }
 
@@ -49,19 +41,6 @@ pub(super) fn encoded_len(source: &Event) -> Result<usize, WriteIntentError> {
     }
     add_json_string(&mut bytes, &source.content)?;
     Ok(bytes)
-}
-
-pub(super) fn map_build_error(error: EventBuildError) -> WriteIntentError {
-    match error {
-        EventBuildError::TooManyTags { actual, maximum } => WriteIntentError::TooLarge {
-            bytes: actual,
-            maximum,
-        },
-        EventBuildError::TooLarge { bytes, maximum } => {
-            WriteIntentError::TooLarge { bytes, maximum }
-        }
-        EventBuildError::Encoding(reason) => WriteIntentError::Encoding(reason),
-    }
 }
 
 fn add_json_string(bytes: &mut usize, value: &str) -> Result<(), WriteIntentError> {

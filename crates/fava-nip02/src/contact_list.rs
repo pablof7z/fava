@@ -358,11 +358,8 @@ fn map_build_error(error: EventBuildError) -> ContactListError {
 
 pub(crate) fn map_write_error(error: WriteIntentError) -> ContactListError {
     match error {
-        WriteIntentError::TooLarge { bytes, maximum } if maximum == bounds::MAX_TAGS => {
-            ContactListError::TooManyTags {
-                actual: bytes,
-                maximum,
-            }
+        WriteIntentError::TooManyTags { actual, maximum } => {
+            ContactListError::TooManyTags { actual, maximum }
         }
         WriteIntentError::TooLarge { bytes, maximum } => {
             ContactListError::TooLarge { bytes, maximum }

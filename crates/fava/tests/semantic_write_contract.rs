@@ -75,7 +75,7 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
             }))
             .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
+            .map_err(WriteIntentError::from)
     }
 }
 
