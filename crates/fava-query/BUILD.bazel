@@ -6,7 +6,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 filegroup(
     name = "architecture_sources",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
     visibility = ["//visibility:public"],
 )
 
@@ -17,6 +17,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-relay:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ],
@@ -26,12 +27,26 @@ rust_library(
 )
 
 rust_test(
+    name = "access_identity",
+    srcs = ["tests/access_identity.rs"],
+    crate_name = "access_identity",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-relay:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "query_identity",
     srcs = ["tests/query_identity.rs"],
     crate_name = "query_identity",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-relay:lib"],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
 )
@@ -43,6 +58,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-state:lib",
     ],

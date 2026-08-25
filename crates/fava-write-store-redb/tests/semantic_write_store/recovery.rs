@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
 use fava_query::{Query, QuerySource, SourceEvent};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
     MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
     WriteRouting,
@@ -11,6 +11,7 @@ use fava_write::{
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use redb::{Database, Durability, ReadableTable};
 use serde_json::{Value, json};
 
@@ -87,7 +88,10 @@ fn schema_v2_refuses_unsound_ordered_route_shapes() {
 #[test]
 fn schema_v2_refuses_missing_extra_and_substituted_explicit_lanes() {
     let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
-    let second_lane = RelaySessionKey::new(second.clone(), RelayAccess::public());
+    let second_lane = RelaySessionKey {
+        relay: second.clone(),
+        access: RelayAccess::Public,
+    };
     mutate_typed_receipt(&missing_path, |receipt| {
         receipt
             .current
@@ -99,10 +103,10 @@ fn schema_v2_refuses_missing_extra_and_substituted_explicit_lanes() {
     assert_lane_mismatch(missing_path, "missing");
 
     let (extra_path, _, _) = explicit_path("extra-explicit-lane");
-    let extra = RelaySessionKey::new(
-        RelayUrl::parse("wss://extra.example").unwrap(),
-        RelayAccess::public(),
-    );
+    let extra = RelaySessionKey {
+        relay: RelayUrl::parse("wss://extra.example").unwrap(),
+        access: RelayAccess::Public,
+    };
     mutate_typed_receipt(&extra_path, |receipt| {
         receipt
             .current
@@ -114,11 +118,14 @@ fn schema_v2_refuses_missing_extra_and_substituted_explicit_lanes() {
     assert_lane_mismatch(extra_path, "extra");
 
     let (substituted_path, _, second) = explicit_path("substituted-explicit-lane");
-    let expected = RelaySessionKey::new(second, RelayAccess::public());
-    let substitute = RelaySessionKey::new(
-        RelayUrl::parse("wss://substitute.example").unwrap(),
-        RelayAccess::public(),
-    );
+    let expected = RelaySessionKey {
+        relay: second,
+        access: RelayAccess::Public,
+    };
+    let substitute = RelaySessionKey {
+        relay: RelayUrl::parse("wss://substitute.example").unwrap(),
+        access: RelayAccess::Public,
+    };
     mutate_typed_receipt(&substituted_path, |receipt| {
         let outcome = receipt
             .current
@@ -367,7 +374,10 @@ fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
     for index in 0..=destination_evidence_capacity() {
         let relay = RelayUrl::parse(&format!("wss://relay-{index}.example")).unwrap();
         oversized.insert(
-            RelaySessionKey::new(relay, RelayAccess::public()),
+            RelaySessionKey {
+                relay,
+                access: RelayAccess::Public,
+            },
             RelayDeliveryOutcome::Pending,
         );
     }
@@ -422,7 +432,7 @@ fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
 
     let timestamp_path = valid_source_path("source-timestamp");
     mutate_row(&timestamp_path, |row| {
-        set(row, "/semantic/current_source/1", json!(11));
+        set(row, "/semantic/current_source/1", json!(12));
     });
     assert!(RedbWriteStore::open(timestamp_path).is_err());
 }

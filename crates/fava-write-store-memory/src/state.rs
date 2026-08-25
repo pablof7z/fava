@@ -1,4 +1,4 @@
-use fava_state::EventCoordinate;
+use fava_state::{EventCoordinate, event_is_newer};
 use fava_write::{
     EventId, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit, Timestamp,
 };
@@ -67,8 +67,7 @@ pub(super) fn require_qualified_source(
     let qualified = match (current, candidate) {
         (None, Some(_)) | (Some(_), None) => true,
         (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_time > current_time
-                || (candidate_time == current_time && candidate_id < current_id)
+            event_is_newer((candidate_time, candidate_id), (current_time, current_id))
         }
         (None, None) => false,
     };

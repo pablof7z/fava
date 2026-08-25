@@ -161,11 +161,13 @@ fn public_exports(root: &str) -> BTreeSet<String> {
 fn normal_dependencies_are_exact() {
     let cargo_expected = BTreeSet::from([
         "fava-query".to_owned(),
+        "fava-relay".to_owned(),
         "fava-state".to_owned(),
         "fava-write".to_owned(),
     ]);
     let bazel_expected = BTreeSet::from([
         "//crates/fava-query:lib".to_owned(),
+        "//crates/fava-relay:lib".to_owned(),
         "//crates/fava-state:lib".to_owned(),
         "//crates/fava-write:lib".to_owned(),
     ]);
@@ -225,7 +227,10 @@ fn pure_helpers_have_no_lifecycle_owner() {
     let prepared = simple_group.prepare(draft).expect("first preparation");
     assert_eq!(simple_group.prepare(prepared.clone()), Ok(prepared));
     let query = Query::events().limit(8).expect("positive limit");
-    assert_eq!(simple_group.events(query.clone()), simple_group.events(query));
+    assert_eq!(
+        simple_group.events(query.clone()),
+        simple_group.events(query)
+    );
     assert_eq!(
         simple_group.records(SimpleGroupRecords::all()),
         simple_group.records(SimpleGroupRecords::all())
@@ -278,7 +283,6 @@ fn capability_sources_and_exports_own_no_lifecycle() {
         "SimpleGroupPins".to_owned(),
         "SimpleGroupRecords".to_owned(),
         "SimpleGroupRoles".to_owned(),
-        "SimpleGroupSnapshot".to_owned(),
         "SimpleGroups".to_owned(),
     ]);
     assert_eq!(public_exports(PUBLIC_ROOT), approved);

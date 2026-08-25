@@ -3,19 +3,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use fava_nip65::{RelayList, RelayListError};
+use fava_nip65::{RelayList, relay_lists};
 use fava_query::{
-    OpenedQuerySource, Query, QuerySource, QuerySourceClosed, SourceChanges, SourceEvent,
-    SourceSnapshot, SourceStatus, SourceTerminationCause,
+    OpenedQuerySource, QuerySource, QuerySourceClosed, SourceChanges, SourceEvent, SourceSnapshot,
+    SourceStatus, SourceTerminationCause,
 };
+use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
 };
-use fava_state::{PublicKey, RelaySessionKey, RelayUrl};
-use fava_write::{EventValue, Kind};
+use fava_write::EventValue;
+use nostr::key::PublicKey;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 const MAX_SHORTFALLS: usize = 256;
@@ -53,12 +55,6 @@ pub struct OutboxRouter {
     name: String,
     indexers: BTreeSet<RelayUrl>,
     queries: Arc<dyn QuerySource>,
-    lists: Arc<KnownLists>,
-}
-
-struct KnownLists {
-    values: Mutex<BTreeMap<PublicKey, RelayList>>,
-    revision: watch::Sender<u64>,
 }
 
 impl OutboxRouter {
@@ -79,79 +75,11 @@ impl OutboxRouter {
                 "outbox routing requires at least one indexer relay".to_owned(),
             ));
         }
-        let (revision, _) = watch::channel(0);
         Ok(Self {
             name: name.into(),
             indexers,
             queries,
-            lists: Arc::new(KnownLists {
-                values: Mutex::new(BTreeMap::new()),
-                revision,
-            }),
         })
-    }
-
-    /// Add one locally known NIP-65 event when it supersedes current knowledge.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RelayListError`] when the event is not a valid relay list.
-    pub fn remember(&self, event: &EventValue) -> Result<bool, RelayListError> {
-        self.lists.remember(event)
-    }
-
-    fn contribution(
-        &self,
-        request: &RouteRequest,
-        settled_absent: &BTreeSet<PublicKey>,
-        shortfalls: &Shortfalls,
-    ) -> RouteContribution {
-        contribution(
-            request,
-            &self.lists.values(),
-            settled_absent,
-            shortfalls.rendered(),
-        )
-    }
-}
-
-impl KnownLists {
-    fn values(&self) -> BTreeMap<PublicKey, RelayList> {
-        self.values
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-
-    fn remember(&self, event: &EventValue) -> Result<bool, RelayListError> {
-        let candidate = RelayList::from_event(event)?;
-        let mut values = self
-            .values
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let replace = values
-            .get(&candidate.author())
-            .is_none_or(|current| candidate.supersedes(current));
-        if !replace {
-            return Ok(false);
-        }
-        values.insert(candidate.author(), candidate);
-        drop(values);
-        let next = self.revision.borrow().saturating_add(1);
-        self.revision.send_replace(next);
-        Ok(true)
-    }
-
-    fn ingest(&self, snapshot: &SourceSnapshot, shortfalls: &mut Shortfalls) {
-        for source in &snapshot.events {
-            let event = match source {
-                SourceEvent::Cached(cached) => EventValue::Signed(cached.event.clone()),
-                SourceEvent::Local(local) => local.event.clone(),
-            };
-            if let Err(error) = self.remember(&event) {
-                shortfalls.push(error.to_string());
-            }
-        }
     }
 }
 
@@ -165,7 +93,12 @@ impl Router for OutboxRouter {
         request: &RouteRequest,
         _upstream: &RoutePlan,
     ) -> Result<RouteContribution, RouterError> {
-        Ok(self.contribution(request, &BTreeSet::new(), &Shortfalls::default()))
+        Ok(contribution(
+            request,
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            Vec::new(),
+        ))
     }
 
     fn open(
@@ -174,37 +107,34 @@ impl Router for OutboxRouter {
         _upstream: watch::Receiver<Arc<RoutePlan>>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         let authors = requested_authors(&request);
-        let known = self.lists.values();
-        let missing: BTreeSet<_> = authors
-            .into_iter()
-            .filter(|author| !known.contains_key(author))
-            .collect();
-        let mut shortfalls = Shortfalls::default();
+        let queried = authors;
+        let shortfalls;
         let mut settled_absent = BTreeSet::new();
-        let changes = if missing.is_empty() {
-            None
+        let (lists, changes) = if queried.is_empty() {
+            shortfalls = Shortfalls::default();
+            (BTreeMap::new(), None)
         } else {
-            let query = Query::events()
-                .kind(Kind::from(10_002_u16))
-                .authors(missing.iter().copied())
+            let query = relay_lists(queried.iter().copied())
+                .map_err(|error| RouterError::Refused(error.to_string()))?
                 .from_relays(self.indexers.iter().cloned())
-                .map_err(|error| RouterError::Refused(error.to_string()))?;
+                .map_err(|error| RouterError::Refused(error.to_string()))?
+                .with_relay_access(request.access());
             let OpenedQuerySource { initial, changes } = self
                 .queries
                 .open(&query)
                 .map_err(|error| RouterError::Refused(error.to_string()))?;
-            self.lists.ingest(&initial, &mut shortfalls);
+            let parsed = decoded_lists(&initial);
+            shortfalls = parsed.1;
             if settles_absence(&initial.status) {
-                settled_absent.extend(missing.iter().copied());
+                settled_absent.extend(queried.iter().copied());
             }
-            Some(changes)
+            (parsed.0, Some(changes))
         };
         Ok(Box::new(OutboxSession {
             request,
-            lists: Arc::clone(&self.lists),
-            revision: self.lists.revision.subscribe(),
+            lists,
             changes,
-            queried: missing,
+            queried,
             settled_absent,
             shortfalls,
             closed: false,
@@ -214,8 +144,7 @@ impl Router for OutboxRouter {
 
 struct OutboxSession {
     request: RouteRequest,
-    lists: Arc<KnownLists>,
-    revision: watch::Receiver<u64>,
+    lists: BTreeMap<PublicKey, RelayList>,
     changes: Option<Box<dyn SourceChanges>>,
     queried: BTreeSet<PublicKey>,
     settled_absent: BTreeSet<PublicKey>,
@@ -225,17 +154,16 @@ struct OutboxSession {
 
 impl OutboxSession {
     fn unresolved_count(&self) -> usize {
-        let known = self.lists.values();
         self.queried
             .iter()
-            .filter(|author| !known.contains_key(author))
+            .filter(|author| !self.lists.contains_key(author))
             .count()
     }
 
     fn contribution(&self) -> RouteContribution {
         contribution(
             &self.request,
-            &self.lists.values(),
+            &self.lists,
             &self.settled_absent,
             self.shortfalls.rendered(),
         )
@@ -254,40 +182,34 @@ impl RouterSession for OutboxSession {
             if self.closed {
                 return Err(RouterError::Closed);
             }
-            tokio::select! {
-                changed = self.revision.changed() => {
-                    changed.map_err(|_| RouterError::Closed)?;
-                    self.revision.borrow_and_update();
+            let changed = next_source(&mut self.changes).await;
+            // Settled absence comes only from a source that reports it
+            // completed; a lost source is a shortfall, not a fact.
+            match changed {
+                Ok(snapshot) => {
+                    let parsed = decoded_lists(&snapshot);
+                    self.lists = parsed.0;
+                    self.shortfalls = parsed.1;
+                    if settles_absence(&snapshot.status) {
+                        self.settled_absent.extend(self.queried.iter().copied());
+                        self.changes = None;
+                    }
                 }
-                changed = next_source(&mut self.changes) => {
-                    // Settled absence comes only from a source that reports it
-                    // completed; a lost source is a shortfall, not a fact.
-                    match changed {
-                        Ok(snapshot) => {
-                            self.lists.ingest(&snapshot, &mut self.shortfalls);
-                            if settles_absence(&snapshot.status) {
-                                self.settled_absent.extend(self.queried.iter().copied());
-                                self.changes = None;
-                            }
-                        }
-                        Err(closed) => {
-                            // Termination reaches this consumer on the error
-                            // channel, never as a trailing `Ok`. The cause it
-                            // carries is what separates "the indexers had
-                            // nothing" from "we lost the indexers".
-                            self.changes = None;
-                            if settles_absence(&closed.status()) {
-                                self.settled_absent.extend(self.queried.iter().copied());
-                            } else {
-                                self.shortfalls.push(format!(
+                Err(closed) => {
+                    // Termination reaches this consumer on the error
+                    // channel, never as a trailing `Ok`. The cause it
+                    // carries is what separates "the indexers had
+                    // nothing" from "we lost the indexers".
+                    self.changes = None;
+                    if settles_absence(&closed.status()) {
+                        self.settled_absent.extend(self.queried.iter().copied());
+                    } else {
+                        self.shortfalls.push(format!(
                                     "relay-list discovery source ended before settling ({}); {} author relay lists remain unresolved",
                                     closed.cause,
                                     self.unresolved_count()
                                 ));
-                            }
-                        }
                     }
-                    self.revision.borrow_and_update();
                 }
             }
             Ok(self.contribution())
@@ -302,6 +224,24 @@ impl RouterSession for OutboxSession {
             }
         }
     }
+}
+
+fn decoded_lists(snapshot: &SourceSnapshot) -> (BTreeMap<PublicKey, RelayList>, Shortfalls) {
+    let mut values = BTreeMap::new();
+    let mut shortfalls = Shortfalls::default();
+    for source in &snapshot.events {
+        let event = match source {
+            SourceEvent::Relay(relay) => EventValue::Signed(relay.event().clone()),
+            SourceEvent::Local(local) => local.event.clone(),
+        };
+        match RelayList::from_event(&event) {
+            Ok(list) => {
+                values.insert(list.author(), list);
+            }
+            Err(error) => shortfalls.push(error.to_string()),
+        }
+    }
+    (values, shortfalls)
 }
 
 async fn next_source(
@@ -358,7 +298,10 @@ fn contribution(
         let sessions: BTreeSet<_> = relays
             .iter()
             .cloned()
-            .map(|relay| RelaySessionKey::new(relay, request.access()))
+            .map(|relay| RelaySessionKey {
+                relay,
+                access: request.access(),
+            })
             .collect();
         if sessions.is_empty() {
             coverage.insert(target, CoverageState::SettledAbsent);

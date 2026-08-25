@@ -1,7 +1,7 @@
 //! Exact semantic acceptance validation shared by durable admission and completion paths.
 
 use fava_routing::RoutePlan;
-use fava_state::{EventCoordinate, event_coordinate};
+use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
     Event, EventId, MaterializationId, PublicKey, Receipt, ReceiptOutcome, ReplaceableEventEdit,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WriteRouting,
@@ -43,7 +43,12 @@ pub(super) fn validate_materialization(
         ));
     }
     let selected = validate_source(edit, author, source)?;
-    if selected.is_some_and(|(_, source_time)| source_time >= event.created_at) {
+    let event_id = event
+        .id
+        .ok_or_else(|| WriteStoreError::Refused("materialization has no stable id".to_owned()))?;
+    if selected.is_some_and(|(source_id, source_time)| {
+        !event_is_newer((event.created_at, event_id), (source_time, source_id))
+    }) {
         return Err(WriteStoreError::Refused(
             "materialization is not newer than its selected source".to_owned(),
         ));
@@ -141,8 +146,7 @@ pub(super) fn require_qualified_source(
     let qualified = match (current, candidate) {
         (None, Some(_)) | (Some(_), None) => true,
         (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_time > current_time
-                || (candidate_time == current_time && candidate_id < current_id)
+            event_is_newer((candidate_time, candidate_id), (current_time, current_id))
         }
         (None, None) => false,
     };

@@ -1,6 +1,12 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_subscriptions",
@@ -8,6 +14,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-relay:lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
         "//crates/fava-transport:lib",
@@ -19,12 +26,24 @@ rust_library(
 )
 
 rust_test(
+    name = "access_session_keys",
+    crate_name = "access_session_keys",
+    srcs = ["tests/access_session_keys.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-query:lib", "//crates/fava-relay:lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "tag_values",
     crate_name = "tag_values",
     srcs = ["tests/tag_values.rs"],
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-wire:lib",
@@ -40,6 +59,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-wire:lib",
@@ -58,6 +78,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
@@ -77,6 +98,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",

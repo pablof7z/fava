@@ -14,7 +14,7 @@ use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
-use fava_simple_groups::{SimpleGroup, SimpleGroupRecords};
+use fava_simple_groups::{SimpleGroup, SimpleGroupAdmins, SimpleGroupMetadata, SimpleGroupRecords};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write::{Event, ReceiptOutcome};
@@ -99,7 +99,8 @@ async fn execute_with_proxies(
         RelayUrl::parse(&urls[0]).map_err(error)?,
         RelayUrl::parse(&urls[1]).map_err(error)?,
     ];
-    let simple_group_id = hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
+    let simple_group_id =
+        hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
 
     let simple_group = SimpleGroup::on(relays.clone(), &simple_group_id).map_err(error)?;
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(author.clone()));
@@ -202,54 +203,78 @@ async fn execute_with_proxies(
         )
         .await
         .map_err(error)?;
-    let mut records = observer
-        .observe(simple_group.records(SimpleGroupRecords::all()).map_err(error)?)
-        .await
-        .map_err(error)?;
+    let mut record_observations = Vec::new();
+    for (host, query) in simple_group
+        .records(SimpleGroupRecords::all())
+        .map_err(error)?
+    {
+        record_observations.push((host, observer.observe(query).await.map_err(error)?));
+    }
     let selected_hosts = simple_group.hosts().count();
     let content_snapshot = wait_observation(&mut content, |current| {
         current.events.len() == selected_hosts + 1
             && current.events.iter().any(|record| {
-                record.id() == shared.id && record.relay_evidence.len() == selected_hosts
+                record.id() == shared.id && record.relay_occurrences().len() == selected_hosts
             })
     })
     .await?;
-    let record_snapshot = wait_observation(&mut records, |current| {
-        let Ok(projected) = simple_group.project(current) else {
-            return false;
-        };
-        projected.metadata().count() == selected_hosts
-            && projected.admin_records().count() == selected_hosts
-    })
-    .await?;
-    let projected = simple_group.project(&record_snapshot).map_err(error)?;
-    if selected_hosts == 2 && (!projected.metadata_differ() || !projected.admins_differ()) {
+    let mut metadata = Vec::new();
+    let mut admins = Vec::new();
+    for (host, observation) in &mut record_observations {
+        let snapshot = wait_observation(observation, |current| {
+            current
+                .events
+                .iter()
+                .any(|record| record.event().kind() == Kind::from_u16(39_000))
+                && current
+                    .events
+                    .iter()
+                    .any(|record| record.event().kind() == Kind::from_u16(39_001))
+        })
+        .await?;
+        let metadata_record = snapshot
+            .events
+            .iter()
+            .find(|record| record.event().kind() == Kind::from_u16(39_000))
+            .ok_or_else(|| CanaryError::new("exact-host metadata record was absent"))?;
+        let admin_record = snapshot
+            .events
+            .iter()
+            .find(|record| record.event().kind() == Kind::from_u16(39_001))
+            .ok_or_else(|| CanaryError::new("exact-host admin record was absent"))?;
+        if metadata_record
+            .relay_occurrences()
+            .occurrences()
+            .any(|occurrence| &occurrence.session.relay != host)
+            || admin_record
+                .relay_occurrences()
+                .occurrences()
+                .any(|occurrence| &occurrence.session.relay != host)
+        {
+            return Err(CanaryError::new(
+                "exact-host record query admitted another host",
+            ));
+        }
+        let value = SimpleGroupMetadata::from_event(metadata_record.event()).map_err(error)?;
+        metadata.push((
+            value.name().unwrap_or_default().to_owned(),
+            value.author().to_hex(),
+        ));
+        let value = SimpleGroupAdmins::from_event(admin_record.event()).map_err(error)?;
+        let target = value
+            .admins()
+            .iter()
+            .filter_map(|row| row.as_ref().ok())
+            .map(|(key, _)| key.to_hex())
+            .find(|key| key != &author.public_key().to_hex())
+            .unwrap_or_default();
+        admins.push((target, value.author().to_hex()));
+    }
+    if selected_hosts == 2 && (metadata[0].0 == metadata[1].0 || admins[0].0 == admins[1].0) {
         return Err(CanaryError::new(
-            "host-local metadata/admin forks did not disagree",
+            "host-local metadata/admin records did not disagree",
         ));
     }
-    let metadata = projected
-        .metadata()
-        .map(|(_, value)| {
-            (
-                value.name().unwrap_or_default().to_owned(),
-                value.author().to_hex(),
-            )
-        })
-        .collect::<Vec<_>>();
-    let admins = projected
-        .admin_records()
-        .map(|(_, value)| {
-            let target = value
-                .admins()
-                .iter()
-                .filter_map(|row| row.as_ref().ok())
-                .map(|(key, _)| key.to_hex())
-                .find(|key| key != &author.public_key().to_hex())
-                .unwrap_or_default();
-            (target, value.author().to_hex())
-        })
-        .collect::<Vec<_>>();
     let metadata = [
         metadata.first().cloned().unwrap_or_default(),
         metadata.get(1).cloned().unwrap_or_default(),
@@ -264,8 +289,8 @@ async fn execute_with_proxies(
         .iter()
         .find(|record| record.id() == shared.id)
         .ok_or_else(|| CanaryError::new("shared content was absent"))?
-        .relay_evidence
-        .observations()
+        .relay_occurrences()
+        .occurrences()
         .map(|observation| observation.session.relay.to_string())
         .collect::<Vec<_>>();
     let shared_evidence = relays.iter().map(ToString::to_string).collect::<Vec<_>>();
@@ -278,22 +303,14 @@ async fn execute_with_proxies(
             "shared content evidence did not match the exact relay route",
         ));
     }
-    for (relay, expected) in [(&relays[0], "relay-A"), (&relays[1], "relay-B")]
-        .into_iter()
-        .take(selected_hosts)
+    for (actual, expected) in metadata
+        .iter()
+        .map(|value| value.0.as_str())
+        .zip(["relay-A", "relay-B"])
     {
-        let selected = SimpleGroup::on([relay.clone()], &simple_group_id)
-            .map_err(error)?
-            .project(&record_snapshot)
-            .map_err(error)?;
-        if selected
-            .metadata()
-            .next()
-            .and_then(|(_, value)| value.name())
-            != Some(expected)
-        {
+        if actual != expected {
             return Err(CanaryError::new(
-                "single-host fork choice selected another host",
+                "exact-host metadata query returned another host's record",
             ));
         }
     }
@@ -326,7 +343,10 @@ async fn execute_with_proxies(
         signed_raw(
             &author,
             now + 10,
-            vec![tag(&["h", &simple_group_id])?, tag(&["h", &simple_group_id])?],
+            vec![
+                tag(&["h", &simple_group_id])?,
+                tag(&["h", &simple_group_id])?,
+            ],
         )?,
         signed_raw(&author, now + 11, vec![tag(&["h", "other-group"])?])?,
     ];
@@ -343,10 +363,13 @@ async fn execute_with_proxies(
     }
 
     content.close();
-    content.close();
-    records.close();
-    records.close();
-    let observation_closed = content.changed().await.is_err() && records.changed().await.is_err();
+    for (_, observation) in &mut record_observations {
+        observation.close();
+    }
+    let mut observation_closed = content.changed().await.is_err();
+    for (_, observation) in &mut record_observations {
+        observation_closed &= observation.changed().await.is_err();
+    }
     wait_for_query_completion(
         &[root.join("wire/a.jsonl"), root.join("wire/b.jsonl")],
         &simple_group_id,

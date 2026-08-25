@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
-use fava_state::RelayUrl;
 use fava_write::{
     EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
     Tag, Timestamp, WriteIntentError,
 };
+use nostr::types::RelayUrl;
 
 use fava_nip02::{
     ContactList, ContactListError, ContactListRowEvidence, Follow, IntoContactAuthors,

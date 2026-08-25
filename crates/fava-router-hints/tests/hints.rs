@@ -3,12 +3,14 @@
 use std::collections::BTreeSet;
 
 use fava_query::EventRecord;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_hints::HintRouter;
 use fava_routing::{RoutePlan, RouteRequest, Router};
-use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
+use fava_state::{RelayEvent, relay_occurrences_for_event};
 use fava_write::{EventBuilder, EventValue, Kind, Tag};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 #[test]
 fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
@@ -20,10 +22,18 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
     let hinted = relay("hinted");
     let record = EventRecord::new(
         EventValue::Signed(target.clone()),
-        RelayEvidence::one(
-            RelaySessionKey::new(observed.clone(), RelayAccess::public()),
-            Timestamp::from(10),
-        ),
+        relay_occurrences_for_event(
+            target.id,
+            &[RelayEvent::new(
+                target.clone(),
+                RelaySessionKey {
+                    relay: observed.clone(),
+                    access: RelayAccess::Public,
+                },
+                Timestamp::from(10),
+            )],
+        )
+        .unwrap(),
         None,
     )
     .unwrap();

@@ -20,14 +20,13 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_simple_groups::{SimpleGroup, SimpleGroupRecords, SavedRelay, SimpleGroups};
-use fava_state::{
-    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
-};
+use fava_simple_groups::{SavedRelay, SimpleGroup, SimpleGroupRecords, SimpleGroups};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -37,6 +36,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 include!("simple_groups/saved.rs");
@@ -62,7 +62,9 @@ async fn simple_group_content_preserves_local_visibility() {
         .content("accepted local content")
         .build()
         .expect("payload builds");
-    let prepared = simple_group.prepare(payload).expect("group context prepares");
+    let prepared = simple_group
+        .prepare(payload)
+        .expect("group context prepares");
     let id = prepared.id.expect("prepared id");
     let _write = harness
         .fava
@@ -74,8 +76,8 @@ async fn simple_group_content_preserves_local_visibility() {
     let snapshot = wait_for_snapshot(&mut observation, |current| !current.events.is_empty()).await;
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), id);
-    assert!(snapshot.events[0].publication.is_some());
-    assert!(snapshot.events[0].relay_evidence.is_empty());
+    assert!(snapshot.events[0].publication().is_some());
+    assert!(snapshot.events[0].relay_occurrences().is_empty());
     assert_eq!(harness.cache.len().expect("cache readable"), 0);
 }
 
@@ -84,12 +86,19 @@ async fn simple_group_records_require_actual_host_evidence() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
     let simple_group = simple_group();
-    let query = simple_group
+    let queries = simple_group
         .records(SimpleGroupRecords::all())
-        .expect("record query")
-        .cache_only();
-    let mut observation = harness.fava.observe(query).await.expect("query opens");
-    assert!(observation.current().events.is_empty());
+        .expect("record queries");
+    let mut observations = Vec::new();
+    for (host, query) in queries {
+        let observation = harness
+            .fava
+            .observe(query.cache_only())
+            .await
+            .expect("query opens");
+        assert!(observation.current().events.is_empty());
+        observations.push((host, observation));
+    }
 
     let local = signed_record(&Keys::generate(), 39_001, 10, "write-store only");
     let _write = harness
@@ -99,39 +108,49 @@ async fn simple_group_records_require_actual_host_evidence() {
         .publish(local)
         .expect("local record custody accepts");
     tokio::task::yield_now().await;
-    assert!(observation.current().events.is_empty());
+    assert!(
+        observations
+            .iter()
+            .all(|(_, observation)| observation.current().events.is_empty())
+    );
 
     let served = signed_record(&keys, 39_000, 20, "served by A and B");
     for (host, observed_at) in [(host("a"), 21), (host("b"), 22)] {
         harness
             .cache
-            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            .commit(vec![EventStateMutation::Upsert(relay_event(
                 served.clone(),
-                evidence(host, observed_at),
+                host,
+                observed_at,
             ))])
             .expect("relay evidence commits");
     }
 
-    let snapshot = wait_for_snapshot(&mut observation, |current| {
-        current
-            .events
-            .first()
-            .is_some_and(|record| record.relay_evidence.len() == 2)
-    })
-    .await;
-    assert_eq!(snapshot.events.len(), 1);
-    assert_eq!(snapshot.events[0].id(), served.id);
-    let actual = snapshot.events[0]
-        .relay_evidence
-        .observations()
-        .map(|observation| observation.session.relay.clone())
-        .collect::<BTreeSet<_>>();
-    assert_eq!(actual, BTreeSet::from([host("a"), host("b")]));
-    assert!(!actual.contains(&host("contacted-but-not-serving")));
+    for (actual_host, observation) in &mut observations {
+        if *actual_host == host("contacted-but-not-serving") {
+            tokio::task::yield_now().await;
+            assert!(observation.current().events.is_empty());
+            continue;
+        }
+        let snapshot = wait_for_snapshot(observation, |current| !current.events.is_empty()).await;
+        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.events[0].id(), served.id);
+        assert_eq!(snapshot.events[0].relay_occurrences().len(), 1);
+        assert_eq!(
+            snapshot.events[0]
+                .relay_occurrences()
+                .occurrences()
+                .next()
+                .unwrap()
+                .session
+                .relay,
+            *actual_host
+        );
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
+async fn ordinary_content_query_deduplicates_exact_occurrences() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
     let simple_group = simple_group();
@@ -155,9 +174,10 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
     ] {
         harness
             .cache
-            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            .commit(vec![EventStateMutation::Upsert(relay_event(
                 event,
-                evidence(relay, observed_at),
+                relay,
+                observed_at,
             ))])
             .expect("event evidence commits");
     }
@@ -166,28 +186,26 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
             && snapshot
                 .events
                 .iter()
-                .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
+                .any(|record| record.id() == shared.id && record.relay_occurrences().len() == 2)
     })
     .await;
-    let projected = simple_group.project(&current).expect("bounded projection");
-
     assert_eq!(
-        projected
-            .events()
+        current
+            .events
             .iter()
             .map(fava::EventRecord::id)
             .collect::<Vec<_>>(),
         [unique_b.id, shared.id, unique_a.id]
     );
-    let shared_record = projected
-        .events()
+    let shared_record = current
+        .events
         .iter()
         .find(|record| record.id() == shared.id)
         .expect("shared id retained once");
     assert_eq!(
         shared_record
-            .relay_evidence
-            .observations()
+            .relay_occurrences()
+            .occurrences()
             .map(|item| item.session.relay.clone())
             .collect::<Vec<_>>(),
         [host("a"), host("b")]
@@ -198,76 +216,79 @@ async fn simple_group_snapshot_deduplicates_content_with_exact_provenance() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn single_host_group_is_explicit_fork_choice() {
+async fn each_record_query_has_one_exact_host_winner() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
     let multi = simple_group();
-    let query = multi
+    let queries = multi
         .records(SimpleGroupRecords::metadata())
-        .expect("record query")
-        .cache_only();
-    let mut observation = harness.fava.observe(query).await.expect("query opens");
+        .expect("record queries");
+    let mut observations = Vec::new();
+    for (host, query) in queries {
+        observations.push((
+            host,
+            harness
+                .fava
+                .observe(query.cache_only())
+                .await
+                .expect("query opens"),
+        ));
+    }
     let left = signed_group_event(&keys, 39_000, 20, "", vec![tag(&["name", "A"])]);
     let right = signed_group_event(&keys, 39_000, 30, "", vec![tag(&["name", "B"])]);
     for (event, relay, observed_at) in [(left, host("a"), 40), (right, host("b"), 41)] {
         harness
             .cache
-            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            .commit(vec![EventStateMutation::Upsert(relay_event(
                 event,
-                evidence(relay, observed_at),
+                relay,
+                observed_at,
             ))])
             .expect("fork commits");
     }
-    let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 2).await;
-    let a = SimpleGroup::on([host("a")], "group-29")
-        .expect("A group")
-        .project(&current)
-        .expect("bounded A projection");
-    let b = SimpleGroup::on([host("b")], "group-29")
-        .expect("B group")
-        .project(&current)
-        .expect("bounded B projection");
-
-    assert_eq!(
-        a.metadata().next().and_then(|(_, value)| value.name()),
-        Some("A")
-    );
-    assert_eq!(
-        b.metadata().next().and_then(|(_, value)| value.name()),
-        Some("B")
-    );
-    assert!(!a.metadata_differ());
-    assert!(!b.metadata_differ());
+    for (actual_host, observation) in &mut observations {
+        if *actual_host == host("contacted-but-not-serving") {
+            tokio::task::yield_now().await;
+            assert!(observation.current().events.is_empty());
+            continue;
+        }
+        let current = wait_for_snapshot(observation, |snapshot| snapshot.events.len() == 1).await;
+        let expected = if *actual_host == host("a") { "A" } else { "B" };
+        assert!(current.events[0].event().tags().iter().any(|tag| {
+            let cells = tag.as_slice();
+            cells.first().map(String::as_str) == Some("name")
+                && cells.get(1).map(String::as_str) == Some(expected)
+        }));
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn single_host_empty_is_no_positive_evidence() {
+async fn unserved_exact_host_has_no_positive_evidence() {
     let keys = Keys::generate();
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
     let multi = simple_group();
-    let query = multi
+    let (_, query) = multi
         .records(SimpleGroupRecords::metadata())
-        .expect("record query")
-        .cache_only();
-    let mut observation = harness.fava.observe(query).await.expect("query opens");
+        .expect("record queries")
+        .into_iter()
+        .find(|(relay, _)| *relay == host("contacted-but-not-serving"))
+        .expect("unserved host query");
+    let observation = harness
+        .fava
+        .observe(query.cache_only())
+        .await
+        .expect("query opens");
     let metadata = signed_group_event(&keys, 39_000, 20, "", vec![tag(&["name", "A"])]);
     harness
         .cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             metadata,
-            evidence(host("a"), 30),
+            host("a"),
+            30,
         ))])
         .expect("record commits");
-    let current = wait_for_snapshot(&mut observation, |snapshot| snapshot.events.len() == 1).await;
-    let empty = SimpleGroup::on([host("contacted-but-not-serving")], "group-29")
-        .expect("single host")
-        .project(&current)
-        .expect("bounded empty projection");
-
-    assert!(empty.metadata().next().is_none());
-    assert!(empty.admins().next().is_none());
-    assert!(empty.members().next().is_none());
-    assert!(empty.at(&host("contacted-but-not-serving")).is_some());
+    tokio::task::yield_now().await;
+    assert!(observation.current().events.is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -286,7 +307,9 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
         .content("kind-blind payload")
         .build()
         .expect("payload builds");
-    let prepared_once = simple_group.prepare(payload.clone()).expect("first preparation");
+    let prepared_once = simple_group
+        .prepare(payload.clone())
+        .expect("first preparation");
     let prepared_twice = simple_group.prepare(payload).expect("repeated preparation");
 
     assert_eq!(
@@ -363,7 +386,7 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
     })
     .await;
     assert_eq!(visible.events.len(), 1);
-    assert!(visible.events[0].publication.is_some());
+    assert!(visible.events[0].publication().is_some());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -384,7 +407,9 @@ async fn simple_group_presigned_context_refuses_before_custody() {
     let original_bytes = serde_json::to_vec(&signed).expect("signed event encodes");
     let original_id = signed.id;
     let original_signature = signed.sig;
-    let prepared = simple_group.prepare(signed).expect("valid context passes purely");
+    let prepared = simple_group
+        .prepare(signed)
+        .expect("valid context passes purely");
 
     assert_eq!(serde_json::to_vec(&prepared).unwrap(), original_bytes);
     assert_eq!(prepared.id, original_id);
@@ -552,9 +577,13 @@ fn signed_group_event(
         .expect("group event signs")
 }
 
-fn evidence(relay: RelayUrl, observed_at: u64) -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(relay, RelayAccess::public()),
+fn relay_event(event: Event, relay: RelayUrl, observed_at: u64) -> RelayEvent {
+    RelayEvent::new(
+        event,
+        RelaySessionKey {
+            relay,
+            access: RelayAccess::Public,
+        },
         Timestamp::from(observed_at),
     )
 }

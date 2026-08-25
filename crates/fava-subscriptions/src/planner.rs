@@ -1,6 +1,6 @@
 //! The replaceable planner contract and its refusal type.
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::BoundedReason;
 use fava_wire::SubscriptionId;
 use thiserror::Error;

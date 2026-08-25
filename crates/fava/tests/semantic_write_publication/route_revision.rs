@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava::{Fava, Receipt, ReceiptId};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{RouteContribution, RouteDestination};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use nostr::types::RelayUrl;
 
 use super::*;
 
@@ -14,9 +15,9 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
     let store = Arc::new(MemoryWriteStore::default());
     let first = signed_source(&keys, Kind::ContactList, 10, "first", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             first,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let initial = RelayUrl::parse("wss://initial-route.example").unwrap();
@@ -44,9 +45,9 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
 
     let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             successor,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     wait_for_materialization(&fava, write.receipt_id(), 2).await;
@@ -54,7 +55,10 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
     let reopened = wait_for_route_revision(&fava, write.receipt_id(), 3).await;
 
     let later = RelayUrl::parse("wss://later-route.example").unwrap();
-    let later_session = RelaySessionKey::new(later.clone(), RelayAccess::public());
+    let later_session = RelaySessionKey {
+        relay: later.clone(),
+        access: RelayAccess::Public,
+    };
     delayed.replace(contribution(later));
     let updated = wait_for_destination(&fava, write.receipt_id(), &later_session).await;
     assert!(updated.route_revision > reopened.route_revision);
@@ -63,7 +67,10 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
 fn contribution(relay: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
-            RelaySessionKey::new(relay, RelayAccess::public()),
+            RelaySessionKey {
+                relay,
+                access: RelayAccess::Public,
+            },
             BTreeSet::new(),
             "controlled semantic route",
         )],

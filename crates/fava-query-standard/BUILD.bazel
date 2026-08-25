@@ -5,6 +5,14 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+exports_files(["src/lib.rs"], visibility = ["//visibility:public"])
+
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_query_standard",
@@ -12,6 +20,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-relay:lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
@@ -22,12 +31,46 @@ rust_library(
 )
 
 rust_test(
+    name = "exact_access_authority",
+    srcs = ["tests/exact_access_authority.rs"],
+    crate_name = "exact_access_authority",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-query:lib", "//crates/fava-relay:lib", "//crates/fava-state:lib", "//crates/fava-write:lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "any_local_cross_source_winner",
+    srcs = ["tests/any_local_cross_source_winner.rs"],
+    crate_name = "any_local_cross_source_winner",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-query:lib", "//crates/fava-relay:lib", "//crates/fava-state:lib", "//crates/fava-write:lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "occurrence_aggregation",
+    srcs = ["tests/occurrence_aggregation.rs"],
+    crate_name = "occurrence_aggregation",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-query:lib", "//crates/fava-relay:lib", "//crates/fava-state:lib", "//crates/fava-write:lib"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "source_merge",
     srcs = ["tests/source_merge.rs"],
     crate_name = "source_merge",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
@@ -44,6 +87,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
@@ -59,6 +103,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
@@ -75,6 +120,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",

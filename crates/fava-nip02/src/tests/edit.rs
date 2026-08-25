@@ -1,10 +1,10 @@
 use std::cell::Cell;
 use std::fmt;
 
-use fava_state::RelayUrl;
 use fava_write::{Kind, ReplaceableEventEdit, WriteIntentError};
 use nostr::nips::nip19::ToBech32;
 use nostr::nips::nip21::ToNostrUri;
+use nostr::types::RelayUrl;
 
 use super::{materialize, source, tag, target_tags};
 use crate::{follow, follow_with, materializer, unfollow};

@@ -7,9 +7,10 @@
 use std::sync::Arc;
 
 use fava_query::{BoundedText, ObservationId, OperationGeneration, RelaySourceState};
-use fava_state::{RelaySessionKey, Timestamp};
+use fava_relay::RelaySessionKey;
 use fava_transport::{RelayInbound, RelaySessionLease};
 use fava_wire::SubscriptionId;
+use nostr::types::Timestamp;
 
 use crate::diagnostics;
 use crate::engine::{Engine, Report};
@@ -264,9 +265,25 @@ impl Engine {
             return;
         };
         let installed = slot.installed.clone();
-        let outcome = ingest::accept(self.providers.cache.as_ref(), relay, &installed, frame);
+        let outcome = ingest::accept(relay, &installed, frame);
         match outcome {
-            ingest::Accepted::Nothing | ingest::Accepted::Event => {}
+            ingest::Accepted::Nothing => {}
+            ingest::Accepted::Event {
+                subscription,
+                relay_event,
+            } => {
+                let owners = self
+                    .slots
+                    .get(relay)
+                    .map(|slot| slot.owners(&subscription))
+                    .unwrap_or_default();
+                for owner in owners {
+                    self.registry
+                        .record_live_event(owner, relay_event.as_ref().clone());
+                }
+                let observed_at = relay_event.occurrence().observed_at;
+                let _retention = self.providers.cache.admit(*relay_event, observed_at);
+            }
             ingest::Accepted::StoredEventsComplete(id) => {
                 let at = Timestamp::now();
                 let proves = self

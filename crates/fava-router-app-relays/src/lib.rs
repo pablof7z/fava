@@ -9,7 +9,7 @@ use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router,
     RouterError, RouterSession,
 };
-use fava_state::RelayUrl;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 /// Router that always contributes the application's configured relays.
@@ -55,7 +55,10 @@ impl AppRelayRouter {
             .relays
             .iter()
             .cloned()
-            .map(|relay| fava_state::RelaySessionKey::new(relay, request.access()))
+            .map(|relay| fava_relay::RelaySessionKey {
+                relay,
+                access: request.access(),
+            })
             .collect();
         let coverage = targets
             .iter()

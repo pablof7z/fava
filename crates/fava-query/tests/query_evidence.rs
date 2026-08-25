@@ -10,13 +10,15 @@ use fava_query::{
     QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence,
     RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
 };
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn session(url: &str) -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse(url).expect("test relay url parses"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse(url).expect("test relay url parses"),
+        access: RelayAccess::Public,
+    }
 }
 
 fn observation(value: u64) -> ObservationId {
@@ -229,8 +231,14 @@ fn a_query_without_relays_never_claims_relay_completeness() {
 #[test]
 fn relay_sessions_are_scoped_by_access_identity() {
     let url = RelayUrl::parse("wss://shared.example").expect("test relay url parses");
-    let public = RelaySessionKey::new(url.clone(), RelayAccess::public());
-    let named = RelaySessionKey::new(url.clone(), RelayAccess::named("alice"));
+    let public = RelaySessionKey {
+        relay: url.clone(),
+        access: RelayAccess::Public,
+    };
+    let named = RelaySessionKey {
+        relay: url.clone(),
+        access: RelayAccess::Authenticated(Keys::generate().public_key()),
+    };
 
     let evidence = QueryEvidence {
         sources: Vec::new(),

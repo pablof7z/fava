@@ -1,8 +1,9 @@
 //! Event values and publication evidence shared by write owners and queries.
 
-use fava_state::{EventCoordinate, RelayUrl, event_coordinate};
+use fava_state::{EventCoordinate, event_coordinate};
 pub use nostr::event::{Event, EventId, Kind, Tag, UnsignedEvent};
 pub use nostr::key::PublicKey;
+use nostr::types::RelayUrl;
 pub use nostr::types::Timestamp;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -13,6 +14,7 @@ mod delivery_map;
 mod edit;
 mod materialization;
 mod receipt;
+mod relay_session_serde;
 mod routing;
 mod session_set;
 

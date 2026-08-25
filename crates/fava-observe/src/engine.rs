@@ -27,8 +27,8 @@ use std::time::Duration;
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_query::{BoundedText, OperationGeneration, RelaySourceState};
+use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
-use fava_state::RelaySessionKey;
 use fava_subscriptions::{
     InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
     SubscriptionPlan, SubscriptionPlanner, filter_covers, validate_plan,
@@ -276,7 +276,7 @@ impl Engine {
                 relay,
                 generation,
                 RelaySourceState::StoredEventsComplete {
-                    at: fava_state::Timestamp::now(),
+                    at: nostr::types::Timestamp::now(),
                 },
             );
         }

@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 
 use fava_nip65::{RelayList, RelayListError};
-use fava_state::RelayUrl;
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag};
+use nostr::types::RelayUrl;
 
 fn author() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")

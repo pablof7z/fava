@@ -8,16 +8,18 @@ use fava_query::{
     QuerySourceError, SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision,
     SourceSnapshot, SourceStatus, SourceTerminationCause,
 };
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_outbox::OutboxRouter;
 use fava_routing::{CoverageState, RoutePlan, RouteRequest, RouteTarget, Router};
-use fava_state::{CachedEvent, RelayEvidence, RelayUrl};
+use fava_state::RelayEvent;
 use fava_write::{EventBuilder, EventValue, Kind, Tag, Timestamp};
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
-async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
+async fn current_query_values_route_and_missing_list_uses_exact_indexer_query() {
     let author = Keys::generate();
     let recipient_a = Keys::generate();
     let recipient_b = Keys::generate();
@@ -26,23 +28,10 @@ async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
     let later_read_relay = relay("recipient-b-read");
     let indexer = relay("indexer");
     let source = Arc::new(WatchSource::new());
+    let author_list = relay_list(&author, None, Some(&author_relay), 1);
+    let recipient_a_list = relay_list(&recipient_a, Some(&first_read_relay), None, 1);
+    source.replace_all(vec![author_list.clone(), recipient_a_list.clone()]);
     let router = OutboxRouter::new("nip65", [indexer.clone()], source.clone()).unwrap();
-    router
-        .remember(&EventValue::Signed(relay_list(
-            &author,
-            None,
-            Some(&author_relay),
-            1,
-        )))
-        .unwrap();
-    router
-        .remember(&EventValue::Signed(relay_list(
-            &recipient_a,
-            Some(&first_read_relay),
-            None,
-            1,
-        )))
-        .unwrap();
     let event = EventBuilder::new(author.public_key(), Kind::TextNote)
         .tag(p_tag(&recipient_a))
         .tag(p_tag(&recipient_b))
@@ -66,14 +55,22 @@ async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
     );
     assert_eq!(
         query.selection().authors,
-        Some(BTreeSet::from([recipient_b.public_key()]))
+        Some(BTreeSet::from([
+            author.public_key(),
+            recipient_a.public_key(),
+            recipient_b.public_key(),
+        ]))
     );
     assert_eq!(
         query.source().acquisition(),
         &QueryAcquisition::Explicit(BTreeSet::from([indexer]))
     );
 
-    source.replace(relay_list(&recipient_b, Some(&later_read_relay), None, 2));
+    source.replace_all(vec![
+        author_list,
+        recipient_a_list,
+        relay_list(&recipient_b, Some(&later_read_relay), None, 2),
+    ]);
     let changed = session.next_change().await.expect("later relay list");
     let final_plan = RoutePlan::from_contribution(2, &changed).unwrap();
     assert!(final_plan.settled());
@@ -124,20 +121,6 @@ impl WatchSource {
         self.query.lock().expect("query lock").clone()
     }
 
-    fn replace(&self, event: fava_write::Event) {
-        let revision = self.latest.borrow().revision.0.saturating_add(1);
-        self.latest.send_replace(Arc::new(SourceSnapshot {
-            kind: SourceKind::EventCache,
-            revision: SourceRevision(revision),
-            status: SourceStatus::Open,
-            retractions: Vec::new(),
-            events: vec![SourceEvent::Cached(CachedEvent::new(
-                event,
-                RelayEvidence::default(),
-            ))],
-        }));
-    }
-
     fn replace_all(&self, events: Vec<fava_write::Event>) {
         let revision = self.latest.borrow().revision.0.saturating_add(1);
         self.latest.send_replace(Arc::new(SourceSnapshot {
@@ -145,10 +128,7 @@ impl WatchSource {
             revision: SourceRevision(revision),
             status: SourceStatus::Open,
             retractions: Vec::new(),
-            events: events
-                .into_iter()
-                .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
-                .collect(),
+            events: events.into_iter().map(source_event).collect(),
         }));
     }
 
@@ -180,6 +160,18 @@ impl WatchSource {
             events: Vec::new(),
         }));
     }
+}
+
+fn source_event(event: fava_write::Event) -> SourceEvent {
+    let observed_at = event.created_at;
+    SourceEvent::Relay(RelayEvent::new(
+        event,
+        RelaySessionKey {
+            relay: relay("source"),
+            access: RelayAccess::Public,
+        },
+        observed_at,
+    ))
 }
 
 impl QuerySource for WatchSource {

@@ -64,8 +64,10 @@ fn nip02_remains_engine_provider_free() {
         dependency_names(CARGO_MANIFEST, "[dependencies]"),
         BTreeSet::from([
             "fava-query".to_owned(),
+            "fava-relay".to_owned(),
             "fava-state".to_owned(),
             "fava-write".to_owned(),
+            "nostr".to_owned(),
         ])
     );
     for forbidden in [

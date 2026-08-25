@@ -16,19 +16,23 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDeadlines};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
+use nostr::types::RelayUrl;
 
 /// A relay whose observe-side demand drains and returns while another lease
 /// holder keeps the socket open must not mint the wire id it just closed there.
 #[tokio::test(flavor = "current_thread")]
 async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
     let relay = RelayUrl::parse("wss://retained.example").expect("relay URL");
-    let key = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+    let key = RelaySessionKey {
+        relay: relay.clone(),
+        access: RelayAccess::Public,
+    };
     let transport = Arc::new(FakeTransport::new());
 
     // The outsider stands in for the publisher: one lease on the same session

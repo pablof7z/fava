@@ -3,12 +3,12 @@
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use fava_state::Timestamp;
 use fava_transport::{
     BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
     RelayInbound, RelayMessageStream, RelaySession, RelaySessionIdentity, ReleaseFuture,
     ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
+use nostr::types::Timestamp;
 
 use crate::stream::{ConsumerState, FakeMessageStream, LiveIdentity};
 

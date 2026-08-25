@@ -8,7 +8,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
-        "//crates/fava-state:lib",
+        "//crates/fava-query:lib",
         "//crates/fava-write:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
@@ -23,7 +23,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal = True, proc_macro = True),
     deps = all_crate_deps(normal = True) + [
-        "//crates/fava-state:lib",
+        "//crates/fava-query:lib",
         "//crates/fava-write:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
@@ -35,11 +35,13 @@ rust_test(
     crate_name = "fava_nip65_decoder",
     srcs = ["tests/decoder.rs"],
     edition = crate_edition(),
-    deps = [
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True) + [
         ":lib",
-        "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
 )
 
 test_suite(

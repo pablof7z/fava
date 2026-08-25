@@ -3,11 +3,11 @@
 use std::fmt;
 use std::sync::Arc;
 
-use fava_state::RelayUrl;
 use fava_write::{
     Event, EventBuilder, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
     Timestamp, UnsignedEvent, WriteIntentError,
 };
+use nostr::types::RelayUrl;
 
 const ADD: u8 = 1;
 const REMOVE: u8 = 2;

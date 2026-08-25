@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelaySession,
     RelaySessionFuture, RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome,

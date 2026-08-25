@@ -3,18 +3,19 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
     TransportDeadlines, TransportFailure,
 };
 use fava_transport_testkit::FakeTransport;
+use nostr::types::RelayUrl;
 
 fn key() -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse("ws://127.0.0.1:1/").expect("relay URL"),
+        access: RelayAccess::Public,
+    }
 }
 
 fn frames(count: usize) -> NonZeroUsize {

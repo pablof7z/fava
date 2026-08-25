@@ -5,7 +5,7 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceError, SourceChangeFuture, SourceChanges,
     SourceKind, SourceSnapshot,
 };
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::{EventStateMutation, RelayEvent};
 use nostr::event::EventId;
 
 /// Deliberately absent event cache implemented outside the Fava workspace.
@@ -22,7 +22,7 @@ impl EventCache for NullEventCache {
     /// retention past a cache that declares it retains nothing.
     fn transact(
         &self,
-        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+        decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,
     ) -> Result<usize, EventCacheError> {
         let mutations = decide(&[]);
         let count = mutations.len();
@@ -30,7 +30,7 @@ impl EventCache for NullEventCache {
         Ok(count)
     }
 
-    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError> {
+    fn commit(&self, mutations: Vec<EventStateMutation>) -> Result<(), EventCacheError> {
         if mutations.is_empty() {
             Ok(())
         } else {
@@ -40,21 +40,8 @@ impl EventCache for NullEventCache {
         }
     }
 
-    fn event(&self, _id: EventId) -> Result<Option<CachedEvent>, EventCacheError> {
+    fn event(&self, _id: EventId) -> Result<Option<RelayEvent>, EventCacheError> {
         Ok(None)
-    }
-
-    fn transact(
-        &self,
-        decide: &dyn for<'a> Fn(&'a [CachedEvent]) -> Vec<CacheMutation>,
-    ) -> Result<usize, EventCacheError> {
-        if decide(&[]).is_empty() {
-            Ok(0)
-        } else {
-            Err(EventCacheError::Refused(
-                "null cache retains no relay events".to_owned(),
-            ))
-        }
     }
 
     fn len(&self) -> Result<usize, EventCacheError> {
@@ -86,7 +73,7 @@ mod tests {
     use std::sync::Arc;
 
     use fava::Fava;
-    use fava_state::Timestamp;
+    use nostr::types::Timestamp;
 
     use super::*;
 

@@ -1,7 +1,7 @@
 //! One live connection generation and its per-consumer inbound streams.
 
 use fava_query::OperationGeneration;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 
 use crate::{HandoffFuture, RelayInboundFuture, ReleaseFuture};
 

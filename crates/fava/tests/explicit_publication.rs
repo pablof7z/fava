@@ -13,9 +13,9 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::RelaySessionKey;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
-use fava_state::{RelaySessionKey, RelayUrl};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -24,6 +24,7 @@ use fava_write::{Event, Kind, PublicKey, UnsignedEvent};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
@@ -71,7 +72,7 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
     ));
     let visible = observation.changed().await.expect("local write appears");
     assert_eq!(visible.events.len(), 1);
-    assert!(visible.events[0].relay_evidence.is_empty());
+    assert!(visible.events[0].relay_occurrences().is_empty());
     assert!(cache.event(event_id).expect("cache readable").is_none());
     wait_until(|| publisher.calls() == 1).await;
     let signed = receipt_changes

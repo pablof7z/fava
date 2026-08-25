@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fava_state::{RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{Event, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
 use fava_write_store::WriteStoreError;
 
@@ -61,7 +61,10 @@ pub(super) fn destinations(
             .cloned()
             .map(|relay| {
                 (
-                    RelaySessionKey::new(relay, RelayAccess::public()),
+                    RelaySessionKey {
+                        relay,
+                        access: RelayAccess::Public,
+                    },
                     RelayDeliveryOutcome::Pending,
                 )
             })
