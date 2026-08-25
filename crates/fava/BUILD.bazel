@@ -257,6 +257,7 @@ rust_test(
         "tests/semantic_write_store.rs",
         "tests/semantic_write_store/author.rs",
         "tests/semantic_write_store/current_guard.rs",
+        "tests/semantic_write_store/signing_authorization.rs",
     ],
     crate_name = "semantic_write_store",
     edition = crate_edition(),

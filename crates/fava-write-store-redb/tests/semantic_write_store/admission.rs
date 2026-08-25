@@ -186,6 +186,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
             std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
+            None,
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
@@ -202,6 +203,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
+                None,
             )
             .is_err()
     );

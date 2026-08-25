@@ -74,12 +74,17 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
     assert!(visible.events[0].relay_evidence.is_empty());
     assert!(cache.event(event_id).expect("cache readable").is_none());
     wait_until(|| publisher.calls() == 1).await;
-    let signed = receipt_changes
-        .recv()
-        .await
-        .expect("signature transition delivered")
-        .1
-        .expect("signature is not removal");
+    let signed = loop {
+        let receipt = receipt_changes
+            .recv()
+            .await
+            .expect("signature transition delivered")
+            .1
+            .expect("signature is not removal");
+        if matches!(&receipt.current.event, EventValue::Signed(_)) {
+            break receipt;
+        }
+    };
     assert!(matches!(signed.current.event, EventValue::Signed(_)));
     let attempting = receipt_changes
         .recv()
@@ -179,10 +184,12 @@ async fn pre_handoff_cancel_retracts_query_and_is_idempotent_and_removable() {
         .expect("cancellation commits")
         .expect("receipt exists");
     assert_eq!(cancelled.outcome, ReceiptOutcome::Cancelled);
-    assert_eq!(
-        receipt_changes.recv().await.unwrap(),
-        (write.receipt_id(), Some(cancelled.clone()))
-    );
+    loop {
+        let change = receipt_changes.recv().await.unwrap();
+        if change == (write.receipt_id(), Some(cancelled.clone())) {
+            break;
+        }
+    }
     assert!(observation.changed().await.unwrap().events.is_empty());
     assert_eq!(publisher.calls(), 0);
     assert_eq!(

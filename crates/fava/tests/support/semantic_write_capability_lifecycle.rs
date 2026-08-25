@@ -21,8 +21,8 @@ use tokio::sync::broadcast;
 use super::capability_protocol::assert_source_removal;
 use super::capability_signer::GatedSigner;
 use super::support::{
-    BlockingSigner, RecordingPublisher, publication_builder, relay_evidence, relay_url,
-    wait_for_materialization, wait_for_signer,
+    RecordingPublisher, UnavailableSigner, publication_builder, relay_evidence, relay_url,
+    wait_for_materialization,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
@@ -67,7 +67,7 @@ async fn prove_source_removal<Add>(
         ])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());
-    let signer = Arc::new(BlockingSigner::new(actor));
+    let signer = Arc::new(UnavailableSigner::new(actor));
     let publisher = Arc::new(RecordingPublisher::default());
     let fava = publication_builder(
         Arc::clone(&cache),
@@ -82,7 +82,6 @@ async fn prove_source_removal<Add>(
     let accepted_receipt = accepted
         .receipt()
         .expect("accepted receipt remains readable");
-    wait_for_signer(&signer, 1).await;
     cache
         .commit(vec![CacheMutation::Retract {
             event_id: current.id,
@@ -102,6 +101,7 @@ async fn prove_source_removal<Add>(
     assert!(publisher.attempts().is_empty());
 }
 
+#[allow(clippy::too_many_lines)]
 async fn prove_processed_stale_success<Add, Adjacent>(
     kind: Kind,
     materializer: Arc<dyn ReplaceableEventMaterializer>,
@@ -155,8 +155,12 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         .finalize(&keys)
         .unwrap();
     admit_twice(&cache, &successor);
-    let current = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
-    let (second, second_completion) = signatures.recv().await.unwrap();
+    let authorized = accepted.receipt().unwrap();
+    assert_eq!(
+        authorized.current.publication.materialization_id,
+        MaterializationId::from_u64(1),
+        "source-driven successor superseded an authorized generation"
+    );
     let first = first.finalize(&keys).unwrap();
     let first_id = first.id;
     first_completion.send(Ok(first)).unwrap();
@@ -165,15 +169,20 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         &accepted,
         MaterializationId::from_u64(1),
         first_id,
-        false,
+        true,
     );
-    let after_stale = accepted.receipt().unwrap();
-    assert_eq!(after_stale, current);
+    let current = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
+    let (second, second_completion) = signatures.recv().await.unwrap();
+    let after_predecessor = accepted.receipt().unwrap();
+    assert_eq!(after_predecessor.current.id(), current.current.id());
     assert_eq!(
-        after_stale.current.publication.materialization_source,
+        after_predecessor.current.publication.materialization_source,
         Some(successor.id)
     );
-    assert!(matches!(after_stale.current.event, EventValue::Unsigned(_)));
+    assert!(matches!(
+        after_predecessor.current.event,
+        EventValue::Unsigned(_)
+    ));
     assert!(publisher.attempts().is_empty());
     let second = second.finalize(&keys).unwrap();
     let second_id = second.id;
@@ -343,6 +352,7 @@ impl WriteStore for CompletionStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.install_materialization(
             write_id,
@@ -352,6 +362,7 @@ impl WriteStore for CompletionStore {
             applied_edits,
             event,
             source,
+            initial_route,
         )
     }
     fn record_materialization_failure(
@@ -422,6 +433,42 @@ impl WriteStore for CompletionStore {
             installed: result.is_ok(),
         });
         result
+    }
+    fn authorize_signing(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.inner
+            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+    }
+    fn record_signer_retryable(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.inner.record_signer_retryable(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
+    }
+    fn signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError> {
+        self.inner
+            .signing_successor(write_id, receipt_id, materialization_id, event_id)
     }
     fn record_signer_refusal(
         &self,

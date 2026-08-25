@@ -12,7 +12,7 @@ use nostr::key::Keys;
 
 use super::ControlledMaterializer;
 use super::support::{
-    BlockingSigner, NoopTransport, RecordingPublisher, relay_evidence, relay_url,
+    NoopTransport, RecordingPublisher, UnavailableSigner, relay_evidence, relay_url,
 };
 
 pub(super) fn edit_intent(author: fava::PublicKey, kind: Kind) -> WriteIntent {
@@ -51,7 +51,7 @@ where
         .write_store(store)
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
-        .signer(Arc::new(BlockingSigner::new(keys.public_key())))
+        .signer(Arc::new(UnavailableSigner::new(keys.public_key())))
         .publisher(Arc::new(RecordingPublisher::default()))
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),

@@ -19,6 +19,8 @@ use nostr::key::Keys;
 mod author;
 #[path = "semantic_write_store/current_guard.rs"]
 mod current_guard;
+#[path = "semantic_write_store/signing_authorization.rs"]
+mod signing_authorization;
 
 fn edit() -> ReplaceableEventEdit {
     ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
@@ -204,6 +206,7 @@ fn memory_generation_swap_is_compare_and_set() {
             std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
             Some(&EventValue::Signed(successor_source.clone())),
+            None,
         )
         .expect("current generation swaps");
 
@@ -239,6 +242,7 @@ fn memory_generation_swap_is_compare_and_set() {
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 31, "stale swap"),
                 Some(&EventValue::Signed(later_source.clone())),
+                None,
             )
             .is_err()
     );
@@ -273,6 +277,7 @@ fn memory_unqualified_source_is_inert() {
                     std::slice::from_ref(&edit()),
                     materialization(keys.public_key(), 22, "inert"),
                     Some(&EventValue::Signed(candidate.clone())),
+                    None,
                 )
                 .is_err()
         );
@@ -286,6 +291,7 @@ fn memory_unqualified_source_is_inert() {
                 Some(selected.id),
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 22, "missing source"),
+                None,
                 None,
             )
             .is_ok(),
@@ -304,6 +310,7 @@ fn memory_unqualified_source_is_inert() {
                 None,
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 23, "already empty"),
+                None,
                 None,
             )
             .is_err()
@@ -400,6 +407,7 @@ fn memory_successful_retry_clears_failure_atomically() {
             std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(retry_source.clone())),
+            None,
         )
         .expect("retry installs atomically");
 
@@ -430,6 +438,7 @@ fn memory_successful_retry_clears_failure_atomically() {
             std::slice::from_ref(&edit()),
             successor_event,
             Some(&EventValue::Signed(retry_source.clone())),
+            None,
         )
         .expect("repeated success is idempotent");
     assert_eq!(repeated, successor);
@@ -550,6 +559,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                     &format!("generation {generation}"),
                 ),
                 Some(&EventValue::Signed(next_source.clone())),
+                None,
             )
             .unwrap();
         expected = MaterializationId::from_u64(expected.as_u64() + 1);
@@ -568,6 +578,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 1_001, "overflow generation"),
                 Some(&EventValue::Signed(overflow_source.clone())),
+                None,
             )
             .is_err()
     );
@@ -658,6 +669,7 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
                 std::slice::from_ref(&second_edit),
                 materialization(actor, 11, "newer|second-only"),
                 Some(&EventValue::Signed(successor)),
+                None,
             )
             .is_err(),
         "successor validation accepted a replay that omitted the first durable edit"

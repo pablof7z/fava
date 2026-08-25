@@ -275,6 +275,94 @@ pub struct BlockingSigner {
     calls: AtomicU64,
 }
 
+#[allow(dead_code)] // Shared support: only failure/capability suites select this signer.
+pub(super) struct UnavailableSigner {
+    public_key: PublicKey,
+}
+
+#[allow(dead_code)]
+impl UnavailableSigner {
+    pub const fn new(public_key: PublicKey) -> Self {
+        Self { public_key }
+    }
+}
+
+impl Signer for UnavailableSigner {
+    fn public_key(&self) -> PublicKey {
+        self.public_key
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Unavailable
+    }
+
+    fn sign_event(
+        &self,
+        _event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        Box::pin(std::future::ready(Err(SignerError::Unavailable(
+            "test signer parked".to_owned(),
+        ))))
+    }
+}
+
+pub(super) struct WindowSigner {
+    keys: Keys,
+    calls: Mutex<Vec<fava_write::EventId>>,
+    permits: tokio::sync::Semaphore,
+}
+
+impl WindowSigner {
+    pub fn new(keys: Keys) -> Self {
+        Self {
+            keys,
+            calls: Mutex::new(Vec::new()),
+            permits: tokio::sync::Semaphore::new(0),
+        }
+    }
+
+    pub fn calls(&self) -> Vec<fava_write::EventId> {
+        self.calls.lock().unwrap().clone()
+    }
+
+    pub fn release_one(&self) {
+        self.permits.add_permits(1);
+    }
+}
+
+impl Signer for WindowSigner {
+    fn public_key(&self) -> PublicKey {
+        self.keys.public_key()
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Available
+    }
+
+    fn sign_event(
+        &self,
+        event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(event.id.expect("materialized event id"));
+        Box::pin(async move {
+            let permit = self
+                .permits
+                .acquire()
+                .await
+                .map_err(|_| SignerError::Unavailable("signer window closed".to_owned()))?;
+            permit.forget();
+            event
+                .finalize(&self.keys)
+                .map_err(|error| SignerError::InvalidOutput(error.to_string()))
+        })
+    }
+}
+
 impl BlockingSigner {
     pub fn new(public_key: PublicKey) -> Self {
         Self {

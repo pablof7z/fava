@@ -1,6 +1,7 @@
 use super::*;
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn memory_exact_current_guard_precedes_idempotence() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
@@ -23,6 +24,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
+            None,
         )
         .expect("successor installs");
     let mut changes = store.receipt_changes();
@@ -37,6 +39,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
+                None,
             )
             .is_err(),
         "an identical body cannot bypass a stale generation"
@@ -51,6 +54,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
+                None,
             )
             .is_err(),
         "an identical body cannot bypass a stale source identity"
@@ -73,6 +77,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
+            None,
         )
         .expect("exact current replay remains idempotent");
     assert_eq!(replay, successor);
@@ -93,6 +98,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 std::slice::from_ref(&edit()),
                 successor_event,
                 Some(&EventValue::Signed(successor_source.clone())),
+                None,
             )
             .is_err(),
         "terminal custody cannot report idempotent success"

@@ -344,6 +344,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                     .build()
                     .unwrap(),
                 Some(&EventValue::Signed(source.clone())),
+                None,
             )
             .unwrap();
         expected = MaterializationId::from_u64(expected.as_u64() + 1);
@@ -365,6 +366,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                     .build()
                     .unwrap(),
                 Some(&EventValue::Signed(overflow_source.clone())),
+                None,
             )
             .is_err()
     );

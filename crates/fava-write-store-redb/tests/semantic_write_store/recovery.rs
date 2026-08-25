@@ -45,7 +45,7 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
 }
 
 #[test]
-fn schema_v3_refuses_unsound_ordered_route_shapes() {
+fn schema_v4_refuses_unsound_ordered_route_shapes() {
     let empty_path = terminal_no_destination_path("empty-explicit-route");
     mutate_row(&empty_path, |row| {
         set(
@@ -85,7 +85,7 @@ fn schema_v3_refuses_unsound_ordered_route_shapes() {
 }
 
 #[test]
-fn schema_v3_refuses_missing_extra_and_substituted_explicit_lanes() {
+fn schema_v4_refuses_missing_extra_and_substituted_explicit_lanes() {
     let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
     let second_lane = RelaySessionKey::new(second.clone(), RelayAccess::public());
     mutate_typed_receipt(&missing_path, |receipt| {
@@ -161,6 +161,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
+            None,
         )
         .unwrap();
     let mut changes = store.receipt_changes();
@@ -175,6 +176,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
+                None,
             )
             .is_err(),
         "stale identity was accepted through the idempotent fast path"
@@ -191,6 +193,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             std::slice::from_ref(&edit()),
             successor_event,
             Some(&EventValue::Signed(successor_source.clone())),
+            None,
         )
         .expect("exact idempotent replay remains accepted");
 }
@@ -326,7 +329,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
 }
 
 #[test]
-fn schema_v3_reconstruction_refuses_every_malformed_invariant() {
+fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
     assert_row_mutation_refused("semantic-author", |row| {
         set(
             row,
@@ -463,7 +466,7 @@ fn schema_v1_refusal_precedes_malformed_row_decode() {
 }
 
 #[test]
-fn schema_v3_accepts_attributed_empty_source_failure() {
+fn schema_v4_accepts_attributed_empty_source_failure() {
     let path = unique_path("empty-source-failure");
     let keys = Keys::generate();
     let base = source(&keys, 10, "base");

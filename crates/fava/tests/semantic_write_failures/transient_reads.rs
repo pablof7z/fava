@@ -15,8 +15,8 @@ use nostr::key::Keys;
 use super::failure_support::publish_edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, publication_builder,
-    relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
+    CountingSigner, RecordingPublisher, TestMaterializer, UnavailableSigner, WindowSigner,
+    publication_builder, relay_evidence, signed_source, wait_for_materialization,
 };
 
 fn compose_direct(
@@ -63,7 +63,7 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
-    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let signer = Arc::new(UnavailableSigner::new(keys.public_key()));
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
@@ -77,7 +77,14 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     store.fail_receipt_reads(1);
     let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
 
-    wait_for_signer(&signer, 1).await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while store.remaining_receipt_read_failures() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("runner consumes the injected initial read failure");
+
     let source = signed_source(&keys, Kind::ContactList, 10, "new source", &[]);
     cache
         .commit(vec![CacheMutation::Upsert(CachedEvent::new(
@@ -86,7 +93,6 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
         ))])
         .expect("source change commits");
     let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
-    wait_for_signer(&signer, 2).await;
     assert_eq!(rematerialized.receipt_id, accepted.receipt_id());
 }
 
@@ -95,7 +101,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
-    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let signer = Arc::new(WindowSigner::new(keys.clone()));
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
@@ -107,7 +113,6 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     .build()
     .expect("faulting-store assembly");
     let first = publish_edit(&fava, keys.public_key(), Kind::ContactList);
-    wait_for_signer(&signer, 1).await;
     let generation_one = first.receipt().expect("first generation remains live");
 
     store.fail_materialized_reads(true);
@@ -117,14 +122,6 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
         composed.current.publication.materialization_id,
         MaterializationId::from_u64(2)
     );
-
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while store.materialized_read_failures() == 0 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("runner observes the injected durable custody failure");
     let third = compose_direct(
         &store,
         &materializer,
@@ -136,6 +133,13 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
         third.current.publication.materialization_id,
         MaterializationId::from_u64(3)
     );
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while store.materialized_read_failures() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("runner observes the injected durable custody failure");
     let source = signed_source(&keys, Kind::ContactList, 20, "new source", &[]);
     cache
         .commit(vec![CacheMutation::Upsert(CachedEvent::new(
@@ -152,8 +156,8 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     .await
     .expect("a post-source custody retry reaches the deterministic read barrier");
     assert_eq!(
-        signer.calls(),
-        1,
+        signer.calls().len(),
+        0,
         "local signing advanced without refreshing the durable edit sequence"
     );
     assert_eq!(
@@ -168,8 +172,22 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     );
 
     store.fail_materialized_reads(false);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while signer.calls().len() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("current generation reaches the authorized signer window");
+    signer.release_one();
     let replayed = wait_for_materialization(&fava, first.receipt_id(), 4).await;
-    wait_for_signer(&signer, 3).await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while signer.calls().len() != 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("replayed generation reaches its signer window");
     let EventValue::Unsigned(event) = replayed.current.event else {
         panic!("blocking signer keeps replay unsigned");
     };

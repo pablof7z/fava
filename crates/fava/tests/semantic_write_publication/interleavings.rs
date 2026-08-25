@@ -49,6 +49,7 @@ fn automatic_route(revision: u64) -> RoutePlan {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn retired_completion_is_attributable_and_inert() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
@@ -67,6 +68,7 @@ fn retired_completion_is_attributable_and_inert() {
             std::slice::from_ref(&edit()),
             materialization(&keys, 3, "generation two"),
             Some(&EventValue::Signed(source.clone())),
+            None,
         )
         .expect("successor installs");
     let session = RelaySessionKey::new(relay_url(), RelayAccess::public());
@@ -179,6 +181,7 @@ fn simultaneous_source_and_completion_converge_once() {
                 std::slice::from_ref(&edit()),
                 materialization(&keys, 3, "generation two"),
                 Some(&EventValue::Signed(source.clone())),
+                None,
             )
         })
     };
@@ -237,6 +240,14 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             )
             .is_err()
     );
+    store
+        .authorize_signing(
+            b.write_id,
+            b.receipt_id,
+            MaterializationId::from_u64(1),
+            b.current.id(),
+        )
+        .expect("B signing authorizes independently");
     assert!(
         store
             .install_signed(
@@ -351,6 +362,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
             std::slice::from_ref(&edit()),
             materialization(&keys, 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
+            None,
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
@@ -367,6 +379,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
                 std::slice::from_ref(&edit()),
                 materialization(&keys, 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
+                None,
             )
             .is_err(),
         "equal-time higher event id cannot displace the winner"

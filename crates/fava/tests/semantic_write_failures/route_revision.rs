@@ -13,14 +13,15 @@ use fava_routing::{
     RouterSession,
 };
 use fava_state::{CacheMutation, CachedEvent, RelayAccess, RelaySessionKey, RelayUrl};
+use fava_write::SignatureState;
 use nostr::key::Keys;
 use tokio::sync::{broadcast, watch};
 
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_evidence,
-    signed_source, wait_for_signer,
+    BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
+    relay_evidence, signed_source,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -30,7 +31,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     let store = Arc::new(FaultingWriteStore::new());
     let initial = relay("wss://initial-route.example");
     let router = Arc::new(QueuedRouter::new(contribution(&[initial])));
-    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let signer = Arc::new(WindowSigner::new(keys.clone()));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -45,7 +46,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         .by(keys.public_key())
         .publish(edit(Kind::ContactList))
         .unwrap();
-    wait_for_signer(&signer, 1).await;
+    wait_for_signer_calls(&signer, 1).await;
     wait_for_opens(&router, 1).await;
     wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.route_revision >= 1
@@ -71,12 +72,13 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
             relay_evidence(),
         ))])
         .unwrap();
+    signer.release_one();
     wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.current.publication.materialization_id == fava::MaterializationId::from_u64(2)
     })
     .await;
     release.join().unwrap();
-    wait_for_signer(&signer, 2).await;
+    wait_for_signer_calls(&signer, 2).await;
     wait_for_opens(&router, 2).await;
     let later_session = RelaySessionKey::new(later, RelayAccess::public());
     let rematerialized = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
@@ -95,6 +97,63 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     })
     .await;
     assert!(updated.route_revision > rematerialized.route_revision);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
+    let keys = Keys::generate();
+    let store = Arc::new(FaultingWriteStore::new());
+    store.refuse_routes(true);
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let router = Arc::new(QueuedRouter::new(contribution(&[relay(
+        "wss://activation-bound.example",
+    )])));
+    let fava = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .router(router)
+    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .build()
+    .unwrap();
+    let accepted = fava
+        .by(keys.public_key())
+        .publish(edit(Kind::ContactList))
+        .unwrap();
+
+    let receipt = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let receipt = fava.receipt(accepted.receipt_id()).unwrap().unwrap();
+            if matches!(
+                receipt.current.publication.signature,
+                SignatureState::Retryable(_)
+            ) {
+                break receipt;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("activation exhaustion becomes durable");
+    let SignatureState::Retryable(reason) = receipt.current.publication.signature else {
+        unreachable!()
+    };
+    assert!(reason.contains("generation activation retry bound 257 exhausted"));
+    assert!(reason.contains(&accepted.write_id().as_u64().to_string()));
+    assert!(reason.contains("retry is permitted"));
+    assert_eq!(signer.calls(), 0);
+}
+
+async fn wait_for_signer_calls(signer: &WindowSigner, count: usize) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while signer.calls().len() != count {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("signer window did not open");
 }
 
 struct QueuedRouter {

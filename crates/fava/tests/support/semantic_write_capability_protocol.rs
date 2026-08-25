@@ -121,7 +121,6 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
         .unwrap()
         .publish(add().unwrap())
         .unwrap();
-    wait_for_signer(&signer, 1).await;
     let second = fava
         .by(actor)
         .to([super::support::relay_url()])
@@ -132,7 +131,7 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
     assert_eq!(second.receipt_id(), first.receipt_id());
 
     let receipt = wait_for_materialization(&fava, first.receipt_id(), 2).await;
-    wait_for_signer(&signer, 2).await;
+    wait_for_signer(&signer, 1).await;
     assert_eq!(
         receipt.current.publication.materialization_source,
         Some(base.id)

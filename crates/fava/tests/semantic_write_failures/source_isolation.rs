@@ -12,7 +12,7 @@ use nostr::key::Keys;
 
 use super::faults::{ClosingEventCache, FaultingWriteStore};
 use super::support::{
-    BlockingSigner, NoopTransport, RecordingPublisher, relay_evidence, signed_source,
+    NoopTransport, RecordingPublisher, UnavailableSigner, relay_evidence, signed_source,
     wait_for_materialization,
 };
 use super::{ControlledMaterializer, publish_edit, wait_failure};
@@ -32,7 +32,7 @@ where
         .write_store(store)
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
-        .signer(Arc::new(BlockingSigner::new(keys.public_key())))
+        .signer(Arc::new(UnavailableSigner::new(keys.public_key())))
         .publisher(Arc::new(RecordingPublisher::default()))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .materializer(materializer)

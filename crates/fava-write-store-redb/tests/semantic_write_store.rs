@@ -24,6 +24,8 @@ const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 mod admission;
 #[path = "semantic_write_store/recovery.rs"]
 mod recovery;
+#[path = "semantic_write_store/signing_authorization.rs"]
+mod signing_authorization;
 
 #[test]
 fn redb_semantic_owners_stay_below_the_code_soft_limit() {
@@ -289,6 +291,7 @@ fn redb_generation_and_failure_state_match_memory() {
             std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
             Some(&EventValue::Signed(failed_source.clone())),
+            None,
         )
         .expect("retry installs");
     assert_eq!(successor.write_id, accepted.write_id);
@@ -354,6 +357,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 3, "stale"),
                 Some(&EventValue::Signed(stale_source.clone())),
+                None,
             )
             .is_err()
     );
@@ -381,6 +385,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                     &format!("generation {generation}"),
                 ),
                 Some(&EventValue::Signed(next_source.clone())),
+                None,
             )
             .unwrap();
         expected = MaterializationId::from_u64(expected.as_u64() + 1);
@@ -399,6 +404,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 1_001, "evidence overflow"),
                 Some(&EventValue::Signed(overflow_source.clone())),
+                None,
             )
             .is_err()
     );
@@ -616,6 +622,7 @@ fn redb_successor_refuses_an_incomplete_accepted_edit_sequence() {
                 std::slice::from_ref(&second_edit),
                 materialization(actor, 11, "newer|second-only"),
                 Some(&EventValue::Signed(successor)),
+                None,
             )
             .is_err(),
         "successor validation accepted a replay that omitted the first durable edit"

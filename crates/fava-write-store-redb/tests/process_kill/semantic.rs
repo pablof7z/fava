@@ -25,7 +25,7 @@ use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
 };
-use fava_write::{Receipt, ReceiptId, WriteIntent, WriteIntentError, WriteRouting};
+use fava_write::{Receipt, ReceiptId, SignatureState, WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
@@ -38,6 +38,7 @@ const SEMANTIC_PATH: &str = "FAVA_REDB_SEMANTIC_PATH";
 const SEMANTIC_MARKER: &str = "FAVA_REDB_SEMANTIC_MARKER";
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn semantic_boundary_child() {
     let Ok(boundary) = env::var(SEMANTIC_BOUNDARY) else {
         return;
@@ -74,6 +75,7 @@ fn semantic_boundary_child() {
                     std::slice::from_ref(&edit()),
                     materialization(created_at, "generation two"),
                     Some(&EventValue::Signed(successor.clone())),
+                    None,
                 )
                 .expect("semantic successor commits");
         }
@@ -110,6 +112,32 @@ fn semantic_boundary_child() {
                 composed.current.publication.materialization_id,
                 MaterializationId::from_u64(2)
             );
+        }
+        "authorized-successor" => {
+            store
+                .authorize_signing(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    MaterializationId::from_u64(1),
+                    accepted.current.id(),
+                )
+                .expect("pre-kill signer authorization commits");
+            let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
+            store
+                .accept_reserved_materialized_edit(
+                    reservation,
+                    WriteIntent::edit_as(
+                        second,
+                        keys().public_key(),
+                        WriteRouting::explicit([relay()]).unwrap(),
+                    )
+                    .unwrap(),
+                    materialization(12, "generation one|two"),
+                    Some(&accepted.current.event),
+                    None,
+                )
+                .expect("post-authorization successor commits before SIGKILL");
         }
         "terminal" => {
             store
@@ -296,6 +324,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
                 std::slice::from_ref(&recovered[0].1[1]),
                 materialization(21, "incomplete replay source|2"),
                 Some(&EventValue::Signed(incomplete_source)),
+                None,
             )
             .is_err(),
         "reopened custody accepted a successor that omitted the first durable edit"
@@ -331,6 +360,112 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     };
     assert_eq!(content, "newer post-kill source|1|2");
     assert_eq!(materializer.calls(), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn authorized_signer_window_and_successor_resume_after_sigkill() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let path = kill_at("authorized-successor");
+    let store = Arc::new(RedbWriteStore::open(path).expect("authorized store reopens"));
+    let recovered = receipt_one(&store);
+    assert_eq!(
+        recovered.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(
+        recovered.current.publication.signature,
+        SignatureState::Unsigned
+    );
+    let successor_id = recovered.current.id();
+    assert_eq!(store.recover_materialized_edits().unwrap()[0].1.len(), 2);
+
+    let fava = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::new(TestMaterializer::new(Kind::ContactList)),
+    )
+    .build()
+    .expect("post-kill authorization recovery assembles");
+    let successor = wait_terminal(&fava, ReceiptId::from_u64(1)).await;
+    assert_eq!(successor.write_id.as_u64(), 1);
+    assert_eq!(successor.receipt_id.as_u64(), 1);
+    assert_eq!(successor.current.id(), successor_id);
+    assert_eq!(
+        successor.current.publication.signature,
+        SignatureState::Signed
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let root = unique_root("semantic-authorized-clean-restart");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("writes.redb");
+    {
+        let store = RedbWriteStore::open(&path).unwrap();
+        let accepted = store
+            .accept_materialized_edit(edit_intent(), materialization(11, "generation one"), None)
+            .unwrap();
+        store
+            .authorize_signing(
+                accepted.write_id,
+                accepted.receipt_id,
+                MaterializationId::from_u64(1),
+                accepted.current.id(),
+            )
+            .unwrap();
+        let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+        let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
+        store
+            .accept_reserved_materialized_edit(
+                reservation,
+                WriteIntent::edit_as(
+                    second,
+                    keys().public_key(),
+                    WriteRouting::explicit([relay()]).unwrap(),
+                )
+                .unwrap(),
+                materialization(12, "generation one|two"),
+                Some(&accepted.current.event),
+                None,
+            )
+            .unwrap();
+    }
+
+    let store = Arc::new(RedbWriteStore::open(&path).unwrap());
+    let recovered = receipt_one(&store);
+    assert_eq!(
+        recovered.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(
+        recovered.current.publication.signature,
+        SignatureState::Unsigned
+    );
+    let successor_id = recovered.current.id();
+    assert_eq!(store.recover_materialized_edits().unwrap()[0].1.len(), 2);
+    let fava = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::new(TestMaterializer::new(Kind::ContactList)),
+    )
+    .build()
+    .unwrap();
+    let successor = wait_terminal(&fava, ReceiptId::from_u64(1)).await;
+    assert_eq!(
+        successor.current.publication.retired_materializations.len(),
+        1
+    );
+    assert_eq!(successor.current.id(), successor_id);
+    assert_eq!(
+        successor.current.publication.signature,
+        SignatureState::Signed
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -438,6 +573,7 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
                 std::slice::from_ref(&edit()),
                 materialization(31, "late retired completion"),
                 Some(&EventValue::Signed(late_source.clone())),
+                None,
             )
             .is_err()
     );

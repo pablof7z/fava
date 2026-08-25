@@ -122,6 +122,7 @@ async fn first_value_edit_publishes_through_public_fava() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[allow(clippy::too_many_lines)]
 async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
@@ -148,7 +149,6 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         .expect("first route validates")
         .publish(first_edit)
         .expect("first edit accepts");
-    wait_for_signer(&signer, 1).await;
     let generation_one = first.receipt().expect("first receipt");
 
     let second = fava
@@ -158,7 +158,12 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         .publish(second_edit)
         .expect("second edit composes at the occupied coordinate");
     let generation_two = wait_for_materialization(&fava, second.receipt_id(), 2).await;
-    wait_for_signer(&signer, 2).await;
+    wait_for_signer(&signer, 1).await;
+    assert_eq!(
+        signer.calls(),
+        1,
+        "the superseded generation reached signer invocation"
+    );
 
     assert_eq!(second.write_id(), first.write_id());
     assert_eq!(second.receipt_id(), first.receipt_id());
@@ -196,11 +201,13 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
             .is_err(),
         "retired signer completion mutated the composed generation"
     );
+    let after_stale = first
+        .receipt()
+        .expect("current receipt after stale completion");
+    assert_eq!(after_stale.current.id(), generation_two.current.id());
     assert_eq!(
-        first
-            .receipt()
-            .expect("current receipt after stale completion"),
-        generation_two
+        after_stale.current.publication.materialization_id,
+        generation_two.current.publication.materialization_id
     );
 
     let newer = signed_source(&keys, Kind::ContactList, u64::MAX - 1, "newer", &[]);
@@ -211,7 +218,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         ))])
         .expect("newer source enters the canonical cache");
     let generation_three = wait_for_materialization(&fava, first.receipt_id(), 3).await;
-    wait_for_signer(&signer, 3).await;
+    wait_for_signer(&signer, 2).await;
     let EventValue::Unsigned(replayed) = &generation_three.current.event else {
         panic!("blocking signer keeps replayed composition unsigned");
     };
@@ -222,6 +229,69 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     );
     assert_eq!(generation_three.write_id, first.write_id());
     assert_eq!(generation_three.receipt_id, first.receipt_id());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn signer_authorization_holds_one_successor_until_exact_completion() {
+    let keys = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
+    let signer = Arc::new(WindowSigner::new(keys.clone()));
+    let router = Arc::new(CountingRouter::new(relay_url()));
+    let fava = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .router(router)
+    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .build()
+    .unwrap();
+
+    let first = fava
+        .by(keys.public_key())
+        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap())
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while signer.calls().len() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("authorized predecessor reaches the signer window");
+    let predecessor = first.receipt().unwrap();
+
+    let second = fava
+        .by(keys.public_key())
+        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap())
+        .unwrap();
+    assert_eq!(second.write_id(), first.write_id());
+    assert_eq!(second.receipt_id(), first.receipt_id());
+    assert_eq!(first.receipt().unwrap(), predecessor);
+    assert_eq!(signer.calls(), vec![predecessor.current.id()]);
+    assert!(
+        store
+            .reserve_active(
+                &ReplaceableEventEdit::new(Kind::ContactList, None, vec![3]).unwrap(),
+                keys.public_key(),
+            )
+            .is_err()
+    );
+
+    signer.release_one();
+    let successor = wait_for_materialization(&fava, first.receipt_id(), 2).await;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while signer.calls().len() != 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("promoted successor reaches its own signer window");
+    assert_eq!(
+        signer.calls(),
+        vec![predecessor.current.id(), successor.current.id()]
+    );
+    assert!(successor.route_revision > predecessor.route_revision);
 }
 
 #[tokio::test(flavor = "current_thread")]

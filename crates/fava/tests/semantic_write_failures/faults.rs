@@ -112,6 +112,7 @@ pub(super) struct FaultingWriteStore {
     route_commits: AtomicU64,
     fail_release: AtomicBool,
     fail_initial_route_accept: AtomicBool,
+    refuse_routes: AtomicBool,
 }
 
 impl FaultingWriteStore {
@@ -147,6 +148,7 @@ impl FaultingWriteStore {
             route_commits: AtomicU64::new(0),
             fail_release: AtomicBool::new(false),
             fail_initial_route_accept: AtomicBool::new(false),
+            refuse_routes: AtomicBool::new(false),
         }
     }
 
@@ -156,6 +158,10 @@ impl FaultingWriteStore {
 
     pub(super) fn fail_receipt_reads(&self, count: usize) {
         self.failing_reads.store(count, Ordering::SeqCst);
+    }
+
+    pub(super) fn remaining_receipt_read_failures(&self) -> usize {
+        self.failing_reads.load(Ordering::SeqCst)
     }
 
     pub(super) fn fail_materialized_reads(&self, fail: bool) {
@@ -202,12 +208,27 @@ impl FaultingWriteStore {
         self.fail_initial_route_accept.store(fail, Ordering::SeqCst);
     }
 
+    pub(super) fn refuse_routes(&self, refuse: bool) {
+        self.refuse_routes.store(refuse, Ordering::SeqCst);
+    }
+
     fn should_fail_read(&self) -> bool {
         self.failing_reads
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                 count.checked_sub(1)
             })
             .is_ok()
+    }
+
+    fn after_route_commit(&self) {
+        let failures = self.reads_after_route.swap(0, Ordering::SeqCst);
+        self.failing_reads.store(failures, Ordering::SeqCst);
+        self.route_commits.fetch_add(1, Ordering::SeqCst);
+        let barrier = self.route_barrier.lock().unwrap().take();
+        if let Some(barrier) = barrier {
+            barrier.wait();
+            barrier.wait();
+        }
     }
 }
 
@@ -283,8 +304,9 @@ impl WriteStore for FaultingWriteStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.install_materialization(
+        let installed = self.inner.install_materialization(
             write_id,
             receipt_id,
             expected,
@@ -292,7 +314,12 @@ impl WriteStore for FaultingWriteStore {
             applied_edits,
             event,
             source,
-        )
+            initial_route,
+        );
+        if installed.is_ok() && initial_route.is_some() {
+            self.after_route_commit();
+        }
+        installed
     }
     fn record_materialization_failure(
         &self,
@@ -370,6 +397,42 @@ impl WriteStore for FaultingWriteStore {
         }
         installed
     }
+    fn authorize_signing(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.inner
+            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+    }
+    fn record_signer_retryable(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.inner.record_signer_retryable(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
+    }
+    fn signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError> {
+        self.inner
+            .signing_successor(write_id, receipt_id, materialization_id, event_id)
+    }
     fn record_signer_refusal(
         &self,
         write_id: WriteId,
@@ -389,18 +452,16 @@ impl WriteStore for FaultingWriteStore {
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
+        if self.refuse_routes.load(Ordering::SeqCst) {
+            return Err(WriteStoreError::Refused(
+                "injected exact-generation route refusal".to_owned(),
+            ));
+        }
         let applied =
             self.inner
                 .apply_route(write_id, receipt_id, materialization_id, event_id, plan);
         if applied.is_ok() {
-            let failures = self.reads_after_route.swap(0, Ordering::SeqCst);
-            self.failing_reads.store(failures, Ordering::SeqCst);
-            self.route_commits.fetch_add(1, Ordering::SeqCst);
-            let barrier = self.route_barrier.lock().unwrap().take();
-            if let Some(barrier) = barrier {
-                barrier.wait();
-                barrier.wait();
-            }
+            self.after_route_commit();
         }
         applied
     }

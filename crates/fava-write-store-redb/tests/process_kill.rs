@@ -4,6 +4,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -23,6 +24,7 @@ mod semantic;
 const CHILD_BOUNDARY: &str = "FAVA_REDB_KILL_BOUNDARY";
 const CHILD_PATH: &str = "FAVA_REDB_KILL_PATH";
 const CHILD_MARKER: &str = "FAVA_REDB_KILL_MARKER";
+static NEXT_ROOT: AtomicU64 = AtomicU64::new(1);
 
 #[test]
 fn boundary_child() {
@@ -35,6 +37,14 @@ fn boundary_child() {
     if boundary != "before-accept" {
         let accepted = store.accept(intent()).expect("child acceptance commits");
         if matches!(boundary.as_str(), "signature" | "attempt" | "outcome") {
+            store
+                .authorize_signing(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    accepted.current.publication.materialization_id,
+                    accepted.current.id(),
+                )
+                .expect("child signing authorization commits");
             let signed = unsigned()
                 .finalize(&keys())
                 .expect("deterministic event signs");
@@ -202,8 +212,9 @@ fn unique_root(boundary: &str) -> PathBuf {
         .expect("clock after epoch")
         .as_nanos();
     env::temp_dir().join(format!(
-        "fava-redb-kill-{}-{boundary}-{nonce}",
-        std::process::id()
+        "fava-redb-kill-{}-{boundary}-{nonce}-{}",
+        std::process::id(),
+        NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
     ))
 }
 
