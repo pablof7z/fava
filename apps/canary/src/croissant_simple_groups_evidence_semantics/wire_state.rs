@@ -221,42 +221,43 @@ fn verify_req(
     }
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
     let filter = payload.get(2).and_then(Value::as_object);
-    let query_kind =
-        if filter.is_some_and(|filter| exact_filter(filter, "#h", claims.simple_group, &[9], 16)) {
-            require_acked(
-                connections,
-                [PublicationRole::Shared, PublicationRole::Unique],
-            )?;
-            assign_once(content_subscription, subscription, "content REQ")?;
-            QueryKind::Content
-        } else if filter.is_some_and(|filter| {
-            exact_filter(
-                filter,
-                "#d",
-                claims.simple_group,
-                &[39000, 39001, 39002, 39003, 39004, 39005],
-                4096,
-            )
-        }) {
-            require_acked(
-                connections,
-                [PublicationRole::Metadata, PublicationRole::Admin],
-            )?;
-            assign_once(records_subscription, subscription, "records REQ")?;
-            QueryKind::Records
-        } else if filter.is_some_and(|filter| {
-            filter.len() == 1
-                && bootstrap_id.is_some()
-                && filter.get("ids") == Some(&json!([bootstrap_id.expect("checked")]))
-        }) {
-            require_acked(connections, [PublicationRole::Bootstrap])?;
-            assign_once(bootstrap_subscription, subscription, "bootstrap REQ")?;
-            QueryKind::Bootstrap
-        } else {
-            return Err(CanaryError::new(
-                "simple-groups wire contained an unclaimed auxiliary REQ",
-            ));
-        };
+    let query_kind = if filter
+        .is_some_and(|filter| exact_filter(filter, "#h", claims.simple_group, &[9], Some(16)))
+    {
+        require_acked(
+            connections,
+            [PublicationRole::Shared, PublicationRole::Unique],
+        )?;
+        assign_once(content_subscription, subscription, "content REQ")?;
+        QueryKind::Content
+    } else if filter.is_some_and(|filter| {
+        exact_filter(
+            filter,
+            "#d",
+            claims.simple_group,
+            &[39000, 39001, 39002, 39003, 39004, 39005],
+            None,
+        )
+    }) {
+        require_acked(
+            connections,
+            [PublicationRole::Metadata, PublicationRole::Admin],
+        )?;
+        assign_once(records_subscription, subscription, "records REQ")?;
+        QueryKind::Records
+    } else if filter.is_some_and(|filter| {
+        filter.len() == 1
+            && bootstrap_id.is_some()
+            && filter.get("ids") == Some(&json!([bootstrap_id.expect("checked")]))
+    }) {
+        require_acked(connections, [PublicationRole::Bootstrap])?;
+        assign_once(bootstrap_subscription, subscription, "bootstrap REQ")?;
+        QueryKind::Bootstrap
+    } else {
+        return Err(CanaryError::new(
+            "simple-groups wire contained an unclaimed auxiliary REQ",
+        ));
+    };
     if subscription.is_empty() {
         return Err(CanaryError::new("simple-groups REQ omitted subscription"));
     }
