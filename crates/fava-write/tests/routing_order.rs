@@ -15,6 +15,15 @@ fn explicit_route_preserves_first_occurrences() {
 }
 
 #[test]
+fn explicit_route_bounds_distinct_relay_identities_not_occurrences() {
+    let repeated = relay("repeated");
+    let routing = WriteRouting::explicit(std::iter::repeat_n(repeated.clone(), 257))
+        .expect("duplicate occurrences do not consume distinct-relay capacity");
+
+    assert_eq!(routing, WriteRouting::Explicit(vec![repeated]));
+}
+
+#[test]
 fn explicit_route_refuses_empty_and_over_bound_inputs() {
     assert_eq!(
         WriteRouting::explicit(std::iter::empty::<RelayUrl>()),
