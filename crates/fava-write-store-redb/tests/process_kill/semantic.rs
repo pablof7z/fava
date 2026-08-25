@@ -46,7 +46,7 @@ fn semantic_boundary_child() {
     let marker = PathBuf::from(env::var(SEMANTIC_MARKER).expect("semantic child marker path"));
     let store = RedbWriteStore::open(path).expect("semantic child store opens");
     let base = signed_source(10, "base");
-    let intent = if boundary == "terminal" {
+    let intent = if matches!(boundary.as_str(), "terminal" | "composed-auto") {
         WriteIntent::edit_as(edit(), keys().public_key(), WriteRouting::Automatic)
             .expect("automatic semantic intent")
     } else {
@@ -90,16 +90,16 @@ fn semantic_boundary_child() {
                 )
                 .expect("semantic failure commits");
         }
-        "composed" => {
+        "composed" | "composed-auto" => {
             let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let routing = if boundary == "composed-auto" {
+                WriteRouting::Automatic
+            } else {
+                WriteRouting::explicit([relay()]).unwrap()
+            };
             let composed = store
                 .accept_materialized_edit(
-                    WriteIntent::edit_as(
-                        second_edit,
-                        keys().public_key(),
-                        WriteRouting::explicit([relay()]).unwrap(),
-                    )
-                    .unwrap(),
+                    WriteIntent::edit_as(second_edit, keys().public_key(), routing).unwrap(),
                     materialization(12, "generation one|two"),
                     Some(&accepted.current.event),
                 )

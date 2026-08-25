@@ -107,6 +107,7 @@ pub(super) struct FaultingWriteStore {
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
     reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
+    receipt_barrier: Mutex<Option<Arc<Barrier>>>,
     route_barrier: Mutex<Option<Arc<Barrier>>>,
     route_commits: AtomicU64,
     fail_release: AtomicBool,
@@ -141,6 +142,7 @@ impl FaultingWriteStore {
             receipt_changes,
             reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
+            receipt_barrier: Mutex::new(None),
             route_barrier: Mutex::new(None),
             route_commits: AtomicU64::new(0),
             fail_release: AtomicBool::new(false),
@@ -182,6 +184,10 @@ impl FaultingWriteStore {
 
     pub(super) fn pause_after_next_route(&self, barrier: Arc<Barrier>) {
         *self.route_barrier.lock().unwrap() = Some(barrier);
+    }
+
+    pub(super) fn pause_after_next_receipt_read(&self, barrier: Arc<Barrier>) {
+        *self.receipt_barrier.lock().unwrap() = Some(barrier);
     }
 
     pub(super) fn route_commits(&self) -> u64 {
@@ -445,7 +451,13 @@ impl WriteStore for FaultingWriteStore {
                 "injected transient receipt read failure".to_owned(),
             ))
         } else {
-            self.inner.receipt(receipt_id)
+            let receipt = self.inner.receipt(receipt_id);
+            let barrier = self.receipt_barrier.lock().unwrap().take();
+            if let Some(barrier) = barrier {
+                barrier.wait();
+                barrier.wait();
+            }
+            receipt
         }
     }
     fn recover_open(&self) -> Result<Vec<Receipt>, WriteStoreError> {

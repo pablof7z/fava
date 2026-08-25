@@ -17,6 +17,8 @@ use nostr::key::Keys;
 mod failure_support;
 #[path = "semantic_write_failures/faults.rs"]
 mod faults;
+#[path = "semantic_write_failures/initialization.rs"]
+mod initialization;
 #[path = "semantic_write_failures/reservation.rs"]
 mod reservation;
 #[path = "semantic_write_failures/route_revision.rs"]

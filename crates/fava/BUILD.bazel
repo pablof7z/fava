@@ -278,6 +278,7 @@ rust_test(
         "tests/semantic_write_publication.rs",
         "tests/semantic_write_publication/author.rs",
         "tests/semantic_write_publication/interleavings.rs",
+        "tests/semantic_write_publication/restart.rs",
         "tests/semantic_write_publication/route_revision.rs",
         "tests/semantic_write_publication/shared_capacity.rs",
         "tests/semantic_write_publication/winner_order.rs",
@@ -315,6 +316,7 @@ rust_test(
     srcs = [
         "tests/semantic_write_failures.rs",
         "tests/semantic_write_failures/faults.rs",
+        "tests/semantic_write_failures/initialization.rs",
         "tests/semantic_write_failures/reservation.rs",
         "tests/semantic_write_failures/route_revision.rs",
         "tests/semantic_write_failures/source_isolation.rs",

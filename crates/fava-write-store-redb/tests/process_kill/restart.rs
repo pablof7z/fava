@@ -1,4 +1,15 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use fava_routing::{
+    RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
+    RouterSession,
+};
+use fava_state::{RelayAccess, RelayUrl};
+use tokio::sync::watch;
 
 use super::*;
 
@@ -96,6 +107,169 @@ async fn assert_restart_then_immediate_edit(
     assert_eq!(content(&replayed), expected_late);
 }
 
+struct ComposingRouter {
+    store: Arc<RedbWriteStore>,
+    stale: RelayUrl,
+    current: RelayUrl,
+    opens: Arc<AtomicU64>,
+    closes: Arc<AtomicU64>,
+}
+
+impl ComposingRouter {
+    fn new(store: Arc<RedbWriteStore>) -> Self {
+        Self {
+            store,
+            stale: RelayUrl::parse("wss://stale-generation.example").unwrap(),
+            current: RelayUrl::parse("wss://current-generation.example").unwrap(),
+            opens: Arc::new(AtomicU64::new(0)),
+            closes: Arc::new(AtomicU64::new(0)),
+        }
+    }
+}
+
+impl Router for ComposingRouter {
+    fn name(&self) -> &'static str {
+        "redb-generation-composition-barrier"
+    }
+
+    fn preview(
+        &self,
+        _request: &RouteRequest,
+        _upstream: &RoutePlan,
+    ) -> Result<RouteContribution, RouterError> {
+        Ok(route_contribution(self.current.clone()))
+    }
+
+    fn open(
+        &self,
+        request: RouteRequest,
+        _upstream: watch::Receiver<Arc<RoutePlan>>,
+    ) -> Result<Box<dyn RouterSession>, RouterError> {
+        let open = self.opens.fetch_add(1, Ordering::SeqCst) + 1;
+        let relay = if open == 1 {
+            let RouteRequest::Write(source) = &request else {
+                panic!("semantic router receives a write request");
+            };
+            let next_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![9]).unwrap();
+            let event = EventBuilder::new(keys().public_key(), Kind::ContactList)
+                .created_at(Timestamp::from(source.created_at().as_secs() + 1))
+                .content(format!("{}|9", event_content(source)))
+                .build()
+                .unwrap();
+            let reservation = self
+                .store
+                .reserve_active(&next_edit, keys().public_key())
+                .unwrap();
+            self.store
+                .accept_reserved_materialized_edit(
+                    reservation,
+                    WriteIntent::edit_as(next_edit, keys().public_key(), WriteRouting::Automatic)
+                        .unwrap(),
+                    event,
+                    Some(source),
+                    None,
+                )
+                .unwrap();
+            self.stale.clone()
+        } else {
+            self.current.clone()
+        };
+        Ok(Box::new(ImmediateSession {
+            current: route_contribution(relay),
+            emitted: false,
+            closes: Arc::clone(&self.closes),
+        }))
+    }
+}
+
+struct ImmediateSession {
+    current: RouteContribution,
+    emitted: bool,
+    closes: Arc<AtomicU64>,
+}
+
+impl RouterSession for ImmediateSession {
+    fn current(&self) -> RouteContribution {
+        self.current.clone()
+    }
+
+    fn next_change(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
+        Box::pin(async move {
+            if self.emitted {
+                std::future::pending().await
+            } else {
+                self.emitted = true;
+                Ok(self.current.clone())
+            }
+        })
+    }
+
+    fn close(&mut self) {
+        self.closes.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+fn route_contribution(relay: RelayUrl) -> RouteContribution {
+    RouteContribution {
+        destinations: vec![RouteDestination::new(
+            RelaySessionKey::new(relay, RelayAccess::public()),
+            BTreeSet::default(),
+            "generation-bound route",
+        )],
+        coverage: BTreeMap::default(),
+        unresolved: BTreeSet::default(),
+        shortfalls: Vec::new(),
+    }
+}
+
+fn event_content(event: &EventValue) -> &str {
+    match event {
+        EventValue::Unsigned(event) => &event.content,
+        EventValue::Signed(event) => &event.content,
+    }
+}
+
+async fn assert_router_reopens_for_current_generation(path: PathBuf, generation: u64) {
+    let store = Arc::new(RedbWriteStore::open(path).unwrap());
+    let router = Arc::new(ComposingRouter::new(Arc::clone(&store)));
+    let fava = restart_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::new(TestMaterializer::new(Kind::ContactList)),
+    )
+    .router(Arc::clone(&router))
+    .build()
+    .unwrap();
+
+    let receipt = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let receipt = fava.receipt(ReceiptId::from_u64(1)).unwrap().unwrap();
+            if receipt.route_revision > 0 {
+                return receipt;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("generation-bound route commits");
+    assert_eq!(
+        receipt.current.publication.materialization_id,
+        MaterializationId::from_u64(generation + 1)
+    );
+    assert!(receipt.destinations().contains_key(&RelaySessionKey::new(
+        router.current.clone(),
+        RelayAccess::public()
+    )));
+    assert!(!receipt.destinations().contains_key(&RelaySessionKey::new(
+        router.stale.clone(),
+        RelayAccess::public()
+    )));
+    assert_eq!(router.opens.load(Ordering::SeqCst), 2);
+    assert_eq!(router.closes.load(Ordering::SeqCst), 1);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn redb_restart_reconciles_before_immediate_edit_and_late_source() {
     if env::var(SEMANTIC_BOUNDARY).is_ok() {
@@ -119,4 +293,33 @@ async fn sigkill_restart_reconciles_before_immediate_edit_and_late_source() {
         return;
     }
     assert_restart_then_immediate_edit(kill_at("composed"), 2, 3).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn redb_restart_reopens_router_if_generation_changes_during_session_open() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let root = unique_root("semantic-clean-restart-generation-route");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("writes.redb");
+    let store = RedbWriteStore::open(&path).unwrap();
+    store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(edit(), keys().public_key(), WriteRouting::Automatic).unwrap(),
+            materialization(1, "1"),
+            None,
+        )
+        .unwrap();
+    drop(store);
+
+    assert_router_reopens_for_current_generation(path, 1).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sigkill_restart_reopens_router_if_generation_changes_during_session_open() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    assert_router_reopens_for_current_generation(kill_at("composed-auto"), 2).await;
 }
