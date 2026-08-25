@@ -1,4 +1,4 @@
-use fava_query::{PublicKey, Query, QuerySnapshot, SingleLetterTag};
+use fava_query::{PublicKey, Query, QueryError, QuerySnapshot, SingleLetterTag};
 use fava_write::Kind;
 
 use crate::ContactList;
@@ -94,10 +94,13 @@ impl<'a, const N: usize> IntoContactAuthors for &'a [PublicKey; N] {
 /// matches nothing. No global result limit is applied: the ordinary evaluator
 /// independently selects the newest replaceable event at each author
 /// coordinate.
-#[must_use]
-pub fn contact_list(authors: impl IntoContactAuthors) -> Query {
+///
+/// # Errors
+///
+/// Returns [`QueryError`] when the neutral query owner refuses the author input.
+pub fn contact_list(authors: impl IntoContactAuthors) -> Result<Query, QueryError> {
     Query::events()
-        .kind(Kind::ContactList)
+        .kinds([Kind::ContactList])?
         .authors(authors.into_contact_authors())
 }
 
@@ -119,9 +122,12 @@ pub fn follows_of(snapshot: &QuerySnapshot) -> Vec<PublicKey> {
 }
 
 /// Query kind-3 contact lists containing an exact lowercase `p` row target.
-#[must_use]
-pub fn followers_of(subject: PublicKey) -> Query {
+///
+/// # Errors
+///
+/// Returns [`QueryError`] when the neutral query owner refuses construction.
+pub fn followers_of(subject: PublicKey) -> Result<Query, QueryError> {
     Query::events()
-        .kind(Kind::ContactList)
+        .kinds([Kind::ContactList])?
         .tag_values(SingleLetterTag::LOWERCASE_P, [subject.to_hex()])
 }

@@ -18,7 +18,7 @@ fn event(keys: &Keys, kind: Kind, created_at: u64) -> Event {
 }
 
 #[test]
-fn repeated_kind_local_selection_is_complete() {
+fn bounded_kind_set_local_selection_is_complete() {
     let keys = Keys::generate();
     let first = event(&keys, Kind::from_u16(30_001), 1);
     let second = event(&keys, Kind::from_u16(30_002), 2);
@@ -35,8 +35,8 @@ fn repeated_kind_local_selection_is_complete() {
             .collect(),
     }];
     let query = Query::events()
-        .kind(Kind::from_u16(30_001))
-        .kind(Kind::from_u16(30_002));
+        .kinds([Kind::from_u16(30_001), Kind::from_u16(30_002)])
+        .expect("two kinds are bounded");
 
     let result = StandardQueryEvaluator
         .evaluate(&query, &sources)

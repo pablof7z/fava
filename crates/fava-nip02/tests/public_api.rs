@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use fava_query::{Query, QuerySnapshot};
+use fava_query::{Query, QueryError, QuerySnapshot};
 use fava_state::RelayUrl;
 use fava_write::{
     EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
@@ -18,9 +18,9 @@ type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
 
 const MATERIALIZER: Selection = fava_nip02::materializer;
 const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
-const FOLLOWERS_OF: fn(PublicKey) -> Query = fava_nip02::followers_of;
+const FOLLOWERS_OF: fn(PublicKey) -> Result<Query, QueryError> = fava_nip02::followers_of;
 
-fn contact_lists<A: IntoContactAuthors>(authors: A) -> Query {
+fn contact_lists<A: IntoContactAuthors>(authors: A) -> Result<Query, QueryError> {
     fava_nip02::contact_list(authors)
 }
 
@@ -76,6 +76,12 @@ fn external_surface_uses_only_approved_functions_and_types() {
     let borrowed = contact_lists::<&Vec<PublicKey>>(&borrowed_authors);
     assert_eq!(one, many);
     assert_eq!(many, borrowed);
-    assert_eq!(FOLLOWERS_OF(author).selection().authors, None);
+    assert_eq!(
+        FOLLOWERS_OF(author)
+            .expect("one follower target is bounded")
+            .selection()
+            .authors,
+        None
+    );
     assert!(FOLLOWS_OF(&QuerySnapshot::evaluated(Vec::new(), &[])).is_empty());
 }

@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub use nostr::filter::SingleLetterTag;
 
-use crate::{EventId, Kind, PublicKey, Query};
+use crate::{
+    EventId, Kind, PublicKey, Query, QueryError, bounded_authors, bounded_ids, bounded_kinds,
+    bounded_tag_values, extend_bounded,
+};
 
 /// Declarative event-filter axes supported by literal query selection.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
@@ -26,46 +29,90 @@ impl Query {
         Self::default()
     }
 
-    /// Match one event kind.
+    /// Match a literal author set. An empty set intentionally matches nothing.
     ///
-    /// One call selects a singleton. Repeated calls union canonical kind
-    /// values, so duplicates and call order do not change query identity.
-    #[must_use]
-    pub fn kind(mut self, kind: Kind) -> Self {
-        self.selection.kinds.get_or_insert_default().insert(kind);
-        self
+    /// # Errors
+    ///
+    /// Returns [`QueryError::TooManyAuthors`] before consuming more than the
+    /// provisional query resource cap.
+    pub fn authors(
+        mut self,
+        authors: impl IntoIterator<Item = PublicKey>,
+    ) -> Result<Self, QueryError> {
+        self.selection.authors = Some(bounded_authors(authors)?);
+        Ok(self)
     }
 
-    /// Match a literal author set. An empty set intentionally matches nothing.
-    #[must_use]
-    pub fn authors(mut self, authors: impl IntoIterator<Item = PublicKey>) -> Self {
-        self.selection.authors = Some(authors.into_iter().collect());
-        self
+    /// Match a literal kind set. An empty set intentionally matches nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::TooManyKinds`] before consuming more than the
+    /// provisional query resource cap.
+    pub fn kinds(mut self, kinds: impl IntoIterator<Item = Kind>) -> Result<Self, QueryError> {
+        self.selection.kinds = Some(bounded_kinds(kinds)?);
+        Ok(self)
     }
 
     /// Match a literal event-id set. An empty set intentionally matches nothing.
-    #[must_use]
-    pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Self {
-        self.selection.ids = Some(ids.into_iter().collect());
-        self
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::TooManyIds`] before consuming more than the
+    /// provisional query resource cap.
+    pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Result<Self, QueryError> {
+        self.selection.ids = Some(bounded_ids(ids)?);
+        Ok(self)
     }
 
     /// Match exact values for one case-sensitive Nostr tag key.
     ///
     /// Repeated calls for the same key union values. An empty iterator retains
     /// a present tag axis that intentionally matches nothing.
-    #[must_use]
-    pub fn tag_values<I, S>(mut self, key: SingleLetterTag, values: I) -> Self
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::TooManyTagValues`] before consuming or retaining
+    /// more than the provisional query resource cap for this key.
+    pub fn tag_values<I, S>(mut self, key: SingleLetterTag, values: I) -> Result<Self, QueryError>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.selection
-            .tag_values
-            .entry(key)
-            .or_default()
-            .extend(values.into_iter().map(Into::into));
-        self
+        extend_bounded(
+            values.into_iter().map(Into::into),
+            self.selection.tag_values.entry(key).or_default(),
+            |actual, maximum| QueryError::TooManyTagValues { actual, maximum },
+        )?;
+        Ok(self)
+    }
+
+    /// Narrow one case-sensitive Nostr tag axis to exact supplied values.
+    ///
+    /// An absent axis becomes the supplied set. A present axis becomes its
+    /// intersection with the supplied set. A disjoint intersection remains a
+    /// present empty axis and therefore intentionally matches nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::TooManyTagValues`] before consuming more than the
+    /// provisional query resource cap for the supplied values.
+    pub fn intersect_tag_values<I, S>(
+        mut self,
+        key: SingleLetterTag,
+        values: I,
+    ) -> Result<Self, QueryError>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let supplied = bounded_tag_values(values.into_iter().map(Into::into))?;
+        if let Some(existing) = self.selection.tag_values.get_mut(&key) {
+            existing.retain(|value| supplied.contains(value));
+        } else {
+            self.selection.tag_values.insert(key, supplied);
+        }
+        Ok(self)
     }
 
     /// Event selection.

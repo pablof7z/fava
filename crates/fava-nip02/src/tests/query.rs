@@ -27,7 +27,9 @@ fn snapshot(events: Vec<fava_write::Event>) -> QuerySnapshot {
     )
 }
 
-fn accepts_sealed_trait(authors: impl IntoContactAuthors) -> fava_query::Query {
+fn accepts_sealed_trait(
+    authors: impl IntoContactAuthors,
+) -> Result<fava_query::Query, fava_query::QueryError> {
     contact_list(authors)
 }
 
@@ -36,7 +38,7 @@ fn one_many_and_empty_contact_list_queries_keep_a_concrete_author_axis() {
     let alice = Keys::generate().public_key();
     let bob = Keys::generate().public_key();
 
-    let one = contact_list(alice);
+    let one = contact_list(alice).expect("one author is bounded");
     assert_eq!(
         one.selection().kinds,
         Some(BTreeSet::from([Kind::ContactList]))
@@ -46,16 +48,21 @@ fn one_many_and_empty_contact_list_queries_keep_a_concrete_author_axis() {
     assert_eq!(one.result_limit(), None);
 
     let authors = vec![alice, bob, alice];
-    let many = contact_list(authors.as_slice());
+    let many = contact_list(authors.as_slice()).expect("three author inputs are bounded");
     assert_eq!(many.selection().authors, Some(BTreeSet::from([alice, bob])));
     assert_eq!(many.result_limit(), None);
 
     let empty: &[fava_write::PublicKey] = &[];
-    let none = contact_list(empty);
+    let none = contact_list(empty).expect("empty author input is bounded");
     assert_eq!(none.selection().authors, Some(BTreeSet::new()));
-    assert_ne!(none, fava_query::Query::events().kind(Kind::ContactList));
+    assert_ne!(
+        none,
+        fava_query::Query::events()
+            .kinds([Kind::ContactList])
+            .expect("one kind is bounded")
+    );
 
-    assert_eq!(accepts_sealed_trait(&authors), many);
+    assert_eq!(accepts_sealed_trait(&authors), Ok(many));
 }
 
 #[test]
@@ -78,7 +85,7 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
 
     let result = StandardQueryEvaluator
         .evaluate(
-            &contact_list([alice.public_key(), bob.public_key()]),
+            &contact_list([alice.public_key(), bob.public_key()]).expect("two authors are bounded"),
             &sources,
         )
         .expect("ordinary evaluation succeeds");
@@ -91,7 +98,7 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
 #[test]
 fn follower_discovery_uses_only_exact_lowercase_p_and_canonical_hex() {
     let subject = Keys::generate().public_key();
-    let query = followers_of(subject);
+    let query = followers_of(subject).expect("one tag value is bounded");
     let lower_p = SingleLetterTag::LOWERCASE_P;
     let upper_p = SingleLetterTag::UPPERCASE_P;
 
@@ -141,7 +148,10 @@ fn follow_projection_is_ordered_repeatable_and_safe_for_two_hop_concurrency() {
 
     let first_hop = follows_of(first_hop_snapshot.as_ref());
     assert_eq!(
-        contact_list(first_hop.as_slice()).selection().authors,
+        contact_list(first_hop.as_slice())
+            .expect("projected authors are bounded")
+            .selection()
+            .authors,
         Some(first_hop.iter().copied().collect())
     );
     let bob_list = source(
