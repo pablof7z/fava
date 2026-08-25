@@ -74,11 +74,12 @@ pub fn validate_current_materialization(
     }
 }
 
-/// Apply one newer complete route plan to a mutable receipt.
+/// Apply one newer complete route plan or accept its exact persisted replay.
 ///
 /// # Errors
 ///
-/// Returns [`WriteStoreError`] for stale, oversized, or incompatible plans.
+/// Returns [`WriteStoreError`] for stale, same-revision mismatched, oversized,
+/// or incompatible plans.
 pub fn apply_route_to_receipt(
     receipt: &mut Receipt,
     plan: &RoutePlan,
@@ -88,12 +89,53 @@ pub fn apply_route_to_receipt(
             "automatic route cannot mutate an explicit receipt".to_owned(),
         ));
     }
-    if plan.revision <= receipt.route_revision {
+    if plan.revision < receipt.route_revision {
         return Err(WriteStoreError::Refused(format!(
-            "route revision is not newer: {} <= {}",
+            "route revision is stale: {} < {}",
             plan.revision, receipt.route_revision
         )));
     }
+    if plan.revision == receipt.route_revision {
+        if plan.revision == 0 {
+            return Err(WriteStoreError::Refused(
+                "route revision zero has no persisted effect to replay".to_owned(),
+            ));
+        }
+        return if persisted_route_effect_matches(receipt, plan) {
+            Ok(())
+        } else {
+            Err(WriteStoreError::Refused(format!(
+                "route revision {} has a different persisted effect",
+                plan.revision
+            )))
+        };
+    }
+    apply_newer_route_to_receipt(receipt, plan)
+}
+
+fn persisted_route_effect_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
+    let mut candidate = receipt.clone();
+    candidate.outcome = ReceiptOutcome::Open;
+    candidate.route_revision = 0;
+    candidate.route_settled = false;
+    candidate.route_shortfalls.clear();
+    candidate.desired_destinations.clear();
+    candidate.attempts.clear();
+    candidate.current.publication.destinations.clear();
+    apply_newer_route_to_receipt(&mut candidate, plan).is_ok()
+        && candidate.outcome == receipt.outcome
+        && candidate.route_revision == receipt.route_revision
+        && candidate.route_settled == receipt.route_settled
+        && candidate.route_shortfalls == receipt.route_shortfalls
+        && candidate.desired_destinations == receipt.desired_destinations
+        && candidate.attempts == receipt.attempts
+        && candidate.current.publication.destinations == receipt.current.publication.destinations
+}
+
+fn apply_newer_route_to_receipt(
+    receipt: &mut Receipt,
+    plan: &RoutePlan,
+) -> Result<(), WriteStoreError> {
     if plan.destinations.len() > destination_evidence_capacity() {
         return Err(WriteStoreError::Refused(format!(
             "route destination fan-out exceeds bound: {} > {}",

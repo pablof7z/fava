@@ -15,9 +15,7 @@ use fava_write_store::{
 
 use super::MemoryWriteStore;
 use super::model::destinations;
-use super::semantic_acceptance::{
-    require_current, route_matches, validate_materialization, validate_source,
-};
+use super::semantic_acceptance::{require_current, validate_materialization, validate_source};
 use super::state::{
     attributed_failure, capacity_reached, edit_coordinate, next_revision, require_failure_source,
     require_qualified_source,
@@ -163,7 +161,10 @@ impl MemoryWriteStore {
                 && stored.2 == selected_source
                 && receipt.routing == routing
                 && receipt.current.event == EventValue::Unsigned(event.clone())
-                && initial_route.is_none_or(|plan| route_matches(receipt, plan))
+                && initial_route.is_none_or(|plan| {
+                    plan.revision == receipt.route_revision
+                        && apply_route_to_receipt(&mut receipt.clone(), plan).is_ok()
+                })
             {
                 return Ok(AcceptedWrite {
                     write_id: receipt.write_id,

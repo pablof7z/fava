@@ -86,13 +86,13 @@ fn memory_first_edit_has_no_prior() {
 
 #[test]
 fn memory_initial_route_idempotence_compares_complete_persisted_effect() {
-    for (label, first, second) in route_effect_mismatches() {
+    for (label, first, second, expected_shortfalls) in route_effect_mismatches() {
         let store = MemoryWriteStore::bounded(NonZeroUsize::new(2).unwrap());
-        assert_route_effect_mismatch_is_atomic(&store, label, &first, &second);
+        assert_route_effect_replay_is_exact(&store, label, &first, &second, &expected_shortfalls);
     }
 }
 
-fn route_effect_mismatches() -> Vec<(&'static str, RoutePlan, RoutePlan)> {
+fn route_effect_mismatches() -> Vec<(&'static str, RoutePlan, RoutePlan, Vec<String>)> {
     let first_target = RouteTarget::Author(Keys::generate().public_key());
     let second_target = RouteTarget::Author(Keys::generate().public_key());
     let unresolved = RouteTarget::Author(Keys::generate().public_key());
@@ -109,12 +109,13 @@ fn route_effect_mismatches() -> Vec<(&'static str, RoutePlan, RoutePlan)> {
                 BTreeMap::new(),
                 unresolved.clone(),
             ),
+            vec!["first failure".to_owned()],
         ),
         (
             "settled-absent coverage",
             initial_route(
                 Vec::new(),
-                BTreeMap::from([(first_target, CoverageState::SettledAbsent)]),
+                BTreeMap::from([(first_target.clone(), CoverageState::SettledAbsent)]),
                 unresolved.clone(),
             ),
             initial_route(
@@ -122,6 +123,7 @@ fn route_effect_mismatches() -> Vec<(&'static str, RoutePlan, RoutePlan)> {
                 BTreeMap::from([(second_target, CoverageState::SettledAbsent)]),
                 unresolved,
             ),
+            vec![format!("no relay destination for {first_target:?}")],
         ),
     ]
 }
@@ -140,11 +142,12 @@ fn initial_route(
     }
 }
 
-fn assert_route_effect_mismatch_is_atomic(
+fn assert_route_effect_replay_is_exact(
     store: &MemoryWriteStore,
     label: &str,
     first: &RoutePlan,
     second: &RoutePlan,
+    expected_shortfalls: &[String],
 ) {
     let keys = Keys::generate();
     let intent =
@@ -160,7 +163,23 @@ fn assert_route_effect_mismatch_is_atomic(
         )
         .expect("first route effect commits");
     let retained = store.receipt(accepted.receipt_id).unwrap().unwrap();
+    assert_eq!(retained.route_shortfalls, expected_shortfalls, "{label}");
     let mut changes = store.receipt_changes();
+    let replayed = store
+        .accept_reserved_materialized_edit(
+            store.reserve_active(&edit(), keys.public_key()).unwrap(),
+            intent(),
+            event(),
+            None,
+            Some(first),
+        )
+        .expect("exact persisted route effect replays idempotently");
+    assert_eq!(replayed, accepted);
+    assert_eq!(
+        store.receipt(accepted.receipt_id).unwrap(),
+        Some(retained.clone())
+    );
+    assert!(changes.try_recv().is_err(), "{label} exact replay notified");
     assert!(
         store
             .accept_reserved_materialized_edit(

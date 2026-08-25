@@ -1,33 +1,13 @@
 //! Exact semantic acceptance validation for volatile custody.
 
-use fava_routing::RoutePlan;
 use fava_state::{EventCoordinate, event_coordinate};
 use fava_write::{
-    EventId, EventValue, MaterializationId, PublicKey, Receipt, ReceiptOutcome,
-    ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent, WriteRouting,
+    EventId, EventValue, MaterializationId, PublicKey, Receipt, ReplaceableEventEdit, Timestamp,
+    UnsignedEvent, WriteId, WriteIntent, WriteRouting,
 };
-use fava_write_store::{WriteStoreError, apply_route_to_receipt};
+use fava_write_store::WriteStoreError;
 
 use super::state::edit_coordinate;
-
-pub(super) fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
-    let mut candidate = receipt.clone();
-    candidate.outcome = ReceiptOutcome::Open;
-    candidate.route_revision = 0;
-    candidate.route_settled = false;
-    candidate.route_shortfalls.clear();
-    candidate.desired_destinations.clear();
-    candidate.attempts.clear();
-    candidate.current.publication.destinations.clear();
-    apply_route_to_receipt(&mut candidate, plan).is_ok()
-        && candidate.outcome == receipt.outcome
-        && candidate.route_revision == receipt.route_revision
-        && candidate.route_settled == receipt.route_settled
-        && candidate.route_shortfalls == receipt.route_shortfalls
-        && candidate.desired_destinations == receipt.desired_destinations
-        && candidate.attempts == receipt.attempts
-        && candidate.current.publication.destinations == receipt.current.publication.destinations
-}
 
 pub(super) fn validate_materialization(
     edit: &ReplaceableEventEdit,

@@ -67,7 +67,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
     let first_target = RouteTarget::Author(Keys::generate().public_key());
     let second_target = RouteTarget::Author(Keys::generate().public_key());
     let unresolved = RouteTarget::Author(Keys::generate().public_key());
-    for (label, first, second) in [
+    for (label, first, second, expected_shortfalls) in [
         (
             "shortfall",
             initial_route(
@@ -80,6 +80,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
                 BTreeMap::new(),
                 unresolved.clone(),
             ),
+            vec!["first failure".to_owned()],
         ),
         (
             "settled-absent coverage",
@@ -93,6 +94,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
                 BTreeMap::from([(second_target.clone(), CoverageState::SettledAbsent)]),
                 unresolved.clone(),
             ),
+            vec![format!("no relay destination for {first_target:?}")],
         ),
     ] {
         let path = unique_path(label);
@@ -116,7 +118,23 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
             )
             .expect("first route effect commits");
         let retained = store.receipt(accepted.receipt_id).unwrap().unwrap();
+        assert_eq!(retained.route_shortfalls, expected_shortfalls, "{label}");
         let mut changes = store.receipt_changes();
+        let replayed = store
+            .accept_reserved_materialized_edit(
+                store.reserve_active(&edit(), keys.public_key()).unwrap(),
+                intent(),
+                event(),
+                None,
+                Some(&first),
+            )
+            .expect("exact persisted route effect replays idempotently");
+        assert_eq!(replayed, accepted);
+        assert_eq!(
+            store.receipt(accepted.receipt_id).unwrap(),
+            Some(retained.clone())
+        );
+        assert!(changes.try_recv().is_err(), "{label} exact replay notified");
         assert!(
             store
                 .accept_reserved_materialized_edit(

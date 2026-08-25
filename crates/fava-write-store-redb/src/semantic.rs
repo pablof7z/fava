@@ -13,7 +13,7 @@ use fava_write_store::{
 use crate::lifecycle::{capacity_reached, destinations, next_revision, terminal_evictions};
 use crate::semantic_acceptance::{
     attributed_failure, require_current, require_failure_source, require_qualified_source,
-    route_matches, validate_materialization, validate_source,
+    validate_materialization, validate_source,
 };
 use crate::{RedbWriteStore, SemanticCustody};
 
@@ -89,7 +89,10 @@ impl RedbWriteStore {
                 && stored.2 == selected_source
                 && receipt.routing == routing
                 && receipt.current.event == EventValue::Unsigned(event.clone())
-                && initial_route.is_none_or(|plan| route_matches(receipt, plan))
+                && initial_route.is_none_or(|plan| {
+                    plan.revision == receipt.route_revision
+                        && apply_route_to_receipt(&mut receipt.clone(), plan).is_ok()
+                })
             {
                 return Ok(AcceptedWrite {
                     write_id: receipt.write_id,
