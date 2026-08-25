@@ -22,6 +22,7 @@ OWNER = "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52"
 APPROVAL_KIND = 9999
 APPROVALS_PATH = Path("docs/internals/approvals.jsonl")
 CANDIDATES_PATH = Path("docs/internals/vocabulary-candidates.jsonl")
+ROOT = Path(__file__).resolve().parent.parent
 
 PROSE_FIELDS = (
     "source",
@@ -61,6 +62,19 @@ CANDIDATE_METADATA_FIELDS = ("category",)
 DISPOSITIONS = {"candidate", "blocked"}
 
 EVIDENCE_LOCATION = re.compile(r"^(?P<path>[^:]+):(?P<line>[1-9][0-9]*)$")
+ITEM_KIND_PATTERN = re.compile(
+    r"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:unsafe\s+)?"
+    r"(?P<kind>struct|enum|trait|type|mod|fn)\s+"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b"
+)
+RUST_KIND_LABELS = {
+    "struct": "Struct",
+    "enum": "Enum",
+    "trait": "Trait",
+    "type": "Type Alias",
+    "mod": "Module",
+    "fn": "Function",
+}
 
 # These phrases identify the rejected category generator, not researched
 # architecture. Keeping them here makes regression to superficially complete
@@ -463,7 +477,16 @@ def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def item_kind_for_term(term: dict[str, Any]) -> str:
-    """Return the Rust item that best identifies a term."""
+    """Return the authoritative Rust kind for a term, or non-Rust Concept."""
+    symbol = symbol_for_term(term)
+    if not symbol:
+        return "non-Rust Concept"
+    kind = item_kind_for_symbol(symbol)
+    return kind or "non-Rust Concept"
+
+
+def symbol_for_term(term: dict[str, Any]) -> str:
+    """Return the symbol or term name that best identifies a term."""
     for field in ("symbols", "spec_symbols"):
         values = term.get(field)
         if not isinstance(values, list):
@@ -474,6 +497,74 @@ def item_kind_for_term(term: dict[str, Any]) -> str:
                 if value:
                     return value
     return str(term.get("name", ""))
+
+
+def item_kind_for_symbol(symbol: str, root: Path = ROOT) -> str | None:
+    """Return the Rust declaration kind for one symbol path."""
+    symbol = symbol.strip()
+    if "::" in symbol:
+        crate, *parts = symbol.split("::")
+    else:
+        crate, parts = symbol, []
+    if not crate:
+        return None
+    crate_root = _crate_root_path(root, crate)
+    if crate_root is None:
+        return None
+    item = parts[-1] if parts else symbol
+    if not item:
+        return None
+    sources = _source_candidates_for_item(crate_root, parts[:-1])
+    for source in sources:
+        try:
+            declaration = source.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        kind = _item_kind_from_text(declaration, item)
+        if kind:
+            return RUST_KIND_LABELS[kind]
+    for source in crate_root.glob("src/**/*.rs"):
+        try:
+            declaration = source.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        kind = _item_kind_from_text(declaration, item)
+        if kind:
+            return RUST_KIND_LABELS[kind]
+    return None
+
+
+def _item_kind_from_text(source: str, item: str) -> str | None:
+    kind = None
+    for match in ITEM_KIND_PATTERN.finditer(source):
+        if match.group("name") == item:
+            kind = match.group("kind")
+            break
+    return kind
+
+
+def _crate_root_path(root: Path, symbol_crate: str) -> Path | None:
+    candidate = root / "crates" / symbol_crate.replace("_", "-")
+    return candidate if candidate.exists() else None
+
+
+def _source_candidates_for_item(crate_root: Path, module_path: list[str]) -> list[Path]:
+    src = crate_root / "src"
+    files: list[Path] = []
+    for base in (src / "lib.rs", src / "main.rs"):
+        if base.exists():
+            files.append(base)
+    module_dir = src
+    for part in module_path:
+        if not part:
+            continue
+        next_candidates = [module_dir / f"{part}.rs", module_dir / part / "mod.rs"]
+        candidates = [path for path in next_candidates if path.exists()]
+        for path in candidates:
+            files.append(path)
+        if candidates:
+            module_dir = candidates[0].parent
+    return files
 
 
 def row_purpose(term: dict[str, Any]) -> str:

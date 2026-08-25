@@ -31,6 +31,8 @@
   .summary-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .summary-title .name { font-size: 15px; }
   .rust-kind { color: #93c5fd; font-size: 12px; }
+  .rust-item-path { color: #6e6e77; font-size: 11px; max-width: min(44ch, 54vw);
+    white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
   .purpose { color: #d4d4dd; font-size: 12px; white-space: nowrap; text-overflow: ellipsis;
              overflow: hidden; max-width: min(62ch, 60vw); }
   .summary-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -160,14 +162,18 @@ function render() {
     badge.textContent = term.status;
     const rustKind = document.createElement("span");
     rustKind.className = "rust-kind";
-    rustKind.textContent = term.rust_item || "untyped";
-    rustKind.title = `Rust item: ${rustKind.textContent}`;
+    rustKind.textContent = term.rust_item_kind || "non-Rust Concept";
+    rustKind.title = `Rust item kind: ${rustKind.textContent}`;
+    const rustItem = document.createElement("span");
+    rustItem.className = "rust-item-path";
+    rustItem.textContent = term.rust_item || "";
+    rustItem.title = `Rust item: ${rustItem.textContent || "untyped"}`;
     const purpose = document.createElement("div");
     purpose.className = "purpose";
     purpose.textContent = term.purpose || "";
     const purposeText = term.purpose || "";
     purpose.title = purposeText;
-    title.append(badge, name, rustKind);
+    title.append(badge, name, rustKind, rustItem);
     if (term.candidate) {
       const candidateLabel = document.createElement("span");
       candidateLabel.className = "candidate-label";

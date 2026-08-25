@@ -201,13 +201,12 @@ class RowPresentationTest(unittest.TestCase):
     def test_item_kind_prefers_real_rust_symbols(self) -> None:
         term = {
             "name": "Follow",
-            "symbols": ["fava_nip02::ContactListRowEvidence", "fava_nip02::Follow"],
-            "spec_symbols": ["Follow"],
+            "symbols": ["fava_simple_groups::SimpleGroup", "fava_nip02::Follow"],
             "meaning": "A row result from NIP-02.",
         }
         self.assertEqual(
             approval.item_kind_for_term(term),
-            "fava_nip02::ContactListRowEvidence",
+            "Struct",
         )
 
     def test_item_kind_falls_back_to_spec_symbol(self) -> None:
@@ -216,11 +215,22 @@ class RowPresentationTest(unittest.TestCase):
             "spec_symbols": ["SpecKind"],
             "meaning": "placeholder",
         }
-        self.assertEqual(approval.item_kind_for_term(term), "SpecKind")
+        self.assertEqual(approval.item_kind_for_term(term), "non-Rust Concept")
 
     def test_item_kind_falls_back_to_name_when_no_symbol(self) -> None:
         term = {"name": "Event", "meaning": "A signed event."}
-        self.assertEqual(approval.item_kind_for_term(term), "Event")
+        self.assertEqual(approval.item_kind_for_term(term), "non-Rust Concept")
+
+    def test_symbol_for_term_prefers_real_rust_symbols(self) -> None:
+        term = {
+            "name": "SimpleGroup",
+            "symbols": ["fava_simple_groups::SimpleGroup"],
+            "meaning": "A relay-based Nostr group.",
+        }
+        self.assertEqual(
+            approval.symbol_for_term(term),
+            "fava_simple_groups::SimpleGroup",
+        )
 
     def test_row_purpose_is_single_line(self) -> None:
         term = {"meaning": "A line.\n with extra   spacing."}
@@ -846,6 +856,7 @@ class ServerTest(unittest.TestCase):
             {"name": "meaning", "value": "A signed Nostr event."},
         ])
         self.assertEqual(event["rust_item"], "Event")
+        self.assertEqual(event["rust_item_kind"], "non-Rust Concept")
         self.assertEqual(
             event["purpose"], "A signed Nostr event."
         )
