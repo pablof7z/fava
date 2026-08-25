@@ -11,12 +11,15 @@
 //! The remaining tests use throwaway-key fixtures and are expected to pass.
 
 use nostr::event::Event;
+use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 
 const OWNER: &str = "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52";
 const APPROVAL_KIND: u16 = 9999;
+const CARGO_PUBLIC_API: &str = "0.52.0";
+const RUSTDOC_TOOLCHAIN: &str = "nightly-2026-07-07";
 
 /// Prose fields rendered in this fixed order, matching `vocabulary_approval.py`.
 const PROSE_FIELDS: &[&str] = &[
@@ -44,7 +47,7 @@ fn is_known_field(field: &str) -> bool {
 ///
 /// Mirrors `vocabulary_approval.py::canonical_markdown`.  Returns `Err` if any
 /// field value has a wrong TOML type (fail-closed: no unrendered field survives).
-fn canonical_markdown(term: &toml::Table) -> Result<String, String> {
+fn canonical_markdown(term: &toml::Table, structure: &JsonValue) -> Result<String, String> {
     let name = term
         .get("name")
         .and_then(toml::Value::as_str)
@@ -132,8 +135,59 @@ fn canonical_markdown(term: &toml::Table) -> Result<String, String> {
         lines.push(String::new());
     }
 
+    let structure = serde_json::to_string(structure)
+        .map_err(|error| format!("cannot render compiler-derived structure: {error}"))?;
+    lines.extend([
+        "## Compiler-derived Rust structure".to_string(),
+        String::new(),
+        "```json".to_string(),
+        structure,
+        "```".to_string(),
+    ]);
+
     // Mirror Python's `"\n".join(lines).rstrip() + "\n"`.
     Ok(lines.join("\n").trim_end().to_string() + "\n")
+}
+
+fn load_structures(text: &str) -> Result<HashMap<String, JsonValue>, String> {
+    let snapshot: JsonValue = serde_json::from_str(text)
+        .map_err(|error| format!("cannot parse vocabulary-structure.json: {error}"))?;
+    if snapshot.get("format").and_then(JsonValue::as_u64) != Some(1) {
+        return Err("vocabulary-structure.json format must be 1".to_string());
+    }
+    if snapshot.get("cargo_public_api").and_then(JsonValue::as_str) != Some(CARGO_PUBLIC_API) {
+        return Err(format!(
+            "vocabulary-structure.json cargo-public-api must be {CARGO_PUBLIC_API}"
+        ));
+    }
+    if snapshot
+        .get("rustdoc_toolchain")
+        .and_then(JsonValue::as_str)
+        != Some(RUSTDOC_TOOLCHAIN)
+    {
+        return Err(format!(
+            "vocabulary-structure.json rustdoc toolchain must be {RUSTDOC_TOOLCHAIN}"
+        ));
+    }
+    let terms = snapshot
+        .get("terms")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| "vocabulary-structure.json must contain terms".to_string())?;
+    let mut structures = HashMap::new();
+    for entry in terms {
+        let name = entry
+            .get("name")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| "structural term is missing a string name".to_string())?;
+        let structure = entry
+            .get("structure")
+            .cloned()
+            .ok_or_else(|| format!("{name}: structural term is missing structure"))?;
+        if structures.insert(name.to_string(), structure).is_some() {
+            return Err(format!("duplicate structural term: {name}"));
+        }
+    }
+    Ok(structures)
 }
 
 /// A cryptographically verified approval event reduced to the fields we need.
@@ -285,6 +339,7 @@ fn vocabulary_gate_requires_all_terms_approved() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let vocab_path = manifest.join("../../docs/internals/vocabulary.toml");
     let approvals_path = manifest.join("../../docs/internals/approvals.jsonl");
+    let structure_path = manifest.join("../../docs/internals/vocabulary-structure.json");
 
     let vocab_text = std::fs::read_to_string(&vocab_path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", vocab_path.display()));
@@ -303,6 +358,11 @@ fn vocabulary_gate_requires_all_terms_approved() {
         String::new()
     };
 
+    let structures_text = std::fs::read_to_string(&structure_path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", structure_path.display()));
+    let structures = load_structures(&structures_text)
+        .unwrap_or_else(|e| panic!("invalid {}: {e}", structure_path.display()));
+
     let (approvals, mut failures) = load_and_verify_approvals(&approvals_text, "approvals.jsonl");
 
     for term_val in terms {
@@ -314,7 +374,11 @@ fn vocabulary_gate_requires_all_terms_approved() {
             .and_then(toml::Value::as_str)
             .unwrap_or_else(|| panic!("each term must have a string 'name'"));
 
-        let markdown = match canonical_markdown(term) {
+        let Some(structure) = structures.get(name) else {
+            failures.push(format!("{name}: missing compiler-derived Rust structure"));
+            continue;
+        };
+        let markdown = match canonical_markdown(term, structure) {
             Ok(m) => m,
             Err(e) => {
                 failures.push(format!("{name}: canonical_markdown error: {e}"));
@@ -380,19 +444,49 @@ fn throwaway_pubkey_is_not_the_owner() {
     );
 }
 
-/// Rust `canonical_markdown` output matches the Python-generated fixture content.
+/// Rust renders the same explicit empty structural suffix as Python.
 #[test]
-fn canonical_markdown_matches_event_term_fixture() {
+fn canonical_markdown_includes_compiler_structure() {
     // The "Event" term as it appears in vocabulary.toml.
     let term_toml = "name = \"Event\"\nsource = \"nostr\"\nprotocol = \"NIP-01\"\nmeaning = \"A signed Nostr event.\"\nowner = \"nostr\"\nsymbols = []\ncrates = []\n";
     let term: toml::Table = toml::from_str(term_toml).expect("parse term TOML");
-    let got = canonical_markdown(&term).expect("canonical_markdown must succeed");
+    let structure = serde_json::json!({
+        "private_architectural_state": [],
+        "public_api": [],
+        "reexports": [],
+    });
+    let got = canonical_markdown(&term, &structure).expect("canonical_markdown must succeed");
+    assert!(got.ends_with(
+        "## Compiler-derived Rust structure\n\n```json\n\
+         {\"private_architectural_state\":[],\"public_api\":[],\"reexports\":[]}\n```\n"
+    ));
+}
 
-    // The expected content is exactly what the throwaway event was signed over.
-    let event = Event::from_json(THROWAWAY_JSON).expect("parse throwaway JSON");
-    assert_eq!(
-        got, event.content,
-        "Rust canonical_markdown must produce the same text as Python's fixture"
+#[test]
+fn compiler_structure_drift_invalidates_prior_payload() {
+    let term: toml::Table = toml::from_str(
+        "name = \"Query\"\nsource = \"fava\"\nmeaning = \"A query.\"\nowner = \"fava-query\"\nsymbols = []\ncrates = []\n",
+    )
+    .expect("parse term TOML");
+    let prior = serde_json::json!({
+        "private_architectural_state": [],
+        "public_api": [{
+            "declaration": "pub fn fava_query::Query::open(&self)",
+            "path": "fava_query::Query::open"
+        }],
+        "reexports": [],
+    });
+    let changed = serde_json::json!({
+        "private_architectural_state": [],
+        "public_api": [{
+            "declaration": "pub fn fava_query::Query::open(&mut self)",
+            "path": "fava_query::Query::open"
+        }],
+        "reexports": [],
+    });
+    assert_ne!(
+        canonical_markdown(&term, &prior).unwrap(),
+        canonical_markdown(&term, &changed).unwrap()
     );
 }
 

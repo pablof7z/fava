@@ -17,6 +17,16 @@ if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 import vocabulary_approval as approval
 
+EMPTY_STRUCTURE = {
+    "private_architectural_state": [],
+    "public_api": [],
+    "reexports": [],
+}
+
+
+def _markdown(term: dict, structure: dict = EMPTY_STRUCTURE) -> str:
+    return approval.canonical_markdown(term, structure)
+
 # Real nostr-crate-generated fixtures (throwaway keys only; owner key is
 # unavailable here — owner approval is the Rust governance test's gate).
 #
@@ -27,14 +37,17 @@ import vocabulary_approval as approval
 
 # secret key = scalar 1, canonical markdown of the "Event" term
 THROWAWAY_EVENT = json.loads(
-    '{"id":"bbc6bc2bb03fcff13f3b465c8edda0269e51c844c2c1d067c77f02962a4d8ac4",'
+    '{"id":"89763d32a7e9bbc49e0a1b31d34a649c9df2f749772c737d73a1ae16e549f0a6",'
     '"pubkey":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",'
     '"created_at":1700000000,"kind":9999,'
     '"tags":[["name","Event"]],'
     '"content":"# Event\\n\\n**source**: nostr\\n\\n**protocol**: NIP-01\\n\\n'
-    '**owner**: nostr\\n\\n**meaning**: A signed Nostr event.\\n",'
-    '"sig":"f218801e16e03833d7c9d6a8bc179a68e0747c15960fb19487be2326bf687acd'
-    '3187b1a58a3f6b9a07647e6298d42c5c22a6f8ac1123417ad7e62e17356bd2a2"}'
+    '**owner**: nostr\\n\\n**meaning**: A signed Nostr event.\\n\\n'
+    '## Compiler-derived Rust structure\\n\\n```json\\n'
+    '{\\"private_architectural_state\\":[],\\"public_api\\":[],\\"reexports\\":[]}'
+    '\\n```\\n",'
+    '"sig":"ea6db25a7ee8968d20fcd6e5e5f4a7259e12d477f469bf54c03cc9a0cacef495'
+    '3af1739c90775c13a9fe329d0ef25a724c8450ff8210d3355b3fc2b3deacbf0f"}'
 )
 
 # Like the owner-signed path but with the throwaway pubkey swapped in; used
@@ -92,7 +105,7 @@ class HiddenVocabularyTest(unittest.TestCase):
 
 class CanonicalMarkdownTest(unittest.TestCase):
     def test_heading_is_term_name(self) -> None:
-        md = approval.canonical_markdown({"name": "Foo"})
+        md = _markdown({"name": "Foo"})
         self.assertTrue(md.startswith("# Foo\n"))
 
     def test_prose_fields_appear_in_order(self) -> None:
@@ -102,7 +115,7 @@ class CanonicalMarkdownTest(unittest.TestCase):
             "meaning": "A thing.",
             "falsifier": "test must fail.",
         }
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         src = md.index("**source**")
         mean = md.index("**meaning**")
         fals = md.index("**falsifier**")
@@ -111,33 +124,33 @@ class CanonicalMarkdownTest(unittest.TestCase):
 
     def test_empty_prose_field_is_omitted(self) -> None:
         term = {"name": "T", "source": "nostr", "meaning": ""}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertIn("**source**", md)
         self.assertNotIn("**meaning**", md)
 
     def test_whitespace_only_prose_field_is_omitted(self) -> None:
         term = {"name": "T", "meaning": "   "}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertNotIn("**meaning**", md)
 
     def test_empty_list_field_is_omitted(self) -> None:
         term = {"name": "T", "symbols": [], "crates": ["fava-foo"]}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertNotIn("**symbols**", md)
         self.assertIn("**crates**", md)
 
     def test_list_items_are_sorted(self) -> None:
         term = {"name": "T", "symbols": ["b::B", "a::A"]}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertLess(md.index("a::A"), md.index("b::B"))
 
     def test_extra_field_is_included(self) -> None:
         term = {"name": "T", "source": "fava", "custom_field": "custom_value"}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertIn("**custom_field**: custom_value", md)
 
     def test_output_ends_with_single_newline(self) -> None:
-        md = approval.canonical_markdown({"name": "T", "source": "nostr"})
+        md = _markdown({"name": "T", "source": "nostr"})
         self.assertTrue(md.endswith("\n"))
         self.assertFalse(md.endswith("\n\n"))
 
@@ -149,52 +162,76 @@ class CanonicalMarkdownTest(unittest.TestCase):
             "symbols": ["fava_query::Query", "fava_query::QueryBounds"],
         }
         self.assertEqual(
-            approval.canonical_markdown(term), approval.canonical_markdown(term)
+            _markdown(term), _markdown(term)
         )
 
     def test_non_ascii_content_is_preserved(self) -> None:
         term = {"name": "T", "meaning": "Ünïcödé and emoji 🐍."}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertIn("Ünïcödé and emoji 🐍", md)
 
     def test_backslash_and_quotes_are_preserved(self) -> None:
         term = {"name": "T", "meaning": 'back\\slash and "quotes"'}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         self.assertIn('back\\slash and "quotes"', md)
 
-    def test_event_term_matches_fixture_content(self) -> None:
-        """The fixture content in THROWAWAY_EVENT must match current rendering."""
+    def test_event_term_includes_explicit_empty_compiler_structure(self) -> None:
         expected = (
             "# Event\n\n"
             "**source**: nostr\n\n"
             "**protocol**: NIP-01\n\n"
             "**owner**: nostr\n\n"
-            "**meaning**: A signed Nostr event.\n"
+            "**meaning**: A signed Nostr event.\n\n"
+            "## Compiler-derived Rust structure\n\n"
+            "```json\n"
+            '{"private_architectural_state":[],"public_api":[],"reexports":[]}\n'
+            "```\n"
         )
-        self.assertEqual(approval.canonical_markdown(EVENT_TERM), expected)
-        self.assertEqual(THROWAWAY_EVENT["content"], expected)
+        self.assertEqual(_markdown(EVENT_TERM), expected)
+
+    def test_structural_drift_invalidates_prior_content(self) -> None:
+        prior = _markdown(
+            EVENT_TERM,
+            {
+                "private_architectural_state": [],
+                "public_api": [
+                    {"path": "fava::Event", "declaration": "pub struct fava::Event"}
+                ],
+                "reexports": [],
+            },
+        )
+        changed = _markdown(
+            EVENT_TERM,
+            {
+                "private_architectural_state": [],
+                "public_api": [
+                    {
+                        "path": "fava::Event::id",
+                        "declaration": "pub fava::Event::id: EventId",
+                    },
+                    {"path": "fava::Event", "declaration": "pub struct fava::Event"},
+                ],
+                "reexports": [],
+            },
+        )
+        event = {"id": "prior", "content": prior}
+        self.assertIsNone(approval.authoritative_approval([event], changed))
 
 
-class ReviewFieldsTest(unittest.TestCase):
-    def test_returns_canonical_fields_without_markdown_syntax(self) -> None:
-        term = {
-            "name": "T",
-            "source": "fava",
-            "meaning": "A thing.",
-            "symbols": ["z::Z", "a::A"],
-        }
-        self.assertEqual(
-            approval.review_fields(term),
-            [
-                {"name": "source", "value": "fava"},
-                {"name": "meaning", "value": "A thing."},
-                {"name": "symbols", "value": ["a::A", "z::Z"]},
-            ],
+class ApprovalPageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.html = (Path(_TOOLS) / "approve_vocabulary.html").read_text(
+            encoding="utf-8"
         )
 
-    def test_rejects_invalid_values_like_canonical_markdown(self) -> None:
-        with self.assertRaisesRegex(ValueError, "meaning.*str"):
-            approval.review_fields({"name": "T", "meaning": ["not text"]})
+    def test_displays_the_exact_payload_submitted_to_signer(self) -> None:
+        self.assertIn("payload.textContent = term.markdown;", self.html)
+        self.assertIn("content: term.markdown", self.html)
+
+    def test_has_no_multi_term_signing_path(self) -> None:
+        self.assertNotIn("sign-all", self.html)
+        self.assertNotIn("Sign all", self.html)
 
 
 class RowPresentationTest(unittest.TestCase):
@@ -445,7 +482,7 @@ class UnapprovedTermsTest(unittest.TestCase):
 
     def test_matching_approval_is_silent(self) -> None:
         term = {"name": "Foo", "meaning": "x"}
-        md = approval.canonical_markdown(term)
+        md = _markdown(term)
         evt = {"content": md}
         problems = approval.unapproved_terms((term,), {"Foo": [evt]})
         self.assertEqual(problems, [])
@@ -453,7 +490,7 @@ class UnapprovedTermsTest(unittest.TestCase):
     def test_stale_approval_detected(self) -> None:
         """Editing a term after approval must be caught by content mismatch."""
         original = {"name": "Foo", "meaning": "original meaning"}
-        md = approval.canonical_markdown(original)
+        md = _markdown(original)
         evt = {"content": md}
 
         modified = {"name": "Foo", "meaning": "CHANGED meaning"}
@@ -462,7 +499,7 @@ class UnapprovedTermsTest(unittest.TestCase):
 
     def test_stale_detected_after_list_field_change(self) -> None:
         original = {"name": "Foo", "symbols": ["foo::Bar"]}
-        md = approval.canonical_markdown(original)
+        md = _markdown(original)
         evt = {"content": md}
 
         modified = {"name": "Foo", "symbols": ["foo::Bar", "foo::Baz"]}
@@ -471,7 +508,7 @@ class UnapprovedTermsTest(unittest.TestCase):
 
     def test_stale_detected_after_field_removed(self) -> None:
         original = {"name": "Foo", "meaning": "something", "distinction": "key detail"}
-        md = approval.canonical_markdown(original)
+        md = _markdown(original)
         evt = {"content": md}
 
         without_distinction = {"name": "Foo", "meaning": "something"}
@@ -556,7 +593,7 @@ class CandidateCoverageTest(unittest.TestCase):
 
     def test_every_candidate_markdown_contains_the_complete_review_packet(self) -> None:
         for term in self.candidates:
-            markdown = approval.canonical_markdown(term)
+            markdown = _markdown(term)
             for field in approval.EXPLICIT_CANDIDATE_FIELDS:
                 with self.subTest(term=term["name"], field=field):
                     self.assertIn(f"**{field}**:", markdown)
@@ -565,7 +602,7 @@ class CandidateCoverageTest(unittest.TestCase):
         candidate = next(term for term in self.candidates if term["name"] == "QueryEvidence")
         parent = next(term for term in self.terms if term["name"] == "QuerySnapshot")
         approvals = {
-            "QuerySnapshot": [{"content": approval.canonical_markdown(parent)}]
+            "QuerySnapshot": [{"content": _markdown(parent)}]
         }
         self.assertEqual(
             approval.unapproved_terms((candidate,), approvals),
@@ -574,7 +611,7 @@ class CandidateCoverageTest(unittest.TestCase):
 
     def test_signature_must_match_the_exact_final_candidate(self) -> None:
         candidate = next(term for term in self.candidates if term["name"] == "QueryEvidence")
-        stale = {"content": approval.canonical_markdown(candidate) + "changed\n"}
+        stale = {"content": _markdown(candidate) + "changed\n"}
         self.assertEqual(
             approval.unapproved_terms((candidate,), {"QueryEvidence": [stale]}),
             ["QueryEvidence: blocked candidate cannot be approved"],
@@ -722,7 +759,7 @@ class CandidateResearchQualityTest(unittest.TestCase):
     def test_blocked_candidate_remains_unsigned_even_with_exact_content(self) -> None:
         term = self._record("RelayQueryEvidence")
         term["disposition"] = "blocked"
-        event = {"content": approval.canonical_markdown(term)}
+        event = {"content": _markdown(term)}
         self.assertEqual(
             approval.unapproved_terms((term,), {term["name"]: [event]}),
             ["RelayQueryEvidence: blocked candidate cannot be approved"],
@@ -762,6 +799,26 @@ if event.get("sig") == "0" * 128:
     print("signature verification failed (simulated bad sig)", file=sys.stderr)
     sys.exit(1)
 print(names[0])
+"""
+
+_MOCK_STRUCTURE_SRC = """\
+import json
+EMPTY_STRUCTURE = {
+    "private_architectural_state": [],
+    "public_api": [],
+    "reexports": [],
+}
+def canonical_structure(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+def read_snapshot(path):
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {entry["name"]: entry["structure"] for entry in raw["terms"]}, []
+def snapshot_inputs_current(root, path):
+    return path.is_file()
+def compile_snapshot(root):
+    return json.loads((root / "docs/internals/vocabulary-structure.json").read_text(encoding="utf-8"))
+def render_snapshot(value):
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\\n"
 """
 
 
@@ -816,6 +873,29 @@ class ServerTest(unittest.TestCase):
         internals.mkdir(parents=True)
         (internals / "vocabulary.toml").write_text(self._VOCAB, encoding="utf-8")
         (internals / "vocabulary-candidates.jsonl").write_text("", encoding="utf-8")
+        empty_structure = {
+            "private_architectural_state": [],
+            "public_api": [],
+            "reexports": [],
+        }
+        snapshot = {
+            "cargo_public_api": "mock",
+            "format": 1,
+            "inputs_sha256": "mock",
+            "rustdoc_toolchain": "mock",
+            "terms": [
+                {"name": name, "structure": empty_structure}
+                for name in (
+                    "Event",
+                    "SavedGroupListMaterializer",
+                    "SimpleGroupStateEventKind",
+                )
+            ],
+        }
+        (internals / "vocabulary-structure.json").write_text(
+            json.dumps(snapshot, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
         probe_crate = self._root / "crates" / "fava-probe" / "src"
         probe_crate.mkdir(parents=True)
@@ -840,6 +920,9 @@ class ServerTest(unittest.TestCase):
                 f'OWNER = "{self._THROWAWAY_OWNER}"',
             ),
             encoding="utf-8",
+        )
+        (self._root / "vocabulary_structure.py").write_text(
+            _MOCK_STRUCTURE_SRC, encoding="utf-8"
         )
         shutil.copy(
             Path(_TOOLS) / "approve_vocabulary.py",
@@ -916,12 +999,7 @@ class ServerTest(unittest.TestCase):
         with self._get("/api/terms") as resp:
             payload = json.loads(resp.read())
         event = next(term for term in payload["terms"] if term["name"] == "Event")
-        self.assertEqual(event["review"], [
-            {"name": "source", "value": "nostr"},
-            {"name": "protocol", "value": "NIP-01"},
-            {"name": "owner", "value": "nostr"},
-            {"name": "meaning", "value": "A signed Nostr event."},
-        ])
+        self.assertEqual(event["markdown"], THROWAWAY_EVENT["content"])
         self.assertEqual(event["rust_item"], "Event")
         self.assertEqual(event["rust_item_kind"], "non-Rust Concept")
         self.assertEqual(

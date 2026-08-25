@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import vocabulary_approval as approval
+import vocabulary_structure as structure
 
 APP_HTML = Path(__file__).with_name("approve_vocabulary.html")
 MAXIMUM_BODY_BYTES = 256 * 1024
@@ -93,6 +94,19 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "; ".join(problems)})
             return
 
+        structure_path = self.root / approval.STRUCTURE_PATH
+        if not structure.snapshot_inputs_current(self.root, structure_path):
+            self._send_json(
+                409,
+                {
+                    "error": (
+                        "Rust inputs changed after structural compilation; "
+                        "refresh the snapshot and restart approval"
+                    )
+                },
+            )
+            return
+
         name = approval.approved_name(event)
         term_list = read_terms(self.root)
         candidates, candidate_problems = read_candidates(self.root, term_list)
@@ -127,8 +141,18 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        structures, structure_problems = structure.read_snapshot(structure_path)
+        if structure_problems:
+            self._send_json(409, {"error": "; ".join(structure_problems)})
+            return
+        compiled = structures.get(name)
+        if compiled is None:
+            self._send_json(
+                409, {"error": f"{name}: missing compiler-derived structure"}
+            )
+            return
         try:
-            expected = approval.canonical_markdown(term)
+            expected = approval.canonical_markdown(term, compiled)
         except ValueError as error:
             self._send_json(500, {"error": f"canonical_markdown error: {error}"})
             return
@@ -181,17 +205,32 @@ class Handler(BaseHTTPRequestHandler):
         approvals, approval_problems = approval.load_approvals(
             self.root / approval.APPROVALS_PATH
         )
-        problems = [*candidate_problems, *approval_problems]
+        structures, structure_problems = structure.read_snapshot(
+            self.root / approval.STRUCTURE_PATH
+        )
+        problems = [
+            *candidate_problems,
+            *approval_problems,
+            *structure_problems,
+        ]
         payload = []
         candidate_names = {term["name"] for term in candidates}
         for term in terms:
             if term["name"] in candidate_names:
                 continue
-            markdown = approval.canonical_markdown(term)
+            compiled = structures.get(term["name"])
+            markdown = (
+                approval.canonical_markdown(term, compiled)
+                if compiled is not None
+                else ""
+            )
             signatures = approvals.get(term["name"], [])
             signed = approval.authoritative_approval(signatures, markdown)
             concealed = approval.structural_problems_for_term(term, hidden)
-            if concealed:
+            if compiled is None:
+                status = "invalid"
+                concealed = ["missing compiler-derived structure", *concealed]
+            elif concealed:
                 status = "invalid"
             elif signed is not None:
                 status = "approved"
@@ -206,7 +245,6 @@ class Handler(BaseHTTPRequestHandler):
                     "source": term.get("source", ""),
                     "owner": term.get("owner", ""),
                     "markdown": markdown,
-                    "review": approval.review_fields(term),
                     "rust_item": approval.symbol_for_term(term),
                     "rust_item_kind": approval.item_kind_for_term(term, root=self.root),
                     "purpose": approval.row_purpose(term),
@@ -220,12 +258,19 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         for term in candidates:
-            markdown = approval.canonical_markdown(term)
+            compiled = structures.get(term["name"])
+            markdown = (
+                approval.canonical_markdown(term, compiled)
+                if compiled is not None
+                else ""
+            )
             signatures = approvals.get(term["name"], [])
             blocked = term["disposition"] == "blocked"
             signed = None if blocked else approval.authoritative_approval(signatures, markdown)
             status = (
-                "blocked"
+                "invalid"
+                if compiled is None
+                else "blocked"
                 if blocked
                 else "approved"
                 if signed
@@ -240,7 +285,6 @@ class Handler(BaseHTTPRequestHandler):
                     "source": term["source"],
                     "owner": term["owner"],
                     "markdown": markdown,
-                    "review": approval.review_fields(term),
                     "rust_item": approval.symbol_for_term(term),
                     "rust_item_kind": approval.item_kind_for_term(term, root=self.root),
                     "purpose": approval.row_purpose(term),
@@ -285,6 +329,15 @@ def main() -> int:
     if arguments.dump_candidates_json:
         terms = read_terms(Handler.root)
         candidates, problems = read_candidates(Handler.root, terms)
+        structures, structure_problems = structure.read_snapshot(
+            Handler.root / approval.STRUCTURE_PATH
+        )
+        problems.extend(structure_problems)
+        problems.extend(
+            f"{term['name']}: missing compiler-derived structure"
+            for term in candidates
+            if term["name"] not in structures
+        )
         if problems:
             for problem in problems:
                 print(problem, file=sys.stderr)
@@ -295,7 +348,9 @@ def main() -> int:
                     {
                         "name": term["name"],
                         "disposition": term["disposition"],
-                        "markdown": approval.canonical_markdown(term),
+                        "markdown": approval.canonical_markdown(
+                            term, structures[term["name"]]
+                        ),
                     }
                     for term in candidates
                 ],
@@ -303,6 +358,22 @@ def main() -> int:
             )
         )
         return 0
+    expected_snapshot = structure.render_snapshot(
+        structure.compile_snapshot(Handler.root)
+    )
+    snapshot_path = Handler.root / approval.STRUCTURE_PATH
+    actual_snapshot = (
+        snapshot_path.read_text(encoding="utf-8")
+        if snapshot_path.exists()
+        else ""
+    )
+    if actual_snapshot != expected_snapshot:
+        print(
+            "approval refused: compiler-derived vocabulary structure is stale; "
+            "run python3 tools/vocabulary_structure.py update",
+            file=sys.stderr,
+        )
+        return 1
     Handler.verifier_path = Path(arguments.verifier) if arguments.verifier else None
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), Handler)
     url = f"http://127.0.0.1:{arguments.port}/"

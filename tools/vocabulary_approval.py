@@ -22,6 +22,7 @@ OWNER = "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52"
 APPROVAL_KIND = 9999
 APPROVALS_PATH = Path("docs/internals/approvals.jsonl")
 CANDIDATES_PATH = Path("docs/internals/vocabulary-candidates.jsonl")
+STRUCTURE_PATH = Path("docs/internals/vocabulary-structure.json")
 ROOT = Path(__file__).resolve().parent.parent
 
 PROSE_FIELDS = (
@@ -374,7 +375,9 @@ def candidate_terms(
     return candidates, problems
 
 
-def canonical_markdown(term: dict[str, Any]) -> str:
+def canonical_markdown(
+    term: dict[str, Any], structure: dict[str, Any]
+) -> str:
     """Render one registry term as the exact text an approval signs.
 
     Raises ValueError if any field value has an unexpected type so that a
@@ -424,56 +427,18 @@ def canonical_markdown(term: dict[str, Any]) -> str:
             )
         lines.append(f"**{field}**: {value}")
         lines.append("")
+    from vocabulary_structure import canonical_structure
+
+    lines.extend(
+        [
+            "## Compiler-derived Rust structure",
+            "",
+            "```json",
+            canonical_structure(structure),
+            "```",
+        ]
+    )
     return "\n".join(lines).rstrip() + "\n"
-
-
-def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the canonical approval fields in a form the UI can display.
-
-    The values and ordering match ``canonical_markdown`` but stay structured,
-    so the approval UI never needs to interpret its signed Markdown payload.
-    """
-    fields: list[dict[str, Any]] = []
-    for field in PROSE_FIELDS:
-        value = term.get(field)
-        if value is None:
-            continue
-        if not isinstance(value, str):
-            raise ValueError(
-                f"field '{field}' must be a str, got {type(value).__name__}"
-            )
-        stripped = value.strip()
-        if stripped:
-            fields.append({"name": field, "value": stripped})
-    for field in LIST_FIELDS:
-        value = term.get(field)
-        if value is None:
-            continue
-        if not isinstance(value, list):
-            raise ValueError(
-                f"field '{field}' must be a list, got {type(value).__name__}"
-            )
-        if not value:
-            continue
-        if any(not isinstance(element, str) for element in value):
-            index = next(
-                i for i, element in enumerate(value) if not isinstance(element, str)
-            )
-            raise ValueError(
-                f"field '{field}[{index}]' must be a str, got "
-                f"{type(value[index]).__name__}"
-            )
-        fields.append({"name": field, "value": sorted(value)})
-    for field in sorted(
-        key for key in term if key not in {"name", *PROSE_FIELDS, *LIST_FIELDS}
-    ):
-        value = term[field]
-        if not isinstance(value, (str, int, float, bool)):
-            raise ValueError(
-                f"extra field '{field}' has unrenderable type {type(value).__name__}"
-            )
-        fields.append({"name": field, "value": str(value)})
-    return fields
 
 
 def symbol_for_term(term: dict[str, Any]) -> str:
@@ -723,7 +688,9 @@ def authoritative_approval(
 
 
 def unapproved_terms(
-    terms: tuple[dict[str, Any], ...], approvals: dict[str, list[dict[str, Any]]]
+    terms: tuple[dict[str, Any], ...],
+    approvals: dict[str, list[dict[str, Any]]],
+    structures: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
     """Every term with no approval, or whose text no longer matches one."""
     problems: list[str] = []
@@ -735,6 +702,13 @@ def unapproved_terms(
         events = approvals.get(name)
         if not events:
             problems.append(f"{name}: no signed approval")
-        elif authoritative_approval(events, canonical_markdown(term)) is None:
+        else:
+            from vocabulary_structure import EMPTY_STRUCTURE
+
+            compiled = (structures or {}).get(str(name), EMPTY_STRUCTURE)
+            if authoritative_approval(
+                events, canonical_markdown(term, compiled)
+            ) is not None:
+                continue
             problems.append(f"{name}: changed since its approval was signed")
     return problems

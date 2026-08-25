@@ -1,6 +1,6 @@
 # 0027 — Vocabulary approvals are not bound to Rust structure
 
-**Status:** implementing
+**Status:** implemented, awaiting independent review
 **Raised:** 2026-08-25, by Pablo
 
 ## Problem
@@ -60,4 +60,18 @@ or deleting them. A new signature appends beside all earlier events.
 
 ## Validation
 
-Pending implementation.
+- `python3 -m unittest tools.tests.test_vocabulary_structure` — 9 passed.
+- Focused approval payload, history, presentation, classification, and research
+  tests excluding the independently red candidate-coverage class — 57 passed.
+- `python3 -m unittest tools.tests.test_vocabulary_check` — 36 passed.
+- Rust vocabulary governance excluding the two independently red repository
+  gates — 8 passed.
+- Fresh compiler snapshot generation and byte-for-byte `check` — passed.
+- All 18 existing historical events load unchanged; zero match the new
+  structurally bound current payload, as required.
+
+The existing candidate-coverage class remains red on 23 unrelated current-tree
+research mismatches (the SimpleGroup rename set, missing
+`ContactListRowEvidence`, and stale `EventValue`/`InvalidEventValue` evidence).
+The terminal-name and all-terms-approved repository gates therefore remain red;
+this issue does not approve or hide that backlog.
