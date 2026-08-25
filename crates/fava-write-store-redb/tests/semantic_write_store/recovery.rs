@@ -512,7 +512,6 @@ fn settle_no_destination(store: &RedbWriteStore, accepted: &fava_write_store::Ac
                 coverage: BTreeMap::new(),
                 unresolved: BTreeSet::new(),
                 shortfalls: Vec::new(),
-                settled: true,
             },
         )
         .unwrap();

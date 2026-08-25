@@ -32,7 +32,7 @@ impl Observation {
             registry,
             latest,
             cancelled,
-            delivered_revision: QueryRevision(1),
+            delivered_revision: QueryRevision::new(1),
             coalesced,
         }
     }
@@ -66,8 +66,8 @@ impl Observation {
         let latest = Arc::clone(&self.latest.borrow_and_update());
         report_delivery_gap(
             self.coalesced.as_deref(),
-            self.delivered_revision.0,
-            latest.revision.0,
+            self.delivered_revision.get(),
+            latest.revision.get(),
         );
         self.delivered_revision = latest.revision;
         Ok(latest)

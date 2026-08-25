@@ -30,7 +30,7 @@ const PREFIX: &str = "fava";
 /// contributes: not the filter, not the relay's advertisement.
 #[must_use]
 pub(crate) fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
-    SubscriptionId::new(format!("{PREFIX}-{}-{ordinal}", revision.0))
+    SubscriptionId::new(format!("{PREFIX}-{}-{ordinal}", revision.get()))
 }
 
 /// Exact encoded byte length of the REQ this content produces.

@@ -353,7 +353,6 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 coverage: BTreeMap::new(),
                 unresolved: BTreeSet::new(),
                 shortfalls: Vec::new(),
-                settled: true,
             },
         )
         .expect("empty route settles");

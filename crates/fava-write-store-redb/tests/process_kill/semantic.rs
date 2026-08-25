@@ -101,7 +101,6 @@ fn semantic_boundary_child() {
                         coverage: BTreeMap::new(),
                         unresolved: BTreeSet::new(),
                         shortfalls: Vec::new(),
-                        settled: true,
                     },
                 )
                 .expect("semantic terminal state commits");

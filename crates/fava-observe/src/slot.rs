@@ -39,14 +39,14 @@ pub(crate) struct Slot {
 impl Slot {
     pub(crate) fn new(cancel: CancellationToken) -> Self {
         Self {
-            generation: OperationGeneration(1),
+            generation: OperationGeneration::new(1),
             cancel,
             lease: None,
             session: None,
             installed: InstalledSubscriptions::empty(),
             completeness: BTreeMap::new(),
             settled: BTreeMap::new(),
-            revision: PlanRevision(0),
+            revision: PlanRevision::new(0),
             armed: false,
             busy: false,
             state: fava_diagnostics::RelaySessionState::Connecting,

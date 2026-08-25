@@ -143,7 +143,7 @@ impl Engine {
             reports: Reports { sender },
             inbox,
             slots: BTreeMap::new(),
-            revision: PlanRevision(0),
+            revision: PlanRevision::new(0),
         };
         runtime
             .spawn_cancellable(TaskName("observe.engine"), root, engine.run())
@@ -306,6 +306,7 @@ impl Engine {
                     deadlines: self.providers.deadlines,
                     bounds: self.providers.bounds,
                     reconnect_attempts: None,
+                    initial_generation: generation,
                 },
                 generation,
                 slot.cancel.clone(),
@@ -315,7 +316,7 @@ impl Engine {
     }
     /// The next plan revision, never reused for the life of this engine.
     fn next_revision(&mut self) -> PlanRevision {
-        self.revision = PlanRevision(self.revision.0.saturating_add(1));
+        self.revision = self.revision.next();
         self.revision
     }
 

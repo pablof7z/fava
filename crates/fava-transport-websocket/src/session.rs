@@ -30,7 +30,7 @@ pub(crate) struct SessionShared {
 impl SessionShared {
     pub(crate) fn new(request: &OpenRelaySession, entropy: u64) -> Self {
         Self {
-            identity: Arc::new(LiveIdentity::new(request.key.clone())),
+            identity: Arc::new(LiveIdentity::new(request.key.clone(), request.initial_generation)),
             bounds: request.bounds,
             deadlines: request.deadlines,
             reconnect_attempts: request.reconnect_attempts,

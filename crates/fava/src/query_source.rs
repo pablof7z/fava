@@ -120,7 +120,7 @@ impl Drop for FavaChanges {
 fn convert(snapshot: &fava_query::QuerySnapshot) -> SourceSnapshot {
     SourceSnapshot {
         kind: SourceKind::EventCache,
-        revision: SourceRevision(snapshot.revision.0),
+        revision: SourceRevision(snapshot.revision.get()),
         status: SourceStatus::Open,
         events: snapshot.events.iter().filter_map(convert_record).collect(),
         // Forward the retraction causes the underlying event cache reported.

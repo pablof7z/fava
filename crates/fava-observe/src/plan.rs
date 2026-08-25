@@ -107,7 +107,7 @@ mod tests {
                 &first,
                 &constraints,
                 &InstalledSubscriptions::empty(),
-                PlanRevision(1),
+                PlanRevision::new(1),
             )
             .expect("the planner accepts the cohort");
         let accepted_ids: BTreeSet<SubscriptionId> =
@@ -129,7 +129,7 @@ mod tests {
             demand(2, Filter::new().kind(Kind::Metadata)),
         ];
         let growing = planner
-            .plan(&relay(), &second, &constraints, &installed, PlanRevision(2))
+            .plan(&relay(), &second, &constraints, &installed, PlanRevision::new(2))
             .expect("the planner accepts the second cohort");
         let opened: BTreeSet<SubscriptionId> =
             growing.open.iter().map(|entry| entry.id.clone()).collect();
@@ -156,7 +156,7 @@ mod tests {
                 &cohort,
                 &constraints,
                 &InstalledSubscriptions::empty(),
-                PlanRevision(1),
+                PlanRevision::new(1),
             )
             .expect("the planner accepts the cohort");
 

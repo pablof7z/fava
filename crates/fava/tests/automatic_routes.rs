@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -27,7 +27,6 @@ use nostr::key::Keys;
 
 #[derive(Default)]
 struct RecordingTransport {
-    next_generation: AtomicU64,
     sessions: Mutex<Vec<Arc<RecordingSession>>>,
 }
 
@@ -69,9 +68,7 @@ impl Transport for RecordingTransport {
             let session = Arc::new(RecordingSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: OperationGeneration(
-                        self.next_generation.fetch_add(1, Ordering::SeqCst) + 1,
-                    ),
+                    generation: request.initial_generation,
                 },
                 sent: Mutex::new(Vec::new()),
                 closed: AtomicBool::new(false),

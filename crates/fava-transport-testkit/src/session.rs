@@ -41,7 +41,7 @@ impl FakeSession {
         Self {
             identity: Arc::new(LiveIdentity {
                 key: request.key.clone(),
-                generation: AtomicU64::new(1),
+                generation: AtomicU64::new(request.initial_generation.get()),
             }),
             bounds: request.bounds,
             deadlines: request.deadlines,

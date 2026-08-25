@@ -139,7 +139,6 @@ fn initial_route(
         coverage,
         unresolved: BTreeSet::new(),
         shortfalls,
-        settled: false,
     }
 }
 
@@ -210,7 +209,6 @@ fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
         coverage: BTreeMap::new(),
         unresolved: BTreeSet::new(),
         shortfalls: Vec::new(),
-        settled: true,
     };
     let mut identities = Vec::new();
 

@@ -14,7 +14,7 @@ pub enum TransportError {
     #[error("relay session disconnected: {0:?}")]
     Disconnected(TransportFailure),
     /// The session generation is already closed.
-    #[error("relay session generation {} is closed", .0.generation.0)]
+    #[error("relay session generation {} is closed", .0.generation.get())]
     Closed(RelaySessionIdentity),
     /// An inbound frame violated a declared bound.
     #[error("inbound frame of {bytes} bytes exceeds the declared bound {maximum}")]

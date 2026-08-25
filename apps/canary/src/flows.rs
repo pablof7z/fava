@@ -242,7 +242,7 @@ async fn flow_01_engine_before_account(live: &RelayUrl) -> FlowRecord {
     match tokio::time::timeout(RESPONSIVE_BUDGET, engine.observe(query)).await {
         Ok(Ok(observation)) => {
             let elapsed = started.elapsed();
-            let revision = observation.current().revision.0;
+            let revision = observation.current().revision.get();
             observation.close();
             FlowRecord::passed(
                 ID,
@@ -902,7 +902,7 @@ async fn flow_08_mixed_relay_health(live: &RelayUrl, down: &RelayUrl) -> FlowRec
         .relays
         .iter()
         .filter(|relay| matches!(relay.state, RelaySessionState::Open))
-        .map(|relay| format!("{} gen {}", relay.session.relay, relay.generation.0))
+        .map(|relay| format!("{} gen {}", relay.session.relay, relay.generation.get()))
         .collect();
     let shortfalls: Vec<String> = diagnostics
         .queries

@@ -207,11 +207,19 @@ pub struct RoutePlan {
     pub unresolved: BTreeSet<RouteTarget>,
     /// Exact current bounded routing failures or limits.
     pub shortfalls: Vec<String>,
-    /// Whether no target remains unresolved.
-    pub settled: bool,
 }
 
 impl RoutePlan {
+    /// Whether no target remains unresolved.
+    ///
+    /// Derived from `unresolved`, never carried as independent state: every
+    /// producer of a `RoutePlan` computes settlement from the exact same
+    /// unresolved set, so a separate stored flag could disagree with it.
+    #[must_use]
+    pub fn settled(&self) -> bool {
+        self.unresolved.is_empty()
+    }
+
     /// Build a bounded plan preserving one routing refusal as current evidence.
     #[must_use]
     pub fn shortfall(revision: u64, request: &RouteRequest, reason: String) -> Self {
@@ -225,7 +233,6 @@ impl RoutePlan {
                 .collect(),
             unresolved: request.targets(),
             shortfalls: vec![reason],
-            settled: false,
         }
     }
 
@@ -270,14 +277,12 @@ impl RoutePlan {
                 );
             }
         }
-        let settled = unresolved.is_empty();
         Ok(Self {
             revision,
             destinations,
             coverage,
             unresolved,
             shortfalls: contribution.shortfalls.clone(),
-            settled,
         })
     }
 

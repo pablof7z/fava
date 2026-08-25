@@ -37,7 +37,7 @@ impl PlannerScenario {
             demand,
             constraints: RelayReadConstraints::unknown(),
             installed: InstalledSubscriptions::empty(),
-            revision: PlanRevision(1),
+            revision: PlanRevision::new(1),
         }
     }
 
@@ -198,7 +198,7 @@ pub fn assert_running_subscriptions_are_immutable(
     let next = scenario
         .clone()
         .demanding(joined)
-        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+        .continuing(installed.clone(), PlanRevision::new(scenario.revision.get() + 1));
     let replan = assert_conformant(planner, &next);
 
     for id in installed.ids() {
@@ -248,7 +248,7 @@ pub fn assert_partial_withdrawal_leaves_the_wire_alone(
     let next = scenario
         .clone()
         .demanding(surviving.to_vec())
-        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+        .continuing(installed.clone(), PlanRevision::new(scenario.revision.get() + 1));
     let replan = assert_conformant(planner, &next);
 
     for id in installed.ids() {

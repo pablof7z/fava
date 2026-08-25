@@ -239,7 +239,6 @@ fn automatic_route_shortfall_bound_is_atomic() {
         coverage: BTreeMap::new(),
         unresolved: BTreeSet::new(),
         shortfalls: vec!["x".repeat(4_097)],
-        settled: true,
     };
 
     assert!(
@@ -311,7 +310,6 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         coverage: BTreeMap::new(),
         unresolved: BTreeSet::new(),
         shortfalls: Vec::new(),
-        settled: true,
     };
 
     let receipt = store

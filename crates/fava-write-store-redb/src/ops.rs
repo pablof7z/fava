@@ -253,7 +253,7 @@ impl WriteStore for RedbWriteStore {
             if plan.revision == receipt.route_revision
                 && destinations == receipt.desired_destinations
                 && plan.shortfalls == receipt.route_shortfalls
-                && plan.settled == receipt.route_settled
+                && plan.settled() == receipt.route_settled
             {
                 return Ok(());
             }

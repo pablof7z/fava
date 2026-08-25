@@ -3,6 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use fava_query::OperationGeneration;
 use fava_state::RelaySessionKey;
 
 /// Fava-owned deadlines for one relay session. Never defaulted by transport.
@@ -52,4 +53,7 @@ pub struct OpenRelaySession {
     pub bounds: TransportBounds,
     /// Reconnect budget. `None` means reconnect until every lease is released.
     pub reconnect_attempts: Option<NonZeroUsize>,
+    /// Generation to give this session at open. Provided by `fava-observe`
+    /// so the transport never mints generation values itself.
+    pub initial_generation: OperationGeneration,
 }

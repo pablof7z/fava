@@ -18,7 +18,7 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions_no_grouping::planner;
-use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDeadlines};
+use fava_transport::{OpenRelaySession, OperationGeneration, Transport, TransportBounds, TransportDeadlines};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
@@ -39,6 +39,7 @@ async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
             deadlines: deadlines(),
             bounds: bounds(),
             reconnect_attempts: None,
+            initial_generation: OperationGeneration::new(1),
         })
         .await
         .expect("the outsider acquires the relay session");

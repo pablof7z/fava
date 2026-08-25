@@ -45,7 +45,7 @@ pub(crate) fn wire_fact(
 pub(crate) fn refused_plan(session: &RelaySessionKey, detail: BoundedText) -> RelayDiagnostic {
     RelayDiagnostic {
         session: session.clone(),
-        generation: OperationGeneration(0),
+        generation: OperationGeneration::new(0),
         state: RelaySessionState::Unreachable { detail },
         holders: 0,
         subscriptions: Vec::new(),

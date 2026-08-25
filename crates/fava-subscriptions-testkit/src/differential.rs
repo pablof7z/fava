@@ -137,7 +137,7 @@ pub fn assert_withdrawal_agrees(
         let next = scenario
             .clone()
             .demanding(surviving.to_vec())
-            .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+            .continuing(installed.clone(), PlanRevision::new(scenario.revision.get() + 1));
         let replan = assert_conformant(planner, &next);
 
         let served = every_settled(&replan);

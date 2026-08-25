@@ -197,8 +197,8 @@ fn a_declared_ceiling_is_reported_by_both_planners() {
     let ungrouped_lost: BTreeSet<_> = ungrouped.shortfalls.iter().map(|e| e.demand).collect();
     assert_eq!(grouped_lost.len(), 2);
     assert_eq!(ungrouped_lost.len(), 2);
-    assert_eq!(grouped.revision, PlanRevision(1));
-    assert_eq!(ungrouped.revision, PlanRevision(1));
+    assert_eq!(grouped.revision, PlanRevision::new(1));
+    assert_eq!(ungrouped.revision, PlanRevision::new(1));
     for plan in [&grouped, &ungrouped] {
         assert_eq!(plan.installed_after().count(), 2);
     }

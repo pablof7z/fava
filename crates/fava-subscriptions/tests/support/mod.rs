@@ -66,7 +66,7 @@ pub fn opening(
 ) -> SubscriptionPlan {
     SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(1),
+        revision: PlanRevision::new(1),
         open: vec![PlannedSubscription {
             id: id.clone(),
             filters: filters.clone(),

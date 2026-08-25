@@ -346,7 +346,7 @@ impl Engine {
             &self.runtime,
             lease,
             Vec::new(),
-            OperationGeneration(0),
+            OperationGeneration::new(0),
             self.providers.deadlines.write,
             self.providers.deadlines.close,
         );

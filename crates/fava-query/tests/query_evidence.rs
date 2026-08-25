@@ -26,7 +26,7 @@ fn observation(value: u64) -> ObservationId {
 fn relay(session: RelaySessionKey, state: RelaySourceState) -> RelayQueryEvidence {
     RelayQueryEvidence {
         session,
-        generation: OperationGeneration(1),
+        generation: OperationGeneration::new(1),
         plan_revision: 7,
         branches: vec![QueryBranchId::ROOT],
         state,
@@ -166,7 +166,7 @@ fn grouped_eose_settles_every_logical_demand() {
         sources: Vec::new(),
         relays: vec![
             RelayQueryEvidence {
-                branches: vec![QueryBranchId::ROOT, QueryBranchId(1)],
+                branches: vec![QueryBranchId::ROOT, QueryBranchId::new(1)],
                 shared_with: vec![observation(1), observation(2)],
                 ..relay(
                     grouped.clone(),
@@ -176,7 +176,7 @@ fn grouped_eose_settles_every_logical_demand() {
                 )
             },
             RelayQueryEvidence {
-                branches: vec![QueryBranchId(2)],
+                branches: vec![QueryBranchId::new(2)],
                 ..relay(
                     separate.clone(),
                     RelaySourceState::Open {
@@ -192,7 +192,7 @@ fn grouped_eose_settles_every_logical_demand() {
     let grouped_evidence = evidence.relay(&grouped).expect("grouped relay present");
     assert_eq!(
         grouped_evidence.branches,
-        vec![QueryBranchId::ROOT, QueryBranchId(1)],
+        vec![QueryBranchId::ROOT, QueryBranchId::new(1)],
         "one relay's EOSE must remain attributed to every branch it serves"
     );
     assert!(grouped_evidence.stored_events_complete());
@@ -307,7 +307,7 @@ fn subscription_shortfall_is_visible_on_the_relay_it_belongs_to() {
         relays: vec![RelayQueryEvidence {
             branches: vec![QueryBranchId::ROOT],
             shortfall: Some(RelayShortfall {
-                branches: vec![QueryBranchId(1), QueryBranchId(2)],
+                branches: vec![QueryBranchId::new(1), QueryBranchId::new(2)],
                 detail: BoundedText::new("relay subscription limit reached"),
             }),
             route: RouteOrigin::Automatic { revision: 3 },
@@ -360,12 +360,12 @@ fn relay_supplied_text_is_bounded() {
 /// is comparable, so an owner can reject it.
 #[test]
 fn stale_completions_are_comparable_against_current_identity() {
-    let current = OperationGeneration(4);
-    assert!(OperationGeneration(3) < current);
-    assert_eq!(current.next(), OperationGeneration(5));
+    let current = OperationGeneration::new(4);
+    assert!(OperationGeneration::new(3) < current);
+    assert_eq!(current.next(), OperationGeneration::new(5));
     assert_eq!(
-        OperationGeneration(u64::MAX).next(),
-        OperationGeneration(u64::MAX),
+        OperationGeneration::new(u64::MAX).next(),
+        OperationGeneration::new(u64::MAX),
         "generation exhaustion saturates instead of panicking"
     );
 
@@ -376,5 +376,5 @@ fn stale_completions_are_comparable_against_current_identity() {
         },
     );
     assert_eq!(stale.plan_revision, 7);
-    assert_eq!(stale.generation, OperationGeneration(1));
+    assert_eq!(stale.generation, OperationGeneration::new(1));
 }

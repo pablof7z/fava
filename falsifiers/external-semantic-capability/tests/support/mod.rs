@@ -287,14 +287,14 @@ impl Shared {
 
 impl Transport for ScriptedTransport {
     fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
-        let generation = self.shared.opens.fetch_add(1, Ordering::SeqCst) + 1;
+        self.shared.opens.fetch_add(1, Ordering::SeqCst);
         let inbox = Arc::new(Inbox::new());
         let owner = Arc::clone(&self.shared);
         Box::pin(async move {
             let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: fava_query::OperationGeneration(generation),
+                    generation: request.initial_generation,
                 },
                 owner,
                 inbox,

@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
-    TransportDeadlines, TransportFailure,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
+    Transport, TransportBounds, TransportDeadlines, TransportFailure,
 };
 use fava_transport_testkit::FakeTransport;
 
@@ -36,6 +36,7 @@ fn request() -> OpenRelaySession {
             max_frame_bytes: frames(1024),
         },
         reconnect_attempts: Some(frames(3)),
+        initial_generation: OperationGeneration::new(1),
     }
 }
 

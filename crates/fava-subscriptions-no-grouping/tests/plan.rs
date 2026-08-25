@@ -59,7 +59,7 @@ fn each_logical_demand_becomes_one_exact_req_with_attribution() {
         &asked,
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        PlanRevision::new(1),
     );
 
     assert_eq!(plan.relay, relay());
@@ -87,7 +87,7 @@ fn an_unchanged_demand_is_retained_across_replans() {
         &asked,
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        PlanRevision::new(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
         first.open.iter().map(|planned| {
@@ -105,7 +105,7 @@ fn an_unchanged_demand_is_retained_across_replans() {
         &asked,
         &RelayReadConstraints::unknown(),
         &installed,
-        PlanRevision(2),
+        PlanRevision::new(2),
     );
 
     assert!(second.is_noop());
@@ -119,7 +119,7 @@ fn withdrawn_demand_closes_its_own_subscription() {
         &[demand(1, filter.clone())],
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        PlanRevision::new(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
         first.open.iter().map(|planned| {
@@ -137,7 +137,7 @@ fn withdrawn_demand_closes_its_own_subscription() {
         &[],
         &RelayReadConstraints::unknown(),
         &installed,
-        PlanRevision(2),
+        PlanRevision::new(2),
     );
 
     assert_eq!(second.close.len(), 1);
@@ -163,7 +163,7 @@ fn a_declared_ceiling_produces_typed_shortfall_not_an_error() {
         &asked,
         &constraints,
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        PlanRevision::new(1),
     );
 
     assert_eq!(plan.open.len(), 2);
@@ -188,7 +188,7 @@ fn two_demands_with_one_identity_are_refused() {
             &asked,
             &RelayReadConstraints::unknown(),
             &InstalledSubscriptions::empty(),
-            PlanRevision(1),
+            PlanRevision::new(1),
         )
         .expect_err("one logical identity cannot appear twice");
 

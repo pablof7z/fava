@@ -41,7 +41,7 @@ fn relay_fact(
 ) -> RelayDiagnostic {
     RelayDiagnostic {
         session,
-        generation: OperationGeneration(generation),
+        generation: OperationGeneration::new(generation),
         state: RelaySessionState::Open,
         holders,
         subscriptions: vec![WireSubscriptionDiagnostic {
@@ -143,7 +143,7 @@ fn diagnostics_attribute_each_relay_session_to_its_observation() {
             demand(&shared_relay, QueryBranchId::ROOT, complete),
             demand(
                 &solo_relay,
-                QueryBranchId(1),
+                QueryBranchId::new(1),
                 RelaySourceState::Open {
                     requested_at: Timestamp::from_secs(90),
                 },
@@ -205,7 +205,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
     for index in 0..3u64 {
         diagnostics.relay(RelayDiagnostic {
             session: session(&format!("relay{index}")),
-            generation: OperationGeneration(index),
+            generation: OperationGeneration::new(index),
             state: RelaySessionState::Reconnecting {
                 detail: BoundedText::new(&hostile),
             },
@@ -241,7 +241,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
     let held = snapshot.relays[1].session.clone();
     diagnostics.relay(RelayDiagnostic {
         session: held.clone(),
-        generation: OperationGeneration(9),
+        generation: OperationGeneration::new(9),
         state: RelaySessionState::Closed,
         holders: 0,
         subscriptions: Vec::new(),
@@ -255,7 +255,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         .iter()
         .find(|fact| fact.session == held)
         .expect("republished session is retained once");
-    assert_eq!(current.generation, OperationGeneration(9));
+    assert_eq!(current.generation, OperationGeneration::new(9));
     assert_eq!(current.state, RelaySessionState::Closed);
 }
 
