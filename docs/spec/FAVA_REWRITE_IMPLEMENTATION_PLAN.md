@@ -1428,6 +1428,7 @@ An enabled scenario may never silently skip.
 | `route-preview-parity` | M6 | WRITE-016 |
 | `replaceable-edit-first-value` | M7 | PROTO-002/003, WRITE-002/006 |
 | `replaceable-edit-rematerialization` | M7 | WRITE-006/007, PROTO-003 |
+| `same-coordinate-edit-composition` | M7 | WRITE-006/007/029, PROTO-003 |
 | `protocol-crate-n-plus-one` | M7 | GOAL-006, PROTO-001/002 |
 | `nip42-write-and-reconnect` | M8 | RELAY-006/007, ID-006/007 |
 | `auth-account-isolation` | M8 | RELAY-007, ID-001 |

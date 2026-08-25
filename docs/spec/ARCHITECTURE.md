@@ -177,7 +177,8 @@ pub struct MaterializationId(u64);
 
 pub trait ReplaceableEventMaterializer: Send + Sync {
     // The protocol-owned implementation validates and applies its durable edit
-    // format to qualified source state or its defined empty state.
+    // format to qualified signed or unsigned source state, or its defined empty
+    // state.
 }
 ```
 
@@ -192,6 +193,16 @@ a completion only while that materialization remains current.
 owns no store, signer, route, delivery, or receipt lifecycle. Application
 assembly selects implementations before write recovery so accepted edit formats
 can be interpreted without a universal event-kind switch.
+
+One active semantic write owns one durable ordered edit sequence for its exact
+author/kind/identifier coordinate. A distinct edit accepted while that write's
+current generation is unsigned appends to the sequence, replays the complete
+sequence in acceptance order, advances `MaterializationId`, and keeps the same
+`WriteId` and `ReceiptId`. The write store commits the sequence and successor
+atomically, retains bounded retired-generation evidence, and refuses stale
+completions by exact operation and generation identity. Recovery restores the
+same ordered sequence before new work is admitted. This is universal semantic
+custody; protocol crates do not own queues, batches, or publication lifecycles.
 
 ### Query results are merged source state
 

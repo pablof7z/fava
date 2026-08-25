@@ -21,6 +21,8 @@ use tokio::sync::{broadcast, watch};
 mod lifecycle;
 mod model;
 mod semantic;
+mod semantic_acceptance;
+mod semantic_composition;
 mod state;
 
 use model::destinations;
@@ -76,8 +78,12 @@ impl WriteStore for MemoryWriteStore {
         self.capacity.get()
     }
 
-    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
-        self.reserve_active_slot()
+    fn reserve_active(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: PublicKey,
+    ) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot(edit, author)
     }
 
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
@@ -157,7 +163,7 @@ impl WriteStore for MemoryWriteStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic(intent, event, source)
     }
@@ -167,7 +173,7 @@ impl WriteStore for MemoryWriteStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_reserved_semantic(reservation, intent, event, source, initial_route)
@@ -180,7 +186,7 @@ impl WriteStore for MemoryWriteStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         self.install_semantic(
             write_id,
@@ -198,7 +204,7 @@ impl WriteStore for MemoryWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.record_semantic_failure(
@@ -217,7 +223,7 @@ impl WriteStore for MemoryWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -225,6 +231,22 @@ impl WriteStore for MemoryWriteStore {
         WriteStoreError,
     > {
         self.recover_semantic()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn materialized_edits(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.semantic_custody(receipt_id)
     }
 
     fn install_signed(

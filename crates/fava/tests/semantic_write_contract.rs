@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use fava_write::{
-    Event, EventBuilder, Kind, MaterializationId, PublicationEvidence, ReceiptId,
+    EventBuilder, EventValue, Kind, MaterializationId, PublicationEvidence, ReceiptId,
     ReplaceableEventEdit, ReplaceableEventMaterializer, SignatureState, Tag, Timestamp,
     UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
@@ -64,7 +64,7 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
         &self,
         _edit: &ReplaceableEventEdit,
         author: fava_write::PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         assert!(source.is_none());

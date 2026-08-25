@@ -1,5 +1,7 @@
 use fava_state::{EventCoordinate, event_coordinate};
-use fava_write::{EventId, Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
+use fava_write::{
+    EventId, EventValue, Kind, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError,
+};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
@@ -33,7 +35,8 @@ fn materialize(
     source: Option<&fava_write::Event>,
     created_at: u64,
 ) -> Result<fava_write::UnsignedEvent, WriteIntentError> {
-    materializer().materialize(edit, author, source, Timestamp::from(created_at))
+    let source = source.cloned().map(EventValue::Signed);
+    materializer().materialize(edit, author, source.as_ref(), Timestamp::from(created_at))
 }
 
 fn article_coordinate() -> EventCoordinate {

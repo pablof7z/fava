@@ -16,7 +16,10 @@ use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventId, Tag};
 use nostr::key::Keys;
 
-use super::support::{CountingSigner, RecordingPublisher, publication_builder, relay_evidence};
+use super::support::{
+    BlockingSigner, CountingSigner, RecordingPublisher, publication_builder, relay_evidence,
+    wait_for_materialization, wait_for_signer,
+};
 use super::{EditResult, explicit_intent, signed, target_count};
 
 pub fn assert_source_removal(
@@ -74,7 +77,93 @@ pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
         tags,
     )
     .await;
+    prove_pre_signature_composition(kind, Arc::clone(&materializer), &add, &adjacent, tags).await;
     prove_public_refusals(kind, materializer, add);
+}
+
+async fn prove_pre_signature_composition<Add, Adjacent>(
+    kind: Kind,
+    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    add: &Add,
+    adjacent: &Adjacent,
+    tags: (&str, &str, &str),
+) where
+    Add: Fn() -> EditResult,
+    Adjacent: Fn() -> EditResult,
+{
+    let (tag_name, target, adjacent_target) = tags;
+    let keys = Keys::generate();
+    let actor = keys.public_key();
+    let base = signed(&keys, kind, 10, "opaque", Vec::new());
+    let cache = Arc::new(MemoryEventCache::default());
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            base.clone(),
+            relay_evidence(),
+        ))])
+        .unwrap();
+    let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
+    let signer = Arc::new(BlockingSigner::new(actor));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let fava = publication_builder(
+        cache,
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::clone(&publisher),
+    )
+    .materializers([materializer])
+    .build()
+    .unwrap();
+
+    let first = fava
+        .by(actor)
+        .to([super::support::relay_url()])
+        .unwrap()
+        .publish(add().unwrap())
+        .unwrap();
+    wait_for_signer(&signer, 1).await;
+    let second = fava
+        .by(actor)
+        .to([super::support::relay_url()])
+        .unwrap()
+        .publish(adjacent().unwrap())
+        .unwrap();
+    assert_eq!(second.write_id(), first.write_id());
+    assert_eq!(second.receipt_id(), first.receipt_id());
+
+    let receipt = wait_for_materialization(&fava, first.receipt_id(), 2).await;
+    wait_for_signer(&signer, 2).await;
+    assert_eq!(
+        receipt.current.publication.materialization_source,
+        Some(base.id)
+    );
+    assert_eq!(
+        receipt.current.publication.retired_materializations.len(),
+        1
+    );
+    assert_eq!(
+        target_count_value(&receipt.current.event, tag_name, target),
+        1
+    );
+    assert_eq!(
+        target_count_value(&receipt.current.event, tag_name, adjacent_target),
+        1
+    );
+    assert_eq!(store.len().unwrap(), 1);
+    assert!(publisher.attempts().is_empty());
+    assert!(fava.cancel_write(first.receipt_id()).unwrap());
+}
+
+fn target_count_value(event: &EventValue, tag_name: &str, target: &str) -> usize {
+    event
+        .tags()
+        .iter()
+        .filter(|tag| {
+            let values = tag.as_slice();
+            values.first().map(String::as_str) == Some(tag_name)
+                && values.get(1).map(String::as_str) == Some(target)
+        })
+        .count()
 }
 
 async fn prove_first_value<Add>(

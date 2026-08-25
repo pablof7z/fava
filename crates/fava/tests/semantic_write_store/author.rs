@@ -1,4 +1,4 @@
-use fava_write::{WriteIntent, WriteRouting};
+use fava_write::{EventValue, WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
@@ -92,7 +92,7 @@ fn materialization_or_source_outside_accepted_author_is_refused() {
             .accept_materialized_edit(
                 alice_intent(),
                 materialization(alice.public_key(), 10, "alice"),
-                Some(&bob_source),
+                Some(&EventValue::Signed(bob_source.clone())),
             )
             .is_err()
     );

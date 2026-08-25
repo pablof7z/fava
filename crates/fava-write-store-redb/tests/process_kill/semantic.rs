@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent,
+    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, MaterializationId,
+    ReplaceableEventEdit, ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -56,7 +56,8 @@ fn semantic_boundary_child() {
         .accept_materialized_edit(
             intent,
             materialization(11, "generation one"),
-            matches!(boundary.as_str(), "successor" | "failed" | "retired").then_some(&base),
+            matches!(boundary.as_str(), "successor" | "failed" | "retired")
+                .then_some(&EventValue::Signed(base.clone())),
         )
         .expect("semantic child acceptance commits");
     match boundary.as_str() {
@@ -71,7 +72,7 @@ fn semantic_boundary_child() {
                     MaterializationId::from_u64(1),
                     Some(base.id),
                     materialization(created_at, "generation two"),
-                    Some(&successor),
+                    Some(&EventValue::Signed(successor.clone())),
                 )
                 .expect("semantic successor commits");
         }
@@ -83,10 +84,31 @@ fn semantic_boundary_child() {
                     accepted.receipt_id,
                     MaterializationId::from_u64(1),
                     Some(base.id),
-                    Some(&failed),
+                    Some(&EventValue::Signed(failed.clone())),
                     "child materializer failure".to_owned(),
                 )
                 .expect("semantic failure commits");
+        }
+        "composed" => {
+            let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let composed = store
+                .accept_materialized_edit(
+                    WriteIntent::edit_as(
+                        second_edit,
+                        keys().public_key(),
+                        WriteRouting::explicit([relay()]).unwrap(),
+                    )
+                    .unwrap(),
+                    materialization(12, "generation one|two"),
+                    Some(&accepted.current.event),
+                )
+                .expect("composed semantic sequence commits");
+            assert_eq!(composed.write_id, accepted.write_id);
+            assert_eq!(composed.receipt_id, accepted.receipt_id);
+            assert_eq!(
+                composed.current.publication.materialization_id,
+                MaterializationId::from_u64(2)
+            );
         }
         "terminal" => {
             store
@@ -238,6 +260,58 @@ async fn semantic_successor_and_failed_source_resume_once() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn semantic_composed_sequence_replays_after_sigkill() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let path = kill_at("composed");
+    let store = Arc::new(RedbWriteStore::open(path).expect("composed store reopens"));
+    let recovered = store.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].0.write_id.as_u64(), 1);
+    assert_eq!(recovered[0].0.receipt_id.as_u64(), 1);
+    assert_eq!(
+        recovered[0].0.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(
+        recovered[0]
+            .1
+            .iter()
+            .map(ReplaceableEventEdit::change)
+            .collect::<Vec<_>>(),
+        vec![&[1][..], &[2][..]]
+    );
+
+    let newer_source = signed_source(30, "newer post-kill source");
+    let newer_source_id = newer_source.id;
+    let cache = Arc::new(MemoryEventCache::default());
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            newer_source,
+            relay_evidence(),
+        ))])
+        .unwrap();
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&materializer))
+        .build()
+        .expect("composed recovery assembles");
+    let replayed = wait_for_generation(&fava, ReceiptId::from_u64(1), 3).await;
+    assert_eq!(replayed.write_id.as_u64(), 1);
+    assert_eq!(replayed.receipt_id.as_u64(), 1);
+    assert_eq!(
+        replayed.current.publication.materialization_source,
+        Some(newer_source_id)
+    );
+    let content = match &replayed.current.event {
+        EventValue::Unsigned(event) => &event.content,
+        EventValue::Signed(event) => &event.content,
+    };
+    assert_eq!(content, "newer post-kill source|1|2");
+    assert_eq!(materializer.calls(), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identity() {
     if env::var(SEMANTIC_BOUNDARY).is_ok() {
         return;
@@ -340,7 +414,7 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
                 MaterializationId::from_u64(1),
                 before.current.publication.materialization_source,
                 materialization(31, "late retired completion"),
-                Some(&late_source),
+                Some(&EventValue::Signed(late_source.clone())),
             )
             .is_err()
     );
@@ -483,15 +557,25 @@ impl ReplaceableEventMaterializer for TestMaterializer {
 
     fn materialize(
         &self,
-        _edit: &ReplaceableEventEdit,
+        edit: &ReplaceableEventEdit,
         author: fava::PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        let source_content = source.map_or("", |event| match event {
+            EventValue::Unsigned(event) => event.content.as_str(),
+            EventValue::Signed(event) => event.content.as_str(),
+        });
+        let change = edit.change().first().copied().unwrap_or_default();
+        let content = if source_content.is_empty() {
+            change.to_string()
+        } else {
+            format!("{source_content}|{change}")
+        };
         let result = EventBuilder::new(author, Kind::ContactList)
             .created_at(created_at)
-            .content(source.map_or("edit", |event| event.content.as_str()))
+            .content(content)
             .tags((0..self.tag_count).map(|index| {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
             }))

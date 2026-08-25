@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
+    EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
@@ -24,7 +24,7 @@ impl RedbWriteStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic_inner(None, intent, event, source, None)
     }
@@ -34,7 +34,7 @@ impl RedbWriteStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic_inner(Some(reservation), intent, event, source, initial_route)
@@ -49,7 +49,7 @@ impl RedbWriteStore {
         reservation: Option<u64>,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock()?;
@@ -67,18 +67,18 @@ impl RedbWriteStore {
         };
         let coordinate = edit_coordinate(&edit, author);
         let selected_source = validate_materialization(&edit, author, &event, source, &routing)?;
-        if let Some(receipt_id) = state.coordinates.get(&coordinate) {
-            let receipt = state.receipts.get(receipt_id).ok_or_else(|| {
+        if let Some(receipt_id) = state.coordinates.get(&coordinate).copied() {
+            let receipt = state.receipts.get(&receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
             })?;
-            let stored = state.semantics.get(receipt_id).ok_or_else(|| {
+            let stored = state.semantics.get(&receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
-            if stored.0 == edit
+            if stored.0.as_slice() == [edit.clone()]
                 && stored.1 == author
                 && stored.2 == selected_source
                 && receipt.routing == routing
-                && receipt.current.event == EventValue::Unsigned(event)
+                && receipt.current.event == EventValue::Unsigned(event.clone())
                 && initial_route.is_none_or(|plan| route_matches(receipt, plan))
             {
                 return Ok(AcceptedWrite {
@@ -87,9 +87,16 @@ impl RedbWriteStore {
                     current: receipt.current.clone(),
                 });
             }
-            return Err(WriteStoreError::Refused(
-                "replaceable-event coordinate already has a live edit".to_owned(),
-            ));
+            return self.compose_semantic(
+                &mut state,
+                receipt_id,
+                edit,
+                author,
+                &routing,
+                event,
+                source,
+                initial_route,
+            );
         }
         if !reserved
             && active_count(&state)
@@ -135,7 +142,7 @@ impl RedbWriteStore {
         if let Some(plan) = initial_route {
             apply_route_to_receipt(&mut receipt, plan)?;
         }
-        let custody = (edit, author, selected_source, None);
+        let custody = (vec![edit], author, selected_source, None);
         let terminal = receipt.is_terminal();
         let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
@@ -163,11 +170,19 @@ impl RedbWriteStore {
         })
     }
 
-    pub(super) fn reserve_active_slot(&self) -> Result<u64, WriteStoreError> {
+    pub(super) fn reserve_active_slot(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: PublicKey,
+    ) -> Result<u64, WriteStoreError> {
         let mut state = self.lock()?;
-        if active_count(&state)
-            .checked_add(state.reservations.len())
-            .is_none_or(|used| used >= self.limits.active.get())
+        let coordinate_is_active = state
+            .coordinates
+            .contains_key(&edit_coordinate(edit, author));
+        if !coordinate_is_active
+            && active_count(&state)
+                .checked_add(state.reservations.len())
+                .is_none_or(|used| used >= self.limits.active.get())
         {
             return Err(WriteStoreError::Refused(format!(
                 "active write bound {} reached",
@@ -201,7 +216,7 @@ impl RedbWriteStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock()?;
         let receipt = state
@@ -209,12 +224,15 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, author, current_source, _) =
+        let (edits, author, current_source, _) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
+        let edit = edits.last().ok_or_else(|| {
+            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
+        })?;
         let selected_source =
-            validate_materialization(&edit, author, &event, source, &receipt.routing)?;
+            validate_materialization(edit, author, &event, source, &receipt.routing)?;
         require_current(
             &receipt,
             write_id,
@@ -286,7 +304,7 @@ impl RedbWriteStore {
         updated.outcome = ReceiptOutcome::Open;
         updated.desired_destinations = correction_destinations;
         updated.attempts.clear();
-        let custody: SemanticCustody = (edit, author, selected_source, None);
+        let custody: SemanticCustody = (edits, author, selected_source, None);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -304,7 +322,7 @@ impl RedbWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock()?;
@@ -313,7 +331,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, author, current_source, current_failed_source) =
+        let (edits, author, current_source, current_failed_source) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
@@ -324,7 +342,10 @@ impl RedbWriteStore {
             expected_source,
             current_source,
         )?;
-        let failed_source = validate_source(&edit, author, source)?;
+        let edit = edits.last().ok_or_else(|| {
+            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
+        })?;
+        let failed_source = validate_source(edit, author, source)?;
         require_failure_source(current_source, failed_source)?;
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
@@ -340,7 +361,7 @@ impl RedbWriteStore {
         }
         let mut updated = receipt;
         updated.current.publication.materialization_failure = Some(failure);
-        let custody: SemanticCustody = (edit, author, current_source, failed_source_id);
+        let custody: SemanticCustody = (edits, author, current_source, failed_source_id);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -357,7 +378,7 @@ impl RedbWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -382,5 +403,21 @@ impl RedbWriteStore {
                 })
             })
             .collect())
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(super) fn semantic_custody(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        Ok(self.lock()?.semantics.get(&receipt_id).cloned())
     }
 }

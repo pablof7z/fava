@@ -5,8 +5,8 @@ use fava_query::{Query, QuerySource, SourceEvent};
 use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
-    MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
-    WriteRouting,
+    EventValue, MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState,
+    WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
@@ -45,7 +45,7 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
 }
 
 #[test]
-fn schema_v2_refuses_unsound_ordered_route_shapes() {
+fn schema_v3_refuses_unsound_ordered_route_shapes() {
     let empty_path = terminal_no_destination_path("empty-explicit-route");
     mutate_row(&empty_path, |row| {
         set(
@@ -85,7 +85,7 @@ fn schema_v2_refuses_unsound_ordered_route_shapes() {
 }
 
 #[test]
-fn schema_v2_refuses_missing_extra_and_substituted_explicit_lanes() {
+fn schema_v3_refuses_missing_extra_and_substituted_explicit_lanes() {
     let (missing_path, _first, second) = explicit_path("missing-explicit-lane");
     let second_lane = RelaySessionKey::new(second.clone(), RelayAccess::public());
     mutate_typed_receipt(&missing_path, |receipt| {
@@ -149,7 +149,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
         edit(),
         keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
-        Some(&base),
+        Some(&EventValue::Signed(base.clone())),
     );
     let successor_event = materialization(keys.public_key(), 21, "generation two");
     let successor = store
@@ -159,7 +159,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             MaterializationId::from_u64(1),
             Some(base.id),
             successor_event.clone(),
-            Some(&successor_source),
+            Some(&EventValue::Signed(successor_source.clone())),
         )
         .unwrap();
     let mut changes = store.receipt_changes();
@@ -172,7 +172,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
                 MaterializationId::from_u64(1),
                 Some(base.id),
                 successor_event.clone(),
-                Some(&successor_source),
+                Some(&EventValue::Signed(successor_source.clone())),
             )
             .is_err(),
         "stale identity was accepted through the idempotent fast path"
@@ -187,7 +187,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             MaterializationId::from_u64(2),
             Some(successor_source.id),
             successor_event,
-            Some(&successor_source),
+            Some(&EventValue::Signed(successor_source.clone())),
         )
         .expect("exact idempotent replay remains accepted");
 }
@@ -323,7 +323,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
 }
 
 #[test]
-fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
+fn schema_v3_reconstruction_refuses_every_malformed_invariant() {
     assert_row_mutation_refused("semantic-author", |row| {
         set(
             row,
@@ -398,7 +398,7 @@ fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
         edit(),
         keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
-        Some(&base),
+        Some(&EventValue::Signed(base.clone())),
     );
     store
         .record_materialization_failure(
@@ -406,7 +406,7 @@ fn schema_v2_reconstruction_refuses_every_malformed_invariant() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
-            Some(&failed),
+            Some(&EventValue::Signed(failed.clone())),
             "failed".to_owned(),
         )
         .unwrap();
@@ -460,7 +460,7 @@ fn schema_v1_refusal_precedes_malformed_row_decode() {
 }
 
 #[test]
-fn schema_v2_accepts_attributed_empty_source_failure() {
+fn schema_v3_accepts_attributed_empty_source_failure() {
     let path = unique_path("empty-source-failure");
     let keys = Keys::generate();
     let base = source(&keys, 10, "base");
@@ -470,7 +470,7 @@ fn schema_v2_accepts_attributed_empty_source_failure() {
         edit(),
         keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
-        Some(&base),
+        Some(&EventValue::Signed(base.clone())),
     );
     store
         .record_materialization_failure(
@@ -593,7 +593,7 @@ fn valid_source_path(label: &str) -> std::path::PathBuf {
         edit(),
         keys.public_key(),
         materialization(keys.public_key(), 11, "current"),
-        Some(&base),
+        Some(&EventValue::Signed(base.clone())),
     );
     drop(store);
     path

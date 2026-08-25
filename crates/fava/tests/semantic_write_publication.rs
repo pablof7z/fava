@@ -52,7 +52,7 @@ fn support_materializer_preserves_the_event_builder_tag_refusal() {
         materializer.materialize(
             &edit(Kind::ContactList),
             keys.public_key(),
-            Some(&source),
+            Some(&EventValue::Signed(source.clone())),
             Timestamp::from(2),
         ),
         Err(WriteIntentError::TooManyTags {
@@ -125,8 +125,9 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let cache = Arc::new(MemoryEventCache::default());
     let fava = publication_builder(
-        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
@@ -199,6 +200,26 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
             .expect("current receipt after stale completion"),
         generation_two
     );
+
+    let newer = signed_source(&keys, Kind::ContactList, u64::MAX - 1, "newer", &[]);
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            newer.clone(),
+            relay_evidence(),
+        ))])
+        .expect("newer source enters the canonical cache");
+    let generation_three = wait_for_materialization(&fava, first.receipt_id(), 3).await;
+    wait_for_signer(&signer, 3).await;
+    let EventValue::Unsigned(replayed) = &generation_three.current.event else {
+        panic!("blocking signer keeps replayed composition unsigned");
+    };
+    assert_eq!(replayed.content, "newer|edit|edit");
+    assert_eq!(
+        generation_three.current.publication.materialization_source,
+        Some(newer.id)
+    );
+    assert_eq!(generation_three.write_id, first.write_id());
+    assert_eq!(generation_three.receipt_id, first.receipt_id());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -334,7 +355,7 @@ async fn first_value_receives_exact_injected_timestamp() {
 
     assert_eq!(calls.len(), 1);
     assert_eq!(
-        calls[0].source.as_ref().map(|event| event.id),
+        calls[0].source.as_ref().and_then(EventValue::id),
         Some(source.id)
     );
     assert_eq!(calls[0].created_at, Timestamp::max());
@@ -406,7 +427,7 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         materializer.calls()[1]
             .source
             .as_ref()
-            .map(|event| event.id),
+            .and_then(EventValue::id),
         Some(newer.id)
     );
 }

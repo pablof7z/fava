@@ -58,7 +58,7 @@ fn retired_completion_is_attributable_and_inert() {
             generation_one,
             None,
             materialization(&keys, 3, "generation two"),
-            Some(&source),
+            Some(&EventValue::Signed(source.clone())),
         )
         .expect("successor installs");
     let session = RelaySessionKey::new(relay_url(), RelayAccess::public());
@@ -169,7 +169,7 @@ fn simultaneous_source_and_completion_converge_once() {
                 MaterializationId::from_u64(1),
                 None,
                 materialization(&keys, 3, "generation two"),
-                Some(&source),
+                Some(&EventValue::Signed(source.clone())),
             )
         })
     };
@@ -275,7 +275,12 @@ fn active_reservation_excludes_unreserved_memory_admission() {
     let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
     let semantic_keys = Keys::generate();
     let raw_keys = Keys::generate();
-    let reservation = store.reserve_active().expect("semantic slot reserves");
+    let reservation = store
+        .reserve_active(
+            &fava::ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap(),
+            semantic_keys.public_key(),
+        )
+        .expect("semantic slot reserves");
     let raw = WriteIntent::event(
         EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
             .created_at(Timestamp::from(1))
@@ -324,7 +329,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
         .accept_materialized_edit(
             intent(keys.public_key(), Kind::ContactList),
             materialization(&keys, 11, "higher-id generation"),
-            Some(&higher_id),
+            Some(&EventValue::Signed(higher_id.clone())),
         )
         .unwrap();
 
@@ -335,7 +340,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
             MaterializationId::from_u64(1),
             Some(higher_id.id),
             materialization(&keys, 12, "lower-id generation"),
-            Some(&lower_id),
+            Some(&EventValue::Signed(lower_id.clone())),
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
@@ -350,7 +355,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
                 MaterializationId::from_u64(2),
                 Some(lower_id.id),
                 materialization(&keys, 13, "higher-id retry"),
-                Some(&higher_id),
+                Some(&EventValue::Signed(higher_id.clone())),
             )
             .is_err(),
         "equal-time higher event id cannot displace the winner"

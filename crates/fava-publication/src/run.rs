@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use fava_query::SourceKind;
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
-use fava_write::{EventValue, Receipt, ReceiptId, WriteIntent, WriteRouting};
+use fava_write::{EventValue, Receipt, ReceiptId, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
 
@@ -68,6 +68,9 @@ impl Publication {
             };
             let current_materialization = current.current.publication.materialization_id;
             if current_materialization > materialization_id {
+                if let Some(state) = &mut semantic {
+                    self.refresh_semantic(receipt_id, state);
+                }
                 route_revision = self.reopen_materialization(
                     &current,
                     &mut routes,
@@ -137,6 +140,9 @@ impl Publication {
                             if next_materialization == materialization_id {
                                 route_revision = route_revision.max(latest.route_revision);
                             } else if next_materialization > materialization_id {
+                                if let Some(state) = &mut semantic {
+                                    self.refresh_semantic(receipt_id, state);
+                                }
                                 route_revision = self.reopen_materialization(
                                     &latest,
                                     &mut routes,
@@ -258,19 +264,15 @@ impl Publication {
     fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
         let expected = receipt.current.publication.materialization_id;
         let expected_source = receipt.current.publication.materialization_source;
-        let Ok((true, successor)) = self.semantic_successor(state, receipt.receipt_id, expected)
-        else {
+        let Ok((true, successor)) = self.semantic_successor(state, receipt.receipt_id) else {
             return;
         };
-        let Ok(intent) =
-            WriteIntent::edit_as(state.edit.clone(), state.author, receipt.routing.clone())
-        else {
-            return;
-        };
-        let (event, mut route) = match self.materialize_and_route(
-            &intent,
+        let (event, mut route) = match self.materialize_sequence_and_route(
+            &state.edits,
+            state.author,
             successor.as_ref(),
             Some(&receipt.current.event),
+            &receipt.routing,
         ) {
             Ok(materialized) => materialized,
             Err(error) => {
@@ -282,7 +284,7 @@ impl Publication {
                     successor.as_ref(),
                     error.to_string(),
                 );
-                state.failed_id = successor.as_ref().map(|event| event.id);
+                state.failed_id = successor.as_ref().and_then(EventValue::id);
                 return;
             }
         };
@@ -305,7 +307,7 @@ impl Publication {
                     successor.as_ref(),
                     error.to_string(),
                 );
-                state.failed_id = successor.as_ref().map(|event| event.id);
+                state.failed_id = successor.as_ref().and_then(EventValue::id);
                 return;
             }
         };
@@ -322,11 +324,26 @@ impl Publication {
                 &route,
             );
         }
-        state.selected_id = successor.as_ref().map(|event| event.id);
+        state.selected_id = successor.as_ref().and_then(EventValue::id);
         if let Some(source) = &successor {
-            state.source_floor = Some(source.created_at);
+            state.source_floor = Some(source.created_at());
         }
         state.failed_id = None;
+    }
+
+    fn refresh_semantic(&self, receipt_id: ReceiptId, state: &mut SemanticState) {
+        let Ok(Some((edits, author, selected, failed_id))) =
+            self.store.materialized_edits(receipt_id)
+        else {
+            return;
+        };
+        state.edits = edits;
+        state.author = author;
+        state.selected_id = selected.map(|(id, _)| id);
+        if let Some((_, timestamp)) = selected {
+            state.source_floor = Some(timestamp);
+        }
+        state.failed_id = failed_id;
     }
 
     fn open_routes(&self, receipt: &Receipt) -> (Option<Box<dyn RouterSession>>, u64) {

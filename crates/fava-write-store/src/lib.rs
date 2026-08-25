@@ -4,9 +4,9 @@ use fava_query::QuerySource;
 use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, PublicKey,
-    Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent,
-    WriteId, WriteIntent, WriteIntentError, WriteRouting,
+    EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, PublicKey, Receipt,
+    ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId,
+    WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
 use tokio::sync::broadcast;
@@ -45,9 +45,15 @@ pub trait WriteStore: QuerySource + Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns [`WriteStoreError`] without a reservation when active custody
-    /// plus existing reservations has reached [`WriteStore::active_capacity`].
-    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
+    /// Returns [`WriteStoreError`] without a reservation when a new coordinate's
+    /// active custody plus existing reservations has reached
+    /// [`WriteStore::active_capacity`]. An already-active coordinate reserves
+    /// against its existing operation and must still pass composition bounds.
+    fn reserve_active(
+        &self,
+        _edit: &ReplaceableEventEdit,
+        _author: PublicKey,
+    ) -> Result<u64, WriteStoreError> {
         Err(WriteStoreError::Refused(
             "write store does not support active reservations".to_owned(),
         ))
@@ -78,7 +84,9 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// acceptance mutation cannot commit.
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError>;
 
-    /// Atomically accept one edit and its already-validated first materialization.
+    /// Atomically accept one edit and its already-validated materialization.
+    /// A distinct same-coordinate edit may append to the exact active unsigned
+    /// operation and returns that operation's stable write and receipt identity.
     ///
     /// # Errors
     ///
@@ -88,7 +96,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         _intent: WriteIntent,
         _event: UnsignedEvent,
-        _source: Option<&Event>,
+        _source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         Err(WriteStoreError::Refused(
             "write store does not support replaceable-event edits".to_owned(),
@@ -109,7 +117,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _reservation: u64,
         _intent: WriteIntent,
         _event: UnsignedEvent,
-        _source: Option<&Event>,
+        _source: Option<&EventValue>,
         _initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         Err(WriteStoreError::Refused(
@@ -134,7 +142,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _expected: MaterializationId,
         _expected_source: Option<EventId>,
         _event: UnsignedEvent,
-        _source: Option<&Event>,
+        _source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         Err(WriteStoreError::Refused(
             "write store does not support materialization replacement".to_owned(),
@@ -155,7 +163,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _receipt_id: ReceiptId,
         _expected: MaterializationId,
         _expected_source: Option<EventId>,
-        _source: Option<&Event>,
+        _source: Option<&EventValue>,
         _reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         Err(WriteStoreError::Refused(
@@ -165,7 +173,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
     /// Recover live semantic custody in stable receipt order.
     ///
-    /// Each tuple carries the current receipt, durable edit, accepted author,
+    /// Each tuple carries the current receipt, durable ordered edit sequence, accepted author,
     /// current selected source id/timestamp, and last failed source id. No
     /// separate recovery noun exists.
     ///
@@ -178,7 +186,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -186,6 +194,30 @@ pub trait WriteStore: QuerySource + Send + Sync {
         WriteStoreError,
     > {
         Ok(Vec::new())
+    }
+
+    /// Read one exact live semantic custody record by receipt identity.
+    ///
+    /// The ordered edit sequence is bounded by retained materialization
+    /// evidence and is empty only for an incoherent provider implementation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when current custody cannot be read.
+    #[allow(clippy::type_complexity)]
+    fn materialized_edits(
+        &self,
+        _receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        Ok(None)
     }
 
     /// Atomically accept one current event using automatic routing.

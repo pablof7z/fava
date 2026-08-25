@@ -3,7 +3,8 @@ use std::num::NonZeroUsize;
 
 use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
-    EventBuilder, Kind, MaterializationId, ReceiptOutcome, Timestamp, WriteIntent, WriteRouting,
+    EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome, Timestamp, WriteIntent,
+    WriteRouting,
 };
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
@@ -22,7 +23,9 @@ fn active_reservation_excludes_unreserved_redb_admission() {
     .unwrap();
     let semantic_keys = Keys::generate();
     let raw_keys = Keys::generate();
-    let reservation = store.reserve_active().expect("semantic slot reserves");
+    let reservation = store
+        .reserve_active(&edit(), semantic_keys.public_key())
+        .expect("semantic slot reserves");
     let raw = WriteIntent::event(
         EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
             .created_at(Timestamp::from(1))
@@ -63,21 +66,32 @@ fn active_reservation_excludes_unreserved_redb_admission() {
 fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
     let first_target = RouteTarget::Author(Keys::generate().public_key());
     let second_target = RouteTarget::Author(Keys::generate().public_key());
+    let unresolved = RouteTarget::Author(Keys::generate().public_key());
     for (label, first, second) in [
         (
             "shortfall",
-            initial_route(vec!["first failure".to_owned()], BTreeMap::new()),
-            initial_route(vec!["different failure".to_owned()], BTreeMap::new()),
+            initial_route(
+                vec!["first failure".to_owned()],
+                BTreeMap::new(),
+                unresolved.clone(),
+            ),
+            initial_route(
+                vec!["different failure".to_owned()],
+                BTreeMap::new(),
+                unresolved.clone(),
+            ),
         ),
         (
             "settled-absent coverage",
             initial_route(
                 Vec::new(),
                 BTreeMap::from([(first_target.clone(), CoverageState::SettledAbsent)]),
+                unresolved.clone(),
             ),
             initial_route(
                 Vec::new(),
                 BTreeMap::from([(second_target.clone(), CoverageState::SettledAbsent)]),
+                unresolved.clone(),
             ),
         ),
     ] {
@@ -94,7 +108,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         let event = || materialization(keys.public_key(), 1, "route effect");
         let accepted = store
             .accept_reserved_materialized_edit(
-                store.reserve_active().unwrap(),
+                store.reserve_active(&edit(), keys.public_key()).unwrap(),
                 intent(),
                 event(),
                 None,
@@ -106,7 +120,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         assert!(
             store
                 .accept_reserved_materialized_edit(
-                    store.reserve_active().unwrap(),
+                    store.reserve_active(&edit(), keys.public_key()).unwrap(),
                     intent(),
                     event(),
                     None,
@@ -120,7 +134,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         store
             .release_active(
                 store
-                    .reserve_active()
+                    .reserve_active(&edit(), keys.public_key())
                     .expect("refusal consumed reservation"),
             )
             .unwrap();
@@ -132,12 +146,13 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
 fn initial_route(
     shortfalls: Vec<String>,
     coverage: BTreeMap<RouteTarget, CoverageState>,
+    unresolved: RouteTarget,
 ) -> RoutePlan {
     RoutePlan {
         revision: 1,
         destinations: BTreeMap::new(),
         coverage,
-        unresolved: BTreeSet::new(),
+        unresolved: BTreeSet::from([unresolved]),
         shortfalls,
     }
 }
@@ -158,7 +173,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
         .accept_materialized_edit(
             WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
             materialization(keys.public_key(), 11, "higher-id generation"),
-            Some(&higher_id),
+            Some(&EventValue::Signed(higher_id.clone())),
         )
         .unwrap();
 
@@ -169,7 +184,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
             MaterializationId::from_u64(1),
             Some(higher_id.id),
             materialization(keys.public_key(), 12, "lower-id generation"),
-            Some(&lower_id),
+            Some(&EventValue::Signed(lower_id.clone())),
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
@@ -184,7 +199,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
                 MaterializationId::from_u64(2),
                 Some(lower_id.id),
                 materialization(keys.public_key(), 13, "higher-id retry"),
-                Some(&higher_id),
+                Some(&EventValue::Signed(higher_id.clone())),
             )
             .is_err()
     );
@@ -213,13 +228,15 @@ fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
     let mut identities = Vec::new();
 
     for timestamp in [2, 3] {
-        let reservation = store.reserve_active().expect("terminal slot reserves");
+        let reservation = store
+            .reserve_active(&edit(), keys.public_key())
+            .expect("terminal slot reserves");
         let accepted = store
             .accept_reserved_materialized_edit(
                 reservation,
                 WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
                 materialization(keys.public_key(), timestamp, "terminal"),
-                Some(&selected_source),
+                Some(&EventValue::Signed(selected_source.clone())),
                 Some(&route),
             )
             .expect("terminal route commits atomically");

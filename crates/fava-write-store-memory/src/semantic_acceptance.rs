@@ -1,4 +1,4 @@
-//! Exact semantic acceptance validation shared by durable admission and completion paths.
+//! Exact semantic acceptance validation for volatile custody.
 
 use fava_routing::RoutePlan;
 use fava_state::{EventCoordinate, event_coordinate};
@@ -7,6 +7,8 @@ use fava_write::{
     ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStoreError, apply_route_to_receipt};
+
+use super::state::edit_coordinate;
 
 pub(super) fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
     let mut candidate = receipt.clone();
@@ -43,7 +45,10 @@ pub(super) fn validate_materialization(
         ));
     }
     let selected = validate_source(edit, author, source)?;
-    if selected.is_some_and(|(_, source_time)| source_time >= event.created_at) {
+    let Some((_, source_time)) = selected else {
+        return Ok(None);
+    };
+    if source_time >= event.created_at {
         return Err(WriteStoreError::Refused(
             "materialization is not newer than its selected source".to_owned(),
         ));
@@ -88,33 +93,6 @@ pub(super) fn validate_source(
     )))
 }
 
-pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
-    EventCoordinate::Replaceable {
-        author,
-        kind: edit.kind(),
-        identifier: edit.identifier().map(str::to_owned),
-    }
-}
-
-pub(super) fn attributed_failure(
-    materialization_id: MaterializationId,
-    source: Option<EventId>,
-    reason: String,
-) -> String {
-    let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
-    let prefix = format!(
-        "materialization {} from source {source} failed",
-        materialization_id.as_u64()
-    );
-    let attributed = format!("{prefix}: {reason}");
-    drop(reason);
-    if fava_write_store::validate_receipt_text(&attributed).is_ok() {
-        attributed
-    } else {
-        prefix
-    }
-}
-
 fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
     let id = event
         .id
@@ -144,36 +122,4 @@ pub(super) fn require_current(
         ));
     }
     Ok(())
-}
-
-pub(super) fn require_qualified_source(
-    current: Option<(EventId, Timestamp)>,
-    candidate: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    let qualified = match (current, candidate) {
-        (None, Some(_)) | (Some(_), None) => true,
-        (Some((current_id, current_time)), Some((candidate_id, candidate_time))) => {
-            candidate_time > current_time
-                || (candidate_time == current_time && candidate_id < current_id)
-        }
-        (None, None) => false,
-    };
-    if qualified {
-        Ok(())
-    } else {
-        Err(WriteStoreError::Refused(
-            "source event is equal, older, or already consumed".to_owned(),
-        ))
-    }
-}
-
-pub(super) fn require_failure_source(
-    current: Option<(EventId, Timestamp)>,
-    failed: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    if current == failed {
-        Ok(())
-    } else {
-        require_qualified_source(current, failed)
-    }
 }

@@ -71,7 +71,7 @@ mod tests {
             )
         );
         let successor = materializer
-            .materialize(&add_alpha, actor, Some(&source), Timestamp::from(21))
+            .materialize(&add_alpha, actor, Some(&source_value), Timestamp::from(21))
             .expect("current state materializes");
         assert_eq!(
             successor.content,
@@ -80,9 +80,15 @@ mod tests {
         assert_eq!(successor.tags.as_slice(), &[preserved_tag]);
 
         let successor = successor.finalize(&keys).expect("successor signs");
+        let successor_value = EventValue::Signed(successor);
         let remove_alpha = remove("alpha").expect("opposing edit");
         let restored = materializer
-            .materialize(&remove_alpha, actor, Some(&successor), Timestamp::from(22))
+            .materialize(
+                &remove_alpha,
+                actor,
+                Some(&successor_value),
+                Timestamp::from(22),
+            )
             .expect("opposing edit materializes through the same contract");
         assert_eq!(
             restored.content,
@@ -104,13 +110,20 @@ mod tests {
             .finalize(&keys)
             .unwrap();
         let alpha_then_beta = materializer
-            .materialize(&add_alpha, actor, Some(&beta), Timestamp::from(2))
+            .materialize(
+                &add_alpha,
+                actor,
+                Some(&EventValue::Signed(beta)),
+                Timestamp::from(2),
+            )
             .unwrap();
         let duplicate = materializer
             .materialize(
                 &add_alpha,
                 actor,
-                Some(&alpha_then_beta.clone().finalize(&keys).unwrap()),
+                Some(&EventValue::Signed(
+                    alpha_then_beta.clone().finalize(&keys).unwrap(),
+                )),
                 Timestamp::from(3),
             )
             .unwrap();
@@ -121,7 +134,12 @@ mod tests {
             .finalize(&keys)
             .unwrap();
         let beta_then_alpha = materializer
-            .materialize(&add_beta, actor, Some(&alpha), Timestamp::from(2))
+            .materialize(
+                &add_beta,
+                actor,
+                Some(&EventValue::Signed(alpha)),
+                Timestamp::from(2),
+            )
             .unwrap();
 
         assert_eq!(alpha_then_beta.content, "external-set-v1\nalpha,beta\n");
@@ -133,7 +151,9 @@ mod tests {
             .materialize(
                 &remove_beta,
                 actor,
-                Some(&beta_then_alpha.finalize(&keys).unwrap()),
+                Some(&EventValue::Signed(
+                    beta_then_alpha.finalize(&keys).unwrap(),
+                )),
                 Timestamp::from(4),
             )
             .unwrap();
@@ -164,7 +184,7 @@ mod tests {
                 .materialize(
                     &insert("alpha").unwrap(),
                     actor,
-                    Some(&malformed_source),
+                    Some(&EventValue::Signed(malformed_source)),
                     Timestamp::from(2),
                 )
                 .is_err()
@@ -178,7 +198,7 @@ mod tests {
                 .materialize(
                     &insert("alpha").unwrap(),
                     actor,
-                    Some(&oversized_source),
+                    Some(&EventValue::Signed(oversized_source)),
                     Timestamp::from(2),
                 )
                 .is_err()
@@ -194,7 +214,7 @@ mod tests {
             materializer.materialize(
                 &insert("alpha").unwrap(),
                 actor,
-                Some(&too_many_tags),
+                Some(&EventValue::Signed(too_many_tags)),
                 Timestamp::from(3),
             ),
             Err(WriteIntentError::InvalidEvent(message)) if message.contains("tag count")
@@ -211,7 +231,7 @@ mod tests {
             materializer.materialize(
                 &insert("alpha").unwrap(),
                 actor,
-                Some(&nested_source),
+                Some(&EventValue::Signed(nested_source)),
                 Timestamp::from(4),
             ),
             Err(WriteIntentError::InvalidEvent(message)) if message.contains("nested values")
@@ -226,7 +246,7 @@ mod tests {
             materializer.materialize(
                 &insert("alpha").unwrap(),
                 actor,
-                Some(&tag_heavy_source),
+                Some(&EventValue::Signed(tag_heavy_source)),
                 Timestamp::from(5),
             ),
             Err(WriteIntentError::TooLarge { maximum: 4_096, .. })

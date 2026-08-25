@@ -148,7 +148,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         .materialize(
             &adjacent().unwrap(),
             actor,
-            Some(&initial),
+            Some(&EventValue::Signed(initial.clone())),
             Timestamp::from(u64::MAX - 50),
         )
         .unwrap()
@@ -294,8 +294,12 @@ impl WriteStore for CompletionStore {
     fn active_capacity(&self) -> usize {
         self.inner.active_capacity()
     }
-    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
-        self.inner.reserve_active()
+    fn reserve_active(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: PublicKey,
+    ) -> Result<u64, WriteStoreError> {
+        self.inner.reserve_active(edit, author)
     }
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
         self.inner.release_active(reservation)
@@ -310,7 +314,7 @@ impl WriteStore for CompletionStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept_materialized_edit(intent, event, source)
     }
@@ -319,7 +323,7 @@ impl WriteStore for CompletionStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept_reserved_materialized_edit(
@@ -337,7 +341,7 @@ impl WriteStore for CompletionStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.install_materialization(
             write_id,
@@ -354,7 +358,7 @@ impl WriteStore for CompletionStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.record_materialization_failure(
@@ -372,7 +376,7 @@ impl WriteStore for CompletionStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -380,6 +384,21 @@ impl WriteStore for CompletionStore {
         WriteStoreError,
     > {
         self.inner.recover_materialized_edits()
+    }
+    #[allow(clippy::type_complexity)]
+    fn materialized_edits(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.inner.materialized_edits(receipt_id)
     }
     fn install_signed(
         &self,

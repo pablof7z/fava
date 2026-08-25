@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use fava::{
-    Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit,
+    EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use fava_event_cache_memory::MemoryEventCache;
@@ -92,7 +92,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         &self,
         _edit: &ReplaceableEventEdit,
         author: fava::PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
@@ -116,7 +116,10 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         } else {
             source.map_or_else(
                 || "initial".to_owned(),
-                |event| format!("{}|edit", event.content),
+                |event| match event {
+                    EventValue::Unsigned(event) => format!("{}|edit", event.content),
+                    EventValue::Signed(event) => format!("{}|edit", event.content),
+                },
             )
         };
         let returned_at = if self.mode.load(Ordering::SeqCst) == WRONG_TIMESTAMP {
@@ -337,7 +340,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                     .content(format!("generation {generation}"))
                     .build()
                     .unwrap(),
-                Some(&source),
+                Some(&EventValue::Signed(source.clone())),
             )
             .unwrap();
         expected = MaterializationId::from_u64(expected.as_u64() + 1);
@@ -357,7 +360,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                     .content("overflow generation")
                     .build()
                     .unwrap(),
-                Some(&overflow_source),
+                Some(&EventValue::Signed(overflow_source.clone())),
             )
             .is_err()
     );
@@ -367,7 +370,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
             accepted.receipt_id,
             expected,
             expected_source,
-            Some(&overflow_source),
+            Some(&EventValue::Signed(overflow_source.clone())),
             "retired materialization evidence capacity reached".to_owned(),
         )
         .unwrap();

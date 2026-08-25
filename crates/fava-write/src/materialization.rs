@@ -1,5 +1,5 @@
 use crate::{
-    Event, Kind, PublicKey, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError,
+    EventValue, Kind, PublicKey, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ pub trait ReplaceableEventMaterializer: Send + Sync {
     /// Whether this provider owns the edit's coordinate and change encoding.
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool;
 
-    /// Apply the edit to qualified source or protocol-defined empty state.
+    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.
     ///
     /// The caller supplies the accepted write's exact author and timestamp.
     /// Implementations return only an unsigned event and receive no custody,
@@ -43,7 +43,7 @@ pub trait ReplaceableEventMaterializer: Send + Sync {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError>;
 }

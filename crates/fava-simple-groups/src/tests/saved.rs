@@ -50,7 +50,8 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     assert_eq!(saved.selection().authors.as_ref(), Some(&canonical));
     assert_eq!(relays, saved);
 
-    let admins = SimpleGroups::simple_groups_where_admin([bob, alice, bob]).expect("bounded subjects");
+    let admins =
+        SimpleGroups::simple_groups_where_admin([bob, alice, bob]).expect("bounded subjects");
     let members = SimpleGroups::simple_groups_where_member([alice, bob]).expect("bounded subjects");
     assert_eq!(
         admins.selection().kinds,
@@ -64,7 +65,8 @@ fn discovery_queries_are_ordinary_canonical_queries() {
     assert_eq!(admins.selection().tag_values.get(&p), Some(&subject_hex));
     assert_eq!(members.selection().tag_values.get(&p), Some(&subject_hex));
 
-    let empty_saved = SimpleGroups::saved_simple_groups(Vec::<PublicKey>::new()).expect("empty is valid");
+    let empty_saved =
+        SimpleGroups::saved_simple_groups(Vec::<PublicKey>::new()).expect("empty is valid");
     let empty_admins =
         SimpleGroups::simple_groups_where_admin(Vec::<PublicKey>::new()).expect("empty is valid");
     assert_eq!(empty_saved.selection().authors, Some(BTreeSet::new()));
@@ -176,8 +178,10 @@ fn groups_saved_by_is_bounded_pure_projection() {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let first = SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("bounded projection");
-    let second = SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("pure repeat");
+    let first =
+        SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("bounded projection");
+    let second =
+        SimpleGroups::simple_groups_saved_by(&snapshot, &simple_group).expect("pure repeat");
     assert_eq!(first, expected);
     assert_eq!(second, first);
 }
@@ -188,8 +192,9 @@ fn materialize(
     source: Option<&fava_write::Event>,
     created_at: u64,
 ) -> fava_write::UnsignedEvent {
+    let source = source.cloned().map(EventValue::Signed);
     SimpleGroups::materializer()
-        .materialize(edit, author, source, Timestamp::from(created_at))
+        .materialize(edit, author, source.as_ref(), Timestamp::from(created_at))
         .expect("saved-list materializes")
 }
 
@@ -236,7 +241,7 @@ fn saved_materializer_refuses_duplicate_encoded_hosts() {
             .materialize(
                 &edit,
                 actor.public_key(),
-                Some(&source),
+                Some(&EventValue::Signed(source.clone())),
                 Timestamp::from(11),
             )
             .is_err()
@@ -257,7 +262,7 @@ fn materializer_preserves_the_exact_event_builder_tag_refusal() {
         SimpleGroups::materializer().materialize(
             &edit,
             keys.public_key(),
-            Some(&source),
+            Some(&EventValue::Signed(source.clone())),
             Timestamp::from(2),
         ),
         Err(fava_write::WriteIntentError::TooManyTags {
@@ -288,7 +293,8 @@ fn multi_host_save_is_deterministic_and_idempotent() {
         "photos",
     )
     .expect("bounded hosts");
-    let edit = SimpleGroups::save_simple_group(&simple_group, Some("Photos")).expect("bounded edit");
+    let edit =
+        SimpleGroups::save_simple_group(&simple_group, Some("Photos")).expect("bounded edit");
     assert_eq!(edit.kind(), Kind::from_u16(10_009));
     assert_eq!(edit.identifier(), None);
     assert!(SimpleGroups::materializer().supports(&edit));
@@ -326,7 +332,8 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         "photos",
     )
     .expect("group");
-    let rename = SimpleGroups::rename_saved_simple_group(&simple_group, "renamed").expect("rename edit");
+    let rename =
+        SimpleGroups::rename_saved_simple_group(&simple_group, "renamed").expect("rename edit");
     let renamed = materialize(&rename, actor.public_key(), Some(&source), 21);
 
     assert_eq!(renamed.content, "opaque encrypted bytes");
@@ -343,7 +350,8 @@ fn saved_edit_conserves_foreign_bytes_and_other_hosts() {
         ]
     );
 
-    let save = SimpleGroups::save_simple_group(&simple_group, Some("ignored for existing")).expect("save edit");
+    let save = SimpleGroups::save_simple_group(&simple_group, Some("ignored for existing"))
+        .expect("save edit");
     let saved = materialize(&save, actor.public_key(), Some(&source), 21);
     assert_eq!(saved.tags[1], source_tags[1]);
     assert_eq!(
@@ -418,14 +426,19 @@ fn saved_edit_rebases_on_newer_qualified_source() {
             .materialize(
                 &edit,
                 Keys::generate().public_key(),
-                Some(&newer),
+                Some(&EventValue::Signed(newer.clone())),
                 Timestamp::from(33),
             )
             .is_err()
     );
     assert!(
         SimpleGroups::materializer()
-            .materialize(&edit, actor.public_key(), Some(&newer), Timestamp::from(31),)
+            .materialize(
+                &edit,
+                actor.public_key(),
+                Some(&EventValue::Signed(newer.clone())),
+                Timestamp::from(31),
+            )
             .is_err()
     );
 }

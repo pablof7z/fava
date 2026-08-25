@@ -19,8 +19,12 @@ impl WriteStore for RedbWriteStore {
         self.limits.active.get()
     }
 
-    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
-        self.reserve_active_slot()
+    fn reserve_active(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: fava_write::PublicKey,
+    ) -> Result<u64, WriteStoreError> {
+        self.reserve_active_slot(edit, author)
     }
 
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
@@ -109,7 +113,7 @@ impl WriteStore for RedbWriteStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic(intent, event, source)
     }
@@ -119,7 +123,7 @@ impl WriteStore for RedbWriteStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_reserved_semantic(reservation, intent, event, source, initial_route)
@@ -132,7 +136,7 @@ impl WriteStore for RedbWriteStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         self.install_semantic(
             write_id,
@@ -150,7 +154,7 @@ impl WriteStore for RedbWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.record_semantic_failure(
@@ -169,7 +173,7 @@ impl WriteStore for RedbWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             fava_write::PublicKey,
             Option<(EventId, fava_write::Timestamp)>,
             Option<EventId>,
@@ -177,6 +181,22 @@ impl WriteStore for RedbWriteStore {
         WriteStoreError,
     > {
         self.recover_semantic()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn materialized_edits(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            fava_write::PublicKey,
+            Option<(EventId, fava_write::Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.semantic_custody(receipt_id)
     }
 
     fn install_signed(

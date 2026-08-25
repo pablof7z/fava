@@ -95,16 +95,28 @@ pub(crate) fn saved_boundary(event: &EventValue) -> Result<&Event, SimpleGroupEr
 }
 
 pub(crate) fn validate_structure(event: &Event) -> Result<(), SimpleGroupError> {
-    if event.tags.len() > MAX_RECORD_TAGS {
+    validate_structure_parts(&event.content, event.tags.as_slice())
+}
+
+pub(crate) fn validate_value_structure(event: &EventValue) -> Result<(), SimpleGroupError> {
+    let content = match event {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    validate_structure_parts(content, event.tags())
+}
+
+fn validate_structure_parts(content: &str, tags: &[Tag]) -> Result<(), SimpleGroupError> {
+    if tags.len() > MAX_RECORD_TAGS {
         return Err(SimpleGroupError::TooManyRecordTags {
-            actual: event.tags.len().min(MAX_RECORD_TAGS.saturating_add(1)),
+            actual: tags.len().min(MAX_RECORD_TAGS.saturating_add(1)),
             maximum: MAX_RECORD_TAGS,
         });
     }
 
     let mut bytes = 0usize;
-    add_bytes(&mut bytes, event.content.len())?;
-    for (tag_index, tag) in event.tags.iter().enumerate() {
+    add_bytes(&mut bytes, content.len())?;
+    for (tag_index, tag) in tags.iter().enumerate() {
         let values = tag.as_slice();
         if values.len() > MAX_RECORD_TAG_VALUES {
             return Err(SimpleGroupError::TooManyRecordTagValues {

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fava::{
-    Event, EventBuilder, EventValue, Kind, PublicKey, Query, ReplaceableEventEdit,
+    EventBuilder, EventValue, Kind, PublicKey, Query, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
@@ -170,14 +170,14 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         if !self.supports(edit) {
             return Err(edit_refusal());
         }
         if let Some(source) = source
-            && (source.pubkey != author || source.kind != KIND)
+            && (source.author() != author || source.kind() != KIND)
         {
             return Err(WriteIntentError::InvalidEvent(
                 "external capability source has the wrong coordinate".to_owned(),
@@ -198,9 +198,9 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
         let content = format!("{CONTENT_PREFIX}{state}\n{preserved}");
         let (tag_count, tag_shapes) = source.map_or((0, Vec::new()), |source| {
             (
-                source.tags.len(),
+                source.tags().len(),
                 source
-                    .tags
+                    .tags()
                     .iter()
                     .map(|tag| value_shape(tag.as_slice()))
                     .collect::<Vec<_>>(),
@@ -211,7 +211,7 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
             .created_at(created_at)
             .content(content);
         if let Some(source) = source {
-            for tag in source.tags.iter().cloned() {
+            for tag in source.tags().iter().cloned() {
                 builder = builder.tag(tag);
             }
         }
@@ -219,16 +219,22 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
     }
 }
 
-fn decode_source(source: Option<&Event>) -> Result<(BTreeSet<String>, String), WriteIntentError> {
+fn decode_source(
+    source: Option<&EventValue>,
+) -> Result<(BTreeSet<String>, String), WriteIntentError> {
     let Some(source) = source else {
         return Ok((BTreeSet::new(), String::new()));
     };
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
     validate_bounds(
-        &source.content,
-        source.tags.len(),
-        source.tags.iter().map(|tag| value_shape(tag.as_slice())),
+        content,
+        source.tags().len(),
+        source.tags().iter().map(|tag| value_shape(tag.as_slice())),
     )?;
-    decode_content(&source.content)
+    decode_content(content)
 }
 
 fn value_shape(values: &[String]) -> (usize, usize) {

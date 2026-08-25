@@ -87,15 +87,13 @@ impl Publication {
     pub fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, PublicationError> {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         if let WritePayload::Edit { edit, author } = intent.payload() {
-            let edit = edit.clone();
-            let author = *author;
-            let reservation = self.store.reserve_active()?;
+            let reservation = self.store.reserve_active(edit, *author)?;
             let PreparedSemantic {
                 event,
                 source,
                 route,
                 mut sources,
-            } = match self.prepare_semantic(&intent, None, None) {
+            } = match self.prepare_semantic(&intent, None) {
                 Ok(prepared) => prepared,
                 Err(error) => {
                     if let Err(release) = self.store.release_active(reservation) {
@@ -121,7 +119,29 @@ impl Publication {
                     return Err(error.into());
                 }
             };
-            let semantic = SemanticState::accepted(edit, author, source.as_ref(), sources);
+            let Some((edits, author, selected, failed_id)) =
+                self.store.materialized_edits(accepted.receipt_id)?
+            else {
+                let terminal = self
+                    .store
+                    .receipt(accepted.receipt_id)?
+                    .is_some_and(|receipt| receipt.is_terminal());
+                sources.close();
+                if terminal {
+                    return Ok(accepted);
+                }
+                return Err(PublicationError::Store(WriteStoreError::Refused(
+                    "accepted semantic custody is missing".to_owned(),
+                )));
+            };
+            let semantic = SemanticState::recovered(
+                edits,
+                author,
+                selected.map(|(id, _)| id),
+                selected.map(|(_, timestamp)| timestamp),
+                failed_id,
+                sources,
+            );
             self.start_semantic(accepted.receipt_id, semantic);
             return Ok(accepted);
         }
@@ -140,12 +160,19 @@ impl Publication {
         let receipts = self.store.recover_open()?;
         let count = receipts.len();
         let semantic = self.store.recover_materialized_edits()?;
-        for (_, edit, _, _, _) in &semantic {
-            self.materializer(edit)?;
+        for (_, edits, _, _, _) in &semantic {
+            for edit in edits {
+                self.materializer(edit)?;
+            }
         }
         let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
-        for (receipt, edit, author, selected, failed_id) in semantic {
-            let sources = match self.open_semantic_sources(&edit, author) {
+        for (receipt, edits, author, selected, failed_id) in semantic {
+            let edit = edits.last().ok_or_else(|| {
+                PublicationError::Store(WriteStoreError::Refused(
+                    "recovered semantic edit sequence is empty".to_owned(),
+                ))
+            })?;
+            let sources = match self.open_semantic_sources(edit, author) {
                 Ok(sources) => sources,
                 Err(error) => {
                     for (_, state) in &mut prepared {
@@ -159,7 +186,7 @@ impl Publication {
             prepared.push((
                 receipt.receipt_id,
                 SemanticState::recovered(
-                    edit,
+                    edits,
                     author,
                     selected_id,
                     source_floor,
@@ -190,7 +217,7 @@ impl Publication {
         &self,
         intent: &WriteIntent,
     ) -> Result<fava_routing::RoutePlan, PublicationError> {
-        let mut prepared = self.prepare_semantic(intent, None, None)?;
+        let mut prepared = self.prepare_semantic(intent, None)?;
         prepared.sources.close();
         Ok(prepared.route)
     }

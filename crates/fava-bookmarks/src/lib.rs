@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    Event, EventBuilder, EventId, Kind, PublicKey, ReplaceableEventEdit,
+    EventBuilder, EventId, EventValue, Kind, PublicKey, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
@@ -269,7 +269,7 @@ impl ReplaceableEventMaterializer for BookmarkMaterializer {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
@@ -283,27 +283,36 @@ impl ReplaceableEventMaterializer for BookmarkMaterializer {
 
 fn qualified_source(
     author: PublicKey,
-    source: Option<&Event>,
+    source: Option<&EventValue>,
     created_at: Timestamp,
 ) -> Result<(&str, &[Tag]), WriteIntentError> {
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    bounds::validate_source(source)?;
-    source
-        .verify()
-        .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-    if source.pubkey != author || source.kind != bookmark_kind() {
+    bounds::validate_value_source(source)?;
+    match source {
+        EventValue::Signed(event) => event
+            .verify()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+        EventValue::Unsigned(event) => event
+            .verify_id()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+    }
+    if source.author() != author || source.kind() != bookmark_kind() {
         return Err(WriteIntentError::InvalidEvent(
             "bookmark source author or kind does not match accepted write".to_owned(),
         ));
     }
-    if created_at <= source.created_at {
+    if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
             "bookmark materialization timestamp must succeed its source".to_owned(),
         ));
     }
-    Ok((&source.content, source.tags.as_slice()))
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    Ok((content, source.tags()))
 }
 
 fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {

@@ -785,6 +785,15 @@ A protocol crate may produce a `ReplaceableEventEdit` before the final event bod
 
 The write store MUST retain the edit and its resolved author independently from the current materialization. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
 
+Distinct edits accepted for the same author/kind/identifier coordinate while
+its current generation remains unsigned MUST compose as one durable ordered
+edit sequence. Each accepted edit is applied exactly once in acceptance order;
+the complete sequence is replayed when qualified source state changes and after
+restart. Composition keeps the original write and receipt identity, advances
+the exact materialization generation, retires prior generation evidence, and
+refuses atomically when that evidence bound is exhausted. Protocol-specific
+queues or batching are not part of this lifecycle.
+
 Rematerialization MUST:
 
 - preserve unrelated source changes;
@@ -794,7 +803,10 @@ Rematerialization MUST:
 - never expose a half-applied operation; and
 - remain bounded to the affected replaceable-event coordinate.
 
-**Acceptance:** accept an offline follow operation, later ingest a newer contact list with unrelated changes, and verify the local successor preserves both the remote changes and the accepted follow.
+**Acceptance:** accept two distinct pre-signature edits for one coordinate,
+verify one write and receipt with an ordered composed successor, restart and
+replay both edits over newer source state, and prove the first generation's late
+completion cannot mutate the current generation.
 
 ## WRITE-007 — Signing is exact and identity-bound
 
@@ -1018,7 +1030,7 @@ Explicit routes remain fixed. Existing acknowledged destinations are not resent 
 
 A persistent write store MUST recover its open obligations, receipts, current materializations, routes, and delivery state before the engine admits new commands that could conflict with them.
 
-Recovery work SHOULD scale with current open obligations and bounded retained evidence rather than the total historical number of completed attempts. Repeated superseding writes to one replaceable coordinate MUST recover as bounded current work rather than one active obligation per historical renewal.
+Recovery work SHOULD scale with current open obligations and bounded retained evidence rather than the total historical number of completed attempts. Repeated superseding writes to one replaceable coordinate MUST recover as bounded current work rather than one active obligation per historical renewal. A live same-coordinate semantic edit sequence MUST recover in its exact accepted order under one stable write and receipt identity; its length is bounded by retained retired-generation evidence.
 
 Unchanged recovered state MUST NOT require rewriting every record merely to reopen.
 

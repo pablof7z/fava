@@ -196,8 +196,12 @@ impl WriteStore for FaultingWriteStore {
     fn active_capacity(&self) -> usize {
         self.inner.active_capacity()
     }
-    fn reserve_active(&self) -> Result<u64, WriteStoreError> {
-        self.inner.reserve_active()
+    fn reserve_active(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: fava::PublicKey,
+    ) -> Result<u64, WriteStoreError> {
+        self.inner.reserve_active(edit, author)
     }
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
         self.inner.release_active(reservation)?;
@@ -219,7 +223,7 @@ impl WriteStore for FaultingWriteStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept_materialized_edit(intent, event, source)
     }
@@ -228,7 +232,7 @@ impl WriteStore for FaultingWriteStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         if initial_route.is_some() && self.fail_initial_route_accept.load(Ordering::SeqCst) {
@@ -252,7 +256,7 @@ impl WriteStore for FaultingWriteStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.install_materialization(
             write_id,
@@ -269,7 +273,7 @@ impl WriteStore for FaultingWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.record_materialization_failure(
@@ -287,7 +291,7 @@ impl WriteStore for FaultingWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             fava::PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -295,6 +299,21 @@ impl WriteStore for FaultingWriteStore {
         WriteStoreError,
     > {
         self.inner.recover_materialized_edits()
+    }
+    #[allow(clippy::type_complexity)]
+    fn materialized_edits(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            fava::PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        self.inner.materialized_edits(receipt_id)
     }
     fn install_signed(
         &self,

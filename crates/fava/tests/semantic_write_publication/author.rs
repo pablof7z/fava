@@ -151,7 +151,7 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
         materializer.calls()[0]
             .source
             .as_ref()
-            .map(|event| event.id),
+            .and_then(EventValue::id),
         Some(wanted.id)
     );
     assert_eq!(signer.calls(), 1);

@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, PublicKey, Receipt, ReceiptId,
-    RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp, UnsignedEvent,
-    WriteIntentError, WriteRouting,
+    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, MaterializationId, PublicKey,
+    Receipt, ReceiptId, RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
+    UnsignedEvent, WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -168,7 +168,7 @@ pub fn assert_no_effects(
 pub struct MaterializerCall {
     pub author: PublicKey,
     pub identifier: Option<String>,
-    pub source: Option<Event>,
+    pub source: Option<EventValue>,
     pub created_at: Timestamp,
 }
 
@@ -203,7 +203,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.lock().unwrap().push(MaterializerCall {
@@ -212,14 +212,17 @@ impl ReplaceableEventMaterializer for TestMaterializer {
             source: source.cloned(),
             created_at,
         });
+        let source_content = source.map(|source| match source {
+            EventValue::Unsigned(event) => event.content.as_str(),
+            EventValue::Signed(event) => event.content.as_str(),
+        });
         let mut builder = EventBuilder::new(author, self.kind)
             .created_at(created_at)
-            .content(match source {
-                Some(source) => format!("{}|edit", source.content),
-                None => "edit".to_owned(),
-            });
+            .content(
+                source_content.map_or_else(|| "edit".to_owned(), |value| format!("{value}|edit")),
+            );
         if let Some(source) = source {
-            for tag in source.tags.iter().cloned() {
+            for tag in source.tags().iter().cloned() {
                 builder = builder.tag(tag);
             }
         }

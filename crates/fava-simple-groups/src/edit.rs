@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use fava_state::RelayUrl;
 use fava_write::{
-    Event, EventBuilder, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
-    Timestamp, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 use crate::records::MAX_RECORD_VALUE_BYTES;
@@ -317,7 +317,7 @@ impl ReplaceableEventMaterializer for SavedListMaterializer {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
@@ -336,28 +336,37 @@ impl ReplaceableEventMaterializer for SavedListMaterializer {
 
 fn qualified_source(
     author: PublicKey,
-    source: Option<&Event>,
+    source: Option<&EventValue>,
     created_at: Timestamp,
 ) -> Result<(&str, &[Tag]), WriteIntentError> {
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    crate::records::validate_structure(source)
+    crate::records::validate_value_structure(source)
         .map_err(|error| simple_group_refusal(&error))?;
-    source
-        .verify()
-        .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-    if source.pubkey != author || source.kind != saved_kind() {
+    match source {
+        EventValue::Signed(event) => event
+            .verify()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+        EventValue::Unsigned(event) => event
+            .verify_id()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+    }
+    if source.author() != author || source.kind() != saved_kind() {
         return Err(WriteIntentError::InvalidEvent(
             "saved-list source author or kind does not match accepted write".to_owned(),
         ));
     }
-    if created_at <= source.created_at {
+    if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
             "saved-list materialization timestamp must succeed its source".to_owned(),
         ));
     }
-    Ok((&source.content, source.tags.as_slice()))
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    Ok((content, source.tags()))
 }
 
 fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
@@ -399,8 +408,7 @@ fn apply_simple_group(
     let mut found = std::collections::BTreeSet::new();
     let mut tags = Vec::with_capacity(source.len().saturating_add(hosts.len()));
     for tag in source {
-        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host))
-        else {
+        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host)) else {
             tags.push(tag.clone());
             continue;
         };
@@ -476,7 +484,11 @@ fn renamed_row(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     Tag::parse(values).map_err(|error| codec_refusal(&error.to_string()))
 }
 
-fn simple_group_row(id: &str, host: &RelayUrl, name: Option<&str>) -> Result<Tag, WriteIntentError> {
+fn simple_group_row(
+    id: &str,
+    host: &RelayUrl,
+    name: Option<&str>,
+) -> Result<Tag, WriteIntentError> {
     let mut values = vec!["group".to_owned(), id.to_owned(), host.as_str().to_owned()];
     if let Some(name) = name {
         values.push(name.to_owned());

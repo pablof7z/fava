@@ -1,4 +1,6 @@
-use fava_write::{Event, WriteIntentError};
+#[cfg(test)]
+use fava_write::Event;
+use fava_write::{EventValue, Kind, Tag, Timestamp, WriteIntentError};
 
 const MAX_EVENT_BYTES: usize = 131_072;
 const MIN_EVENT_WITH_ONE_TAG_BYTES: usize = 334;
@@ -6,19 +8,38 @@ const MAX_TAG_VALUES: usize = (MAX_EVENT_BYTES - MIN_EVENT_WITH_ONE_TAG_BYTES) /
 const EMPTY_EVENT_OBJECT_BYTES: usize = 71;
 const FIXED_HEX_BYTES: usize = 64 + 64 + 128;
 
-pub(super) fn validate_source(source: &Event) -> Result<(), WriteIntentError> {
-    encoded_len(source).map(|_| ())
+pub(super) fn validate_value_source(source: &EventValue) -> Result<(), WriteIntentError> {
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    encoded_len_parts(source.created_at(), source.kind(), source.tags(), content).map(|_| ())
 }
 
+#[cfg(test)]
 pub(super) fn encoded_len(source: &Event) -> Result<usize, WriteIntentError> {
+    encoded_len_parts(
+        source.created_at,
+        source.kind,
+        source.tags.as_slice(),
+        &source.content,
+    )
+}
+
+fn encoded_len_parts(
+    created_at: Timestamp,
+    kind: Kind,
+    tags: &[Tag],
+    content: &str,
+) -> Result<usize, WriteIntentError> {
     let mut bytes = EMPTY_EVENT_OBJECT_BYTES;
     add(&mut bytes, FIXED_HEX_BYTES)?;
-    add(&mut bytes, decimal_len(source.created_at.as_secs()))?;
-    add(&mut bytes, decimal_len(u64::from(source.kind.as_u16())))?;
+    add(&mut bytes, decimal_len(created_at.as_secs()))?;
+    add(&mut bytes, decimal_len(u64::from(kind.as_u16())))?;
     add(&mut bytes, 2)?;
 
     let mut value_count = 0usize;
-    for (tag_index, tag) in source.tags.iter().enumerate() {
+    for (tag_index, tag) in tags.iter().enumerate() {
         if tag_index > 0 {
             add(&mut bytes, 1)?;
         }
@@ -39,7 +60,7 @@ pub(super) fn encoded_len(source: &Event) -> Result<usize, WriteIntentError> {
             add_json_string(&mut bytes, value)?;
         }
     }
-    add_json_string(&mut bytes, &source.content)?;
+    add_json_string(&mut bytes, content)?;
     Ok(bytes)
 }
 

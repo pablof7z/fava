@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use fava_query::{SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus};
 use fava_routing::RoutePlan;
-use fava_state::{EventCoordinate, event_coordinate};
+use fava_state::EventCoordinate;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
+    EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
@@ -15,6 +15,9 @@ use fava_write_store::{
 
 use super::MemoryWriteStore;
 use super::model::destinations;
+use super::semantic_acceptance::{
+    require_current, route_matches, validate_materialization, validate_source,
+};
 use super::state::{
     active_count, attributed_failure, capacity_reached, edit_coordinate, next_revision,
     require_failure_source, require_qualified_source,
@@ -32,7 +35,7 @@ pub(super) struct WriteState {
     pub(super) edits: BTreeMap<
         ReceiptId,
         (
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -83,7 +86,7 @@ impl MemoryWriteStore {
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic_inner(None, intent, event, source, None)
     }
@@ -93,18 +96,22 @@ impl MemoryWriteStore {
         reservation: u64,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         self.accept_semantic_inner(Some(reservation), intent, event, source, initial_route)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one lock and one volatile commit keep semantic admission atomic"
+    )]
     fn accept_semantic_inner(
         &self,
         reservation: Option<u64>,
         intent: WriteIntent,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock_state()?;
@@ -123,18 +130,18 @@ impl MemoryWriteStore {
         let coordinate = edit_coordinate(&edit, author);
         let selected_source = validate_materialization(&edit, author, &event, source, &routing)?;
 
-        if let Some(receipt_id) = state.coordinates.get(&coordinate) {
-            let receipt = state.writes.get(receipt_id).ok_or_else(|| {
+        if let Some(receipt_id) = state.coordinates.get(&coordinate).copied() {
+            let receipt = state.writes.get(&receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
             })?;
-            let stored = state.edits.get(receipt_id).ok_or_else(|| {
+            let stored = state.edits.get(&receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
-            if stored.0 == edit
+            if stored.0.as_slice() == [edit.clone()]
                 && stored.1 == author
                 && stored.2 == selected_source
                 && receipt.routing == routing
-                && receipt.current.event == EventValue::Unsigned(event)
+                && receipt.current.event == EventValue::Unsigned(event.clone())
                 && initial_route.is_none_or(|plan| route_matches(receipt, plan))
             {
                 return Ok(AcceptedWrite {
@@ -143,9 +150,16 @@ impl MemoryWriteStore {
                     current: receipt.current.clone(),
                 });
             }
-            return Err(WriteStoreError::Refused(
-                "replaceable-event coordinate already has a live edit".to_owned(),
-            ));
+            return self.compose_semantic(
+                &mut state,
+                receipt_id,
+                edit,
+                author,
+                &routing,
+                event,
+                source,
+                initial_route,
+            );
         }
 
         if !reserved && capacity_reached(&state, self.capacity.get()) {
@@ -196,7 +210,7 @@ impl MemoryWriteStore {
             state.coordinates.insert(coordinate, receipt_id);
             state
                 .edits
-                .insert(receipt_id, (edit, author, selected_source, None));
+                .insert(receipt_id, (vec![edit], author, selected_source, None));
         }
         state.writes.insert(receipt_id, receipt.clone());
         self.publish_receipt(&state, &receipt);
@@ -207,11 +221,19 @@ impl MemoryWriteStore {
         })
     }
 
-    pub(super) fn reserve_active_slot(&self) -> Result<u64, WriteStoreError> {
+    pub(super) fn reserve_active_slot(
+        &self,
+        edit: &ReplaceableEventEdit,
+        author: PublicKey,
+    ) -> Result<u64, WriteStoreError> {
         let mut state = self.lock_state()?;
-        if active_count(&state)
-            .checked_add(state.reservations.len())
-            .is_none_or(|used| used >= self.capacity.get())
+        let coordinate_is_active = state
+            .coordinates
+            .contains_key(&edit_coordinate(edit, author));
+        if !coordinate_is_active
+            && active_count(&state)
+                .checked_add(state.reservations.len())
+                .is_none_or(|used| used >= self.capacity.get())
         {
             return Err(WriteStoreError::Refused(format!(
                 "bounded write-store capacity {} reached",
@@ -245,7 +267,7 @@ impl MemoryWriteStore {
         expected: MaterializationId,
         expected_source: Option<EventId>,
         event: UnsignedEvent,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock_state()?;
         let receipt = state
@@ -253,12 +275,15 @@ impl MemoryWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, author, current_source, _) =
+        let (edits, author, current_source, _) =
             state.edits.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
+        let edit = edits.last().ok_or_else(|| {
+            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
+        })?;
         let selected_source =
-            validate_materialization(&edit, author, &event, source, &receipt.routing)?;
+            validate_materialization(edit, author, &event, source, &receipt.routing)?;
 
         require_current(
             &receipt,
@@ -339,7 +364,7 @@ impl MemoryWriteStore {
         state.revision = next_revision;
         state
             .edits
-            .insert(receipt_id, (edit, author, selected_source, None));
+            .insert(receipt_id, (edits, author, selected_source, None));
         state.writes.insert(receipt_id, updated.clone());
         self.publish_receipt(&state, &updated);
         Ok(updated)
@@ -352,7 +377,7 @@ impl MemoryWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock_state()?;
@@ -361,7 +386,7 @@ impl MemoryWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edit, author, current_source, current_failed_source) =
+        let (edits, author, current_source, current_failed_source) =
             state.edits.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
@@ -372,7 +397,10 @@ impl MemoryWriteStore {
             expected_source,
             current_source,
         )?;
-        let failed_source = validate_source(&edit, author, source)?;
+        let edit = edits.last().ok_or_else(|| {
+            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
+        })?;
+        let failed_source = validate_source(edit, author, source)?;
         require_failure_source(current_source, failed_source)?;
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
@@ -391,9 +419,10 @@ impl MemoryWriteStore {
         updated.current.publication.materialization_failure = Some(failure);
         let next_revision = next_revision(&state)?;
         state.revision = next_revision;
-        state
-            .edits
-            .insert(receipt_id, (edit, author, current_source, failed_source_id));
+        state.edits.insert(
+            receipt_id,
+            (edits, author, current_source, failed_source_id),
+        );
         state.writes.insert(receipt_id, updated.clone());
         self.publish_receipt(&state, &updated);
         Ok(updated)
@@ -405,7 +434,7 @@ impl MemoryWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            ReplaceableEventEdit,
+            Vec<ReplaceableEventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -431,106 +460,20 @@ impl MemoryWriteStore {
             })
             .collect())
     }
-}
 
-fn route_matches(receipt: &Receipt, plan: &RoutePlan) -> bool {
-    let mut candidate = receipt.clone();
-    candidate.outcome = ReceiptOutcome::Open;
-    candidate.route_revision = 0;
-    candidate.route_settled = false;
-    candidate.route_shortfalls.clear();
-    candidate.desired_destinations.clear();
-    candidate.attempts.clear();
-    candidate.current.publication.destinations.clear();
-    apply_route_to_receipt(&mut candidate, plan).is_ok()
-        && candidate.outcome == receipt.outcome
-        && candidate.route_revision == receipt.route_revision
-        && candidate.route_settled == receipt.route_settled
-        && candidate.route_shortfalls == receipt.route_shortfalls
-        && candidate.desired_destinations == receipt.desired_destinations
-        && candidate.attempts == receipt.attempts
-        && candidate.current.publication.destinations == receipt.current.publication.destinations
-}
-
-fn validate_materialization(
-    edit: &ReplaceableEventEdit,
-    author: PublicKey,
-    event: &UnsignedEvent,
-    source: Option<&Event>,
-    routing: &WriteRouting,
-) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
-    WriteIntent::event(event.clone(), routing.clone())?;
-    if event.pubkey != author
-        || event_coordinate_of_unsigned(event)? != edit_coordinate(edit, author)
-    {
-        return Err(WriteStoreError::Refused(
-            "materialization actor or coordinate does not match edit".to_owned(),
-        ));
+    #[allow(clippy::type_complexity)]
+    pub(super) fn semantic_custody(
+        &self,
+        receipt_id: ReceiptId,
+    ) -> Result<
+        Option<(
+            Vec<ReplaceableEventEdit>,
+            PublicKey,
+            Option<(EventId, Timestamp)>,
+            Option<EventId>,
+        )>,
+        WriteStoreError,
+    > {
+        Ok(self.lock_state()?.edits.get(&receipt_id).cloned())
     }
-    let selected = validate_source(edit, author, source)?;
-    let Some((_, source_time)) = selected else {
-        return Ok(None);
-    };
-    if source_time >= event.created_at {
-        return Err(WriteStoreError::Refused(
-            "materialization is not newer than its selected source".to_owned(),
-        ));
-    }
-    Ok(selected)
-}
-
-fn validate_source(
-    edit: &ReplaceableEventEdit,
-    author: PublicKey,
-    source: Option<&Event>,
-) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
-    let Some(source) = source else {
-        return Ok(None);
-    };
-    source
-        .verify()
-        .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
-    if event_coordinate(
-        source.id,
-        source.pubkey,
-        source.kind,
-        source.tags.as_slice(),
-    ) != edit_coordinate(edit, author)
-    {
-        return Err(WriteStoreError::Refused(
-            "materialization source does not match edit coordinate".to_owned(),
-        ));
-    }
-    Ok(Some((source.id, source.created_at)))
-}
-
-fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
-    let id = event
-        .id
-        .ok_or_else(|| WriteStoreError::Refused("materialization has no event id".to_owned()))?;
-    Ok(event_coordinate(
-        id,
-        event.pubkey,
-        event.kind,
-        event.tags.as_slice(),
-    ))
-}
-
-fn require_current(
-    receipt: &Receipt,
-    write_id: WriteId,
-    expected: MaterializationId,
-    expected_source: Option<EventId>,
-    current_source: Option<(EventId, Timestamp)>,
-) -> Result<(), WriteStoreError> {
-    if receipt.is_terminal()
-        || receipt.write_id != write_id
-        || receipt.current.publication.materialization_id != expected
-        || current_source.map(|(id, _)| id) != expected_source
-    {
-        return Err(WriteStoreError::Refused(
-            "semantic materialization is not current".to_owned(),
-        ));
-    }
-    Ok(())
 }

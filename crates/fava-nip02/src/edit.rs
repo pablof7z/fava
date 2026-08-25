@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use fava_state::RelayUrl;
 use fava_write::{
-    Event, EventBuilder, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
-    Timestamp, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const ADD: u8 = 1;
@@ -296,7 +296,7 @@ impl ReplaceableEventMaterializer for Nip02Materializer {
         &self,
         edit: &ReplaceableEventEdit,
         author: PublicKey,
-        source: Option<&Event>,
+        source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let change = decode_edit(edit)?;
@@ -310,27 +310,36 @@ impl ReplaceableEventMaterializer for Nip02Materializer {
 
 fn qualified_source(
     author: PublicKey,
-    source: Option<&Event>,
+    source: Option<&EventValue>,
     created_at: Timestamp,
 ) -> Result<(&str, &[Tag]), WriteIntentError> {
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    bounds::validate_source(source)?;
-    source
-        .verify()
-        .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
-    if source.pubkey != author || source.kind != Kind::ContactList {
+    bounds::validate_value_source(source)?;
+    match source {
+        EventValue::Signed(event) => event
+            .verify()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+        EventValue::Unsigned(event) => event
+            .verify_id()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
+    }
+    if source.author() != author || source.kind() != Kind::ContactList {
         return Err(WriteIntentError::InvalidEvent(
             "NIP-02 source author or kind does not match accepted write".to_owned(),
         ));
     }
-    if created_at <= source.created_at {
+    if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
             "NIP-02 materialization timestamp must succeed its source".to_owned(),
         ));
     }
-    Ok((&source.content, source.tags.as_slice()))
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    Ok((content, source.tags()))
 }
 
 fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {

@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit, Timestamp, UnsignedEvent,
-    WriteIntent, WriteRouting,
+    Event, EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit, Timestamp,
+    UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
@@ -32,6 +32,10 @@ fn redb_semantic_owners_stay_below_the_code_soft_limit() {
         (
             "semantic acceptance",
             include_str!("../src/semantic_acceptance.rs"),
+        ),
+        (
+            "semantic composition",
+            include_str!("../src/semantic_composition.rs"),
         ),
     ] {
         let lines = source.lines().count();
@@ -65,7 +69,7 @@ fn accept(
     edit: ReplaceableEventEdit,
     author: fava_write::PublicKey,
     event: UnsignedEvent,
-    source: Option<&Event>,
+    source: Option<&EventValue>,
 ) -> fava_write_store::AcceptedWrite {
     store
         .accept_materialized_edit(
@@ -112,7 +116,72 @@ fn redb_coordinate_admission_is_single_owner() {
     let recovered = reopened.recover_materialized_edits().unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0.receipt_id, first.receipt_id);
-    assert_eq!(recovered[0].1, edit());
+    assert_eq!(recovered[0].1, vec![edit()]);
+    assert_eq!(recovered[0].2, actor);
+}
+
+#[test]
+fn redb_same_coordinate_edit_sequence_survives_reopen_with_exact_identity() {
+    let path = unique_path("composed-coordinate");
+    let keys = Keys::generate();
+    let actor = keys.public_key();
+    let store = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(2).unwrap(),
+    )
+    .expect("bounded redb opens");
+    let first_edit = edit();
+    let second_edit =
+        ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).expect("second edit");
+    let first = accept(
+        &store,
+        first_edit.clone(),
+        actor,
+        materialization(actor, 10, "first"),
+        None,
+    );
+    let second = accept(
+        &store,
+        second_edit.clone(),
+        actor,
+        materialization(actor, 11, "first|second"),
+        Some(&first.current.event),
+    );
+
+    assert_eq!(second.write_id, first.write_id);
+    assert_eq!(second.receipt_id, first.receipt_id);
+    assert_eq!(
+        second.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(
+        second.current.publication.retired_materializations,
+        vec![(
+            MaterializationId::from_u64(1),
+            first.current.id(),
+            None,
+            None,
+        )]
+    );
+    assert_eq!(store.len().unwrap(), 1);
+    drop(store);
+
+    let reopened = RedbWriteStore::open_bounded(
+        path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(2).unwrap(),
+    )
+    .expect("composed redb reopens");
+    let recovered = reopened.recover_materialized_edits().unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].0.write_id, first.write_id);
+    assert_eq!(recovered[0].0.receipt_id, first.receipt_id);
+    assert_eq!(
+        recovered[0].0.current.publication.materialization_id,
+        MaterializationId::from_u64(2)
+    );
+    assert_eq!(recovered[0].1, vec![first_edit, second_edit]);
     assert_eq!(recovered[0].2, actor);
 }
 
@@ -171,7 +240,7 @@ fn redb_refuses_materialization_or_source_outside_accepted_author() {
             .accept_materialized_edit(
                 alice_intent(),
                 materialization(alice.public_key(), 10, "alice"),
-                Some(&bob_source),
+                Some(&EventValue::Signed(bob_source.clone())),
             )
             .is_err()
     );
@@ -190,7 +259,7 @@ fn redb_generation_and_failure_state_match_memory() {
         edit(),
         keys.public_key(),
         materialization(keys.public_key(), 11, "generation one"),
-        Some(&base),
+        Some(&EventValue::Signed(base.clone())),
     );
     let failed = store
         .record_materialization_failure(
@@ -198,7 +267,7 @@ fn redb_generation_and_failure_state_match_memory() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
-            Some(&failed_source),
+            Some(&EventValue::Signed(failed_source.clone())),
             "x".repeat(5_000),
         )
         .expect("failure commits");
@@ -218,7 +287,7 @@ fn redb_generation_and_failure_state_match_memory() {
             MaterializationId::from_u64(1),
             Some(base.id),
             materialization(keys.public_key(), 21, "generation two"),
-            Some(&failed_source),
+            Some(&EventValue::Signed(failed_source.clone())),
         )
         .expect("retry installs");
     assert_eq!(successor.write_id, accepted.write_id);
@@ -282,7 +351,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 MaterializationId::from_u64(9),
                 None,
                 materialization(keys.public_key(), 3, "stale"),
-                Some(&stale_source),
+                Some(&EventValue::Signed(stale_source.clone())),
             )
             .is_err()
     );
@@ -308,7 +377,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                     source_time + 1,
                     &format!("generation {generation}"),
                 ),
-                Some(&next_source),
+                Some(&EventValue::Signed(next_source.clone())),
             )
             .unwrap();
         expected = MaterializationId::from_u64(expected.as_u64() + 1);
@@ -325,7 +394,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 expected,
                 expected_source,
                 materialization(keys.public_key(), 1_001, "evidence overflow"),
-                Some(&overflow_source),
+                Some(&EventValue::Signed(overflow_source.clone())),
             )
             .is_err()
     );
@@ -366,7 +435,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 replacement.receipt_id,
                 MaterializationId::from_u64(1),
                 None,
-                Some(&stale_source),
+                Some(&EventValue::Signed(stale_source.clone())),
                 "late".to_owned(),
             )
             .is_err()
@@ -414,14 +483,18 @@ fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
         NonZeroUsize::new(1).unwrap(),
     )
     .expect("bounded store opens");
-    let first = store.reserve_active().expect("one reservation fits");
-    assert!(store.reserve_active().is_err());
+    let keys = Keys::generate();
+    let first = store
+        .reserve_active(&edit(), keys.public_key())
+        .expect("one reservation fits");
+    assert!(store.reserve_active(&edit(), keys.public_key()).is_err());
     store
         .release_active(first)
         .expect("unused reservation releases");
 
-    let consumed = store.reserve_active().expect("released slot is reusable");
-    let keys = Keys::generate();
+    let consumed = store
+        .reserve_active(&edit(), keys.public_key())
+        .expect("released slot is reusable");
     let ordinary = WriteIntent::event(
         materialization(keys.public_key(), 1, "not an edit"),
         WriteRouting::Automatic,
@@ -439,7 +512,7 @@ fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
             .is_err()
     );
     let reusable = store
-        .reserve_active()
+        .reserve_active(&edit(), keys.public_key())
         .expect("refused acceptance consumed its reservation");
     store.release_active(reusable).unwrap();
     drop(store);
@@ -456,8 +529,9 @@ fn redb_pre_custody_reservation_disappears_on_reopen() {
             NonZeroUsize::new(1).unwrap(),
         )
         .expect("bounded store opens");
+        let keys = Keys::generate();
         store
-            .reserve_active()
+            .reserve_active(&edit(), keys.public_key())
             .expect("reservation is held in process");
     }
     let reopened = RedbWriteStore::open_bounded(
@@ -467,7 +541,7 @@ fn redb_pre_custody_reservation_disappears_on_reopen() {
     )
     .expect("store reopens after pre-custody loss");
     let reservation = reopened
-        .reserve_active()
+        .reserve_active(&edit(), Keys::generate().public_key())
         .expect("process loss releases pre-custody reservation");
     reopened.release_active(reservation).unwrap();
     drop(reopened);

@@ -504,10 +504,10 @@ spec_crates = ["fava-publication"]
 [[term]]
 name = "WriteStore"
 source = "fava"
-meaning = "The authority for accepted local publication obligations, receipts, and current materialized events."
+meaning = "The authority for accepted local publication obligations, receipts, current materialized events, and bounded ordered edit custody for each active replaceable coordinate."
 owner = "fava-write-store"
 nearest_nostr = "EVENT and OK messages"
-distinction = "Relay messages do not define durable local custody or recovery of publication obligations."
+distinction = "Relay messages do not define durable local custody, ordered same-coordinate edit composition, or recovery of publication obligations."
 symbols = [
     "fava_write_store::AcceptedWrite",
     "fava_write_store::WriteStore",
@@ -586,10 +586,10 @@ crates = []
 [[term]]
 name = "ReplaceableEventEdit"
 source = "fava"
-meaning = "A durable protocol-owned change carrying kind and optional identifier, but no author, encoding version, or stored inverse; accepted custody applies it to the newest event at the resolved-author coordinate or to defined empty state."
+meaning = "A durable protocol-owned change carrying kind and optional identifier, but no author, encoding version, or stored inverse; accepted custody applies its bounded ordered sequence to the newest event at the resolved-author coordinate or to defined empty state."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
-distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves one intended change while the accepted write separately freezes the author used for every materialization generation."
+distinction = "Nostr defines replacement events; ReplaceableEventEdit preserves one intended change and its position in one active coordinate's ordered sequence while the accepted write separately freezes the author used for every materialization generation."
 symbols = ["fava_write::ReplaceableEventEdit"]
 crates = []
 spec_symbols = ["ReplaceableEventEdit"]
@@ -597,10 +597,10 @@ spec_symbols = ["ReplaceableEventEdit"]
 [[term]]
 name = "ReplaceableEventMaterializer"
 source = "fava"
-meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified source or defined empty state and produces an unsigned replacement event."
+meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified signed or unsigned source or defined empty state and produces an unsigned replacement event; universal publication may invoke it sequentially for durable same-coordinate composition."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
-distinction = "Nostr defines replacement events but not a client-side provider contract for replaying one durable intention across changing source state without owning publication."
+distinction = "Nostr defines replacement events but not a client-side provider contract for replaying durable ordered intentions across changing source state without owning custody, queues, or publication."
 symbols = ["fava_write::ReplaceableEventMaterializer"]
 crates = []
 spec_symbols = ["ReplaceableEventMaterializer"]
@@ -608,7 +608,7 @@ spec_symbols = ["ReplaceableEventMaterializer"]
 [[term]]
 name = "MaterializationId"
 source = "fava"
-meaning = "The exact identity of one immutable event materialization generation under a stable accepted write and receipt."
+meaning = "The exact identity of one immutable event materialization generation under a stable accepted write and receipt, including generations produced by appending a pre-signature same-coordinate edit."
 owner = "fava-write"
 nearest_nostr = "EventId"
 distinction = "An EventId identifies one completed event body; MaterializationId correlates every effect and late completion to the exact generation that authorized it."

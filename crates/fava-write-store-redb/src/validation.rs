@@ -209,9 +209,17 @@ fn validate_materializations(
 
 fn validate_semantic(
     receipt: &Receipt,
-    (edit, author, current_source, failed_source): &SemanticCustody,
+    (edits, author, current_source, failed_source): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
-    WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
+    if edits.is_empty()
+        || edits.len() > receipt.current.publication.retired_materializations.len() + 1
+    {
+        return incoherent("durable semantic edit sequence and generations disagree");
+    }
+    for edit in edits {
+        WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
+    }
+    let edit = edits.last().expect("non-empty edit sequence validated");
     if receipt.current.event.author() != *author
         || receipt
             .current

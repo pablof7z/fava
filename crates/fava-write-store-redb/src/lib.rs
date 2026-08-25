@@ -23,12 +23,13 @@ mod ops;
 mod schema;
 mod semantic;
 mod semantic_acceptance;
+mod semantic_composition;
 mod validation;
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
 type SemanticCustody = (
-    ReplaceableEventEdit,
+    Vec<ReplaceableEventEdit>,
     PublicKey,
     Option<(EventId, Timestamp)>,
     Option<EventId>,
@@ -208,15 +209,19 @@ fn recover_ambiguous(state: &mut StoreState) -> Vec<ReceiptId> {
 }
 
 fn release_semantic(state: &mut StoreState, receipt_id: ReceiptId) {
-    if let Some((edit, author, _, _)) = state.semantics.remove(&receipt_id) {
+    if let Some((edits, author, _, _)) = state.semantics.remove(&receipt_id)
+        && let Some(edit) = edits.last()
+    {
         state
             .coordinates
-            .remove(&semantic::edit_coordinate(&edit, author));
+            .remove(&semantic::edit_coordinate(edit, author));
     }
 }
 
 fn release_semantic_coordinate(state: &mut StoreState, receipt_id: ReceiptId) {
-    if let Some((edit, author, _, _)) = state.semantics.get(&receipt_id) {
+    if let Some((edits, author, _, _)) = state.semantics.get(&receipt_id)
+        && let Some(edit) = edits.last()
+    {
         state
             .coordinates
             .remove(&semantic::edit_coordinate(edit, *author));

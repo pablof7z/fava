@@ -1,4 +1,4 @@
-use fava_write::{ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
+use fava_write::{EventValue, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
@@ -33,7 +33,8 @@ fn materialize(
     source: Option<&fava_write::Event>,
     created_at: u64,
 ) -> Result<fava_write::UnsignedEvent, WriteIntentError> {
-    materializer().materialize(edit, author, source, Timestamp::from(created_at))
+    let source = source.cloned().map(EventValue::Signed);
+    materializer().materialize(edit, author, source.as_ref(), Timestamp::from(created_at))
 }
 
 fn target_tags(event: &fava_write::UnsignedEvent, target: PublicKey) -> usize {
