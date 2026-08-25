@@ -1,6 +1,6 @@
 # `fava-simple-groups` NIP-29 value capability
 
-**Status:** implementation reconciled; signed vocabulary approval pending
+**Status:** implementation reconciled; remaining signed vocabulary approvals pending
 **Owning phase:** 07.1.1
 
 This issue records the implemented event-local, saved-list, and operation
@@ -9,13 +9,15 @@ boundary is recorded in
 `docs/issues/0027-simple-group-relay-input-boundary.md`.
 
 The current nominal model is recorded in `docs/internals/vocabulary.toml`.
-All 14 simple-groups nominal entries remain absent from the signed
-`docs/internals/approvals.jsonl` ledger: `SimpleGroup`,
-`SimpleGroupConstructionError`, `SimpleGroupStateEventKind`, the six event
-projections, `SimpleGroupDecodeError`, `SavedSimpleGroup`, `SavedGroupList`,
-`SavedGroupListMaterializer`, and `SavedGroupListDecodeError`. Their signed
-approvals are an external governance gate. This issue and commit series do not
-fabricate or claim them.
+Three of its 14 simple-groups entries have signed approvals in
+`docs/internals/approvals.jsonl`: `SimpleGroupMetadata`, `SimpleGroupAdmins`,
+and `SimpleGroupStateEventKind`. The remaining 11 are absent:
+`SimpleGroup`, `SimpleGroupConstructionError`, `SimpleGroupMembers`,
+`SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`,
+`SimpleGroupDecodeError`, `SavedSimpleGroup`, `SavedGroupList`,
+`SavedGroupListMaterializer`, and `SavedGroupListDecodeError`. Those remaining
+signed approvals are an external governance gate. This issue and commit series
+do not fabricate or claim them.
 
 ## Delivered model
 
@@ -69,7 +71,8 @@ values, repetitions according to the exact operation, and unrelated order.
 
 ## Current nominal vocabulary
 
-- `SimpleGroup` and `SimpleGroupStateEventKind`.
+- `SimpleGroup`, `SimpleGroupConstructionError`, and
+  `SimpleGroupStateEventKind`.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
   `SimpleGroupDecodeError`.
@@ -90,9 +93,11 @@ bounds, observation, publication, cancellation, or receipt value exists.
    Query builders delegate kind, tag-value, exact tag-axis intersection, and
    relay inputs to bounded `fava-query` constructors and return the resulting
    `QueryError` directly.
-   Write routing independently owns its operation bound and exact
-   `WriteIntentError`. The capability defines no construction or query-refusal
-   wrapper, and `fava-state` owns no application relay-selection value.
+   `SimpleGroup` construction owns only its exact empty-id and empty-relay
+   refusals through `SimpleGroupConstructionError`. Write routing independently
+   owns its operation bound and exact `WriteIntentError`; the capability defines
+   no query-refusal wrapper, and `fava-state` owns no application
+   relay-selection value.
 3. Universal Fava owners contain no NIP-29 semantic branch or production
    dependency on this capability.
 4. The facade and canary consume only the ordinary queries, event values,
