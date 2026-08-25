@@ -271,15 +271,6 @@ impl WriteStore for RedbWriteStore {
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
             validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
-            let destinations: std::collections::BTreeSet<_> =
-                plan.destinations.keys().cloned().collect();
-            if plan.revision == receipt.route_revision
-                && destinations == receipt.desired_destinations
-                && plan.shortfalls == receipt.route_shortfalls
-                && plan.settled() == receipt.route_settled
-            {
-                return Ok(());
-            }
             apply_route_to_receipt(receipt, plan)
         })
     }

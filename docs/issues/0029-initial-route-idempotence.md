@@ -57,7 +57,7 @@ Green:
 
 - the deliberate removal of only shared shortfall equality makes both named
   tests fail with `shortfall mismatch was accepted as idempotent`;
-- all 18 public memory semantic-store tests and all 28 redb semantic-store
+- all 19 public memory semantic-store tests and all 29 redb semantic-store
   tests through Cargo;
 - `fava-write-store` and `fava-write-store-memory` Cargo package tests;
 - `//crates/fava:semantic_write_store` and
@@ -68,3 +68,30 @@ Green:
 The repository vocabulary command remains red on the pre-existing public
 inventory and approval backlog. This slice adds no public symbol, crate, or
 architectural vocabulary term and does not modify the vocabulary registry.
+
+## Public apply-route review closure
+
+Review found a remaining provider bypass after initial admission was fixed.
+Memory and redb each returned early for a same-revision route when revision,
+destination identities, raw `plan.shortfalls`, and settlement matched. That
+partial check did not own coverage-to-shortfall derivation and could therefore
+disagree with the neutral complete-effect comparator.
+
+The causal public `WriteStore::apply_route` proof first persists a
+coverage-derived shortfall for one `SettledAbsent` target while an unresolved
+target keeps the route open. A same-revision candidate then copies that
+persisted string into its raw shortfalls and names a different
+`SettledAbsent` target. The inherited redb fast path accepted the candidate;
+the inherited memory path separately notified on an exact replay because its
+partial check could not recognize the derived shortfall.
+
+Both provider-local equality checks are removed. Every route replay now calls
+`apply_route_to_receipt`; the provider transaction publishes only when the
+shared transition changes the receipt. Exact replay remains mutation-free,
+and the changed derived effect refuses without receipt mutation or
+notification in memory and redb.
+
+The two new proofs pass through their complete Cargo and Bazel semantic-store
+targets. Focused Clippy with warnings denied, rustfmt, vocabulary-tool unit
+tests, and diff checks remain green. The unchanged repository vocabulary
+inventory backlog remains the only red validation command.

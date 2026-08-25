@@ -328,22 +328,16 @@ impl MemoryWriteStore {
         let mut state = self.lock_state()?;
         let receipt = state
             .writes
-            .get_mut(&receipt_id)
+            .get(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
         validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
-        let plan_destinations: std::collections::BTreeSet<_> =
-            plan.destinations.keys().cloned().collect();
-        if plan.revision == receipt.route_revision
-            && plan_destinations == receipt.desired_destinations
-            && plan.shortfalls == receipt.route_shortfalls
-            && plan.settled() == receipt.route_settled
-        {
-            return Ok(receipt.clone());
+        let mut updated = receipt.clone();
+        apply_route_to_receipt(&mut updated, plan)?;
+        if updated == *receipt {
+            return Ok(updated);
         }
         let next_revision = next_revision(&state)?;
-        let receipt = state.writes.get_mut(&receipt_id).expect("checked above");
-        apply_route_to_receipt(receipt, plan)?;
-        let updated = receipt.clone();
+        state.writes.insert(receipt_id, updated.clone());
         state.revision = next_revision;
         if updated.is_terminal() {
             release_semantic(&mut state, receipt_id);

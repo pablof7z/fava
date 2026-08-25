@@ -161,6 +161,78 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
     }
 }
 
+#[test]
+fn redb_apply_route_replay_compares_complete_persisted_effect() {
+    let path = unique_path("apply-route-replay-effect");
+    let store = RedbWriteStore::open(&path).unwrap();
+    let keys = Keys::generate();
+    let accepted = store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
+            materialization(keys.public_key(), 1, "apply route"),
+            None,
+        )
+        .unwrap();
+    let first_target = RouteTarget::Author(Keys::generate().public_key());
+    let second_target = RouteTarget::Author(Keys::generate().public_key());
+    let unresolved = RouteTarget::Author(Keys::generate().public_key());
+    let first = initial_route(
+        Vec::new(),
+        BTreeMap::from([(first_target.clone(), CoverageState::SettledAbsent)]),
+        unresolved.clone(),
+    );
+    let applied = store
+        .apply_route(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+            &first,
+        )
+        .expect("first complete route effect applies");
+    assert_eq!(
+        applied.route_shortfalls,
+        vec![format!("no relay destination for {first_target:?}")]
+    );
+
+    let mut changes = store.receipt_changes();
+    assert_eq!(
+        store
+            .apply_route(
+                accepted.write_id,
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
+                &first,
+            )
+            .expect("exact route effect replays idempotently"),
+        applied
+    );
+    assert!(changes.try_recv().is_err(), "exact replay notified");
+
+    let mismatch = initial_route(
+        applied.route_shortfalls.clone(),
+        BTreeMap::from([(second_target, CoverageState::SettledAbsent)]),
+        unresolved,
+    );
+    assert!(
+        store
+            .apply_route(
+                accepted.write_id,
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+                accepted.current.id(),
+                &mismatch,
+            )
+            .is_err(),
+        "coverage-derived shortfall mismatch was accepted"
+    );
+    assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(applied));
+    assert!(changes.try_recv().is_err(), "mismatch notified");
+    drop(store);
+    std::fs::remove_file(path).ok();
+}
+
 fn initial_route(
     shortfalls: Vec<String>,
     coverage: BTreeMap<RouteTarget, CoverageState>,
