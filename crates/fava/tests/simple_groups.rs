@@ -170,9 +170,9 @@ fn assembly(keys: &Keys) -> (Fava, Arc<MemoryEventCache>) {
 fn group() -> SimpleGroup {
     SimpleGroup::from_relays(
         "group-29",
-        relay("a"),
-        vec![relay("b"), relay("contacted-but-not-serving")],
+        vec![relay("a"), relay("b"), relay("contacted-but-not-serving")],
     )
+    .expect("non-empty group")
 }
 
 fn relay(name: &str) -> RelayUrl {

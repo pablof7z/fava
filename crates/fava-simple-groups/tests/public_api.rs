@@ -6,10 +6,11 @@ use std::sync::Arc;
 use fava_query::{Kind, PublicKey, Query, RelayUrl};
 use fava_simple_groups::{
     SavedGroupList, SavedGroupListDecodeError, SavedSimpleGroup, SimpleGroup, SimpleGroupAdmins,
-    SimpleGroupDecodeError, SimpleGroupLivekitParticipants, SimpleGroupMembers,
-    SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles, SimpleGroupStateEventKind,
-    remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group, save_relay,
-    save_simple_group, saved_group_list_materializer, saved_group_lists,
+    SimpleGroupConstructionError, SimpleGroupDecodeError, SimpleGroupLivekitParticipants,
+    SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles,
+    SimpleGroupStateEventKind, remove_saved_relay, remove_saved_simple_group,
+    rename_saved_simple_group, save_relay, save_simple_group, saved_group_list_materializer,
+    saved_group_lists,
 };
 use fava_state::EventCoordinate;
 use fava_write::{
@@ -53,7 +54,9 @@ fn inspect_decoders(
 
 #[test]
 fn constructors_queries_and_preparation_compile_at_the_current_surface() {
-    let group: SimpleGroup = SimpleGroup::from_relays("photos", relay(), Vec::new());
+    let constructor: Result<SimpleGroup, SimpleGroupConstructionError> =
+        SimpleGroup::from_relays("photos", vec![relay()]);
+    let group = constructor.expect("valid public construction");
     let _: Vec<RelayUrl> = group.relays().collect();
     assert_eq!(group.id(), "photos");
 
@@ -113,7 +116,7 @@ fn all_decoder_signatures_and_return_types_are_public() {
 #[test]
 fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
     let _: Result<Query, fava_query::QueryError> = saved_group_lists([key()]);
-    let group = SimpleGroup::from_relays("photos", relay(), Vec::new());
+    let group = SimpleGroup::from_relays("photos", vec![relay()]).expect("valid group");
     let _: Result<ReplaceableEventEdit, WriteIntentError> = save_simple_group(&group, None);
     let _: Result<ReplaceableEventEdit, WriteIntentError> = remove_saved_simple_group(&group);
     let _: Result<ReplaceableEventEdit, WriteIntentError> =
@@ -125,6 +128,14 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
 
 #[test]
 fn errors_expose_the_current_typed_fields() {
+    assert_eq!(
+        SimpleGroup::from_relays("", vec![relay()]),
+        Err(SimpleGroupConstructionError::EmptyId)
+    );
+    assert_eq!(
+        SimpleGroup::from_relays("photos", Vec::new()),
+        Err(SimpleGroupConstructionError::EmptyRelays)
+    );
     let decode = SimpleGroupDecodeError::MissingTagValue {
         tag_index: 1,
         value_index: 2,

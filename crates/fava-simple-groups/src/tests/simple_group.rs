@@ -2,17 +2,32 @@ use fava_query::{Kind, Query, QueryAcquisition, QueryError, ResultAuthority, Sin
 use fava_state::RelayUrl;
 use fava_write::{EventBuilder, Timestamp, WriteIntentError, WriteRouting};
 
-use crate::{SimpleGroup, SimpleGroupStateEventKind};
+use crate::{SimpleGroup, SimpleGroupConstructionError, SimpleGroupStateEventKind};
 
 use super::{public_key, tag};
 
 #[test]
-fn construction_preserves_id_and_first_relay_occurrences() {
+fn construction_rejects_exactly_empty_ids_and_empty_relay_vectors() {
+    let relay = RelayUrl::parse("wss://relay.example").expect("relay");
+
+    assert_eq!(
+        SimpleGroup::from_relays("", vec![relay]),
+        Err(SimpleGroupConstructionError::EmptyId)
+    );
+    assert_eq!(
+        SimpleGroup::from_relays("photos", Vec::new()),
+        Err(SimpleGroupConstructionError::EmptyRelays)
+    );
+}
+
+#[test]
+fn construction_preserves_opaque_non_empty_id_and_first_relay_occurrences() {
     let first = RelayUrl::parse("wss://b.example").expect("relay");
     let second = RelayUrl::parse("wss://a.example").expect("relay");
-    let group = SimpleGroup::from_relays("", first.clone(), vec![second, first]);
+    let group = SimpleGroup::from_relays(" ", vec![first.clone(), second, first])
+        .expect("non-empty opaque id and relay selection");
 
-    assert_eq!(group.id(), "");
+    assert_eq!(group.id(), " ");
     assert_eq!(
         group
             .relays()
@@ -25,12 +40,13 @@ fn construction_preserves_id_and_first_relay_occurrences() {
 #[test]
 fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
     let first = RelayUrl::parse("wss://relay-0.example").expect("relay");
-    let rest = (1..4_097)
+    let rest: Vec<_> = (1..4_097)
         .map(|index| {
             RelayUrl::parse(&format!("wss://relay-{index}.example")).expect("unique relay")
         })
         .collect();
-    let group = SimpleGroup::from_relays("g", first, rest);
+    let group = SimpleGroup::from_relays("g", std::iter::once(first).chain(rest).collect())
+        .expect("non-empty group");
     assert_eq!(group.relays().count(), 4_097);
     assert!(matches!(
         group.events(Query::events()),
@@ -41,12 +57,13 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
     ));
 
     let first = RelayUrl::parse("wss://write-0.example").expect("relay");
-    let rest = (1..257)
+    let rest: Vec<_> = (1..257)
         .map(|index| {
             RelayUrl::parse(&format!("wss://write-{index}.example")).expect("unique relay")
         })
         .collect();
-    let group = SimpleGroup::from_relays("g", first, rest);
+    let group = SimpleGroup::from_relays("g", std::iter::once(first).chain(rest).collect())
+        .expect("non-empty group");
     assert!(matches!(
         WriteRouting::explicit(group.relays()),
         Err(WriteIntentError::TooManyExplicitRelays {
@@ -56,7 +73,7 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
     ));
 
     let relay = RelayUrl::parse("wss://bounded.example").expect("relay");
-    let group = SimpleGroup::from_relays("g", relay, Vec::new());
+    let group = SimpleGroup::from_relays("g", vec![relay]).expect("non-empty group");
     assert!(matches!(
         group.state_events(std::iter::repeat(SimpleGroupStateEventKind::Metadata)),
         Err(QueryError::TooManyKinds {
@@ -70,7 +87,7 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
 fn content_query_intersects_the_h_axis_and_uses_ordinary_relay_acquisition() {
     let first = RelayUrl::parse("wss://b.example").expect("relay");
     let second = RelayUrl::parse("wss://a.example").expect("relay");
-    let group = SimpleGroup::from_relays("photos", first, vec![second]);
+    let group = SimpleGroup::from_relays("photos", vec![first, second]).expect("non-empty group");
     let selection = Query::events()
         .kinds([Kind::from_u16(9)])
         .expect("one kind is bounded")
@@ -129,7 +146,7 @@ fn content_query_intersects_the_h_axis_and_uses_ordinary_relay_acquisition() {
 #[test]
 fn state_event_query_delegates_empty_and_non_empty_sets_to_query() {
     let relay = RelayUrl::parse("wss://relay.example").expect("relay");
-    let group = SimpleGroup::from_relays("photos", relay.clone(), Vec::new());
+    let group = SimpleGroup::from_relays("photos", vec![relay.clone()]).expect("non-empty group");
     let query = group
         .state_events([
             SimpleGroupStateEventKind::Pins,
@@ -167,7 +184,7 @@ fn state_event_query_delegates_empty_and_non_empty_sets_to_query() {
 #[test]
 fn prepare_preserves_every_existing_tag_and_adds_only_a_missing_match() {
     let relay = RelayUrl::parse("wss://relay.example").expect("relay");
-    let group = SimpleGroup::from_relays("photos", relay, Vec::new());
+    let group = SimpleGroup::from_relays("photos", vec![relay]).expect("non-empty group");
     let draft = EventBuilder::new(public_key(), Kind::from_u16(42))
         .created_at(Timestamp::from(2))
         .tags([
