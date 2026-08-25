@@ -173,21 +173,19 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
 
     store.fail_materialized_reads(false);
     tokio::time::timeout(Duration::from_secs(1), async {
-        while signer.calls().len() != 1 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("current generation reaches the authorized signer window");
-    signer.release_one();
-    let replayed = wait_for_materialization(&fava, first.receipt_id(), 4).await;
-    tokio::time::timeout(Duration::from_secs(1), async {
         while signer.calls().len() != 2 {
             tokio::task::yield_now().await;
         }
     })
     .await
-    .expect("replayed generation reaches its signer window");
+    .expect("current and replayed generations reach their exact signer windows");
+    let calls = signer.calls();
+    let current = first.receipt().unwrap();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[1], current.current.id());
+    signer.release_one();
+    let replayed = wait_for_materialization(&fava, first.receipt_id(), 4).await;
+    assert_eq!(signer.calls(), calls);
     let EventValue::Unsigned(event) = replayed.current.event else {
         panic!("blocking signer keeps replay unsigned");
     };
