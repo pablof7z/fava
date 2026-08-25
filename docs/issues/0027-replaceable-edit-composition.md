@@ -99,17 +99,40 @@ installation receives the complete applied edit slice and refuses unless it
 equals durable custody after exact write, receipt, generation, and source
 validation.
 
+## Restart-admission blocker closure
+
+Commit `ddb56702` adds deterministic causal proofs for the remaining restart
+race. Memory, clean-redb reopen, and redb SIGKILL recovery each place a newer
+qualified source in the initial restart snapshot, build the facade, and submit
+a same-coordinate edit immediately without yielding the current-thread
+runtime. The returned facade itself is therefore the admission barrier. After
+that composition, a second late source must replay the complete accepted
+sequence. The custody-refresh failure proof now waits on an observed failed
+durable read after source arrival instead of sleeping.
+
+Commit `fdf5d5ce` makes initial semantic reconciliation part of synchronous
+publication recovery rather than background-runner startup. The facade is not
+returned until every recovered coordinate has considered its complete durable
+sequence against the initial qualified source snapshot. Each runner state also
+carries the exact `MaterializationId` of its loaded sequence; initialization
+exact-refreshes custody whenever the receipt advanced before opening signer or
+route work. Both reconciliation loops are bounded by the existing retained
+materialization-evidence capacity.
+
 ## Validation gates
 
 Green evidence:
 
 - `semantic_write_store`: memory 15 passed; redb 25 passed.
 - `semantic_write_failures`: 18 passed, including a persistent custody-read
-  failure across a further durable composition and newer source arrival.
-- `semantic_write_publication`: 21 passed; `semantic_write_contract`: 5 passed;
+  failure across a further durable composition and newer source arrival, proved
+  through an observed read barrier without a timing sleep.
+- `semantic_write_publication`: 22 passed, including restart reconciliation,
+  immediate same-coordinate admission, and later complete replay;
+  `semantic_write_contract`: 5 passed;
   `semantic_write_capabilities`: 4 passed.
-- Redb `process_kill`: 8 passed, including incomplete-sequence refusal after
-  SIGKILL/reopen followed by complete ordered replay.
+- Redb `process_kill`: 10 passed, including clean-reopen and SIGKILL
+  restart-then-immediate-edit barriers followed by complete late-source replay.
 - Bookmark, NIP-02, simple-groups, and the external semantic-capability
   falsifier all passed.
 - `cargo check --workspace --all-targets --locked` passed.
