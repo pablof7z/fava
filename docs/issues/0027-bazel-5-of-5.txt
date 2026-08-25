@@ -1,23 +1,57 @@
 Issue: 0027 replaceable edit composition
 Date: 2026-08-26
-Main closure base: 863eef72
+Tested revision: c56cabdadf832eb680e6661d2caecd53564ccf2e
+Base: 863eef727bad1398aeb5db8e08fffa0259f5a262
 Bazel: 9.2.0
-Invocation ID: 36b49ef9-3339-4b5a-83a3-c9da9af452dc
+Invocation ID: 7017d140-b808-4934-b189-30afb05cae47
+Cache policy: --nocache_test_results; all five tests executed
 
 Command:
 
-bazel --install_base=/private/tmp/fava-bazel-install-r3 --output_base=/private/tmp/fava-bazel-r4 test --repo_contents_cache=/private/tmp/fava-bazel-repo-cache-r3 --disk_cache=/private/tmp/fava-bazel-disk-cache-r3 //crates/fava:semantic_write_contract //crates/fava:semantic_write_store //crates/fava:semantic_write_publication //crates/fava:semantic_write_failures //crates/fava:semantic_write_capabilities
+bazel --install_base=/private/tmp/fava-bazel-install-r3 --output_base=/private/tmp/fava-bazel-r6 test --nocache_test_results --repo_contents_cache=/private/tmp/fava-bazel-repo-cache-r3 --disk_cache=/private/tmp/fava-bazel-disk-cache-r3 //crates/fava:semantic_write_contract //crates/fava:semantic_write_store //crates/fava:semantic_write_publication //crates/fava:semantic_write_failures //crates/fava:semantic_write_capabilities
 
-Terminal target/output evidence:
+Exact terminal output:
 
+Starting local Bazel server (9.2.0) and connecting to it...
+INFO: Invocation ID: 7017d140-b808-4934-b189-30afb05cae47
+Computing main repo mapping:
+Loading:
+Loading: 0 packages loaded
+Analyzing: 5 targets (5 packages loaded, 6 targets configured)
+Analyzing: 5 targets (5 packages loaded, 6 targets configured)
+
+Analyzing: 5 targets (280 packages loaded, 7636 targets configured)
+
+Analyzing: 5 targets (280 packages loaded, 7636 targets configured)
+
+Analyzing: 5 targets (287 packages loaded, 8028 targets configured)
+
+INFO: Analyzed 5 targets (290 packages loaded, 8076 targets configured).
+[219 / 565] Compiling Rust bin _bs_ (17 files) [for tool]; 0s disk-cache, darwin-sandbox ... (14 actions, 13 running)
+[265 / 565] Compiling Rust rlib syn v2.0.98 (96 files) [for tool]; 0s disk-cache, darwin-sandbox
+[278 / 565] Compiling Rust rlib serde v1.0.228 (25 files) [for tool]; 0s disk-cache, darwin-sandbox ... (3 actions running)
+[290 / 565] Compiling Rust rlib toml_edit v0.22.24 (58 files) [for tool]; 0s disk-cache, darwin-sandbox ... (2 actions running)
+[295 / 565] Compiling Rust rlib idna v1.0.3 (11 files) [for tool]; 0s disk-cache, darwin-sandbox
+[298 / 565] Compiling Rust bin cargo_toml_variable_extractor (1 file) [for tool]; 0s disk-cache, darwin-sandbox
+[391 / 565] Compiling Rust rlib bech32 v0.12.0 (20 files); 0s disk-cache, darwin-sandbox ... (14 actions, 13 running)
+[481 / 565] Compiling Rust rlib serde_core v1.0.229 (20 files); 1s disk-cache, darwin-sandbox ... (8 actions running)
+[491 / 565] Compiling Rust rlib syn v2.0.119 (97 files) [for tool]; 1s disk-cache, darwin-sandbox ... (8 actions running)
+[507 / 565] Compiling Rust rlib tokio v1.53.1 (555 files); 0s disk-cache, darwin-sandbox ... (5 actions running)
+[520 / 565] Compiling Rust rlib toml_edit v0.22.27 (45 files); 0s disk-cache, darwin-sandbox ... (3 actions running)
+[527 / 565] Compiling Rust rlib nostr v0.45.3 (102 files); 0s disk-cache, darwin-sandbox
+[528 / 565] [Prepa] Compiling Rust rlib lib (1 file) ... (2 actions, 0 running)
+[540 / 566] 1 / 5 tests; Compiling Rust rlib lib (1 file); 0s disk-cache, darwin-sandbox ... (8 actions running)
+[557 / 566] 1 / 5 tests; Compiling Rust bin semantic_write_store (4 files); 0s disk-cache, darwin-sandbox ... (2 actions running)
+[569 / 570] 4 / 5 tests; Testing //crates/fava:semantic_write_failures; 0s disk-cache, darwin-sandbox
 INFO: Found 5 test targets...
-INFO: Elapsed time: 4.656s, Critical Path: 1.73s
-INFO: 14 processes: 556 action cache hit, 5 internal, 13 processwrapper-sandbox.
-INFO: Build completed successfully, 14 total actions
-//crates/fava:semantic_write_contract                           (cached) PASSED in 0.1s
+INFO: Elapsed time: 22.202s, Critical Path: 16.55s
+INFO: 570 processes: 2 disk cache hit, 241 internal, 332 darwin-sandbox.
+INFO: Build completed successfully, 570 total actions
 //crates/fava:semantic_write_capabilities                                PASSED in 0.1s
+//crates/fava:semantic_write_contract                                    PASSED in 0.1s
 //crates/fava:semantic_write_failures                                    PASSED in 0.4s
 //crates/fava:semantic_write_publication                                 PASSED in 0.1s
 //crates/fava:semantic_write_store                                       PASSED in 0.4s
 
-Executed 4 out of 5 tests: 5 tests pass.
+Executed 5 out of 5 tests: 5 tests pass.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
