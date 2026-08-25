@@ -109,6 +109,7 @@ async fn multi_relay(
         .observe(
             Query::events()
                 .ids([event.id])
+                .map_err(error)?
                 .only_from_relays(relays.clone())
                 .map_err(error)?,
         )
@@ -176,7 +177,8 @@ async fn reconnect(
     let mut observation = fava
         .observe(
             Query::events()
-                .kind(Kind::TextNote)
+                .kinds([Kind::TextNote])
+                .map_err(error)?
                 .only_from_relays([relay.clone()])
                 .map_err(error)?,
         )

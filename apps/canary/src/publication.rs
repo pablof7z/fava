@@ -165,7 +165,8 @@ async fn optimistic(
     let mut observation = fava
         .observe(
             Query::events()
-                .kind(Kind::TextNote)
+                .kinds([Kind::TextNote])
+                .map_err(error)?
                 .from_relays([relay_url.clone()])
                 .map_err(error)?,
         )
@@ -292,7 +293,12 @@ async fn cancel(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canar
     )?;
     let relay_url = RelayUrl::parse(&relay.url).map_err(error)?;
     let mut observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .map_err(error)?
+                .cache_only(),
+        )
         .await
         .map_err(error)?;
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
@@ -359,7 +365,12 @@ async fn crash(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canary
         return Err(CanaryError::new("recovered event identity changed"));
     }
     let observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .map_err(error)?
+                .cache_only(),
+        )
         .await
         .map_err(error)?;
     if observation.current().events.len() != 1 {

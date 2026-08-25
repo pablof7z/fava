@@ -155,7 +155,7 @@ fn validate_manifest(
             .and_then(Value::as_bool)
             != Some(true)
         || manifest.get("observation_closed").and_then(Value::as_bool) != Some(true)
-        || manifest.get("signed_refusals").and_then(Value::as_u64) != Some(3)
+        || manifest.get("prepared_contexts").and_then(Value::as_u64) != Some(3)
     {
         return Err(CanaryError::new(
             "simple-groups manifest completion claims were incomplete",

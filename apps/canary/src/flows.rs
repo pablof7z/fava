@@ -237,7 +237,9 @@ async fn flow_01_engine_before_account(live: &RelayUrl) -> FlowRecord {
             );
         }
     };
-    let query = Query::events().kind(Kind::TextNote);
+    let query = Query::events()
+        .kinds([Kind::TextNote])
+        .expect("one kind is bounded");
     let started = Instant::now();
     match tokio::time::timeout(RESPONSIVE_BUDGET, engine.observe(query)).await {
         Ok(Ok(observation)) => {
@@ -284,8 +286,8 @@ async fn flow_02_offline_local_view(unreachable: &RelayUrl, blackhole: &RelayUrl
         }
     };
     let query = match Query::events()
-        .kind(Kind::TextNote)
-        .from_relays([unreachable.clone()])
+        .kinds([Kind::TextNote])
+        .and_then(|query| query.from_relays([unreachable.clone()]))
     {
         Ok(query) => query,
         Err(error) => {
@@ -313,7 +315,11 @@ async fn flow_02_offline_local_view(unreachable: &RelayUrl, blackhole: &RelayUrl
             let started = Instant::now();
             match tokio::time::timeout(
                 RESPONSIVE_BUDGET,
-                engine.observe(Query::events().kind(Kind::TextNote)),
+                engine.observe(
+                    Query::events()
+                        .kinds([Kind::TextNote])
+                        .expect("one kind is bounded"),
+                ),
             )
             .await
             {
@@ -335,7 +341,11 @@ async fn flow_02_offline_local_view(unreachable: &RelayUrl, blackhole: &RelayUrl
             let started = Instant::now();
             match tokio::time::timeout(
                 RESPONSIVE_BUDGET,
-                engine.observe(Query::events().kind(Kind::TextNote)),
+                engine.observe(
+                    Query::events()
+                        .kinds([Kind::TextNote])
+                        .expect("one kind is bounded"),
+                ),
             )
             .await
             {
@@ -557,9 +567,21 @@ async fn flow_05_profile_and_contacts(live: &RelayUrl, seed: &str) -> FlowRecord
             );
         }
     }
-    let profile_query = Query::events()
-        .kind(Kind::Metadata)
-        .authors([me.public_key()]);
+    let profile_query = match Query::events()
+        .kinds([Kind::Metadata])
+        .and_then(|query| query.authors([me.public_key()]))
+    {
+        Ok(query) => query,
+        Err(error) => {
+            return FlowRecord::wall(
+                ID,
+                INTENT,
+                "show-stopper",
+                format!("constructing the profile query failed: {error}"),
+                detail,
+            );
+        }
+    };
     match read_back(&engine, profile_query, live, 1).await {
         Ok(count) => detail["profile_readback"] = json!(count),
         Err(error) => {
@@ -593,7 +615,18 @@ async fn flow_05_profile_and_contacts(live: &RelayUrl, seed: &str) -> FlowRecord
             );
         }
     }
-    let contact_query = fava_nip02::contact_list(me.public_key());
+    let contact_query = match fava_nip02::contact_list(me.public_key()) {
+        Ok(query) => query,
+        Err(error) => {
+            return FlowRecord::wall(
+                ID,
+                INTENT,
+                "show-stopper",
+                format!("constructing the contact-list query failed: {error}"),
+                detail,
+            );
+        }
+    };
     let follows = match observe_local(&engine, contact_query.clone()).await {
         Ok(snapshot) => fava_nip02::follows_of(&snapshot),
         Err(error) => {
@@ -754,7 +787,9 @@ async fn flow_07_two_observations_one_connection(live: &RelayUrl, proxy: &WirePr
         }
     };
     let before = proxy.connection_count();
-    let query = Query::events().kind(Kind::TextNote);
+    let query = Query::events()
+        .kinds([Kind::TextNote])
+        .expect("one kind is bounded");
     let first = match tokio::time::timeout(RESPONSIVE_BUDGET, engine.observe(query.clone())).await {
         Ok(Ok(observation)) => observation,
         Ok(Err(error)) => {
@@ -837,8 +872,8 @@ async fn flow_08_mixed_relay_health(live: &RelayUrl, down: &RelayUrl) -> FlowRec
         }
     };
     let query = match Query::events()
-        .kind(Kind::TextNote)
-        .from_relays([live.clone(), down.clone()])
+        .kinds([Kind::TextNote])
+        .and_then(|query| query.from_relays([live.clone(), down.clone()]))
     {
         Ok(query) => query,
         Err(error) => {
@@ -866,7 +901,11 @@ async fn flow_08_mixed_relay_health(live: &RelayUrl, down: &RelayUrl) -> FlowRec
     let started = Instant::now();
     let observation = match tokio::time::timeout(
         RESPONSIVE_BUDGET,
-        automatic.observe(Query::events().kind(Kind::TextNote)),
+        automatic.observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded"),
+        ),
     )
     .await
     {
@@ -1114,7 +1153,7 @@ pub async fn run_flow_close_child(arguments: Vec<String>) -> CanaryResult<()> {
     let account = deterministic_keys("flow-close-child")?;
     let engine = publishing_engine(std::slice::from_ref(&relay), std::slice::from_ref(&account))?;
     let observation = engine
-        .observe(Query::events().kind(Kind::TextNote))
+        .observe(Query::events().kinds([Kind::TextNote]).map_err(error)?)
         .await
         .map_err(error)?;
     let note = EventBuilder::new(account.public_key(), Kind::TextNote)
