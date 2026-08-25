@@ -1,7 +1,7 @@
 //! Exact receipt-generation activation for router sessions and route effects.
 
 use fava_routing::{RoutePlan, RouteRequest, RouterSession};
-use fava_write::{Receipt, WriteRouting};
+use fava_write::{EventValue, Receipt, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::watch;
 
@@ -76,6 +76,27 @@ impl Publication {
             }
             receipt = self.read_receipt(receipt.receipt_id, cancel).await?;
         }
+        self.record_activation_exhaustion(&receipt);
         None
+    }
+
+    pub(super) fn record_activation_exhaustion(&self, receipt: &Receipt) {
+        if !matches!(receipt.current.event, EventValue::Unsigned(_)) {
+            return;
+        }
+        let _ = self.store.record_signer_retryable(
+            receipt.write_id,
+            receipt.receipt_id,
+            receipt.current.publication.materialization_id,
+            receipt.current.id(),
+            format!(
+                "generation activation retry bound {} exhausted for write {} receipt {} materialization {} event {}; retry is permitted after a receipt or provider change",
+                destination_evidence_capacity() + 1,
+                receipt.write_id.as_u64(),
+                receipt.receipt_id.as_u64(),
+                receipt.current.publication.materialization_id.as_u64(),
+                receipt.current.id(),
+            ),
+        );
     }
 }

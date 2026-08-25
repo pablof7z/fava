@@ -23,6 +23,7 @@ impl Publication {
             }
             receipt = current;
         }
+        self.record_activation_exhaustion(&receipt);
         None
     }
 

@@ -31,6 +31,16 @@ pub(super) struct WriteState {
     pub(super) reservations: BTreeMap<u64, EventCoordinate>,
     pub(super) writes: BTreeMap<ReceiptId, Receipt>,
     pub(super) coordinates: BTreeMap<EventCoordinate, ReceiptId>,
+    #[allow(clippy::type_complexity)] // Existing values avoid a second successor lifecycle type.
+    pub(super) successors: BTreeMap<
+        ReceiptId,
+        (
+            Option<ReplaceableEventEdit>,
+            UnsignedEvent,
+            Option<(EventId, Timestamp)>,
+            Option<RoutePlan>,
+        ),
+    >,
     #[allow(clippy::type_complexity)] // Existing values deliberately avoid a state wrapper.
     pub(super) edits: BTreeMap<
         ReceiptId,
@@ -52,6 +62,7 @@ impl Default for WriteState {
             reservations: BTreeMap::new(),
             writes: BTreeMap::new(),
             coordinates: BTreeMap::new(),
+            successors: BTreeMap::new(),
             edits: BTreeMap::new(),
         }
     }
@@ -241,6 +252,7 @@ impl MemoryWriteStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock_state()?;
         let receipt = state
@@ -287,6 +299,26 @@ impl MemoryWriteStore {
             return Err(WriteStoreError::Refused(
                 "retired materialization evidence capacity reached".to_owned(),
             ));
+        }
+        if let Some(plan) = initial_route {
+            let mut routed = receipt.clone();
+            apply_route_to_receipt(&mut routed, plan)?;
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            if state.successors.contains_key(&receipt_id) {
+                return Err(WriteStoreError::Refused(
+                    "replaceable coordinate already has a durable successor".to_owned(),
+                ));
+            }
+            state.successors.insert(
+                receipt_id,
+                (None, event, selected_source, initial_route.cloned()),
+            );
+            self.publish_receipt_only(&receipt);
+            return Ok(receipt);
         }
 
         let mut retired = receipt.current.publication.retired_materializations.clone();
@@ -336,6 +368,9 @@ impl MemoryWriteStore {
         updated.outcome = ReceiptOutcome::Open;
         updated.desired_destinations = correction_destinations;
         updated.attempts.clear();
+        if let Some(plan) = initial_route {
+            apply_route_to_receipt(&mut updated, plan)?;
+        }
         let next_revision = next_revision(&state)?;
 
         state.revision = next_revision;
@@ -403,64 +438,5 @@ impl MemoryWriteStore {
         state.writes.insert(receipt_id, updated.clone());
         self.publish_receipt(&state, &updated);
         Ok(updated)
-    }
-
-    #[allow(clippy::type_complexity)] // Existing values deliberately avoid a recovery wrapper.
-    pub(super) fn recover_semantic(
-        &self,
-    ) -> Result<
-        Vec<(
-            Receipt,
-            Vec<ReplaceableEventEdit>,
-            PublicKey,
-            Option<(EventId, Timestamp)>,
-            Option<EventId>,
-        )>,
-        WriteStoreError,
-    > {
-        let state = self.lock_state()?;
-        Ok(state
-            .edits
-            .iter()
-            .filter_map(|(receipt_id, (edit, author, source, failed_source))| {
-                state.writes.get(receipt_id).and_then(|receipt| {
-                    (!receipt.is_terminal()).then(|| {
-                        (
-                            receipt.clone(),
-                            edit.clone(),
-                            *author,
-                            *source,
-                            *failed_source,
-                        )
-                    })
-                })
-            })
-            .collect())
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(super) fn semantic_custody(
-        &self,
-        receipt_id: ReceiptId,
-        expected: MaterializationId,
-    ) -> Result<
-        Option<(
-            Vec<ReplaceableEventEdit>,
-            PublicKey,
-            Option<(EventId, Timestamp)>,
-            Option<EventId>,
-        )>,
-        WriteStoreError,
-    > {
-        let state = self.lock_state()?;
-        let Some(receipt) = state.writes.get(&receipt_id) else {
-            return Ok(None);
-        };
-        if receipt.current.publication.materialization_id != expected {
-            return Err(WriteStoreError::Refused(
-                "semantic custody generation is not current".to_owned(),
-            ));
-        }
-        Ok(state.edits.get(&receipt_id).cloned())
     }
 }

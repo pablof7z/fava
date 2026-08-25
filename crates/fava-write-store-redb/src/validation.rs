@@ -89,10 +89,15 @@ fn validate_event_and_signature(receipt: &Receipt) -> Result<(), WriteStoreError
         &receipt.current.event,
         &receipt.current.publication.signature,
     ) {
-        (EventValue::Unsigned(event), SignatureState::Unsigned) => event
-            .verify_id()
-            .map_err(|error| WriteStoreError::Refused(error.to_string())),
-        (EventValue::Unsigned(event), SignatureState::Refused(reason)) => {
+        (EventValue::Unsigned(event), SignatureState::Unsigned | SignatureState::Authorized) => {
+            event
+                .verify_id()
+                .map_err(|error| WriteStoreError::Refused(error.to_string()))
+        }
+        (
+            EventValue::Unsigned(event),
+            SignatureState::Retryable(reason) | SignatureState::Refused(reason),
+        ) => {
             event
                 .verify_id()
                 .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
@@ -102,9 +107,13 @@ fn validate_event_and_signature(receipt: &Receipt) -> Result<(), WriteStoreError
             .verify()
             .map_err(|error| WriteStoreError::Refused(error.to_string())),
         (EventValue::Unsigned(_), SignatureState::Signed)
-        | (EventValue::Signed(_), SignatureState::Unsigned | SignatureState::Refused(_)) => {
-            incoherent("durable signature state disagrees with current event")
-        }
+        | (
+            EventValue::Signed(_),
+            SignatureState::Unsigned
+            | SignatureState::Authorized
+            | SignatureState::Retryable(_)
+            | SignatureState::Refused(_),
+        ) => incoherent("durable signature state disagrees with current event"),
     }
 }
 
@@ -209,7 +218,7 @@ fn validate_materializations(
 
 fn validate_semantic(
     receipt: &Receipt,
-    (edits, author, current_source, failed_source): &SemanticCustody,
+    (edits, author, current_source, failed_source, successor): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
     if edits.is_empty()
         || edits.len() > receipt.current.publication.retired_materializations.len() + 1
@@ -218,6 +227,27 @@ fn validate_semantic(
     }
     for edit in edits {
         WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
+    }
+    if let Some((successor_edit, successor_event, successor_source, successor_route)) = successor {
+        if let Some(successor_edit) = successor_edit {
+            WriteIntent::edit_as(successor_edit.clone(), *author, receipt.routing.clone())?;
+        }
+        successor_event
+            .verify_id()
+            .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
+        if successor_event.pubkey != *author
+            || successor_source.is_some_and(|(_, time)| time >= successor_event.created_at)
+            || !matches!(
+                receipt.current.publication.signature,
+                SignatureState::Authorized | SignatureState::Retryable(_)
+            )
+        {
+            return incoherent("durable semantic successor disagrees with current custody");
+        }
+        if let Some(plan) = successor_route {
+            let mut routed = receipt.clone();
+            fava_write_store::apply_route_to_receipt(&mut routed, plan)?;
+        }
     }
     let edit = edits.last().expect("non-empty edit sequence validated");
     if receipt.current.event.author() != *author

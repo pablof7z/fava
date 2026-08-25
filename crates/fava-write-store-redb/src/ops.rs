@@ -7,12 +7,12 @@ use fava_write::{
 };
 use fava_write_store::{
     AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
-    validate_current_materialization, validate_delivery_outcome, validate_receipt_text,
+    validate_current_materialization, validate_delivery_outcome,
 };
 use tokio::sync::broadcast;
 
 use crate::RedbWriteStore;
-use crate::lifecycle::{UnsignedEventView, capacity_reached, destinations, next_revision, settle};
+use crate::lifecycle::{capacity_reached, destinations, next_revision, settle};
 
 impl WriteStore for RedbWriteStore {
     fn active_capacity(&self) -> usize {
@@ -130,6 +130,7 @@ impl WriteStore for RedbWriteStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         self.install_semantic(
             write_id,
@@ -139,6 +140,7 @@ impl WriteStore for RedbWriteStore {
             applied_edits,
             event,
             source,
+            initial_route,
         )
     }
 
@@ -202,30 +204,44 @@ impl WriteStore for RedbWriteStore {
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
-        event
-            .verify()
-            .map_err(|error| WriteStoreError::Refused(error.to_string()))?;
-        self.update(receipt_id, |receipt| {
-            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
-            match &receipt.current.event {
-                EventValue::Signed(current) if current == &event => return Ok(()),
-                EventValue::Signed(_) => {
-                    return Err(WriteStoreError::Refused(
-                        "event is already signed differently".to_owned(),
-                    ));
-                }
-                EventValue::Unsigned(unsigned)
-                    if UnsignedEventView::from(unsigned) == UnsignedEventView::from(&event) => {}
-                EventValue::Unsigned(_) => {
-                    return Err(WriteStoreError::Refused(
-                        "signature does not match current unsigned event".to_owned(),
-                    ));
-                }
-            }
-            receipt.current.event = EventValue::Signed(event);
-            receipt.current.publication.signature = SignatureState::Signed;
-            Ok(())
-        })
+        self.install_signed_current(write_id, receipt_id, materialization_id, event_id, event)
+    }
+
+    fn authorize_signing(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.authorize_signing_current(write_id, receipt_id, materialization_id, event_id)
+    }
+
+    fn record_signer_retryable(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.record_signer_retryable_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
+    }
+
+    fn signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError> {
+        self.has_signing_successor(write_id, receipt_id, materialization_id, event_id)
     }
 
     fn record_signer_refusal(
@@ -236,21 +252,13 @@ impl WriteStore for RedbWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        validate_receipt_text(&reason)?;
-        self.update(receipt_id, |receipt| {
-            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
-            match &receipt.current.publication.signature {
-                SignatureState::Refused(current) if current == &reason => return Ok(()),
-                SignatureState::Unsigned => {}
-                SignatureState::Signed | SignatureState::Refused(_) => {
-                    return Err(WriteStoreError::Refused(
-                        "signer refusal is not current".to_owned(),
-                    ));
-                }
-            }
-            receipt.current.publication.signature = SignatureState::Refused(reason);
-            Ok(())
-        })
+        self.record_signer_refusal_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
     }
 
     fn apply_route(

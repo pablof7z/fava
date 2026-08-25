@@ -4,7 +4,7 @@ use fava_routing::RoutePlan;
 use fava_write::{
     EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
-    Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
+    UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
@@ -148,7 +148,7 @@ impl RedbWriteStore {
         if let Some(plan) = initial_route {
             apply_route_to_receipt(&mut receipt, plan)?;
         }
-        let custody = (vec![edit], author, selected_source, None);
+        let custody = (vec![edit], author, selected_source, None, None);
         let terminal = receipt.is_terminal();
         let removals = terminal_evictions(&state, &receipt, self.limits.terminal.get());
         let next_revision = next_revision(&state)?;
@@ -192,6 +192,16 @@ impl RedbWriteStore {
                 "replaceable coordinate already has an active reservation".to_owned(),
             ));
         }
+        if state
+            .coordinates
+            .get(&coordinate)
+            .and_then(|receipt_id| state.semantics.get(receipt_id))
+            .is_some_and(|custody| custody.4.is_some())
+        {
+            return Err(WriteStoreError::Refused(
+                "replaceable coordinate already has a durable successor".to_owned(),
+            ));
+        }
         if !state.coordinates.contains_key(&coordinate)
             && capacity_reached(&state, self.limits.active.get())
         {
@@ -210,7 +220,12 @@ impl RedbWriteStore {
 
     pub(super) fn release_active_slot(&self, reservation: u64) -> Result<(), WriteStoreError> {
         let mut state = self.lock()?;
-        if state.reservations.remove(&reservation).is_some() {
+        if let Some(coordinate) = state.reservations.remove(&reservation) {
+            if let Some(receipt_id) = state.coordinates.get(&coordinate).copied()
+                && let Some(receipt) = state.receipts.get(&receipt_id).cloned()
+            {
+                self.publish_receipt(Some(receipt), receipt_id);
+            }
             Ok(())
         } else {
             Err(WriteStoreError::Refused(
@@ -219,7 +234,7 @@ impl RedbWriteStore {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // One transaction owns the swap.
     pub(super) fn install_semantic(
         &self,
         write_id: WriteId,
@@ -229,6 +244,7 @@ impl RedbWriteStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock()?;
         let receipt = state
@@ -236,7 +252,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edits, author, current_source, _) =
+        let (edits, author, current_source, _, _) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
@@ -276,6 +292,34 @@ impl RedbWriteStore {
             return Err(WriteStoreError::Refused(
                 "retired materialization evidence capacity reached".to_owned(),
             ));
+        }
+        if let Some(plan) = initial_route {
+            let mut routed = receipt.clone();
+            apply_route_to_receipt(&mut routed, plan)?;
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            let current_custody = state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
+                WriteStoreError::Refused("semantic custody does not exist".to_owned())
+            })?;
+            if current_custody.4.is_some() {
+                return Err(WriteStoreError::Refused(
+                    "replaceable coordinate already has a durable successor".to_owned(),
+                ));
+            }
+            let custody: SemanticCustody = (
+                edits,
+                author,
+                current_source,
+                None,
+                Some((None, event, selected_source, initial_route.cloned())),
+            );
+            self.commit_update(Some(&receipt), Some(&custody), &[])?;
+            state.semantics.insert(receipt_id, custody);
+            self.publish_receipt(Some(receipt.clone()), receipt_id);
+            return Ok(receipt);
         }
         let mut retired = receipt.current.publication.retired_materializations.clone();
         retired.push((
@@ -321,7 +365,10 @@ impl RedbWriteStore {
         updated.outcome = ReceiptOutcome::Open;
         updated.desired_destinations = correction_destinations;
         updated.attempts.clear();
-        let custody: SemanticCustody = (edits, author, selected_source, None);
+        if let Some(plan) = initial_route {
+            apply_route_to_receipt(&mut updated, plan)?;
+        }
+        let custody: SemanticCustody = (edits, author, selected_source, None, None);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -348,7 +395,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        let (edits, author, current_source, current_failed_source) =
+        let (edits, author, current_source, current_failed_source, successor) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
@@ -378,7 +425,7 @@ impl RedbWriteStore {
         }
         let mut updated = receipt;
         updated.current.publication.materialization_failure = Some(failure);
-        let custody: SemanticCustody = (edits, author, current_source, failed_source_id);
+        let custody: SemanticCustody = (edits, author, current_source, failed_source_id, successor);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;
         state.revision = next_revision;
@@ -387,64 +434,5 @@ impl RedbWriteStore {
         self.publish_snapshot(&state);
         self.publish_receipt(Some(updated.clone()), receipt_id);
         Ok(updated)
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(super) fn recover_semantic(
-        &self,
-    ) -> Result<
-        Vec<(
-            Receipt,
-            Vec<ReplaceableEventEdit>,
-            PublicKey,
-            Option<(EventId, Timestamp)>,
-            Option<EventId>,
-        )>,
-        WriteStoreError,
-    > {
-        let state = self.lock()?;
-        Ok(state
-            .semantics
-            .iter()
-            .filter_map(|(receipt_id, (edit, author, source, failed_source))| {
-                state.receipts.get(receipt_id).and_then(|receipt| {
-                    (!receipt.is_terminal()).then(|| {
-                        (
-                            receipt.clone(),
-                            edit.clone(),
-                            *author,
-                            *source,
-                            *failed_source,
-                        )
-                    })
-                })
-            })
-            .collect())
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(super) fn semantic_custody(
-        &self,
-        receipt_id: ReceiptId,
-        expected: MaterializationId,
-    ) -> Result<
-        Option<(
-            Vec<ReplaceableEventEdit>,
-            PublicKey,
-            Option<(EventId, Timestamp)>,
-            Option<EventId>,
-        )>,
-        WriteStoreError,
-    > {
-        let state = self.lock()?;
-        let Some(receipt) = state.receipts.get(&receipt_id) else {
-            return Ok(None);
-        };
-        if receipt.current.publication.materialization_id != expected {
-            return Err(WriteStoreError::Refused(
-                "semantic custody generation is not current".to_owned(),
-            ));
-        }
-        Ok(state.semantics.get(&receipt_id).cloned())
     }
 }

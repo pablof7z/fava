@@ -12,7 +12,7 @@ use fava_query::{
 use fava_state::EventCoordinate;
 use fava_write::{
     EventId, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    ReplaceableEventEdit, Timestamp,
+    ReplaceableEventEdit, Timestamp, UnsignedEvent,
 };
 use fava_write_store::WriteStoreError;
 use redb::Database;
@@ -20,10 +20,12 @@ use tokio::sync::{broadcast, watch};
 
 mod lifecycle;
 mod ops;
+mod recovery;
 mod schema;
 mod semantic;
 mod semantic_acceptance;
 mod semantic_composition;
+mod signing;
 mod validation;
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
@@ -33,6 +35,12 @@ type SemanticCustody = (
     PublicKey,
     Option<(EventId, Timestamp)>,
     Option<EventId>,
+    Option<(
+        Option<ReplaceableEventEdit>,
+        UnsignedEvent,
+        Option<(EventId, Timestamp)>,
+        Option<fava_routing::RoutePlan>,
+    )>,
 );
 
 /// Redb write store with bounded active work and retained terminal receipts.
@@ -98,20 +106,22 @@ impl RedbWriteStore {
             coordinates,
             semantics,
         };
-        let recovered = recover_ambiguous(&mut state);
+        let recovered = recover_ambiguous_delivery(&mut state);
         lifecycle::validate_recovered_bounds(&state, active.get(), terminal.get())?;
         if !recovered.is_empty() {
             schema::persist_existing(&database, &state, &recovered)?;
         }
         let (latest, _) = watch::channel(Arc::new(snapshot(&state)));
         let (receipt_changes, _) = broadcast::channel(RECEIPT_CHANGE_CAPACITY);
-        Ok(Self {
+        let store = Self {
             database,
             state: Mutex::new(state),
             limits: StoreLimits { active, terminal },
             latest,
             receipt_changes,
-        })
+        };
+        store.recover_authorized_signing()?;
+        Ok(store)
     }
 
     fn commit_accept(
@@ -180,7 +190,7 @@ impl SourceChanges for WatchChanges {
     }
 }
 
-fn recover_ambiguous(state: &mut StoreState) -> Vec<ReceiptId> {
+fn recover_ambiguous_delivery(state: &mut StoreState) -> Vec<ReceiptId> {
     let mut recovered = Vec::new();
     let mut released = Vec::new();
     for receipt in state.receipts.values_mut() {
@@ -209,7 +219,7 @@ fn recover_ambiguous(state: &mut StoreState) -> Vec<ReceiptId> {
 }
 
 fn release_semantic(state: &mut StoreState, receipt_id: ReceiptId) {
-    if let Some((edits, author, _, _)) = state.semantics.remove(&receipt_id)
+    if let Some((edits, author, _, _, _)) = state.semantics.remove(&receipt_id)
         && let Some(edit) = edits.last()
     {
         state
@@ -219,7 +229,7 @@ fn release_semantic(state: &mut StoreState, receipt_id: ReceiptId) {
 }
 
 fn release_semantic_coordinate(state: &mut StoreState, receipt_id: ReceiptId) {
-    if let Some((edits, author, _, _)) = state.semantics.get(&receipt_id)
+    if let Some((edits, author, _, _, _)) = state.semantics.get(&receipt_id)
         && let Some(edit) = edits.last()
     {
         state

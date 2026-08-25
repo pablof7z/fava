@@ -18,7 +18,7 @@ use super::semantic_acceptance::validate_source;
 use super::state::{edit_coordinate, next_revision};
 
 impl MemoryWriteStore {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // One lock owns the transition.
     pub(super) fn compose_semantic(
         &self,
         state: &mut WriteState,
@@ -65,6 +65,39 @@ impl MemoryWriteStore {
                 "retired materialization evidence capacity reached".to_owned(),
             ));
         }
+        let successor_route = initial_route
+            .map(|plan| {
+                let mut plan = plan.clone();
+                plan.revision = receipt.route_revision.checked_add(1).ok_or_else(|| {
+                    WriteStoreError::Refused("route revision exhausted".to_owned())
+                })?;
+                Ok::<_, WriteStoreError>(plan)
+            })
+            .transpose()?;
+        if let Some(plan) = successor_route.as_ref() {
+            let mut routed = receipt.clone();
+            apply_route_to_receipt(&mut routed, plan)?;
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            if state.successors.contains_key(&receipt_id) {
+                return Err(WriteStoreError::Refused(
+                    "replaceable coordinate already has a durable successor".to_owned(),
+                ));
+            }
+            state.successors.insert(
+                receipt_id,
+                (Some(edit), event, current_source, successor_route),
+            );
+            self.publish_receipt_only(&receipt);
+            return Ok(AcceptedWrite {
+                write_id: receipt.write_id,
+                receipt_id,
+                current: receipt.current,
+            });
+        }
 
         let mut retired = receipt.current.publication.retired_materializations.clone();
         retired.push((
@@ -106,7 +139,7 @@ impl MemoryWriteStore {
             attempts: BTreeMap::new(),
             ..receipt
         };
-        if let Some(plan) = initial_route {
+        if let Some(plan) = successor_route.as_ref() {
             apply_route_to_receipt(&mut updated, plan)?;
         }
         edits.push(edit);

@@ -12,7 +12,7 @@ const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const NEXT_ID: &str = "next_id";
 const SCHEMA_VERSION_KEY: &str = "schema_version";
-const SCHEMA_VERSION: u64 = 3;
+const SCHEMA_VERSION: u64 = 4;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PersistedReceipt {
@@ -26,20 +26,28 @@ struct PersistedSemantic {
     author: PublicKey,
     current_source: Option<(EventId, Timestamp)>,
     failed_source: Option<EventId>,
+    #[allow(clippy::type_complexity)] // Mirrors universal custody without a second persisted noun.
+    successor: Option<(
+        Option<ReplaceableEventEdit>,
+        fava_write::UnsignedEvent,
+        Option<(EventId, Timestamp)>,
+        Option<fava_routing::RoutePlan>,
+    )>,
 }
 
 impl PersistedReceipt {
     fn from_current(receipt: &Receipt, semantic: Option<&SemanticCustody>) -> Self {
         Self {
             receipt: receipt.clone(),
-            semantic: semantic.map(|(edits, author, current_source, failed_source)| {
-                PersistedSemantic {
+            semantic: semantic.map(
+                |(edits, author, current_source, failed_source, successor)| PersistedSemantic {
                     edits: edits.clone(),
                     author: *author,
                     current_source: *current_source,
                     failed_source: *failed_source,
-                }
-            }),
+                    successor: successor.clone(),
+                },
+            ),
         }
     }
 }
@@ -145,6 +153,7 @@ pub(super) fn load(
                     semantic.author,
                     semantic.current_source,
                     semantic.failed_source,
+                    semantic.successor,
                 ),
             );
         }

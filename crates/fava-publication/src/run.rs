@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fava_query::SourceKind;
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
-use fava_write::{EventValue, Receipt, ReceiptId, WriteRouting};
+use fava_write::{EventValue, Receipt, ReceiptId, SignatureState, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
 
@@ -189,6 +189,33 @@ impl Publication {
                                 latest.current.publication.materialization_id;
                             if next_materialization == materialization_id {
                                 route_revision = route_revision.max(latest.route_revision);
+                                if matches!(
+                                    latest.current.publication.signature,
+                                    SignatureState::Authorized
+                                ) && self
+                                    .store
+                                    .signing_successor(
+                                        latest.write_id,
+                                        latest.receipt_id,
+                                        next_materialization,
+                                        latest.current.id(),
+                                    )
+                                    .unwrap_or(false)
+                                {
+                                    signing_cancel.send_replace(true);
+                                }
+                                if signing_generation.is_none()
+                                    && matches!(
+                                        &latest.current.publication.signature,
+                                        SignatureState::Retryable(reason)
+                                            if reason.contains("coordinate reservation resolves")
+                                    )
+                                {
+                                    let (next_cancel, next_cancel_rx) = watch::channel(false);
+                                    signing_cancel = next_cancel;
+                                    signing_generation =
+                                        self.start_signing(&latest, next_cancel_rx);
+                                }
                             }
                             if !matches!(latest.current.event, EventValue::Unsigned(_)) {
                                 signing_generation = None;
@@ -314,6 +341,15 @@ impl Publication {
                 return;
             }
         };
+        let initial_route = if matches!(receipt.routing, WriteRouting::Automatic) {
+            let Some(revision) = receipt.route_revision.checked_add(1) else {
+                return;
+            };
+            route.revision = revision;
+            Some(&route)
+        } else {
+            None
+        };
         let installed = self.store.install_materialization(
             receipt.write_id,
             receipt.receipt_id,
@@ -322,6 +358,7 @@ impl Publication {
             &state.edits,
             event,
             successor.as_ref(),
+            initial_route,
         );
         let installed = match installed {
             Ok(installed) => installed,
@@ -338,19 +375,6 @@ impl Publication {
                 return;
             }
         };
-        if matches!(receipt.routing, WriteRouting::Automatic) {
-            let Some(revision) = installed.route_revision.checked_add(1) else {
-                return;
-            };
-            route.revision = revision;
-            let _ = self.store.apply_route(
-                installed.write_id,
-                installed.receipt_id,
-                installed.current.publication.materialization_id,
-                installed.current.id(),
-                &route,
-            );
-        }
         state.selected_id = successor.as_ref().and_then(EventValue::id);
         state.materialization_id = installed.current.publication.materialization_id;
         if let Some(source) = &successor {

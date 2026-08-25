@@ -12,6 +12,10 @@ use crate::{
 pub enum SignatureState {
     /// Exact unsigned event exists.
     Unsigned,
+    /// The write store durably authorized signer invocation for this exact generation.
+    Authorized,
+    /// Exact signing work stopped before a signer effect and may be retried.
+    Retryable(String),
     /// Exact signed event exists.
     Signed,
     /// Signer refused or produced invalid output.

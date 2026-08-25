@@ -1,7 +1,9 @@
 //! Exact signer attachment selection and completion admission.
 
 use fava_signer::{SignerAvailability, SignerError};
-use fava_write::{EventId, EventValue, MaterializationId, Receipt, ReceiptId, WriteId};
+use fava_write::{
+    EventId, EventValue, MaterializationId, Receipt, ReceiptId, SignatureState, WriteId,
+};
 use tokio::sync::watch;
 
 use crate::Publication;
@@ -75,6 +77,16 @@ impl Publication {
         let receipt_id = receipt.receipt_id;
         let materialization_id = receipt.current.publication.materialization_id;
         let event_id = receipt.current.id();
+        let authorized = self
+            .store
+            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+            .ok()?;
+        if !matches!(
+            authorized.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            return None;
+        }
         tokio::spawn(async move {
             let completion = signer.sign_event(unsigned, cancel).await;
             if !publication
@@ -108,7 +120,33 @@ impl Publication {
                         Err(error) => error.to_string(),
                     }
                 }
-                Err(SignerError::Cancelled) => return,
+                Err(SignerError::Cancelled) => {
+                    if publication
+                        .store
+                        .signing_successor(write_id, receipt_id, materialization_id, event_id)
+                        .unwrap_or(false)
+                    {
+                        let _ = publication.store.record_signer_retryable(
+                            write_id,
+                            receipt_id,
+                            materialization_id,
+                            event_id,
+                            "authorized signer operation cancelled before effect; retry is permitted"
+                                .to_owned(),
+                        );
+                    }
+                    return;
+                }
+                Err(SignerError::Unavailable(reason)) => {
+                    let _ = publication.store.record_signer_retryable(
+                        write_id,
+                        receipt_id,
+                        materialization_id,
+                        event_id,
+                        format!("signer unavailable before effect: {reason}; retry is permitted"),
+                    );
+                    return;
+                }
                 Err(error) => error.to_string(),
             };
             if let Err(stale) = publication.store.record_signer_refusal(

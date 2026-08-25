@@ -20,6 +20,7 @@ use tokio::sync::{broadcast, watch};
 
 mod lifecycle;
 mod model;
+mod recovery;
 mod semantic;
 mod semantic_acceptance;
 mod semantic_composition;
@@ -68,6 +69,10 @@ impl MemoryWriteStore {
 
     fn publish_receipt(&self, state: &WriteState, receipt: &Receipt) {
         self.publish_snapshot(state);
+        self.publish_receipt_only(receipt);
+    }
+
+    fn publish_receipt_only(&self, receipt: &Receipt) {
         let _ = self
             .receipt_changes
             .send((receipt.receipt_id, Some(receipt.clone())));
@@ -189,6 +194,7 @@ impl WriteStore for MemoryWriteStore {
         applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
+        initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         self.install_semantic(
             write_id,
@@ -198,6 +204,7 @@ impl WriteStore for MemoryWriteStore {
             applied_edits,
             event,
             source,
+            initial_route,
         )
     }
 
@@ -262,6 +269,43 @@ impl WriteStore for MemoryWriteStore {
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
         self.install_signed_current(write_id, receipt_id, materialization_id, event_id, event)
+    }
+
+    fn authorize_signing(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.authorize_signing_current(write_id, receipt_id, materialization_id, event_id)
+    }
+
+    fn record_signer_retryable(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        self.record_signer_retryable_current(
+            write_id,
+            receipt_id,
+            materialization_id,
+            event_id,
+            reason,
+        )
+    }
+
+    fn signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError> {
+        self.has_signing_successor(write_id, receipt_id, materialization_id, event_id)
     }
 
     fn record_signer_refusal(

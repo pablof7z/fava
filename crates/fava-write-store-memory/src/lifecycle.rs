@@ -1,8 +1,8 @@
 use fava_routing::RoutePlan;
 use fava_state::RelaySessionKey;
 use fava_write::{
-    Event, EventId, EventValue, MaterializationId, Receipt, ReceiptId, RelayDeliveryOutcome,
-    SignatureState, WriteId,
+    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteRouting,
 };
 use fava_write_store::{
     WriteStoreError, apply_route_to_receipt, validate_current_materialization,
@@ -10,7 +10,7 @@ use fava_write_store::{
 };
 
 use super::MemoryWriteStore;
-use super::model::{UnsignedEventView, settle};
+use super::model::{UnsignedEventView, destinations, settle};
 use super::state::{next_revision, release_semantic};
 
 impl MemoryWriteStore {
@@ -46,7 +46,18 @@ impl MemoryWriteStore {
                 ));
             }
         }
+        if !matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized | SignatureState::Signed
+        ) {
+            return Err(WriteStoreError::Refused(
+                "signature completion was not authorized".to_owned(),
+            ));
+        }
         let next_revision = next_revision(&state)?;
+        if state.successors.contains_key(&receipt_id) {
+            return self.promote_authorized_successor(&mut state, receipt_id);
+        }
         let receipt = state.writes.get_mut(&receipt_id).expect("checked above");
         receipt.current.event = EventValue::Signed(event);
         receipt.current.publication.signature = SignatureState::Signed;
@@ -73,7 +84,12 @@ impl MemoryWriteStore {
         validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
         match &receipt.current.publication.signature {
             SignatureState::Refused(current) if current == &reason => return Ok(receipt.clone()),
-            SignatureState::Unsigned => {}
+            SignatureState::Authorized => {}
+            SignatureState::Unsigned | SignatureState::Retryable(_) => {
+                return Err(WriteStoreError::Refused(
+                    "signer refusal was not authorized".to_owned(),
+                ));
+            }
             SignatureState::Signed | SignatureState::Refused(_) => {
                 return Err(WriteStoreError::Refused(
                     "signer refusal is not current".to_owned(),
@@ -81,12 +97,224 @@ impl MemoryWriteStore {
             }
         }
         let next_revision = next_revision(&state)?;
+        if state.successors.contains_key(&receipt_id) {
+            return self.promote_authorized_successor(&mut state, receipt_id);
+        }
         let receipt = state.writes.get_mut(&receipt_id).expect("checked above");
         receipt.current.publication.signature = SignatureState::Refused(reason);
         let current = receipt.clone();
         state.revision = next_revision;
         self.publish_receipt(&state, &current);
         Ok(current)
+    }
+
+    pub(super) fn authorize_signing_current(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError> {
+        let mut state = self.lock_state()?;
+        let receipt = state
+            .writes
+            .get(&receipt_id)
+            .cloned()
+            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        if !matches!(receipt.current.event, EventValue::Unsigned(_)) {
+            return Err(WriteStoreError::Refused(
+                "event is already signed".to_owned(),
+            ));
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            return Ok(receipt);
+        }
+        if !matches!(
+            receipt.current.publication.signature,
+            SignatureState::Unsigned | SignatureState::Retryable(_)
+        ) {
+            return Err(WriteStoreError::Refused(
+                "signing authorization is not current".to_owned(),
+            ));
+        }
+        let reserved = state
+            .edits
+            .get(&receipt_id)
+            .is_some_and(|(edits, author, _, _)| {
+                edits.last().is_some_and(|edit| {
+                    let coordinate = super::state::edit_coordinate(edit, *author);
+                    state
+                        .reservations
+                        .values()
+                        .any(|value| value == &coordinate)
+                })
+            });
+        let signature = if reserved {
+            SignatureState::Retryable(format!(
+                "signing authorization for write {} receipt {} materialization {} event {} deferred until its coordinate reservation resolves",
+                write_id.as_u64(),
+                receipt_id.as_u64(),
+                materialization_id.as_u64(),
+                event_id
+            ))
+        } else {
+            SignatureState::Authorized
+        };
+        if receipt.current.publication.signature == signature {
+            return Ok(receipt);
+        }
+        let next_revision = next_revision(&state)?;
+        let receipt = state.writes.get_mut(&receipt_id).expect("checked above");
+        receipt.current.publication.signature = signature;
+        let current = receipt.clone();
+        state.revision = next_revision;
+        self.publish_receipt(&state, &current);
+        Ok(current)
+    }
+
+    pub(super) fn record_signer_retryable_current(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError> {
+        validate_receipt_text(&reason)?;
+        let mut state = self.lock_state()?;
+        let receipt = state
+            .writes
+            .get_mut(&receipt_id)
+            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        if !matches!(
+            receipt.current.publication.signature,
+            SignatureState::Unsigned | SignatureState::Authorized | SignatureState::Retryable(_)
+        ) {
+            return Err(WriteStoreError::Refused(
+                "retryable signer failure is not current".to_owned(),
+            ));
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) && state.successors.contains_key(&receipt_id)
+        {
+            return self.promote_authorized_successor(&mut state, receipt_id);
+        }
+        let next_revision = next_revision(&state)?;
+        let receipt = state.writes.get_mut(&receipt_id).expect("checked above");
+        receipt.current.publication.signature = SignatureState::Retryable(reason);
+        let current = receipt.clone();
+        state.revision = next_revision;
+        self.publish_receipt(&state, &current);
+        Ok(current)
+    }
+
+    pub(super) fn has_signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError> {
+        let state = self.lock_state()?;
+        let receipt = state
+            .writes
+            .get(&receipt_id)
+            .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
+        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        Ok(state.successors.contains_key(&receipt_id))
+    }
+
+    fn promote_authorized_successor(
+        &self,
+        state: &mut super::semantic::WriteState,
+        receipt_id: ReceiptId,
+    ) -> Result<Receipt, WriteStoreError> {
+        let next_revision = next_revision(state)?;
+        let (edit, event, successor_source, successor_route) =
+            state.successors.remove(&receipt_id).ok_or_else(|| {
+                WriteStoreError::Refused("durable semantic successor is missing".to_owned())
+            })?;
+        let receipt =
+            state.writes.get(&receipt_id).cloned().ok_or_else(|| {
+                WriteStoreError::Refused("coordinate owner is missing".to_owned())
+            })?;
+        let (mut edits, author, _current_source, _failed_source) =
+            state.edits.get(&receipt_id).cloned().ok_or_else(|| {
+                WriteStoreError::Refused("semantic custody is missing".to_owned())
+            })?;
+        let mut retired = receipt.current.publication.retired_materializations.clone();
+        retired.push((
+            receipt.current.publication.materialization_id,
+            receipt.current.id(),
+            receipt.current.publication.materialization_source,
+            receipt.current.publication.materialization_failure.clone(),
+        ));
+        let materialization_id = MaterializationId::from_u64(
+            receipt
+                .current
+                .publication
+                .materialization_id
+                .as_u64()
+                .checked_add(1)
+                .ok_or_else(|| {
+                    WriteStoreError::Refused("materialization identity exhausted".to_owned())
+                })?,
+        );
+        let source_correction = edit.is_none();
+        let successor_destinations = if source_correction {
+            let mut sessions = receipt.desired_destinations.clone();
+            sessions.extend(receipt.current.publication.destinations.keys().cloned());
+            sessions
+                .iter()
+                .cloned()
+                .map(|session| (session, RelayDeliveryOutcome::Pending))
+                .collect()
+        } else {
+            destinations(&receipt.routing)
+        };
+        let publication = PublicationEvidence {
+            receipt_id,
+            write_id: receipt.write_id,
+            materialization_id,
+            materialization_source: successor_source.map(|(id, _)| id),
+            materialization_failure: None,
+            retired_materializations: retired,
+            signature: SignatureState::Unsigned,
+            destinations: successor_destinations,
+        };
+        let current = LocalWriteEvent::new(EventValue::Unsigned(event), publication)?;
+        let explicit = matches!(receipt.routing, WriteRouting::Explicit(_));
+        let desired_destinations = current.publication.destinations.keys().cloned().collect();
+        let mut updated = Receipt {
+            current,
+            outcome: ReceiptOutcome::Open,
+            route_revision: u64::from(explicit),
+            route_settled: explicit,
+            route_shortfalls: Vec::new(),
+            desired_destinations,
+            attempts: std::collections::BTreeMap::new(),
+            ..receipt
+        };
+        if let Some(plan) = successor_route.as_ref() {
+            apply_route_to_receipt(&mut updated, plan)?;
+        }
+        if let Some(edit) = edit {
+            edits.push(edit);
+        }
+        state
+            .edits
+            .insert(receipt_id, (edits, author, successor_source, None));
+        state.writes.insert(receipt_id, updated.clone());
+        state.revision = next_revision;
+        self.publish_receipt(state, &updated);
+        Ok(updated)
     }
 
     pub(super) fn apply_route_current(

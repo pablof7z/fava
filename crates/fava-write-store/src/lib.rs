@@ -149,6 +149,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _applied_edits: &[ReplaceableEventEdit],
         _event: UnsignedEvent,
         _source: Option<&EventValue>,
+        _initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         Err(WriteStoreError::Refused(
             "write store does not support materialization replacement".to_owned(),
@@ -256,6 +257,51 @@ pub trait WriteStore: QuerySource + Send + Sync {
         event_id: EventId,
         event: fava_write::Event,
     ) -> Result<Receipt, WriteStoreError>;
+
+    /// Durably authorize signer invocation for one exact current unsigned generation.
+    ///
+    /// A semantic coordinate reservation that committed first leaves typed
+    /// retryable evidence instead. Once authorization commits, later semantic
+    /// admission is retained as at most one bounded successor and cannot
+    /// supersede the authorized generation before invocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] for stale, signed, terminal, or failed mutation.
+    fn authorize_signing(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<Receipt, WriteStoreError>;
+
+    /// Commit an exact retryable pre-effect signing failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] for stale, signed, terminal, or failed mutation.
+    fn record_signer_retryable(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+        reason: String,
+    ) -> Result<Receipt, WriteStoreError>;
+
+    /// Whether one exact authorized generation has a bounded durable successor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteStoreError`] when the supplied identity is stale or unreadable.
+    fn signing_successor(
+        &self,
+        write_id: WriteId,
+        receipt_id: ReceiptId,
+        materialization_id: MaterializationId,
+        event_id: EventId,
+    ) -> Result<bool, WriteStoreError>;
 
     /// Commit an exact signing refusal for the current unsigned event.
     ///

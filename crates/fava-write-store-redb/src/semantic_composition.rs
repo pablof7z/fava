@@ -16,7 +16,7 @@ use crate::semantic_acceptance::validate_source;
 use crate::{RedbWriteStore, SemanticCustody, StoreState};
 
 impl RedbWriteStore {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // One transaction owns composition.
     pub(super) fn compose_semantic(
         &self,
         state: &mut StoreState,
@@ -32,7 +32,7 @@ impl RedbWriteStore {
             state.receipts.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
             })?;
-        let (mut edits, stored_author, current_source, _) =
+        let (mut edits, stored_author, current_source, _, successor) =
             state.semantics.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
@@ -62,6 +62,44 @@ impl RedbWriteStore {
             return Err(WriteStoreError::Refused(
                 "retired materialization evidence capacity reached".to_owned(),
             ));
+        }
+        let successor_route = initial_route
+            .map(|plan| {
+                let mut plan = plan.clone();
+                plan.revision = receipt.route_revision.checked_add(1).ok_or_else(|| {
+                    WriteStoreError::Refused("route revision exhausted".to_owned())
+                })?;
+                Ok::<_, WriteStoreError>(plan)
+            })
+            .transpose()?;
+        if let Some(plan) = successor_route.as_ref() {
+            let mut routed = receipt.clone();
+            apply_route_to_receipt(&mut routed, plan)?;
+        }
+        if matches!(
+            receipt.current.publication.signature,
+            SignatureState::Authorized
+        ) {
+            if successor.is_some() {
+                return Err(WriteStoreError::Refused(
+                    "replaceable coordinate already has a durable successor".to_owned(),
+                ));
+            }
+            let custody: SemanticCustody = (
+                edits,
+                author,
+                current_source,
+                None,
+                Some((Some(edit), event, current_source, successor_route)),
+            );
+            self.commit_update(Some(&receipt), Some(&custody), &[])?;
+            state.semantics.insert(receipt_id, custody);
+            self.publish_receipt(Some(receipt.clone()), receipt_id);
+            return Ok(AcceptedWrite {
+                write_id: receipt.write_id,
+                receipt_id,
+                current: receipt.current,
+            });
         }
 
         let mut retired = receipt.current.publication.retired_materializations.clone();
@@ -104,11 +142,11 @@ impl RedbWriteStore {
             attempts: BTreeMap::new(),
             ..receipt
         };
-        if let Some(plan) = initial_route {
+        if let Some(plan) = successor_route.as_ref() {
             apply_route_to_receipt(&mut updated, plan)?;
         }
         edits.push(edit);
-        let custody: SemanticCustody = (edits, author, current_source, None);
+        let custody: SemanticCustody = (edits, author, current_source, None, None);
         let next_revision = next_revision(state)?;
         self.commit_update(
             Some(&updated),

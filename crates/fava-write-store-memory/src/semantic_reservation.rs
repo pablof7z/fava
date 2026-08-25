@@ -23,6 +23,15 @@ impl MemoryWriteStore {
                 "replaceable coordinate already has an active reservation".to_owned(),
             ));
         }
+        if state
+            .coordinates
+            .get(&coordinate)
+            .is_some_and(|receipt_id| state.successors.contains_key(receipt_id))
+        {
+            return Err(WriteStoreError::Refused(
+                "replaceable coordinate already has a durable successor".to_owned(),
+            ));
+        }
         if !state.coordinates.contains_key(&coordinate)
             && capacity_reached(&state, self.capacity.get())
         {
@@ -41,7 +50,12 @@ impl MemoryWriteStore {
 
     pub(super) fn release_active_slot(&self, reservation: u64) -> Result<(), WriteStoreError> {
         let mut state = self.lock_state()?;
-        if state.reservations.remove(&reservation).is_some() {
+        if let Some(coordinate) = state.reservations.remove(&reservation) {
+            if let Some(receipt_id) = state.coordinates.get(&coordinate).copied()
+                && let Some(receipt) = state.writes.get(&receipt_id).cloned()
+            {
+                self.publish_receipt_only(&receipt);
+            }
             Ok(())
         } else {
             Err(WriteStoreError::Refused(

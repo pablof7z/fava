@@ -60,6 +60,7 @@ pub(super) fn capacity_reached(state: &WriteState, capacity: usize) -> bool {
 }
 
 pub(super) fn release_semantic(state: &mut WriteState, receipt_id: ReceiptId) {
+    state.successors.remove(&receipt_id);
     if let Some((edits, author, _, _)) = state.edits.remove(&receipt_id)
         && let Some(edit) = edits.last()
     {

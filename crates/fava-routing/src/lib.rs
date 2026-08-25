@@ -8,10 +8,12 @@ use std::sync::Arc;
 use fava_query::Query;
 use fava_state::{PublicKey, RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{EventId, EventValue};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::watch;
 
 mod chain;
+mod serde_maps;
 
 pub use chain::{open, preview};
 
@@ -107,7 +109,7 @@ impl RouteRequest {
 }
 
 /// One independently tracked routing-coverage target.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum RouteTarget {
     /// The complete request when no narrower author target applies.
     WholeRequest,
@@ -120,7 +122,7 @@ pub enum RouteTarget {
 }
 
 /// Current routing knowledge for one target.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CoverageState {
     /// Exact relay sessions currently covering the target.
     Covered(BTreeSet<RelaySessionKey>),
@@ -184,7 +186,7 @@ pub struct RouteContribution {
 }
 
 /// One deduplicated relay in a current route plan.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlannedRelay {
     /// Exact relay and access identity.
     pub session: RelaySessionKey,
@@ -195,13 +197,15 @@ pub struct PlannedRelay {
 }
 
 /// Complete current result of ordered routing.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RoutePlan {
     /// Monotonic revision of this open routing calculation.
     pub revision: u64,
     /// Deduplicated exact relay destinations.
+    #[serde(with = "serde_maps::destinations")]
     pub destinations: BTreeMap<RelaySessionKey, PlannedRelay>,
     /// Merged current target coverage.
+    #[serde(with = "serde_maps::coverage")]
     pub coverage: BTreeMap<RouteTarget, CoverageState>,
     /// Targets for which at least one configured router still owes an answer.
     pub unresolved: BTreeSet<RouteTarget>,
