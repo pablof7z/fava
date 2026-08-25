@@ -15,18 +15,15 @@ enum QueryKind {
     Bootstrap,
 }
 
-enum ConnectionState {
-    Publish {
-        event_id: String,
-        role: PublicationRole,
-        acknowledged: bool,
-    },
-    Query {
-        subscription: String,
-        kind: QueryKind,
-        eose: bool,
-        closed: bool,
-    },
+struct PublicationExchange {
+    role: PublicationRole,
+    acknowledged: bool,
+}
+
+struct QueryExchange {
+    kind: QueryKind,
+    eose: bool,
+    closed: bool,
 }
 
 struct WireClaims<'a> {
@@ -43,7 +40,7 @@ struct WireClaims<'a> {
 
 #[allow(
     clippy::too_many_lines,
-    reason = "one strict pass owns the complete per-connection causal proof"
+    reason = "one strict pass owns the complete per-exchange causal proof"
 )]
 fn verify_one_wire(
     snapshot: &EvidenceSnapshot,
@@ -67,8 +64,10 @@ fn verify_one_wire(
         relay_signer: string(manifest, "relay_signer_public_key")?,
         author: string(manifest, "author_public_key")?,
     };
-    let mut connections = std::collections::BTreeMap::<u64, ConnectionState>::new();
-    let mut publications = BTreeSet::new();
+    let mut publication_exchanges =
+        std::collections::BTreeMap::<(u64, String), PublicationExchange>::new();
+    let mut query_exchanges = std::collections::BTreeMap::<(u64, String), QueryExchange>::new();
+    let mut publication_roles = BTreeSet::new();
     let mut bootstrap_id = None;
     let mut content_subscription = None;
     let mut records_subscription = None;
@@ -106,18 +105,14 @@ fn verify_one_wire(
                 payload,
                 connection,
                 &claims,
-                &mut connections,
+                &publication_exchanges,
+                &mut query_exchanges,
                 &mut content_subscription,
                 &mut records_subscription,
                 &mut bootstrap_subscription,
                 bootstrap_id.as_deref(),
             )?,
             ("client_to_relay", "EVENT") => {
-                if connections.contains_key(&connection) {
-                    return Err(CanaryError::new(
-                        "simple-groups wire reused a connection for a second exchange",
-                    ));
-                }
                 let event = event_at(payload, 1)?;
                 event.verify().map_err(error)?;
                 if event.pubkey.to_hex() != claims.author
@@ -128,7 +123,7 @@ fn verify_one_wire(
                     ));
                 }
                 let role = publication_role(&event, &claims)?;
-                if !publications.insert(role) {
+                if !publication_roles.insert(role) {
                     return Err(CanaryError::new(
                         "simple-groups wire repeated a claimed publication role",
                     ));
@@ -136,29 +131,34 @@ fn verify_one_wire(
                 if role == PublicationRole::Bootstrap {
                     bootstrap_id = Some(event.id.to_hex());
                 }
-                connections.insert(
-                    connection,
-                    ConnectionState::Publish {
-                        event_id: event.id.to_hex(),
-                        role,
-                        acknowledged: false,
-                    },
-                );
+                if publication_exchanges
+                    .insert(
+                        (connection, event.id.to_hex()),
+                        PublicationExchange {
+                            role,
+                            acknowledged: false,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(CanaryError::new(
+                        "simple-groups wire repeated an exact publication exchange",
+                    ));
+                }
             }
             ("relay_to_client", "OK") => {
                 let acknowledged = payload.get(1).and_then(Value::as_str).unwrap_or_default();
                 let accepted = payload.get(2).and_then(Value::as_bool) == Some(true);
-                let Some(ConnectionState::Publish {
-                    event_id,
+                let Some(PublicationExchange {
                     acknowledged: was_acknowledged,
                     ..
-                }) = connections.get_mut(&connection)
+                }) = publication_exchanges.get_mut(&(connection, acknowledged.to_owned()))
                 else {
                     return Err(CanaryError::new(
                         "simple-groups OK was not on its EVENT connection",
                     ));
                 };
-                if !accepted || *was_acknowledged || acknowledged != event_id {
+                if !accepted || *was_acknowledged {
                     return Err(CanaryError::new(
                         "simple-groups OK did not causally acknowledge its EVENT",
                     ));
@@ -169,7 +169,7 @@ fn verify_one_wire(
                 payload,
                 connection,
                 &claims,
-                &connections,
+                &query_exchanges,
                 bootstrap_id.as_deref(),
                 &mut content_events,
                 &mut bootstrap_result,
@@ -177,18 +177,19 @@ fn verify_one_wire(
                 &mut admin_winner,
             )?,
             ("relay_to_client", "EOSE") => {
-                update_query_terminal(payload, connection, &mut connections, true)?;
+                update_query_terminal(payload, connection, &mut query_exchanges, true)?;
             }
             ("client_to_relay", "CLOSE") => {
-                update_query_terminal(payload, connection, &mut connections, false)?;
+                update_query_terminal(payload, connection, &mut query_exchanges, false)?;
             }
             _ => {}
         }
     }
     verify_complete_wire(
         &claims,
-        &connections,
-        &publications,
+        &publication_exchanges,
+        &query_exchanges,
+        &publication_roles,
         bootstrap_id.as_deref(),
         bootstrap_result.as_deref(),
         &content_events,
@@ -208,24 +209,20 @@ fn verify_req(
     payload: &Value,
     connection: u64,
     claims: &WireClaims<'_>,
-    connections: &mut std::collections::BTreeMap<u64, ConnectionState>,
+    publications: &std::collections::BTreeMap<(u64, String), PublicationExchange>,
+    queries: &mut std::collections::BTreeMap<(u64, String), QueryExchange>,
     content_subscription: &mut Option<String>,
     records_subscription: &mut Option<String>,
     bootstrap_subscription: &mut Option<String>,
     bootstrap_id: Option<&str>,
 ) -> CanaryResult<()> {
-    if connections.contains_key(&connection) {
-        return Err(CanaryError::new(
-            "simple-groups wire reused a connection for a second exchange",
-        ));
-    }
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
     let filter = payload.get(2).and_then(Value::as_object);
     let query_kind = if filter
         .is_some_and(|filter| exact_filter(filter, "#h", claims.simple_group, &[9], Some(16)))
     {
         require_acked(
-            connections,
+            publications,
             [PublicationRole::Shared, PublicationRole::Unique],
         )?;
         assign_once(content_subscription, subscription, "content REQ")?;
@@ -240,7 +237,7 @@ fn verify_req(
         )
     }) {
         require_acked(
-            connections,
+            publications,
             [PublicationRole::Metadata, PublicationRole::Admin],
         )?;
         assign_once(records_subscription, subscription, "records REQ")?;
@@ -250,7 +247,7 @@ fn verify_req(
             && bootstrap_id.is_some()
             && filter.get("ids") == Some(&json!([bootstrap_id.expect("checked")]))
     }) {
-        require_acked(connections, [PublicationRole::Bootstrap])?;
+        require_acked(publications, [PublicationRole::Bootstrap])?;
         assign_once(bootstrap_subscription, subscription, "bootstrap REQ")?;
         QueryKind::Bootstrap
     } else {
@@ -261,15 +258,21 @@ fn verify_req(
     if subscription.is_empty() {
         return Err(CanaryError::new("simple-groups REQ omitted subscription"));
     }
-    connections.insert(
-        connection,
-        ConnectionState::Query {
-            subscription: subscription.to_owned(),
-            kind: query_kind,
-            eose: false,
-            closed: false,
-        },
-    );
+    if queries
+        .insert(
+            (connection, subscription.to_owned()),
+            QueryExchange {
+                kind: query_kind,
+                eose: false,
+                closed: false,
+            },
+        )
+        .is_some()
+    {
+        return Err(CanaryError::new(
+            "simple-groups wire repeated an exact query exchange",
+        ));
+    }
     Ok(())
 }
 
@@ -320,7 +323,7 @@ fn verify_response(
     payload: &Value,
     connection: u64,
     claims: &WireClaims<'_>,
-    connections: &std::collections::BTreeMap<u64, ConnectionState>,
+    queries: &std::collections::BTreeMap<(u64, String), QueryExchange>,
     bootstrap_id: Option<&str>,
     content_events: &mut BTreeSet<String>,
     bootstrap_result: &mut Option<String>,
@@ -330,18 +333,14 @@ fn verify_response(
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
     let event = event_at(payload, 2)?;
     event.verify().map_err(error)?;
-    let Some(ConnectionState::Query {
-        subscription: expected,
-        kind,
-        closed,
-        ..
-    }) = connections.get(&connection)
+    let Some(QueryExchange { kind, closed, .. }) =
+        queries.get(&(connection, subscription.to_owned()))
     else {
         return Err(CanaryError::new(
             "simple-groups response EVENT preceded its REQ",
         ));
     };
-    if subscription != expected || *closed {
+    if *closed {
         return Err(CanaryError::new(
             "simple-groups response EVENT escaped its open REQ",
         ));
@@ -394,25 +393,21 @@ fn verify_response(
 fn update_query_terminal(
     payload: &Value,
     connection: u64,
-    connections: &mut std::collections::BTreeMap<u64, ConnectionState>,
+    queries: &mut std::collections::BTreeMap<(u64, String), QueryExchange>,
     eose_frame: bool,
 ) -> CanaryResult<()> {
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
-    let Some(ConnectionState::Query {
-        subscription: expected,
-        eose,
-        closed,
-        ..
-    }) = connections.get_mut(&connection)
+    let Some(QueryExchange { eose, closed, .. }) =
+        queries.get_mut(&(connection, subscription.to_owned()))
     else {
         return Err(CanaryError::new(
             "simple-groups query terminal frame preceded its REQ",
         ));
     };
     let invalid = if eose_frame {
-        subscription != expected || *eose || *closed
+        *eose || *closed
     } else {
-        subscription != expected || !*eose || *closed
+        !*eose || *closed
     };
     if invalid {
         return Err(CanaryError::new(
@@ -428,14 +423,14 @@ fn update_query_terminal(
 }
 
 fn require_acked<const N: usize>(
-    connections: &std::collections::BTreeMap<u64, ConnectionState>,
+    publications: &std::collections::BTreeMap<(u64, String), PublicationExchange>,
     roles: [PublicationRole; N],
 ) -> CanaryResult<()> {
     for expected in roles {
-        if !connections.values().any(|state| {
+        if !publications.values().any(|state| {
             matches!(
                 state,
-                ConnectionState::Publish {
+                PublicationExchange {
                     role,
                     acknowledged: true,
                     ..
@@ -453,8 +448,9 @@ fn require_acked<const N: usize>(
 #[allow(clippy::too_many_arguments)]
 fn verify_complete_wire(
     claims: &WireClaims<'_>,
-    connections: &std::collections::BTreeMap<u64, ConnectionState>,
-    publications: &BTreeSet<PublicationRole>,
+    publications: &std::collections::BTreeMap<(u64, String), PublicationExchange>,
+    queries: &std::collections::BTreeMap<(u64, String), QueryExchange>,
+    publication_roles: &BTreeSet<PublicationRole>,
     bootstrap_id: Option<&str>,
     bootstrap_result: Option<&str>,
     content_events: &BTreeSet<String>,
@@ -479,18 +475,17 @@ fn verify_complete_wire(
         has_tag_value(event, "p", &claims.admin_target)
             && event.pubkey.to_hex() == claims.relay_signer
     });
-    if publications != &roles
+    if publication_roles != &roles
         || bootstrap_id.is_none()
         || bootstrap_result != bootstrap_id
         || content_events != &content
         || !metadata_ok
         || !admin_ok
         || subscriptions.iter().any(Option::is_none)
-        || connections.len() != 9
-        || connections.values().any(|state| match state {
-            ConnectionState::Publish { acknowledged, .. } => !acknowledged,
-            ConnectionState::Query { eose, closed, .. } => !eose || !closed,
-        })
+        || publications.len() != 6
+        || publications.values().any(|state| !state.acknowledged)
+        || queries.len() != 3
+        || queries.values().any(|state| !state.eose || !state.closed)
     {
         return Err(CanaryError::new(
             "simple-groups wire did not derive the complete public flow",
