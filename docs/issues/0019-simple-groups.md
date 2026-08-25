@@ -1,6 +1,6 @@
 # `fava-simple-groups` NIP-29 value capability
 
-**Status:** implementation reconciled; remaining signed vocabulary approvals pending
+**Status:** implementation reconciled; 19 unapproved and 3 stale owner signatures pending
 **Owning phase:** 07.1.1
 
 This issue records the implemented event-local, saved-list, and operation
@@ -10,9 +10,10 @@ boundary is recorded in
 
 The current nominal model is recorded in `docs/internals/vocabulary.toml` and
 its exact compiler-derived per-term records are pinned in
-`docs/internals/vocabulary-structure.json`. All 14 simple-groups terms require
-current structurally bound owner signatures. The append-only approval history
-contains earlier text-only events for `SimpleGroupMetadata`,
+`docs/internals/vocabulary-structure.json`. All 22 simple-group approval
+identities bind 113 public API records and require current structurally bound
+owner signatures. Nineteen are `unapproved`; three are `stale`. The append-only
+approval history contains earlier text-only events for `SimpleGroupMetadata`,
 `SimpleGroupAdmins`, and `SimpleGroupStateEventKind`; the structural-approval
 contract intentionally makes those events stale without deleting them. This
 issue and commit series do not fabricate or claim replacement signatures.
@@ -67,7 +68,7 @@ private edit codec with Fava's ordinary semantic-write lifecycle. Edits
 preserve opaque content, foreign tags, malformed entries, unused trailing
 values, repetitions according to the exact operation, and unrelated order.
 
-## Current nominal vocabulary
+## Current approval identities
 
 - `SimpleGroup`, `SimpleGroupConstructionError`, and
   `SimpleGroupStateEventKind`.
@@ -76,6 +77,15 @@ values, repetitions according to the exact operation, and unrelated order.
   `SimpleGroupDecodeError`.
 - `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
   `SavedGroupListDecodeError`.
+- Crate/function identities `fava_simple_groups`, `save_simple_group`,
+  `remove_saved_simple_group`, `rename_saved_simple_group`, `save_relay`,
+  `remove_saved_relay`, `saved_group_list_materializer`, and
+  `saved_group_lists`.
+
+These 22 owner-scoped packets have zero review problems and zero public-API
+gaps. This is not repository-wide governance success: `check_vocabulary.py`
+retains 354 inherited unique findings, and terminal-name plus external
+owner-signature gates remain independently red.
 
 `RelayUrl`, `Query`, `QuerySnapshot`, `EventCoordinate`, `PublicKey`,
 `UnsignedEvent`, `Write`, and `ReplaceableEventEdit` remain owned by their
