@@ -211,10 +211,13 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
             .map(|index| tag(&["x", &index.to_string()]))
             .collect(),
     );
-    assert!(matches!(
+    assert_eq!(
         materialize(actor.public_key(), &edit, Some(&too_many), 2),
-        Err(WriteIntentError::TooLarge { .. })
-    ));
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_002,
+            maximum: 2_000,
+        })
+    );
     let too_large = source(
         &actor,
         Kind::ContactList,
@@ -286,7 +289,7 @@ fn structural_size_matches_exact_nostr_json_encoding() {
 }
 
 #[test]
-fn insertion_is_decided_before_the_tag_cap_is_allocated() {
+fn insertion_is_decided_before_the_builder_enforces_its_tag_bound() {
     let actor = Keys::generate();
     let target = Keys::generate().public_key();
     let edit = follow(target).expect("follow edit");
@@ -308,8 +311,35 @@ fn insertion_is_decided_before_the_tag_cap_is_allocated() {
             .map(|index| tag(&["x", &index.to_string()]))
             .collect(),
     );
-    assert!(matches!(
+    assert_eq!(
         materialize(actor.public_key(), &edit, Some(&full_without_target), 2),
-        Err(WriteIntentError::TooLarge { .. })
-    ));
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
+}
+
+#[test]
+fn materializer_preserves_the_exact_event_builder_tag_refusal() {
+    let actor = Keys::generate();
+    let target = Keys::generate().public_key();
+    let edit = unfollow(target).expect("unfollow edit");
+    let source = source(
+        &actor,
+        Kind::ContactList,
+        1,
+        "",
+        (0..2_001)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
+    );
+
+    assert_eq!(
+        materialize(actor.public_key(), &edit, Some(&source), 2),
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
 }

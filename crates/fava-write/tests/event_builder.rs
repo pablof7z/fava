@@ -1,6 +1,6 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
-use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp};
+use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError};
 use nostr::key::Keys;
 
 fn keys() -> Keys {
@@ -89,4 +89,55 @@ fn raw_parts_and_bulk_tags_share_exact_hostile_bounds() {
     )
     .build();
     assert!(matches!(oversized, Err(EventBuildError::TooLarge { .. })));
+}
+
+#[test]
+fn event_build_tag_refusal_converts_without_losing_fields() {
+    let converted = WriteIntentError::from(EventBuildError::TooManyTags {
+        actual: 2_001,
+        maximum: 2_000,
+    });
+    assert_eq!(
+        converted,
+        WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        }
+    );
+    assert_eq!(
+        converted.to_string(),
+        "event tags exceed bound: 2001 > 2000"
+    );
+}
+
+#[test]
+fn event_build_byte_refusal_converts_without_losing_fields() {
+    let converted = WriteIntentError::from(EventBuildError::TooLarge {
+        bytes: 131_073,
+        maximum: 131_072,
+    });
+    assert_eq!(
+        converted,
+        WriteIntentError::TooLarge {
+            bytes: 131_073,
+            maximum: 131_072,
+        }
+    );
+    assert_eq!(
+        converted.to_string(),
+        "event bytes exceed bound: 131073 > 131072"
+    );
+}
+
+#[test]
+fn event_build_encoding_refusal_converts_without_losing_fields() {
+    let converted = WriteIntentError::from(EventBuildError::Encoding("exact encoding".to_owned()));
+    assert_eq!(
+        converted,
+        WriteIntentError::Encoding("exact encoding".to_owned())
+    );
+    assert_eq!(
+        converted.to_string(),
+        "event encoding failed: exact encoding"
+    );
 }

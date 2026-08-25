@@ -12,9 +12,28 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use fava::{EventValue, Kind, Query, ReplaceableEventEdit, Timestamp, WriteIntentError};
+    use fava::{
+        EventBuildError, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp,
+        WriteIntentError,
+    };
     use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
     use nostr::key::Keys;
+
+    #[test]
+    fn external_consumer_can_convert_and_destructure_the_exact_tag_refusal() {
+        let converted = WriteIntentError::from(EventBuildError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        });
+
+        assert!(matches!(
+            converted,
+            WriteIntentError::TooManyTags {
+                actual: 2_001,
+                maximum: 2_000,
+            }
+        ));
+    }
 
     #[test]
     fn external_first_value_opposing_operation_and_preservation() {
