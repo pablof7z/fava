@@ -1,6 +1,7 @@
 # 0023 — Relay access, live state, and query authority have split owners
 
-**Status:** integrated on current main; current validation recorded below
+**Status:** prepared on `integrate/state-foundation` against current main;
+current validation recorded below
 **Raised:** 2026-08-25, approved by Pablo in pad
 `fava/2026-08-cross-crate-cleanup-proposals` as `STATE-ARCH-1`,
 `RELAY-ID-1`, and `QUERY-ACCESS-1`
@@ -82,17 +83,17 @@ overrule the fixed capacity or atomic-refusal policy before merge.
 
 ## Evidence
 
-The integrated range starts from current main `06585d0c`, including the
-compiler-structure-bound vocabulary approval contract. Behavior-first commit
-`fac89739` establishes the accepted contracts. Against unchanged current-main
-production code, `event_state_model` fails to resolve the new state vocabulary
-and the 12 structural subtraction checks report eight failures, three errors,
-and one pass. Production commit `7f6d089f` then supplies the owning
-implementation. `375ae7a1` repairs a test fixture whose empty `unresolved` set
-became terminal after settlement was made derived; runtime behavior is
-unchanged. `bebbb236` removes a test-only nominal wrapper. `18ae9a51` aligns
-the isolated dependency locks and `b3534837` records the accepted current
-documentation and catalogs.
+The prepared integration-branch range starts from current main `1fe3fd6d`,
+including the compiler-structure-bound vocabulary approval contract.
+Behavior-first commit `51cefb14` establishes the accepted contracts. Against
+unchanged current-main production code, `event_state_model` fails to resolve
+the new state vocabulary and the 12 structural subtraction checks report eight
+failures, three errors, and one pass. Production commit `8cb4da02` then
+supplies the owning implementation. `67c98430` repairs a test fixture whose
+empty `unresolved` set became terminal after settlement was made derived;
+runtime behavior is unchanged. `7702d603` removes a test-only nominal wrapper.
+`2ee7897d` aligns the isolated dependency locks and `17143929` records the
+accepted current documentation and catalogs.
 
 Fresh deliberate breaks prove the named boundaries causally:
 
@@ -129,4 +130,6 @@ Current validation:
 - The clean-rebase Bazel run found one omitted build-only dependency from
   `//crates/fava-routing:failure_isolation` to `//crates/fava-relay:lib`.
   Adding that edge changes no Rust behavior. With isolated writable output and
-  disk-cache roots, the complete aggregate passes 87/87 tests.
+  disk-cache roots, the exact complete aggregate passes 87/87 tests. The
+  [compact source/toolchain manifest and binary BEP](../evidence/state-foundation/bazel-87.md)
+  retain the re-review run. The separate signature gate remains open.
