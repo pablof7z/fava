@@ -112,6 +112,14 @@ def load_registry(path: Path) -> tuple[Registry | None, list[str]]:
                     problems.append(f"duplicate registered {field[:-1]}: {value}")
                 else:
                     destination.add(value)
+                if field == "symbols" and isinstance(value, str) and value.strip():
+                    terminal = value.rsplit("::", maxsplit=1)[-1]
+                    if terminal != name:
+                        problems.append(
+                            f"{name}: symbols '{value}' has terminal name "
+                            f"'{terminal}', hiding a differently named concept "
+                            f"under term '{name}'"
+                        )
         for field, destination in (
             ("spec_symbols", spec_symbols),
             ("spec_crates", spec_crates),
@@ -127,6 +135,12 @@ def load_registry(path: Path) -> tuple[Registry | None, list[str]]:
                     problems.append(f"duplicate registered {field[:-1]}: {value}")
                 else:
                     destination.add(value)
+                if field == "spec_symbols" and isinstance(value, str) and value.strip():
+                    if value != name:
+                        problems.append(
+                            f"{name}: spec_symbols '{value}' must equal "
+                            f"term name '{name}'"
+                        )
         terms.append(term)
 
     return Registry(

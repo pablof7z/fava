@@ -50,6 +50,7 @@ fava-write-store-redb.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
 serde_json.workspace = true
 tokio.workspace = true
+toml = "=0.8.23"
 
 [lints]
 workspace = true
