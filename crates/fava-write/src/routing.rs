@@ -5,9 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::WriteIntentError;
 
-const MAX_EXPLICIT_RELAYS: usize = 256;
+// Provisional implementation resource-safety cap. This is not a Nostr limit or
+// publication-domain semantic; fava-write owns and may revise the shortcut.
+const PROVISIONAL_MAX_EXPLICIT_RELAYS: usize = 256;
 
 /// Relay selection for one publication obligation.
+///
+/// Explicit routes preserve normalized first-occurrence order.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum WriteRouting {
     /// Use the configured ordered router chain.
@@ -20,25 +24,27 @@ impl WriteRouting {
     /// Normalize an exact explicit route in caller first-occurrence order.
     ///
     /// Duplicate relay identities collapse to one entry. Input is consumed only
-    /// until the normalized bound is exceeded, so an unbounded iterator cannot
-    /// allocate an unbounded route.
+    /// until the provisional write resource cap is exceeded, so an unbounded
+    /// iterator cannot allocate an unbounded route. The cap is not a protocol
+    /// fact or publication-domain semantic.
     ///
     /// # Errors
     ///
     /// Returns [`WriteIntentError`] when no destination remains or more than
-    /// 256 distinct relay identities are supplied.
+    /// 256 relay inputs are supplied; that resource-safety value is provisional.
     pub fn explicit(relays: impl IntoIterator<Item = RelayUrl>) -> Result<Self, WriteIntentError> {
         let mut seen = BTreeSet::new();
         let mut ordered = Vec::new();
-        for relay in relays {
+        for (index, relay) in relays.into_iter().enumerate() {
+            let actual = index.saturating_add(1);
+            if actual > PROVISIONAL_MAX_EXPLICIT_RELAYS {
+                return Err(WriteIntentError::TooManyExplicitRelays {
+                    actual,
+                    maximum: PROVISIONAL_MAX_EXPLICIT_RELAYS,
+                });
+            }
             if seen.insert(relay.clone()) {
                 ordered.push(relay);
-                if ordered.len() > MAX_EXPLICIT_RELAYS {
-                    return Err(WriteIntentError::TooManyExplicitRelays {
-                        actual: ordered.len(),
-                        maximum: MAX_EXPLICIT_RELAYS,
-                    });
-                }
             }
         }
         if ordered.is_empty() {
@@ -54,10 +60,10 @@ impl WriteRouting {
         if relays.is_empty() {
             return Err(WriteIntentError::EmptyExplicitRelays);
         }
-        if relays.len() > MAX_EXPLICIT_RELAYS {
+        if relays.len() > PROVISIONAL_MAX_EXPLICIT_RELAYS {
             return Err(WriteIntentError::TooManyExplicitRelays {
                 actual: relays.len(),
-                maximum: MAX_EXPLICIT_RELAYS,
+                maximum: PROVISIONAL_MAX_EXPLICIT_RELAYS,
             });
         }
         let mut seen = BTreeSet::new();

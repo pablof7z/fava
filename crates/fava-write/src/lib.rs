@@ -154,13 +154,34 @@ impl WriteIntent {
     }
 }
 
-/// Refusal before durable write custody.
+/// Refusal while constructing a write intent or materializing its event body.
+///
+/// Intent validation returns this error before durable custody. A
+/// [`ReplaceableEventMaterializer`] can also return it while constructing an
+/// initial materialization or a later post-custody rematerialization;
+/// publication owns attribution at those lifecycle boundaries.
+///
+/// ```
+/// use fava_write::{EventBuildError, WriteIntentError};
+///
+/// let refusal = WriteIntentError::from(EventBuildError::TooManyTags {
+///     actual: 2_001,
+///     maximum: 2_000,
+/// });
+/// assert!(matches!(
+///     refusal,
+///     WriteIntentError::TooManyTags {
+///         actual: 2_001,
+///         maximum: 2_000,
+///     }
+/// ));
+/// ```
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum WriteIntentError {
     /// Explicit publication requires at least one relay.
     #[error("explicit publication requires at least one relay")]
     EmptyExplicitRelays,
-    /// Explicit relay fan-out exceeds the declared bound.
+    /// Explicit relay input exceeds the provisional write resource cap.
     #[error("explicit relay count exceeds bound: {actual} > {maximum}")]
     TooManyExplicitRelays {
         /// Actual relay count.
@@ -180,6 +201,14 @@ pub enum WriteIntentError {
     /// Complete event is already expired.
     #[error("event is already expired")]
     Expired,
+    /// Event contains too many tags.
+    #[error("event tags exceed bound: {actual} > {maximum}")]
+    TooManyTags {
+        /// Actual tag count.
+        actual: usize,
+        /// Declared maximum.
+        maximum: usize,
+    },
     /// Event exceeds the declared byte bound.
     #[error("event bytes exceed bound: {bytes} > {maximum}")]
     TooLarge {
@@ -191,6 +220,18 @@ pub enum WriteIntentError {
     /// Exact serialization failed.
     #[error("event encoding failed: {0}")]
     Encoding(String),
+}
+
+impl From<EventBuildError> for WriteIntentError {
+    fn from(error: EventBuildError) -> Self {
+        match error {
+            EventBuildError::TooManyTags { actual, maximum } => {
+                Self::TooManyTags { actual, maximum }
+            }
+            EventBuildError::TooLarge { bytes, maximum } => Self::TooLarge { bytes, maximum },
+            EventBuildError::Encoding(reason) => Self::Encoding(reason),
+        }
+    }
 }
 
 fn validate_event_size(event: &impl Serialize) -> Result<(), WriteIntentError> {

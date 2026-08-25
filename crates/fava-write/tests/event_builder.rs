@@ -1,6 +1,6 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
-use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp};
+use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError};
 use nostr::key::Keys;
 
 fn keys() -> Keys {
@@ -89,4 +89,40 @@ fn raw_parts_and_bulk_tags_share_exact_hostile_bounds() {
     )
     .build();
     assert!(matches!(oversized, Err(EventBuildError::TooLarge { .. })));
+}
+
+#[test]
+fn event_build_tag_refusal_converts_without_losing_fields() {
+    assert_eq!(
+        WriteIntentError::from(EventBuildError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        }),
+        WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        }
+    );
+}
+
+#[test]
+fn event_build_byte_refusal_converts_without_losing_fields() {
+    assert_eq!(
+        WriteIntentError::from(EventBuildError::TooLarge {
+            bytes: 131_073,
+            maximum: 131_072,
+        }),
+        WriteIntentError::TooLarge {
+            bytes: 131_073,
+            maximum: 131_072,
+        }
+    );
+}
+
+#[test]
+fn event_build_encoding_refusal_converts_without_losing_fields() {
+    assert_eq!(
+        WriteIntentError::from(EventBuildError::Encoding("exact encoding".to_owned())),
+        WriteIntentError::Encoding("exact encoding".to_owned())
+    );
 }
