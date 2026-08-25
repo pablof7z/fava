@@ -462,6 +462,28 @@ def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
     return fields
 
 
+def item_kind_for_term(term: dict[str, Any]) -> str:
+    """Return the Rust item that best identifies a term."""
+    for field in ("symbols", "spec_symbols"):
+        values = term.get(field)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, str):
+                value = value.strip()
+                if value:
+                    return value
+    return str(term.get("name", ""))
+
+
+def row_purpose(term: dict[str, Any]) -> str:
+    """Return a single-line concise purpose for list row rendering."""
+    meaning = term.get("meaning", "")
+    if not isinstance(meaning, str):
+        return ""
+    return " ".join(meaning.split())
+
+
 def approved_name(event: dict[str, Any]) -> str | None:
     """The single term name one approval event carries, if it carries one."""
     names = [

@@ -27,6 +27,13 @@
   .term > summary::-webkit-details-marker { display: none; }
   .name { font-weight: 600; }
   .owner { color: var(--dim); font-size: 12px; }
+  .summary-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .summary-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .summary-title .name { font-size: 15px; }
+  .rust-kind { color: #93c5fd; font-size: 12px; }
+  .purpose { color: #d4d4dd; font-size: 12px; white-space: nowrap; text-overflow: ellipsis;
+             overflow: hidden; max-width: min(62ch, 60vw); }
+  .summary-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .candidate-label { color: #93c5fd; font-size: 11px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
   .approved { color: #4ade80; border-color: #1e5b39; }
@@ -140,23 +147,39 @@ function render() {
     details.className = "term";
 
     const summary = document.createElement("summary");
+    const summaryMain = document.createElement("div");
+    summaryMain.className = "summary-main";
+
+    const title = document.createElement("div");
+    title.className = "summary-title";
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = term.name;
     const badge = document.createElement("span");
     badge.className = `badge ${term.status}`;
     badge.textContent = term.status;
-    const owner = document.createElement("span");
-    owner.className = "owner";
-    owner.textContent = term.owner;
-    summary.append(badge, name);
+    const rustKind = document.createElement("span");
+    rustKind.className = "rust-kind";
+    rustKind.textContent = term.rust_item || "untyped";
+    rustKind.title = `Rust item: ${rustKind.textContent}`;
+    const purpose = document.createElement("div");
+    purpose.className = "purpose";
+    purpose.textContent = term.purpose || "";
+    const purposeText = term.purpose || "";
+    purpose.title = purposeText;
+    title.append(badge, name, rustKind);
     if (term.candidate) {
       const candidateLabel = document.createElement("span");
       candidateLabel.className = "candidate-label";
       candidateLabel.textContent = term.proposed_disposition;
-      summary.append(candidateLabel);
+      title.append(candidateLabel);
     }
-    summary.append(owner);
+    summaryMain.append(title, purpose);
+    summary.append(summaryMain);
+
+    const owner = document.createElement("span");
+    owner.className = "owner";
+    owner.textContent = term.owner;
 
     const body = document.createElement("div");
     body.className = "body";
@@ -187,13 +210,14 @@ function render() {
       fieldList.append(fieldRow);
     }
     review.append(reviewTitle, fieldList);
-    const row = document.createElement("div");
-    row.className = "row";
+    const actions = document.createElement("span");
+    actions.className = "summary-actions";
     const button = document.createElement("button");
     const signable = !["blocked", "invalid", "missing", "misfiled"].includes(term.status);
     button.textContent = term.status === "approved" ? "Re-sign" :
       signable ? "Sign approval" : "Cannot sign";
     button.disabled = !signerReady || !signable;
+    button.addEventListener("click", (event) => event.stopPropagation());
     const status = document.createElement("span");
     status.className = "error";
     button.addEventListener("click", async () => {
@@ -209,9 +233,10 @@ function render() {
         button.disabled = false;
       }
     });
-    row.append(button, status);
-    body.append(review, row);
+    actions.append(button, status);
+    body.append(review);
 
+    summary.append(owner, actions);
     details.append(summary, body);
     container.append(details);
   }

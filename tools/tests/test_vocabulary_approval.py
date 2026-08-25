@@ -197,6 +197,36 @@ class ReviewFieldsTest(unittest.TestCase):
             approval.review_fields({"name": "T", "meaning": ["not text"]})
 
 
+class RowPresentationTest(unittest.TestCase):
+    def test_item_kind_prefers_real_rust_symbols(self) -> None:
+        term = {
+            "name": "Follow",
+            "symbols": ["fava_nip02::ContactListRowEvidence", "fava_nip02::Follow"],
+            "spec_symbols": ["Follow"],
+            "meaning": "A row result from NIP-02.",
+        }
+        self.assertEqual(
+            approval.item_kind_for_term(term),
+            "fava_nip02::ContactListRowEvidence",
+        )
+
+    def test_item_kind_falls_back_to_spec_symbol(self) -> None:
+        term = {
+            "name": "KindHint",
+            "spec_symbols": ["SpecKind"],
+            "meaning": "placeholder",
+        }
+        self.assertEqual(approval.item_kind_for_term(term), "SpecKind")
+
+    def test_item_kind_falls_back_to_name_when_no_symbol(self) -> None:
+        term = {"name": "Event", "meaning": "A signed event."}
+        self.assertEqual(approval.item_kind_for_term(term), "Event")
+
+    def test_row_purpose_is_single_line(self) -> None:
+        term = {"meaning": "A line.\n with extra   spacing."}
+        self.assertEqual(approval.row_purpose(term), "A line. with extra spacing.")
+
+
 class ApprovedNameTest(unittest.TestCase):
     def test_returns_name_for_single_name_tag(self) -> None:
         event = {"tags": [["name", "Query"]]}
@@ -815,6 +845,10 @@ class ServerTest(unittest.TestCase):
             {"name": "owner", "value": "nostr"},
             {"name": "meaning", "value": "A signed Nostr event."},
         ])
+        self.assertEqual(event["rust_item"], "Event")
+        self.assertEqual(
+            event["purpose"], "A signed Nostr event."
+        )
 
     def test_wrong_path_returns_404(self) -> None:
         import urllib.error
