@@ -48,6 +48,22 @@ fn pair_verifier_rejects_noncausal_wire_mutations() {
 }
 
 #[test]
+fn pair_verifier_tracks_exchanges_when_one_relay_session_is_reused() {
+    let fixture = PairEvidenceFixture::new();
+    for run in 0..2 {
+        for relay in ["a", "b"] {
+            fixture.rewrite_wire_values(run, relay, |frames| {
+                for frame in frames {
+                    frame["connection"] = json!(1);
+                }
+            });
+        }
+    }
+    verify_fixture_pair(fixture.root())
+        .expect("subscription and event identities keep reused-session exchanges causal");
+}
+
+#[test]
 fn pair_verifier_rejects_wrong_author_and_unready_children() {
     let wrong_author = PairEvidenceFixture::new();
     let attacker = Keys::generate();
