@@ -210,6 +210,11 @@ coordinate cannot consume the reservation. A live publication runner may
 advance its local signer and route generation only after an exact-generation
 custody refresh succeeds. Successor installation compares the complete applied
 edit sequence with durable custody before accepting the new event.
+During assembly, publication synchronously reconciles every recovered semantic
+coordinate against its initial source snapshots before the facade is returned;
+spawning its runner is not the admission boundary. Runner state carries the
+exact `MaterializationId` of its loaded sequence and refreshes custody before
+initial materialization, signing, or routing whenever the receipt is newer.
 
 ### Query results are merged source state
 
@@ -2955,6 +2960,12 @@ application reopens desired queries
         ↓
 open writes reopen signer and router sessions automatically
 ```
+
+For a recovered semantic coordinate, “required source/write reconciliation”
+means the complete durable sequence has been considered against the initial
+qualified source snapshot and any successor has committed. A runner spawned
+for that coordinate may initialize later, but it exact-refreshes its sequence
+if admission advanced the receipt generation in the meantime.
 
 A memory event cache starts empty after restart. A persistent event cache may serve cached relay events immediately. The durable standard write store still supplies open local writes through queries once the application reopens them.
 

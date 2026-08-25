@@ -22,13 +22,13 @@ impl Publication {
                 receipt.current.publication.materialization_id,
             ) {
                 Ok(Some((edits, author, selected, failed_id))) if !edits.is_empty() => {
-                    state.edits = edits;
-                    state.author = author;
-                    state.selected_id = selected.map(|(id, _)| id);
-                    if let Some((_, timestamp)) = selected {
-                        state.source_floor = Some(timestamp);
-                    }
-                    state.failed_id = failed_id;
+                    state.refresh_custody(
+                        receipt.current.publication.materialization_id,
+                        edits,
+                        author,
+                        selected,
+                        failed_id,
+                    );
                     return Some(receipt);
                 }
                 Ok(Some(_) | None) => return None,

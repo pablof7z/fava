@@ -20,6 +20,7 @@ use tokio::sync::watch;
 
 mod delivery;
 mod materialization;
+mod recovery;
 mod run;
 mod semantic_refresh;
 mod sign;
@@ -143,6 +144,7 @@ impl Publication {
             let semantic = SemanticState::recovered(
                 edits,
                 author,
+                accepted.current.publication.materialization_id,
                 selected.map(|(id, _)| id),
                 selected.map(|(_, timestamp)| timestamp),
                 failed_id,
@@ -156,7 +158,12 @@ impl Publication {
         Ok(accepted)
     }
 
-    /// Resume every durable open obligation after store recovery.
+    /// Reconcile every durable open obligation, then resume its remaining work.
+    ///
+    /// Recovered semantic coordinates apply their complete durable sequence to
+    /// the initial qualified source snapshot before this method returns. A
+    /// caller may therefore expose its publication facade immediately after a
+    /// successful return without racing same-coordinate admission.
     ///
     /// # Errors
     ///
@@ -194,12 +201,22 @@ impl Publication {
                 SemanticState::recovered(
                     edits,
                     author,
+                    receipt.current.publication.materialization_id,
                     selected_id,
                     source_floor,
                     failed_id,
                     sources,
                 ),
             ));
+        }
+        for index in 0..prepared.len() {
+            let (receipt_id, state) = &mut prepared[index];
+            if let Err(error) = self.reconcile_recovered(*receipt_id, state) {
+                for (_, state) in &mut prepared {
+                    state.close();
+                }
+                return Err(error);
+            }
         }
         let semantic_ids: std::collections::BTreeSet<_> =
             prepared.iter().map(|(receipt_id, _)| *receipt_id).collect();

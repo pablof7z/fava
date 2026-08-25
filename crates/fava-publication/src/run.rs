@@ -212,8 +212,7 @@ impl Publication {
             return None;
         };
         if let Some(state) = semantic {
-            self.rematerialize(&receipt, state);
-            let Some(current) = self.read_receipt(receipt_id, cancel).await else {
+            let Some(current) = self.initialize_semantic(receipt, state, cancel).await else {
                 state.close();
                 self.finished(receipt_id);
                 return None;
@@ -276,7 +275,7 @@ impl Publication {
         );
     }
 
-    fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
+    pub(super) fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
         let expected = receipt.current.publication.materialization_id;
         let expected_source = receipt.current.publication.materialization_source;
         let Ok((true, successor)) = self.semantic_successor(state, receipt.receipt_id) else {
@@ -341,6 +340,7 @@ impl Publication {
             );
         }
         state.selected_id = successor.as_ref().and_then(EventValue::id);
+        state.materialization_id = installed.current.publication.materialization_id;
         if let Some(source) = &successor {
             state.source_floor = Some(source.created_at());
         }

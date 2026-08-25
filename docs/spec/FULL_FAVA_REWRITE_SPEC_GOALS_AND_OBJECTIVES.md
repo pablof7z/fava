@@ -803,6 +803,12 @@ source-driven successor, publication MUST refresh custody for that exact
 materialization generation and prove that the complete durable edit sequence,
 not merely its final edit, produced the successor.
 
+On restart, publication MUST reconcile each recovered sequence against the
+initial qualified source snapshot before the facade can admit another edit for
+that coordinate. A recovered runner that observes a receipt generation newer
+than its loaded sequence MUST refresh exact-generation custody before
+materialization, signing, or routing begins.
+
 Rematerialization MUST:
 
 - preserve unrelated source changes;
@@ -1037,9 +1043,14 @@ Explicit routes remain fixed. Existing acknowledged destinations are not resent 
 
 ## WRITE-029 — Write recovery is complete before new work is admitted
 
-A persistent write store MUST recover its open obligations, receipts, current materializations, routes, and delivery state before the engine admits new commands that could conflict with them.
+A persistent write store MUST recover its open obligations, receipts, current materializations, routes, and delivery state before the engine admits new commands that could conflict with them. For semantic writes, engine recovery includes applying the complete durable edit sequence to the initial qualified source snapshot; starting a background runner is not completion of this admission barrier.
 
 Recovery work SHOULD scale with current open obligations and bounded retained evidence rather than the total historical number of completed attempts. Repeated superseding writes to one replaceable coordinate MUST recover as bounded current work rather than one active obligation per historical renewal. A live same-coordinate semantic edit sequence MUST recover in its exact accepted order under one stable write and receipt identity; its length is bounded by retained retired-generation evidence.
+
+Every recovered runner MUST bind its loaded sequence to the exact current
+materialization generation. If same-coordinate admission advances the receipt
+before that runner initializes, it MUST reload the newer complete sequence
+before opening signer or route work or reacting to later source state.
 
 Unchanged recovered state MUST NOT require rewriting every record merely to reopen.
 

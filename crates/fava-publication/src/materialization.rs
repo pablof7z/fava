@@ -5,8 +5,9 @@ use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapsh
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
 use fava_write::{
-    EventValue, Kind, PublicKey, ReceiptId, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Timestamp, UnsignedEvent, WriteIntent, WritePayload, WriteRouting,
+    EventValue, Kind, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit,
+    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
+    WriteRouting,
 };
 
 use super::{Publication, PublicationError};
@@ -95,6 +96,7 @@ pub(super) struct PreparedSemantic {
 pub(super) struct SemanticState {
     pub(super) edits: Vec<ReplaceableEventEdit>,
     pub(super) author: PublicKey,
+    pub(super) materialization_id: MaterializationId,
     pub(super) selected_id: Option<fava_write::EventId>,
     pub(super) source_floor: Option<Timestamp>,
     pub(super) failed_id: Option<fava_write::EventId>,
@@ -105,6 +107,7 @@ impl SemanticState {
     pub(super) fn recovered(
         edits: Vec<ReplaceableEventEdit>,
         author: PublicKey,
+        materialization_id: MaterializationId,
         selected_id: Option<fava_write::EventId>,
         source_floor: Option<Timestamp>,
         _failed_id: Option<fava_write::EventId>,
@@ -113,6 +116,7 @@ impl SemanticState {
         Self {
             edits,
             author,
+            materialization_id,
             selected_id,
             source_floor,
             // Recovery authorizes exactly one retry of the persisted failed
@@ -124,6 +128,24 @@ impl SemanticState {
 
     pub(super) fn close(&mut self) {
         self.sources.close();
+    }
+
+    pub(super) fn refresh_custody(
+        &mut self,
+        materialization_id: MaterializationId,
+        edits: Vec<ReplaceableEventEdit>,
+        author: PublicKey,
+        selected: Option<(fava_write::EventId, Timestamp)>,
+        failed_id: Option<fava_write::EventId>,
+    ) {
+        self.edits = edits;
+        self.author = author;
+        self.materialization_id = materialization_id;
+        self.selected_id = selected.map(|(id, _)| id);
+        if let Some((_, timestamp)) = selected {
+            self.source_floor = Some(timestamp);
+        }
+        self.failed_id = failed_id;
     }
 }
 
