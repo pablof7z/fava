@@ -127,8 +127,10 @@ async fn execute(id: &str, seed: &str, proxy_url: &str) -> CanaryResult<Scenario
         wire::publish(proxy_url, &initial).await?;
     }
     let query = Query::events()
+        .kinds([Kind::TextNote])
+        .map_err(error)?
         .authors([keys.public_key()])
-        .kind(Kind::TextNote)
+        .map_err(error)?
         .only_from_relays([relay.clone()])
         .map_err(error)?;
     let mut observation = fava.observe(query).await.map_err(error)?;
