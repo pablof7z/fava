@@ -176,8 +176,10 @@ async fn continuous_arrival_never_postpones_the_admission_window() {
 
 fn metadata_of(authors: impl IntoIterator<Item = PublicKey>, relay: &RelayUrl) -> Query {
     Query::events()
-        .kind(Kind::Metadata)
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
         .authors(authors)
+        .expect("test authors are bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid")
 }

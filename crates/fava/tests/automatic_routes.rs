@@ -249,7 +249,11 @@ async fn fallback_retracts_when_upstream_coverage_arrives_without_restarting_oth
         .build()
         .expect("assembly");
     let observation = fava
-        .observe(Query::events().authors(authors))
+        .observe(
+            Query::events()
+                .authors(authors)
+                .expect("two authors are bounded"),
+        )
         .await
         .expect("automatic query opens");
     wait_until(|| transport.requested(&stable) && transport.requested(&fallback)).await;

@@ -148,7 +148,10 @@ async fn cancelling_local_replacement_reveals_cached_predecessor() {
     let accepted = writes
         .accept_materialized(EventValue::Unsigned(successor))
         .expect("local successor accepts");
-    let query = Query::events().kind(Kind::ContactList).cache_only();
+    let query = Query::events()
+        .kinds([Kind::ContactList])
+        .expect("one kind is bounded")
+        .cache_only();
     let mut feed = fava.observe(query).await.expect("query opens");
 
     assert_eq!(feed.current().events.len(), 1);
@@ -288,7 +291,12 @@ async fn deletion_and_expiration_update_the_same_open_query() {
         );
     }
     let mut feed = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded")
+                .cache_only(),
+        )
         .await
         .expect("query opens");
     assert_eq!(feed.current().events.len(), 2);
@@ -401,10 +409,15 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
     let upper_p = SingleLetterTag::from_char('P').expect("uppercase tag key");
     let query = Query::events()
         .ids(all_ids)
+        .expect("six ids are bounded")
         .authors([keys.public_key()])
-        .kind(Kind::TextNote)
+        .expect("one author is bounded")
+        .kinds([Kind::TextNote])
+        .expect("one kind is bounded")
         .tag_values(e, ["café", "東京"])
+        .expect("two tag values are bounded")
         .tag_values(upper_p, ["CaseSensitive"])
+        .expect("one tag value is bounded")
         .cache_only();
 
     let feed = fava.observe(query).await.expect("query opens");
@@ -443,6 +456,7 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
         .observe(
             Query::events()
                 .tag_values(e, std::iter::empty::<String>())
+                .expect("an empty tag value collection is bounded")
                 .cache_only(),
         )
         .await

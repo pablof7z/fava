@@ -300,6 +300,7 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
         .expect("event signs");
     let query = Query::events()
         .authors([keys.public_key()])
+        .expect("one author is bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid");
 
@@ -473,8 +474,10 @@ fn session_key(relay: &RelayUrl) -> RelaySessionKey {
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
     Query::events()
-        .kind(Kind::Metadata)
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
         .authors([author])
+        .expect("one author is bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid")
 }

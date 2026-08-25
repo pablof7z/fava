@@ -164,7 +164,9 @@ fn local_replacement_overlays_then_reveals_cached_predecessor() {
         ))],
     );
     let writes = snapshot(SourceKind::WriteStore, vec![SourceEvent::Local(local)]);
-    let query = Query::events().kind(Kind::ContactList);
+    let query = Query::events()
+        .kinds([Kind::ContactList])
+        .expect("one kind is bounded");
 
     let overlaid = StandardQueryEvaluator
         .evaluate(&query, &[cache.clone(), writes])
@@ -196,10 +198,14 @@ fn nonmatching_local_replacement_shadows_cached_predecessor_until_cancelled() {
         ))],
     );
     let writes = snapshot(SourceKind::WriteStore, vec![local_unsigned(successor)]);
-    let query = Query::events().kind(Kind::ContactList).tag_values(
-        SingleLetterTag::from_char('d').expect("tag key"),
-        ["wanted"],
-    );
+    let query = Query::events()
+        .kinds([Kind::ContactList])
+        .expect("one kind is bounded")
+        .tag_values(
+            SingleLetterTag::from_char('d').expect("tag key"),
+            ["wanted"],
+        )
+        .expect("one tag value is bounded");
 
     let overlaid = StandardQueryEvaluator
         .evaluate(&query, &[cache.clone(), writes])
@@ -271,7 +277,12 @@ fn replaceable_tie_selects_the_lowest_event_id() {
     )];
 
     let result = StandardQueryEvaluator
-        .evaluate(&Query::events().kind(Kind::Metadata), &sources)
+        .evaluate(
+            &Query::events()
+                .kinds([Kind::Metadata])
+                .expect("one kind is bounded"),
+            &sources,
+        )
         .expect("evaluation succeeds");
 
     assert_eq!(result.events.len(), 1);
@@ -426,16 +437,21 @@ fn literal_tag_selection_matches_exact_signed_and_unsigned_cells() {
     ];
     let query = Query::events()
         .ids(all_ids)
-        .authors([keys.public_key()])
-        .kind(Kind::TextNote)
+        .and_then(|query| query.authors([keys.public_key()]))
+        .expect("test ids and author are bounded")
+        .kinds([Kind::TextNote])
+        .expect("one kind is bounded")
         .tag_values(
             SingleLetterTag::from_char('e').expect("tag key"),
             ["café", "東京"],
         )
-        .tag_values(
-            SingleLetterTag::from_char('P').expect("tag key"),
-            ["CaseSensitive"],
-        );
+        .and_then(|query| {
+            query.tag_values(
+                SingleLetterTag::from_char('P').expect("tag key"),
+                ["CaseSensitive"],
+            )
+        })
+        .expect("literal tag inputs are bounded");
 
     let result = StandardQueryEvaluator
         .evaluate(&query, &sources)
@@ -498,10 +514,12 @@ fn all_ascii_letter_keys_select_only_the_exact_case() {
             ),
             snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
         ];
-        let query = Query::events().tag_values(
-            SingleLetterTag::from_char(character).expect("ASCII tag key"),
-            ["exact"],
-        );
+        let query = Query::events()
+            .tag_values(
+                SingleLetterTag::from_char(character).expect("ASCII tag key"),
+                ["exact"],
+            )
+            .expect("one tag value is bounded");
 
         let result = StandardQueryEvaluator
             .evaluate(&query, &sources)
@@ -531,10 +549,12 @@ fn present_empty_literal_tag_axis_matches_nothing() {
         ),
         snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
     ];
-    let query = Query::events().tag_values(
-        SingleLetterTag::from_char('e').expect("tag key"),
-        std::iter::empty::<String>(),
-    );
+    let query = Query::events()
+        .tag_values(
+            SingleLetterTag::from_char('e').expect("tag key"),
+            std::iter::empty::<String>(),
+        )
+        .expect("empty tag input is bounded");
 
     let result = StandardQueryEvaluator
         .evaluate(&query, &sources)
