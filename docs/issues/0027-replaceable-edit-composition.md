@@ -1,6 +1,6 @@
 # Universal same-coordinate replaceable-edit composition
 
-**Status:** in progress
+**Status:** ready for independent re-review
 **Branch:** `fix/replaceable-edit-composition`
 **Authority:** WRITE-004/006/007/024/029, PROTO-001/002/003, M7
 **Approved by:** Pablo, 2026-08-25
@@ -73,11 +73,57 @@ the public proof and failed at the second `publish`: `Publication(Store(Refused(
 custody and started generation-one signing. This isolates the first causal gate:
 reservation counts a same-coordinate composition as a second active operation.
 
+## Independent-review blocker closure
+
+Commit `cda66754` adds causal red proofs for two independent defects in
+`31a87f1a`:
+
+- an anonymous reservation can be consumed by another coordinate and an active
+  coordinate can grow the reservation set without bound; and
+- a failed durable-sequence refresh still advances the runner's local signing
+  generation, after which successor installation accepts a replay carrying
+  only the final edit. Memory, redb, and post-SIGKILL stores all accept that
+  incomplete successor.
+
+Commit `b186aa61` closes both ownership defects. Every reservation now carries
+its exact author/kind/identifier coordinate in write-store state, with one
+reservation per coordinate and inactive reserved coordinates counted against
+the global active bound. Mismatched acceptance refuses without consuming the
+owner's reservation; matching post-coordinate failures still consume it.
+
+Durable custody reads now require the exact current `MaterializationId`.
+Publication retries failed reads without reopening signing or routing, re-reads
+the receipt if another composition supersedes the failed target generation,
+and advances only after the newest exact sequence is available. Successor
+installation receives the complete applied edit slice and refuses unless it
+equals durable custody after exact write, receipt, generation, and source
+validation.
+
 ## Validation gates
 
-- Focused public behavior and stale-completion tests.
-- Memory and redb write-store owner tests, including overflow atomicity.
-- Redb close/reopen/rematerialize proof.
-- Protocol-capability corpus for NIP-02 and bookmarks.
-- `python3 tools/check_vocabulary.py` and its unit tests.
-- Focused Cargo/Bazel targets, formatting, lint, and `git diff --check`.
+Green evidence:
+
+- `semantic_write_store`: memory 15 passed; redb 25 passed.
+- `semantic_write_failures`: 18 passed, including a persistent custody-read
+  failure across a further durable composition and newer source arrival.
+- `semantic_write_publication`: 21 passed; `semantic_write_contract`: 5 passed;
+  `semantic_write_capabilities`: 4 passed.
+- Redb `process_kill`: 8 passed, including incomplete-sequence refusal after
+  SIGKILL/reopen followed by complete ordered replay.
+- Bookmark, NIP-02, simple-groups, and the external semantic-capability
+  falsifier all passed.
+- `cargo check --workspace --all-targets --locked` passed.
+- Focused workspace and external-falsifier clippy passed with `-D warnings`.
+- `python3 -m unittest tools.tests.test_vocabulary_check`: 36 passed.
+- Every Rust file changed from `31a87f1a` passes `rustfmt --check`; `git diff
+  --check` passes.
+
+Independent residual gates:
+
+- Full vocabulary-checker output is byte-for-byte identical to `31a87f1a` and
+  remains red on its pre-existing terminal-name/approval inventory.
+- Full `cargo fmt --all -- --check` reports the same eleven pre-existing files
+  as `31a87f1a`.
+- Focused Bazel analysis reaches the five requested targets but builds none:
+  `//crates/fava-observe:lib` still lacks declared first-party dependencies and
+  fails with 76 unresolved-import errors. No Bazel-green claim is made.

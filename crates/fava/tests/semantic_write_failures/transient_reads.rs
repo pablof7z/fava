@@ -2,14 +2,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventValue, Kind, MaterializationId, ReceiptOutcome, ReplaceableEventEdit,
+    EventValue, Kind, MaterializationId, Receipt, ReceiptOutcome, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Timestamp, WriteRouting, all,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::{CacheMutation, CachedEvent};
 use fava_write::WriteIntent;
-use fava_write_store::WriteStore;
+use fava_write_store::{AcceptedWrite, WriteStore};
 use nostr::key::Keys;
 
 use super::failure_support::publish_edit;
@@ -18,6 +18,45 @@ use super::support::{
     BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, publication_builder,
     relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
 };
+
+fn compose_direct(
+    store: &FaultingWriteStore,
+    materializer: &TestMaterializer,
+    author: fava::PublicKey,
+    current: &Receipt,
+    change: u8,
+) -> AcceptedWrite {
+    let edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap();
+    let created_at = Timestamp::from(
+        current
+            .current
+            .event
+            .created_at()
+            .as_secs()
+            .checked_add(1)
+            .unwrap(),
+    );
+    let event = materializer
+        .materialize(&edit, author, Some(&current.current.event), created_at)
+        .unwrap();
+    let reservation = store
+        .reserve_active(&edit, author)
+        .expect("same coordinate reserves bounded composition");
+    store
+        .accept_reserved_materialized_edit(
+            reservation,
+            WriteIntent::edit_as(
+                edit,
+                author,
+                WriteRouting::explicit([super::support::relay_url()]).unwrap(),
+            )
+            .unwrap(),
+            event,
+            Some(&current.current.event),
+            None,
+        )
+        .expect("direct composition commits outside the existing runner")
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn transient_initial_read_resumes_semantic_runner_without_restart() {
@@ -71,42 +110,8 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     wait_for_signer(&signer, 1).await;
     let generation_one = first.receipt().expect("first generation remains live");
 
-    let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
-    let created_at = Timestamp::from(
-        generation_one
-            .current
-            .event
-            .created_at()
-            .as_secs()
-            .checked_add(1)
-            .unwrap(),
-    );
-    let second_event = materializer
-        .materialize(
-            &second_edit,
-            keys.public_key(),
-            Some(&generation_one.current.event),
-            created_at,
-        )
-        .unwrap();
     store.fail_materialized_reads(true);
-    let reservation = store
-        .reserve_active(&second_edit, keys.public_key())
-        .expect("same coordinate reserves composition");
-    let composed = store
-        .accept_reserved_materialized_edit(
-            reservation,
-            WriteIntent::edit_as(
-                second_edit,
-                keys.public_key(),
-                WriteRouting::explicit([super::support::relay_url()]).unwrap(),
-            )
-            .unwrap(),
-            second_event,
-            Some(&generation_one.current.event),
-            None,
-        )
-        .expect("second edit commits durably outside the existing runner");
+    let composed = compose_direct(&store, &materializer, keys.public_key(), &generation_one, 2);
     assert_eq!(
         composed.current.publication.materialization_id,
         MaterializationId::from_u64(2)
@@ -119,40 +124,13 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     })
     .await
     .expect("runner observes the injected durable custody failure");
-    let third_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![3]).unwrap();
-    let third_event = materializer
-        .materialize(
-            &third_edit,
-            keys.public_key(),
-            Some(&composed.current.event),
-            Timestamp::from(
-                composed
-                    .current
-                    .event
-                    .created_at()
-                    .as_secs()
-                    .checked_add(1)
-                    .unwrap(),
-            ),
-        )
-        .unwrap();
-    let third_reservation = store
-        .reserve_active(&third_edit, keys.public_key())
-        .expect("same coordinate reserves another bounded composition");
-    let third = store
-        .accept_reserved_materialized_edit(
-            third_reservation,
-            WriteIntent::edit_as(
-                third_edit,
-                keys.public_key(),
-                WriteRouting::explicit([super::support::relay_url()]).unwrap(),
-            )
-            .unwrap(),
-            third_event,
-            Some(&composed.current.event),
-            None,
-        )
-        .expect("newer durable composition supersedes the failed refresh target");
+    let third = compose_direct(
+        &store,
+        &materializer,
+        keys.public_key(),
+        &store.receipt(composed.receipt_id).unwrap().unwrap(),
+        3,
+    );
     assert_eq!(
         third.current.publication.materialization_id,
         MaterializationId::from_u64(3)
