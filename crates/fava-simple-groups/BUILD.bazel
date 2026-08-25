@@ -66,5 +66,7 @@ rust_test(
     compile_data = glob(["src/*.rs"]) + [
         "Cargo.toml",
         "BUILD.bazel",
+        "README.md",
+        "//:.bg-shell/simple-groups-semantic-catalog.jsonl",
     ],
 )

@@ -1954,11 +1954,12 @@ A new protocol crate is selected by the application profile and contributes thro
 **Responsibility:** provide typed NIP-02 contact-list reads and lossless
 follow-list edits over ordinary query and publication primitives.
 
-`contact_list(authors)` returns an ordinary kind-3 `Query` with replaceable
-event semantics. `followers_of(subject)` returns the corresponding query with
-an exact lowercase `p` tag-value constraint. `follows_of(snapshot)` is a pure
-projection of the valid follows in the current `QuerySnapshot`. These helpers
-own no observation or relay lifecycle.
+`contact_list(authors)` returns `Result<Query, QueryError>` for an ordinary
+kind-3 query with replaceable-event semantics. `followers_of(subject)` returns
+the same fallible neutral-query result with an exact lowercase `p` tag-value
+constraint. `follows_of(snapshot)` is a pure projection of the valid follows in
+the current `QuerySnapshot`. These helpers own no observation or relay
+lifecycle.
 
 `ContactList` accounts for every `p` row in source order. `Follow` exposes a
 valid first-occurrence row's typed public key, optional valid relay hint, and
@@ -1989,89 +1990,82 @@ resolve application authors, construct route sessions, or own receipts.
 described by `crates/fava-simple-groups/README.md` using only ordinary query
 and write values.
 
-`SimpleGroup` is a pure value containing one opaque simple group id and an
-application-selected, non-empty, bounded set of host relays. One host is the
-ordinary case. Several hosts are a required app aggregation for forked simple
-groups: the same id at two relays remains two independently authoritative
-relay groups, while the application may render their content as one
-deduplicated feed and inspect their record disagreement explicitly.
+`SimpleGroup` is a pure value containing one opaque simple group id and a
+normalized non-empty sequence of application-selected relays. Empty ids are
+valid opaque values. Construction requires one parsed `RelayUrl` plus a finite
+owned `Vec<RelayUrl>` tail and removes later duplicates in first-occurrence
+order.
 
 `SimpleGroup` owns no socket, observation, store, signer, routing session,
-delivery, retry, or receipt lifecycle. Its operations lower to universal
-primitives:
+delivery, retry, cancellation, or receipt lifecycle:
 
 ```rust
-SimpleGroup::on(hosts, id) -> Result<SimpleGroup, SimpleGroupError>
-simple_group.events(selection) -> Result<Query, SimpleGroupError>
-simple_group.records(which) -> Result<Query, SimpleGroupError>
-simple_group.project(snapshot) -> Result<SimpleGroupSnapshot, SimpleGroupError>
-simple_group.prepare(draft) -> Result<UnsignedEvent, SimpleGroupError>
+SimpleGroup::from_relays(id, first: RelayUrl, rest: Vec<RelayUrl>) -> SimpleGroup
+simple_group.events(selection) -> Result<Query, QueryError>
+simple_group.state_events(kinds) -> Result<Query, QueryError>
+simple_group.prepare(draft) -> Result<UnsignedEvent, EventBuildError>
 ```
 
-The approved public nominal vocabulary is:
+The implemented public nominal vocabulary is:
 
 ```rust
-pub struct SimpleGroup { /* private host set + id */ }
-pub struct SimpleGroups;
-pub struct SimpleGroupSnapshot { /* private bounded projection */ }
-pub enum SimpleGroupRecords { /* metadata/admin/member/role/participant/pin set */ }
+pub struct SimpleGroup { /* opaque id + application-selected relays */ }
+pub enum SimpleGroupStateEventKind { /* 39000 through 39005 */ }
 pub struct SimpleGroupMetadata { /* typed kind-39000 value */ }
 pub struct SimpleGroupAdmins { /* typed kind-39001 value */ }
 pub struct SimpleGroupMembers { /* typed kind-39002 value */ }
 pub struct SimpleGroupRoles { /* typed kind-39003 value */ }
-pub struct SimpleGroupParticipants { /* typed kind-39004 value */ }
+pub struct SimpleGroupLivekitParticipants { /* typed kind-39004 value */ }
 pub struct SimpleGroupPins { /* typed kind-39005 value */ }
-pub enum PinnedItem { /* ordered event/address target */ }
-pub struct SavedSimpleGroup { /* typed kind-10009 simple group row */ }
-pub struct SavedRelay { /* typed kind-10009 relay row */ }
-pub enum SimpleGroupError { /* typed construction/parsing/bounds refusal */ }
+pub enum SimpleGroupDecodeError { /* event boundary or semantic-entry failure */ }
+pub struct SavedSimpleGroup { /* typed kind-10009 simple group entry */ }
+pub struct SavedGroupList { /* one decoded kind-10009 event */ }
+pub enum SavedGroupListDecodeError { /* kind-10009 event or entry failure */ }
 ```
 
-The signatures are illustrative; the observable contract is fixed:
+`fava-state` does not own reusable application relay selection. Requiring one
+relay and a concrete `Vec` tail makes empty and arbitrary-iterator construction
+impossible without a numeric limit. Callers parse through `RelayUrl::parse`.
+The query owner's current 4,096 cap and write owner's current 256 cap are
+distinct provisional resource-safety shortcuts, not Nostr limits or domain
+semantics. `SimpleGroup` has no domain refusal enum.
 
-- content queries add exactly one `h = simple-group-id` constraint and use
-  `from_relays(hosts)`, preserving accepted local-write visibility while asking
-  exactly the selected hosts;
-- relay-authored record queries select kinds 39000 through 39005, add exactly
-  one `d = simple-group-id` constraint, and use `only_from_relays(hosts)`;
-- the same event id appears once across hosts with every actual relay evidence
-  contribution;
-- `SimpleGroupSnapshot` is a pure projection with typed merged views, per-host
-  views, and per-record disagreement; projection accepts at most 4,096
-  snapshot events and refuses the 4,097th as
-  `SimpleGroupError::TooManyDiscoveryItems` before deduplication; it never
-  field-merges conflicting metadata or chooses a canonical host;
-- member and admin collections retain per-entry host attribution, and absence
-  never proves non-membership or non-administration;
-- application code chooses one fork by constructing a single-host
-  `SimpleGroup`, not through hidden capability policy.
+Content queries preserve every unrelated selection axis, constrain lowercase
+`h` to exactly the group id without broadening an existing `h` axis, and use
+`from_relays(relays)`. Query-owned `Query::intersect_tag_values` performs the
+exact narrowing; a disjoint axis remains present-empty and matches nothing.
+`fava-simple-groups` returns the query owner's exact refusal without
+translation. State queries delegate their kind set to
+`Query::kinds`, add exact `d = id`, and use `only_from_relays(relays)`; an empty
+kind set keeps the query owner's match-nothing meaning. Both helpers return
+`QueryError` directly and own no private result limit or result projection.
 
-`SimpleGroups` builds ordinary discovery queries for saved simple groups,
-saved relays, and simple groups where subjects are listed as administrators or
-members. Discovery returns ordinary `Query` values and bounded pure
-projections rather than opening a private observation. `SavedSimpleGroup` and
-`SavedRelay` are typed projections of kind-10009 rows; the record parsers
-expose `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
-`SimpleGroupRoles`, `SimpleGroupParticipants`, `SimpleGroupPins`, and ordered
-`PinnedItem` values without requiring applications to interpret raw tags.
+Each state decoder accepts an ordinary `EventValue`, checks the exact kind and
+the first `d` tag's first value, and ignores later `d` tags, unknown tags, and
+unused extra values. Repeated semantic entries remain ordered. A malformed entry is
+retained as a local `Result` while valid siblings survive. Metadata keeps the
+first usable singleton field and all child entries. Pins preserve interleaved `e`
+and `a` order as `EventCoordinate` values. These values do not verify event ids
+or signatures and do not interpret relay evidence.
 
 Publication is kind-blind. An unsigned author-bearing draft receives exactly
-one matching `h` simple group tag, then the application calls
-`fava.to(simple_group.hosts()).publish(payload)` to select the exact explicit
-route. A pre-signed event is never mutated: the helper verifies its existing
-exact simple group tag, and the application supplies only the explicit route.
-Simple group management commands remain ordinary NIP-29 events. Kind-10009
-saved-list changes use `ReplaceableEventEdit` and the application-selected
-materializer through the one publication lifecycle.
+one matching `h` tag only when no existing `h` tag's first value matches. It
+preserves malformed, repeated, extended, and unrelated tags. The application
+calls `fava.to(simple_group.relays()).publish(payload)`; signed events and
+management-event wrappers are outside this owner.
 
-The host set shares the universal explicit-relay fan-out bound. Simple group
-ids, constructed tags, decoded records, projections, and discovery results
-have explicit structural/count bounds or typed refusal/shortfall. No helper
-silently truncates a host, record, row, or conflict.
+`saved_group_lists(authors)` constructs the ordinary kind-10009 query through
+the neutral query owner's bounded author-input constructor and preserves its
+typed `QueryError`. `SavedGroupList::from_event` represents one event and decodes group and
+relay entries exactly once, retaining order, repetitions, and entry-local errors.
+Crate-root save, remove, and rename functions return `ReplaceableEventEdit`;
+`saved_group_list_materializer()` integrates their private codec with Fava's
+generic semantic-write lifecycle. Edits preserve opaque content, foreign tags,
+malformed entries, unused trailing values, and unrelated order.
 
-The crate depends on `fava-query`, `fava-state`, and `fava-write`. Universal
-owners and the `fava` facade do not depend on `fava-simple-groups`, contain a
-NIP-29 kind switch, or bypass its public values.
+The crate depends on `fava-query`, `fava-state`, `fava-write`, and `nostr` for
+typed query, event-builder, and relay-parser failures. It owns no verification, generic bounds,
+projection, disagreement, discovery, management-event, or runtime policy.
 
 # Part VI — Universal engine owners
 

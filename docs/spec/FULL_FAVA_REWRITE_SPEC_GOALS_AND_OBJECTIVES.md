@@ -1347,8 +1347,9 @@ For replaceable events, a protocol crate SHOULD expose edits such as:
 
 The protocol crate owns how its edit applies to the event coordinate. The write store owns durable custody, materialization generations, signing, routing, delivery, and receipts.
 
-For NIP-02, `contact_list(authors)` and `followers_of(subject)` are ordinary
-kind-3 `Query` values, while `follows_of(snapshot)` is a typed snapshot
+For NIP-02, `contact_list(authors)` and `followers_of(subject)` are fallible
+builders for ordinary kind-3 `Query` values and return the neutral `QueryError`
+on bounded-input refusal, while `follows_of(snapshot)` is a typed snapshot
 projection.
 `ContactList` accounts for every `p` row in source order. Valid rows expose
 typed pubkey, relay-hint, and UTF-8 petname fields; malformed, duplicate, or
@@ -1379,33 +1380,56 @@ Reply, reaction, repost, quote, and comment crates each own their exact protocol
 ## PROTO-006 — `fava-simple-groups` preserves multi-relay simple group truth
 
 `fava-simple-groups` MUST expose a pure `SimpleGroup` value over one opaque
-NIP-29 simple group id and an application-selected non-empty, bounded set of
-host relays. One host is the ordinary case; several hosts are a required
-application aggregation for independently authoritative relay-local forks.
+NIP-29 simple group id and an application-selected, normalized, non-empty
+relay sequence. One relay and several relays use the same value and methods.
 
-Simple group content reads MUST add the exact `h` constraint and ask the
-complete host set through an ordinary `Query`. Relay-authored
-simple-group-record reads MUST add the exact `d` constraint, retain actual
-per-host relay evidence, and expose record disagreement rather than
-field-merging it or silently selecting a winner. The same event id served by
-several selected hosts appears once with every actual serving-relay
-contribution.
+Simple group content reads MUST constrain the `h` axis to the exact group id
+without broadening any existing `h` selection and ask the complete relay
+sequence through an ordinary `Query`. Query-owned
+`Query::intersect_tag_values` performs exact intersection; disjoint axes stay
+present-empty and match nothing. `fava-simple-groups` MUST NOT inspect or
+rewrite generic query selection or invent a query failure. Relay-generated
+state-event reads MUST add the exact
+`d` constraint, delegate the selected kinds 39000 through 39005 to the query
+owner, and use the selected relays as result-provenance authority. The query
+owner's empty-set meaning and exact `QueryError` refusals pass through
+unchanged. The capability MUST NOT impose a private result limit.
 
-Simple group publication MUST prepare the exact simple group context without
-restricting the carried event to a fixed set of event kinds. The application
-then publishes the prepared payload through
-`fava.to(simple_group.hosts()).publish(payload)`, which gives the universal
-publication owner the complete selected host set as its exact explicit route.
-Custom event kinds MUST use the same path. A pre-signed event is verified
-unchanged and MUST already carry the exact simple group context; adding
-routing cannot rewrite its tags.
+State-event decoders MUST check only the expected kind and the first `d` tag's
+first value at the event boundary. They MUST ignore unknown tags and unused
+extra values, retain repeated semantic entries in source order, and scope a
+malformed semantic entry to its own typed `Result`. Decoding establishes
+semantics, not signature, id, provenance, replacement, or snapshot authority.
+Pins MUST retain interleaved `e` and `a` order using the existing
+`EventCoordinate` value.
 
-The capability MUST return ordinary `Query`, event, or
-`ReplaceableEventEdit` values and MUST NOT own a socket, observation, signer,
-store, delivery, retry, or receipt lifecycle. It MUST provide typed bounded
-parsing/projection for NIP-29 records and saved rows so ordinary applications do
-not decode raw tags. Discovery remains declarative and makes no relay-global
-completeness, existence, membership-absence, or canonical-fork claim.
+Simple group publication MUST remain kind-blind. Preparing an unsigned event
+MUST preserve every existing tag; it returns unchanged when any `h` tag's first
+value equals the group id and otherwise appends one matching tag. The
+application publishes through `fava.to(simple_group.relays()).publish(payload)`.
+The helper MUST NOT accept or verify signed events or provide management-event
+wrappers.
+
+The capability MUST build the ordinary kind-10009 query for exact authors,
+decode one `SavedGroupList` per event, and provide pure saved-group and relay
+edits plus their materializer. Valid entries, repetitions, malformed siblings,
+unknown tags, opaque content, unused trailing values, and unrelated order MUST
+survive according to the edit's exact target semantics.
+
+`SimpleGroup::from_relays` MUST require one parsed `RelayUrl` and a finite owned
+`Vec<RelayUrl>` remainder, making empty and arbitrary-iterator construction
+impossible. It MUST preserve first occurrences and impose no numeric relay
+limit. Query author, kind, tag, id, and relay axes remain bounded by
+`fava-query`, while write routes retain their distinct `fava-write` cap. The
+current 4,096 query and 256 write values are provisional resource-safety
+shortcuts owned by those operation crates, not Nostr limits or domain
+semantics. The capability MUST return `QueryError` and `EventBuildError`
+directly from their owners without variant collapse or string translation.
+
+The capability MUST return ordinary `Query`, `UnsignedEvent`, or
+`ReplaceableEventEdit` values and MUST NOT own generic bounds, verification,
+projection, disagreement, discovery, socket, observation, signer, store,
+delivery, retry, cancellation, or receipt policy.
 
 ## PROTO-007 — NIP-25 reaction construction refuses ambiguous content
 

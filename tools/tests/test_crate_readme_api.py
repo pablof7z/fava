@@ -171,16 +171,41 @@ class PublicApiParsingTest(unittest.TestCase):
             ],
         )
 
+    def test_ignores_methods_on_external_types_that_mention_the_crate(self) -> None:
+        output = textwrap.dedent(
+            """\
+            pub mod sample
+            pub enum sample::Choice
+            impl core::convert::From<sample::Choice> for external::Kind
+            pub fn external::Kind::from(sample::Choice) -> Self
+            pub struct sample::Value
+            """
+        )
+
+        self.assertEqual(
+            api.parse_public_api(output, "sample"),
+            [
+                api.ApiItem("sample", "Module"),
+                api.ApiItem("sample::Choice", "Enum"),
+                api.ApiItem("sample::Value", "Struct"),
+            ],
+        )
+
 
 class ReadmeManagementTest(unittest.TestCase):
-    def test_adds_a_managed_table_without_changing_existing_prose(self) -> None:
+    def test_adds_grouped_h3_inventory_without_changing_existing_prose(self) -> None:
         original = "# sample\n\nArbitrary prose.\n\n\n"
-        items = [api.ApiItem("sample::Value", "Struct")]
+        items = [
+            api.ApiItem("sample", "Module", "pub mod sample"),
+            api.ApiItem("sample::Value", "Struct", "pub struct sample::Value"),
+        ]
 
         updated = api.expected_readme(original, items)
 
         self.assertTrue(updated.startswith(original))
-        self.assertIn("| Struct | `sample::Value` |  |", updated)
+        self.assertIn("### `sample` (Module)", updated)
+        self.assertIn("### `Value` (Struct)", updated)
+        self.assertIn('"signature":"pub struct sample::Value"', updated)
         self.assertEqual(updated.count(api.BEGIN_MARKER), 1)
         self.assertEqual(updated.count(api.END_MARKER), 1)
 
@@ -198,6 +223,7 @@ class ReadmeManagementTest(unittest.TestCase):
             """
         )
         items = [
+            api.ApiItem("sample", "Module"),
             api.ApiItem("sample::Added", "Function"),
             api.ApiItem("sample::Kept", "Struct"),
         ]
@@ -208,7 +234,67 @@ class ReadmeManagementTest(unittest.TestCase):
         self.assertTrue(updated.endswith("After.\n"))
         self.assertIn("Hand-written meaning with \\| separator.", updated)
         self.assertNotIn("sample::Removed", updated)
-        self.assertIn("| Function | `sample::Added` |  |", updated)
+        self.assertIn("**`Added`**<br><sub>Function</sub>", updated)
+
+    def test_grouped_catalog_refreshes_signatures_and_preserves_evidence_and_examples(self) -> None:
+        original = textwrap.dedent(
+            f'''\
+            {api.BEGIN_MARKER}
+            ### `sample` (Module)
+
+            Domain purpose.
+            <!-- api-item {{"kind":"Module","item":"sample","signature":"old module","evidence":"module evidence","example":"MOD-1"}} -->
+            Example coverage: [MOD-1](#mod-1).
+
+            | Item | Purpose |
+            | --- | --- |
+            | **`run`**<br><sub>Function</sub><!-- api-item {{"kind":"Function","item":"sample::run","signature":"old function","evidence":"function evidence","example":"MOD-1"}} --> | Runs the exact operation. |
+
+            <a id="mod-1"></a>
+            #### MOD-1 — concrete coverage
+            ```rust,no_run
+            fn main() {{}}
+            ```
+            {api.END_MARKER}
+            '''
+        )
+        items = [
+            api.ApiItem("sample", "Module", "pub mod sample"),
+            api.ApiItem("sample::run", "Function", "pub fn sample::run()"),
+        ]
+
+        updated = api.expected_readme(original, items)
+
+        self.assertIn('"signature":"pub mod sample"', updated)
+        self.assertIn('"signature":"pub fn sample::run()"', updated)
+        self.assertNotIn("old function", updated)
+        self.assertIn('"evidence":"function evidence"', updated)
+        self.assertIn("Runs the exact operation.", updated)
+        self.assertIn('#### MOD-1 — concrete coverage', updated)
+        self.assertIn("```rust,no_run\nfn main() {}\n```", updated)
+
+    def test_grouped_catalog_refreshes_compiler_derived_evidence(self) -> None:
+        original = textwrap.dedent(
+            f'''\
+            {api.BEGIN_MARKER}
+            ### `Value` (Struct)
+
+            Value purpose.
+            <!-- api-item {{"kind":"Struct","item":"sample::Value","signature":"old","evidence":"cargo-public-api@0.52.0: old"}} -->
+            {api.END_MARKER}
+            '''
+        )
+
+        updated = api.expected_readme(
+            original,
+            [api.ApiItem("sample::Value", "Struct", "pub struct sample::Value")],
+        )
+
+        self.assertIn(
+            '"evidence":"cargo-public-api@0.52.0: pub struct sample::Value"',
+            updated,
+        )
+        self.assertNotIn('"evidence":"cargo-public-api@0.52.0: old"', updated)
 
     def test_rejects_duplicate_or_malformed_managed_rows(self) -> None:
         duplicate = textwrap.dedent(
@@ -239,7 +325,10 @@ class ReadmeManagementTest(unittest.TestCase):
             readme.write_text("# sample\n", encoding="utf-8")
             self.assertIn("missing", api.check_package(root, package) or "")
 
-            current = [api.ApiItem("sample::Current", "Struct")]
+            current = [
+                api.ApiItem("sample", "Module"),
+                api.ApiItem("sample::Current", "Struct"),
+            ]
             readme.write_text(
                 api.expected_readme("# sample\n", current), encoding="utf-8"
             )
@@ -248,6 +337,29 @@ class ReadmeManagementTest(unittest.TestCase):
 
             changed = current + [api.ApiItem("sample::Added", "Function")]
             with patch.object(api, "inventory_for", return_value=changed):
+                self.assertIn("stale", api.check_package(root, package) or "")
+
+    def test_check_rejects_a_deleted_reexport(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = api.Package(
+                name="sample",
+                crate_name="sample",
+                directory=root,
+                manifest=root / "Cargo.toml",
+                readme=root / "README.md",
+            )
+            exported = [
+                api.ApiItem("sample", "Module"),
+                api.ApiItem("sample::Reexported", "Struct"),
+            ]
+            package.readme.write_text(
+                api.expected_readme("# sample\n", exported), encoding="utf-8"
+            )
+
+            with patch.object(
+                api, "inventory_for", return_value=[api.ApiItem("sample", "Module")]
+            ):
                 self.assertIn("stale", api.check_package(root, package) or "")
 
     def test_update_can_create_a_missing_crate_readme(self) -> None:
@@ -268,7 +380,8 @@ class ReadmeManagementTest(unittest.TestCase):
 
             created = package.readme.read_text(encoding="utf-8")
             self.assertTrue(created.startswith("# sample\n"))
-            self.assertIn("| Module | `sample` |  |", created)
+            self.assertIn("### `sample` (Module)", created)
+            self.assertIn('"item":"sample"', created)
 
 
 class ModifiedCratesTest(unittest.TestCase):
@@ -296,6 +409,17 @@ class ModifiedCratesTest(unittest.TestCase):
             [Path("crates/alpha/tests/public.rs"), Path("docs/guide.md")],
         )
 
+        self.assertEqual([package.name for package in changed], ["alpha"])
+
+    def test_deletion_only_diff_is_included_and_maps_to_its_crate(self) -> None:
+        completed = api.subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="crates/alpha/src/lib.rs\n", stderr=""
+        )
+        with patch.object(api, "run", return_value=completed) as run:
+            paths = api.changed_paths(self.root, "base", "head")
+
+        self.assertIn("--diff-filter=ACDMR", run.call_args.args[0])
+        changed = api.modified_packages(self.root, self.packages, paths)
         self.assertEqual([package.name for package in changed], ["alpha"])
 
     def test_root_manifest_change_checks_every_library_crate(self) -> None:
