@@ -13,8 +13,7 @@ mod tests {
 
     use super::*;
     use fava::{
-        EventBuildError, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp,
-        WriteIntentError,
+        EventBuildError, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp, WriteIntentError,
     };
     use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
     use nostr::key::Keys;
