@@ -175,6 +175,28 @@ class CanonicalMarkdownTest(unittest.TestCase):
         self.assertEqual(THROWAWAY_EVENT["content"], expected)
 
 
+class ReviewFieldsTest(unittest.TestCase):
+    def test_returns_canonical_fields_without_markdown_syntax(self) -> None:
+        term = {
+            "name": "T",
+            "source": "fava",
+            "meaning": "A thing.",
+            "symbols": ["z::Z", "a::A"],
+        }
+        self.assertEqual(
+            approval.review_fields(term),
+            [
+                {"name": "source", "value": "fava"},
+                {"name": "meaning", "value": "A thing."},
+                {"name": "symbols", "value": ["a::A", "z::Z"]},
+            ],
+        )
+
+    def test_rejects_invalid_values_like_canonical_markdown(self) -> None:
+        with self.assertRaisesRegex(ValueError, "meaning.*str"):
+            approval.review_fields({"name": "T", "meaning": ["not text"]})
+
+
 class ApprovedNameTest(unittest.TestCase):
     def test_returns_name_for_single_name_tag(self) -> None:
         event = {"tags": [["name", "Query"]]}
@@ -786,8 +808,13 @@ class ServerTest(unittest.TestCase):
     def test_get_terms_returns_event_term(self) -> None:
         with self._get("/api/terms") as resp:
             payload = json.loads(resp.read())
-        names = [t["name"] for t in payload["terms"]]
-        self.assertIn("Event", names)
+        event = next(term for term in payload["terms"] if term["name"] == "Event")
+        self.assertEqual(event["review"], [
+            {"name": "source", "value": "nostr"},
+            {"name": "protocol", "value": "NIP-01"},
+            {"name": "owner", "value": "nostr"},
+            {"name": "meaning", "value": "A signed Nostr event."},
+        ])
 
     def test_wrong_path_returns_404(self) -> None:
         import urllib.error

@@ -413,6 +413,55 @@ def canonical_markdown(term: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the canonical approval fields in a form the UI can display.
+
+    The values and ordering match ``canonical_markdown`` but stay structured,
+    so the approval UI never needs to interpret its signed Markdown payload.
+    """
+    fields: list[dict[str, Any]] = []
+    for field in PROSE_FIELDS:
+        value = term.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(
+                f"field '{field}' must be a str, got {type(value).__name__}"
+            )
+        stripped = value.strip()
+        if stripped:
+            fields.append({"name": field, "value": stripped})
+    for field in LIST_FIELDS:
+        value = term.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            raise ValueError(
+                f"field '{field}' must be a list, got {type(value).__name__}"
+            )
+        if not value:
+            continue
+        if any(not isinstance(element, str) for element in value):
+            index = next(
+                i for i, element in enumerate(value) if not isinstance(element, str)
+            )
+            raise ValueError(
+                f"field '{field}[{index}]' must be a str, got "
+                f"{type(value[index]).__name__}"
+            )
+        fields.append({"name": field, "value": sorted(value)})
+    for field in sorted(
+        key for key in term if key not in {"name", *PROSE_FIELDS, *LIST_FIELDS}
+    ):
+        value = term[field]
+        if not isinstance(value, (str, int, float, bool)):
+            raise ValueError(
+                f"extra field '{field}' has unrenderable type {type(value).__name__}"
+            )
+        fields.append({"name": field, "value": str(value)})
+    return fields
+
+
 def approved_name(event: dict[str, Any]) -> str | None:
     """The single term name one approval event carries, if it carries one."""
     names = [
