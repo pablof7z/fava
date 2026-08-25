@@ -18,7 +18,10 @@ rust_library(
         "//crates/fava-write:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
-    compile_data = ["Cargo.toml"],
+    compile_data = [
+        "Cargo.toml",
+        "README.md",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -34,6 +37,7 @@ rust_test(
         "//crates/fava-write:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["README.md"],
 )
 
 rust_test(
@@ -43,7 +47,6 @@ rust_test(
     edition = crate_edition(),
     deps = [
         ":lib",
-        "//crates/fava:lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
@@ -60,16 +63,10 @@ rust_test(
         "//crates/fava-query:lib",
         "//crates/fava-write:lib",
     ],
-    compile_data = [
+    compile_data = glob(["src/*.rs"]) + [
         "Cargo.toml",
         "BUILD.bazel",
-        "src/lib.rs",
-    ],
-    data = [
-        ":architecture_sources",
-        "//crates/fava-query:architecture_sources",
-        "//crates/fava-state:architecture_sources",
-        "//crates/fava-write:architecture_sources",
-        "//crates/fava:architecture_sources",
+        "README.md",
+        "//:.bg-shell/simple-groups-semantic-catalog.jsonl",
     ],
 )

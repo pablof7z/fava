@@ -59,8 +59,10 @@ async fn signer_and_relay_scopes_compose_in_both_orders() {
     let observation = fava
         .observe(
             Query::events()
+                .kinds([Kind::ContactList])
+                .expect("one kind is bounded")
                 .authors([author.public_key()])
-                .kind(Kind::ContactList)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await
@@ -118,8 +120,10 @@ async fn equivalent_explicitly_authored_edits_have_distinct_custody_identities()
     let observation = fava
         .observe(
             Query::events()
+                .kinds([Kind::ContactList])
+                .expect("one kind is bounded")
                 .authors([author.public_key()])
-                .kind(Kind::ContactList)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await

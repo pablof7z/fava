@@ -1,289 +1,213 @@
-use std::collections::BTreeSet;
+use fava_write::{EventValue, PublicKey};
 
-use fava_write::{EventValue, PublicKey, Tag};
+use crate::records::{SimpleGroupDecodeError, required_value, state_event};
 
-use crate::SimpleGroupError;
-use crate::records::record_boundary;
-
-/// Positive administrator rows from one signed kind-39001 record.
+/// Semantic kind-39001 administrator entries from one event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SimpleGroupAdmins {
     id: String,
     author: PublicKey,
-    admins: Vec<Result<(PublicKey, Vec<String>), SimpleGroupError>>,
+    admins: Vec<Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>>,
 }
 
-/// Positive member rows from one signed kind-39002 record.
+/// Semantic kind-39002 member entries from one event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SimpleGroupMembers {
     id: String,
     author: PublicKey,
-    members: Vec<Result<PublicKey, SimpleGroupError>>,
+    members: Vec<Result<PublicKey, SimpleGroupDecodeError>>,
 }
 
-/// Role definitions from one signed kind-39003 record.
+/// Semantic kind-39003 role entries from one event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SimpleGroupRoles {
     id: String,
     author: PublicKey,
-    roles: Vec<Result<(String, Option<String>), SimpleGroupError>>,
+    roles: Vec<Result<(String, Option<String>), SimpleGroupDecodeError>>,
 }
 
-/// Positive live participant rows from one signed kind-39004 record.
+/// Semantic kind-39004 `LiveKit` participant entries from one event.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SimpleGroupParticipants {
+pub struct SimpleGroupLivekitParticipants {
     id: String,
     author: PublicKey,
-    participants: Vec<Result<PublicKey, SimpleGroupError>>,
+    participants: Vec<Result<PublicKey, SimpleGroupDecodeError>>,
 }
 
+macro_rules! common_accessors {
+    ($type:ty) => {
+        impl $type {
+            /// Borrow the first `d` tag's first value.
+            #[must_use]
+            pub fn id(&self) -> &str {
+                &self.id
+            }
+
+            /// Return the event author.
+            #[must_use]
+            pub const fn author(&self) -> PublicKey {
+                self.author
+            }
+        }
+    };
+}
+
+common_accessors!(SimpleGroupAdmins);
+common_accessors!(SimpleGroupMembers);
+common_accessors!(SimpleGroupRoles);
+common_accessors!(SimpleGroupLivekitParticipants);
+
 impl SimpleGroupAdmins {
-    /// Parse one signed kind-39001 record.
+    /// Decode one kind-39001 event, retaining `p`-tag-local failures.
     ///
     /// # Errors
     ///
-    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
-        let boundary = record_boundary(event, 39_001)?;
-        let author = boundary.author();
-        let admins = collect_rows(
-            boundary.tags(),
-            "p",
-            parse_admin,
-            |(key, _): &(PublicKey, Vec<String>)| *key,
-        );
+    /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupDecodeError> {
+        let (id, author, tags) = state_event(event, 39_001)?;
+        let admins = tags
+            .iter()
+            .enumerate()
+            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .map(|(tag_index, tag)| parse_admin(tag.as_slice(), tag_index))
+            .collect();
         Ok(Self {
-            id: boundary.id,
+            id: id.to_owned(),
             author,
             admins,
         })
     }
 
-    /// Exact simple group id.
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    /// Relay author that signed this record.
-    #[must_use]
-    pub const fn author(&self) -> PublicKey {
-        self.author
-    }
-
-    /// Source-ordered positive rows and row-local failures.
-    pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), SimpleGroupError>] {
+    /// Return every `p` tag as key plus roles or a local failure.
+    pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>] {
         &self.admins
     }
 }
 
 impl SimpleGroupMembers {
-    /// Parse one signed kind-39002 record.
+    /// Decode one kind-39002 event, retaining `p`-tag-local failures.
     ///
     /// # Errors
     ///
-    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
-        let boundary = record_boundary(event, 39_002)?;
-        let author = boundary.author();
-        let members = collect_rows(
-            boundary.tags(),
-            "p",
-            |index, values| parse_key(index, values, false),
-            |key| *key,
-        );
+    /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupDecodeError> {
+        let (id, author, tags) = state_event(event, 39_002)?;
+        let members = tags
+            .iter()
+            .enumerate()
+            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .map(|(tag_index, tag)| parse_public_key(tag.as_slice(), tag_index))
+            .collect();
         Ok(Self {
-            id: boundary.id,
+            id: id.to_owned(),
             author,
             members,
         })
     }
 
-    /// Exact simple group id.
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    /// Relay author that signed this record.
-    #[must_use]
-    pub const fn author(&self) -> PublicKey {
-        self.author
-    }
-
-    /// Source-ordered positive rows and row-local failures.
-    pub fn members(&self) -> &[Result<PublicKey, SimpleGroupError>] {
+    /// Return every `p` tag as its parsed first value or a local failure.
+    pub fn members(&self) -> &[Result<PublicKey, SimpleGroupDecodeError>] {
         &self.members
     }
 }
 
 impl SimpleGroupRoles {
-    /// Parse one signed kind-39003 record.
+    /// Decode one kind-39003 event, retaining `role`-tag-local failures.
     ///
     /// # Errors
     ///
-    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
-        let boundary = record_boundary(event, 39_003)?;
-        let author = boundary.author();
-        let roles = collect_rows(
-            boundary.tags(),
-            "role",
-            parse_role,
-            |(name, _): &(String, Option<String>)| name.clone(),
-        );
+    /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupDecodeError> {
+        let (id, author, tags) = state_event(event, 39_003)?;
+        let roles = tags
+            .iter()
+            .enumerate()
+            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("role"))
+            .map(|(tag_index, tag)| {
+                let values = tag.as_slice();
+                required_value(values, tag_index, 1)
+                    .map(|name| (name.to_owned(), values.get(2).cloned()))
+            })
+            .collect();
         Ok(Self {
-            id: boundary.id,
+            id: id.to_owned(),
             author,
             roles,
         })
     }
 
-    /// Exact simple group id.
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    /// Relay author that signed this record.
-    #[must_use]
-    pub const fn author(&self) -> PublicKey {
-        self.author
-    }
-
-    /// Source-ordered role names and optional descriptions with row-local failures.
-    pub fn roles(&self) -> &[Result<(String, Option<String>), SimpleGroupError>] {
+    /// Return every `role` tag as name plus optional description or a local failure.
+    pub fn roles(&self) -> &[Result<(String, Option<String>), SimpleGroupDecodeError>] {
         &self.roles
     }
 }
 
-impl SimpleGroupParticipants {
-    /// Parse one signed kind-39004 record.
+impl SimpleGroupLivekitParticipants {
+    /// Decode one kind-39004 event, retaining `participant`-tag-local failures.
     ///
     /// # Errors
     ///
-    /// Returns [`SimpleGroupError`] when the signed record boundary is invalid.
-    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupError> {
-        let boundary = record_boundary(event, 39_004)?;
-        let author = boundary.author();
-        let participants = collect_rows(
-            boundary.tags(),
-            "participant",
-            |index, values| parse_key(index, values, true),
-            |key| *key,
-        );
+    /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
+    pub fn from_event(event: &EventValue) -> Result<Self, SimpleGroupDecodeError> {
+        let (id, author, tags) = state_event(event, 39_004)?;
+        let participants = tags
+            .iter()
+            .enumerate()
+            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("participant"))
+            .map(|(tag_index, tag)| parse_livekit_key(tag.as_slice(), tag_index))
+            .collect();
         Ok(Self {
-            id: boundary.id,
+            id: id.to_owned(),
             author,
             participants,
         })
     }
 
-    /// Exact simple group id.
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    /// Relay author that signed this record.
-    #[must_use]
-    pub const fn author(&self) -> PublicKey {
-        self.author
-    }
-
-    /// Source-ordered positive rows and row-local failures.
-    pub fn participants(&self) -> &[Result<PublicKey, SimpleGroupError>] {
+    /// Return every `participant` tag as its parsed first value or a local failure.
+    pub fn participants(&self) -> &[Result<PublicKey, SimpleGroupDecodeError>] {
         &self.participants
     }
 }
 
 fn parse_admin(
-    tag_index: usize,
     values: &[String],
-) -> Result<(PublicKey, Vec<String>), SimpleGroupError> {
-    if values.len() < 3 {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "admin row requires a public key and at least one role",
-        });
-    }
-    let key = parse_key_prefix(tag_index, values, false)?;
+    tag_index: usize,
+) -> Result<(PublicKey, Vec<String>), SimpleGroupDecodeError> {
+    let key = parse_public_key(values, tag_index)?;
+    required_value(values, tag_index, 2)?;
     Ok((key, values[2..].to_vec()))
 }
 
-fn parse_key(
-    tag_index: usize,
+fn parse_public_key(
     values: &[String],
-    require_lowercase: bool,
-) -> Result<PublicKey, SimpleGroupError> {
-    if values.len() != 2 {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "public-key row must contain exactly one value",
-        });
-    }
-    parse_key_prefix(tag_index, values, require_lowercase)
-}
-
-fn parse_key_prefix(
     tag_index: usize,
-    values: &[String],
-    require_lowercase: bool,
-) -> Result<PublicKey, SimpleGroupError> {
-    let value = values.get(1).ok_or(SimpleGroupError::MalformedRecordRow {
+) -> Result<PublicKey, SimpleGroupDecodeError> {
+    let raw = required_value(values, tag_index, 1)?;
+    PublicKey::from_hex(raw).map_err(|_| SimpleGroupDecodeError::InvalidPublicKey {
         tag_index,
-        reason: "public key is missing or invalid",
-    })?;
-    if require_lowercase
-        && (value.len() != 64 || value.bytes().any(|byte| byte.is_ascii_uppercase()))
-    {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "participant public key must be lowercase hex",
-        });
-    }
-    PublicKey::from_hex(value).map_err(|_| SimpleGroupError::MalformedRecordRow {
-        tag_index,
-        reason: "public key is missing or invalid",
+        value_index: 1,
     })
 }
 
-fn parse_role(
-    tag_index: usize,
+fn parse_livekit_key(
     values: &[String],
-) -> Result<(String, Option<String>), SimpleGroupError> {
-    if !(2..=3).contains(&values.len()) {
-        return Err(SimpleGroupError::MalformedRecordRow {
+    tag_index: usize,
+) -> Result<PublicKey, SimpleGroupDecodeError> {
+    let raw = required_value(values, tag_index, 1)?;
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey {
             tag_index,
-            reason: "role row requires a name and optional description",
+            value_index: 1,
         });
     }
-    if values[1].is_empty() {
-        return Err(SimpleGroupError::MalformedRecordRow {
+    PublicKey::from_hex(raw).map_err(|_| {
+        SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey {
             tag_index,
-            reason: "role name must not be empty",
-        });
-    }
-    Ok((values[1].clone(), values.get(2).cloned()))
-}
-
-fn collect_rows<T, K>(
-    tags: &[Tag],
-    row_name: &str,
-    parse: impl Fn(usize, &[String]) -> Result<T, SimpleGroupError>,
-    key: impl Fn(&T) -> K,
-) -> Vec<Result<T, SimpleGroupError>>
-where
-    K: Ord,
-{
-    let mut seen = BTreeSet::new();
-    tags.iter()
-        .enumerate()
-        .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some(row_name))
-        .map(|(tag_index, tag)| match parse(tag_index, tag.as_slice()) {
-            Ok(value) if seen.insert(key(&value)) => Ok(value),
-            Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
-            Err(error) => Err(error),
-        })
-        .collect()
+            value_index: 1,
+        }
+    })
 }

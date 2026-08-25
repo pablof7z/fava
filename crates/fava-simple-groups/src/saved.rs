@@ -1,188 +1,179 @@
-use std::collections::BTreeSet;
+use std::fmt;
 
 use fava_state::RelayUrl;
-use fava_write::{EventValue, PublicKey};
+use fava_write::{EventValue, Kind, PublicKey};
 
-use crate::SimpleGroupError;
-use crate::records::saved_boundary;
-
-/// One public saved-simple-group row from a signed kind-10009 list.
+/// One valid semantic `group` entry from a kind-10009 Simple Group List event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SavedSimpleGroup {
     id: String,
     relay: RelayUrl,
-    name: Option<String>,
-    author: PublicKey,
-}
-
-/// One public relay-in-use row from a signed kind-10009 list.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SavedRelay {
-    relay: RelayUrl,
-    author: PublicKey,
+    display_name: Option<String>,
 }
 
 impl SavedSimpleGroup {
-    /// Parse bounded public `group` rows while conserving row-local failures.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SimpleGroupError`] when the signed kind-10009 boundary is invalid.
-    pub fn from_event(
-        event: &EventValue,
-    ) -> Result<Vec<Result<Self, SimpleGroupError>>, SimpleGroupError> {
-        let event = saved_boundary(event)?;
-        let mut seen = BTreeSet::new();
-        Ok(event
-            .tags
-            .iter()
-            .enumerate()
-            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("group"))
-            .map(|(tag_index, tag)| {
-                match parse_simple_group(tag_index, tag.as_slice(), event.pubkey) {
-                    Ok(simple_group)
-                        if seen.insert((simple_group.id.clone(), simple_group.relay.clone())) =>
-                    {
-                        Ok(simple_group)
-                    }
-                    Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
-                    Err(error) => Err(error),
-                }
-            })
-            .collect())
-    }
-
-    /// Exact opaque simple group id.
+    /// Borrow the exact group id.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    /// Parsed inert host relay.
+    /// Borrow the parsed inert relay URL.
     #[must_use]
     pub const fn relay(&self) -> &RelayUrl {
         &self.relay
     }
 
-    /// Optional exact display name; present-empty remains `Some("")`.
+    /// Return the optional exact display name.
     #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Author who saved this row.
-    #[must_use]
-    pub const fn author(&self) -> PublicKey {
-        self.author
+    pub fn display_name(&self) -> Option<&str> {
+        self.display_name.as_deref()
     }
 }
 
-impl SavedRelay {
-    /// Parse bounded public `r` rows while conserving row-local failures.
+/// One kind-10009 event decoded into public `group` and `r` entries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SavedGroupList {
+    author: PublicKey,
+    simple_groups: Vec<Result<SavedSimpleGroup, SavedGroupListDecodeError>>,
+    relays: Vec<Result<RelayUrl, SavedGroupListDecodeError>>,
+}
+
+impl SavedGroupList {
+    /// Decode one kind-10009 event without establishing trust or provenance.
     ///
     /// # Errors
     ///
-    /// Returns [`SimpleGroupError`] when the signed kind-10009 boundary is invalid.
-    pub fn from_event(
-        event: &EventValue,
-    ) -> Result<Vec<Result<Self, SimpleGroupError>>, SimpleGroupError> {
-        let event = saved_boundary(event)?;
-        let mut seen = BTreeSet::new();
-        Ok(event
-            .tags
-            .iter()
-            .enumerate()
-            .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("r"))
-            .map(
-                |(tag_index, tag)| match parse_relay(tag_index, tag.as_slice(), event.pubkey) {
-                    Ok(relay) if seen.insert(relay.relay.clone()) => Ok(relay),
-                    Ok(_) => Err(SimpleGroupError::DuplicateRecordRow { tag_index }),
-                    Err(error) => Err(error),
-                },
-            )
-            .collect())
+    /// Returns [`SavedGroupListDecodeError::WrongEventKind`] for another kind.
+    pub fn from_event(event: &EventValue) -> Result<Self, SavedGroupListDecodeError> {
+        let expected = Kind::from_u16(10_009);
+        let actual = event.kind();
+        if actual != expected {
+            return Err(SavedGroupListDecodeError::WrongEventKind { expected, actual });
+        }
+        let mut simple_groups = Vec::new();
+        let mut relays = Vec::new();
+        for (tag_index, tag) in event.tags().iter().enumerate() {
+            let values = tag.as_slice();
+            match values.first().map(String::as_str) {
+                Some("group") => simple_groups.push(parse_group(values, tag_index)),
+                Some("r") => relays.push(parse_relay(values, tag_index)),
+                _ => {}
+            }
+        }
+        Ok(Self {
+            author: event.author(),
+            simple_groups,
+            relays,
+        })
     }
 
-    /// Parsed inert relay URL.
-    #[must_use]
-    pub const fn relay(&self) -> &RelayUrl {
-        &self.relay
-    }
-
-    /// Author who saved this row.
+    /// Return the event author.
     #[must_use]
     pub const fn author(&self) -> PublicKey {
         self.author
     }
+
+    /// Return all `group` entries and local failures in relative source order.
+    pub fn simple_groups(&self) -> &[Result<SavedSimpleGroup, SavedGroupListDecodeError>] {
+        &self.simple_groups
+    }
+
+    /// Return all `r` entries and local failures in relative source order.
+    pub fn relays(&self) -> &[Result<RelayUrl, SavedGroupListDecodeError>] {
+        &self.relays
+    }
 }
 
-fn parse_simple_group(
-    tag_index: usize,
+/// A source-positioned semantic failure while decoding a Simple Group List event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SavedGroupListDecodeError {
+    /// The decoder received a non-10009 event.
+    WrongEventKind {
+        /// Required kind.
+        expected: Kind,
+        /// Supplied kind.
+        actual: Kind,
+    },
+    /// A recognized tag lacks a required position.
+    MissingTagValue {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based index in `Tag::as_slice()`.
+        value_index: usize,
+    },
+    /// A required relay value is invalid.
+    InvalidRelayUrl {
+        /// Zero-based event tag index.
+        tag_index: usize,
+        /// Zero-based value index.
+        value_index: usize,
+    },
+}
+
+impl fmt::Display for SavedGroupListDecodeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrongEventKind { expected, actual } => {
+                write!(formatter, "wrong event kind {actual}; expected {expected}")
+            }
+            Self::MissingTagValue {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has no value at position {value_index}"
+            ),
+            Self::InvalidRelayUrl {
+                tag_index,
+                value_index,
+            } => write!(
+                formatter,
+                "tag {tag_index} has an invalid relay URL at position {value_index}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SavedGroupListDecodeError {}
+
+fn parse_group(
     values: &[String],
-    author: PublicKey,
-) -> Result<SavedSimpleGroup, SimpleGroupError> {
-    if values.len() < 3 {
-        return Err(SimpleGroupError::MalformedRecordRow {
+    tag_index: usize,
+) -> Result<SavedSimpleGroup, SavedGroupListDecodeError> {
+    let id = required(values, tag_index, 1)?.to_owned();
+    let relay = RelayUrl::parse(required(values, tag_index, 2)?).map_err(|_| {
+        SavedGroupListDecodeError::InvalidRelayUrl {
             tag_index,
-            reason: "saved simple group row is missing id or relay",
-        });
-    }
-    if values.len() > 4 {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "saved simple group row has extra columns",
-        });
-    }
-    if values[1].is_empty() {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "saved simple group id is empty",
-        });
-    }
-    if values[2].is_empty() {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "saved simple group relay is empty",
-        });
-    }
-    let relay = RelayUrl::parse(&values[2]).map_err(|_| SimpleGroupError::MalformedRecordRow {
-        tag_index,
-        reason: "saved simple group relay is invalid",
+            value_index: 2,
+        }
     })?;
     Ok(SavedSimpleGroup {
-        id: values[1].clone(),
+        id,
         relay,
-        name: values.get(3).cloned(),
-        author,
+        display_name: values.get(3).cloned(),
     })
 }
 
-fn parse_relay(
-    tag_index: usize,
+fn parse_relay(values: &[String], tag_index: usize) -> Result<RelayUrl, SavedGroupListDecodeError> {
+    RelayUrl::parse(required(values, tag_index, 1)?).map_err(|_| {
+        SavedGroupListDecodeError::InvalidRelayUrl {
+            tag_index,
+            value_index: 1,
+        }
+    })
+}
+
+fn required(
     values: &[String],
-    author: PublicKey,
-) -> Result<SavedRelay, SimpleGroupError> {
-    if values.len() < 2 {
-        return Err(SimpleGroupError::MalformedRecordRow {
+    tag_index: usize,
+    value_index: usize,
+) -> Result<&str, SavedGroupListDecodeError> {
+    values
+        .get(value_index)
+        .map(String::as_str)
+        .ok_or(SavedGroupListDecodeError::MissingTagValue {
             tag_index,
-            reason: "saved relay row is missing its URL",
-        });
-    }
-    if values.len() > 2 {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "saved relay row has extra columns",
-        });
-    }
-    if values[1].is_empty() {
-        return Err(SimpleGroupError::MalformedRecordRow {
-            tag_index,
-            reason: "saved relay URL is empty",
-        });
-    }
-    let relay = RelayUrl::parse(&values[1]).map_err(|_| SimpleGroupError::MalformedRecordRow {
-        tag_index,
-        reason: "saved relay URL is invalid",
-    })?;
-    Ok(SavedRelay { relay, author })
+            value_index,
+        })
 }

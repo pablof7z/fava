@@ -228,7 +228,11 @@ async fn failed_discovery_source_stays_unresolved_and_never_becomes_settled_abse
         detail: BoundedText::new("indexer socket died"),
     }));
     let router = OutboxRouter::new("nip65", [indexer], source).unwrap();
-    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let request = RouteRequest::Read(
+        Query::events()
+            .authors([author.public_key()])
+            .expect("one author is bounded"),
+    );
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
     let mut session = router.open(request, upstream).expect("router opens");
 
@@ -259,7 +263,11 @@ async fn discovery_source_completing_without_a_relay_list_settles_absence() {
     let indexer = relay("indexer");
     let source = Arc::new(WatchSource::new());
     let router = OutboxRouter::new("nip65", [indexer], source.clone()).unwrap();
-    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let request = RouteRequest::Read(
+        Query::events()
+            .authors([author.public_key()])
+            .expect("one author is bounded"),
+    );
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
     let mut session = router.open(request, upstream).expect("router opens");
 
@@ -281,7 +289,11 @@ async fn discarded_relay_list_failures_are_reported_as_an_exact_overflow_shortfa
     let indexer = relay("indexer");
     let source = Arc::new(WatchSource::new());
     let router = OutboxRouter::new("nip65", [indexer], source.clone()).unwrap();
-    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let request = RouteRequest::Read(
+        Query::events()
+            .authors([author.public_key()])
+            .expect("one author is bounded"),
+    );
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
     let mut session = router.open(request, upstream).expect("router opens");
 
@@ -337,7 +349,11 @@ async fn a_cleanly_closed_discovery_source_settles_absence_through_the_error_cha
     let indexer = relay("indexer");
     let source = Arc::new(ClosingSource(SourceTerminationCause::ProviderClosed));
     let router = OutboxRouter::new("nip65", [indexer], source).unwrap();
-    let request = RouteRequest::Read(Query::events().authors([author.public_key()]));
+    let request = RouteRequest::Read(
+        Query::events()
+            .authors([author.public_key()])
+            .expect("one author is bounded"),
+    );
     let (_, upstream) = watch::channel(Arc::new(RoutePlan::default()));
     let mut session = router.open(request, upstream).expect("router opens");
 

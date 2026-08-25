@@ -219,7 +219,11 @@ mod tests {
         assert_eq!(edit.identifier(), None);
         assert_eq!(
             external_query(actor),
-            Query::events().authors([actor]).kind(external_kind())
+            Query::events()
+                .authors([actor])
+                .expect("one author is bounded")
+                .kinds([external_kind()])
+                .expect("one kind is bounded")
         );
     }
 }

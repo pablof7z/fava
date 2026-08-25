@@ -24,7 +24,11 @@ pub const fn external_kind() -> Kind {
 /// Build the capability-owned author-and-kind query fragment.
 #[must_use]
 pub fn external_query(actor: PublicKey) -> Query {
-    Query::events().authors([actor]).kind(KIND)
+    Query::events()
+        .authors([actor])
+        .expect("one external capability author is bounded")
+        .kinds([KIND])
+        .expect("one external capability kind is bounded")
 }
 
 /// Validate one public event value against the capability's typed semantics.

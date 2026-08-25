@@ -124,7 +124,11 @@ async fn combined_bound_overflow_is_a_shortfall_not_a_spawned_panic() {
             coverage_block(index),
         )));
     }
-    let request = RouteRequest::Read(Query::events().ids(request_ids()));
+    let request = RouteRequest::Read(
+        Query::events()
+            .ids(request_ids())
+            .expect("request ids are bounded"),
+    );
     let mut session = fava_routing::open(&routers, &request).expect("chain opens under bound");
 
     controlled.replace(coverage_block(0));
