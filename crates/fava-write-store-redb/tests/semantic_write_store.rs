@@ -520,6 +520,104 @@ fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
 }
 
 #[test]
+fn redb_reservation_is_coordinate_bound_and_repeated_coordinate_bounded() {
+    let path = unique_path("coordinate-bound-reservation");
+    let store = RedbWriteStore::open_bounded(
+        &path,
+        NonZeroUsize::new(1).unwrap(),
+        NonZeroUsize::new(1).unwrap(),
+    )
+    .expect("bounded store opens");
+    let owner = Keys::generate();
+    let intruder = Keys::generate();
+    let reservation = store
+        .reserve_active(&edit(), owner.public_key())
+        .expect("one coordinate reserves");
+
+    assert!(
+        store
+            .accept_reserved_materialized_edit(
+                reservation,
+                WriteIntent::edit_as(edit(), intruder.public_key(), WriteRouting::Automatic)
+                    .unwrap(),
+                materialization(intruder.public_key(), 1, "wrong coordinate"),
+                None,
+                None,
+            )
+            .is_err(),
+        "another coordinate consumed the reservation"
+    );
+    assert!(
+        store.reserve_active(&edit(), owner.public_key()).is_err(),
+        "the mismatched refusal released the owner's live reservation"
+    );
+
+    store
+        .accept_reserved_materialized_edit(
+            reservation,
+            WriteIntent::edit_as(edit(), owner.public_key(), WriteRouting::Automatic).unwrap(),
+            materialization(owner.public_key(), 1, "matching coordinate"),
+            None,
+            None,
+        )
+        .expect("only the matching coordinate consumes the reservation");
+    let composition = store
+        .reserve_active(&edit(), owner.public_key())
+        .expect("active coordinate reserves one composition");
+    assert!(
+        store.reserve_active(&edit(), owner.public_key()).is_err(),
+        "one active coordinate grew the global reservation set"
+    );
+    store.release_active(composition).unwrap();
+    assert_eq!(store.len().unwrap(), 1);
+    drop(store);
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn redb_successor_refuses_an_incomplete_accepted_edit_sequence() {
+    let path = unique_path("incomplete-successor-sequence");
+    let store = RedbWriteStore::open(&path).unwrap();
+    let keys = Keys::generate();
+    let actor = keys.public_key();
+    let first_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap();
+    let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+    let first = accept(
+        &store,
+        first_edit,
+        actor,
+        materialization(actor, 1, "first"),
+        None,
+    );
+    let composed = store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(second_edit, actor, WriteRouting::Automatic).unwrap(),
+            materialization(actor, 2, "first|second"),
+            Some(&first.current.event),
+        )
+        .unwrap();
+    let successor = source(&keys, 10, "newer");
+    let before = store.receipt(first.receipt_id).unwrap();
+
+    assert!(
+        store
+            .install_materialization(
+                first.write_id,
+                first.receipt_id,
+                composed.current.publication.materialization_id,
+                composed.current.publication.materialization_source,
+                materialization(actor, 11, "newer|second-only"),
+                Some(&EventValue::Signed(successor)),
+            )
+            .is_err(),
+        "successor validation accepted a replay that omitted the first durable edit"
+    );
+    assert_eq!(store.receipt(first.receipt_id).unwrap(), before);
+    drop(store);
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
 fn redb_pre_custody_reservation_disappears_on_reopen() {
     let path = unique_path("reservation-reopen");
     {

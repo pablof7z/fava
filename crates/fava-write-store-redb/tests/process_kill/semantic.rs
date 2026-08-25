@@ -283,6 +283,26 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
         vec![&[1][..], &[2][..]]
     );
 
+    let before_incomplete = store.receipt(ReceiptId::from_u64(1)).unwrap();
+    let incomplete_source = signed_source(20, "incomplete replay source");
+    assert!(
+        store
+            .install_materialization(
+                recovered[0].0.write_id,
+                recovered[0].0.receipt_id,
+                recovered[0].0.current.publication.materialization_id,
+                recovered[0].0.current.publication.materialization_source,
+                materialization(21, "incomplete replay source|2"),
+                Some(&EventValue::Signed(incomplete_source)),
+            )
+            .is_err(),
+        "reopened custody accepted a successor that omitted the first durable edit"
+    );
+    assert_eq!(
+        store.receipt(ReceiptId::from_u64(1)).unwrap(),
+        before_incomplete
+    );
+
     let newer_source = signed_source(30, "newer post-kill source");
     let newer_source_id = newer_source.id;
     let cache = Arc::new(MemoryEventCache::default());

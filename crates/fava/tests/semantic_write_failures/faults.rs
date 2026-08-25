@@ -101,6 +101,8 @@ pub(super) struct FaultingWriteStore {
     closed: broadcast::Sender<()>,
     drop_receipt_changes: Arc<AtomicBool>,
     failing_reads: AtomicUsize,
+    fail_materialized_reads: AtomicBool,
+    materialized_read_failures: AtomicU64,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
     reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
@@ -131,6 +133,8 @@ impl FaultingWriteStore {
             closed,
             drop_receipt_changes,
             failing_reads: AtomicUsize::new(0),
+            fail_materialized_reads: AtomicBool::new(false),
+            materialized_read_failures: AtomicU64::new(0),
             receipt_changes,
             reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
@@ -147,6 +151,14 @@ impl FaultingWriteStore {
 
     pub(super) fn fail_receipt_reads(&self, count: usize) {
         self.failing_reads.store(count, Ordering::SeqCst);
+    }
+
+    pub(super) fn fail_materialized_reads(&self, fail: bool) {
+        self.fail_materialized_reads.store(fail, Ordering::SeqCst);
+    }
+
+    pub(super) fn materialized_read_failures(&self) -> u64 {
+        self.materialized_read_failures.load(Ordering::SeqCst)
     }
 
     pub(super) fn fail_receipt_reads_after_signature(&self, count: usize) {
@@ -313,6 +325,13 @@ impl WriteStore for FaultingWriteStore {
         )>,
         WriteStoreError,
     > {
+        if self.fail_materialized_reads.load(Ordering::SeqCst) {
+            self.materialized_read_failures
+                .fetch_add(1, Ordering::SeqCst);
+            return Err(WriteStoreError::Refused(
+                "injected durable semantic custody read failure".to_owned(),
+            ));
+        }
         self.inner.materialized_edits(receipt_id)
     }
     fn install_signed(
