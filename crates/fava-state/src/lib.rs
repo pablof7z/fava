@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 pub use nostr::event::{Event, EventId, Kind, Tag};
 pub use nostr::key::PublicKey;
 pub use nostr::types::{RelayUrl, Timestamp};
-
 /// The application-selected authorization identity for relay work.
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RelayAccess(String);

@@ -1,7 +1,5 @@
 use fava_write::{Event, WriteIntentError};
 
-pub(super) const MAX_TAGS: usize = 2_000;
-
 const MAX_EVENT_BYTES: usize = 131_072;
 const MIN_EVENT_WITH_ONE_TAG_BYTES: usize = 334;
 const MAX_TAG_VALUES: usize = (MAX_EVENT_BYTES - MIN_EVENT_WITH_ONE_TAG_BYTES) / 3;
@@ -9,12 +7,6 @@ const EMPTY_EVENT_OBJECT_BYTES: usize = 71;
 const FIXED_HEX_BYTES: usize = 64 + 64 + 128;
 
 pub(super) fn validate_source(source: &Event) -> Result<(), WriteIntentError> {
-    if source.tags.len() > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: source.tags.len(),
-            maximum: MAX_TAGS,
-        });
-    }
     encoded_len(source).map(|_| ())
 }
 

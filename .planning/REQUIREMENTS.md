@@ -273,9 +273,9 @@ verifier. The identifiers `R1`-`R9` are void and must not be used again.
 - [ ] **NIP02-02** *(was R2)*: Typed signer and relay scopes are borrowed, must-use, and inert until publish; both composition orders work, selections are frozen at publish, and an invalid or abandoned scope has no effect.
 - [ ] **NIP02-03** *(was R3)*: Settlement is awaitable through stable write and receipt identity with all-of and at-least-n predicates, returning the exact first satisfying revision and a terminal not-reached outcome carrying the complete receipt.
 - [ ] **NIP02-04** *(was R4)*: The NIP-02 crate owns pure values, parsing, queries, projections, edits, and materializer selection only; no universal owner branches on NIP-02 event-kind meaning.
-- [ ] **NIP02-05** *(was R5)*: Contact-list decoding accounts for every `p` row in source order, exposing typed pubkey, relay-hint, and petname fields for valid rows and exact typed row evidence for malformed, duplicate, or uninterpreted rows; empty lists are valid and an invalid event is refused at event level.
+- [ ] **NIP02-05** *(was R5)*: Contact-list decoding accounts for every `p` tag entry in source order, exposing typed pubkey, relay-hint, and petname fields for valid entries and exact typed entry evidence for malformed, duplicate, or uninterpreted entries; empty lists are valid and an invalid event is refused at event level.
 - [ ] **NIP02-06** *(was R6)*: Contact-list, follows-of, and followers-of reads are ordinary query and snapshot values with newest-per-author replacement, exact canonical `p` matching, and deterministic repeated projection.
-- [ ] **NIP02-07** *(was R7)*: Follow and unfollow edits are lossless - preserving first-occurrence order, malformed rows, unknown rows, and foreign extensions - are idempotent, and rebase onto a newer source.
+- [ ] **NIP02-07** *(was R7)*: Follow and unfollow edits are lossless - preserving first-occurrence order, malformed entries, unknown tags, and foreign extensions - are idempotent, and rebase onto a newer source.
 - [ ] **NIP02-08** *(was R8)*: The README-level Rust API is exactly the delivered surface, and a live relay proof exercises public publish, local observation, signing, typed readback, exact relay echo, settlement, preservation, and teardown through a **retained, tracked, independently replayable** evidence bundle.
   *This is the clause that fails today. Registration does not restore the missing witness.*
 - [ ] **NIP02-09** *(was R9)*: Vocabulary entries carry owners, nearest Nostr concepts, distinctions, counterexamples, lifecycles, forcing requirements, symbols, and falsifiers, and no deprecated publication door remains re-exported.
@@ -291,18 +291,24 @@ mark**, including behavioral fixes to GROUP-04, GROUP-07, GROUP-08, and GROUP-10
 re-verification. `HANDOFF.json:9` still records the phase as `paused`, with "Execute, review, verify,
 and complete Phase 07.1.1" listed `not_started`.
 
-- [ ] **GROUP-01**: `fava-simple-groups::Group` represents one opaque NIP-29 group id over an application-selected non-empty bounded host-relay set, with one-host and multi-host use sharing one public value.
-- [ ] **GROUP-02**: Group content helpers return ordinary queries with the exact `h` value and explicit acquisition from every selected host while preserving accepted local write visibility.
-- [ ] **GROUP-03**: Group-record helpers return ordinary queries for kinds 39000-39005 with the exact `d` value and require actual evidence from the selected host set.
-- [ ] **GROUP-04**: A duplicate event served by several hosts appears once with every actual serving-relay contribution, while unique events from each host remain visible.
-- [ ] **GROUP-05**: Typed group projections retain independent per-host record authority, expose exact disagreement and member/admin attribution, and never field-merge metadata or silently select a host.
-- [ ] **GROUP-06**: Applications choose one fork through a single-host `Group`; the capability makes no canonical-host, migration, existence, completeness, or negative-membership claim.
-- [ ] **GROUP-07**: Group publication is kind-blind, adds or validates exactly one group context, and uses one exact explicit write route over the complete selected host set.
-- [ ] **GROUP-08**: Pre-signed group events remain byte-for-byte unchanged and are refused before custody when their existing group context is missing, duplicate, or contradictory.
-- [ ] **GROUP-09**: NIP-29 records, pins, saved groups, and saved relays have typed bounded parsers/projections so applications do not decode raw protocol tags.
-- [ ] **GROUP-10**: Saved/admin/member discovery returns ordinary `Query` or `ValueSet` expressions; kind-10009 saved-list changes use the ordinary semantic-edit lifecycle.
+**Current reconciliation (2026-08-24):** all twelve verdicts remain unchecked.
+Pablo approved issue 0023's required-head plus finite-`Vec` tail boundary.
+Pablo approved issue 0024 Option A; focused implementation evidence is being
+refreshed. GROUP-12 remains blocked on cryptographic vocabulary approval and a
+fresh full matrix.
+
+- [ ] **GROUP-01**: `SimpleGroup::from_relays(id, first, rest)` preserves one opaque group id and normalized first-occurrence relay order; its required parsed head and finite owned `Vec<RelayUrl>` tail make empty and arbitrary-iterator construction impossible without a shared owner, private numeric bound, compatibility path, or invented failure wrapper.
+- [ ] **GROUP-02**: `SimpleGroup::events` preserves every unrelated `Query` field, constrains lowercase `h` through query-owned `Query::intersect_tag_values`, keeps disjoint axes present-empty match-nothing, and asks every selected relay through ordinary `from_relays` acquisition. It performs no group-owned validation or error translation.
+- [ ] **GROUP-03**: `SimpleGroup::state_events` delegates its subset of the six typed kinds 39000-39005 to `Query::kinds`, adds the exact lowercase `d` group id, and requires evidence from selected relays through ordinary `only_from_relays` authority.
+- [ ] **GROUP-04**: `fava-query` bounds authors, ids, tag values, kinds, and query relays and returns exact `QueryError`; `fava-write` independently bounds explicit publication relays and returns exact `WriteIntentError`. Their current 4,096 and 256 values are provisional resource-safety shortcuts, not protocol or domain facts. `fava-simple-groups` performs no query/write validation or translation and accepts no arbitrary iterator during construction.
+- [ ] **GROUP-05**: Metadata, admins, members, roles, participants, and pins decode one ordinary `EventValue`, check only their exact kind and the first `d` tag value, and leave replacement and relay provenance to generic query owners.
+- [ ] **GROUP-06**: State decoders tolerate unknown tags, repetitions, unused extra values, and malformed siblings; each recognized entry retains source order and its own typed success or failure.
+- [ ] **GROUP-07**: Pins reuse `EventCoordinate`, saved relays reuse `RelayUrl`, and person entries reuse `PublicKey` plus `String`; no projection, snapshot, attribution, or coordinate-string parser is privately duplicated.
+- [ ] **GROUP-08**: `SavedGroupList` decodes one kind-10009 event and its save, rename, remove, and relay edits preserve unrelated content and tags through ordinary `ReplaceableEventEdit` semantics.
+- [ ] **GROUP-09**: `SimpleGroup::prepare` returns the exact neutral `EventBuildError`, preserves existing tags, and adds one matching lowercase `h` tag only when one is absent.
+- [ ] **GROUP-10**: Applications publish prepared unsigned payloads through the ordinary facade `to` and `publish` path over `SimpleGroup::relays`; the capability exposes no signed-event compatibility path or publication lifecycle.
 - [ ] **GROUP-11**: `fava-simple-groups` owns no observation, store, signer, router session, publisher, delivery, retry, receipt, runtime, or transport lifecycle, and universal owners contain no NIP-29 behavior switch.
-- [ ] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
+- [ ] **GROUP-12**: Unit, architecture, public-facade, canary, Cargo, Bazel, vocabulary, and compiler-derived README inventory gates agree with the final surface; cryptographic vocabulary approval exists, unsigned candidates remain explicitly non-authoritative, and approval evidence remains separate and unmodified.
 
 ### Runtime Signer Lifecycle
 
@@ -555,7 +561,7 @@ every `Session` match is a `RelaySession` or `RouterSession`.
 |---|---|---|---|---|
 | PROTO-001 | 1237 | CAP-08, CAP-09, GROUP-11, NIP02-04 | MAPPED | |
 | PROTO-002 | 1243 | CAP-01, CAP-07 | MAPPED | |
-| PROTO-003 | 1257 | CAP-01, CAP-03, CAP-04, NIP02-05, NIP02-06, NIP02-07 | WEAKENED | The NIP-02 row-evidence clauses - total `p`-row accounting, typed evidence for malformed/duplicate/uninterpreted rows, first-occurrence order and extension preservation - lived only in Phase 07.1's unregistered R5/R6/R7. Registered here as NIP02-05/06/07 and unchecked. |
+| PROTO-003 | 1257 | CAP-01, CAP-03, CAP-04, NIP02-05, NIP02-06, NIP02-07 | WEAKENED | The NIP-02 entry-evidence clauses - total `p`-tag entry accounting, typed evidence for malformed, duplicate, or uninterpreted entries, first-occurrence order, and extension preservation - lived only in Phase 07.1's unregistered R5/R6/R7. Registered here as NIP02-05/06/07 and unchecked. |
 | PROTO-004 | 1279 | CAP-09, GROUP-07 | MAPPED | |
 | PROTO-005 | 1291 | - | UNMAPPED | Protocol crates own reference-tag meaning: markers, author hints, usable relay hints derived from thread position. No reply, reaction, repost, quote, or comment crate exists. |
 | PROTO-006 | 1297 | GROUP-01 through GROUP-12 | MAPPED | Twelve requirements, verdict revoked. |

@@ -21,7 +21,8 @@ fn encode_query(id: &str, query: &Query) -> String {
 fn lowercase_uppercase_and_utf8_tag_values_encode_exactly() {
     let query = Query::events()
         .tag_values(tag('e'), ["café", "alpha"])
-        .tag_values(tag('E'), ["東京"]);
+        .and_then(|query| query.tag_values(tag('E'), ["東京"]))
+        .expect("literal tag inputs are bounded");
 
     assert_eq!(
         encode_query("tag-case", &query),
@@ -31,7 +32,9 @@ fn lowercase_uppercase_and_utf8_tag_values_encode_exactly() {
 
 #[test]
 fn present_empty_tag_axis_remains_on_the_wire() {
-    let query = Query::events().tag_values(tag('p'), std::iter::empty::<String>());
+    let query = Query::events()
+        .tag_values(tag('p'), std::iter::empty::<String>())
+        .expect("empty tag input is bounded");
 
     assert_eq!(
         encode_query("tag-empty", &query),
@@ -43,10 +46,12 @@ fn present_empty_tag_axis_remains_on_the_wire() {
 fn duplicate_and_reordered_values_encode_canonically() {
     let left = Query::events()
         .tag_values(tag('e'), ["omega", "alpha", "omega"])
-        .tag_values(tag('e'), ["café"]);
+        .and_then(|query| query.tag_values(tag('e'), ["café"]))
+        .expect("literal tag inputs are bounded");
     let right = Query::events()
         .tag_values(tag('e'), ["café", "omega"])
-        .tag_values(tag('e'), ["alpha", "café"]);
+        .and_then(|query| query.tag_values(tag('e'), ["alpha", "café"]))
+        .expect("literal tag inputs are bounded");
 
     let left = encode_query("tag-canonical", &left);
     let right = encode_query("tag-canonical", &right);

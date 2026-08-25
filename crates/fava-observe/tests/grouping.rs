@@ -154,8 +154,10 @@ async fn a_joiner_of_a_completed_merged_request_is_credited_its_completion() {
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
     Query::events()
-        .kind(Kind::Metadata)
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
         .authors([author])
+        .expect("one author is bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid")
 }

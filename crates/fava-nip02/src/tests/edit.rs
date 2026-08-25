@@ -52,7 +52,7 @@ fn edit_codec_encodes_optional_metadata_without_collapsing_petname_presence() {
     );
 
     let relay_only = follow_with(target, Some(relay.clone()), None).expect("relay edit");
-    let relay_event = materialize(actor.public_key(), &relay_only, None, 1).expect("relay row");
+    let relay_event = materialize(actor.public_key(), &relay_only, None, 1).expect("relay entry");
     assert_eq!(
         relay_event.tags.as_slice(),
         &[tag(&["p", &target.to_hex(), relay.as_str()])]
@@ -68,7 +68,8 @@ fn edit_codec_encodes_optional_metadata_without_collapsing_petname_presence() {
     let exact_petname = "a\u{301}";
     let complete = follow_with(target, Some(relay.clone()), Some(exact_petname))
         .expect("complete metadata edit");
-    let complete_event = materialize(actor.public_key(), &complete, None, 1).expect("complete row");
+    let complete_event =
+        materialize(actor.public_key(), &complete, None, 1).expect("complete entry");
     assert_eq!(
         complete_event.tags.as_slice(),
         &[tag(&["p", &target.to_hex(), relay.as_str(), exact_petname])]
@@ -151,10 +152,10 @@ fn nip02_preserves_foreign_kind3_bytes() {
             &target_hex,
             "wss://original.example",
             "original-name",
-            "foreign-extra-column",
+            "foreign-extra-value",
         ]),
         tag(&["t", "nostr"]),
-        tag(&["p", "not-a-public-key", "raw-malformed-row"]),
+        tag(&["p", "not-a-public-key", "raw-malformed-entry"]),
         tag(&["x", "between", "bytes"]),
         tag(&["p", &target_hex, "wss://duplicate.example", "duplicate"]),
         tag(&["p", &other.to_hex(), "wss://other.example"]),

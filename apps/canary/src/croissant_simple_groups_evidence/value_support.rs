@@ -322,7 +322,7 @@ fn verify_source_manifest_claim(bytes: &[u8], build: &Value) -> CanaryResult<()>
     for line in &lines[5..] {
         let fields = line
             .strip_prefix("file=")
-            .ok_or_else(|| CanaryError::new("simple-groups compiler-input row was invalid"))?
+            .ok_or_else(|| CanaryError::new("simple-groups compiler-input entry was invalid"))?
             .split('\t')
             .collect::<Vec<_>>();
         if fields.len() != 4
@@ -342,7 +342,7 @@ fn verify_source_manifest_claim(bytes: &[u8], build: &Value) -> CanaryResult<()>
             || previous.is_some_and(|value: &str| value >= fields[3])
         {
             return Err(CanaryError::new(
-                "simple-groups compiler-input row was invalid",
+                "simple-groups compiler-input entry was invalid",
             ));
         }
         let size = fields[2].parse::<u64>().map_err(error)?;

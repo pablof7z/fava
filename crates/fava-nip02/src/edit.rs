@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use fava_state::RelayUrl;
 use fava_write::{
-    Event, EventBuildError, EventBuilder, Kind, PublicKey, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    Event, EventBuilder, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
+    Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const ADD: u8 = 1;
@@ -16,7 +16,7 @@ const CODEC_LEN: usize = 33;
 const MAX_EDIT_BYTES: usize = 131_072;
 const MAX_TARGET_TEXT_BYTES: usize = 69;
 
-use crate::bounds::{self, MAX_TAGS};
+use crate::bounds;
 
 /// Produce one bounded edit that follows `target` in a kind-3 list.
 ///
@@ -42,7 +42,7 @@ pub fn unfollow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, Write
 
 /// Produce one bounded edit that follows `target` with optional NIP-02 metadata.
 ///
-/// Existing matching rows remain byte-for-byte authoritative; supplied metadata
+/// Existing matching entries remain byte-for-byte authoritative; supplied metadata
 /// is used only when materialization appends a missing target.
 ///
 /// # Errors
@@ -347,12 +347,6 @@ fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> 
         .checked_sub(matching)
         .and_then(|without_matches| without_matches.checked_add(retained))
         .ok_or_else(|| codec_refusal("NIP-02 output tag count overflow"))?;
-    if capacity > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: capacity,
-            maximum: MAX_TAGS,
-        });
-    }
     let mut found = false;
     let mut tags = Vec::with_capacity(capacity);
     for tag in source {
@@ -366,13 +360,13 @@ fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> 
         }
     }
     if !matches!(change.operation, Operation::Remove) && !found {
-        tags.push(canonical_row(change)?);
+        tags.push(canonical_tag(change)?);
     }
     debug_assert_eq!(tags.len(), capacity);
     Ok(tags)
 }
 
-fn canonical_row(change: &Change) -> Result<Tag, WriteIntentError> {
+fn canonical_tag(change: &Change) -> Result<Tag, WriteIntentError> {
     let mut values = vec!["p".to_owned(), change.target.to_hex()];
     if let Operation::AddWithMetadata { relay, petname } = &change.operation {
         if relay.is_some() || petname.is_some() {
@@ -382,7 +376,7 @@ fn canonical_row(change: &Change) -> Result<Tag, WriteIntentError> {
             values.push(petname.clone());
         }
     }
-    Tag::parse(values).map_err(|_| codec_refusal("invalid NIP-02 contact row"))
+    Tag::parse(values).map_err(|_| codec_refusal("invalid NIP-02 contact entry"))
 }
 
 fn tag_targets(tag: &Tag, target: PublicKey) -> bool {
@@ -406,7 +400,7 @@ fn build(
     for tag in tags {
         builder = builder.tag(tag);
     }
-    builder.build().map_err(map_build_error)
+    builder.build().map_err(WriteIntentError::from)
 }
 
 fn validate_output(
@@ -422,19 +416,6 @@ fn validate_output(
     event
         .verify_id()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
-}
-
-fn map_build_error(error: EventBuildError) -> WriteIntentError {
-    match error {
-        EventBuildError::TooManyTags { actual, maximum } => WriteIntentError::TooLarge {
-            bytes: actual,
-            maximum,
-        },
-        EventBuildError::TooLarge { bytes, maximum } => {
-            WriteIntentError::TooLarge { bytes, maximum }
-        }
-        EventBuildError::Encoding(reason) => WriteIntentError::Encoding(reason),
-    }
 }
 
 fn codec_refusal(reason: &str) -> WriteIntentError {

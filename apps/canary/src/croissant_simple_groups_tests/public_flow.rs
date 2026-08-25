@@ -1,9 +1,7 @@
 use std::process::Command;
 
 use super::croissant::{CroissantLimits, process_is_alive};
-use super::croissant_simple_groups::{
-    CroissantSimpleGroupsOptions, prepare_owned_supervisors, supervise_owned_pair,
-};
+use super::croissant_simple_groups::{prepare_owned_supervisors, supervise_owned_pair};
 use super::croissant_simple_groups_flow::execute_public_flow;
 
 const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
@@ -17,27 +15,24 @@ const FIXTURE_FAVA_BUILD_COMMAND: &str =
     "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08";
 const FIXTURE_FAVA_SOURCE_MANIFEST: &str =
     "73b83ce204d2d4c69ec95a8750b0c2f25483f18d6235f357d7d50a950d9dde96";
-const FIXTURE_FAVA_EXECUTABLE: &str = "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
+const FIXTURE_FAVA_EXECUTABLE: &str =
+    "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
 const FIXTURE_FAVA_SUBJECT_IMAGE: &str =
     "9999999999999999999999999999999999999999999999999999999999999999";
 const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
-const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
+const FIXTURE_CROISSANT_EXECUTABLE: &str =
+    "4444444444444444444444444444444444444444444444444444444444444444";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn croissant_simple_groups_public_flow() {
     let _fixture_guard = crate::environment::croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("public-flow fixture root");
-    let source = PathBuf::from("/Users/pablo/Work/croissant");
+    let source = clone_croissant(
+        Path::new("/Users/pablofernandez/Work/croissant"),
+        temporary.path(),
+    );
     let binary = build_croissant(&source, temporary.path());
     let seed = "controlled-simple-groups-public-flow";
-    let options = CroissantSimpleGroupsOptions {
-        relay_binary: binary,
-        source_checkout: source,
-        fava_build_attestation: temporary.path().join("unused-build-attestation.json"),
-        fava_build_source_manifest: temporary.path().join("unused-build-source.manifest"),
-        scenario_seed: seed.to_owned(),
-        runs_directory: temporary.path().join("unused-retained-root"),
-    };
     let relay_keys = Keys::generate();
     let owner_a = Keys::generate().public_key().to_hex();
     let owner_b = Keys::generate().public_key().to_hex();
@@ -45,7 +40,9 @@ async fn croissant_simple_groups_public_flow() {
     let run_root = temporary.path().join("run");
     fs::create_dir(&run_root).expect("run root");
     let supervisors = prepare_owned_supervisors(
-        &options,
+        &binary,
+        &source,
+        seed,
         &run_root,
         &relay_keys,
         [&owner_a, &owner_b],
@@ -78,7 +75,7 @@ async fn croissant_simple_groups_public_flow() {
     assert_eq!(facts.custom_destinations, 2);
     assert_eq!(facts.custom_acknowledged, 2);
     assert_eq!(facts.handoffs, [1, 1]);
-    assert_eq!(facts.signed_refusals, 3);
+    assert_eq!(facts.prepared_contexts, 3);
     assert!(facts.observation_closed);
     assert_pair_cleanup(&completion.ready, &completion.teardown);
 }
@@ -118,4 +115,20 @@ fn build_croissant(source: &Path, root: &Path) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
     binary
+}
+
+fn clone_croissant(source: &Path, root: &Path) -> PathBuf {
+    let checkout = root.join("croissant-source");
+    let output = Command::new("git")
+        .args(["clone", "--quiet", "--no-hardlinks"])
+        .arg(source)
+        .arg(&checkout)
+        .output()
+        .expect("git clone launches");
+    assert!(
+        output.status.success(),
+        "controlled Croissant clone failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    checkout
 }

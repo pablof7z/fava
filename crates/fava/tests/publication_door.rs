@@ -81,7 +81,12 @@ async fn publish_returns_after_local_acceptance() {
 
     assert_eq!(signer.calls(), 0, "downstream signer has not advanced");
     let observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded")
+                .cache_only(),
+        )
         .await
         .expect("local observation opens");
     assert!(
@@ -139,7 +144,12 @@ async fn invalid_payload_refuses_without_custody() {
             .is_empty()
     );
     let observation = fava
-        .observe(Query::events().kind(Kind::TextNote).cache_only())
+        .observe(
+            Query::events()
+                .kinds([Kind::TextNote])
+                .expect("one kind is bounded")
+                .cache_only(),
+        )
         .await
         .expect("local observation opens");
     assert!(observation.current().events.is_empty());

@@ -101,7 +101,7 @@ fn verify_flow(snapshot: &EvidenceSnapshot, manifest: &Value) -> CanaryResult<()
         "custom_destinations",
         "custom_acknowledged",
         "handoffs",
-        "signed_refusals",
+        "prepared_contexts",
         "observation_closed",
     ] {
         if flow.get(field) != manifest.get(field) {

@@ -195,6 +195,7 @@ async fn execute_flow(
     let mut observation = fava
         .observe(
             fava_nip02::contact_list(keys.public_key())
+                .map_err(error)?
                 .from_relays([relay.clone()])
                 .map_err(error)?,
         )
@@ -243,7 +244,7 @@ async fn execute_flow(
     wait_record(&mut observation, baseline_id, 0).await?;
     let baseline_record = record(&observation, baseline_id)?;
     let empty = ContactList::from_event(&baseline_record.event).map_err(error)?;
-    if !empty.follows().is_empty() || !empty.evidence().is_empty() {
+    if !empty.follows().is_empty() || !empty.entry_errors().is_empty() {
         return Err(CanaryError::new(
             "baseline kind-3 did not decode as valid empty",
         ));
@@ -377,7 +378,7 @@ fn validate_final(
         || follows[0].relay() != Some(relay)
         || follows[0].petname() != Some(PETNAME)
         || follows[0].source_index() != 3
-        || !list.evidence().is_empty()
+        || !list.entry_errors().is_empty()
     {
         return Err(CanaryError::new(
             "typed contact-list decode did not preserve exact metadata",

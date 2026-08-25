@@ -10,7 +10,7 @@ use fava::{
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::{CacheMutation, CachedEvent, RetractionCause};
-use fava_write::{WriteIntent, WriteRouting};
+use fava_write::{WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
@@ -35,6 +35,33 @@ fn edit(kind: Kind) -> ReplaceableEventEdit {
     ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit")
 }
 
+#[test]
+fn support_materializer_preserves_the_event_builder_tag_refusal() {
+    let keys = Keys::generate();
+    let source = NostrEventBuilder::new(Kind::ContactList, "source")
+        .tags(
+            (0..2_001)
+                .map(|index| Tag::parse(["x", &index.to_string()]).expect("ordinary source tag")),
+        )
+        .custom_created_at(Timestamp::from(1))
+        .finalize(&keys)
+        .expect("source signs");
+    let materializer = TestMaterializer::new(Kind::ContactList);
+
+    assert_eq!(
+        materializer.materialize(
+            &edit(Kind::ContactList),
+            keys.public_key(),
+            Some(&source),
+            Timestamp::from(2),
+        ),
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn first_value_edit_publishes_through_public_fava() {
     let keys = Keys::generate();
@@ -47,8 +74,10 @@ async fn first_value_edit_publishes_through_public_fava() {
     let mut observation = fava
         .observe(
             fava::Query::events()
+                .kinds([Kind::ContactList])
+                .expect("one kind is bounded")
                 .authors([keys.public_key()])
-                .kind(Kind::ContactList)
+                .expect("one author is bounded")
                 .cache_only(),
         )
         .await

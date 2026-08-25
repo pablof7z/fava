@@ -17,16 +17,16 @@ pub struct ContactList {
     event_id: EventId,
     created_at: Timestamp,
     follows: Vec<Follow>,
-    evidence: Vec<ContactListRowEvidence>,
+    entry_errors: Vec<ContactListEntryError>,
 }
 
 impl ContactList {
-    /// Decode one complete kind-3 event while conserving every `p` row.
+    /// Decode one complete kind-3 event while conserving every `p` entry.
     ///
     /// # Errors
     ///
     /// Returns [`ContactListError`] when the event boundary is invalid. A
-    /// malformed contact row remains successful typed row evidence instead.
+    /// malformed contact entry remains an entry-local typed error instead.
     pub fn from_event(event: &EventValue) -> Result<Self, ContactListError> {
         if event.kind() != Kind::ContactList {
             return Err(ContactListError::WrongKind(event.kind().as_u16()));
@@ -34,7 +34,7 @@ impl ContactList {
         validate_event(event)?;
         let event_id = event.id().ok_or(ContactListError::MissingEventId)?;
         let mut follows = Vec::new();
-        let mut evidence = Vec::new();
+        let mut entry_errors = Vec::new();
         let mut seen = BTreeSet::new();
 
         for (source_index, tag) in event.tags().iter().enumerate() {
@@ -42,12 +42,12 @@ impl ContactList {
             if values.first().map(String::as_str) != Some("p") {
                 continue;
             }
-            match parse_row(source_index, values, &seen) {
+            match parse_entry(source_index, values, &seen) {
                 Ok(follow) => {
                     seen.insert(follow.pubkey);
                     follows.push(follow);
                 }
-                Err(row_evidence) => evidence.push(row_evidence),
+                Err(entry_error) => entry_errors.push(entry_error),
             }
         }
 
@@ -56,7 +56,7 @@ impl ContactList {
             event_id,
             created_at: event.created_at(),
             follows,
-            evidence,
+            entry_errors,
         })
     }
 
@@ -66,16 +66,16 @@ impl ContactList {
         self.author
     }
 
-    /// Valid first-occurrence contact rows in source order.
+    /// Valid first-occurrence contact entries in source order.
     #[must_use]
     pub const fn follows(&self) -> &[Follow] {
         self.follows.as_slice()
     }
 
-    /// Malformed, duplicate, or uninterpreted contact rows in source order.
+    /// Malformed, duplicate, or uninterpreted contact-entry errors in source order.
     #[must_use]
-    pub const fn evidence(&self) -> &[ContactListRowEvidence] {
-        self.evidence.as_slice()
+    pub const fn entry_errors(&self) -> &[ContactListEntryError] {
+        self.entry_errors.as_slice()
     }
 
     /// Whether this event supersedes another same-coordinate list.
@@ -87,7 +87,7 @@ impl ContactList {
     }
 }
 
-/// One valid first-occurrence NIP-02 `p` row.
+/// One valid first-occurrence NIP-02 `p` entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Follow {
     source_index: usize,
@@ -122,49 +122,49 @@ impl Follow {
     }
 }
 
-/// Exact typed evidence for one non-valid NIP-02 `p` row.
+/// Typed entry-local refusal retaining one non-valid NIP-02 `p` tag exactly.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ContactListRowEvidence {
-    /// The row contains no target column.
+pub enum ContactListEntryError {
+    /// The entry contains no target value.
     MissingTarget {
         /// Original tag index.
         source_index: usize,
-        /// Exact owned source row.
-        raw_row: Vec<String>,
+        /// Exact owned source entry.
+        raw_tag: Vec<String>,
     },
-    /// The target column is not a valid public key.
+    /// The target value is not a valid public key.
     InvalidPublicKey {
         /// Original tag index.
         source_index: usize,
-        /// Exact owned source row.
-        raw_row: Vec<String>,
+        /// Exact owned source entry.
+        raw_tag: Vec<String>,
     },
     /// A non-empty relay hint is not a valid relay URL.
     InvalidRelayHint {
         /// Original tag index.
         source_index: usize,
-        /// Exact owned source row.
-        raw_row: Vec<String>,
+        /// Exact owned source entry.
+        raw_tag: Vec<String>,
     },
-    /// A fully valid row repeats an earlier fully valid target.
+    /// A fully valid entry repeats an earlier fully valid target.
     DuplicateTarget {
         /// Original tag index.
         source_index: usize,
-        /// Exact owned source row.
-        raw_row: Vec<String>,
+        /// Exact owned source entry.
+        raw_tag: Vec<String>,
         /// Repeated valid target.
         pubkey: PublicKey,
     },
-    /// Columns after the optional petname have no NIP-02 meaning here.
-    UninterpretedExtraColumns {
+    /// Values after the optional petname have no NIP-02 meaning here.
+    UninterpretedExtraValues {
         /// Original tag index.
         source_index: usize,
-        /// Exact owned source row.
-        raw_row: Vec<String>,
+        /// Exact owned source entry.
+        raw_tag: Vec<String>,
     },
 }
 
-impl ContactListRowEvidence {
+impl ContactListEntryError {
     /// Original tag index in the source event.
     #[must_use]
     pub const fn source_index(&self) -> usize {
@@ -173,19 +173,19 @@ impl ContactListRowEvidence {
             | Self::InvalidPublicKey { source_index, .. }
             | Self::InvalidRelayHint { source_index, .. }
             | Self::DuplicateTarget { source_index, .. }
-            | Self::UninterpretedExtraColumns { source_index, .. } => *source_index,
+            | Self::UninterpretedExtraValues { source_index, .. } => *source_index,
         }
     }
 
-    /// Exact source row without normalization or column loss.
+    /// Exact source entry without normalization or value loss.
     #[must_use]
-    pub fn raw_row(&self) -> &[String] {
+    pub fn raw_tag(&self) -> &[String] {
         match self {
-            Self::MissingTarget { raw_row, .. }
-            | Self::InvalidPublicKey { raw_row, .. }
-            | Self::InvalidRelayHint { raw_row, .. }
-            | Self::DuplicateTarget { raw_row, .. }
-            | Self::UninterpretedExtraColumns { raw_row, .. } => raw_row.as_slice(),
+            Self::MissingTarget { raw_tag, .. }
+            | Self::InvalidPublicKey { raw_tag, .. }
+            | Self::InvalidRelayHint { raw_tag, .. }
+            | Self::DuplicateTarget { raw_tag, .. }
+            | Self::UninterpretedExtraValues { raw_tag, .. } => raw_tag.as_slice(),
         }
     }
 }
@@ -263,43 +263,43 @@ impl fmt::Display for ContactListError {
 
 impl Error for ContactListError {}
 
-fn parse_row(
+fn parse_entry(
     source_index: usize,
     values: &[String],
     seen: &BTreeSet<PublicKey>,
-) -> Result<Follow, ContactListRowEvidence> {
-    let raw_row = || values.to_vec();
+) -> Result<Follow, ContactListEntryError> {
+    let raw_tag = || values.to_vec();
     let Some(raw_pubkey) = values.get(1) else {
-        return Err(ContactListRowEvidence::MissingTarget {
+        return Err(ContactListEntryError::MissingTarget {
             source_index,
-            raw_row: raw_row(),
+            raw_tag: raw_tag(),
         });
     };
     let pubkey =
-        PublicKey::from_hex(raw_pubkey).map_err(|_| ContactListRowEvidence::InvalidPublicKey {
+        PublicKey::from_hex(raw_pubkey).map_err(|_| ContactListEntryError::InvalidPublicKey {
             source_index,
-            raw_row: raw_row(),
+            raw_tag: raw_tag(),
         })?;
     let relay = match values.get(2).map(String::as_str) {
         None | Some("") => None,
         Some(raw_relay) => Some(RelayUrl::parse(raw_relay).map_err(|_| {
-            ContactListRowEvidence::InvalidRelayHint {
+            ContactListEntryError::InvalidRelayHint {
                 source_index,
-                raw_row: raw_row(),
+                raw_tag: raw_tag(),
             }
         })?),
     };
     let petname = values.get(3).cloned();
     if values.len() > 4 {
-        return Err(ContactListRowEvidence::UninterpretedExtraColumns {
+        return Err(ContactListEntryError::UninterpretedExtraValues {
             source_index,
-            raw_row: raw_row(),
+            raw_tag: raw_tag(),
         });
     }
     if seen.contains(&pubkey) {
-        return Err(ContactListRowEvidence::DuplicateTarget {
+        return Err(ContactListEntryError::DuplicateTarget {
             source_index,
-            raw_row: raw_row(),
+            raw_tag: raw_tag(),
             pubkey,
         });
     }
@@ -358,11 +358,8 @@ fn map_build_error(error: EventBuildError) -> ContactListError {
 
 pub(crate) fn map_write_error(error: WriteIntentError) -> ContactListError {
     match error {
-        WriteIntentError::TooLarge { bytes, maximum } if maximum == bounds::MAX_TAGS => {
-            ContactListError::TooManyTags {
-                actual: bytes,
-                maximum,
-            }
+        WriteIntentError::TooManyTags { actual, maximum } => {
+            ContactListError::TooManyTags { actual, maximum }
         }
         WriteIntentError::TooLarge { bytes, maximum } => {
             ContactListError::TooLarge { bytes, maximum }

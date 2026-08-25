@@ -27,30 +27,6 @@ use crate::{
     CanaryError, CanaryResult, RunArtifacts, deterministic_keys, repository_root, unix_ms,
 };
 
-/// Process-memory input for one controlled two-relay simple-groups proof.
-#[derive(Clone, Debug)]
-pub struct CroissantSimpleGroupsOptions {
-    /// Croissant executable launched twice without modifying its checkout.
-    pub relay_binary: PathBuf,
-    /// Croissant source checkout used for exact source-revision evidence.
-    pub source_checkout: PathBuf,
-    /// Bounded immutable-build attestation whose subject is the exact Fava executable.
-    pub fava_build_attestation: PathBuf,
-    /// Canonical bounded manifest of every immutable compiler input.
-    pub fava_build_source_manifest: PathBuf,
-    /// Disposable identity seed, never retained outside process memory.
-    pub scenario_seed: String,
-    /// Parent directory for one fresh durable evidence bundle.
-    pub runs_directory: PathBuf,
-}
-
-/// Durable location produced by one completed controlled run.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CroissantSimpleGroupsOutcome {
-    /// Fresh run directory containing the completed manifest and artifacts.
-    pub run_directory: PathBuf,
-}
-
 #[derive(Debug)]
 pub(crate) struct OwnedPairCompletion<T> {
     pub(crate) ready: [CroissantReadyFact; 2],
@@ -82,18 +58,20 @@ impl std::fmt::Display for OwnedPairFailure {
 impl std::error::Error for OwnedPairFailure {}
 
 pub(crate) fn prepare_owned_supervisors(
-    options: &CroissantSimpleGroupsOptions,
+    relay_binary: &Path,
+    source_checkout: &Path,
+    scenario_seed: &str,
     root: &Path,
     relay_keys: &Keys,
     owner_public_keys: [&str; 2],
     limits: CroissantLimits,
 ) -> CanaryResult<[CroissantSupervisor; 2]> {
-    let seed_hash = hex::encode(Sha256::digest(options.scenario_seed.as_bytes()));
+    let seed_hash = hex::encode(Sha256::digest(scenario_seed.as_bytes()));
     let relay_roots = [root.join("relays/a"), root.join("relays/b")];
     let supervisors = [
         CroissantSupervisor::prepare(
-            &options.relay_binary,
-            &options.source_checkout,
+            relay_binary,
+            source_checkout,
             &relay_roots[0],
             owner_public_keys[0],
             &seed_hash,
@@ -101,8 +79,8 @@ pub(crate) fn prepare_owned_supervisors(
         )
         .map_err(error)?,
         CroissantSupervisor::prepare(
-            &options.relay_binary,
-            &options.source_checkout,
+            relay_binary,
+            source_checkout,
             &relay_roots[1],
             owner_public_keys[1],
             &seed_hash,
@@ -129,25 +107,28 @@ pub(crate) fn prepare_owned_supervisors(
     reason = "one finalizer keeps staging, cleanup, two scans, sealing, and promotion ordered"
 )]
 pub async fn run_croissant_simple_groups_scenario(
-    options: CroissantSimpleGroupsOptions,
-) -> CanaryResult<CroissantSimpleGroupsOutcome> {
+    relay_binary: &Path,
+    source_checkout: &Path,
+    fava_build_attestation: &Path,
+    fava_build_source_manifest: &Path,
+    scenario_seed: &str,
+    runs_directory: &Path,
+) -> CanaryResult<PathBuf> {
     let repository = repository_root()?;
     let pinned_fava_executable = PinnedFavaExecutable::inherited()?;
-    let build_attestation = load_pinned_build_attestation(
-        &options.fava_build_attestation,
-        pinned_fava_executable.sha256(),
-    )?;
+    let build_attestation =
+        load_pinned_build_attestation(fava_build_attestation, pinned_fava_executable.sha256())?;
     let source_manifest =
-        load_pinned_source_manifest(&options.fava_build_source_manifest, &build_attestation)?;
+        load_pinned_source_manifest(fava_build_source_manifest, &build_attestation)?;
     let fava_source = clean_fava_source(&repository, &pinned_fava_executable)?;
-    let seed = &options.scenario_seed;
+    let seed = scenario_seed;
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let relay = deterministic_keys(&format!("simple-groups-relay\0{seed}"))?;
     let owner_a = deterministic_keys(&format!("simple-groups-owner-a\0{seed}"))?;
     let owner_b = deterministic_keys(&format!("simple-groups-owner-b\0{seed}"))?;
     let target_a = deterministic_keys(&format!("simple-groups-admin-a\0{seed}"))?;
     let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?;
-    let mut artifacts = RunArtifacts::create_staged(&options.runs_directory, SCENARIO, seed)?;
+    let mut artifacts = RunArtifacts::create_staged(runs_directory, SCENARIO, seed)?;
     fs::create_dir_all(artifacts.root().join("source"))?;
     pinned_fava_executable.retain(&artifacts.root().join("source/fava-canary"))?;
     build_attestation.retain(&artifacts.root().join("source/fava-build.json"))?;
@@ -163,7 +144,9 @@ pub async fn run_croissant_simple_groups_scenario(
         }),
     )?;
     let supervisors = prepare_owned_supervisors(
-        &options,
+        relay_binary,
+        source_checkout,
+        scenario_seed,
         artifacts.root(),
         &relay,
         [
@@ -234,7 +217,7 @@ pub async fn run_croissant_simple_groups_scenario(
         "custom_destinations": completion.flow.custom_destinations,
         "custom_acknowledged": completion.flow.custom_acknowledged,
         "handoffs": completion.flow.handoffs,
-        "signed_refusals": completion.flow.signed_refusals,
+        "prepared_contexts": completion.flow.prepared_contexts,
         "observation_closed": completion.flow.observation_closed,
         "ready": completion.ready,
         "teardown": completion.teardown,
@@ -284,8 +267,8 @@ pub async fn run_croissant_simple_groups_scenario(
         .insert("artifact_seal".to_owned(), serde_json::to_value(seal)?);
     artifacts.write_json("manifest.json", &manifest)?;
     assert_secrets_absent(artifacts.root(), &needles)?;
-    let run_directory = artifacts.promote()?;
-    Ok(CroissantSimpleGroupsOutcome { run_directory })
+    let retained_directory = artifacts.promote()?;
+    Ok(retained_directory)
 }
 
 pub(crate) async fn supervise_owned_pair<T, F, Fut>(

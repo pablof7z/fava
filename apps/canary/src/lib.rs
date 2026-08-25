@@ -41,10 +41,7 @@ pub use croissant_nip02::{
     CroissantNip02Options, CroissantNip02Outcome, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
 };
-pub use croissant_simple_groups::{
-    CroissantSimpleGroupsOptions, CroissantSimpleGroupsOutcome,
-    run_croissant_simple_groups_scenario,
-};
+pub use croissant_simple_groups::run_croissant_simple_groups_scenario;
 pub use croissant_simple_groups_evidence::verify_croissant_simple_groups_pair;
 pub use flows::{FlowOptions, run_flow_close_child, run_flows_scenario};
 pub use live::run_live_scenario;

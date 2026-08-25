@@ -1,5 +1,9 @@
 # Root package. Exports the crate_universe source of truth.
-exports_files(["Cargo.toml", "Cargo.lock"])
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+    ".bg-shell/simple-groups-semantic-catalog.jsonl",
+])
 
 # `bazel run //:fmt` rewrites every crate's sources in place, the way
 # `cargo fmt` does. The read-only counterpart is `--config=fmt-check`,

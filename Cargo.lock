@@ -606,7 +606,6 @@ dependencies = [
 name = "fava-simple-groups"
 version = "0.1.0"
 dependencies = [
- "fava",
  "fava-query",
  "fava-state",
  "fava-write",

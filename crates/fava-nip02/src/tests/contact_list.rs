@@ -1,7 +1,7 @@
 use fava_write::{EventBuilder as FavaEventBuilder, EventValue, Kind, Timestamp};
 use nostr::key::Keys;
 
-use crate::{ContactList, ContactListError, ContactListRowEvidence};
+use crate::{ContactList, ContactListEntryError, ContactListError};
 
 use super::{source, tag};
 
@@ -43,7 +43,7 @@ fn valid_empty_and_ordered_contact_lists_decode() {
     let empty = ContactList::from_event(&EventValue::Signed(empty)).expect("valid empty list");
     assert_eq!(empty.author(), author.public_key());
     assert!(empty.follows().is_empty());
-    assert!(empty.evidence().is_empty());
+    assert!(empty.entry_errors().is_empty());
 
     let event = source(
         &author,
@@ -79,21 +79,21 @@ fn valid_empty_and_ordered_contact_lists_decode() {
 }
 
 #[test]
-fn nip02_accounts_for_every_p_row() {
+fn nip02_accounts_for_every_p_entry() {
     let author = Keys::generate();
     let alice = Keys::generate().public_key();
     let bob = Keys::generate().public_key();
-    let rows = vec![
+    let entries = vec![
         tag(&["x", "not-a-contact"]),
         tag(&["p"]),
         tag(&["p", "not-a-public-key"]),
         tag(&["p", &alice.to_hex(), "https://not-a-relay.example"]),
         tag(&["p", &alice.to_hex(), "", "ali"]),
         tag(&["p", &alice.to_hex()]),
-        tag(&["p", &bob.to_hex(), "", "bob", "future-column"]),
+        tag(&["p", &bob.to_hex(), "", "bob", "future-value"]),
         tag(&["p", &bob.to_hex()]),
     ];
-    let event = source(&author, Kind::ContactList, 7, "legacy", rows.clone());
+    let event = source(&author, Kind::ContactList, 7, "legacy", entries.clone());
     let list = ContactList::from_event(&EventValue::Signed(event)).expect("mixed list");
 
     assert_eq!(
@@ -104,9 +104,9 @@ fn nip02_accounts_for_every_p_row() {
         vec![4, 7]
     );
     assert_eq!(
-        list.evidence()
+        list.entry_errors()
             .iter()
-            .map(ContactListRowEvidence::source_index)
+            .map(ContactListEntryError::source_index)
             .collect::<Vec<_>>(),
         vec![1, 2, 3, 5, 6]
     );
@@ -115,72 +115,72 @@ fn nip02_accounts_for_every_p_row() {
         .iter()
         .map(crate::Follow::source_index)
         .chain(
-            list.evidence()
+            list.entry_errors()
                 .iter()
-                .map(ContactListRowEvidence::source_index),
+                .map(ContactListEntryError::source_index),
         )
         .collect::<Vec<_>>();
     accounted.sort_unstable();
     assert_eq!(accounted, vec![1, 2, 3, 4, 5, 6, 7]);
 
     assert!(matches!(
-        &list.evidence()[0],
-        ContactListRowEvidence::MissingTarget { .. }
+        &list.entry_errors()[0],
+        ContactListEntryError::MissingTarget { .. }
     ));
     assert!(matches!(
-        &list.evidence()[1],
-        ContactListRowEvidence::InvalidPublicKey { .. }
+        &list.entry_errors()[1],
+        ContactListEntryError::InvalidPublicKey { .. }
     ));
     assert!(matches!(
-        &list.evidence()[2],
-        ContactListRowEvidence::InvalidRelayHint { .. }
+        &list.entry_errors()[2],
+        ContactListEntryError::InvalidRelayHint { .. }
     ));
     assert!(matches!(
-        &list.evidence()[3],
-        ContactListRowEvidence::DuplicateTarget { pubkey, .. } if *pubkey == alice
+        &list.entry_errors()[3],
+        ContactListEntryError::DuplicateTarget { pubkey, .. } if *pubkey == alice
     ));
     assert!(matches!(
-        &list.evidence()[4],
-        ContactListRowEvidence::UninterpretedExtraColumns { .. }
+        &list.entry_errors()[4],
+        ContactListEntryError::UninterpretedExtraValues { .. }
     ));
-    for (evidence, source_index) in list.evidence().iter().zip([1, 2, 3, 5, 6]) {
-        assert_eq!(evidence.raw_row(), rows[source_index].as_slice());
+    for (evidence, source_index) in list.entry_errors().iter().zip([1, 2, 3, 5, 6]) {
+        assert_eq!(evidence.raw_tag(), entries[source_index].as_slice());
     }
 }
 
 #[test]
-fn invalid_contact_rows_do_not_reserve_duplicate_targets() {
+fn invalid_contact_entries_do_not_reserve_duplicate_targets() {
     let author = Keys::generate();
     let target = Keys::generate().public_key();
-    let rows = vec![
+    let entries = vec![
         tag(&["p", &target.to_hex(), "https://invalid.example"]),
         tag(&["p", &target.to_hex(), "wss://relay.example", "alice"]),
         tag(&["p", &target.to_hex()]),
     ];
-    let event = source(&author, Kind::ContactList, 9, "", rows.clone());
+    let event = source(&author, Kind::ContactList, 9, "", entries.clone());
     let list = ContactList::from_event(&EventValue::Signed(event)).expect("mixed list");
 
     assert_eq!(list.follows().len(), 1);
     assert_eq!(list.follows()[0].source_index(), 1);
     assert_eq!(list.follows()[0].pubkey(), target);
-    assert_eq!(list.evidence().len(), 2);
+    assert_eq!(list.entry_errors().len(), 2);
     assert!(matches!(
-        &list.evidence()[0],
-        ContactListRowEvidence::InvalidRelayHint {
+        &list.entry_errors()[0],
+        ContactListEntryError::InvalidRelayHint {
             source_index: 0,
             ..
         }
     ));
     assert!(matches!(
-        &list.evidence()[1],
-        ContactListRowEvidence::DuplicateTarget {
+        &list.entry_errors()[1],
+        ContactListEntryError::DuplicateTarget {
             source_index: 2,
             pubkey,
             ..
         } if *pubkey == target
     ));
-    assert_eq!(list.evidence()[0].raw_row(), rows[0].as_slice());
-    assert_eq!(list.evidence()[1].raw_row(), rows[2].as_slice());
+    assert_eq!(list.entry_errors()[0].raw_tag(), entries[0].as_slice());
+    assert_eq!(list.entry_errors()[1].raw_tag(), entries[2].as_slice());
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn petname_presence_and_utf8_remain_exact() {
 }
 
 #[test]
-fn invalid_contact_list_events_are_refused_before_rows() {
+fn invalid_contact_list_events_are_refused_before_entries() {
     let author = Keys::generate();
     let wrong_kind = source(&author, Kind::Metadata, 1, "", Vec::new());
     assert!(matches!(
@@ -241,20 +241,6 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         Err(ContactListError::InvalidEvent(_))
     ));
 
-    let too_many = source(
-        &author,
-        Kind::ContactList,
-        4,
-        "",
-        (0..2_001)
-            .map(|index| tag(&["x", &index.to_string()]))
-            .collect(),
-    );
-    assert!(matches!(
-        ContactList::from_event(&EventValue::Signed(too_many)),
-        Err(ContactListError::TooManyTags { .. })
-    ));
-
     let too_large = source(
         &author,
         Kind::ContactList,
@@ -266,6 +252,25 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         ContactList::from_event(&EventValue::Signed(too_large)),
         Err(ContactListError::TooLarge { .. })
     ));
+}
+
+#[test]
+fn signed_contact_list_input_is_not_subject_to_the_local_write_builder_tag_bound() {
+    let author = Keys::generate();
+    let signed = source(
+        &author,
+        Kind::ContactList,
+        4,
+        "",
+        (0..2_001)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
+    );
+
+    let decoded = ContactList::from_event(&EventValue::Signed(signed))
+        .expect("valid signed input is decoded without rebuilding it");
+    assert!(decoded.follows().is_empty());
+    assert!(decoded.entry_errors().is_empty());
 }
 
 /// A duplicate relay in the publication route is a routing defect. Reporting

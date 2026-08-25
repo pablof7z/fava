@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7, the tag-value query slice, Phase 07.1, and the approved `fava-simple-groups` Phase 07.1.1 are complete; urgent Phase 07.2 restores the specified runtime signer lifecycle before M8. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
+Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. Phase 07.1.1's completion verdict is revoked as recorded in `.planning/REQUIREMENTS.md`; its executed plans are historical inputs, not current validation. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -24,7 +24,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 6: Automatic Routing and Partial Delivery** - Complete M6's live write routing and route expansion under one durable receipt.
 - [x] **Phase 7: Semantic Writes and Capability Composition** - Complete M7's replaceable-event edits and protocol-crate extensibility without core kind switches.
 - [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
-- [x] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
+- [ ] **Phase 07.1.1: Multi-Relay Simple Groups** - Completion verdict revoked; re-verification remains pending against the approved refactored surface and current gates.
 - [x] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava. (completed 2026-08-23)
 - [ ] **Phase 07.3: Architecture Gate Integrity and Requirement Traceability** - Make the vocabulary, requirement, and verification gates truthful before measuring any remediation against them.
 - [ ] **Phase 07.4: Neutral Contract Correction** - Reshape transport, subscription-planning, evidence, and diagnostics contracts so their specified owners can express the facts they own.
@@ -190,7 +190,9 @@ Plans:
 **Goal:** An application can read, discover, edit, publish, and await NIP-02 contact-list changes through the README-level typed Rust API, while the same universal `publish`/`by`/`to` vocabulary accepts every write payload without exposing `WriteIntent` ceremony.
 **Requirements**: R1, R2, R3, R4, R5, R6, R7, R8, R9
 **Depends on:** Phase 7
-**Plans:** 12/12 plans complete
+**Status:** Completion verdict revoked. The 12 executed plans below are historical and do not establish current completion; `.planning/REQUIREMENTS.md` owns the pending requirement verdicts.
+
+**Plans:** 12/12 historical plans executed; current verification pending
 
 Plans:
 **Wave 1**
@@ -234,31 +236,19 @@ Plans:
 
 ### Phase 07.1.1: Multi-Relay Simple Groups (INSERTED)
 
-**Goal:** As a Fava application developer, I can use the README-shaped `fava-simple-groups` capability to read, project, discover, and publish one NIP-29 group across one or several host relays without losing relay-local authority or creating a second query/publication lifecycle.
+**Goal:** As a Fava application developer, I can use the README-shaped `fava-simple-groups` capability to query content and state, decode event-local values, publish prepared content, and maintain one saved-group list across one or several host relays without creating a second query/publication lifecycle.
 **Mode:** mvp
 **Requirements:** GROUP-01, GROUP-02, GROUP-03, GROUP-04, GROUP-05, GROUP-06, GROUP-07, GROUP-08, GROUP-09, GROUP-10, GROUP-11, GROUP-12
 **Depends on:** Phase 07.1
 **Success Criteria** (what must be TRUE):
 
-  1. An application constructs one `Group` from a non-empty host set and opaque id; the same public helpers produce ordinary exact-`h` content queries, exact-`d` record queries, and kind-blind exact-host write intents for one or several hosts.
-  2. A controlled two-relay fork appears as one event-id-deduplicated feed with exact serving-relay evidence while typed projections retain each host's independent records, expose disagreement, and never choose or field-merge a winner.
-  3. Typed record/saved-row parsing and ordinary `Query`/`ValueSet` discovery cover metadata, admins, members, roles, participants, pins, saved groups, and saved relays without raw-tag work or global completeness claims.
-  4. The crate README's public flow passes pure, facade, cancellation/close, bounds, deliberate-break, and two-relay wire evidence while the crate owns no engine lifecycle and universal owners contain no NIP-29 switch.
+  1. An application constructs one `SimpleGroup` from an opaque id and normalized non-empty relay sequence; its helpers produce ordinary exact-`h` content through query-owned intersection and exact-`d` state queries without capability-private bounds, validation, errors, or lifecycle work.
+  2. Event-local decoders cover kinds 39000 through 39005 with tolerant entry-local failures, leaving verification, provenance, replacement, and relay-local selection to their generic owners.
+  3. One kind-10009 query, decoded `SavedGroupList`, pure edits, and the private materializer cover saved groups and relays without raw-tag work or a second publication lifecycle.
+  4. The compiler-derived README catalog, direct crate canary, facade consumer, controlled canary, Cargo targets, and Bazel targets agree with the real public surface and current authoritative vocabulary before completion is re-earned.
 
-**Plans:** 12/12 plans complete
-
-- [x] 07.1.1-01-PLAN.md
-- [x] 07.1.1-02-PLAN.md
-- [x] 07.1.1-03-PLAN.md
-- [x] 07.1.1-04-PLAN.md
-- [x] 07.1.1-05-PLAN.md
-- [x] 07.1.1-06-PLAN.md
-- [x] 07.1.1-07-PLAN.md
-- [x] 07.1.1-08-PLAN.md
-- [x] 07.1.1-09-PLAN.md
-- [x] 07.1.1-10-PLAN.md
-- [x] 07.1.1-11-PLAN.md
-- [x] 07.1.1-12-PLAN.md
+**Plans:** Current refactor not planned in GSD. The twelve numbered plan files are
+superseded historical execution records and make no current completion claim.
 
 ### Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup (INSERTED)
 
@@ -488,7 +478,7 @@ Plans:
 | 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
 | 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete    | 2026-08-22 |
-| 07.1.1. Multi-Relay Simple Groups | 12/12 | Complete | 2026-08-22 |
+| 07.1.1. Multi-Relay Simple Groups | 12/12 historical | Verdict revoked | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |

@@ -35,8 +35,6 @@ const MAX_IDENTIFIER_BYTES: usize = 4_096;
 
 mod bounds;
 
-use bounds::MAX_TAGS;
-
 /// Produce a bounded edit that adds one public event bookmark.
 ///
 /// # Errors
@@ -327,12 +325,6 @@ fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> 
             without_matches.checked_add(usize::from(change.operation == Operation::Add))
         })
         .ok_or_else(|| codec_refusal("bookmark output tag count overflow"))?;
-    if capacity > MAX_TAGS {
-        return Err(WriteIntentError::TooLarge {
-            bytes: capacity,
-            maximum: MAX_TAGS,
-        });
-    }
     let mut found = false;
     let mut tags = Vec::with_capacity(capacity);
     for tag in source {
@@ -413,7 +405,7 @@ fn build(
     for tag in tags {
         builder = builder.tag(tag);
     }
-    builder.build().map_err(bounds::map_build_error)
+    builder.build().map_err(WriteIntentError::from)
 }
 
 fn validate_output(

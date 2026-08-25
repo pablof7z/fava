@@ -32,7 +32,7 @@ mod contact_list;
 mod edit;
 mod query;
 
-pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
+pub use contact_list::{ContactList, ContactListEntryError, ContactListError, Follow};
 pub use edit::{follow, follow_with, materializer, unfollow};
 pub use query::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
