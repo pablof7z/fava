@@ -229,6 +229,12 @@ class ApprovalPageTest(unittest.TestCase):
         self.assertIn("payload.textContent = term.markdown;", self.html)
         self.assertIn("content: term.markdown", self.html)
 
+    def test_renders_markdown_and_keeps_the_exact_raw_payload(self) -> None:
+        self.assertIn("function renderMarkdown(markdown)", self.html)
+        self.assertIn("renderMarkdown(term.markdown)", self.html)
+        self.assertIn("Exact signed Markdown (raw)", self.html)
+        self.assertNotIn("innerHTML", self.html)
+
     def test_has_no_multi_term_signing_path(self) -> None:
         self.assertNotIn("sign-all", self.html)
         self.assertNotIn("Sign all", self.html)
