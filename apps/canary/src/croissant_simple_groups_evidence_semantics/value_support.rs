@@ -35,12 +35,15 @@ fn exact_filter(
     axis: &str,
     simple_group: &str,
     kinds: &[u64],
-    limit: u64,
+    limit: Option<u64>,
 ) -> bool {
-    filter.len() == 3
+    filter.len() == 2 + usize::from(limit.is_some())
         && filter.get(axis) == Some(&json!([simple_group]))
         && filter.get("kinds") == Some(&json!(kinds))
-        && filter.get("limit").and_then(Value::as_u64) == Some(limit)
+        && match limit {
+            Some(limit) => filter.get("limit").and_then(Value::as_u64) == Some(limit),
+            None => !filter.contains_key("limit"),
+        }
 }
 
 fn assign_once(slot: &mut Option<String>, value: &str, label: &str) -> CanaryResult<()> {

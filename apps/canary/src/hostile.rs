@@ -67,6 +67,7 @@ pub(crate) async fn refuse_forged_event(seed: &str) -> CanaryResult<()> {
         .map_err(error)?;
     let query = Query::events()
         .authors([keys.public_key()])
+        .map_err(error)?
         .only_from_relays([relay])
         .map_err(error)?;
     let observation = fava.observe(query).await.map_err(error)?;

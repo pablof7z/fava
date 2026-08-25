@@ -14,12 +14,14 @@ use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
-use fava_simple_groups::{SimpleGroup, SimpleGroupRecords};
+use fava_simple_groups::{
+    SimpleGroup, SimpleGroupAdmins, SimpleGroupMetadata, SimpleGroupStateEventKind,
+};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write::{Event, ReceiptOutcome};
 use fava_write_store_redb::RedbWriteStore;
-use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -35,7 +37,7 @@ const OPERATION_MS: u64 = 30_000;
 const CUSTOM_KIND: u16 = 50_029;
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct SimpleGroupsFlowFacts {
+pub(crate) struct SimpleGroupFlowFacts {
     pub(crate) simple_group_id: String,
     pub(crate) relay_urls: [String; 2],
     pub(crate) shared_event_id: String,
@@ -51,7 +53,7 @@ pub(crate) struct SimpleGroupsFlowFacts {
     pub(crate) custom_destinations: usize,
     pub(crate) custom_acknowledged: usize,
     pub(crate) handoffs: [usize; 2],
-    pub(crate) signed_refusals: usize,
+    pub(crate) prepared_contexts: usize,
     pub(crate) observation_closed: bool,
 }
 
@@ -59,7 +61,7 @@ pub(crate) async fn execute_public_flow(
     root: &Path,
     seed: &str,
     ready: [CroissantReadyFact; 2],
-) -> CanaryResult<SimpleGroupsFlowFacts> {
+) -> CanaryResult<SimpleGroupFlowFacts> {
     fs::create_dir_all(root.join("wire"))?;
     fs::create_dir_all(root.join("children"))?;
     let proxy_a = WireProxy::start(ready[0].endpoint, &root.join("wire/a.jsonl")).await?;
@@ -91,7 +93,7 @@ async fn execute_with_proxies(
     root: &Path,
     seed: &str,
     urls: &[String; 2],
-) -> CanaryResult<(SimpleGroupsFlowFacts, String)> {
+) -> CanaryResult<(SimpleGroupFlowFacts, String)> {
     let author = deterministic_keys(&format!("simple-groups-author\0{seed}"))?;
     let target_a = deterministic_keys(&format!("simple-groups-admin-a\0{seed}"))?.public_key();
     let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?.public_key();
@@ -99,9 +101,11 @@ async fn execute_with_proxies(
         RelayUrl::parse(&urls[0]).map_err(error)?,
         RelayUrl::parse(&urls[1]).map_err(error)?,
     ];
-    let simple_group_id = hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
+    let simple_group_id =
+        hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
 
-    let simple_group = SimpleGroup::on(relays.clone(), &simple_group_id).map_err(error)?;
+    let simple_group =
+        SimpleGroup::from_relays(&simple_group_id, relays[0].clone(), vec![relays[1].clone()]);
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(author.clone()));
     let publisher = assembly(root.join("children/publisher.redb"), signer)?;
     let observer = assembly(
@@ -141,7 +145,7 @@ async fn execute_with_proxies(
     .enumerate()
     {
         let metadata = simple_group
-            .edit_metadata(
+            .prepare(
                 EventBuilder::new(author.public_key(), Kind::from_u16(9_002))
                     .created_at(Timestamp::from(now + 1 + index as u64))
                     .tags([tag(&["name", name])?, tag(&["about", about])?])
@@ -194,7 +198,8 @@ async fn execute_with_proxies(
             simple_group
                 .events(
                     Query::events()
-                        .kind(Kind::from_u16(9))
+                        .kinds([Kind::from_u16(9)])
+                        .map_err(error)?
                         .limit(16)
                         .map_err(error)?,
                 )
@@ -203,61 +208,45 @@ async fn execute_with_proxies(
         .await
         .map_err(error)?;
     let mut records = observer
-        .observe(simple_group.records(SimpleGroupRecords::all()).map_err(error)?)
+        .observe(
+            simple_group
+                .state_events(SimpleGroupStateEventKind::ALL)
+                .map_err(error)?,
+        )
         .await
         .map_err(error)?;
-    let selected_hosts = simple_group.hosts().count();
+    let selected_relays = simple_group.relays().count();
     let content_snapshot = wait_observation(&mut content, |current| {
-        current.events.len() == selected_hosts + 1
+        current.events.len() == selected_relays + 1
             && current.events.iter().any(|record| {
-                record.id() == shared.id && record.relay_evidence.len() == selected_hosts
+                record.id() == shared.id && record.relay_evidence.len() == selected_relays
             })
     })
     .await?;
     let record_snapshot = wait_observation(&mut records, |current| {
-        let Ok(projected) = simple_group.project(current) else {
-            return false;
-        };
-        projected.metadata().count() == selected_hosts
-            && projected.admin_records().count() == selected_hosts
+        relays.iter().all(|relay| {
+            metadata_for_relay(current, relay).is_some()
+                && admins_for_relay(current, relay, author.public_key()).is_some()
+        })
     })
     .await?;
-    let projected = simple_group.project(&record_snapshot).map_err(error)?;
-    if selected_hosts == 2 && (!projected.metadata_differ() || !projected.admins_differ()) {
-        return Err(CanaryError::new(
-            "host-local metadata/admin forks did not disagree",
-        ));
-    }
-    let metadata = projected
-        .metadata()
-        .map(|(_, value)| {
-            (
-                value.name().unwrap_or_default().to_owned(),
-                value.author().to_hex(),
-            )
-        })
-        .collect::<Vec<_>>();
-    let admins = projected
-        .admin_records()
-        .map(|(_, value)| {
-            let target = value
-                .admins()
-                .iter()
-                .filter_map(|row| row.as_ref().ok())
-                .map(|(key, _)| key.to_hex())
-                .find(|key| key != &author.public_key().to_hex())
-                .unwrap_or_default();
-            (target, value.author().to_hex())
-        })
-        .collect::<Vec<_>>();
     let metadata = [
-        metadata.first().cloned().unwrap_or_default(),
-        metadata.get(1).cloned().unwrap_or_default(),
+        metadata_for_relay(&record_snapshot, &relays[0])
+            .ok_or_else(|| CanaryError::new("relay A metadata was absent"))?,
+        metadata_for_relay(&record_snapshot, &relays[1])
+            .ok_or_else(|| CanaryError::new("relay B metadata was absent"))?,
     ];
     let admins = [
-        admins.first().cloned().unwrap_or_default(),
-        admins.get(1).cloned().unwrap_or_default(),
+        admins_for_relay(&record_snapshot, &relays[0], author.public_key())
+            .ok_or_else(|| CanaryError::new("relay A admin state was absent"))?,
+        admins_for_relay(&record_snapshot, &relays[1], author.public_key())
+            .ok_or_else(|| CanaryError::new("relay B admin state was absent"))?,
     ];
+    if metadata[0].0 == metadata[1].0 || admins[0].0 == admins[1].0 {
+        return Err(CanaryError::new(
+            "relay-local metadata/admin records did not remain distinct",
+        ));
+    }
 
     let observed_shared_evidence = content_snapshot
         .events
@@ -278,22 +267,12 @@ async fn execute_with_proxies(
             "shared content evidence did not match the exact relay route",
         ));
     }
-    for (relay, expected) in [(&relays[0], "relay-A"), (&relays[1], "relay-B")]
-        .into_iter()
-        .take(selected_hosts)
-    {
-        let selected = SimpleGroup::on([relay.clone()], &simple_group_id)
-            .map_err(error)?
-            .project(&record_snapshot)
-            .map_err(error)?;
-        if selected
-            .metadata()
-            .next()
-            .and_then(|(_, value)| value.name())
-            != Some(expected)
+    for (relay, expected) in [(&relays[0], "relay-A"), (&relays[1], "relay-B")] {
+        if metadata_for_relay(&record_snapshot, relay).map(|value| value.0)
+            != Some(expected.to_owned())
         {
             return Err(CanaryError::new(
-                "single-host fork choice selected another host",
+                "relay-evidence selection returned another relay's metadata",
             ));
         }
     }
@@ -308,37 +287,51 @@ async fn execute_with_proxies(
         )
         .map_err(error)?;
     let custom_write = publisher
-        .to(simple_group.hosts())
+        .to(simple_group.relays())
         .map_err(error)?
         .publish(custom)
         .map_err(error)?;
     let custom_receipt = wait_terminal(&custom_write).await?;
-    require_terminal(&custom_receipt, selected_hosts)?;
+    require_terminal(&custom_receipt, selected_relays)?;
     let custom_id = custom_receipt.current.id();
     let handoffs = [
         exact_event_handoffs(&root.join("wire/a.jsonl"), custom_id)?,
         exact_event_handoffs(&root.join("wire/b.jsonl"), custom_id)?,
     ];
 
-    let before_refusal = publisher.open_receipts().map_err(error)?.len();
-    let invalids = [
-        signed_raw(&author, now + 9, vec![])?,
-        signed_raw(
-            &author,
-            now + 10,
-            vec![tag(&["h", &simple_group_id])?, tag(&["h", &simple_group_id])?],
-        )?,
-        signed_raw(&author, now + 11, vec![tag(&["h", "other-group"])?])?,
+    let before_preparation = publisher.open_receipts().map_err(error)?.len();
+    let drafts = [
+        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+            .created_at(Timestamp::from(now + 9))
+            .build()
+            .map_err(error)?,
+        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+            .created_at(Timestamp::from(now + 10))
+            .tags([
+                tag(&["h", &simple_group_id])?,
+                tag(&["h", &simple_group_id, "unused"])?,
+            ])
+            .build()
+            .map_err(error)?,
+        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+            .created_at(Timestamp::from(now + 11))
+            .tag(tag(&["h", "other-group"])?)
+            .build()
+            .map_err(error)?,
     ];
-    let mut signed_refusals = 0;
-    for invalid in invalids {
-        if simple_group.prepare(invalid).is_err() {
-            signed_refusals += 1;
+    let mut prepared_contexts = 0;
+    for draft in drafts {
+        let prepared = simple_group.prepare(draft).map_err(error)?;
+        if prepared.tags.iter().any(|tag| {
+            tag.as_slice().first().map(String::as_str) == Some("h")
+                && tag.as_slice().get(1).map(String::as_str) == Some(&simple_group_id)
+        }) {
+            prepared_contexts += 1;
         }
     }
-    if publisher.open_receipts().map_err(error)?.len() != before_refusal {
+    if publisher.open_receipts().map_err(error)?.len() != before_preparation {
         return Err(CanaryError::new(
-            "invalid signed context reached Fava custody",
+            "pure simple-group preparation reached Fava custody",
         ));
     }
 
@@ -356,7 +349,7 @@ async fn execute_with_proxies(
 
     let bootstrap_event_id = create.id.to_hex();
     Ok((
-        SimpleGroupsFlowFacts {
+        SimpleGroupFlowFacts {
             simple_group_id,
             relay_urls: [relays[0].to_string(), relays[1].to_string()],
             shared_event_id: shared.id.to_hex(),
@@ -372,11 +365,54 @@ async fn execute_with_proxies(
             custom_destinations: custom_receipt.desired_destinations.len(),
             custom_acknowledged: custom_receipt.acknowledged(),
             handoffs,
-            signed_refusals,
+            prepared_contexts,
             observation_closed,
         },
         bootstrap_event_id,
     ))
+}
+
+fn metadata_for_relay(
+    snapshot: &fava::QuerySnapshot,
+    relay: &RelayUrl,
+) -> Option<(String, String)> {
+    snapshot.events.iter().find_map(|record| {
+        if !seen_on(record, relay) {
+            return None;
+        }
+        let metadata = SimpleGroupMetadata::from_event(&record.event).ok()?;
+        Some((
+            metadata.name().unwrap_or_default().to_owned(),
+            metadata.author().to_hex(),
+        ))
+    })
+}
+
+fn admins_for_relay(
+    snapshot: &fava::QuerySnapshot,
+    relay: &RelayUrl,
+    author: fava::PublicKey,
+) -> Option<(String, String)> {
+    snapshot.events.iter().find_map(|record| {
+        if !seen_on(record, relay) {
+            return None;
+        }
+        let admins = SimpleGroupAdmins::from_event(&record.event).ok()?;
+        let target = admins
+            .admins()
+            .iter()
+            .filter_map(|entry| entry.as_ref().ok())
+            .map(|(key, _)| key.to_hex())
+            .find(|key| key != &author.to_hex())?;
+        Some((target, admins.author().to_hex()))
+    })
+}
+
+fn seen_on(record: &fava::EventRecord, relay: &RelayUrl) -> bool {
+    record
+        .relay_evidence
+        .observations()
+        .any(|observation| &observation.session.relay == relay)
 }
 
 fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
@@ -451,14 +487,6 @@ fn signed_group_event(
                 .map_err(error)?,
         )
         .map_err(error)?
-        .finalize(keys)
-        .map_err(error)
-}
-
-fn signed_raw(keys: &Keys, created: u64, tags: Vec<Tag>) -> CanaryResult<Event> {
-    NostrEventBuilder::new(Kind::from_u16(CUSTOM_KIND + 1), "invalid signed context")
-        .tags(tags)
-        .custom_created_at(Timestamp::from(created))
         .finalize(keys)
         .map_err(error)
 }

@@ -17,11 +17,13 @@ const FIXTURE_FAVA_BUILD_COMMAND: &str =
     "8e010e7b68d708e96ebc25f34935b42d8e6198436a65cf41e27a60c7765bae08";
 const FIXTURE_FAVA_SOURCE_MANIFEST: &str =
     "73b83ce204d2d4c69ec95a8750b0c2f25483f18d6235f357d7d50a950d9dde96";
-const FIXTURE_FAVA_EXECUTABLE: &str = "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
+const FIXTURE_FAVA_EXECUTABLE: &str =
+    "dbe3d43cfad0cc9a73e99695aa9df9ba54a475ee38f6111b3dead5e55e08be78";
 const FIXTURE_FAVA_SUBJECT_IMAGE: &str =
     "9999999999999999999999999999999999999999999999999999999999999999";
 const FIXTURE_CROISSANT_REVISION: &str = "3333333333333333333333333333333333333333";
-const FIXTURE_CROISSANT_EXECUTABLE: &str = "4444444444444444444444444444444444444444444444444444444444444444";
+const FIXTURE_CROISSANT_EXECUTABLE: &str =
+    "4444444444444444444444444444444444444444444444444444444444444444";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn croissant_simple_groups_public_flow() {
@@ -78,7 +80,7 @@ async fn croissant_simple_groups_public_flow() {
     assert_eq!(facts.custom_destinations, 2);
     assert_eq!(facts.custom_acknowledged, 2);
     assert_eq!(facts.handoffs, [1, 1]);
-    assert_eq!(facts.signed_refusals, 3);
+    assert_eq!(facts.prepared_contexts, 3);
     assert!(facts.observation_closed);
     assert_pair_cleanup(&completion.ready, &completion.teardown);
 }
