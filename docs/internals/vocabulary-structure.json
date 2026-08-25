@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 1,
-  "inputs_sha256": "39c996ab64822707d5aabde39d2b26544e896bad9ac069f2449565c5a7ecf7ac",
+  "inputs_sha256": "f6c756ca541af2d13544aa3d2a01c1d6e74a764034928ba6d6beffe377ad5d0f",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -1856,6 +1856,65 @@
       }
     },
     {
+      "name": "EventValue",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum EventValue {\n    /// Materialized event awaiting a valid signature.\n    Unsigned(UnsignedEvent),\n    /// Exact signed event.\n    Signed(Event),\n}",
+            "kind": "enum",
+            "path": "fava_write::EventValue",
+            "source": "crates/fava-write/src/lib.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_write::EventValue",
+            "path": "fava_write::EventValue"
+          },
+          {
+            "declaration": "pub fava_write::EventValue::Signed(nostr::event::Event)",
+            "path": "fava_write::EventValue::Signed"
+          },
+          {
+            "declaration": "pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)",
+            "path": "fava_write::EventValue::Unsigned"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::author"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::coordinate"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::created_at"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::id"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::kind"
+          },
+          {
+            "declaration": "pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]",
+            "implementation": "impl fava_write::EventValue",
+            "path": "fava_write::EventValue::tags"
+          }
+        ],
+        "reexports": []
+      }
+    },
+    {
       "name": "FakeRelay",
       "structure": {
         "private_architectural_state": [
@@ -3062,6 +3121,31 @@
       }
     },
     {
+      "name": "InvalidEventValue",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}",
+            "kind": "enum",
+            "path": "fava_write::InvalidEventValue",
+            "source": "crates/fava-write/src/lib.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_write::InvalidEventValue",
+            "path": "fava_write::InvalidEventValue"
+          },
+          {
+            "declaration": "pub fava_write::InvalidEventValue::MissingId",
+            "path": "fava_write::InvalidEventValue::MissingId"
+          }
+        ],
+        "reexports": []
+      }
+    },
+    {
       "name": "Kind",
       "structure": {
         "private_architectural_state": [],
@@ -4092,40 +4176,6 @@
       }
     },
     {
-      "name": "PinnedItem",
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum PinnedItem {\n    /// Immutable event id target.\n    Event(EventId),\n    /// Addressable event coordinate target.\n    Address(EventCoordinate),\n}",
-            "kind": "enum",
-            "path": "fava_simple_groups::pins::PinnedItem",
-            "source": "crates/fava-simple-groups/src/pins.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_simple_groups::PinnedItem",
-            "path": "fava_simple_groups::PinnedItem"
-          },
-          {
-            "declaration": "pub fava_simple_groups::PinnedItem::Address(fava_state::EventCoordinate)",
-            "path": "fava_simple_groups::PinnedItem::Address"
-          },
-          {
-            "declaration": "pub fava_simple_groups::PinnedItem::Event(nostr::event::id::EventId)",
-            "path": "fava_simple_groups::PinnedItem::Event"
-          }
-        ],
-        "reexports": [
-          {
-            "path": "fava_simple_groups::PinnedItem",
-            "source": "pins::PinnedItem"
-          }
-        ]
-      }
-    },
-    {
       "name": "ProviderCompletion",
       "structure": {
         "private_architectural_state": [
@@ -5146,6 +5196,66 @@
             "path": "fava_query::QueryError::EmptyExplicitRelays"
           },
           {
+            "declaration": "pub fava_query::QueryError::TooManyAuthors",
+            "path": "fava_query::QueryError::TooManyAuthors"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyAuthors::actual: usize",
+            "path": "fava_query::QueryError::TooManyAuthors::actual"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyAuthors::maximum: usize",
+            "path": "fava_query::QueryError::TooManyAuthors::maximum"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays",
+            "path": "fava_query::QueryError::TooManyExplicitRelays"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays::actual: usize",
+            "path": "fava_query::QueryError::TooManyExplicitRelays::actual"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays::maximum: usize",
+            "path": "fava_query::QueryError::TooManyExplicitRelays::maximum"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyIds",
+            "path": "fava_query::QueryError::TooManyIds"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyIds::actual: usize",
+            "path": "fava_query::QueryError::TooManyIds::actual"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyIds::maximum: usize",
+            "path": "fava_query::QueryError::TooManyIds::maximum"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyKinds",
+            "path": "fava_query::QueryError::TooManyKinds"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyKinds::actual: usize",
+            "path": "fava_query::QueryError::TooManyKinds::actual"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyKinds::maximum: usize",
+            "path": "fava_query::QueryError::TooManyKinds::maximum"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyTagValues",
+            "path": "fava_query::QueryError::TooManyTagValues"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyTagValues::actual: usize",
+            "path": "fava_query::QueryError::TooManyTagValues::actual"
+          },
+          {
+            "declaration": "pub fava_query::QueryError::TooManyTagValues::maximum: usize",
+            "path": "fava_query::QueryError::TooManyTagValues::maximum"
+          },
+          {
             "declaration": "pub fava_query::QueryError::ZeroLimit",
             "path": "fava_query::QueryError::ZeroLimit"
           },
@@ -5292,7 +5402,7 @@
             "path": "fava_query::BoundedText::new"
           },
           {
-            "declaration": "pub fn fava_query::Query::authors(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> Self",
+            "declaration": "pub fn fava_query::Query::authors(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> core::result::Result<Self, fava_query::QueryError>",
             "implementation": "impl fava_query::Query",
             "path": "fava_query::Query::authors"
           },
@@ -5312,14 +5422,19 @@
             "path": "fava_query::Query::from_relays"
           },
           {
-            "declaration": "pub fn fava_query::Query::ids(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::id::EventId>) -> Self",
+            "declaration": "pub fn fava_query::Query::ids(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::id::EventId>) -> core::result::Result<Self, fava_query::QueryError>",
             "implementation": "impl fava_query::Query",
             "path": "fava_query::Query::ids"
           },
           {
-            "declaration": "pub fn fava_query::Query::kind(self, nostr::event::kind::Kind) -> Self",
+            "declaration": "pub fn fava_query::Query::intersect_tag_values<I, S>(self, nostr::filter::single_letter::SingleLetterTag, I) -> core::result::Result<Self, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>",
             "implementation": "impl fava_query::Query",
-            "path": "fava_query::Query::kind"
+            "path": "fava_query::Query::intersect_tag_values"
+          },
+          {
+            "declaration": "pub fn fava_query::Query::kinds(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::kind::Kind>) -> core::result::Result<Self, fava_query::QueryError>",
+            "implementation": "impl fava_query::Query",
+            "path": "fava_query::Query::kinds"
           },
           {
             "declaration": "pub fn fava_query::Query::limit(self, usize) -> core::result::Result<Self, fava_query::QueryError>",
@@ -5332,7 +5447,7 @@
             "path": "fava_query::Query::only_from_relays"
           },
           {
-            "declaration": "pub fn fava_query::Query::tag_values<I, S>(self, nostr::filter::single_letter::SingleLetterTag, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>",
+            "declaration": "pub fn fava_query::Query::tag_values<I, S>(self, nostr::filter::single_letter::SingleLetterTag, I) -> core::result::Result<Self, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>",
             "implementation": "impl fava_query::Query",
             "path": "fava_query::Query::tag_values"
           },
@@ -8337,42 +8452,173 @@
       }
     },
     {
-      "name": "SavedRelay",
+      "name": "SavedGroupList",
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct SavedRelay {\n    relay: RelayUrl,\n    author: PublicKey,\n}",
+            "declaration": "pub struct SavedGroupList {\n    author: PublicKey,\n    simple_groups: Vec<Result<SavedSimpleGroup, SavedGroupListDecodeError>>,\n    relays: Vec<Result<RelayUrl, SavedGroupListDecodeError>>,\n}",
             "kind": "struct",
-            "path": "fava_simple_groups::saved::SavedRelay",
+            "path": "fava_simple_groups::saved::SavedGroupList",
             "source": "crates/fava-simple-groups/src/saved.rs",
             "visibility": "public"
           }
         ],
         "public_api": [
           {
-            "declaration": "pub const fn fava_simple_groups::SavedRelay::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::author"
+            "declaration": "pub const fn fava_simple_groups::SavedGroupList::author(&self) -> nostr::key::public_key::PublicKey",
+            "implementation": "impl fava_simple_groups::SavedGroupList",
+            "path": "fava_simple_groups::SavedGroupList::author"
           },
           {
-            "declaration": "pub const fn fava_simple_groups::SavedRelay::relay(&self) -> &nostr::types::url::RelayUrl",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::relay"
+            "declaration": "pub fn fava_simple_groups::SavedGroupList::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SavedGroupListDecodeError>",
+            "implementation": "impl fava_simple_groups::SavedGroupList",
+            "path": "fava_simple_groups::SavedGroupList::from_event"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SavedRelay::from_event(&fava_write::EventValue) -> core::result::Result<alloc::vec::Vec<core::result::Result<Self, fava_simple_groups::SimpleGroupError>>, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::from_event"
+            "declaration": "pub fn fava_simple_groups::SavedGroupList::relays(&self) -> &[core::result::Result<nostr::types::url::RelayUrl, fava_simple_groups::SavedGroupListDecodeError>]",
+            "implementation": "impl fava_simple_groups::SavedGroupList",
+            "path": "fava_simple_groups::SavedGroupList::relays"
           },
           {
-            "declaration": "pub struct fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay"
+            "declaration": "pub fn fava_simple_groups::SavedGroupList::simple_groups(&self) -> &[core::result::Result<fava_simple_groups::SavedSimpleGroup, fava_simple_groups::SavedGroupListDecodeError>]",
+            "implementation": "impl fava_simple_groups::SavedGroupList",
+            "path": "fava_simple_groups::SavedGroupList::simple_groups"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SavedGroupList",
+            "path": "fava_simple_groups::SavedGroupList"
           }
         ],
         "reexports": [
           {
-            "path": "fava_simple_groups::SavedRelay",
-            "source": "saved::SavedRelay"
+            "path": "fava_simple_groups::SavedGroupList",
+            "source": "saved::SavedGroupList"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SavedGroupListDecodeError",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum SavedGroupListDecodeError {\n    /// The decoder received a non-10009 event.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// A required relay value is invalid.\n    InvalidRelayUrl {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::saved::SavedGroupListDecodeError",
+            "source": "crates/fava-simple-groups/src/saved.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_simple_groups::SavedGroupListDecodeError",
+            "path": "fava_simple_groups::SavedGroupListDecodeError"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::tag_index: usize",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::value_index: usize",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::MissingTagValue"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::tag_index: usize",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::value_index: usize",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::WrongEventKind",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::WrongEventKind"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::WrongEventKind::actual: nostr::event::kind::Kind",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::WrongEventKind::actual"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SavedGroupListDecodeError::WrongEventKind::expected: nostr::event::kind::Kind",
+            "path": "fava_simple_groups::SavedGroupListDecodeError::WrongEventKind::expected"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SavedGroupListDecodeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
+            "implementation": "impl core::fmt::Display for fava_simple_groups::SavedGroupListDecodeError",
+            "path": "<fava_simple_groups::SavedGroupListDecodeError as core::fmt::Display>::fmt"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SavedGroupListDecodeError",
+            "source": "saved::SavedGroupListDecodeError"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SavedGroupListMaterializer",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "struct SavedGroupListMaterializer;",
+            "kind": "struct",
+            "path": "fava_simple_groups::edit::SavedGroupListMaterializer",
+            "source": "crates/fava-simple-groups/src/edit.rs",
+            "visibility": {
+              "restricted": "::edit"
+            }
+          }
+        ],
+        "public_api": [],
+        "reexports": []
+      }
+    },
+    {
+      "name": "SavedSimpleGroup",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SavedSimpleGroup {\n    id: String,\n    relay: RelayUrl,\n    display_name: Option<String>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::saved::SavedSimpleGroup",
+            "source": "crates/fava-simple-groups/src/saved.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_simple_groups::SavedSimpleGroup::relay(&self) -> &nostr::types::url::RelayUrl",
+            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
+            "path": "fava_simple_groups::SavedSimpleGroup::relay"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SavedSimpleGroup::display_name(&self) -> core::option::Option<&str>",
+            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
+            "path": "fava_simple_groups::SavedSimpleGroup::display_name"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SavedSimpleGroup::id(&self) -> &str",
+            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
+            "path": "fava_simple_groups::SavedSimpleGroup::id"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SavedSimpleGroup",
+            "path": "fava_simple_groups::SavedSimpleGroup"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SavedSimpleGroup",
+            "source": "saved::SavedSimpleGroup"
           }
         ]
       }
@@ -8826,7 +9072,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct SimpleGroup {\n    hosts: Vec<RelayUrl>,\n    id: String,\n}",
+            "declaration": "pub struct SimpleGroup {\n    id: String,\n    relays: Vec<RelayUrl>,\n}",
             "kind": "struct",
             "path": "fava_simple_groups::simple_group::SimpleGroup",
             "source": "crates/fava-simple-groups/src/simple_group.rs",
@@ -8835,35 +9081,357 @@
         ],
         "public_api": [
           {
-            "declaration": "pub const fn fava_simple_groups::SavedRelay::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::author"
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_query::QueryError>",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::events"
           },
           {
-            "declaration": "pub const fn fava_simple_groups::SavedRelay::relay(&self) -> &nostr::types::url::RelayUrl",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::relay"
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::from_relays"
           },
           {
-            "declaration": "pub const fn fava_simple_groups::SavedSimpleGroup::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup::author"
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::id"
           },
           {
-            "declaration": "pub const fn fava_simple_groups::SavedSimpleGroup::relay(&self) -> &nostr::types::url::RelayUrl",
-            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup::relay"
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::prepare"
           },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::relays"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::state_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::state_events"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroup",
+            "source": "simple_group::SimpleGroup"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupAdmins",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupAdmins {\n    id: String,\n    author: PublicKey,\n    admins: Vec<Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::people::SimpleGroupAdmins",
+            "source": "crates/fava-simple-groups/src/people.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
           {
             "declaration": "pub const fn fava_simple_groups::SimpleGroupAdmins::author(&self) -> nostr::key::public_key::PublicKey",
             "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
             "path": "fava_simple_groups::SimpleGroupAdmins::author"
           },
           {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::admins(&self) -> &[core::result::Result<(nostr::key::public_key::PublicKey, alloc::vec::Vec<alloc::string::String>), fava_simple_groups::SimpleGroupDecodeError>]",
+            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
+            "path": "fava_simple_groups::SimpleGroupAdmins::admins"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
+            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
+            "path": "fava_simple_groups::SimpleGroupAdmins::from_event"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::id(&self) -> &str",
+            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
+            "path": "fava_simple_groups::SimpleGroupAdmins::id"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SimpleGroupAdmins",
+            "path": "fava_simple_groups::SimpleGroupAdmins"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupAdmins",
+            "source": "people::SimpleGroupAdmins"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupConstructionError",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum SimpleGroupConstructionError {\n    /// The supplied group id is exactly empty.\n    EmptyId,\n    /// The supplied relay vector is empty.\n    EmptyRelays,\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::simple_group::SimpleGroupConstructionError",
+            "source": "crates/fava-simple-groups/src/simple_group.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_simple_groups::SimpleGroupConstructionError",
+            "path": "fava_simple_groups::SimpleGroupConstructionError"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupConstructionError::EmptyId",
+            "path": "fava_simple_groups::SimpleGroupConstructionError::EmptyId"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupConstructionError::EmptyRelays",
+            "path": "fava_simple_groups::SimpleGroupConstructionError::EmptyRelays"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupConstructionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
+            "implementation": "impl core::fmt::Display for fava_simple_groups::SimpleGroupConstructionError",
+            "path": "<fava_simple_groups::SimpleGroupConstructionError as core::fmt::Display>::fmt"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupConstructionError",
+            "source": "simple_group::SimpleGroupConstructionError"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupDecodeError",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum SimpleGroupDecodeError {\n    /// The selected decoder does not own the supplied kind.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// No `d` tag exists.\n    MissingIdentifierTag,\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// An administrator or member key is invalid.\n    InvalidPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// A `LiveKit` participant key is not exact lowercase hex.\n    InvalidLivekitParticipantPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// A `supported_kinds` value is not a decimal `u16`.\n    InvalidKind {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// An `e` pin value is not an event id.\n    InvalidEventId {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// An `a` pin value is not an addressable event coordinate.\n    InvalidEventCoordinate {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::records::SimpleGroupDecodeError",
+            "source": "crates/fava-simple-groups/src/records.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_simple_groups::SimpleGroupDecodeError",
+            "path": "fava_simple_groups::SimpleGroupDecodeError"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventId"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::MissingIdentifierTag",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::MissingIdentifierTag"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::MissingTagValue",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::MissingTagValue"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::tag_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::tag_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::value_index: usize",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::value_index"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::WrongEventKind",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::WrongEventKind"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::WrongEventKind::actual: nostr::event::kind::Kind",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::WrongEventKind::actual"
+          },
+          {
+            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::WrongEventKind::expected: nostr::event::kind::Kind",
+            "path": "fava_simple_groups::SimpleGroupDecodeError::WrongEventKind::expected"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupDecodeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
+            "implementation": "impl core::fmt::Display for fava_simple_groups::SimpleGroupDecodeError",
+            "path": "<fava_simple_groups::SimpleGroupDecodeError as core::fmt::Display>::fmt"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupDecodeError",
+            "source": "records::SimpleGroupDecodeError"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupLivekitParticipants",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupLivekitParticipants {\n    id: String,\n    author: PublicKey,\n    participants: Vec<Result<PublicKey, SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::people::SimpleGroupLivekitParticipants",
+            "source": "crates/fava-simple-groups/src/people.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_simple_groups::SimpleGroupLivekitParticipants::author(&self) -> nostr::key::public_key::PublicKey",
+            "implementation": "impl fava_simple_groups::SimpleGroupLivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants::author"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupLivekitParticipants::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
+            "implementation": "impl fava_simple_groups::SimpleGroupLivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants::from_event"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupLivekitParticipants::id(&self) -> &str",
+            "implementation": "impl fava_simple_groups::SimpleGroupLivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants::id"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupLivekitParticipants::participants(&self) -> &[core::result::Result<nostr::key::public_key::PublicKey, fava_simple_groups::SimpleGroupDecodeError>]",
+            "implementation": "impl fava_simple_groups::SimpleGroupLivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants::participants"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SimpleGroupLivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupLivekitParticipants",
+            "source": "people::SimpleGroupLivekitParticipants"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupMembers",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupMembers {\n    id: String,\n    author: PublicKey,\n    members: Vec<Result<PublicKey, SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::people::SimpleGroupMembers",
+            "source": "crates/fava-simple-groups/src/people.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
             "declaration": "pub const fn fava_simple_groups::SimpleGroupMembers::author(&self) -> nostr::key::public_key::PublicKey",
             "implementation": "impl fava_simple_groups::SimpleGroupMembers",
             "path": "fava_simple_groups::SimpleGroupMembers::author"
           },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
+            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
+            "path": "fava_simple_groups::SimpleGroupMembers::from_event"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::id(&self) -> &str",
+            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
+            "path": "fava_simple_groups::SimpleGroupMembers::id"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::members(&self) -> &[core::result::Result<nostr::key::public_key::PublicKey, fava_simple_groups::SimpleGroupDecodeError>]",
+            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
+            "path": "fava_simple_groups::SimpleGroupMembers::members"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::SimpleGroupMembers",
+            "path": "fava_simple_groups::SimpleGroupMembers"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupMembers",
+            "source": "people::SimpleGroupMembers"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupMetadata",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupMetadata {\n    id: String,\n    author: PublicKey,\n    name: Option<String>,\n    picture: Option<String>,\n    banner: Option<String>,\n    about: Option<String>,\n    private: bool,\n    restricted: bool,\n    hidden: bool,\n    closed: bool,\n    livekit: bool,\n    supported_kinds: Option<Vec<Result<Kind, SimpleGroupDecodeError>>>,\n    parent: Option<String>,\n    children: Vec<Result<String, SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::metadata::SimpleGroupMetadata",
+            "source": "crates/fava-simple-groups/src/metadata.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
           {
             "declaration": "pub const fn fava_simple_groups::SimpleGroupMetadata::author(&self) -> nostr::key::public_key::PublicKey",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
@@ -8895,447 +9463,6 @@
             "path": "fava_simple_groups::SimpleGroupMetadata::is_restricted"
           },
           {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupParticipants::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SimpleGroupParticipants",
-            "path": "fava_simple_groups::SimpleGroupParticipants::author"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupPins::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SimpleGroupPins",
-            "path": "fava_simple_groups::SimpleGroupPins::author"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::admins() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::admins"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::all() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::all"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::members() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::members"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::metadata() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::metadata"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::participants() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::participants"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::pins() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::pins"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRecords::roles() -> Self",
-            "implementation": "impl fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords::roles"
-          },
-          {
-            "declaration": "pub const fn fava_simple_groups::SimpleGroupRoles::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_simple_groups::SimpleGroupRoles",
-            "path": "fava_simple_groups::SimpleGroupRoles::author"
-          },
-          {
-            "declaration": "pub enum fava_simple_groups::PinnedItem",
-            "path": "fava_simple_groups::PinnedItem"
-          },
-          {
-            "declaration": "pub enum fava_simple_groups::SimpleGroupError",
-            "path": "fava_simple_groups::SimpleGroupError"
-          },
-          {
-            "declaration": "pub enum fava_simple_groups::SimpleGroupRecords",
-            "path": "fava_simple_groups::SimpleGroupRecords"
-          },
-          {
-            "declaration": "pub fava_simple_groups::PinnedItem::Address(fava_state::EventCoordinate)",
-            "path": "fava_simple_groups::PinnedItem::Address"
-          },
-          {
-            "declaration": "pub fava_simple_groups::PinnedItem::Event(nostr::event::id::EventId)",
-            "path": "fava_simple_groups::PinnedItem::Event"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::AmbiguousRecordField(&'static str)",
-            "path": "fava_simple_groups::SimpleGroupError::AmbiguousRecordField"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::ConflictingRecordId",
-            "path": "fava_simple_groups::SimpleGroupError::ConflictingRecordId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::ConflictingSimpleGroupContext",
-            "path": "fava_simple_groups::SimpleGroupError::ConflictingSimpleGroupContext"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateHost",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateHost"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateHost::relay: nostr::types::url::RelayUrl",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateHost::relay"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateRecordId",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateRecordId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateRecordRow",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateRecordRow"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateRecordRow::tag_index: usize",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateRecordRow::tag_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::DuplicateSimpleGroupContext",
-            "path": "fava_simple_groups::SimpleGroupError::DuplicateSimpleGroupContext"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::EmptyHosts",
-            "path": "fava_simple_groups::SimpleGroupError::EmptyHosts"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::EmptyId",
-            "path": "fava_simple_groups::SimpleGroupError::EmptyId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::EmptyRecordId",
-            "path": "fava_simple_groups::SimpleGroupError::EmptyRecordId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::EmptySimpleGroupContext",
-            "path": "fava_simple_groups::SimpleGroupError::EmptySimpleGroupContext"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::Event(alloc::string::String)",
-            "path": "fava_simple_groups::SimpleGroupError::Event"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::InvalidHost(alloc::string::String)",
-            "path": "fava_simple_groups::SimpleGroupError::InvalidHost"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::InvalidRecordId",
-            "path": "fava_simple_groups::SimpleGroupError::InvalidRecordId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::InvalidRecordSignature",
-            "path": "fava_simple_groups::SimpleGroupError::InvalidRecordSignature"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::MalformedRecordRow",
-            "path": "fava_simple_groups::SimpleGroupError::MalformedRecordRow"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::MalformedRecordRow::reason: &'static str",
-            "path": "fava_simple_groups::SimpleGroupError::MalformedRecordRow::reason"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::MalformedRecordRow::tag_index: usize",
-            "path": "fava_simple_groups::SimpleGroupError::MalformedRecordRow::tag_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::MissingRecordId",
-            "path": "fava_simple_groups::SimpleGroupError::MissingRecordId"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::MissingSimpleGroupContext",
-            "path": "fava_simple_groups::SimpleGroupError::MissingSimpleGroupContext"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::Query(alloc::string::String)",
-            "path": "fava_simple_groups::SimpleGroupError::Query"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordTooLarge",
-            "path": "fava_simple_groups::SimpleGroupError::RecordTooLarge"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordTooLarge::bytes: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordTooLarge::bytes"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordTooLarge::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordTooLarge::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordValueTooLong",
-            "path": "fava_simple_groups::SimpleGroupError::RecordValueTooLong"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordValueTooLong::bytes: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordValueTooLong::bytes"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordValueTooLong::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordValueTooLong::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordValueTooLong::tag_index: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordValueTooLong::tag_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::RecordValueTooLong::value_index: usize",
-            "path": "fava_simple_groups::SimpleGroupError::RecordValueTooLong::value_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong::bytes: usize",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong::bytes"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupContextTooLong::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong::bytes: usize",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong::bytes"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::SimpleGroupIdTooLong::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyContextTags",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyContextTags"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyContextTags::actual: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyContextTags::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyContextTags::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyContextTags::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems::actual: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyHosts",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyHosts"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyHosts::actual: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyHosts::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyHosts::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyHosts::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTagValues",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTagValues"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::actual: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::tag_index: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTagValues::tag_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTags",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTags"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTags::actual: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTags::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::TooManyRecordTags::maximum: usize",
-            "path": "fava_simple_groups::SimpleGroupError::TooManyRecordTags::maximum"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::UnsignedRecord",
-            "path": "fava_simple_groups::SimpleGroupError::UnsignedRecord"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::WrongRecordKind",
-            "path": "fava_simple_groups::SimpleGroupError::WrongRecordKind"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::WrongRecordKind::actual: u16",
-            "path": "fava_simple_groups::SimpleGroupError::WrongRecordKind::actual"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupError::WrongRecordKind::expected: u16",
-            "path": "fava_simple_groups::SimpleGroupError::WrongRecordKind::expected"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Admins",
-            "path": "fava_simple_groups::SimpleGroupRecords::Admins"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::All",
-            "path": "fava_simple_groups::SimpleGroupRecords::All"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Members",
-            "path": "fava_simple_groups::SimpleGroupRecords::Members"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Metadata",
-            "path": "fava_simple_groups::SimpleGroupRecords::Metadata"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Participants",
-            "path": "fava_simple_groups::SimpleGroupRecords::Participants"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Pins",
-            "path": "fava_simple_groups::SimpleGroupRecords::Pins"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupRecords::Roles",
-            "path": "fava_simple_groups::SimpleGroupRecords::Roles"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SavedRelay::from_event(&fava_write::EventValue) -> core::result::Result<alloc::vec::Vec<core::result::Result<Self, fava_simple_groups::SimpleGroupError>>, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay::from_event"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SavedSimpleGroup::from_event(&fava_write::EventValue) -> core::result::Result<alloc::vec::Vec<core::result::Result<Self, fava_simple_groups::SimpleGroupError>>, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup::from_event"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SavedSimpleGroup::id(&self) -> &str",
-            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup::id"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SavedSimpleGroup::name(&self) -> core::option::Option<&str>",
-            "implementation": "impl fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup::name"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::edit_metadata(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::edit_metadata"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::events"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::hosts(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::hosts"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::id"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::on<I>(I, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: IntoRelayUrl",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::on"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::prepare<P>(&self, P) -> core::result::Result<P, fava_simple_groups::SimpleGroupError> where P: PreparePayload",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::prepare"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::project(&self, &fava_query::QuerySnapshot) -> core::result::Result<fava_simple_groups::SimpleGroupSnapshot, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::project"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::records(&self, fava_simple_groups::SimpleGroupRecords) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::set_pins(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::set_pins"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::admins(&self) -> &[core::result::Result<(nostr::key::public_key::PublicKey, alloc::vec::Vec<alloc::string::String>), fava_simple_groups::SimpleGroupError>]",
-            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
-            "path": "fava_simple_groups::SimpleGroupAdmins::admins"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
-            "path": "fava_simple_groups::SimpleGroupAdmins::from_event"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupAdmins::id(&self) -> &str",
-            "implementation": "impl fava_simple_groups::SimpleGroupAdmins",
-            "path": "fava_simple_groups::SimpleGroupAdmins::id"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
-            "implementation": "impl core::fmt::Display for fava_simple_groups::SimpleGroupError",
-            "path": "<fava_simple_groups::SimpleGroupError as core::fmt::Display>::fmt"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupError::from(fava_query::QueryError) -> Self",
-            "implementation": "impl core::convert::From<fava_query::QueryError> for fava_simple_groups::SimpleGroupError",
-            "path": "<fava_simple_groups::SimpleGroupError as core::convert::From<fava_query::QueryError>>::from"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupError::from(fava_write::WriteIntentError) -> Self",
-            "implementation": "impl core::convert::From<fava_write::WriteIntentError> for fava_simple_groups::SimpleGroupError",
-            "path": "<fava_simple_groups::SimpleGroupError as core::convert::From<fava_write::WriteIntentError>>::from"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupError::from(fava_write::builder::EventBuildError) -> Self",
-            "implementation": "impl core::convert::From<fava_write::builder::EventBuildError> for fava_simple_groups::SimpleGroupError",
-            "path": "<fava_simple_groups::SimpleGroupError as core::convert::From<fava_write::builder::EventBuildError>>::from"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
-            "path": "fava_simple_groups::SimpleGroupMembers::from_event"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::id(&self) -> &str",
-            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
-            "path": "fava_simple_groups::SimpleGroupMembers::id"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMembers::members(&self) -> &[core::result::Result<nostr::key::public_key::PublicKey, fava_simple_groups::SimpleGroupError>]",
-            "implementation": "impl fava_simple_groups::SimpleGroupMembers",
-            "path": "fava_simple_groups::SimpleGroupMembers::members"
-          },
-          {
             "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::about(&self) -> core::option::Option<&str>",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
             "path": "fava_simple_groups::SimpleGroupMetadata::about"
@@ -9346,12 +9473,12 @@
             "path": "fava_simple_groups::SimpleGroupMetadata::banner"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::children(&self) -> &[alloc::string::String]",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::children(&self) -> &[core::result::Result<alloc::string::String, fava_simple_groups::SimpleGroupDecodeError>]",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
             "path": "fava_simple_groups::SimpleGroupMetadata::children"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
             "path": "fava_simple_groups::SimpleGroupMetadata::from_event"
           },
@@ -9376,27 +9503,43 @@
             "path": "fava_simple_groups::SimpleGroupMetadata::picture"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[nostr::event::kind::Kind]>",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
             "path": "fava_simple_groups::SimpleGroupMetadata::supported_kinds"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupParticipants::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroupParticipants",
-            "path": "fava_simple_groups::SimpleGroupParticipants::from_event"
+            "declaration": "pub struct fava_simple_groups::SimpleGroupMetadata",
+            "path": "fava_simple_groups::SimpleGroupMetadata"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupMetadata",
+            "source": "metadata::SimpleGroupMetadata"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupPins",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupPins {\n    id: String,\n    author: PublicKey,\n    pins: Vec<Result<EventCoordinate, SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::pins::SimpleGroupPins",
+            "source": "crates/fava-simple-groups/src/pins.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_simple_groups::SimpleGroupPins::author(&self) -> nostr::key::public_key::PublicKey",
+            "implementation": "impl fava_simple_groups::SimpleGroupPins",
+            "path": "fava_simple_groups::SimpleGroupPins::author"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupParticipants::id(&self) -> &str",
-            "implementation": "impl fava_simple_groups::SimpleGroupParticipants",
-            "path": "fava_simple_groups::SimpleGroupParticipants::id"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupParticipants::participants(&self) -> &[core::result::Result<nostr::key::public_key::PublicKey, fava_simple_groups::SimpleGroupError>]",
-            "implementation": "impl fava_simple_groups::SimpleGroupParticipants",
-            "path": "fava_simple_groups::SimpleGroupParticipants::participants"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupPins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupPins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
             "implementation": "impl fava_simple_groups::SimpleGroupPins",
             "path": "fava_simple_groups::SimpleGroupPins::from_event"
           },
@@ -9406,12 +9549,43 @@
             "path": "fava_simple_groups::SimpleGroupPins::id"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupPins::items(&self) -> &[core::result::Result<fava_simple_groups::PinnedItem, fava_simple_groups::SimpleGroupError>]",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupPins::pins(&self) -> &[core::result::Result<fava_state::EventCoordinate, fava_simple_groups::SimpleGroupDecodeError>]",
             "implementation": "impl fava_simple_groups::SimpleGroupPins",
-            "path": "fava_simple_groups::SimpleGroupPins::items"
+            "path": "fava_simple_groups::SimpleGroupPins::pins"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupRoles::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupError>",
+            "declaration": "pub struct fava_simple_groups::SimpleGroupPins",
+            "path": "fava_simple_groups::SimpleGroupPins"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupPins",
+            "source": "pins::SimpleGroupPins"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimpleGroupRoles",
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct SimpleGroupRoles {\n    id: String,\n    author: PublicKey,\n    roles: Vec<Result<(String, Option<String>), SimpleGroupDecodeError>>,\n}",
+            "kind": "struct",
+            "path": "fava_simple_groups::people::SimpleGroupRoles",
+            "source": "crates/fava-simple-groups/src/people.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_simple_groups::SimpleGroupRoles::author(&self) -> nostr::key::public_key::PublicKey",
+            "implementation": "impl fava_simple_groups::SimpleGroupRoles",
+            "path": "fava_simple_groups::SimpleGroupRoles::author"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupRoles::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>",
             "implementation": "impl fava_simple_groups::SimpleGroupRoles",
             "path": "fava_simple_groups::SimpleGroupRoles::from_event"
           },
@@ -9421,332 +9595,78 @@
             "path": "fava_simple_groups::SimpleGroupRoles::id"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupRoles::roles(&self) -> &[core::result::Result<(alloc::string::String, core::option::Option<alloc::string::String>), fava_simple_groups::SimpleGroupError>]",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupRoles::roles(&self) -> &[core::result::Result<(alloc::string::String, core::option::Option<alloc::string::String>), fava_simple_groups::SimpleGroupDecodeError>]",
             "implementation": "impl fava_simple_groups::SimpleGroupRoles",
             "path": "fava_simple_groups::SimpleGroupRoles::roles"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::admin_records(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupAdmins)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::admin_records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::admins(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &(nostr::key::public_key::PublicKey, alloc::vec::Vec<alloc::string::String>))>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::admins"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::admins_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::admins_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::at(&self, &nostr::types::url::RelayUrl) -> core::option::Option<Self>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::at"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::events(&self) -> &[fava_query::EventRecord]",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::events"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::hosts(&self) -> impl core::iter::traits::iterator::Iterator<Item = &nostr::types::url::RelayUrl>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::hosts"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::member_records(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupMembers)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::member_records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::members(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &nostr::key::public_key::PublicKey)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::members"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::members_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::members_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::metadata(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupMetadata)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::metadata"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::metadata_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::metadata_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::participant_records(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupParticipants)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::participant_records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::participants_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::participants_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::pin_records(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupPins)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::pin_records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::pins_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::pins_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::role_records(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&nostr::types::url::RelayUrl, &fava_simple_groups::SimpleGroupRoles)>",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::role_records"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupSnapshot::roles_differ(&self) -> bool",
-            "implementation": "impl fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot::roles_differ"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::materializer() -> alloc::sync::Arc<dyn fava_write::materialization::ReplaceableEventMaterializer>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::materializer"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::remove_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::remove_relay"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::remove_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::remove_simple_group"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::rename_saved_simple_group"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::save_relay"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::save_simple_group"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::saved_relays<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::saved_relays"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::saved_simple_groups<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::saved_simple_groups"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_saved_by(&fava_query::QuerySnapshot, &fava_simple_groups::SimpleGroup) -> core::result::Result<alloc::vec::Vec<nostr::key::public_key::PublicKey>, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_saved_by"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_where_admin<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_where_admin"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_where_member<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_where_member"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SavedRelay",
-            "path": "fava_simple_groups::SavedRelay"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SavedSimpleGroup",
-            "path": "fava_simple_groups::SavedSimpleGroup"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupAdmins",
-            "path": "fava_simple_groups::SimpleGroupAdmins"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupMembers",
-            "path": "fava_simple_groups::SimpleGroupMembers"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupMetadata",
-            "path": "fava_simple_groups::SimpleGroupMetadata"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupParticipants",
-            "path": "fava_simple_groups::SimpleGroupParticipants"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupPins",
-            "path": "fava_simple_groups::SimpleGroupPins"
-          },
-          {
             "declaration": "pub struct fava_simple_groups::SimpleGroupRoles",
             "path": "fava_simple_groups::SimpleGroupRoles"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroupSnapshot",
-            "path": "fava_simple_groups::SimpleGroupSnapshot"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups"
           }
         ],
         "reexports": [
           {
-            "path": "fava_simple_groups::PinnedItem",
-            "source": "pins::PinnedItem"
-          },
-          {
-            "path": "fava_simple_groups::SavedRelay",
-            "source": "saved::SavedRelay"
-          },
-          {
-            "path": "fava_simple_groups::SavedSimpleGroup",
-            "source": "saved::SavedSimpleGroup"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroup",
-            "source": "simple_group::SimpleGroup"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupAdmins",
-            "source": "people::SimpleGroupAdmins"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupError",
-            "source": "simple_group::SimpleGroupError"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupMembers",
-            "source": "people::SimpleGroupMembers"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupMetadata",
-            "source": "metadata::SimpleGroupMetadata"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupParticipants",
-            "source": "people::SimpleGroupParticipants"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupPins",
-            "source": "pins::SimpleGroupPins"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupRecords",
-            "source": "query::SimpleGroupRecords"
-          },
-          {
             "path": "fava_simple_groups::SimpleGroupRoles",
             "source": "people::SimpleGroupRoles"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroupSnapshot",
-            "source": "snapshot::SimpleGroupSnapshot"
-          },
-          {
-            "path": "fava_simple_groups::SimpleGroups",
-            "source": "query::SimpleGroups"
           }
         ]
       }
     },
     {
-      "name": "SimpleGroups",
+      "name": "SimpleGroupStateEventKind",
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct SimpleGroups;",
-            "kind": "struct",
-            "path": "fava_simple_groups::query::SimpleGroups",
+            "declaration": "pub enum SimpleGroupStateEventKind {\n    /// Kind 39000 metadata.\n    Metadata,\n    /// Kind 39001 administrators.\n    Admins,\n    /// Kind 39002 members.\n    Members,\n    /// Kind 39003 roles.\n    Roles,\n    /// Kind 39004 `LiveKit` participants.\n    LivekitParticipants,\n    /// Kind 39005 pins.\n    Pins,\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::query::SimpleGroupStateEventKind",
             "source": "crates/fava-simple-groups/src/query.rs",
             "visibility": "public"
           }
         ],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::materializer() -> alloc::sync::Arc<dyn fava_write::materialization::ReplaceableEventMaterializer>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::materializer"
+            "declaration": "pub const fava_simple_groups::SimpleGroupStateEventKind::ALL: [Self; 6]",
+            "implementation": "impl fava_simple_groups::SimpleGroupStateEventKind",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::ALL"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::remove_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::remove_relay"
+            "declaration": "pub enum fava_simple_groups::SimpleGroupStateEventKind",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::remove_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::remove_simple_group"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Admins",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::Admins"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::rename_saved_simple_group"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::save_relay"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Members",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::Members"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::save_simple_group"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Metadata",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::Metadata"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::saved_relays<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::saved_relays"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Pins",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::Pins"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::saved_simple_groups<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::saved_simple_groups"
+            "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Roles",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind::Roles"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_saved_by(&fava_query::QuerySnapshot, &fava_simple_groups::SimpleGroup) -> core::result::Result<alloc::vec::Vec<nostr::key::public_key::PublicKey>, fava_simple_groups::SimpleGroupError>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_saved_by"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_where_admin<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_where_admin"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroups::simple_groups_where_member<I>(I) -> core::result::Result<fava_query::Query, fava_simple_groups::SimpleGroupError> where I: core::iter::traits::collect::IntoIterator, <I as core::iter::traits::collect::IntoIterator>::Item: core::borrow::Borrow<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups::simple_groups_where_member"
-          },
-          {
-            "declaration": "pub struct fava_simple_groups::SimpleGroups",
-            "path": "fava_simple_groups::SimpleGroups"
+            "declaration": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self",
+            "path": "fava_simple_groups::SimpleGroupStateEventKind"
           }
         ],
         "reexports": [
           {
-            "path": "fava_simple_groups::SimpleGroups",
-            "source": "query::SimpleGroups"
+            "path": "fava_simple_groups::SimpleGroupStateEventKind",
+            "source": "query::SimpleGroupStateEventKind"
           }
         ]
       }

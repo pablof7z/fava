@@ -8,16 +8,14 @@ composition boundaries. It is not an approval source. The approved constructor
 boundary is recorded in
 `docs/issues/0027-simple-group-relay-input-boundary.md`.
 
-The current nominal model is recorded in `docs/internals/vocabulary.toml`.
-Three of its 14 simple-groups entries have signed approvals in
-`docs/internals/approvals.jsonl`: `SimpleGroupMetadata`, `SimpleGroupAdmins`,
-and `SimpleGroupStateEventKind`. The remaining 11 are absent:
-`SimpleGroup`, `SimpleGroupConstructionError`, `SimpleGroupMembers`,
-`SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`,
-`SimpleGroupDecodeError`, `SavedSimpleGroup`, `SavedGroupList`,
-`SavedGroupListMaterializer`, and `SavedGroupListDecodeError`. Those remaining
-signed approvals are an external governance gate. This issue and commit series
-do not fabricate or claim them.
+The current nominal model is recorded in `docs/internals/vocabulary.toml` and
+its exact compiler-derived per-term records are pinned in
+`docs/internals/vocabulary-structure.json`. All 14 simple-groups terms require
+current structurally bound owner signatures. The append-only approval history
+contains earlier text-only events for `SimpleGroupMetadata`,
+`SimpleGroupAdmins`, and `SimpleGroupStateEventKind`; the structural-approval
+contract intentionally makes those events stale without deleting them. This
+issue and commit series do not fabricate or claim replacement signatures.
 
 ## Delivered model
 
