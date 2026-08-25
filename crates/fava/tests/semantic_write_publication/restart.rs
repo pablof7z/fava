@@ -7,12 +7,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use fava::{EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::EventStateMutation;
 use fava_write::WriteIntent;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 use fava_routing::{
@@ -21,8 +22,8 @@ use fava_routing::{
 };
 
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_evidence,
-    relay_url, signed_source, wait_for_materialization,
+    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_event,
+    relay_occurrence, relay_url, signed_source, wait_for_materialization,
 };
 
 fn edit(change: u8) -> ReplaceableEventEdit {
@@ -58,9 +59,9 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
         .expect("pre-restart custody commits");
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&keys, Kind::ContactList, 10, "restart source", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -100,9 +101,9 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     assert_eq!(content(&composed.current.event), "restart source|edit|edit");
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&keys, Kind::ContactList, 20, "late source", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let replayed = wait_for_materialization(&fava, first.receipt_id, 4).await;
@@ -153,13 +154,9 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
     assert!(
         receipt
             .destinations()
-            .contains_key(&RelaySessionKey::new(current, RelayAccess::public()))
+            .contains_key(&public_session(current))
     );
-    assert!(
-        !receipt
-            .destinations()
-            .contains_key(&RelaySessionKey::new(stale, RelayAccess::public()))
-    );
+    assert!(!receipt.destinations().contains_key(&public_session(stale)));
     assert_eq!(router.opens.load(Ordering::SeqCst), 2);
     assert_eq!(router.closes.load(Ordering::SeqCst), 1);
 }
@@ -274,13 +271,20 @@ impl RouterSession for ImmediateSession {
 fn contribution(relay: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
-            RelaySessionKey::new(relay, RelayAccess::public()),
+            public_session(relay),
             BTreeSet::default(),
             "generation-bound route",
         )],
         coverage: BTreeMap::default(),
         unresolved: BTreeSet::default(),
         shortfalls: Vec::new(),
+    }
+}
+
+fn public_session(relay: RelayUrl) -> RelaySessionKey {
+    RelaySessionKey {
+        relay,
+        access: RelayAccess::Public,
     }
 }
 

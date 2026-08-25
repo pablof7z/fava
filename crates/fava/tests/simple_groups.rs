@@ -6,17 +6,17 @@ use std::time::Duration;
 use fava::{EventBuilder, EventValue, Fava, Kind, Query, SingleLetterTag, Tag, Timestamp, all};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
     SavedGroupList, SimpleGroup, SimpleGroupMetadata, SimpleGroupStateEventKind, save_simple_group,
     saved_group_list_materializer,
 };
-use fava_state::{
-    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
-};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_write_store_memory::MemoryWriteStore;
-use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+use nostr::event::{Event, EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 #[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
@@ -75,8 +75,8 @@ async fn prepared_content_uses_the_ordinary_observation_and_write_doors() {
     })
     .await;
     assert_eq!(current.events.len(), 1);
-    assert!(current.events[0].publication.is_some());
-    assert!(current.events[0].relay_evidence.is_empty());
+    assert!(current.events[0].publication().is_some());
+    assert!(current.events[0].relay_occurrences().is_empty());
     assert!(cache.event(id).expect("cache readable").is_none());
 }
 
@@ -100,14 +100,15 @@ async fn state_query_returns_generic_records_for_event_local_decoding() {
         .finalize(&keys)
         .expect("metadata signs");
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(observed(
             event,
-            evidence(group.relays().next().expect("relay"), 21),
+            group.relays().next().expect("relay"),
+            21,
         ))])
         .expect("cache commit");
 
     let current = wait_for(&mut observation, |snapshot| !snapshot.events.is_empty()).await;
-    let metadata = SimpleGroupMetadata::from_event(&current.events[0].event)
+    let metadata = SimpleGroupMetadata::from_event(current.events[0].event())
         .expect("ordinary event value decodes");
     assert_eq!(metadata.id(), "group-29");
     assert_eq!(metadata.name(), Some("Facade group"));
@@ -183,9 +184,13 @@ fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("tag")
 }
 
-fn evidence(relay: RelayUrl, observed_at: u64) -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(relay, RelayAccess::public()),
+fn observed(event: Event, relay: RelayUrl, observed_at: u64) -> RelayEvent {
+    RelayEvent::new(
+        event,
+        RelaySessionKey {
+            relay,
+            access: RelayAccess::Public,
+        },
         Timestamp::from(observed_at),
     )
 }

@@ -23,7 +23,7 @@ use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
     BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
-    relay_event, relay_occurrence, signed_source, wait_for_signer,
+    relay_event, relay_occurrence, signed_source,
 };
 
 #[tokio::test(flavor = "current_thread")]

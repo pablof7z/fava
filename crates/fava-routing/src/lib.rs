@@ -127,7 +127,7 @@ pub enum RouteTarget {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CoverageState {
     /// Exact relay sessions currently covering the target.
-    Covered(BTreeSet<RelaySessionKey>),
+    Covered(#[serde(with = "serde_maps::sessions")] BTreeSet<RelaySessionKey>),
     /// Relevant routing knowledge has not settled.
     Unresolved,
     /// Relevant routing knowledge settled without a destination.
@@ -191,6 +191,7 @@ pub struct RouteContribution {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlannedRelay {
     /// Exact relay and access identity.
+    #[serde(with = "serde_maps::session")]
     pub session: RelaySessionKey,
     /// Union of targets covered at this relay.
     pub targets: BTreeSet<RouteTarget>,

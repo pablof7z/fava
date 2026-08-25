@@ -1,10 +1,88 @@
 use std::collections::BTreeMap;
 
-use fava_state::RelaySessionKey;
+use fava_relay::{RelayAccess, RelaySessionKey};
+use nostr::key::PublicKey;
+use nostr::types::RelayUrl;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{CoverageState, PlannedRelay, RouteTarget};
+
+fn encode_session(value: &RelaySessionKey) -> (RelayUrl, Option<PublicKey>) {
+    (
+        value.relay.clone(),
+        match &value.access {
+            RelayAccess::Public => None,
+            RelayAccess::Authenticated(public_key) => Some(*public_key),
+        },
+    )
+}
+
+fn decode_session(value: (RelayUrl, Option<PublicKey>)) -> RelaySessionKey {
+    RelaySessionKey {
+        relay: value.0,
+        access: value
+            .1
+            .map_or(RelayAccess::Public, RelayAccess::Authenticated),
+    }
+}
+
+pub(super) mod session {
+    use super::*;
+
+    pub(crate) fn serialize<S>(value: &RelaySessionKey, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        encode_session(value).serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<RelaySessionKey, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        <(RelayUrl, Option<PublicKey>)>::deserialize(deserializer).map(decode_session)
+    }
+}
+
+pub(super) mod sessions {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    pub(crate) fn serialize<S>(
+        value: &BTreeSet<RelaySessionKey>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value
+            .iter()
+            .map(encode_session)
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    pub(crate) fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<BTreeSet<RelaySessionKey>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let values = Vec::<(RelayUrl, Option<PublicKey>)>::deserialize(deserializer)?;
+        let count = values.len();
+        let sessions = values
+            .into_iter()
+            .map(decode_session)
+            .collect::<BTreeSet<_>>();
+        if sessions.len() == count {
+            Ok(sessions)
+        } else {
+            Err(D::Error::custom("duplicate covered relay session"))
+        }
+    }
+}
 
 pub(super) mod destinations {
     use super::*;
@@ -16,7 +94,11 @@ pub(super) mod destinations {
     where
         S: Serializer,
     {
-        value.iter().collect::<Vec<_>>().serialize(serializer)
+        value
+            .iter()
+            .map(|(session, relay)| (encode_session(session), relay))
+            .collect::<Vec<_>>()
+            .serialize(serializer)
     }
 
     pub(crate) fn deserialize<'de, D>(
@@ -25,9 +107,13 @@ pub(super) mod destinations {
     where
         D: Deserializer<'de>,
     {
-        let pairs = Vec::<(RelaySessionKey, PlannedRelay)>::deserialize(deserializer)?;
+        let pairs =
+            Vec::<((RelayUrl, Option<PublicKey>), PlannedRelay)>::deserialize(deserializer)?;
         let count = pairs.len();
-        let map: BTreeMap<_, _> = pairs.into_iter().collect();
+        let map: BTreeMap<_, _> = pairs
+            .into_iter()
+            .map(|(session, relay)| (decode_session(session), relay))
+            .collect();
         if map.len() == count {
             Ok(map)
         } else {

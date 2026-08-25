@@ -633,7 +633,6 @@ name = "fava-simple-groups"
 version = "0.1.0"
 dependencies = [
  "fava-query",
- "fava-relay",
  "fava-state",
  "fava-write",
  "nostr",

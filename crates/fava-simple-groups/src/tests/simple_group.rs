@@ -1,6 +1,6 @@
 use fava_query::{Kind, Query, QueryAcquisition, QueryError, ResultAuthority, SingleLetterTag};
-use fava_state::RelayUrl;
 use fava_write::{EventBuilder, Timestamp, WriteIntentError, WriteRouting};
+use nostr::types::RelayUrl;
 
 use crate::{SimpleGroup, SimpleGroupConstructionError, SimpleGroupStateEventKind};
 

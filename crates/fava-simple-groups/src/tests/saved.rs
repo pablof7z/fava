@@ -1,7 +1,7 @@
-use fava_state::RelayUrl;
 use fava_write::{EventValue, Kind, ReplaceableEventMaterializer, Tag, Timestamp};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 use crate::{
     SavedGroupList, SavedGroupListDecodeError, SimpleGroup, remove_saved_relay,

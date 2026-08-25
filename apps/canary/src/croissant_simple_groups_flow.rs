@@ -220,7 +220,7 @@ async fn execute_with_proxies(
     let content_snapshot = wait_observation(&mut content, |current| {
         current.events.len() == selected_relays + 1
             && current.events.iter().any(|record| {
-                record.id() == shared.id && record.relay_evidence.len() == selected_relays
+                record.id() == shared.id && record.relay_occurrences().len() == selected_relays
             })
     })
     .await?;
@@ -254,9 +254,9 @@ async fn execute_with_proxies(
         .iter()
         .find(|record| record.id() == shared.id)
         .ok_or_else(|| CanaryError::new("shared content was absent"))?
-        .relay_evidence
-        .observations()
-        .map(|observation| observation.session.relay.to_string())
+        .relay_occurrences()
+        .occurrences()
+        .map(|occurrence| occurrence.session.relay.to_string())
         .collect::<Vec<_>>();
     let shared_evidence = relays.iter().map(ToString::to_string).collect::<Vec<_>>();
     if observed_shared_evidence.len() != shared_evidence.len()
@@ -381,7 +381,7 @@ fn metadata_for_relay(
         if !seen_on(record, relay) {
             return None;
         }
-        let metadata = SimpleGroupMetadata::from_event(&record.event).ok()?;
+        let metadata = SimpleGroupMetadata::from_event(record.event()).ok()?;
         Some((
             metadata.name().unwrap_or_default().to_owned(),
             metadata.author().to_hex(),
@@ -398,7 +398,7 @@ fn admins_for_relay(
         if !seen_on(record, relay) {
             return None;
         }
-        let admins = SimpleGroupAdmins::from_event(&record.event).ok()?;
+        let admins = SimpleGroupAdmins::from_event(record.event()).ok()?;
         let target = admins
             .admins()
             .iter()
@@ -411,9 +411,9 @@ fn admins_for_relay(
 
 fn seen_on(record: &fava::EventRecord, relay: &RelayUrl) -> bool {
     record
-        .relay_evidence
-        .observations()
-        .any(|observation| &observation.session.relay == relay)
+        .relay_occurrences()
+        .occurrences()
+        .any(|occurrence| &occurrence.session.relay == relay)
 }
 
 fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {

@@ -114,10 +114,7 @@ impl Router for OutboxRouter {
             shortfalls = Shortfalls::default();
             (BTreeMap::new(), None)
         } else {
-            let query = Query::events()
-                .kinds([Kind::from(10_002_u16)])
-                .map_err(|error| RouterError::Refused(error.to_string()))?
-                .authors(missing.iter().copied())
+            let query = relay_lists(queried.iter().copied())
                 .map_err(|error| RouterError::Refused(error.to_string()))?
                 .from_relays(self.indexers.iter().cloned())
                 .map_err(|error| RouterError::Refused(error.to_string()))?

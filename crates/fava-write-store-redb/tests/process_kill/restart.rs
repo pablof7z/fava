@@ -4,11 +4,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use fava_relay::RelayAccess;
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
 };
-use fava_state::{RelayAccess, RelayUrl};
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 use super::*;
@@ -51,9 +52,9 @@ async fn assert_restart_then_immediate_edit(
     let store = Arc::new(RedbWriteStore::open(path).expect("semantic store reopens"));
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(20, "restart source"),
-            relay_evidence(),
+            session(),
         ))])
         .unwrap();
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -93,9 +94,9 @@ async fn assert_restart_then_immediate_edit(
     );
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(40, "late source"),
-            relay_evidence(),
+            session(),
         ))])
         .unwrap();
     let replayed = wait_for_generation(&fava, ReceiptId::from_u64(1), persisted_edits + 3).await;
@@ -214,7 +215,10 @@ impl RouterSession for ImmediateSession {
 fn route_contribution(relay: RelayUrl) -> RouteContribution {
     RouteContribution {
         destinations: vec![RouteDestination::new(
-            RelaySessionKey::new(relay, RelayAccess::public()),
+            RelaySessionKey {
+                relay,
+                access: RelayAccess::Public,
+            },
             BTreeSet::default(),
             "generation-bound route",
         )],
@@ -258,14 +262,14 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
         receipt.current.publication.materialization_id,
         MaterializationId::from_u64(generation + 1)
     );
-    assert!(receipt.destinations().contains_key(&RelaySessionKey::new(
-        router.current.clone(),
-        RelayAccess::public()
-    )));
-    assert!(!receipt.destinations().contains_key(&RelaySessionKey::new(
-        router.stale.clone(),
-        RelayAccess::public()
-    )));
+    assert!(receipt.destinations().contains_key(&RelaySessionKey {
+        relay: router.current.clone(),
+        access: RelayAccess::Public,
+    }));
+    assert!(!receipt.destinations().contains_key(&RelaySessionKey {
+        relay: router.stale.clone(),
+        access: RelayAccess::Public,
+    }));
     assert_eq!(router.opens.load(Ordering::SeqCst), 2);
     assert_eq!(router.closes.load(Ordering::SeqCst), 1);
 }

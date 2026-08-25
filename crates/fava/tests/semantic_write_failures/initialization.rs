@@ -6,15 +6,15 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write::WriteIntent;
 use fava_write_store::WriteStore;
 use nostr::key::Keys;
 
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_evidence,
-    relay_url, signed_source,
+    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_event,
+    relay_occurrence, relay_url, signed_source,
 };
 
 fn edit(change: u8) -> ReplaceableEventEdit {
@@ -47,9 +47,9 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
         .unwrap();
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&keys, Kind::ContactList, 10, "recovery source", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));

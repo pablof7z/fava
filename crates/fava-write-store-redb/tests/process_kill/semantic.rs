@@ -359,9 +359,9 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     let newer_source_id = newer_source.id;
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             newer_source,
-            relay_evidence(),
+            session(),
         ))])
         .unwrap();
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));

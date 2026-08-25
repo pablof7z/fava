@@ -359,7 +359,8 @@ fn query_access_survives_real_demand_compilation_and_grouping() {
     let url = RelayUrl::parse("wss://same.example").expect("relay URL");
     let authenticated = RelayAccess::Authenticated(Keys::generate().public_key());
     let public_query = Query::events()
-        .kind(Kind::from_u16(1))
+        .kinds([Kind::from_u16(1)])
+        .expect("one kind is bounded")
         .with_relay_access(RelayAccess::Public);
     let private_query = public_query
         .clone()

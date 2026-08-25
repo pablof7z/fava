@@ -1,6 +1,6 @@
 # 0023 — Relay access, live state, and query authority have split owners
 
-**Status:** reconstructed on current main; current validation recorded below
+**Status:** integrated on current main; current validation recorded below
 **Raised:** 2026-08-25, approved by Pablo in pad
 `fava/2026-08-cross-crate-cleanup-proposals` as `STATE-ARCH-1`,
 `RELAY-ID-1`, and `QUERY-ACCESS-1`
@@ -82,17 +82,17 @@ overrule the fixed capacity or atomic-refusal policy before merge.
 
 ## Evidence
 
-Reconstruction starts from current main `da9d322`, using `9b66b37` only as a
-donor for individually reconciled files and hunks. The rescue snapshot was not
-merged or cherry-picked.
-
-Behavior-first commit `aaec9fd` establishes the accepted contracts. Against
-unchanged current-main production code, `event_state_model` fails to resolve
-the new state vocabulary and the 12 structural subtraction checks report eight
-failures, three errors, and one pass. Production commit `5a0e5a7` then supplies
-the owning implementation. `c9fdee9` repairs a current-main test fixture whose
-empty `unresolved` set became terminal after settlement was made derived;
-runtime behavior is unchanged. `194a65e` removes a test-only nominal wrapper.
+The integrated range starts from current main `06585d0c`, including the
+compiler-structure-bound vocabulary approval contract. Behavior-first commit
+`fac89739` establishes the accepted contracts. Against unchanged current-main
+production code, `event_state_model` fails to resolve the new state vocabulary
+and the 12 structural subtraction checks report eight failures, three errors,
+and one pass. Production commit `7f6d089f` then supplies the owning
+implementation. `375ae7a1` repairs a test fixture whose empty `unresolved` set
+became terminal after settlement was made derived; runtime behavior is
+unchanged. `bebbb236` removes a test-only nominal wrapper. `18ae9a51` aligns
+the isolated dependency locks and `b3534837` records the accepted current
+documentation and catalogs.
 
 Fresh deliberate breaks prove the named boundaries causally:
 
@@ -107,13 +107,17 @@ suite passes 12/12.
 
 Current validation:
 
-- `cargo check --workspace --all-targets --all-features`, strict workspace
-  Clippy, and formatting pass.
+- `python3 tools/vocabulary_structure.py update` regenerated the pinned
+  compiler-derived structure after the accepted Rust and registry changes;
+  `python3 tools/vocabulary_structure.py check` and the structure/approval
+  tooling tests prove the snapshot byte-current.
+- `cargo check --workspace --all-targets --all-features --locked`, strict
+  workspace Clippy, locked dependency resolution, and formatting pass.
 - The workspace/all-target/all-feature test aggregate passes with only the two
   repository-wide vocabulary approval cases explicitly filtered. Those remain
-  independently non-green: unsigned approvals and the existing terminal-name
-  review backlog.
-- All 151 tooling unit tests pass. README API inventories are byte-current for
+  independently non-green: existing signatures predate compiler-structure
+  binding, and the terminal-name review reports 205 violations.
+- All 161 tooling unit tests pass. README API inventories are byte-current for
   `fava-relay`, `fava-state`, `fava-query`, `fava-nip65`, and
   `fava-simple-groups`.
 - Both external falsifiers pass tests and strict Clippy under locked manifests.
@@ -122,12 +126,7 @@ Current validation:
   approval, terminal-name, undocumented-symbol, and future-crate backlog; the
   reconstructed candidate evidence has no validation error. No signature is
   fabricated and no blocked candidate is claimed approved.
-- Bazel reaches repository analysis after adding the missing current NIP-65
-  architecture source target. The aggregate remains environmentally blocked:
-  extraction of the Rust 1.90 rustfmt toolchain fails with `No space left on
-  device` while only 186 MiB is free. Bazel is not claimed green.
-
-The linked-worktree Git directory is read-only in this sandbox. Review commits
-therefore live in the adjacent writable Git directory
-`/private/tmp/fava-state-reconstruction-review.git`, with this checkout as its
-work tree. A portable bundle is produced after the final catalog commit.
+- The clean-rebase Bazel run found one omitted build-only dependency from
+  `//crates/fava-routing:failure_isolation` to `//crates/fava-relay:lib`.
+  Adding that edge changes no Rust behavior. With isolated writable output and
+  disk-cache roots, the complete aggregate passes 87/87 tests.

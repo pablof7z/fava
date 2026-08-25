@@ -105,7 +105,7 @@ fn selection_filters_candidates_before_coordinate_winner_selection()
         ],
     );
     let query = Query::events()
-        .ids([selected.id])
+        .ids([selected.id])?
         .only_from_relays([relay])?;
 
     let snapshot = StandardQueryEvaluator.evaluate(&query, &[source])?;

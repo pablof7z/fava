@@ -15,7 +15,6 @@ rust_library(
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
         "//crates/fava-query:lib",
-        "//crates/fava-relay:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ],

@@ -1,6 +1,5 @@
 //! Exact semantic acceptance validation shared by durable admission and completion paths.
 
-use fava_routing::RoutePlan;
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
     EventId, EventValue, MaterializationId, PublicKey, Receipt, ReplaceableEventEdit, Timestamp,

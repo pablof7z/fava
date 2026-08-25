@@ -96,8 +96,8 @@ impl RelayList {
 /// Returns the query owner's refusal unchanged.
 pub fn relay_lists(authors: impl IntoIterator<Item = PublicKey>) -> Result<Query, QueryError> {
     Query::events()
-        .kind(Kind::from(10_002_u16))
-        .authors(authors)
+        .kinds([Kind::from(10_002_u16)])?
+        .authors(authors)?
         .limit(4_096)
 }
 

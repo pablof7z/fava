@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use fava_query::{Query, QueryError, SingleLetterTag};
-use fava_state::RelayUrl;
 use fava_write::{EventBuildError, EventBuilder, Tag, UnsignedEvent};
+use nostr::types::RelayUrl;
 
 use crate::SimpleGroupStateEventKind;
 
@@ -44,7 +44,7 @@ impl SimpleGroup {
     ///
     /// ```
     /// use fava_simple_groups::SimpleGroup;
-    /// use fava_state::RelayUrl;
+    /// use nostr::types::RelayUrl;
     ///
     /// let first = RelayUrl::parse("wss://a.example")?;
     /// let second = RelayUrl::parse("wss://b.example")?;
@@ -57,7 +57,7 @@ impl SimpleGroup {
     ///
     /// ```compile_fail
     /// use fava_simple_groups::SimpleGroup;
-    /// use fava_state::RelayUrl;
+    /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
     /// let _ = SimpleGroup::from_relays("photos", std::iter::repeat(relay));
@@ -67,7 +67,7 @@ impl SimpleGroup {
     ///
     /// ```compile_fail
     /// use fava_simple_groups::SimpleGroup;
-    /// use fava_state::RelayUrl;
+    /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
     /// let _ = SimpleGroup::from_relays("photos", relay.clone(), vec![relay]);

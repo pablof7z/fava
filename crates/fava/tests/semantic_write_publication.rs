@@ -214,9 +214,9 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
 
     let newer = signed_source(&keys, Kind::ContactList, u64::MAX - 1, "newer", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             newer.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("newer source enters the canonical cache");
     let generation_three = wait_for_materialization(&fava, first.receipt_id(), 3).await;

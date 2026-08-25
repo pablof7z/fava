@@ -22,8 +22,8 @@ use tokio::sync::broadcast;
 use super::capability_protocol::assert_source_removal;
 use super::capability_signer::GatedSigner;
 use super::support::{
-    RecordingPublisher, UnavailableSigner, publication_builder, relay_url,
-    relay_event, relay_occurrence, relay_session, wait_for_materialization,
+    RecordingPublisher, UnavailableSigner, publication_builder, relay_event, relay_occurrence,
+    relay_session, relay_url, wait_for_materialization,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
