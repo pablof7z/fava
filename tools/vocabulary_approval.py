@@ -569,7 +569,19 @@ def item_kind_for_name_within_crates(
     owning_crates: list[str] = []
     owning_crates.extend(_string_list(term.get("crates", [])))
     owning_crates.extend(_string_list(term.get("spec_crates", [])))
+    owner = term.get("owner")
+    if isinstance(owner, str):
+        owner_crate = owner.strip()
+        if owner_crate and _looks_like_owner_crate(owner_crate):
+            owning_crates.append(owner_crate)
+    seen: set[str] = set()
+    normalized_crates: list[str] = []
     for owning_crate in owning_crates:
+        if owning_crate in seen:
+            continue
+        seen.add(owning_crate)
+        normalized_crates.append(owning_crate)
+    for owning_crate in normalized_crates:
         if not owning_crate:
             continue
         crate_root = _crate_root_path(root, owning_crate)
@@ -594,6 +606,18 @@ def _string_list(values: Any) -> list[str]:
         for value in values
         if isinstance(value, str) and value.strip()
     ]
+
+
+def _looks_like_owner_crate(value: str) -> bool:
+    value = value.strip()
+    if not value or value in {"fava", "nostr"}:
+        return False
+    normalized = value.replace("_", "-")
+    if not normalized:
+        return False
+    if not all(ch.isalnum() or ch == "-" for ch in normalized):
+        return False
+    return normalized.startswith("fava-")
 
 
 def _source_candidates_for_item(crate_root: Path, module_path: list[str]) -> list[Path]:

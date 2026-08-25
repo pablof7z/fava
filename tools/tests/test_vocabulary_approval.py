@@ -758,8 +758,9 @@ class ServerTest(unittest.TestCase):
         'name = "SavedGroupListMaterializer"\n'
         'source = "probe"\n'
         'meaning = "Probe private struct in local crate."\n'
+        'owner = "fava-probe"\n'
         'symbols = []\n'
-        'crates = ["fava-probe"]\n'
+        'crates = []\n'
     )
     _THROWAWAY_OWNER = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
@@ -900,6 +901,39 @@ class ServerTest(unittest.TestCase):
         )
         self.assertEqual(term["rust_item"], "SavedGroupListMaterializer")
         self.assertEqual(term["rust_item_kind"], "Struct")
+
+
+class LiveWorktreeVocabularyClassificationRegressionTest(unittest.TestCase):
+    """Regression guard for final-worktree classifications with exact metadata shape."""
+
+    WORKTREE = Path("/private/tmp/fava-simple-groups-final-worktree")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not cls.WORKTREE.exists():
+            raise unittest.SkipTest("final worktree not available in this environment")
+        import tomllib
+
+        registry = tomllib.loads(
+            (cls.WORKTREE / "docs/internals/vocabulary.toml")
+            .read_text(encoding="utf-8")
+        )
+        cls.terms = {
+            term["name"]: term
+            for term in registry["term"]
+            if isinstance(term, dict) and "name" in term
+        }
+
+    def test_simple_group_state_event_kind_from_root_term(self) -> None:
+        term = self.terms["SimpleGroupStateEventKind"]
+        self.assertEqual(approval.item_kind_for_term(term, self.WORKTREE), "Enum")
+
+    def test_saved_group_list_materializer_owner_only_fallback(self) -> None:
+        term = self.terms["SavedGroupListMaterializer"]
+        self.assertEqual(term.get("symbols"), [])
+        self.assertEqual(term.get("crates"), [])
+        self.assertEqual(term.get("owner"), "fava-simple-groups")
+        self.assertEqual(approval.item_kind_for_term(term, self.WORKTREE), "Struct")
 
     def test_wrong_path_returns_404(self) -> None:
         import urllib.error
