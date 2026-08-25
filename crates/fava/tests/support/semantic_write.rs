@@ -226,9 +226,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
         if let Some(identifier) = edit.identifier() {
             builder = builder.tag(Tag::identifier(identifier));
         }
-        builder
-            .build()
-            .map_err(WriteIntentError::from)
+        builder.build().map_err(WriteIntentError::from)
     }
 }
 

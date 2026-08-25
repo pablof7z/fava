@@ -215,9 +215,7 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
                 builder = builder.tag(tag);
             }
         }
-        builder
-            .build()
-            .map_err(WriteIntentError::from)
+        builder.build().map_err(WriteIntentError::from)
     }
 }
 

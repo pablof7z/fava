@@ -35,7 +35,6 @@ const MAX_IDENTIFIER_BYTES: usize = 4_096;
 
 mod bounds;
 
-
 /// Produce a bounded edit that adds one public event bookmark.
 ///
 /// # Errors

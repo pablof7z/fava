@@ -563,12 +563,25 @@ forcing_requirement = "Publication, rematerialization, preview, and recovery req
 falsifier = "The facade_has_no_write_intent_compatibility_door test must fail if fava re-exports WriteIntent or WritePayload or accepts WriteIntent through Fava::publish."
 symbols = [
     "fava_write::WriteIntent",
-    "fava_write::WriteIntentError",
     "fava_write::WritePayload",
     "fava_write::WriteRouting",
 ]
 crates = []
 spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
+
+[[term]]
+name = "WriteIntentError"
+source = "fava"
+meaning = "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving tag cardinality, serialized bytes, encoding, routing, verification, and expiry as distinct concerns."
+owner = "fava-write"
+nearest_nostr = "NIP-01 event construction and verification, NIP-40 expiration, and client-selected relay destinations"
+distinction = "EventBuildError is the generic EventBuilder refusal; WriteIntentError is the outward error contract returned by complete intent validation and ReplaceableEventMaterializer before or after custody, but it owns no publication lifecycle attribution and does not survive the current publication boundary."
+counterexample = "A materializer reaching EventBuilder with 2,001 tags returns WriteIntentError::TooManyTags { actual: 2001, maximum: 2000 }, not TooLarge with a tag count mislabeled as bytes and not InvalidEvent text."
+lifecycle = "Constructed during pre-custody intent validation or converted from EventBuildError during initial or post-custody materialization. Intent validation can return it directly; current fava-publication converts a materializer result to PublicationError::Routing(error.to_string()), so the typed value does not survive custody-side publication. Issue 0025 owns structured lifecycle attribution."
+forcing_requirement = "EventBuilder distinguishes tag cardinality, serialized bytes, and encoding, and every materializer must expose those distinctions exactly at its return boundary without duplicating conversion policy; current publication erasure is explicitly outside this contract."
+falsifier = "Mutate only the EventBuildError::TooManyTags conversion to TooLarge and run the fava-write owner test, all three shipped materializer tests, four internal fixture tests, and the external semantic-capability conversion test; every exact TooManyTags assertion must fail."
+symbols = ["fava_write::WriteIntentError"]
+crates = []
 
 [[term]]
 name = "ReplaceableEventEdit"
@@ -623,10 +636,23 @@ nearest_nostr = "Event"
 distinction = "Nostr defines Event fields; EventBuilder provides checked construction without interpreting any event kind."
 symbols = [
     "fava_write::EventBuilder",
-    "fava_write::EventBuildError",
 ]
 crates = []
 spec_symbols = ["EventBuilder"]
+
+[[term]]
+name = "EventBuildError"
+source = "fava"
+meaning = "The generic checked-event construction refusal that distinguishes tag cardinality, serialized event bytes, and exact encoding failure."
+owner = "fava-write's EventBuilder"
+nearest_nostr = "NIP-01 event serialization and tag array validity"
+distinction = "WriteIntentError is the neutral outward materializer and intent-validation error contract; EventBuildError names only why EventBuilder could not produce one bounded UnsignedEvent and owns no publication attribution."
+counterexample = "Building an event with 2,001 tags returns EventBuildError::TooManyTags { actual: 2001, maximum: 2000 }; that count is neither serialized bytes nor an encoding string."
+lifecycle = "Created by EventBuilder after fields and tag order are fixed, either before custody or inside initial or post-custody materialization, then returned directly or converted immediately to WriteIntentError. Current fava-publication subsequently erases a materializer result to PublicationError::Routing(error.to_string()); neither typed error enters WriteStore."
+forcing_requirement = "The global boundedness gate and replaceable materializer contract require one protocol-agnostic constructor whose three refusal categories remain exact through the EventBuildError-to-WriteIntentError caller boundary; they make no typed-survival promise beyond current publication."
+falsifier = "Remove or mis-map the tag-count branch and run cargo test -p fava-write --test event_builder plus the shipped, internal, Redb restart, and external conversion falsifiers; the 2,001-tag assertions must fail independently."
+symbols = ["fava_write::EventBuildError"]
+crates = []
 
 [[term]]
 name = "RouteRequest"
