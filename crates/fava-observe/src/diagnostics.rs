@@ -5,7 +5,7 @@ use fava_diagnostics::{
     RelayDiagnostic, RelaySessionState, WireSubscriptionDiagnostic,
 };
 use fava_query::{BoundedText, ObservationId, OperationGeneration, RelayQueryEvidence};
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 
 /// Current facts for one relay session this owner holds.

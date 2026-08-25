@@ -10,7 +10,8 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use fava_state::{CachedEvent, RelayAccess, RelayEvidence};
+use fava_relay::RelayAccess;
+use fava_state::{RelayEvent, RelayOccurrences};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
 pub use nostr::event::{EventId, Kind};
 pub use nostr::key::PublicKey;
@@ -124,7 +125,7 @@ impl Default for Query {
         Self {
             selection: FilterSelection::default(),
             source: QuerySourcePolicy::default(),
-            access: RelayAccess::public(),
+            access: RelayAccess::Public,
             freshness: Freshness::Live,
             ordering: QueryOrdering::NewestFirst,
             limit: None,
@@ -133,6 +134,13 @@ impl Default for Query {
 }
 
 impl Query {
+    /// Select exact relay access before acquisition opens.
+    #[must_use]
+    pub fn with_relay_access(mut self, access: RelayAccess) -> Self {
+        self.access = access;
+        self
+    }
+
     /// Ask exactly these relays while retaining ordinary local result visibility.
     ///
     /// # Errors
@@ -365,8 +373,8 @@ pub struct SourceRevision(pub u64);
 /// One source contribution to the universal query merge.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SourceEvent {
-    /// Signed event and relay evidence from an event cache.
-    Cached(CachedEvent),
+    /// One atomic live or retained signed relay contribution.
+    Relay(RelayEvent),
     /// Current local materialization and publication evidence from a write store.
     Local(LocalWriteEvent),
 }
@@ -520,12 +528,9 @@ impl QuerySourceClosed {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventRecord {
     id: EventId,
-    /// Unsigned local or signed Nostr event.
-    pub event: EventValue,
-    /// Relays that actually served this event id.
-    pub relay_evidence: RelayEvidence,
-    /// Local accepted publication evidence, when present.
-    pub publication: Option<PublicationEvidence>,
+    event: EventValue,
+    relay_occurrences: RelayOccurrences,
+    publication: Option<PublicationEvidence>,
 }
 
 impl EventRecord {
@@ -537,14 +542,20 @@ impl EventRecord {
     /// unsigned event body.
     pub fn new(
         event: EventValue,
-        relay_evidence: RelayEvidence,
+        relay_occurrences: RelayOccurrences,
         publication: Option<PublicationEvidence>,
     ) -> Result<Self, QueryEvaluationError> {
         let id = event.id().ok_or(QueryEvaluationError::MissingEventId)?;
+        if id != relay_occurrences.event_id() {
+            return Err(QueryEvaluationError::RelayOccurrenceEventMismatch {
+                event: id,
+                occurrences: relay_occurrences.event_id(),
+            });
+        }
         Ok(Self {
             id,
             event,
-            relay_evidence,
+            relay_occurrences,
             publication,
         })
     }
@@ -553,6 +564,24 @@ impl EventRecord {
     #[must_use]
     pub const fn id(&self) -> EventId {
         self.id
+    }
+
+    /// Borrow the event without exposing independent record mutation.
+    #[must_use]
+    pub const fn event(&self) -> &EventValue {
+        &self.event
+    }
+
+    /// Borrow the exact event-id-bound relay occurrences.
+    #[must_use]
+    pub const fn relay_occurrences(&self) -> &RelayOccurrences {
+        &self.relay_occurrences
+    }
+
+    /// Borrow local accepted publication evidence, when present.
+    #[must_use]
+    pub const fn publication(&self) -> Option<&PublicationEvidence> {
+        self.publication.as_ref()
     }
 
     /// Event timestamp.
@@ -619,6 +648,14 @@ pub enum QueryEvaluationError {
     /// A supposedly accepted local event violated the source contract.
     #[error("query source supplied an event without a stable id")]
     MissingEventId,
+    /// Relay occurrences were bound to another event id.
+    #[error("event {event} cannot carry relay occurrences for {occurrences}")]
+    RelayOccurrenceEventMismatch {
+        /// Event id being constructed.
+        event: EventId,
+        /// Event id carried by the occurrence aggregate.
+        occurrences: EventId,
+    },
     /// Evaluator-specific refusal, retained under a Fava-owned byte bound.
     #[error("query evaluator refused current sources: {}", .0.as_str())]
     Refused(BoundedText),

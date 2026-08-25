@@ -12,9 +12,9 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_observe::{Observation, ObserveError, Observer};
 use fava_query::{ObservationId, QueryEvaluator, QuerySource, RelayQueryEvidence};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::Router;
 use fava_runtime::{Runtime, RuntimeConfig};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions::{
     InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints, SubscriptionPlan,
     SubscriptionPlanError, SubscriptionPlanner,
@@ -24,6 +24,7 @@ use fava_transport::{Transport, TransportDeadlines};
 use fava_transport_testkit::{FakeRelay, FakeTransport};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
+use nostr::types::RelayUrl;
 
 /// Complete owner assembly plus the scripted providers it was given.
 pub(crate) struct Assembly {
@@ -154,7 +155,10 @@ pub fn relay(name: &str) -> RelayUrl {
 /// The public-access session key for one relay.
 #[must_use]
 pub fn session_key(relay: &RelayUrl) -> RelaySessionKey {
-    RelaySessionKey::new(relay.clone(), RelayAccess::public())
+    RelaySessionKey {
+        relay: relay.clone(),
+        access: RelayAccess::Public,
+    }
 }
 
 /// Evidence one observation currently reports for one relay.

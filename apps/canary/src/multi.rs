@@ -125,8 +125,8 @@ async fn multi_relay(
         return Err(CanaryError::new("same event was not deduplicated"));
     }
     let serving: BTreeSet<_> = current.events[0]
-        .relay_evidence
-        .observations()
+        .relay_occurrences()
+        .occurrences()
         .map(|evidence| evidence.session.relay.clone())
         .collect();
     if serving.len() != 2
@@ -316,7 +316,7 @@ async fn wait_events(
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if observation.current().events.iter().any(|record| {
-                record.id() == event_id && record.relay_evidence.len() == evidence_count
+                record.id() == event_id && record.relay_occurrences().len() == evidence_count
             }) {
                 return Ok(());
             }

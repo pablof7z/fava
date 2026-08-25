@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 fava-event-cache.workspace = true
 fava-query.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 nostr.workspace = true
 thiserror.workspace = true

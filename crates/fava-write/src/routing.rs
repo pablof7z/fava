@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use fava_state::RelayUrl;
+use nostr::types::RelayUrl;
 use serde::{Deserialize, Serialize};
 
 use crate::WriteIntentError;

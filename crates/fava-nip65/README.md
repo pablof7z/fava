@@ -1,9 +1,9 @@
 # fava-nip65
 
-`fava-nip65` currently decodes one event-shaped value as a kind-10002 relay
-list. It owns the interpretation and bounded result of NIP-65 `r` tags. It does
-not admit events, query relays, select replaceable-event winners, retain cache
-state, choose routes, publish events, or report delivery.
+`fava-nip65` decodes one event-shaped value as a kind-10002 relay list and
+builds the ordinary bounded query used to acquire relay-list events. It owns
+the interpretation of NIP-65 `r` tags, but universal query evaluation owns
+replaceable-event winner selection.
 
 ## Decode a relay list
 
@@ -35,26 +35,18 @@ for relay in list.write_relays() {
 # }
 ```
 
-## Current foundation boundary
+## Query composition
 
-The compiler-visible surface still retains `event_id`, `created_at`,
-`supersedes`, and `MissingEventId`. The current outbox router consumes those
-members through its `KnownLists` and `remember` state. Removing that duplicate
-winner state requires the separately unapproved state/query observation and
-replaceable-winner foundation. This crate therefore does not expose the
-foundation-dependent `relay_lists` query helper, and this README does not claim
-the blocked final surface is implemented.
-
-The current normal `fava-state` dependency likewise remains because it owns the
-available `RelayUrl` path in this checkout. No compatibility path or alternate
-representation is added.
+`relay_lists(authors)` returns one ordinary bounded kind-10002 query. The
+query evaluator selects the current event per author before `RelayList` parses
+the resulting record. The protocol crate retains no duplicate event identity,
+timestamp, or winner comparator.
 
 ## Current refusals
 
 - `WrongKind { actual }` reports a non-10002 kind.
 - `TooManyRelays { actual: 257, maximum: 256 }` reports the exact first
   over-bound distinct relay.
-- `MissingEventId` remains only at the blocked current event/state boundary.
 
 Malformed relay URLs are ignored per tag and are not event-level refusals.
 
@@ -76,20 +68,17 @@ at their exported path and are classified by the re-exported item's kind.
 <!-- BEGIN crate-readme-api inventory -->
 | Kind | Item | Description |
 | --- | --- | --- |
-| Module | `fava_nip65` | Current NIP-65 relay-list decoder crate. |
-| Struct | `fava_nip65::RelayList` | Decoded author and deterministic read/write relay sets; currently also retains blocked source identity. |
+| Module | `fava_nip65` | NIP-65 relay-list query and decoder crate. |
+| Struct | `fava_nip65::RelayList` | Decoded author and deterministic read/write relay sets. |
 | Method | `fava_nip65::RelayList::author` | Returns the author whose kind-10002 event was decoded. |
-| Method | `fava_nip65::RelayList::created_at` | Returns the currently retained source timestamp; removal awaits the state/query foundation. |
-| Method | `fava_nip65::RelayList::event_id` | Returns the currently retained source event id; removal awaits the state/query foundation. |
 | Method | `fava_nip65::RelayList::from_event` | Tolerantly decodes one event-shaped value with an exact distinct-result bound. |
 | Method | `fava_nip65::RelayList::read_relays` | Borrows the distinct decoded read relay set. |
-| Method | `fava_nip65::RelayList::supersedes` | Applies the current duplicated winner comparison; removal awaits the universal state/query comparator. |
 | Method | `fava_nip65::RelayList::write_relays` | Borrows the distinct decoded write relay set. |
 | Enum | `fava_nip65::RelayListError` | Current event-level relay-list decoding refusals. |
-| Enum variant | `fava_nip65::RelayListError::MissingEventId` | Current unfinalized-event refusal; removal awaits the state/query event-record boundary. |
 | Enum variant | `fava_nip65::RelayListError::TooManyRelays` | Refuses the 257th distinct valid accepted relay identity. |
 | Public field | `fava_nip65::RelayListError::TooManyRelays::actual` | Distinct accepted relay count at refusal. |
 | Public field | `fava_nip65::RelayListError::TooManyRelays::maximum` | Declared maximum of 256. |
 | Enum variant | `fava_nip65::RelayListError::WrongKind` | Refuses an event whose kind is not 10002. |
 | Public field | `fava_nip65::RelayListError::WrongKind::actual` | Exact received event kind number. |
+| Function | `fava_nip65::relay_lists` | Builds the ordinary bounded kind-10002 query for exact authors. |
 <!-- END crate-readme-api inventory -->

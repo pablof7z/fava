@@ -4,10 +4,10 @@ use std::cell::Cell;
 
 use fava_query::QuerySource;
 use fava_state::{
-    CacheMutation, CachedEvent, Timestamp, admission_mutations, event_is_expired,
-    expiration_mutations,
+    EventStateMutation, RelayEvent, event_is_expired, mutations_for_event, mutations_for_expiration,
 };
 use nostr::event::EventId;
+use nostr::types::Timestamp;
 use thiserror::Error;
 
 /// Event-cache provider contract.
@@ -27,7 +27,7 @@ pub trait EventCache: QuerySource + Send + Sync {
     /// complete.
     fn transact(
         &self,
-        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+        decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,
     ) -> Result<usize, EventCacheError>;
 
     /// Admit one verified signed relay event using universal event-state rules.
@@ -37,18 +37,18 @@ pub trait EventCache: QuerySource + Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns [`EventCacheError`] when the current read or the atomic
-    /// mutation cannot complete.
-    fn admit(&self, event: CachedEvent, now: Timestamp) -> Result<bool, EventCacheError> {
+    /// Returns [`EventCacheError`] when the current read or atomic mutation
+    /// cannot complete.
+    fn admit(&self, event: RelayEvent, now: Timestamp) -> Result<bool, EventCacheError> {
         let admitted = Cell::new(false);
         self.transact(&|current| {
-            let mut mutations = expiration_mutations(current, now);
-            let live: Vec<CachedEvent> = current
+            let mut mutations = mutations_for_expiration(current, now);
+            let live: Vec<RelayEvent> = current
                 .iter()
-                .filter(|known| !event_is_expired(&known.event, now))
+                .filter(|known| !event_is_expired(known.event().tags.as_slice(), now))
                 .cloned()
                 .collect();
-            let admission = admission_mutations(&live, event.clone(), now);
+            let admission = mutations_for_event(&live, event.clone(), now);
             admitted.set(!admission.is_empty());
             mutations.extend(admission);
             mutations
@@ -63,25 +63,25 @@ pub trait EventCache: QuerySource + Send + Sync {
     /// Returns [`EventCacheError`] when the current read or atomic mutation
     /// cannot complete.
     fn expire(&self, now: Timestamp) -> Result<usize, EventCacheError> {
-        self.transact(&|current| expiration_mutations(current, now))
+        self.transact(&|current| mutations_for_expiration(current, now))
     }
 
     /// Atomically apply one externally decided event-state mutation batch.
     ///
-    /// Every [`CacheMutation::Retract`] in the batch is always applicable: a
+    /// Every [`EventStateMutation::Retract`] in the batch is always applicable: a
     /// provider may refuse an insertion for capacity but never a removal.
     ///
     /// # Errors
     ///
     /// Returns [`EventCacheError`] when the complete batch cannot commit.
-    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError>;
+    fn commit(&self, mutations: Vec<EventStateMutation>) -> Result<(), EventCacheError>;
 
     /// Read one currently retained event.
     ///
     /// # Errors
     ///
     /// Returns [`EventCacheError`] when the provider cannot read current state.
-    fn event(&self, id: EventId) -> Result<Option<CachedEvent>, EventCacheError>;
+    fn event(&self, id: EventId) -> Result<Option<RelayEvent>, EventCacheError>;
 
     /// Number of retained signed events.
     ///

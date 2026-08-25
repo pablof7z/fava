@@ -5,15 +5,15 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 
 use super::faults::{ClosingEventCache, FaultingWriteStore};
 use super::support::{
-    NoopTransport, RecordingPublisher, UnavailableSigner, relay_evidence, signed_source,
-    wait_for_materialization,
+    NoopTransport, RecordingPublisher, UnavailableSigner, relay_event, relay_occurrence,
+    signed_source, wait_for_materialization,
 };
 use super::{ControlledMaterializer, publish_edit, wait_failure};
 
@@ -102,9 +102,9 @@ async fn write_store_source_closure_keeps_cache_source_live() {
     );
     let source = signed_source(&keys, Kind::ContactList, 10, "cache source", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("independent cache source commits");
     let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;

@@ -18,6 +18,7 @@ fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
 fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }
 fava-signer-local = { path = "../../crates/fava-signer-local" }
+fava-relay = { path = "../../crates/fava-relay" }
 fava-state = { path = "../../crates/fava-state" }
 fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }
 fava-transport = { path = "../../crates/fava-transport" }

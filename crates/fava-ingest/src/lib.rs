@@ -2,11 +2,12 @@
 
 use std::collections::BTreeMap;
 
-use fava_event_cache::{EventCache, EventCacheError};
-use fava_state::{CachedEvent, RelayEvidence, RelaySessionKey, Timestamp};
+use fava_relay::RelaySessionKey;
+use fava_state::RelayEvent;
 use nostr::event::Event;
 use nostr::filter::{Filter, MatchEventOptions};
 use nostr::message::SubscriptionId;
+use nostr::types::Timestamp;
 use thiserror::Error;
 
 /// Refusal of one relay EVENT before it can affect local state.
@@ -24,9 +25,6 @@ pub enum RelayIngestError {
     /// The event ID or signature is invalid.
     #[error("relay EVENT verification failed: {0}")]
     InvalidEvent(String),
-    /// The event-cache provider refused or failed the atomic admission.
-    #[error(transparent)]
-    Cache(#[from] EventCacheError),
 }
 
 /// Attribute, verify, filter, and admit one relay EVENT.
@@ -49,16 +47,15 @@ pub enum RelayIngestError {
 ///
 /// Returns [`RelayIngestError`] unless the frame is attributed to an accepted
 /// subscription with at least one filter, has a valid ID and signature,
-/// matches one of that subscription's accepted filters, and can be admitted by
-/// the selected event cache.
+/// matches one of that subscription's accepted filters, and can become one
+/// storage-neutral live contribution.
 pub fn admit_subscription_event(
-    cache: &dyn EventCache,
     session: &RelaySessionKey,
     accepted: &BTreeMap<SubscriptionId, Vec<Filter>>,
     attributed: &SubscriptionId,
     event: Event,
     now: Timestamp,
-) -> Result<bool, RelayIngestError> {
+) -> Result<RelayEvent, RelayIngestError> {
     let Some(filters) = accepted.get(attributed) else {
         return Err(RelayIngestError::WrongSubscription);
     };
@@ -74,10 +71,5 @@ pub fn admit_subscription_event(
     {
         return Err(RelayIngestError::OffFilter);
     }
-    cache
-        .admit(
-            CachedEvent::new(event, RelayEvidence::one(session.clone(), now)),
-            now,
-        )
-        .map_err(Into::into)
+    Ok(RelayEvent::new(event, session.clone(), now))
 }

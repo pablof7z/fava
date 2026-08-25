@@ -1,5 +1,5 @@
+use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
-use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteRouting,

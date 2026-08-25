@@ -8,20 +8,22 @@ use std::time::Duration;
 use fava::{Fava, Kind, Receipt, ReceiptId};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
 };
-use fava_state::{CacheMutation, CachedEvent, RelayAccess, RelaySessionKey, RelayUrl};
+use fava_state::EventStateMutation;
 use fava_write::SignatureState;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::{broadcast, watch};
 
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
     BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
-    relay_evidence, signed_source,
+    relay_event, relay_occurrence, signed_source, wait_for_signer,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -67,9 +69,9 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     });
     let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             successor,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     signer.release_one();
@@ -80,7 +82,10 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     release.join().unwrap();
     wait_for_signer_calls(&signer, 2).await;
     wait_for_opens(&router, 2).await;
-    let later_session = RelaySessionKey::new(later, RelayAccess::public());
+    let later_session = RelaySessionKey {
+        relay: later,
+        access: RelayAccess::Public,
+    };
     let rematerialized = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.destinations().contains_key(&later_session)
     })
@@ -91,7 +96,10 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
     router.send(contribution(&[later_session.relay.clone(), second.clone()]));
     wait_for_route_commits(&store, baseline_commits.saturating_add(1)).await;
 
-    let second_session = RelaySessionKey::new(second, RelayAccess::public());
+    let second_session = RelaySessionKey {
+        relay: second,
+        access: RelayAccess::Public,
+    };
     let updated = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.destinations().contains_key(&second_session)
     })
@@ -230,7 +238,10 @@ fn contribution(relays: &[RelayUrl]) -> RouteContribution {
             .cloned()
             .map(|relay| {
                 RouteDestination::new(
-                    RelaySessionKey::new(relay, RelayAccess::public()),
+                    RelaySessionKey {
+                        relay,
+                        access: RelayAccess::Public,
+                    },
                     BTreeSet::new(),
                     "controlled route revision",
                 )

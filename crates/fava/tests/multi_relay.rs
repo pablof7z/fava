@@ -10,7 +10,7 @@ use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::RelaySessionKey;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
@@ -23,6 +23,7 @@ use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 use tokio::sync::Notify;
 
 #[derive(Default)]
@@ -139,7 +140,7 @@ impl ScriptedSession {
             .push_back(Ok(RelayInbound::Frame {
                 identity: self.identity.clone(),
                 frame: frame.into_bytes(),
-                received_at: fava_state::Timestamp::now(),
+                received_at: nostr::types::Timestamp::now(),
             }));
         self.mailbox.changed.notify_one();
     }
@@ -256,25 +257,32 @@ async fn duplicate_event_merges_only_actual_serving_relays() {
         snapshot
             .events
             .first()
-            .is_some_and(|record| record.relay_evidence.len() == 2)
+            .is_some_and(|record| record.relay_occurrences().len() == 2)
     })
     .await;
     assert_eq!(latest.events.len(), 1);
     let serving: Vec<_> = latest.events[0]
-        .relay_evidence
-        .observations()
+        .relay_occurrences()
+        .occurrences()
         .map(|evidence| evidence.session.relay.clone())
         .collect();
     assert!(serving.contains(&relays[0]));
     assert!(serving.contains(&relays[1]));
     assert!(!serving.contains(&relays[2]));
-    assert_eq!(cache.len().expect("cache readable"), 1);
+    assert_eq!(
+        cache.len().expect("cache readable"),
+        2,
+        "retention keeps one atomic contribution per exact serving session"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let relay = relay_urls(1).remove(0);
-    let key = RelaySessionKey::new(relay.clone(), fava_state::RelayAccess::public());
+    let key = RelaySessionKey {
+        relay: relay.clone(),
+        access: fava_relay::RelayAccess::Public,
+    };
     let transport = Arc::new(FakeTransport::new());
     let cache = Arc::new(MemoryEventCache::default());
     let fava = Fava::builder()
@@ -446,7 +454,7 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
             && snapshot
                 .events
                 .iter()
-                .any(|record| record.id() == shared.id && record.relay_evidence.len() == 2)
+                .any(|record| record.id() == shared.id && record.relay_occurrences().len() == 2)
     })
     .await;
     assert!(
@@ -459,14 +467,15 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
         latest
             .events
             .iter()
-            .any(|record| record.id() == winner_b.id)
+            .all(|record| record.id() != winner_b.id),
+        "one cross-source coordinate winner replaces per-relay winner unions"
     );
     let shared_record = latest
         .events
         .iter()
         .find(|record| record.id() == shared.id)
         .expect("shared event remains visible once");
-    assert_eq!(shared_record.relay_evidence.len(), 2);
+    assert_eq!(shared_record.relay_occurrences().len(), 2);
     assert_eq!(
         latest
             .events
@@ -475,7 +484,7 @@ async fn multi_relay_replaceable_authority_survives_public_facade() {
             .count(),
         1
     );
-    assert_eq!(cache.len().expect("cache readable"), 3);
+    assert_eq!(cache.len().expect("cache readable"), 4);
 
     observation.close();
     observation.close();

@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fava_query::OperationGeneration;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::{
     RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionIdentity, TransportError,
 };

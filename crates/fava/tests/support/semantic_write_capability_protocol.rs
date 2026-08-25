@@ -9,7 +9,7 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -17,8 +17,8 @@ use nostr::event::{EventId, Tag};
 use nostr::key::Keys;
 
 use super::support::{
-    BlockingSigner, CountingSigner, RecordingPublisher, publication_builder, relay_evidence,
-    wait_for_materialization, wait_for_signer,
+    BlockingSigner, CountingSigner, RecordingPublisher, publication_builder, relay_event,
+    relay_occurrence, wait_for_materialization, wait_for_signer,
 };
 use super::{EditResult, explicit_intent, signed, target_count};
 
@@ -97,9 +97,9 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
     let base = signed(&keys, kind, 10, "opaque", Vec::new());
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             base.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
@@ -236,9 +236,9 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     );
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             base.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());
@@ -335,9 +335,9 @@ fn prove_public_refusals<Add>(
     );
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             hostile,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());

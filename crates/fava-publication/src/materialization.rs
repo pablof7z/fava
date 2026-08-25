@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot};
+use fava_relay::RelayAccess;
 use fava_routing::{RoutePlan, RouteRequest};
-use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
+use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
     EventValue, Kind, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
@@ -70,12 +71,15 @@ impl OpenedSemanticSources {
     pub(super) fn selected(&self, selected_id: Option<fava_write::EventId>) -> Option<EventValue> {
         let selected_id = selected_id?;
         self.snapshots.iter().find_map(|snapshot| {
-            snapshot.events.iter().find_map(|event| {
-                let value = match event {
-                    SourceEvent::Cached(cached) => EventValue::Signed(cached.event.clone()),
-                    SourceEvent::Local(local) => local.event.clone(),
-                };
-                (value.id() == Some(selected_id)).then_some(value)
+            snapshot.events.iter().find_map(|event| match event {
+                SourceEvent::Relay(relay) if relay.event().id == selected_id => {
+                    Some(EventValue::Signed(relay.event().clone()))
+                }
+                SourceEvent::Local(local) if local.event.id() == Some(selected_id) => {
+                    Some(local.event.clone())
+                }
+                SourceEvent::Local(_) => None,
+                SourceEvent::Relay(_) => None,
             })
         })
     }
@@ -325,12 +329,12 @@ impl Publication {
         let coordinate = edit_coordinate(edit, author);
         for source in &mut qualified {
             source.events.retain(|event| match event {
-                SourceEvent::Cached(cached) => {
+                SourceEvent::Relay(relay) => {
                     event_coordinate(
-                        cached.event.id,
-                        cached.event.pubkey,
-                        cached.event.kind,
-                        cached.event.tags.as_slice(),
+                        relay.event().id,
+                        relay.event().pubkey,
+                        relay.event().kind,
+                        relay.event().tags.as_slice(),
                     ) == coordinate
                 }
                 SourceEvent::Local(local) => {
@@ -347,7 +351,7 @@ impl Publication {
             .evaluator
             .evaluate(&exact_query(edit, author), &qualified)
             .map_err(|error| PublicationError::Routing(error.to_string()))?;
-        Ok(snapshot.events.first().map(|record| record.event.clone()))
+        Ok(snapshot.events.first().map(|record| record.event().clone()))
     }
 
     pub(super) fn route_for(
@@ -359,7 +363,7 @@ impl Publication {
         match routing {
             WriteRouting::Explicit(relays) => RoutePlan::explicit(
                 relays.iter().cloned(),
-                &RelayAccess::public(),
+                &RelayAccess::Public,
                 &request.targets(),
             )
             .map_err(|error| PublicationError::Routing(error.to_string())),
@@ -393,11 +397,12 @@ impl Publication {
         match candidate {
             Some(candidate)
                 if state.source_floor.is_none_or(|floor| {
-                    candidate.created_at() > floor
-                        || (candidate.created_at() == floor
-                            && state.selected_id.is_some_and(|selected_id| {
-                                candidate.id().is_some_and(|id| id < selected_id)
-                            }))
+                    candidate.id().is_some_and(|candidate_id| {
+                        event_is_newer(
+                            (candidate.created_at(), candidate_id),
+                            (floor, state.selected_id.unwrap_or(candidate_id)),
+                        )
+                    })
                 }) =>
             {
                 Ok((true, Some(candidate)))
@@ -412,7 +417,7 @@ impl Publication {
 fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventId) -> bool {
     sources.iter().any(|source| {
         source.events.iter().any(|event| match event {
-            SourceEvent::Cached(cached) => cached.event.id == selected_id,
+            SourceEvent::Relay(relay) => relay.event().id == selected_id,
             SourceEvent::Local(local) => local.event.id() == Some(selected_id),
         })
     })

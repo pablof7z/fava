@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{
     EventBuilder, EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState,
     WriteIntent, WriteRouting,
@@ -17,6 +17,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 #[path = "process_kill/semantic.rs"]
 mod semantic;
@@ -203,7 +204,10 @@ fn relay() -> RelayUrl {
 }
 
 fn session() -> RelaySessionKey {
-    RelaySessionKey::new(relay(), RelayAccess::public())
+    RelaySessionKey {
+        relay: relay(),
+        access: RelayAccess::Public,
+    }
 }
 
 fn unique_root(boundary: &str) -> PathBuf {

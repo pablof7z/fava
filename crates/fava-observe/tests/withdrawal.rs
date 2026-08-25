@@ -6,12 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fava_query::{Query, RelaySourceState, RelayWithdrawal, RouteOrigin};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget, Router};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::Transport;
 use nostr::event::Kind;
 use nostr::key::{Keys, PublicKey};
+use nostr::types::RelayUrl;
 use support::{
     assemble, assemble_with, relay, relay_evidence, requests, session_key, settle, wait_until,
     withdrawals,
@@ -138,7 +139,10 @@ fn explicit(author: PublicKey, relay: &RelayUrl) -> Query {
 
 /// A complete router contribution naming exactly one relay.
 fn contribution(relay: &RelayUrl) -> RouteContribution {
-    let session = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+    let session = RelaySessionKey {
+        relay: relay.clone(),
+        access: RelayAccess::Public,
+    };
     RouteContribution {
         destinations: vec![RouteDestination::new(
             session.clone(),

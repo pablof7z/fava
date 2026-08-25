@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use serde::{Deserialize, Serialize};
 
 use crate::{

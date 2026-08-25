@@ -7,7 +7,8 @@ use fava_query::{
     SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::RelayEvent;
 use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, SignatureState, WriteId,
 };
@@ -15,6 +16,7 @@ use nostr::event::{
     Event, EventBuilder, EventId, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
 };
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn signed_event(keys: &Keys, kind: Kind, created_at: u64, content: &str) -> Event {
     EventBuilder::new(kind, content)
@@ -80,18 +82,15 @@ fn result_ids(snapshot: &fava_query::QuerySnapshot) -> BTreeSet<EventId> {
         .collect()
 }
 
-fn relay_evidence(urls: &[&str]) -> RelayEvidence {
-    let mut evidence = RelayEvidence::default();
-    for (index, url) in urls.iter().enumerate() {
-        evidence.merge(&RelayEvidence::one(
-            RelaySessionKey::new(
-                RelayUrl::parse(url).expect("test relay url"),
-                RelayAccess::public(),
-            ),
-            Timestamp::from(index as u64 + 1),
-        ));
-    }
-    evidence
+fn relay_source(event: Event, url: &str, observed_at: u64) -> SourceEvent {
+    SourceEvent::Relay(RelayEvent::new(
+        event,
+        RelaySessionKey {
+            relay: RelayUrl::parse(url).expect("test relay url"),
+            access: RelayAccess::Public,
+        },
+        Timestamp::from(observed_at),
+    ))
 }
 
 fn publication() -> PublicationEvidence {
@@ -121,14 +120,16 @@ fn snapshot(kind: SourceKind, events: Vec<SourceEvent>) -> SourceSnapshot {
 fn same_signed_event_merges_relay_and_publication_evidence() {
     let keys = Keys::generate();
     let event = signed_event(&keys, Kind::TextNote, 10, "hello");
-    let cached = CachedEvent::new(
-        event.clone(),
-        relay_evidence(&["wss://relay-a.example", "wss://relay-b.example"]),
-    );
-    let local = LocalWriteEvent::new(EventValue::Signed(event), publication())
+    let local = LocalWriteEvent::new(EventValue::Signed(event.clone()), publication())
         .expect("signed event is valid local state");
     let sources = [
-        snapshot(SourceKind::EventCache, vec![SourceEvent::Cached(cached)]),
+        snapshot(
+            SourceKind::EventCache,
+            vec![
+                relay_source(event.clone(), "wss://relay-a.example", 1),
+                relay_source(event, "wss://relay-b.example", 2),
+            ],
+        ),
         snapshot(SourceKind::WriteStore, vec![SourceEvent::Local(local)]),
     ];
     let query = Query::events();
@@ -138,8 +139,8 @@ fn same_signed_event_merges_relay_and_publication_evidence() {
         .expect("evaluation succeeds");
 
     assert_eq!(result.events.len(), 1);
-    assert_eq!(result.events[0].relay_evidence.len(), 2);
-    assert_eq!(result.events[0].publication, Some(publication()));
+    assert_eq!(result.events[0].relay_occurrences().len(), 2);
+    assert_eq!(result.events[0].publication(), Some(&publication()));
 }
 
 #[test]
@@ -158,10 +159,7 @@ fn local_replacement_overlays_then_reveals_cached_predecessor() {
     .expect("unsigned event is finalized");
     let cache = snapshot(
         SourceKind::EventCache,
-        vec![SourceEvent::Cached(CachedEvent::new(
-            predecessor.clone(),
-            relay_evidence(&["wss://relay.example"]),
-        ))],
+        vec![relay_source(predecessor.clone(), "wss://relay.example", 1)],
     );
     let writes = snapshot(SourceKind::WriteStore, vec![SourceEvent::Local(local)]);
     let query = Query::events()
@@ -182,7 +180,7 @@ fn local_replacement_overlays_then_reveals_cached_predecessor() {
 }
 
 #[test]
-fn nonmatching_local_replacement_shadows_cached_predecessor_until_cancelled() {
+fn nonmatching_local_replacement_does_not_shadow_a_selected_predecessor() {
     let keys = Keys::generate();
     let predecessor = EventBuilder::new(Kind::ContactList, "predecessor")
         .tags([literal_tag('d', "wanted", &[])])
@@ -192,10 +190,7 @@ fn nonmatching_local_replacement_shadows_cached_predecessor_until_cancelled() {
     let successor = unsigned_event(&keys, Kind::ContactList, 20, "successor");
     let cache = snapshot(
         SourceKind::EventCache,
-        vec![SourceEvent::Cached(CachedEvent::new(
-            predecessor.clone(),
-            relay_evidence(&["wss://relay.example"]),
-        ))],
+        vec![relay_source(predecessor.clone(), "wss://relay.example", 1)],
     );
     let writes = snapshot(SourceKind::WriteStore, vec![local_unsigned(successor)]);
     let query = Query::events()
@@ -210,7 +205,7 @@ fn nonmatching_local_replacement_shadows_cached_predecessor_until_cancelled() {
     let overlaid = StandardQueryEvaluator
         .evaluate(&query, &[cache.clone(), writes])
         .expect("evaluation succeeds");
-    assert!(overlaid.events.is_empty());
+    assert_eq!(result_ids(&overlaid), BTreeSet::from([predecessor.id]));
 
     let after_cancel = StandardQueryEvaluator
         .evaluate(&query, &[cache])
@@ -230,10 +225,9 @@ fn asking_relays_and_trusting_only_relays_are_distinct() {
     let event = signed_event(&keys, Kind::TextNote, 10, "source authority");
     let asked = RelayUrl::parse("wss://asked.example").expect("relay url");
     let other = "wss://other.example";
-    let cached_other = CachedEvent::new(event.clone(), relay_evidence(&[other]));
     let sources = [snapshot(
         SourceKind::EventCache,
-        vec![SourceEvent::Cached(cached_other)],
+        vec![relay_source(event.clone(), other, 1)],
     )];
     let acquisition_only = Query::events()
         .from_relays([asked.clone()])
@@ -251,10 +245,12 @@ fn asking_relays_and_trusting_only_relays_are_distinct() {
     assert_eq!(visible.events.len(), 1);
     assert!(hidden.events.is_empty());
 
-    let qualified = CachedEvent::new(event, relay_evidence(&[other, "wss://asked.example"]));
     let qualified_sources = [snapshot(
         SourceKind::EventCache,
-        vec![SourceEvent::Cached(qualified)],
+        vec![
+            relay_source(event.clone(), other, 1),
+            relay_source(event, "wss://asked.example", 2),
+        ],
     )];
     let now_visible = StandardQueryEvaluator
         .evaluate(&provenance_constrained, &qualified_sources)
@@ -271,8 +267,8 @@ fn replaceable_tie_selects_the_lowest_event_id() {
     let sources = [snapshot(
         SourceKind::EventCache,
         vec![
-            SourceEvent::Cached(CachedEvent::new(left, RelayEvidence::default())),
-            SourceEvent::Cached(CachedEvent::new(right, RelayEvidence::default())),
+            relay_source(left, "wss://relay.example", 1),
+            relay_source(right, "wss://relay.example", 2),
         ],
     )];
 
@@ -299,8 +295,8 @@ fn equal_timestamp_ordering_and_limit_follow_event_id_contract() {
     let sources = [snapshot(
         SourceKind::EventCache,
         vec![
-            SourceEvent::Cached(CachedEvent::new(left, RelayEvidence::default())),
-            SourceEvent::Cached(CachedEvent::new(right, RelayEvidence::default())),
+            relay_source(left, "wss://relay.example", 1),
+            relay_source(right, "wss://relay.example", 2),
         ],
     )];
 
@@ -412,18 +408,9 @@ fn literal_tag_selection_matches_exact_signed_and_unsigned_cells() {
         snapshot(
             SourceKind::EventCache,
             vec![
-                SourceEvent::Cached(CachedEvent::new(
-                    signed.clone(),
-                    relay_evidence(&["wss://relay.example"]),
-                )),
-                SourceEvent::Cached(CachedEvent::new(
-                    opposite_key,
-                    relay_evidence(&["wss://relay.example"]),
-                )),
-                SourceEvent::Cached(CachedEvent::new(
-                    missing_conjunct,
-                    relay_evidence(&["wss://relay.example"]),
-                )),
+                relay_source(signed.clone(), "wss://relay.example", 1),
+                relay_source(opposite_key, "wss://relay.example", 2),
+                relay_source(missing_conjunct, "wss://relay.example", 3),
             ],
         ),
         snapshot(
@@ -507,10 +494,7 @@ fn all_ascii_letter_keys_select_only_the_exact_case() {
         let sources = [
             snapshot(
                 SourceKind::EventCache,
-                vec![SourceEvent::Cached(CachedEvent::new(
-                    signed,
-                    relay_evidence(&["wss://relay.example"]),
-                ))],
+                vec![relay_source(signed, "wss://relay.example", 1)],
             ),
             snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
         ];
@@ -542,10 +526,7 @@ fn present_empty_literal_tag_axis_matches_nothing() {
     let sources = [
         snapshot(
             SourceKind::EventCache,
-            vec![SourceEvent::Cached(CachedEvent::new(
-                signed,
-                relay_evidence(&["wss://relay.example"]),
-            ))],
+            vec![relay_source(signed, "wss://relay.example", 1)],
         ),
         snapshot(SourceKind::WriteStore, vec![local_unsigned(unsigned)]),
     ];

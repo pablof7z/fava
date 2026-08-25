@@ -31,7 +31,7 @@ use std::time::Duration;
 pub use bounded::BoundedReason;
 pub use error::TransportError;
 pub use fava_query::OperationGeneration;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use inbound::RelayInbound;
 pub use lease::{LeaseRelease, RelaySessionLease};

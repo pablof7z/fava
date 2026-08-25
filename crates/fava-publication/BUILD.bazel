@@ -1,11 +1,13 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+exports_files(["src/materialization.rs"], visibility = ["//visibility:public"])
+
 # Source set exported for the cross-crate architecture gates that assert the
 # universal owners stay kind-blind.
 filegroup(
     name = "architecture_sources",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
     visibility = ["//visibility:public"],
 )
 
@@ -16,6 +18,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-relay:lib",
         "//crates/fava-delivery:lib",
         "//crates/fava-publisher:lib",
         "//crates/fava-query:lib",
@@ -42,6 +45,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-delivery:lib",
         "//crates/fava-delivery-standard:lib",

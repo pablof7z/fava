@@ -5,7 +5,7 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
     TransportDeadlines,

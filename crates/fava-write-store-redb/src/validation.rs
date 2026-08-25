@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_state::{RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::event_is_newer;
 use fava_write::{
     EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState, WriteIntent, WriteRouting,
@@ -69,7 +70,10 @@ fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
     let expected: BTreeSet<_> = relays
         .iter()
         .cloned()
-        .map(|relay| RelaySessionKey::new(relay, RelayAccess::public()))
+        .map(|relay| RelaySessionKey {
+            relay,
+            access: RelayAccess::Public,
+        })
         .collect();
     let retained: BTreeSet<_> = receipt
         .current
@@ -258,7 +262,12 @@ fn validate_semantic(
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?
             != crate::semantic::edit_coordinate(edit, *author)
         || receipt.current.publication.materialization_source != current_source.map(|(id, _)| id)
-        || current_source.is_some_and(|(_, time)| time >= receipt.current.event.created_at())
+        || current_source.is_some_and(|(id, time)| {
+            !event_is_newer(
+                (receipt.current.event.created_at(), receipt.current.id()),
+                (time, id),
+            )
+        })
     {
         return incoherent("durable semantic custody is incoherent");
     }

@@ -93,11 +93,11 @@ async fn external_capability_composes_through_public_fava() {
         first.id
     );
     let record = wait_generation_record(&mut observation, 2).await;
-    assert_eq!(record.event.kind(), external_kind());
-    assert_eq!(record.event.tags(), &[preserved_tag]);
-    validate_external_event(&record.event).expect("public typed validation accepts successor");
+    assert_eq!(record.event().kind(), external_kind());
+    assert_eq!(record.event().tags(), &[preserved_tag]);
+    validate_external_event(record.event()).expect("public typed validation accepts successor");
     assert_eq!(
-        decode_external_event(&record.event).expect("public typed decode accepts successor"),
+        decode_external_event(record.event()).expect("public typed decode accepts successor"),
         (
             BTreeSet::from(["alpha".to_owned(), "omega".to_owned()]),
             "unrelated\nsource-body".to_owned()
@@ -278,10 +278,10 @@ async fn raw_future_event_kind_publishes_unchanged() {
     );
     let record = wait_first_record(&mut observation, "raw future query visibility").await;
     assert_eq!(record.id(), expected_id);
-    assert_eq!(record.event.kind(), future_kind);
-    assert_eq!(record.event.created_at(), Timestamp::from(42));
-    assert_eq!(record.event.tags(), unknown.as_slice());
-    assert_eq!(content(&record.event), "opaque future content");
+    assert_eq!(record.event().kind(), future_kind);
+    assert_eq!(record.event().created_at(), Timestamp::from(42));
+    assert_eq!(record.event().tags(), unknown.as_slice());
+    assert_eq!(content(record.event()), "opaque future content");
 
     let published = harness.transport.published(0).await;
     assert_eq!(published.id, expected_id);

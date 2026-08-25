@@ -12,9 +12,9 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::RelaySessionKey;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
-use fava_state::{RelaySessionKey, RelayUrl};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -24,6 +24,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]

@@ -3,7 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 filegroup(
     name = "architecture_sources",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
+    visibility = ["//visibility:public"],
 )
 
 rust_library(
@@ -14,6 +15,7 @@ rust_library(
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
         "//crates/fava-query:lib",
+        "//crates/fava-relay:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ],
@@ -71,4 +73,18 @@ rust_test(
         "//:docs/internals/vocabulary.toml",
         "//:docs/issues/0027-simple-group-relay-input-boundary.md",
     ],
+)
+
+rust_test(
+    name = "exact_host_records",
+    crate_name = "exact_host_records",
+    srcs = ["tests/exact_host_records.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-query:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
 )

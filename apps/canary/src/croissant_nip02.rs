@@ -243,7 +243,7 @@ async fn execute_flow(
     let baseline_id = baseline_write.receipt().map_err(error)?.current.id();
     wait_record(&mut observation, baseline_id, 0).await?;
     let baseline_record = record(&observation, baseline_id)?;
-    let empty = ContactList::from_event(&baseline_record.event).map_err(error)?;
+    let empty = ContactList::from_event(baseline_record.event()).map_err(error)?;
     if !empty.follows().is_empty() || !empty.evidence().is_empty() {
         return Err(CanaryError::new(
             "baseline kind-3 did not decode as valid empty",
@@ -266,12 +266,12 @@ async fn execute_flow(
     wait_record(&mut observation, edit_id, 0).await?;
     let local = record(&observation, edit_id)?;
     let local_revision = observation.current().revision.0;
-    let local_publication = local.publication.as_ref().ok_or_else(|| {
+    let local_publication = local.publication().ok_or_else(|| {
         CanaryError::new("local NIP-02 materialization lacked publication evidence")
     })?;
     if local_publication.write_id != edit_write.write_id()
         || local_publication.receipt_id != edit_write.receipt_id()
-        || !local.relay_evidence.is_empty()
+        || !local.relay_occurrences().is_empty()
     {
         return Err(CanaryError::new(
             "local NIP-02 evidence did not precede relay acknowledgement",
@@ -283,7 +283,7 @@ async fn execute_flow(
     wait_record(&mut observation, edit_receipt.current.id(), 1).await?;
     let relay_revision = observation.current().revision.0;
     let relayed = record(&observation, edit_receipt.current.id())?;
-    validate_final(&relayed.event, target, &relay, &group_id)?;
+    validate_final(relayed.event(), target, &relay, &group_id)?;
     if relay_revision <= local_revision
         || edit_receipt.current.publication.materialization_source
             != Some(baseline_receipt.current.id())

@@ -6,7 +6,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 filegroup(
     name = "architecture_sources",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
     visibility = ["//visibility:public"],
 )
 
@@ -16,19 +16,62 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(),
-    deps = all_crate_deps(normal = True),
+    deps = all_crate_deps(normal = True) + ["//crates/fava-relay:lib"],
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],
 )
 
 rust_test(
-    name = "event_state",
-    srcs = ["tests/event_state.rs"],
-    crate_name = "event_state",
+    name = "event_state_model",
+    srcs = ["tests/event_state_model.rs"],
+    crate_name = "event_state_model",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [":lib"],
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-relay:lib",
+    ],
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
     compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "hostile_sibling_rules",
+    srcs = ["tests/hostile_sibling_rules.rs"],
+    crate_name = "hostile_sibling_rules",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-relay:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "readme_examples",
+    srcs = ["tests/readme_examples.rs"],
+    crate_name = "readme_examples",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-relay:lib",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "downstream_comparator_subtraction",
+    srcs = ["tests/downstream_comparator_subtraction.rs"],
+    crate_name = "downstream_comparator_subtraction",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = all_crate_deps(normal = True, normal_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+    data = ["//:state_comparator_sources"],
 )

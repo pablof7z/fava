@@ -8,8 +8,8 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
     SourceChanges, SourceKind, SourceSnapshot,
 };
+use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
-use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,

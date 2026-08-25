@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::RelayDeliveryOutcome;
+use crate::relay_session_serde::{decode, encode};
 
 pub(super) fn serialize<S>(
     value: &BTreeMap<RelaySessionKey, RelayDeliveryOutcome>,
@@ -13,7 +14,11 @@ pub(super) fn serialize<S>(
 where
     S: Serializer,
 {
-    value.iter().collect::<Vec<_>>().serialize(serializer)
+    value
+        .iter()
+        .map(|(session, outcome)| (encode(session), outcome))
+        .collect::<Vec<_>>()
+        .serialize(serializer)
 }
 
 pub(super) fn deserialize<'de, D>(
@@ -22,9 +27,15 @@ pub(super) fn deserialize<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let pairs = Vec::<(RelaySessionKey, RelayDeliveryOutcome)>::deserialize(deserializer)?;
+    let pairs = Vec::<(
+        (nostr::types::RelayUrl, Option<nostr::key::PublicKey>),
+        RelayDeliveryOutcome,
+    )>::deserialize(deserializer)?;
     let count = pairs.len();
-    let map: BTreeMap<_, _> = pairs.into_iter().collect();
+    let map: BTreeMap<_, _> = pairs
+        .into_iter()
+        .map(|(session, outcome)| (decode(session), outcome))
+        .collect();
     if map.len() == count {
         Ok(map)
     } else {

@@ -6,11 +6,12 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
 };
-use fava_state::{RelaySessionKey, RelayUrl};
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 /// Router contributing configured relays while upstream target coverage is low.
@@ -69,7 +70,10 @@ impl FallbackRelayRouter {
             .relays
             .iter()
             .cloned()
-            .map(|relay| RelaySessionKey::new(relay, request.access()))
+            .map(|relay| RelaySessionKey {
+                relay,
+                access: request.access(),
+            })
             .collect();
         let coverage = targets
             .iter()

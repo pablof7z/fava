@@ -6,9 +6,11 @@ use fava_query::{
     SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CachedEvent, RelayEvidence};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::{RelayEvent, relay_occurrences_for_event};
 use fava_write::{EventValue, Kind};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 use crate::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
@@ -19,7 +21,8 @@ fn snapshot(events: Vec<fava_write::Event>) -> QuerySnapshot {
         events
             .into_iter()
             .map(|event| {
-                EventRecord::new(EventValue::Signed(event), RelayEvidence::default(), None)
+                let occurrences = relay_occurrences_for_event(event.id, &[]).unwrap();
+                EventRecord::new(EventValue::Signed(event), occurrences, None)
                     .expect("finalized event record")
             })
             .collect(),
@@ -79,7 +82,16 @@ fn ordinary_evaluation_keeps_each_authors_newest_contact_list() {
         retractions: Vec::new(),
         events: vec![alice_old, bob_only.clone(), alice_new.clone()]
             .into_iter()
-            .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
+            .map(|event| {
+                SourceEvent::Relay(RelayEvent::new(
+                    event,
+                    RelaySessionKey {
+                        relay: RelayUrl::parse("wss://relay.example").unwrap(),
+                        access: RelayAccess::Public,
+                    },
+                    Timestamp::from(1),
+                ))
+            })
             .collect(),
     }];
 

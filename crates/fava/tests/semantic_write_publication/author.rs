@@ -35,18 +35,18 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
     assert_eq!(bob_signer.calls(), 0);
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&bob, Kind::ContactList, 50, "Bob", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("Bob's unrelated coordinate enters cache");
     assert_no_receipt_change(&store).await;
     assert_eq!(materializer.calls().len(), 1);
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&alice, Kind::ContactList, 10, "Alice", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("Alice's successor enters cache");
     let successor = wait_for_materialization(&fava, write.receipt_id(), 2).await;
@@ -91,9 +91,9 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
     .expect("recovery starts with only Bob's signer selected");
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             signed_source(&alice, Kind::ContactList, 10, "Alice source", &[]),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("Alice's source enters after recovery");
     let recovered = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
@@ -121,8 +121,8 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(wanted.clone(), relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(unrelated, relay_evidence())),
+            EventStateMutation::Upsert(relay_event(wanted.clone(), relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(unrelated, relay_occurrence())),
         ])
         .unwrap();
     let materializer = Arc::new(TestMaterializer::new(kind));

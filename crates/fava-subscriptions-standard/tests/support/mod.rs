@@ -3,9 +3,10 @@
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{DeclaredLimit, DemandId, RelayDemand, RelayReadConstraints};
 use nostr::filter::Filter;
+use nostr::types::RelayUrl;
 
 /// The relay session every fixture plans against.
 #[must_use]
@@ -14,10 +15,10 @@ use nostr::filter::Filter;
     reason = "shared fixture; not every test file uses every helper"
 )]
 pub fn relay() -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse("wss://relay.example").expect("relay URL"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
+        access: RelayAccess::Public,
+    }
 }
 
 /// One observation identity.

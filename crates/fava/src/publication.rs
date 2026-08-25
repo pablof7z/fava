@@ -8,11 +8,11 @@
 use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
-use fava_state::RelayUrl;
 use fava_write::{
     Event, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
     UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
+use nostr::types::RelayUrl;
 use thiserror::Error;
 
 /// One accepted publication obligation as seen by an application.

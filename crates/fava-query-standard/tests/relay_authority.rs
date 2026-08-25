@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use fava_query::{Query, QueryError, QueryEvaluator, SourceEvent, SourceKind, SourceRevision};
 use fava_query::{SourceSnapshot, SourceStatus};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::RelayEvent;
 use fava_write::{
     EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, SignatureState,
     WriteId,
@@ -14,20 +15,25 @@ use nostr::event::{
     Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
 };
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("relay url")
 }
 
-fn evidence(urls: &[&str]) -> RelayEvidence {
-    let mut evidence = RelayEvidence::default();
-    for (index, url) in urls.iter().enumerate() {
-        evidence.merge(&RelayEvidence::one(
-            RelaySessionKey::new(relay(url), RelayAccess::public()),
-            Timestamp::from(index as u64 + 1),
-        ));
-    }
-    evidence
+fn evidence(urls: &[&str]) -> Vec<(RelaySessionKey, Timestamp)> {
+    urls.iter()
+        .enumerate()
+        .map(|(index, url)| {
+            (
+                RelaySessionKey {
+                    relay: relay(url),
+                    access: RelayAccess::Public,
+                },
+                Timestamp::from(index as u64 + 1),
+            )
+        })
+        .collect()
 }
 
 fn addressable(keys: &Keys, created_at: u64, content: &str) -> Event {
@@ -47,7 +53,7 @@ fn addressable_unsigned(keys: &Keys, created_at: u64, content: &str) -> Unsigned
     event
 }
 
-fn cache(events: Vec<(Event, RelayEvidence)>) -> SourceSnapshot {
+fn cache(events: Vec<(Event, Vec<(RelaySessionKey, Timestamp)>)>) -> SourceSnapshot {
     SourceSnapshot {
         kind: SourceKind::EventCache,
         revision: SourceRevision(1),
@@ -55,7 +61,11 @@ fn cache(events: Vec<(Event, RelayEvidence)>) -> SourceSnapshot {
         retractions: Vec::new(),
         events: events
             .into_iter()
-            .map(|(event, evidence)| SourceEvent::Cached(CachedEvent::new(event, evidence)))
+            .flat_map(|(event, evidence)| {
+                evidence.into_iter().map(move |(session, observed_at)| {
+                    SourceEvent::Relay(RelayEvent::new(event.clone(), session, observed_at))
+                })
+            })
             .collect(),
     }
 }
@@ -120,7 +130,7 @@ fn base_query() -> Query {
 }
 
 #[test]
-fn only_relays_unions_per_relay_replaceable_winners() {
+fn only_relays_selects_one_cross_source_replaceable_winner() {
     let keys = Keys::generate();
     let relay_a = "wss://relay-a.example";
     let relay_b = "wss://relay-b.example";
@@ -145,7 +155,7 @@ fn only_relays_unions_per_relay_replaceable_winners() {
             .iter()
             .map(fava_query::EventRecord::id)
             .collect::<Vec<_>>(),
-        vec![winner_a.id, winner_b.id]
+        vec![winner_a.id]
     );
 
     let newest = StandardQueryEvaluator
@@ -158,7 +168,7 @@ fn only_relays_unions_per_relay_replaceable_winners() {
         )
         .expect("limited oldest-first evaluation succeeds");
     assert_eq!(newest.events[0].id(), winner_a.id);
-    assert_eq!(oldest.events[0].id(), winner_b.id);
+    assert_eq!(oldest.events[0].id(), winner_a.id);
 }
 
 #[test]
@@ -229,8 +239,8 @@ fn any_local_keeps_global_replaceable_semantics() {
 
     assert_eq!(result.events.len(), 1);
     assert_eq!(result.events[0].id(), accepted_local.id);
-    assert!(result.events[0].relay_evidence.is_empty());
-    assert!(result.events[0].publication.is_some());
+    assert!(result.events[0].relay_occurrences().is_empty());
+    assert!(result.events[0].publication().is_some());
 }
 
 /// `docs/spec/partial-spec-api-semantics.md:200` — "An unpublished local event with no
@@ -290,7 +300,7 @@ fn unpublished_local_event_cannot_hide_a_relay_qualified_predecessor() {
 /// acquires qualifying provenance because one of the specified relays serves it, it may
 /// then enter the query result."
 #[test]
-fn local_event_wins_its_coordinate_once_a_selected_relay_serves_it() {
+fn relay_served_event_enters_without_local_evidence_under_only_relays() {
     let keys = Keys::generate();
     let relay_a = "wss://relay-a.example";
     let predecessor = addressable(&keys, 10, "relay-served predecessor");
@@ -319,5 +329,5 @@ fn local_event_wins_its_coordinate_once_a_selected_relay_serves_it() {
             .collect::<Vec<_>>(),
         vec![successor.id]
     );
-    assert!(served.events[0].publication.is_some());
+    assert!(served.events[0].publication().is_none());
 }

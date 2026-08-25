@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     PlannedSubscription, RelayDemand, RelayReadConstraints, ShortfallReason,

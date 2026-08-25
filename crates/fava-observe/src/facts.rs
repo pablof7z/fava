@@ -6,7 +6,7 @@ use std::time::Duration;
 use fava_query::{
     BoundedText, OperationGeneration, RelayDeadline, RelayShortfall, RelaySourceState,
 };
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_subscriptions::{RelayDemand, SubscriptionPlan};
 use fava_transport::{TransportBounds, TransportDeadlines};
 use fava_wire::SubscriptionId;
@@ -134,7 +134,7 @@ impl Engine {
                 relay,
                 generation,
                 RelaySourceState::Open {
-                    requested_at: fava_state::Timestamp::now(),
+                    requested_at: nostr::types::Timestamp::now(),
                 },
             );
         }

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/fava-relay",
     "crates/fava-state",
     "crates/fava-write",
     "crates/fava-query",
@@ -49,6 +50,7 @@ edition = "2024"
 rust-version = "1.90"
 
 [workspace.dependencies]
+fava-relay = { path = "crates/fava-relay" }
 fava-event-cache = { path = "crates/fava-event-cache" }
 fava-event-cache-memory = { path = "crates/fava-event-cache-memory" }
 fava-observe = { path = "crates/fava-observe" }
@@ -96,6 +98,8 @@ redb = "=4.2.0"
 thiserror = "=2.0.20"
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "=0.30.0", features = ["rustls-tls-webpki-roots"] }
+quote = "=1.0.47"
+syn = { version = "=2.0.119", features = ["full", "visit"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

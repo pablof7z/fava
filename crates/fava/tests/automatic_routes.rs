@@ -9,11 +9,11 @@ use std::time::Duration;
 use fava::{Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_fallback_relays::FallbackRelayRouter;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInboundFuture,
@@ -24,6 +24,7 @@ use fava_transport_testkit::detached_lease;
 use fava_wire::ClientMessage;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 #[derive(Default)]
 struct RecordingTransport {
@@ -293,7 +294,10 @@ fn contribution(values: &[(RelayUrl, RouteTarget)]) -> RouteContribution {
     let destinations = values
         .iter()
         .map(|(relay, target)| {
-            let session = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+            let session = RelaySessionKey {
+                relay: relay.clone(),
+                access: RelayAccess::Public,
+            };
             coverage.insert(
                 target.clone(),
                 CoverageState::Covered(BTreeSet::from([session.clone()])),

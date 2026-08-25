@@ -196,7 +196,7 @@ async fn execute(id: &str, seed: &str, proxy_url: &str) -> CanaryResult<Scenario
 async fn wait_subscription(
     fava: &Fava,
 ) -> CanaryResult<(
-    fava_state::RelaySessionKey,
+    fava_relay::RelaySessionKey,
     fava::OperationGeneration,
     SubscriptionId,
 )> {
@@ -250,8 +250,8 @@ async fn wait_event(
                 && current.events.iter().any(|record| record.id() == event_id)
                 && current.events.iter().all(|record| {
                     record
-                        .relay_evidence
-                        .observations()
+                        .relay_occurrences()
+                        .occurrences()
                         .all(|evidence| !evidence.session.relay.as_str().is_empty())
                 })
             {

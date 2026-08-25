@@ -10,7 +10,7 @@ use fava_external_semantic_capability_proof::selected_materializer;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::{
     BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
@@ -333,7 +333,7 @@ impl RelayMessageStream for ScriptedStream {
                     return frame.map(|text| RelayInbound::Frame {
                         identity: self.identity.clone(),
                         frame: text.into_bytes(),
-                        received_at: fava_state::Timestamp::now(),
+                        received_at: nostr::types::Timestamp::now(),
                     });
                 }
                 if self.inbox.closed.load(Ordering::SeqCst) {

@@ -9,12 +9,12 @@ use fava_delivery::{DeliveryDecision, DeliveryFacts, DeliveryPolicy};
 use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
 use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -28,6 +28,7 @@ use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
 use nostr::key::SecretKey;
+use nostr::types::RelayUrl;
 use tokio::sync::{Notify, watch};
 
 /// Deterministic secret material for the single test author.
@@ -48,7 +49,10 @@ pub fn relay_url(url: &str) -> RelayUrl {
 
 #[must_use]
 pub fn relay(url: &str) -> RelaySessionKey {
-    RelaySessionKey::new(relay_url(url), RelayAccess::public())
+    RelaySessionKey {
+        relay: relay_url(url),
+        access: RelayAccess::Public,
+    }
 }
 
 #[must_use]

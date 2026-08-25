@@ -234,7 +234,11 @@ async fn optimistic(
         receipt_id: accepted.receipt_id().as_u64(),
         details: json!({
             "outcome": receipt.outcome,
-            "destinations": receipt.destinations().iter().collect::<Vec<_>>(),
+            "destinations": receipt.destinations().iter().map(|(session, outcome)| json!({
+                "relay": session.relay.to_string(),
+                "access": format!("{:?}", session.access),
+                "outcome": format!("{:?}", outcome),
+            })).collect::<Vec<_>>(),
             "receipt_changes": ["unsigned", "signed", "attempting", "acknowledged"],
         }),
     })
@@ -275,7 +279,11 @@ async fn mixed(
         receipt_id: accepted.receipt_id().as_u64(),
         details: json!({
             "outcome": receipt.outcome,
-            "destinations": receipt.destinations().iter().collect::<Vec<_>>(),
+            "destinations": receipt.destinations().iter().map(|(session, outcome)| json!({
+                "relay": session.relay.to_string(),
+                "access": format!("{:?}", session.access),
+                "outcome": format!("{:?}", outcome),
+            })).collect::<Vec<_>>(),
         }),
     })
 }

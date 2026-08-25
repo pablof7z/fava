@@ -6,9 +6,9 @@ use std::sync::Arc;
 use fava_query::{
     ObservationId, Query, QueryAcquisition, QueryBranchId, RelayWithdrawal, RouteOrigin,
 };
+use fava_relay::RelaySessionKey;
 use fava_routing::{RoutePlan, RouteRequest, Router, RouterSession};
 use fava_runtime::{CancellationToken, Runtime, TaskHandle, TaskName};
-use fava_state::RelaySessionKey;
 use fava_subscriptions::{RelayDemand, demand_for_query};
 
 use crate::error::ObserveError;
@@ -40,15 +40,6 @@ impl Origin {
         match self {
             Self::Explicit => None,
             Self::Automatic => Some(plan.revision),
-        }
-    }
-}
-
-impl RouteBinding {
-    /// Release router-owned acquisition work without delivering a handle.
-    pub(crate) fn close(self) {
-        if let Some(mut session) = self.session {
-            session.close();
         }
     }
 }

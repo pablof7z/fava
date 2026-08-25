@@ -9,10 +9,10 @@ use std::sync::Arc;
 use fava_query::{Query, RelaySourceState, RouteOrigin};
 use fava_router_app_relays::AppRelayRouter;
 use fava_routing::Router;
-use fava_state::RelayUrl;
 use fava_transport::Transport;
 use nostr::event::Kind;
 use nostr::key::{Keys, PublicKey};
+use nostr::types::RelayUrl;
 use support::{
     assemble, assemble_with, push, relay, relay_evidence, requests, session_key, settle,
     wait_until, withdrawals,

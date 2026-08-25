@@ -5,13 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-fava-event-cache.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 nostr.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-fava-event-cache-memory.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]

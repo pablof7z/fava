@@ -39,6 +39,11 @@ impl OpenSources {
         self.cache.close();
         self.writes.close();
     }
+
+    /// Replace observation-owned live source snapshots at one coherent boundary.
+    pub(crate) fn refresh_live(&mut self, registry: &Registry, id: ObservationId) {
+        refresh_live_snapshots(&mut self.snapshots, registry, id);
+    }
 }
 
 /// Everything one observation's projection task needs.
@@ -126,7 +131,10 @@ async fn deliver(
         };
 
         let evaluate = match wake {
-            Wake::Evidence => false,
+            Wake::Evidence => {
+                refresh_live_snapshots(&mut snapshots, &registry, id);
+                true
+            }
             Wake::Source(role, result) => match *result {
                 Ok(snapshot) => {
                     if let Some(current) = snapshots.iter().find(|source| source.kind == role) {
@@ -194,9 +202,13 @@ pub(crate) fn decorate(registry: &Registry, id: ObservationId, evidence: &mut Qu
     let owned = registry.evidence(id);
     evidence.relays = owned.relays;
     evidence.plan = owned.plan;
-    evidence
-        .shortfalls
-        .retain(|entry| !matches!(entry, QueryShortfall::CoalescedUpdates { .. }));
+    evidence.shortfalls.retain(|entry| {
+        !matches!(
+            entry,
+            QueryShortfall::CoalescedUpdates { .. } | QueryShortfall::LiveRetentionLimit { .. }
+        )
+    });
+    evidence.shortfalls.extend(owned.live_shortfalls);
     if owned.coalesced > 0 {
         evidence.shortfalls.push(QueryShortfall::CoalescedUpdates {
             dropped: owned.coalesced,
@@ -259,6 +271,15 @@ fn replace_source(sources: &mut [SourceSnapshot], changed: SourceSnapshot) {
     {
         *source = changed;
     }
+}
+
+fn refresh_live_snapshots(
+    sources: &mut Vec<SourceSnapshot>,
+    registry: &Registry,
+    id: ObservationId,
+) {
+    sources.retain(|source| !matches!(source.kind, SourceKind::LiveRelay { .. }));
+    sources.extend(registry.live_snapshots(id));
 }
 
 /// Stamp the terminal fact the provider actually reported.

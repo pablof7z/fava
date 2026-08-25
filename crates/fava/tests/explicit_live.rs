@@ -11,7 +11,7 @@ use fava_query::{
     AuthenticationState, ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_transport::Transport;
@@ -20,6 +20,7 @@ use fava_wire::{ClientMessage, RelayMessage, SubscriptionId};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
 use nostr::key::{Keys, PublicKey};
+use nostr::types::{RelayUrl, Timestamp};
 
 #[tokio::test(flavor = "current_thread")]
 async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
@@ -46,7 +47,7 @@ async fn relay_establishment_does_not_delay_the_coherent_local_observation() {
 
     assert!(observation.current().events.is_empty());
     assert_eq!(transport.dials(&session_key(&relay)), 0);
-    let planned = relay_evidence(&observation.current(), &session_key(&relay));
+    let planned = relay_occurrence(&observation.current(), &session_key(&relay));
     assert!(matches!(
         planned.state,
         RelaySourceState::Planned | RelaySourceState::Connecting
@@ -326,8 +327,8 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     .expect("event deadline");
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), event.id);
-    assert_eq!(snapshot.events[0].relay_evidence.len(), 1);
-    wait_until(|| relay_evidence(&observation.current(), &key).stored_events_complete()).await;
+    assert_eq!(snapshot.events[0].relay_occurrences().len(), 1);
+    wait_until(|| relay_occurrence(&observation.current(), &key).stored_events_complete()).await;
 
     let mut forged = event.clone();
     forged.content = "forged after signing".to_owned();
@@ -373,12 +374,12 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
 
     wait_until(|| {
         matches!(
-            relay_evidence(&observation.current(), &key).state,
+            relay_occurrence(&observation.current(), &key).state,
             RelaySourceState::Open { .. }
         )
     })
     .await;
-    let silent = relay_evidence(&observation.current(), &key);
+    let silent = relay_occurrence(&observation.current(), &key);
     assert!(
         !silent.stored_events_complete(),
         "silence is not completeness"
@@ -469,7 +470,10 @@ fn relay(name: &str) -> RelayUrl {
 }
 
 fn session_key(relay: &RelayUrl) -> RelaySessionKey {
-    RelaySessionKey::new(relay.clone(), RelayAccess::public())
+    RelaySessionKey {
+        relay: relay.clone(),
+        access: RelayAccess::Public,
+    }
 }
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
@@ -538,7 +542,7 @@ fn withdrawals(peer: Option<FakeRelay>) -> Vec<SubscriptionId> {
         .collect()
 }
 
-fn relay_evidence(
+fn relay_occurrence(
     snapshot: &QuerySnapshot,
     key: &RelaySessionKey,
 ) -> fava_query::RelayQueryEvidence {
@@ -556,7 +560,7 @@ async fn await_state(
 ) -> fava_query::RelayQueryEvidence {
     tokio::time::timeout(Duration::from_secs(1), async {
         loop {
-            let current = relay_evidence(&observation.current(), key);
+            let current = relay_occurrence(&observation.current(), key);
             if predicate(&current.state) {
                 return current;
             }

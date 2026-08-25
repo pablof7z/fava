@@ -6,12 +6,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use fava_query::Query;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
 };
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::EventId;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
@@ -156,7 +157,10 @@ fn relay(name: &str) -> RelayUrl {
 }
 
 fn session_key(name: &str) -> RelaySessionKey {
-    RelaySessionKey::new(relay(name), RelayAccess::public())
+    RelaySessionKey {
+        relay: relay(name),
+        access: RelayAccess::Public,
+    }
 }
 
 fn covering(name: &str) -> RouteContribution {

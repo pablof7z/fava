@@ -6,18 +6,19 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use fava_query::EventRecord;
+use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
 };
-use fava_state::{RelayEvidence, RelaySessionKey, RelayUrl};
 use fava_write::EventId;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 /// Router contributing relays justified by Nostr references and observations.
 pub struct HintRouter {
     name: String,
-    evidence: Arc<Mutex<BTreeMap<EventId, RelayEvidence>>>,
+    evidence: Arc<Mutex<BTreeMap<EventId, BTreeSet<RelaySessionKey>>>>,
 }
 
 impl HintRouter {
@@ -36,8 +37,13 @@ impl HintRouter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .entry(record.id())
-            .and_modify(|current| current.merge(&record.relay_evidence))
-            .or_insert_with(|| record.relay_evidence.clone());
+            .or_default()
+            .extend(
+                record
+                    .relay_occurrences()
+                    .occurrences()
+                    .map(|occurrence| occurrence.session.clone()),
+            );
     }
 
     fn contribution(&self, request: &RouteRequest) -> RouteContribution {
@@ -61,7 +67,10 @@ impl HintRouter {
                 by_target
                     .entry(RouteTarget::ReferencedEvent(event_id))
                     .or_default()
-                    .insert(RelaySessionKey::new(relay, request.access()));
+                    .insert(RelaySessionKey {
+                        relay,
+                        access: request.access(),
+                    });
             }
         }
         let evidence = self
@@ -76,7 +85,7 @@ impl HintRouter {
                 by_target
                     .entry(RouteTarget::ReferencedEvent(event_id))
                     .or_default()
-                    .extend(known.observations().map(|item| item.session.clone()));
+                    .extend(known.iter().cloned());
             }
         }
         drop(evidence);

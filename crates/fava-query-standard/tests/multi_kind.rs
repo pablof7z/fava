@@ -6,9 +6,11 @@ use fava_query::{
     Query, QueryEvaluator, SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CachedEvent, RelayEvidence, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::RelayEvent;
 use nostr::event::{Event, EventBuilder, EventId, FinalizeEvent, Kind};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn event(keys: &Keys, kind: Kind, created_at: u64) -> Event {
     EventBuilder::new(kind, format!("kind {}", kind.as_u16()))
@@ -31,7 +33,16 @@ fn bounded_kind_set_local_selection_is_complete() {
         retractions: Vec::new(),
         events: vec![first, second, unrelated]
             .into_iter()
-            .map(|event| SourceEvent::Cached(CachedEvent::new(event, RelayEvidence::default())))
+            .map(|event| {
+                SourceEvent::Relay(RelayEvent::new(
+                    event,
+                    RelaySessionKey {
+                        relay: RelayUrl::parse("wss://relay.example").unwrap(),
+                        access: RelayAccess::Public,
+                    },
+                    Timestamp::from(1),
+                ))
+            })
             .collect(),
     }];
     let query = Query::events()

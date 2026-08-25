@@ -7,7 +7,7 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write::WriteIntent;
 use fava_write_store::{AcceptedWrite, WriteStore};
 use nostr::key::Keys;
@@ -16,7 +16,7 @@ use super::failure_support::publish_edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
     CountingSigner, RecordingPublisher, TestMaterializer, UnavailableSigner, WindowSigner,
-    publication_builder, relay_evidence, signed_source, wait_for_materialization,
+    publication_builder, relay_event, relay_occurrence, signed_source, wait_for_materialization,
 };
 
 fn compose_direct(
@@ -87,9 +87,9 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
 
     let source = signed_source(&keys, Kind::ContactList, 10, "new source", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("source change commits");
     let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
@@ -142,9 +142,9 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     .expect("runner observes the injected durable custody failure");
     let source = signed_source(&keys, Kind::ContactList, 20, "new source", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("successor source commits while custody reads fail");
     let failures_before_late_source = *custody_reads.borrow_and_update();

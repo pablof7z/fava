@@ -13,10 +13,10 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use fava_query::Query;
-use fava_state::RelayUrl;
 use fava_transport::Transport;
 use nostr::event::Kind;
 use nostr::key::{Keys, PublicKey};
+use nostr::types::RelayUrl;
 use support::{
     assemble_grouping, push, relay, relay_evidence, requests, session_key, settle, wait_until,
     withdrawals,
