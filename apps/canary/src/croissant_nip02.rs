@@ -195,6 +195,7 @@ async fn execute_flow(
     let mut observation = fava
         .observe(
             fava_nip02::contact_list(keys.public_key())
+                .map_err(error)?
                 .from_relays([relay.clone()])
                 .map_err(error)?,
         )

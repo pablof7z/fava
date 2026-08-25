@@ -83,7 +83,7 @@ impl PairEvidenceFixture {
                 manifest["teardown"][1]["completed"] = json!(false);
             }),
             UnsafePairCase::UnsignedClaim => self.mutate(0, false, |manifest| {
-                manifest["signed_refusals"] = json!(2);
+                manifest["prepared_contexts"] = json!(2);
             }),
             UnsafePairCase::ReusedIdentity => {
                 let first = read_manifest(&self.roots[0]);
@@ -263,7 +263,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "custom_destinations": 2,
         "custom_acknowledged": 2,
         "handoffs": [1, 1],
-        "signed_refusals": 3,
+        "prepared_contexts": 3,
         "observation_closed": true,
     });
     let processes = json!({"ready": ready, "teardown": teardown});
@@ -390,7 +390,7 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "custom_destinations": 2,
         "custom_acknowledged": 2,
         "handoffs": [1, 1],
-        "signed_refusals": 3,
+        "prepared_contexts": 3,
         "observation_closed": true,
         "ready": ready,
         "teardown": teardown,
@@ -574,7 +574,7 @@ fn write_wire_fixture(
         (
             8,
             "client_to_relay",
-            json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "limit": 4096, "#d": [simple_group]}]),
+            json!(["REQ", records_subscription, {"kinds": [39000,39001,39002,39003,39004,39005], "#d": [simple_group]}]),
         ),
         (
             8,

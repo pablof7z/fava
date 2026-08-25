@@ -41,7 +41,12 @@ pub(crate) async fn wait_for_query_completion(
         loop {
             let wire_a = read_wire(&paths[0])?;
             let wire_b = read_wire(&paths[1])?;
-            if pair_query_completion([&wire_a, &wire_b], simple_group_id, bootstrap_event_id, false)? {
+            if pair_query_completion(
+                [&wire_a, &wire_b],
+                simple_group_id,
+                bootstrap_event_id,
+                false,
+            )? {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -58,7 +63,12 @@ pub(crate) fn verify_query_completion(
 ) -> CanaryResult<()> {
     let wire_a = read_wire(&paths[0])?;
     let wire_b = read_wire(&paths[1])?;
-    if !pair_query_completion([&wire_a, &wire_b], simple_group_id, bootstrap_event_id, true)? {
+    if !pair_query_completion(
+        [&wire_a, &wire_b],
+        simple_group_id,
+        bootstrap_event_id,
+        true,
+    )? {
         return Err(CanaryError::new(
             "both final wire logs must carry exact terminal query completion",
         ));
@@ -177,8 +187,12 @@ fn query_completion(
         };
         match (direction, array.first().and_then(Value::as_str)) {
             ("client_to_relay", Some("REQ")) => {
-                let (role, subscription) =
-                    classify_request(array, simple_group_id, bootstrap_event_id, bootstrap_subscription)?;
+                let (role, subscription) = classify_request(
+                    array,
+                    simple_group_id,
+                    bootstrap_event_id,
+                    bootstrap_subscription,
+                )?;
                 // Distinct query roles legitimately share one connection; what
                 // must stay unique is the wire subscription each role owns.
                 if queries
@@ -257,7 +271,6 @@ fn classify_request(
     } else if filter
         == &json!({
             "kinds": [39000, 39001, 39002, 39003, 39004, 39005],
-            "limit": 4096,
             "#d": [simple_group_id]
         })
     {
@@ -363,7 +376,7 @@ mod tests {
                 &mut sequence,
                 8,
                 "records",
-                &json!({"kinds": [39000, 39001, 39002, 39003, 39004, 39005], "limit": 4096, "#d": [GROUP]}),
+                &json!({"kinds": [39000, 39001, 39002, 39003, 39004, 39005], "#d": [GROUP]}),
             )
     }
 
