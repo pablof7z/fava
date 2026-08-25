@@ -191,29 +191,193 @@ spec_crates = ["fava-bookmarks"]
 name = "SimpleGroup"
 source = "nostr"
 protocol = "NIP-29"
-meaning = "A relay-based Nostr group; Fava's SimpleGroup value presents one opaque simple group id over an application-selected non-empty host-relay set while each relay remains independently authoritative."
+nearest_nostr = "NIP-29 relay-based group identified by an h or d tag value"
+meaning = "One opaque simple-group id plus a normalized non-empty sequence of application-selected relays."
 owner = "fava-simple-groups"
-counterexample = "A value that lets one host's record answer for another host or silently selects one host is not Fava's SimpleGroup."
-lifecycle = "SimpleGroup and every capability helper are immutable or pure values; ordinary Fava query and publication owners retain all work and state."
-forcing_requirement = "Applications must read and publish across selected NIP-29 hosts while keeping exact relay-local record authority and explicit destinations."
-falsifier = "The public API and architecture targets must fail if per-host authority collapses, a helper retains state, or a universal owner gains an NIP-29 branch."
-symbols = [
-    "fava_simple_groups::PinnedItem",
-    "fava_simple_groups::SavedRelay",
-    "fava_simple_groups::SavedSimpleGroup",
-    "fava_simple_groups::SimpleGroup",
-    "fava_simple_groups::SimpleGroupAdmins",
-    "fava_simple_groups::SimpleGroupError",
-    "fava_simple_groups::SimpleGroupMembers",
-    "fava_simple_groups::SimpleGroupMetadata",
-    "fava_simple_groups::SimpleGroupParticipants",
-    "fava_simple_groups::SimpleGroupPins",
-    "fava_simple_groups::SimpleGroupRecords",
-    "fava_simple_groups::SimpleGroupRoles",
-    "fava_simple_groups::SimpleGroupSnapshot",
-    "fava_simple_groups::SimpleGroups",
-]
+distinction = "A raw id or relay URL alone cannot lower both exact group selection and the complete caller-selected relay sequence."
+counterexample = "A globally canonical group id or a value that silently chooses one relay is not this SimpleGroup."
+lifecycle = "Constructed synchronously from one required parsed RelayUrl plus a finite owned Vec tail; immutable thereafter and owns no query or publication work."
+forcing_requirement = "Applications must reuse one exact id and non-empty relay selection across content queries, state queries, preparation, and explicit publication without a shared numeric bound or new relay owner."
+falsifier = "Compile-fail evidence rejects empty and arbitrary-iterator construction; runtime tests fail if first-occurrence relay order changes, content-query composition broadens an existing h axis, or query/write lowering omits the id or any selected relay."
+symbols = ["fava_simple_groups::SimpleGroup"]
 crates = ["fava-simple-groups"]
+
+[[term]]
+name = "SimpleGroupStateEventKind"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Relay-generated group state kinds 39000 through 39005"
+meaning = "A closed selector for one relay-generated simple-group state-event kind."
+owner = "fava-simple-groups"
+distinction = "It names the exact six-family domain without owning an observation or arbitrary kind policy."
+counterexample = "An arbitrary event Kind or content kind selected through h is not a SimpleGroupStateEventKind."
+lifecycle = "An inert copyable query input consumed synchronously by state_events."
+forcing_requirement = "Callers need a type-safe subset, including the query owner's match-nothing empty set, without copying raw NIP-29 kind numbers."
+falsifier = "The ALL and state-event query tests fail if any kind is missing, duplicated, reordered, or lowered to another number."
+symbols = ["fava_simple_groups::SimpleGroupStateEventKind"]
+crates = []
+
+[[term]]
+name = "SimpleGroupMetadata"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39000 group metadata event"
+meaning = "The semantic metadata fields decoded from one kind-39000 event."
+owner = "fava-simple-groups"
+distinction = "It retains first singleton values, presence flags, value-local supported kinds, and ordered child entries without assigning trust."
+counterexample = "A metadata object merged across events or relays is not SimpleGroupMetadata."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need typed metadata semantics without raw tag walking or losing malformed siblings."
+falsifier = "Metadata decoder tests fail if kind/d boundaries loosen, later singleton tags win, or malformed values erase valid siblings."
+symbols = ["fava_simple_groups::SimpleGroupMetadata"]
+crates = []
+
+[[term]]
+name = "SimpleGroupAdmins"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39001 group administrators event"
+meaning = "The ordered administrator entries decoded from one kind-39001 event."
+owner = "fava-simple-groups"
+distinction = "Each p tag retains one public key, every role value, or its own parse failure."
+counterexample = "A membership set, relay-authority projection, or merged admin state is not SimpleGroupAdmins."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need all administrator entries and entry-local failures in source order."
+falsifier = "People decoder tests fail if repetitions collapse, roles reorder, or one malformed p tag removes valid siblings."
+symbols = ["fava_simple_groups::SimpleGroupAdmins"]
+crates = []
+
+[[term]]
+name = "SimpleGroupMembers"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39002 group members event"
+meaning = "The ordered member entries decoded from one kind-39002 event."
+owner = "fava-simple-groups"
+distinction = "Each p tag remains a public key or its own parse failure without set canonicalization."
+counterexample = "An inferred membership absence or member set merged across events is not SimpleGroupMembers."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need typed member entries without raw tag walking or sibling erasure."
+falsifier = "People decoder tests fail if repeated members collapse or malformed entries erase later valid members."
+symbols = ["fava_simple_groups::SimpleGroupMembers"]
+crates = []
+
+[[term]]
+name = "SimpleGroupRoles"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39003 group roles event"
+meaning = "The ordered role names and optional descriptions decoded from one kind-39003 event."
+owner = "fava-simple-groups"
+distinction = "Each role tag retains its first name, optional description, or local missing-value failure."
+counterexample = "Administrator role assignments on kind 39001 are not SimpleGroupRoles."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need role definitions separately from administrator assignments."
+falsifier = "Role decoder tests fail if repetitions collapse, descriptions move, or missing names erase valid siblings."
+symbols = ["fava_simple_groups::SimpleGroupRoles"]
+crates = []
+
+[[term]]
+name = "SimpleGroupLivekitParticipants"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39004 LiveKit participants event"
+meaning = "The ordered exact-lowercase participant public keys decoded from one kind-39004 event."
+owner = "fava-simple-groups"
+distinction = "Participant tags use their own lowercase-hex rule rather than member p-tag semantics."
+counterexample = "Kind-39002 members or case-normalized public keys are not SimpleGroupLivekitParticipants."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need the protocol's participant-specific tag and key rules without raw decoding."
+falsifier = "LiveKit decoder tests fail if uppercase hex succeeds, valid lowercase keys fail, or malformed siblings erase valid entries."
+symbols = ["fava_simple_groups::SimpleGroupLivekitParticipants"]
+crates = []
+
+[[term]]
+name = "SimpleGroupPins"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-39005 pinned items event"
+meaning = "The source-interleaved event-id and address-coordinate pins decoded from one kind-39005 event."
+owner = "fava-simple-groups"
+distinction = "Existing EventCoordinate represents both e and a targets while ordered Result entries retain malformed pins."
+counterexample = "A grouped pair of event-id and address lists or pins gathered from content events is not SimpleGroupPins."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need typed pin targets without losing e/a interleaving or entry failures."
+falsifier = "Pin decoder tests fail if e/a entries regroup, invalid coordinates disappear, or repetitions collapse."
+symbols = ["fava_simple_groups::SimpleGroupPins"]
+crates = []
+
+[[term]]
+name = "SimpleGroupDecodeError"
+source = "fava"
+nearest_nostr = "NIP-29 group state event and semantic tag"
+meaning = "A wrong event boundary or one semantic tag-value parse failure while decoding kinds 39000 through 39005."
+owner = "fava-simple-groups"
+distinction = "Its variants share the single-event semantic decode boundary and retain exact source positions."
+counterexample = "Signature, event-id verification, relay provenance, replacement, query, and publication failures are not SimpleGroupDecodeError."
+lifecycle = "Created synchronously for a whole-event refusal or retained inside one decoded entry Result."
+forcing_requirement = "Malformed semantic input must remain attributable without widening into generic event validity."
+falsifier = "Decoder tests fail if wrong kinds or missing d values pass, entry indexes are lost, or one entry failure aborts valid siblings."
+symbols = ["fava_simple_groups::SimpleGroupDecodeError"]
+crates = []
+
+[[term]]
+name = "SavedSimpleGroup"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-10009 group tag"
+meaning = "One valid saved group entry containing opaque id, relay URL, and optional display name."
+owner = "fava-simple-groups"
+distinction = "The relay is inert saved-list data and the display name belongs to this exact entry."
+counterexample = "A SimpleGroup relay sequence or active routing destination is not SavedSimpleGroup."
+lifecycle = "Decoded as an immutable entry inside one SavedGroupList."
+forcing_requirement = "Applications need typed group-list entries without mistaking saved relays for active policy."
+falsifier = "Saved-list tests fail if id, relay, name, repetition, or source order is lost."
+symbols = ["fava_simple_groups::SavedSimpleGroup"]
+crates = []
+
+[[term]]
+name = "SavedGroupList"
+source = "nostr"
+protocol = "NIP-29"
+nearest_nostr = "Kind-10009 Simple Group List event"
+meaning = "One decoded kind-10009 event with author and ordered saved-group and relay entry results."
+owner = "fava-simple-groups"
+distinction = "One value corresponds to one event and retains both tag families, repetitions, and local failures."
+counterexample = "Entries merged across authors or replacement candidates are not one SavedGroupList."
+lifecycle = "Decoded synchronously from one EventValue and immutable thereafter."
+forcing_requirement = "Applications need one-event list semantics without raw tags or hidden replacement policy."
+falsifier = "Saved-list tests fail if wrong kinds pass, authors change, entry families are rescanned, or malformed siblings erase valid entries."
+symbols = ["fava_simple_groups::SavedGroupList"]
+crates = []
+
+[[term]]
+name = "SavedGroupListMaterializer"
+source = "fava"
+nearest_nostr = "Kind-10009 Simple Group List replacement"
+meaning = "The private implementation that applies this crate's saved-list edit codec through ReplaceableEventMaterializer."
+owner = "fava-simple-groups"
+distinction = "The public function returns the neutral contract, while this concrete type owns only decoding and applying the crate-private edit bytes."
+counterexample = "A signer, author selector, router, write store, publication owner, or public provider contract is not SavedGroupListMaterializer."
+lifecycle = "Constructed fresh behind Arc, called by Fava for one materialization, and retains no mutable state."
+forcing_requirement = "ReplaceableEventEdit requires one concrete neutral-contract implementation to rematerialize against the current kind-10009 source."
+falsifier = "Saved edit tests fail if another edit kind is accepted, source material is lost, or repeated calls retain state."
+symbols = []
+crates = []
+
+[[term]]
+name = "SavedGroupListDecodeError"
+source = "fava"
+nearest_nostr = "Kind-10009 Simple Group List event and entry"
+meaning = "A wrong kind or one missing or invalid saved-list entry value."
+owner = "fava-simple-groups"
+distinction = "It retains exact entry positions and the saved-list-specific relay URL failure."
+counterexample = "Generic event verification, replacement, query, or edit failures are not SavedGroupListDecodeError."
+lifecycle = "Returned for the whole event or retained inside one SavedGroupList entry Result."
+forcing_requirement = "Malformed saved-list entries must remain attributable without erasing valid sibling entries."
+falsifier = "Saved-list tests fail if wrong kinds pass, indexes disappear, invalid relay URLs succeed, or one malformed entry aborts the event."
+symbols = ["fava_simple_groups::SavedGroupListDecodeError"]
+crates = []
 
 [[term]]
 name = "RelayList"

@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const PUBLIC_ROOT: &str = include_str!("../src/lib.rs");
+const README: &str = include_str!("../README.md");
+const CATALOG: &str = include_str!("../../../.bg-shell/simple-groups-semantic-catalog.jsonl");
 
 fn sources() -> [(&'static str, &'static str); 9] {
     [
@@ -123,5 +125,52 @@ fn production_files_respect_code_line_limits() {
     for (path, source) in sources() {
         let lines = source.lines().count();
         assert!(lines <= 800, "{path} has {lines} lines");
+    }
+}
+
+#[test]
+fn compiler_inventory_is_grouped_described_evidenced_and_catalogued() {
+    let body = README
+        .split_once("<!-- BEGIN crate-readme-api inventory -->")
+        .and_then(|(_, rest)| rest.split_once("<!-- END crate-readme-api inventory -->"))
+        .map(|(body, _)| body)
+        .expect("managed README inventory");
+    assert!(!body.contains("| Kind | Item | Description |"));
+    let owner_sections = body
+        .lines()
+        .filter(|line| line.starts_with("### `"))
+        .count();
+    assert!(owner_sections > 0, "inventory has no public owners");
+    assert_eq!(body.matches("| Item | Purpose |").count(), owner_sections);
+    assert_eq!(body.matches("```rust,no_run").count(), owner_sections);
+    assert!(!body.contains("Compiler-visible"));
+
+    let metadata = body
+        .lines()
+        .filter(|line| line.contains("<!-- api-item "))
+        .collect::<Vec<_>>();
+    let catalog = CATALOG.lines().collect::<Vec<_>>();
+    assert!(!metadata.is_empty());
+    assert_eq!(metadata.len(), catalog.len());
+
+    let mut identities = BTreeSet::new();
+    for (readme, catalog) in metadata.into_iter().zip(catalog) {
+        for required in ["\"kind\":", "\"item\":", "\"signature\":", "\"evidence\":"] {
+            assert!(
+                readme.contains(required),
+                "incomplete API metadata: {readme}"
+            );
+        }
+        let item = readme
+            .split_once("\"item\":\"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(item, _)| item)
+            .expect("metadata item");
+        assert!(identities.insert(item), "duplicate API identity: {item}");
+        assert!(
+            catalog.contains(&format!("\"item\": \"{item}\"")),
+            "catalog disagrees for {item}"
+        );
+        assert!(catalog.contains("\"purpose\": ") && catalog.contains("\"evidence\": "));
     }
 }

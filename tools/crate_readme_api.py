@@ -9,7 +9,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
@@ -22,8 +22,9 @@ SECTION = f"""\
 ## Complete public API inventory
 
 Generated from rustdoc with `python3 tools/crate_readme_api.py update <crate>`.
-Descriptions are hand-written and preserved across updates. Re-exports appear
-at their exported path and are classified by the re-exported item's kind.
+Purposes and evidence are preserved across updates. Compiler-derived identities
+and signatures are refreshed on every run. Re-exports appear at their exported
+path and are classified by the re-exported item's kind.
 
 {BEGIN_MARKER}
 {END_MARKER}
@@ -47,6 +48,14 @@ class Package:
 class ApiItem:
     path: str
     kind: str
+    signature: str = field(default="", compare=False)
+
+
+@dataclass(frozen=True)
+class CatalogEntry:
+    purpose: str
+    evidence: str
+    example: str | None = None
 
 
 class InventoryError(RuntimeError):
@@ -208,6 +217,7 @@ def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | Non
     records: list[tuple[str, str, str | None]] = []
     implementation_type: str | None = None
     implementation_qualification: str | None = None
+    external_implementation = False
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if line.startswith(("impl ", "impl<")):
@@ -215,21 +225,33 @@ def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | Non
                 " for "
             )
             if separator:
+                owner = after.partition(" where ")[0]
+                external_implementation = re.match(
+                    rf"^{re.escape(crate_name)}(?:\b|::|<)", owner
+                ) is None
+                if external_implementation:
+                    implementation_type = None
+                    implementation_qualification = None
+                    continue
                 try:
                     implementation_type = exported_path(after, crate_name)
                 except InventoryError:
                     implementation_type = None
-                owner = after.partition(" where ")[0]
                 trait = without_impl_generics(before)
                 implementation_qualification = (
                     f"<{owner} as {trait}>" if implementation_type else None
                 )
             else:
+                external_implementation = False
                 implementation_type = None
                 implementation_qualification = None
             continue
         if not line.startswith("pub "):
             continue
+        if external_implementation:
+            if FUNCTION.match(line) or line.startswith(("pub const ", "pub type ")):
+                continue
+            external_implementation = False
         path = exported_path(line, crate_name)
         parent = path.removesuffix("!").rpartition("::")[0]
         qualification = (
@@ -313,11 +335,11 @@ def tuple_fields(line: str, path: str, *, enum_variant: bool) -> list[ApiItem]:
     fields = split_top_level(line[start + 1 : end])
     if enum_variant:
         return [
-            ApiItem(f"{path}::{index}", "Public field")
-            for index in range(len(fields))
+            ApiItem(f"{path}::{index}", "Public field", field)
+            for index, field in enumerate(fields)
         ]
     return [
-        ApiItem(f"{path}::{index}", "Public field")
+        ApiItem(f"{path}::{index}", "Public field", field)
         for index, field in enumerate(fields)
         if field.startswith("pub ")
     ]
@@ -355,12 +377,12 @@ def parse_public_api(output: str, crate_name: str) -> list[ApiItem]:
         nominal = re.match(r"^pub\s+(mod|struct|enum|union|trait)\s+", line)
         if nominal:
             keyword = nominal.group(1)
-            items.add(ApiItem(path, nominal_labels[keyword]))
+            items.add(ApiItem(path, nominal_labels[keyword], line))
             if keyword == "struct":
                 items.update(tuple_fields(line, path, enum_variant=False))
             continue
         if re.match(r"^pub\s+type\s+", line):
-            items.add(ApiItem(item_path, "Type alias"))
+            items.add(ApiItem(item_path, "Type alias", line))
         elif FUNCTION.match(line):
             parent = path.rpartition("::")[0]
             kind = (
@@ -368,20 +390,20 @@ def parse_public_api(output: str, crate_name: str) -> list[ApiItem]:
                 if typed.get(parent) in {"struct", "enum", "union", "trait"}
                 else "Function"
             )
-            items.add(ApiItem(item_path, kind))
+            items.add(ApiItem(item_path, kind, line))
         elif re.match(r"^pub\s+const\s+", line):
-            items.add(ApiItem(item_path, "Constant"))
+            items.add(ApiItem(item_path, "Constant", line))
         elif re.match(r"^pub\s+(?:mut\s+)?static\s+", line):
-            items.add(ApiItem(item_path, "Static"))
+            items.add(ApiItem(item_path, "Static", line))
         elif line.startswith(("pub macro ", "pub proc macro ")):
-            items.add(ApiItem(path, "Macro"))
+            items.add(ApiItem(path, "Macro", line))
         elif path in variants:
-            items.add(ApiItem(path, "Enum variant"))
+            items.add(ApiItem(path, "Enum variant", line))
             items.update(tuple_fields(line, path, enum_variant=True))
         else:
             parent = path.rpartition("::")[0]
             if parent in typed or parent in variants:
-                items.add(ApiItem(path, "Public field"))
+                items.add(ApiItem(path, "Public field", line))
             else:
                 raise InventoryError(f"unclassified extractor line: {line}")
     return sorted(items, key=item_sort_key)
@@ -409,20 +431,71 @@ def split_markdown_row(line: str) -> list[str]:
     return cells
 
 
-def existing_descriptions(body: str) -> dict[tuple[str, str], str]:
-    descriptions: dict[tuple[str, str], str] = {}
-    for line in body.splitlines()[2:]:
-        cells = split_markdown_row(line)
-        if len(cells) != 3:
-            raise InventoryError(f"malformed managed inventory row: {line}")
-        kind, rendered_path, description = cells
-        if not (rendered_path.startswith("`") and rendered_path.endswith("`")):
-            raise InventoryError(f"malformed managed API item: {rendered_path}")
-        key = (kind, rendered_path[1:-1])
-        if key in descriptions:
-            raise InventoryError(f"duplicate managed API item: {kind} {key[1]}")
-        descriptions[key] = description
-    return descriptions
+API_ITEM = re.compile(r"<!-- api-item (\{.*\}) -->")
+
+
+def existing_catalog(body: str) -> dict[tuple[str, str], CatalogEntry]:
+    catalog: dict[tuple[str, str], CatalogEntry] = {}
+    lines = body.splitlines()
+
+    if lines[:1] == ["| Kind | Item | Description |"]:
+        for line in lines[2:]:
+            cells = split_markdown_row(line)
+            if len(cells) != 3:
+                raise InventoryError(f"malformed managed inventory row: {line}")
+            kind, rendered_path, purpose = cells
+            purpose = purpose.replace("\\|", "|")
+            if not (rendered_path.startswith("`") and rendered_path.endswith("`")):
+                raise InventoryError(f"malformed managed API item: {rendered_path}")
+            path = rendered_path[1:-1]
+            key = (kind, path)
+            if key in catalog:
+                raise InventoryError(f"duplicate managed API item: {kind} {path}")
+            catalog[key] = CatalogEntry(
+                purpose=purpose,
+                evidence=default_evidence(ApiItem(path, kind)),
+            )
+        return catalog
+
+    owner_purpose: list[str] | None = None
+    for line in lines:
+        if line.startswith("### "):
+            owner_purpose = []
+            continue
+        match = API_ITEM.search(line)
+        if match is None:
+            if owner_purpose is not None and line.strip():
+                owner_purpose.append(line.strip())
+            continue
+        try:
+            metadata = json.loads(match.group(1))
+        except json.JSONDecodeError as error:
+            raise InventoryError(f"malformed api-item metadata: {line}") from error
+        kind = metadata.get("kind")
+        path = metadata.get("item")
+        evidence = metadata.get("evidence")
+        if not all(isinstance(value, str) and value for value in (kind, path, evidence)):
+            raise InventoryError(f"incomplete api-item metadata: {line}")
+        if line.startswith("|"):
+            cells = split_markdown_row(line)
+            if len(cells) != 2:
+                raise InventoryError(f"malformed managed inventory row: {line}")
+            purpose = cells[1].replace("\\|", "|")
+        else:
+            purpose = " ".join(owner_purpose or []).strip()
+            owner_purpose = None
+        key = (kind, path)
+        if key in catalog:
+            raise InventoryError(f"duplicate managed API item: {kind} {path}")
+        example = metadata.get("example")
+        if example is not None and not isinstance(example, str):
+            raise InventoryError(f"invalid api-item example metadata: {line}")
+        catalog[key] = CatalogEntry(
+            purpose=purpose,
+            evidence=evidence,
+            example=example,
+        )
+    return catalog
 
 
 def managed_region(readme: str) -> tuple[int, int, str] | None:
@@ -436,14 +509,141 @@ def managed_region(readme: str) -> tuple[int, int, str] | None:
     return body_start, ends[0], readme[body_start : ends[0]].strip("\n")
 
 
+def default_evidence(item: ApiItem) -> str:
+    detail = item.signature or item.path
+    return f"cargo-public-api@{PUBLIC_API_VERSION}: {detail}"
+
+
+def current_evidence(item: ApiItem, entry: CatalogEntry | None) -> str:
+    if entry is None or entry.evidence.startswith("cargo-public-api@"):
+        return default_evidence(item)
+    return entry.evidence
+
+
+def default_purpose(item: ApiItem, owner: str | None = None) -> str:
+    if owner is None:
+        return f"Compiler-visible {item.kind.lower()} `{item.path}`."
+    return f"Compiler-visible {item.kind.lower()} owned by `{owner}`."
+
+
+def item_metadata(item: ApiItem, evidence: str, example: str | None) -> str:
+    values = {
+        "kind": item.kind,
+        "item": item.path,
+        "signature": item.signature or item.path,
+        "evidence": evidence,
+    }
+    if example:
+        values["example"] = example
+    metadata = json.dumps(
+        values,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return f"<!-- api-item {metadata.replace('|', r'\u007c')} -->"
+
+
+def owner_path(item: ApiItem, owners: set[str]) -> str:
+    path = item.path
+    if path.startswith("<") and " as " in path and ">::" in path:
+        path = path[1:].split(" as ", maxsplit=1)[0]
+        path = path.split("<", maxsplit=1)[0]
+    candidates = [
+        owner
+        for owner in owners
+        if path == owner or path.startswith(f"{owner}::")
+    ]
+    if not candidates:
+        raise InventoryError(f"public API item has no owning module/type: {item.path}")
+    return max(candidates, key=len)
+
+
+def owner_label(item: ApiItem) -> str:
+    if item.kind == "Module":
+        return item.path
+    return item.path.rpartition("::")[2]
+
+
+def leaf_label(item: ApiItem, owner: str) -> str:
+    if item.path.startswith("<") and " as " in item.path and ">::" in item.path:
+        trait = item.path.split(" as ", maxsplit=1)[1].split(">::", maxsplit=1)[0]
+        return f"{trait}::{item.path.rsplit('>::', maxsplit=1)[1]}"
+    relative = item.path.removeprefix(f"{owner}::")
+    if item.kind == "Public field" and "::" in relative:
+        parent, _, field_name = relative.rpartition("::")
+        return f"Field `{field_name}` of `{parent}`"
+    return relative
+
+
+def escape_purpose(value: str) -> str:
+    return " ".join(value.split()).replace("|", "\\|")
+
+
+def preserved_examples(body: str) -> dict[tuple[str, str], str]:
+    examples: dict[tuple[str, str], str] = {}
+    for section in re.split(r"(?=^### )", body, flags=re.MULTILINE):
+        metadata = API_ITEM.search(section)
+        anchor = re.search(r"(?m)^<a id=", section)
+        if metadata is None or anchor is None:
+            continue
+        values = json.loads(metadata.group(1))
+        key = (values.get("kind"), values.get("item"))
+        if all(isinstance(value, str) for value in key):
+            examples[key] = section[anchor.start() :].strip()
+    return examples
+
+
 def render_body(
-    items: Sequence[ApiItem], descriptions: dict[tuple[str, str], str]
+    items: Sequence[ApiItem],
+    catalog: dict[tuple[str, str], CatalogEntry],
+    examples: dict[tuple[str, str], str],
 ) -> str:
-    lines = ["| Kind | Item | Description |", "| --- | --- | --- |"]
+    owner_kinds = {"Module", "Struct", "Enum", "Union", "Trait"}
+    owners = {item.path for item in items if item.kind in owner_kinds}
+    owner_items = {item.path: item for item in items if item.path in owners}
+    grouped: dict[str, list[ApiItem]] = {owner: [] for owner in owners}
     for item in items:
-        description = descriptions.get((item.kind, item.path), "")
-        lines.append(f"| {item.kind} | `{item.path}` | {description} |")
-    return "\n".join(lines)
+        if item.path in owners:
+            continue
+        grouped[owner_path(item, owners)].append(item)
+
+    lines: list[str] = []
+    for owner in sorted(owners, key=lambda path: item_sort_key(owner_items[path])):
+        item = owner_items[owner]
+        entry = catalog.get((item.kind, item.path))
+        purpose = entry.purpose if entry and entry.purpose else default_purpose(item)
+        evidence = current_evidence(item, entry)
+        lines.extend(
+            [
+                f"### `{owner_label(item)}` ({item.kind})",
+                "",
+                escape_purpose(purpose),
+                item_metadata(item, evidence, entry.example if entry else None),
+            ]
+        )
+        if entry and entry.example:
+            anchor = entry.example.lower()
+            lines.append(f"Example coverage: [{entry.example}](#{anchor}).")
+        leaves = sorted(grouped[owner], key=item_sort_key)
+        if leaves:
+            lines.extend(["", "| Item | Purpose |", "| --- | --- |"])
+            for leaf in leaves:
+                leaf_entry = catalog.get((leaf.kind, leaf.path))
+                leaf_purpose = (
+                    leaf_entry.purpose
+                    if leaf_entry and leaf_entry.purpose
+                    else default_purpose(leaf, owner)
+                )
+                leaf_evidence = current_evidence(leaf, leaf_entry)
+                lines.append(
+                    f"| **`{leaf_label(leaf, owner)}`**<br><sub>{leaf.kind}</sub>"
+                    f"{item_metadata(leaf, leaf_evidence, leaf_entry.example if leaf_entry else None)} | {escape_purpose(leaf_purpose)} |"
+                )
+        example = examples.get((item.kind, item.path))
+        if example:
+            lines.extend(["", example])
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def expected_readme(readme: str, items: Sequence[ApiItem]) -> str:
@@ -460,8 +660,9 @@ def expected_readme(readme: str, items: Sequence[ApiItem]) -> str:
         assert region is not None
         readme = base
     body_start, body_end, old_body = region
-    descriptions = existing_descriptions(old_body) if old_body else {}
-    body = render_body(items, descriptions)
+    catalog = existing_catalog(old_body) if old_body else {}
+    examples = preserved_examples(old_body) if old_body else {}
+    body = render_body(items, catalog, examples)
     return readme[:body_start] + "\n" + body + "\n" + readme[body_end:]
 
 
@@ -502,7 +703,7 @@ def changed_paths(root: Path, base: str, head: str) -> list[Path]:
     if re.fullmatch(r"0+", base):
         return [Path("Cargo.toml")]
     result = run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}"],
+        ["git", "diff", "--name-only", "--diff-filter=ACDMR", f"{base}...{head}"],
         cwd=root,
     )
     if result.returncode:
