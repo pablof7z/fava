@@ -233,6 +233,14 @@ class ApprovalPageTest(unittest.TestCase):
         self.assertNotIn("sign-all", self.html)
         self.assertNotIn("Sign all", self.html)
 
+    def test_supports_owner_scoped_pending_review_links(self) -> None:
+        self.assertIn("new URLSearchParams(window.location.search)", self.html)
+        self.assertIn('term.owner === ownerFilter', self.html)
+        self.assertIn('statusFilter === "pending"', self.html)
+        self.assertIn(
+            'term.status === "unapproved" || term.status === "stale"', self.html
+        )
+
 
 class RowPresentationTest(unittest.TestCase):
     def test_item_kind_prefers_real_rust_symbols(self) -> None:

@@ -69,6 +69,18 @@ const OWNER = "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52"
 const KIND = 9999;
 let terms = [];
 let signerReady = false;
+const review = new URLSearchParams(window.location.search);
+const ownerFilter = review.get("owner") || "";
+const statusFilter = review.get("status") || "";
+document.getElementById("filter").value = review.get("filter") || "";
+
+function matchesStatus(term) {
+  if (!statusFilter) return true;
+  if (statusFilter === "pending") {
+    return term.status === "unapproved" || term.status === "stale";
+  }
+  return term.status === statusFilter;
+}
 
 async function waitForNostr(timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
@@ -121,14 +133,19 @@ async function load() {
 
 function render() {
   const needle = document.getElementById("filter").value.toLowerCase();
-  const visible = terms.filter((term) => term.name.toLowerCase().includes(needle));
-  const counts = terms.reduce((totals, term) => {
+  const visible = terms.filter((term) =>
+    term.name.toLowerCase().includes(needle) &&
+    (!ownerFilter || term.owner === ownerFilter) &&
+    matchesStatus(term)
+  );
+  const counts = visible.reduce((totals, term) => {
     totals[term.status] = (totals[term.status] || 0) + 1;
     return totals;
   }, {});
-  const candidateCount = terms.filter((term) => term.candidate).length;
+  const candidateCount = visible.filter((term) => term.candidate).length;
   document.getElementById("counts").textContent =
-    `${candidateCount} candidates · ${counts.approved || 0} approved · ` +
+    `${visible.length} shown · ${candidateCount} candidates · ` +
+    `${counts.approved || 0} approved · ` +
     `${counts.unapproved || 0} unsigned · ` +
     `${counts.blocked || 0} blocked unsigned · ` +
     `${counts.invalid || 0} invalid parents · ${counts.missing || 0} missing terms · ` +
