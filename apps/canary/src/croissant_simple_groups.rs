@@ -29,7 +29,7 @@ use crate::{
 
 /// Process-memory input for one controlled two-relay simple-groups proof.
 #[derive(Clone, Debug)]
-pub struct CroissantSimpleGroupsOptions {
+pub(crate) struct CroissantSimpleGroupsOptions {
     /// Croissant executable launched twice without modifying its checkout.
     pub relay_binary: PathBuf,
     /// Croissant source checkout used for exact source-revision evidence.
@@ -46,7 +46,7 @@ pub struct CroissantSimpleGroupsOptions {
 
 /// Durable location produced by one completed controlled run.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CroissantSimpleGroupsOutcome {
+pub(crate) struct CroissantSimpleGroupsOutcome {
     /// Fresh run directory containing the completed manifest and artifacts.
     pub run_directory: PathBuf,
 }
@@ -128,7 +128,7 @@ pub(crate) fn prepare_owned_supervisors(
     clippy::too_many_lines,
     reason = "one finalizer keeps staging, cleanup, two scans, sealing, and promotion ordered"
 )]
-pub async fn run_croissant_simple_groups_scenario(
+pub(crate) async fn run_croissant_simple_groups_scenario(
     options: CroissantSimpleGroupsOptions,
 ) -> CanaryResult<CroissantSimpleGroupsOutcome> {
     let repository = repository_root()?;

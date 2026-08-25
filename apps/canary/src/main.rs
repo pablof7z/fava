@@ -10,12 +10,20 @@ mod pinned_launcher;
 mod sealed_executable;
 
 use canary::{
-    CroissantNip02Options, CroissantSimpleGroupsOptions, FlowOptions, ReconOptions, SmokeOptions,
-    run_croissant_nip02_scenario, run_croissant_simple_groups_scenario, run_live_scenario,
-    run_m3_live_scenario, run_public_recon, run_publication_scenario, run_real_relay_smoke,
-    run_routing_scenario, scenario_registry, verify_croissant_run_pair,
-    verify_croissant_simple_groups_pair,
+    CroissantNip02Options, FlowOptions, ReconOptions, SmokeOptions, run_croissant_nip02_scenario,
+    run_croissant_simple_groups_scenario, run_live_scenario, run_m3_live_scenario,
+    run_public_recon, run_publication_scenario, run_real_relay_smoke, run_routing_scenario,
+    scenario_registry, verify_croissant_run_pair, verify_croissant_simple_groups_pair,
 };
+
+struct CroissantSimpleGroupsCliOptions {
+    relay_binary: PathBuf,
+    source_checkout: PathBuf,
+    fava_build_attestation: PathBuf,
+    fava_build_source_manifest: PathBuf,
+    scenario_seed: String,
+    runs_directory: PathBuf,
+}
 
 #[tokio::main]
 async fn main() {
@@ -183,9 +191,17 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
     }
     if scenario == "croissant-simple-groups-public-flow" {
         let options = simple_groups_options(&mut arguments)?;
-        let outcome = run_croissant_simple_groups_scenario(options).await?;
+        let run_directory = run_croissant_simple_groups_scenario(
+            options.relay_binary,
+            options.source_checkout,
+            options.fava_build_attestation,
+            options.fava_build_source_manifest,
+            options.scenario_seed,
+            options.runs_directory,
+        )
+        .await?;
         println!("passed croissant-simple-groups-public-flow");
-        println!("evidence: {}", outcome.run_directory.display());
+        println!("evidence: {}", run_directory.display());
         return Ok(());
     }
     let evidence = match scenario.as_str() {
@@ -227,7 +243,7 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
 
 fn simple_groups_options(
     arguments: &mut impl Iterator<Item = String>,
-) -> canary::CanaryResult<CroissantSimpleGroupsOptions> {
+) -> canary::CanaryResult<CroissantSimpleGroupsCliOptions> {
     let mut relay_binary = None;
     let mut source_checkout = None;
     let mut fava_build_attestation = None;
@@ -248,7 +264,7 @@ fn simple_groups_options(
             _ => return Err(usage()),
         }
     }
-    Ok(CroissantSimpleGroupsOptions {
+    Ok(CroissantSimpleGroupsCliOptions {
         relay_binary: relay_binary.ok_or_else(usage)?,
         source_checkout: source_checkout.ok_or_else(usage)?,
         fava_build_attestation: fava_build_attestation.ok_or_else(usage)?,
