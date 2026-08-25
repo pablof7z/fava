@@ -62,6 +62,81 @@ pub fava_probe::QueryError::TooLarge::maximum: usize
             ],
         )
 
+    def test_rustdoc_projects_behavior_onto_the_external_impl_identity(self) -> None:
+        rustdoc = {
+            "index": {
+                "10": {
+                    "name": "from",
+                    "docs": "Maps every closed state selector to its exact wire kind.",
+                    "inner": {"function": {}},
+                },
+                "11": {
+                    "name": None,
+                    "inner": {
+                        "impl": {
+                            "blanket_impl": None,
+                            "for": {
+                                "resolved_path": {
+                                    "id": 2,
+                                    "path": "Kind",
+                                    "args": None,
+                                }
+                            },
+                            "items": [10],
+                            "trait": {
+                                "id": 3,
+                                "path": "From",
+                                "args": {
+                                    "angle_bracketed": {
+                                        "args": [
+                                            {
+                                                "type": {
+                                                    "resolved_path": {
+                                                        "id": 1,
+                                                        "path": "StateKind",
+                                                        "args": None,
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                        }
+                    },
+                },
+            },
+            "paths": {
+                "1": {
+                    "crate_id": 0,
+                    "kind": "enum",
+                    "path": ["fava_probe", "query", "StateKind"],
+                },
+                "2": {
+                    "crate_id": 9,
+                    "kind": "enum",
+                    "path": ["nostr", "Kind"],
+                },
+                "3": {
+                    "crate_id": 2,
+                    "kind": "trait",
+                    "path": ["core", "convert", "From"],
+                },
+            },
+        }
+
+        descriptions = structure.rustdoc_descriptions(
+            rustdoc,
+            [{"path": "fava_probe::StateKind", "target": "1"}],
+        )
+
+        self.assertEqual(
+            descriptions[
+                "<nostr::Kind as core::convert::From<fava_probe::StateKind>>::from"
+            ],
+            "Maps every closed state selector to its exact wire kind.",
+        )
+
     def test_trait_method_path_carries_exact_implementation(self) -> None:
         output = """\
 impl fava_contract::Source for fava_probe::Query
@@ -106,6 +181,151 @@ pub fn &nostr::PublicKey::into_query(self) -> Self::Output
                 for record in records
             )
         )
+
+    def test_external_receiver_impl_uses_the_complete_trait_identity(self) -> None:
+        output = """\
+impl core::convert::From<fava_probe::StateKind> for nostr::Kind
+pub fn nostr::Kind::from(fava_probe::StateKind) -> Self
+pub fn fava_probe::free(fava_probe::StateKind)
+pub struct fava_probe::Later
+"""
+
+        records = structure.public_records(output, "fava_probe")
+        self.assertEqual(
+            records,
+            [
+                {
+                    "binding_roots": ["fava_probe::StateKind"],
+                    "declaration": "pub fn nostr::Kind::from(fava_probe::StateKind) -> Self",
+                    "implementation": (
+                        "impl core::convert::From<fava_probe::StateKind> for nostr::Kind"
+                    ),
+                    "path": (
+                        "<nostr::Kind as "
+                        "core::convert::From<fava_probe::StateKind>>::from"
+                    ),
+                },
+                {
+                    "declaration": "pub fn fava_probe::free(fava_probe::StateKind)",
+                    "path": "fava_probe::free",
+                },
+                {
+                    "declaration": "pub struct fava_probe::Later",
+                    "path": "fava_probe::Later",
+                },
+            ],
+        )
+        self.assertTrue(
+            structure._record_matches_root(records[0], "fava_probe::StateKind")
+        )
+
+    def test_external_receiver_associated_items_keep_distinct_impl_identities(self) -> None:
+        output = """\
+impl fava_probe::Project<fava_probe::Input> for external::Receiver
+pub type external::Receiver::Output = fava_probe::Result
+pub const external::Receiver::LIMIT: usize
+pub fn external::Receiver::project(fava_probe::Input) -> Self::Output
+impl fava_probe::Project<fava_probe::OtherInput> for external::Receiver
+pub fn external::Receiver::project(fava_probe::OtherInput) -> Self::Output
+"""
+
+        records = structure.public_records(output, "fava_probe")
+
+        self.assertEqual(
+            [record["path"] for record in records],
+            [
+                (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::Input>>::Output"
+                ),
+                (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::Input>>::LIMIT"
+                ),
+                (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::Input>>::project"
+                ),
+                (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::OtherInput>>::project"
+                ),
+            ],
+        )
+        self.assertEqual(
+            [record["binding_roots"] for record in records],
+            [
+                ["fava_probe::Input", "fava_probe::Project"],
+                ["fava_probe::Input", "fava_probe::Project"],
+                ["fava_probe::Input", "fava_probe::Project"],
+                ["fava_probe::OtherInput", "fava_probe::Project"],
+            ],
+        )
+
+
+class PublicApiCoverageTest(unittest.TestCase):
+    def test_counts_semantic_identities_and_deduplicates_identical_records(self) -> None:
+        record = {
+            "declaration": "pub fn probe::Thing::run(&self)",
+            "path": "probe::Thing::run",
+        }
+        packets = {
+            "Thing": {
+                "structure": {
+                    "public_api": [record],
+                }
+            }
+        }
+
+        coverage = structure.public_api_binding_coverage([record, record], packets)
+
+        self.assertEqual(coverage["public_items"], 1)
+        self.assertEqual(coverage["bound_items"], 1)
+        self.assertEqual(coverage["collisions"], [])
+
+    def test_distinct_trait_impl_identities_do_not_collide(self) -> None:
+        records = [
+            {
+                "declaration": "pub fn external::Receiver::project(fava_probe::Input)",
+                "path": (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::Input>>::project"
+                ),
+            },
+            {
+                "declaration": "pub fn external::Receiver::project(fava_probe::OtherInput)",
+                "path": (
+                    "<external::Receiver as "
+                    "fava_probe::Project<fava_probe::OtherInput>>::project"
+                ),
+            },
+        ]
+        packets = {
+            "Project": {"structure": {"public_api": records}},
+        }
+
+        coverage = structure.public_api_binding_coverage(records, packets)
+
+        self.assertEqual(coverage["public_items"], 2)
+        self.assertEqual(coverage["bound_items"], 2)
+        self.assertEqual(coverage["collisions"], [])
+
+    def test_conflicting_records_for_one_semantic_identity_are_a_collision(self) -> None:
+        records = [
+            {"declaration": "pub fn probe::Thing::run(&self)", "path": "probe::Thing::run"},
+            {
+                "declaration": "pub fn probe::Thing::run(&mut self)",
+                "path": "probe::Thing::run",
+            },
+        ]
+        packets = {"Thing": {"structure": {"public_api": [records[0]]}}}
+
+        coverage = structure.public_api_binding_coverage(records, packets)
+
+        self.assertEqual(coverage["public_items"], 1)
+        self.assertEqual(coverage["bound_items"], 0)
+        self.assertEqual(len(coverage["collisions"]), 1)
+        self.assertEqual(coverage["collisions"][0]["identity"], "probe::Thing::run")
 
 
 class ReexportTest(unittest.TestCase):
@@ -453,6 +673,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
         coverage = structure.public_api_binding_coverage(records, packets)
         self.assertEqual(coverage["unbound"], [])
         self.assertEqual(coverage["multiply_bound"], [])
+        self.assertEqual(coverage["collisions"], [])
         self.assertEqual(coverage["public_items"], 113)
         self.assertEqual(coverage["bound_items"], 113)
 
@@ -507,6 +728,30 @@ class HumanReviewInventoryTest(unittest.TestCase):
             item
             for item in packets["SimpleGroupStateEventKind"]["interface"]
             if "Kind::from" in item["signature"]
+        )
+        self.assertEqual(
+            conversion["path"],
+            (
+                "<nostr::event::kind::Kind as "
+                "core::convert::From<fava_simple_groups::SimpleGroupStateEventKind>>::from"
+            ),
+        )
+        conversion_record = next(
+            item
+            for item in packets["SimpleGroupStateEventKind"]["structure"]["public_api"]
+            if item["declaration"] == conversion["signature"]
+        )
+        self.assertEqual(
+            conversion_record["implementation"],
+            (
+                "impl core::convert::From<"
+                "fava_simple_groups::SimpleGroupStateEventKind> "
+                "for nostr::event::kind::Kind"
+            ),
+        )
+        self.assertEqual(
+            conversion_record["binding_roots"],
+            ["fava_simple_groups::SimpleGroupStateEventKind"],
         )
         for variant, number in expected.items():
             with self.subTest(conversion=variant):

@@ -95,13 +95,42 @@ def _compiled_package(
     return rendered, public_json, private_json
 
 
-def public_records(output: str, crate_name: str) -> list[dict[str, str]]:
+def _exported_paths(text: str, crate_name: str) -> list[str]:
+    pattern = re.compile(
+        rf"\b{re.escape(crate_name)}(?:::{public_api.IDENTIFIER})*"
+    )
+    return sorted({match.group(0) for match in pattern.finditer(text)})
+
+
+def _associated_member(declaration: str, owner: str) -> str | None:
+    if re.match(
+        r'^pub\s+(?:(?:const|async|unsafe)\s+)*(?:extern\s+"[^"]+"\s+)?'
+        r"(?:fn|type|const|static)\s+",
+        declaration,
+    ) is None:
+        return None
+    head = declaration.split("=", maxsplit=1)[0].split("(", maxsplit=1)[0]
+    match = re.search(
+        rf"{re.escape(owner)}::(?P<name>{public_api.IDENTIFIER})\s*(?::|$)",
+        head,
+    )
+    return match.group("name") if match is not None else None
+
+
+def public_api_identity(record: dict[str, Any]) -> str:
+    """Stable semantic identity of one compiler-visible public API item."""
+    return record["path"]
+
+
+def public_records(output: str, crate_name: str) -> list[dict[str, Any]]:
     """Exact compiler-rendered declarations with stable exported paths."""
-    records: list[dict[str, str]] = []
+    records: list[dict[str, Any]] = []
     implementation_type: str | None = None
     implementation_qualification: str | None = None
     implementation_trait: str | None = None
+    implementation_owner: str | None = None
     implementation: str | None = None
+    implementation_binding_roots: list[str] = []
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if line.startswith(("impl ", "impl<")):
@@ -115,6 +144,7 @@ def public_records(output: str, crate_name: str) -> list[dict[str, str]]:
             except public_api.InventoryError:
                 implementation_type = None
             owner = after.partition(" where ")[0]
+            implementation_owner = owner
             trait = public_api.without_impl_generics(before) if separator else None
             try:
                 implementation_trait = (
@@ -131,9 +161,28 @@ def public_records(output: str, crate_name: str) -> list[dict[str, str]]:
                 else None
             )
             implementation = line if implementation_qualification or implementation_type else None
+            implementation_binding_roots = _exported_paths(line, crate_name)
             continue
         if not line.startswith("pub "):
             continue
+        if implementation_qualification is not None and implementation_type is None:
+            member = _associated_member(line, implementation_owner or "")
+            if member is not None:
+                record: dict[str, Any] = {
+                    "declaration": line,
+                    "implementation": implementation or "",
+                    "path": f"{implementation_qualification}::{member}",
+                }
+                if implementation_binding_roots:
+                    record["binding_roots"] = implementation_binding_roots
+                records.append(record)
+                continue
+            implementation_type = None
+            implementation_qualification = None
+            implementation_trait = None
+            implementation_owner = None
+            implementation = None
+            implementation_binding_roots = []
         try:
             path = public_api.exported_path(line, crate_name)
         except public_api.InventoryError:
@@ -160,7 +209,9 @@ def public_records(output: str, crate_name: str) -> list[dict[str, str]]:
             implementation_type = None
             implementation_qualification = None
             implementation_trait = None
+            implementation_owner = None
             implementation = None
+            implementation_binding_roots = []
         record = {
             "declaration": line,
             "path": public_api.qualified_path(path, qualification),
@@ -213,6 +264,13 @@ def _root_matches(path: str, root: str) -> bool:
         or path.startswith(root + "::")
         or path.startswith("<" + root + " as ")
         or f" as {root}>" in path
+    )
+
+
+def _record_matches_root(record: dict[str, Any], root: str) -> bool:
+    return _root_matches(record["path"], root) or any(
+        _root_matches(binding_root, root)
+        for binding_root in record.get("binding_roots", [])
     )
 
 
@@ -366,25 +424,50 @@ def _registry(root: Path) -> dict[str, Any]:
 
 
 def public_api_binding_coverage(
-    records: list[dict[str, str]], packets: dict[str, dict[str, Any]]
+    records: list[dict[str, Any]], packets: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
     """One-to-one ownership report for a compiler-rendered crate public API."""
-    compiler_items = {canonical_structure(record): record for record in records}
-    bindings: dict[str, list[str]] = {identity: [] for identity in compiler_items}
+    compiler_items: dict[str, dict[str, dict[str, Any]]] = {}
+    for record in records:
+        compiler_items.setdefault(public_api_identity(record), {})[
+            canonical_structure(record)
+        ] = record
+    collisions = [
+        {
+            "identity": identity,
+            "records": sorted(variants.values(), key=canonical_structure),
+        }
+        for identity, variants in compiler_items.items()
+        if len(variants) > 1
+    ]
+    bindings: dict[str, set[str]] = {identity: set() for identity in compiler_items}
     for name, packet in packets.items():
         structure = packet.get("structure", packet)
         for record in structure.get("public_api", []):
-            identity = canonical_structure(record)
-            if identity in bindings:
-                bindings[identity].append(name)
-    unbound = [compiler_items[key] for key, owners in bindings.items() if not owners]
+            identity = public_api_identity(record)
+            variants = compiler_items.get(identity)
+            if variants is not None and canonical_structure(record) in variants:
+                bindings[identity].add(name)
+    unbound = [
+        next(iter(compiler_items[identity].values()))
+        for identity, owners in bindings.items()
+        if not owners
+    ]
     multiply_bound = [
-        {"item": compiler_items[key], "owners": owners}
-        for key, owners in bindings.items()
+        {
+            "item": next(iter(compiler_items[identity].values())),
+            "owners": sorted(owners),
+        }
+        for identity, owners in bindings.items()
         if len(owners) > 1
     ]
+    collision_identities = {item["identity"] for item in collisions}
     return {
-        "bound_items": sum(len(owners) == 1 for owners in bindings.values()),
+        "bound_items": sum(
+            len(owners) == 1 and identity not in collision_identities
+            for identity, owners in bindings.items()
+        ),
+        "collisions": sorted(collisions, key=lambda value: value["identity"]),
         "multiply_bound": sorted(
             multiply_bound, key=lambda value: canonical_structure(value["item"])
         ),
@@ -419,7 +502,7 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
                 structures[term["name"]]["public_api"].extend(
                     record
                     for record in records
-                    if any(_root_matches(record["path"], root) for root in roots)
+                    if any(_record_matches_root(record, root) for root in roots)
                 )
                 structures[term["name"]]["reexports"].extend(bound_aliases)
             structures[term["name"]]["private_architectural_state"].extend(
@@ -434,17 +517,21 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
                     for name, value in structures.items()
                 },
             )
-            if coverage["unbound"] or coverage["multiply_bound"]:
+            if coverage["unbound"] or coverage["multiply_bound"] or coverage["collisions"]:
                 unbound = ", ".join(item["path"] for item in coverage["unbound"])
                 repeated = ", ".join(
                     f"{item['item']['path']} ({', '.join(item['owners'])})"
                     for item in coverage["multiply_bound"]
+                )
+                collided = ", ".join(
+                    item["identity"] for item in coverage["collisions"]
                 )
                 details = "; ".join(
                     value
                     for value in (
                         f"unbound: {unbound}" if unbound else "",
                         f"multiply bound: {repeated}" if repeated else "",
+                        f"identity collisions: {collided}" if collided else "",
                     )
                     if value
                 )

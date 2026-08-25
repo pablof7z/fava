@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from itertools import product
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -20,6 +21,7 @@ TAUTOLOGICAL_DESCRIPTIONS = (
     re.compile(r"^Represents the .+ case of the containing enum\.$"),
     re.compile(r"^Names the exact type shown below\.$"),
     re.compile(r"^Bound implementation state for this term\.$"),
+    re.compile(r"^Implements `.+` for `.+`\.$"),
 )
 
 
@@ -147,6 +149,74 @@ def rustdoc_descriptions(
         if docs:
             descriptions[path] = docs
 
+    def arguments(value: Any) -> list[str]:
+        if value is None:
+            return [""]
+        if not isinstance(value, dict):
+            return []
+        angle = value.get("angle_bracketed")
+        if not isinstance(angle, dict):
+            return []
+        rendered: list[list[str]] = []
+        for argument in angle.get("args", []):
+            if not isinstance(argument, dict):
+                return []
+            if "type" in argument:
+                names = type_names(argument["type"])
+            elif "lifetime" in argument:
+                names = [str(argument["lifetime"])]
+            elif "const" in argument:
+                constant = argument["const"]
+                names = [str(constant.get("expr", ""))] if isinstance(constant, dict) else []
+            else:
+                names = []
+            if not names:
+                return []
+            rendered.append(names)
+        return [
+            "<" + ", ".join(values) + ">" if values else ""
+            for values in product(*rendered)
+        ] if rendered else [""]
+
+    def resolved_names(value: Any) -> list[str]:
+        if not isinstance(value, dict):
+            return []
+        item_id = str(value.get("id"))
+        bases = roots.get(item_id)
+        if not bases:
+            path = rustdoc.get("paths", {}).get(item_id, {}).get("path")
+            bases = {"::".join(path)} if isinstance(path, list) else set()
+        suffixes = arguments(value.get("args"))
+        return sorted(f"{base}{suffix}" for base in bases for suffix in suffixes)
+
+    def type_names(value: Any) -> list[str]:
+        if not isinstance(value, dict):
+            return []
+        if "resolved_path" in value:
+            return resolved_names(value["resolved_path"])
+        if "generic" in value:
+            return [str(value["generic"])]
+        if "primitive" in value:
+            return [str(value["primitive"])]
+        if "borrowed_ref" in value:
+            reference = value["borrowed_ref"]
+            if not isinstance(reference, dict):
+                return []
+            prefix = "&"
+            if reference.get("lifetime"):
+                prefix += str(reference["lifetime"]) + " "
+            if reference.get("is_mutable"):
+                prefix += "mut "
+            return [prefix + name for name in type_names(reference.get("type"))]
+        if "slice" in value:
+            return [f"[{name}]" for name in type_names(value["slice"])]
+        if "tuple" in value and isinstance(value["tuple"], list):
+            members = [type_names(member) for member in value["tuple"]]
+            if any(not member for member in members):
+                return []
+            return ["(" + ", ".join(values) + ")" for values in product(*members)]
+        return []
+
     for item_id, exported_roots in roots.items():
         item = index.get(item_id)
         if item is None:
@@ -210,6 +280,24 @@ def rustdoc_descriptions(
                     retain(f"{exported_root}::{child['name']}", child)
                     if isinstance(trait_path, str):
                         retain(f"<{exported_root} as {trait_path}>::{child['name']}", child)
+
+    for item in index.values():
+        implementation = item.get("inner", {}).get("impl")
+        if not isinstance(implementation, dict) or implementation.get("blanket_impl") is not None:
+            continue
+        trait = implementation.get("trait")
+        if not isinstance(trait, dict):
+            continue
+        owners = type_names(implementation.get("for"))
+        traits = resolved_names(trait)
+        if not owners or not traits:
+            continue
+        for child_id in implementation.get("items", []):
+            child = index.get(str(child_id))
+            if child is None or not child.get("name"):
+                continue
+            for owner, trait_name in product(owners, traits):
+                retain(f"<{owner} as {trait_name}>::{child['name']}", child)
     return descriptions
 
 
@@ -301,12 +389,20 @@ def human_review_inventory(
             "path": path,
             "signature": f"pub use {source} as {path}",
         })
+    public_records = {
+        (record["path"], record["declaration"]): record
+        for record in structure["public_api"]
+    }
     for item in interface:
-        crate = item["path"].lstrip("<").split("::", maxsplit=1)[0]
+        record = public_records.get((item["path"], item["signature"]), {})
+        crates = {
+            path.lstrip("<").split("::", maxsplit=1)[0]
+            for path in [item["path"], *record.get("binding_roots", [])]
+        }
         if (
             item["description"] != MISSING_DESCRIPTION
             and tautological_description(item["description"])
-            and (semantic_crates is None or crate in semantic_crates)
+            and (semantic_crates is None or bool(crates & semantic_crates))
         ):
             problems.append(
                 f"{item['path']}: tautological human interface description"

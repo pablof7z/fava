@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "effc5a057577cc5cad354a8536d6dbe35e65ffb7d8c16f2d3e635ca6be9f8d6a",
+  "inputs_sha256": "706725cada8d42efa2c1a68fd87ed6a614da29add6218491c78fe3681fdfbdb3",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -6720,22 +6720,10 @@
           "signature": "pub fn alloc::vec::Vec<nostr::key::public_key::PublicKey>::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
-          "kind": "Method",
-          "path": "fava_nip02::IntoContactAuthors::into_contact_authors",
-          "signature": "pub fn fava_nip02::IntoContactAuthors::into_contact_authors(self) -> Self::IntoIter"
-        },
-        {
           "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `nostr::key::public_key::PublicKey`.",
           "kind": "Function",
           "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter"
-        },
-        {
-          "description": "Compiler-visible trait `fava_nip02::IntoContactAuthors`.",
-          "kind": "Trait",
-          "path": "fava_nip02::IntoContactAuthors",
-          "signature": "pub trait fava_nip02::IntoContactAuthors: sealed::Sealed"
         },
         {
           "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `&'a [nostr::key::public_key::PublicKey; N]`.",
@@ -6774,16 +6762,28 @@
           "signature": "pub type alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = alloc::vec::into_iter::IntoIter<nostr::key::public_key::PublicKey>"
         },
         {
-          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
-          "kind": "Type alias",
-          "path": "fava_nip02::IntoContactAuthors::IntoIter",
-          "signature": "pub type fava_nip02::IntoContactAuthors::IntoIter: core::iter::traits::iterator::Iterator<Item = nostr::key::public_key::PublicKey>"
-        },
-        {
           "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `nostr::key::public_key::PublicKey`.",
           "kind": "Type alias",
           "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
+          "path": "fava_nip02::IntoContactAuthors::into_contact_authors",
+          "signature": "pub fn fava_nip02::IntoContactAuthors::into_contact_authors(self) -> Self::IntoIter"
+        },
+        {
+          "description": "Compiler-visible trait `fava_nip02::IntoContactAuthors`.",
+          "kind": "Trait",
+          "path": "fava_nip02::IntoContactAuthors",
+          "signature": "pub trait fava_nip02::IntoContactAuthors: sealed::Sealed"
+        },
+        {
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Type alias",
+          "path": "fava_nip02::IntoContactAuthors::IntoIter",
+          "signature": "pub type fava_nip02::IntoContactAuthors::IntoIter: core::iter::traits::iterator::Iterator<Item = nostr::key::public_key::PublicKey>"
         },
         {
           "description": "Exports this term at `fava_nip02::IntoContactAuthors` from `query::IntoContactAuthors`.",
@@ -6806,86 +6806,128 @@
         ],
         "public_api": [
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn &'a [nostr::key::public_key::PublicKey; N]::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl<'a, const N: usize> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey; N]",
             "path": "<&'a [nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::into_contact_authors"
           },
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn &'a [nostr::key::public_key::PublicKey]::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey]",
             "path": "<&'a [nostr::key::public_key::PublicKey] as fava_nip02::IntoContactAuthors>::into_contact_authors"
           },
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>",
             "path": "<&'a alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::into_contact_authors"
           },
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn &nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl fava_nip02::IntoContactAuthors for &nostr::key::public_key::PublicKey",
             "path": "<&nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors"
           },
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn [nostr::key::public_key::PublicKey; N]::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl<const N: usize> fava_nip02::IntoContactAuthors for [nostr::key::public_key::PublicKey; N]",
             "path": "<[nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::into_contact_authors"
           },
           {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
             "declaration": "pub fn alloc::vec::Vec<nostr::key::public_key::PublicKey>::into_contact_authors(self) -> Self::IntoIter",
             "implementation": "impl fava_nip02::IntoContactAuthors for alloc::vec::Vec<nostr::key::public_key::PublicKey>",
             "path": "<alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::into_contact_authors"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub fn nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter",
+            "implementation": "impl fava_nip02::IntoContactAuthors for nostr::key::public_key::PublicKey",
+            "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type &'a [nostr::key::public_key::PublicKey; N]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
+            "implementation": "impl<'a, const N: usize> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey; N]",
+            "path": "<&'a [nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type &'a [nostr::key::public_key::PublicKey]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
+            "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey]",
+            "path": "<&'a [nostr::key::public_key::PublicKey] as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
+            "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>",
+            "path": "<&'a alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type &nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>",
+            "implementation": "impl fava_nip02::IntoContactAuthors for &nostr::key::public_key::PublicKey",
+            "path": "<&nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type [nostr::key::public_key::PublicKey; N]::IntoIter = core::array::iter::IntoIter<nostr::key::public_key::PublicKey, N>",
+            "implementation": "impl<const N: usize> fava_nip02::IntoContactAuthors for [nostr::key::public_key::PublicKey; N]",
+            "path": "<[nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = alloc::vec::into_iter::IntoIter<nostr::key::public_key::PublicKey>",
+            "implementation": "impl fava_nip02::IntoContactAuthors for alloc::vec::Vec<nostr::key::public_key::PublicKey>",
+            "path": "<alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter"
+          },
+          {
+            "binding_roots": [
+              "fava_nip02::IntoContactAuthors"
+            ],
+            "declaration": "pub type nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>",
+            "implementation": "impl fava_nip02::IntoContactAuthors for nostr::key::public_key::PublicKey",
+            "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter"
           },
           {
             "declaration": "pub fn fava_nip02::IntoContactAuthors::into_contact_authors(self) -> Self::IntoIter",
             "path": "fava_nip02::IntoContactAuthors::into_contact_authors"
           },
           {
-            "declaration": "pub fn nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter",
-            "implementation": "impl fava_nip02::IntoContactAuthors for nostr::key::public_key::PublicKey",
-            "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors"
-          },
-          {
             "declaration": "pub trait fava_nip02::IntoContactAuthors: sealed::Sealed",
             "path": "fava_nip02::IntoContactAuthors"
           },
           {
-            "declaration": "pub type &'a [nostr::key::public_key::PublicKey; N]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
-            "implementation": "impl<'a, const N: usize> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey; N]",
-            "path": "<&'a [nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
-            "declaration": "pub type &'a [nostr::key::public_key::PublicKey]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
-            "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a [nostr::key::public_key::PublicKey]",
-            "path": "<&'a [nostr::key::public_key::PublicKey] as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
-            "declaration": "pub type &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>",
-            "implementation": "impl<'a> fava_nip02::IntoContactAuthors for &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>",
-            "path": "<&'a alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
-            "declaration": "pub type &nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_nip02::IntoContactAuthors for &nostr::key::public_key::PublicKey",
-            "path": "<&nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
-            "declaration": "pub type [nostr::key::public_key::PublicKey; N]::IntoIter = core::array::iter::IntoIter<nostr::key::public_key::PublicKey, N>",
-            "implementation": "impl<const N: usize> fava_nip02::IntoContactAuthors for [nostr::key::public_key::PublicKey; N]",
-            "path": "<[nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
-            "declaration": "pub type alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = alloc::vec::into_iter::IntoIter<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_nip02::IntoContactAuthors for alloc::vec::Vec<nostr::key::public_key::PublicKey>",
-            "path": "<alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter"
-          },
-          {
             "declaration": "pub type fava_nip02::IntoContactAuthors::IntoIter: core::iter::traits::iterator::Iterator<Item = nostr::key::public_key::PublicKey>",
             "path": "fava_nip02::IntoContactAuthors::IntoIter"
-          },
-          {
-            "declaration": "pub type nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>",
-            "implementation": "impl fava_nip02::IntoContactAuthors for nostr::key::public_key::PublicKey",
-            "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter"
           }
         ],
         "reexports": [
@@ -20933,6 +20975,12 @@
           "signature": "pub enum SimpleGroupStateEventKind {\n    /// Kind 39000 metadata.\n    Metadata,\n    /// Kind 39001 administrators.\n    Admins,\n    /// Kind 39002 members.\n    Members,\n    /// Kind 39003 roles.\n    Roles,\n    /// Kind 39004 `LiveKit` participants.\n    LivekitParticipants,\n    /// Kind 39005 pins.\n    Pins,\n}"
         },
         {
+          "description": "Convert each closed selector to its exact NIP-29 numeric kind: Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005.",
+          "kind": "Function",
+          "path": "<nostr::event::kind::Kind as core::convert::From<fava_simple_groups::SimpleGroupStateEventKind>>::from",
+          "signature": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self"
+        },
+        {
           "description": "Enumerates all six relay-generated simple-group state-event kinds for callers that intentionally select the complete state family.",
           "kind": "Constant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::ALL",
@@ -20981,12 +21029,6 @@
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Roles"
         },
         {
-          "description": "Exact NIP-29 state mapping: Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005.",
-          "kind": "Function",
-          "path": "fava_simple_groups::SimpleGroupStateEventKind",
-          "signature": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self"
-        },
-        {
           "description": "Exports this term at `fava_simple_groups::SimpleGroupStateEventKind` from `query::SimpleGroupStateEventKind`.",
           "kind": "Public export",
           "path": "fava_simple_groups::SimpleGroupStateEventKind",
@@ -21006,6 +21048,14 @@
           }
         ],
         "public_api": [
+          {
+            "binding_roots": [
+              "fava_simple_groups::SimpleGroupStateEventKind"
+            ],
+            "declaration": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self",
+            "implementation": "impl core::convert::From<fava_simple_groups::SimpleGroupStateEventKind> for nostr::event::kind::Kind",
+            "path": "<nostr::event::kind::Kind as core::convert::From<fava_simple_groups::SimpleGroupStateEventKind>>::from"
+          },
           {
             "declaration": "pub const fava_simple_groups::SimpleGroupStateEventKind::ALL: [Self; 6]",
             "implementation": "impl fava_simple_groups::SimpleGroupStateEventKind",
@@ -21038,10 +21088,6 @@
           {
             "declaration": "pub fava_simple_groups::SimpleGroupStateEventKind::Roles",
             "path": "fava_simple_groups::SimpleGroupStateEventKind::Roles"
-          },
-          {
-            "declaration": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self",
-            "path": "fava_simple_groups::SimpleGroupStateEventKind"
           }
         ],
         "reexports": [
