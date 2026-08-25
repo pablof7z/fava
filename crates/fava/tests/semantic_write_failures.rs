@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use fava::{
     Event, EventBuilder, Kind, MaterializationId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntentError,
+    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use fava_event_cache_memory::MemoryEventCache;
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -48,6 +48,7 @@ struct ControlledMaterializer {
     kind: Kind,
     mode: AtomicU8,
     calls: AtomicU64,
+    tag_count: usize,
 }
 
 impl ControlledMaterializer {
@@ -56,6 +57,16 @@ impl ControlledMaterializer {
             kind,
             mode: AtomicU8::new(VALID),
             calls: AtomicU64::new(0),
+            tag_count: 0,
+        }
+    }
+
+    fn with_tag_count(kind: Kind, tag_count: usize) -> Self {
+        Self {
+            kind,
+            mode: AtomicU8::new(VALID),
+            calls: AtomicU64::new(0),
+            tag_count,
         }
     }
 
@@ -116,9 +127,28 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         EventBuilder::new(actor, kind)
             .created_at(returned_at)
             .content(content)
+            .tags((0..self.tag_count).map(|index| {
+                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+            }))
             .build()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
     }
+}
+
+#[test]
+fn controlled_materializer_preserves_the_event_builder_tag_refusal() {
+    let actor = Keys::generate().public_key();
+    let kind = Kind::ContactList;
+    let materializer = ControlledMaterializer::with_tag_count(kind, 2_001);
+    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+
+    assert_eq!(
+        materializer.materialize(&edit, actor, None, Timestamp::from(42)),
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
