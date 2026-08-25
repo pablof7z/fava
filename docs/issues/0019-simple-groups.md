@@ -9,21 +9,23 @@ boundary is recorded in
 `docs/issues/0027-simple-group-relay-input-boundary.md`.
 
 The current nominal model is recorded in `docs/internals/vocabulary.toml`.
-All 13 simple-groups nominal entries remain absent from the signed
+All 14 simple-groups nominal entries remain absent from the signed
 `docs/internals/approvals.jsonl` ledger: `SimpleGroup`,
-`SimpleGroupStateEventKind`, the six event projections, `SimpleGroupDecodeError`,
-`SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
-`SavedGroupListDecodeError`. Their signed approvals are an external governance
-gate. This issue and commit series do not fabricate or claim them.
+`SimpleGroupConstructionError`, `SimpleGroupStateEventKind`, the six event
+projections, `SimpleGroupDecodeError`, `SavedSimpleGroup`, `SavedGroupList`,
+`SavedGroupListMaterializer`, and `SavedGroupListDecodeError`. Their signed
+approvals are an external governance gate. This issue and commit series do not
+fabricate or claim them.
 
 ## Delivered model
 
-`SimpleGroup` retains an opaque id plus normalized application-selected relays.
-`from_relays(id, first, rest)` requires one parsed `RelayUrl` and a finite owned
-`Vec<RelayUrl>` tail, so empty and arbitrary-iterator construction are
-unrepresentable. Later duplicates collapse in first-occurrence order. Empty ids
-are valid. Parsing remains with `RelayUrl`; there is no construction error,
-shared relay owner, or private numeric bound.
+`SimpleGroup` retains a non-empty opaque id plus normalized
+application-selected relays. `from_relays(id, relays)` accepts a finite owned
+`Vec<RelayUrl>` and returns `SimpleGroupConstructionError::EmptyId` or
+`EmptyRelays` for exactly those invalid inputs. Later duplicates collapse in
+first-occurrence order. Parsing remains with `RelayUrl`; there is no string
+constructor, arbitrary-iterator input, shared relay owner, compatibility API,
+or private numeric bound.
 
 - `events` must preserve an ordinary query, constrain lowercase `h` to exactly
   the group id without broadening an existing axis, and use `from_relays`.
