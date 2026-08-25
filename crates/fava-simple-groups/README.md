@@ -5,10 +5,10 @@ and a normalized, non-empty sequence of application-selected relays. This crate
 lowers that value into ordinary queries and unsigned events, decodes individual
 state events, and supplies pure kind-10009 edits. Fava retains observation,
 provenance, bounds, signing, routing, publication, cancellation, and receipts.
-Construction requires one parsed `RelayUrl` plus a finite owned `Vec<RelayUrl>`
-tail. This makes empty and arbitrary-iterator construction impossible without a
-shared owner or numeric domain limit; later duplicates collapse in
-first-occurrence order. URL parsing remains with `RelayUrl`.
+Construction accepts a finite owned `Vec<RelayUrl>` and returns a public typed
+error for exactly an empty id or empty vector. Every non-empty id remains
+opaque, arbitrary iterators are not accepted, and later relay duplicates
+collapse in first-occurrence order. URL parsing remains with `RelayUrl`.
 
 ## Group content
 
@@ -25,7 +25,7 @@ use fava_simple_groups::SimpleGroup;
 
 let bob = RelayUrl::parse("wss://bob.groups.example")?;
 let alice = RelayUrl::parse("wss://alice.groups.example")?;
-let photos = SimpleGroup::from_relays("photos", bob, vec![alice]);
+let photos = SimpleGroup::from_relays("photos", vec![bob, alice])?;
 let query = photos.events(Query::events().kinds([Kind::from_u16(9)])?)?;
 let observation = fava.observe(query).await?;
 
@@ -169,7 +169,8 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
     assert_eq!(query.selection().authors, Some(BTreeSet::from([author])));
     let relay_a = RelayUrl::parse("wss://a.example")?;
     let relay_b = RelayUrl::parse("wss://b.example")?;
-    let group = SimpleGroup::from_relays("photos", relay_a.clone(), vec![relay_b.clone()]);
+    let group =
+        SimpleGroup::from_relays("photos", vec![relay_a.clone(), relay_b.clone()])?;
     let source = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags([
             Tag::parse(["group", "photos", "wss://a.example", "Old"])?,
@@ -398,15 +399,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 ### `SimpleGroup` (Struct)
 
-Immutable opaque simple-group id plus a normalized non-empty application-selected relay sequence. It lowers context into ordinary queries and unsigned events without opening work.
+Immutable non-empty opaque simple-group id plus a normalized non-empty application-selected relay sequence. It lowers context into ordinary queries and unsigned events without opening work.
 <!-- api-item {"kind":"Struct","item":"fava_simple_groups::SimpleGroup","signature":"pub struct fava_simple_groups::SimpleGroup","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#SimpleGroup; crates/fava-simple-groups/src/simple_group.rs; NIP-29 Group identity, migration and forking","example":"SG-1"} -->
 Example coverage: [SG-1](#sg-1).
 
 | Item | Purpose |
 | --- | --- |
 | **`events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::events","signature":"pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"docs/issues/0028-query-tag-axis-composition.md; crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/tests/query_identity.rs; NIP-29 The h tag","example":"SG-1"} --> | Narrows lowercase `h` through query-owned exact intersection, so absent becomes this id, overlap narrows to this id, and disjoint remains present-empty match-nothing. Then delegates acquisition to all retained relays and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
-| **`from_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::from_relays","signature":"pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, nostr::types::url::RelayUrl, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> Self","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Requires one parsed relay plus a finite owned tail, making empty and arbitrary-iterator construction impossible. Collapses later duplicates in first-occurrence order without a numeric domain limit or construction error.<br><br>Example: [SG-1](#sg-1). |
-| **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied opaque id; no trimming, normalization, or non-empty rule.<br><br>Example: [SG-1](#sg-1). |
+| **`from_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::from_relays","signature":"pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.<br><br>Example: [SG-1](#sg-1). |
+| **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.<br><br>Example: [SG-1](#sg-1). |
 | **`prepare`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::prepare","signature":"pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Unsigned preparation; NIP-29 The h tag; current implementation crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.<br><br>Example: [SG-1](#sg-1). |
 | **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::relays","signature":"pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.<br><br>Example: [SG-1](#sg-1). |
 | **`state_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::state_events","signature":"pub fn fava_simple_groups::SimpleGroup::state_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
@@ -426,9 +427,8 @@ fn exercise_simple_group() -> Result<(), Box<dyn Error>> {
     let second = RelayUrl::parse("wss://b.example")?;
     let group = SimpleGroup::from_relays(
         " photos ",
-        first.clone(),
-        vec![second.clone(), first.clone()],
-    );
+        vec![first.clone(), second.clone(), first.clone()],
+    )?;
     assert_eq!(group.id(), " photos ");
     assert_eq!(
         group.relays().collect::<Vec<_>>(),
@@ -541,6 +541,42 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "speaker".to_owned()
             ]
         ))
+    );
+    Ok(())
+}
+```
+
+### `SimpleGroupConstructionError` (Enum)
+
+Exact caller-attributable refusals from the finite `SimpleGroup` constructor boundary.
+<!-- api-item {"kind":"Enum","item":"fava_simple_groups::SimpleGroupConstructionError","signature":"pub enum fava_simple_groups::SimpleGroupConstructionError","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SGE-1"} -->
+Example coverage: [SGE-1](#sge-1).
+
+| Item | Purpose |
+| --- | --- |
+| **`EmptyId`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupConstructionError::EmptyId","signature":"pub fava_simple_groups::SimpleGroupConstructionError::EmptyId","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/tests/simple_group.rs","example":"SGE-1"} --> | The supplied id is exactly zero length. Whitespace and every other non-empty id remain opaque valid values.<br><br>Example: [SGE-1](#sge-1). |
+| **`EmptyRelays`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupConstructionError::EmptyRelays","signature":"pub fava_simple_groups::SimpleGroupConstructionError::EmptyRelays","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/tests/simple_group.rs","example":"SGE-1"} --> | The supplied finite relay vector contains no relay.<br><br>Example: [SGE-1](#sge-1). |
+| **`core::fmt::Display::fmt`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_simple_groups::SimpleGroupConstructionError as core::fmt::Display>::fmt","signature":"pub fn fava_simple_groups::SimpleGroupConstructionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result","evidence":"crates/fava-simple-groups/src/simple_group.rs","example":"SGE-1"} --> | Formats the exact constructor refusal without erasing its typed variant.<br><br>Example: [SGE-1](#sge-1). |
+
+<a id="sge-1"></a>
+#### SGE-1 — concrete coverage
+```rust,no_run
+use std::error::Error;
+use fava_query::RelayUrl;
+use fava_simple_groups::{SimpleGroup, SimpleGroupConstructionError};
+fn main() -> Result<(), Box<dyn Error>> {
+    let relay = RelayUrl::parse("wss://relay.example")?;
+    assert_eq!(
+        SimpleGroup::from_relays("", vec![relay]),
+        Err(SimpleGroupConstructionError::EmptyId),
+    );
+    assert_eq!(
+        SimpleGroup::from_relays("photos", Vec::new()),
+        Err(SimpleGroupConstructionError::EmptyRelays),
+    );
+    assert_eq!(
+        SimpleGroupConstructionError::EmptyId.to_string(),
+        "simple group id must not be empty",
     );
     Ok(())
 }
@@ -1041,7 +1077,7 @@ fn selected(
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let relay = RelayUrl::parse("wss://relay.example")?;
-    let group = SimpleGroup::from_relays("g", relay, Vec::new());
+    let group = SimpleGroup::from_relays("g", vec![relay])?;
     assert_eq!(
         selected(&group, SimpleGroupStateEventKind::Metadata)?,
         BTreeSet::from([Kind::from_u16(39_000)])

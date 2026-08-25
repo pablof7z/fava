@@ -6,6 +6,9 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const PUBLIC_ROOT: &str = include_str!("../src/lib.rs");
 const README: &str = include_str!("../README.md");
 const CATALOG: &str = include_str!("../../../.bg-shell/simple-groups-semantic-catalog.jsonl");
+const CONSTRUCTOR_DECISION: &str =
+    include_str!("../../../docs/issues/0027-simple-group-relay-input-boundary.md");
+const VOCABULARY: &str = include_str!("../../../docs/internals/vocabulary.toml");
 
 fn sources() -> [(&'static str, &'static str); 9] {
     [
@@ -57,6 +60,7 @@ fn normal_dependencies_are_exact_domain_and_composition_owners() {
 fn public_root_exports_only_the_current_nominal_surface() {
     for required in [
         "SimpleGroup",
+        "SimpleGroupConstructionError",
         "SimpleGroupStateEventKind",
         "SimpleGroupMetadata",
         "SimpleGroupAdmins",
@@ -89,6 +93,38 @@ fn public_root_exports_only_the_current_nominal_surface() {
             "obsolete export survived: {removed}"
         );
     }
+}
+
+#[test]
+fn constructor_decision_and_vocabulary_describe_the_exported_boundary() {
+    for required in [
+        "from_relays(id, relays: Vec<RelayUrl>)",
+        "Result<SimpleGroup, SimpleGroupConstructionError>",
+        "`EmptyId` rejects exactly a zero-length id",
+        "`EmptyRelays` rejects exactly an empty vector",
+    ] {
+        assert!(
+            CONSTRUCTOR_DECISION.contains(required),
+            "constructor decision lost {required}"
+        );
+    }
+
+    let simple_group = vocabulary_term("SimpleGroup");
+    assert!(simple_group.contains("source = \"nostr\""));
+    assert!(simple_group.contains("One non-empty opaque simple-group id"));
+
+    let construction_error = vocabulary_term("SimpleGroupConstructionError");
+    assert!(construction_error.contains("source = \"fava\""));
+    assert!(construction_error.contains("EmptyId"));
+    assert!(construction_error.contains("EmptyRelays"));
+}
+
+fn vocabulary_term(name: &str) -> &'static str {
+    let marker = format!("[[term]]\nname = \"{name}\"\n");
+    let (_, rest) = VOCABULARY
+        .split_once(&marker)
+        .unwrap_or_else(|| panic!("missing vocabulary term {name}"));
+    rest.split_once("\n[[term]]").map_or(rest, |(term, _)| term)
 }
 
 #[test]

@@ -1379,9 +1379,10 @@ Reply, reaction, repost, quote, and comment crates each own their exact protocol
 
 ## PROTO-006 — `fava-simple-groups` preserves multi-relay simple group truth
 
-`fava-simple-groups` MUST expose a pure `SimpleGroup` value over one opaque
-NIP-29 simple group id and an application-selected, normalized, non-empty
-relay sequence. One relay and several relays use the same value and methods.
+`fava-simple-groups` MUST expose a pure `SimpleGroup` value over one non-empty
+opaque NIP-29 simple group id and an application-selected, normalized,
+non-empty relay sequence. One relay and several relays use the same value and
+methods.
 
 Simple group content reads MUST constrain the `h` axis to the exact group id
 without broadening any existing `h` selection and ask the complete relay
@@ -1416,10 +1417,11 @@ edits plus their materializer. Valid entries, repetitions, malformed siblings,
 unknown tags, opaque content, unused trailing values, and unrelated order MUST
 survive according to the edit's exact target semantics.
 
-`SimpleGroup::from_relays` MUST require one parsed `RelayUrl` and a finite owned
-`Vec<RelayUrl>` remainder, making empty and arbitrary-iterator construction
-impossible. It MUST preserve first occurrences and impose no numeric relay
-limit. Query author, kind, tag, id, and relay axes remain bounded by
+`SimpleGroup::from_relays` MUST accept a finite owned `Vec<RelayUrl>` and return
+a public typed construction error for exactly an empty id or empty relay
+vector. It MUST preserve every non-empty id exactly, preserve first relay
+occurrences, reject arbitrary-iterator input at the type boundary, and impose
+no numeric relay limit. Query author, kind, tag, id, and relay axes remain bounded by
 `fava-query`, while write routes retain their distinct `fava-write` cap. The
 current 4,096 query and 256 write values are provisional resource-safety
 shortcuts owned by those operation crates, not Nostr limits or domain

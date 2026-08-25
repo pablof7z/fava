@@ -192,15 +192,29 @@ name = "SimpleGroup"
 source = "nostr"
 protocol = "NIP-29"
 nearest_nostr = "NIP-29 relay-based group identified by an h or d tag value"
-meaning = "One opaque simple-group id plus a normalized non-empty sequence of application-selected relays."
+meaning = "One non-empty opaque simple-group id plus a normalized non-empty sequence of application-selected relays."
 owner = "fava-simple-groups"
 distinction = "A raw id or relay URL alone cannot lower both exact group selection and the complete caller-selected relay sequence."
 counterexample = "A globally canonical group id or a value that silently chooses one relay is not this SimpleGroup."
-lifecycle = "Constructed synchronously from one required parsed RelayUrl plus a finite owned Vec tail; immutable thereafter and owns no query or publication work."
+lifecycle = "Constructed synchronously from a complete finite owned RelayUrl vector after its id and relay selection validate; immutable thereafter and owns no query or publication work."
 forcing_requirement = "Applications must reuse one exact id and non-empty relay selection across content queries, state queries, preparation, and explicit publication without a shared numeric bound or new relay owner."
-falsifier = "Compile-fail evidence rejects empty and arbitrary-iterator construction; runtime tests fail if first-occurrence relay order changes, content-query composition broadens an existing h axis, or query/write lowering omits the id or any selected relay."
+falsifier = "Construction tests fail if an empty id or empty relay vector succeeds, a non-empty opaque id changes, first-occurrence relay order changes, or query/write lowering omits the id or any selected relay."
 symbols = ["fava_simple_groups::SimpleGroup"]
 crates = ["fava-simple-groups"]
+
+[[term]]
+name = "SimpleGroupConstructionError"
+source = "fava"
+nearest_nostr = "NIP-29 simple group id plus application-selected relay sequence"
+meaning = "The exact EmptyId or EmptyRelays refusal to construct a SimpleGroup from an empty id or empty finite relay vector."
+owner = "fava-simple-groups"
+distinction = "It attributes only invalid reusable group construction input; relay URL parsing, query bounds, write bounds, and event decoding retain their existing error owners."
+counterexample = "An invalid RelayUrl, a QueryError from lowering, or a SimpleGroupDecodeError from one state event is not a SimpleGroupConstructionError."
+lifecycle = "Created synchronously when from_relays refuses exactly one of its two input invariants; it owns no retained state or work."
+forcing_requirement = "Applications must distinguish an unusable group id from a missing relay selection before a reusable SimpleGroup exists without moving those invariants into query or write operations."
+falsifier = "Public constructor tests fail if empty ids and empty relay vectors do not return their distinct variants or if any other non-empty id is refused."
+symbols = ["fava_simple_groups::SimpleGroupConstructionError"]
+crates = []
 
 [[term]]
 name = "SimpleGroupStateEventKind"

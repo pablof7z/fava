@@ -68,5 +68,7 @@ rust_test(
         "BUILD.bazel",
         "README.md",
         "//:.bg-shell/simple-groups-semantic-catalog.jsonl",
+        "//:docs/internals/vocabulary.toml",
+        "//:docs/issues/0027-simple-group-relay-input-boundary.md",
     ],
 )
