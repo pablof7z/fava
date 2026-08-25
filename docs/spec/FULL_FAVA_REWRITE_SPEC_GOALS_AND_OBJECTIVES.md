@@ -816,6 +816,22 @@ opening an automatic router session. Any intervening receipt change discards
 that candidate state, closes the stale session, and restarts from current
 custody before materialization, signing, or route effects proceed.
 
+Immediately before signer invocation, the write store MUST durably authorize
+the exact current write, receipt, materialization, and event identity. A
+same-coordinate reservation committed before authorization defers that
+authorization with attributable retryable evidence, so publication refreshes
+the composed generation before invoking a signer. Authorization committed
+first keeps that generation current while at most one coordinate-bound durable
+successor is retained; the successor is promoted only after the authorized
+operation resolves. The retained successor MUST include any route plan derived
+for that exact materialization so promotion cannot apply it to the predecessor
+or lose it on restart. Source-driven rematerialization follows the same rule.
+On restart, an authorized generation with a durable successor MUST promote the
+successor before facade construction or signer attachment; authorization
+without a successor becomes exact attributable retryable work. An authorization
+or activation retry bound MUST leave a typed retryable signing fact naming the
+exact work and retry disposition rather than silently ending the runner.
+
 Rematerialization MUST:
 
 - preserve unrelated source changes;
@@ -841,6 +857,11 @@ A signer completion is accepted only if it:
 - matches the event's `pubkey`;
 - passes signature verification; and
 - belongs to the current signer/provider operation.
+
+The store refuses an un-authorized signature or refusal even when its event
+body is otherwise current. Process recovery converts an interrupted durable
+authorization to an attributable retryable fact before signer work resumes;
+it never assumes that an old in-process signer operation survived restart.
 
 Unavailable, rejected, invalid-output, cancelled, timed-out, and stale signer results remain distinct.
 

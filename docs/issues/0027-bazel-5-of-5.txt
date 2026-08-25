@@ -1,0 +1,23 @@
+Issue: 0027 replaceable edit composition
+Date: 2026-08-26
+Main closure base: 863eef72
+Bazel: 9.2.0
+Invocation ID: 36b49ef9-3339-4b5a-83a3-c9da9af452dc
+
+Command:
+
+bazel --install_base=/private/tmp/fava-bazel-install-r3 --output_base=/private/tmp/fava-bazel-r4 test --repo_contents_cache=/private/tmp/fava-bazel-repo-cache-r3 --disk_cache=/private/tmp/fava-bazel-disk-cache-r3 //crates/fava:semantic_write_contract //crates/fava:semantic_write_store //crates/fava:semantic_write_publication //crates/fava:semantic_write_failures //crates/fava:semantic_write_capabilities
+
+Terminal target/output evidence:
+
+INFO: Found 5 test targets...
+INFO: Elapsed time: 4.656s, Critical Path: 1.73s
+INFO: 14 processes: 556 action cache hit, 5 internal, 13 processwrapper-sandbox.
+INFO: Build completed successfully, 14 total actions
+//crates/fava:semantic_write_contract                           (cached) PASSED in 0.1s
+//crates/fava:semantic_write_capabilities                                PASSED in 0.1s
+//crates/fava:semantic_write_failures                                    PASSED in 0.4s
+//crates/fava:semantic_write_publication                                 PASSED in 0.1s
+//crates/fava:semantic_write_store                                       PASSED in 0.4s
+
+Executed 4 out of 5 tests: 5 tests pass.

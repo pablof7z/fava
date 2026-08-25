@@ -144,37 +144,69 @@ event, re-reads again, and closes/restarts on any mismatch. Route application
 uses the write, receipt, materialization, and event identity accepted by that
 activation; signing starts only after it succeeds.
 
+## Store-owned signer authorization closure
+
+The remaining signer handoff was still read-based: composition could commit
+after the last receipt comparison but before the spawned signer future invoked
+its provider. The write store now owns a durable exact-generation signing
+authorization. Coordinate reservation and authorization compete under the
+same store lock. If reservation wins, authorization records an attributable
+retryable fact and the composed generation refreshes before signer invocation.
+If authorization wins, that generation remains current while the store holds
+at most one durable coordinate successor; signature success or refusal
+atomically promotes it. Source-driven successors use the same slot. The slot
+also retains the successor's exact route plan, so neither live completion nor
+restart can apply successor routing to the predecessor.
+
+Redb persists authorization and the bounded successor in one receipt row.
+Clean restart and SIGKILL recovery promote an already-durable successor before
+facade construction, so the interrupted predecessor cannot invoke a signer
+again. An interrupted authorization without a successor becomes typed exact
+retryable evidence. Activation retry exhaustion likewise leaves exact write,
+receipt, generation, event, and retry-disposition evidence instead of silently
+abandoning the runner. No protocol crate, bookmark path, queue, or batching
+lifecycle was added.
+
 ## Validation gates
 
 Green evidence:
 
-- `semantic_write_store`: memory 15 passed; redb 25 passed.
-- `semantic_write_failures`: 19 passed, including a persistent custody-read
+- `semantic_write_store`: memory 17 passed; redb 27 passed, including the two
+  authorization/reservation winners, exact retry disposition, durable successor
+  route effects, and pre-facade restart promotion.
+- `semantic_write_failures`: 20 passed, including a persistent custody-read
   failure across a further durable composition and newer source arrival, proved
   through an observed read barrier without a timing sleep, plus recovery
-  generation change between receipt and custody reads.
-- `semantic_write_publication`: 23 passed, including restart reconciliation,
-  immediate same-coordinate admission, and later complete replay;
+  generation change between receipt and custody reads and typed activation-bound
+  exhaustion.
+- `semantic_write_publication`: 24 passed, including the deterministic memory
+  signer window, restart reconciliation, immediate same-coordinate admission,
+  later complete replay, and generation-bound route revision;
   `semantic_write_contract`: 5 passed;
   `semantic_write_capabilities`: 4 passed.
-- Redb `process_kill`: 12 passed, including clean-reopen and SIGKILL
+- Redb `process_kill`: 14 passed, including clean-reopen and SIGKILL signer-window
+  promotion before facade construction,
   restart-then-immediate-edit barriers, complete late-source replay, and route
   session replacement when custody advances during initialization.
-- Bookmark, NIP-02, simple-groups, and the external semantic-capability
-  falsifier all passed.
 - `cargo check --workspace --all-targets --locked` passed.
-- Focused workspace and external-falsifier clippy passed with `-D warnings`.
+- Focused workspace clippy passed with `-D warnings`.
 - `python3 -m unittest tools.tests.test_vocabulary_check`: 36 passed.
-- Every Rust file changed from `31a87f1a` passes `rustfmt --check`; `git diff
+- Every changed Rust file passes `rustfmt --check`; `git diff
   --check` passes.
 - After rebasing onto main closure `863eef72`, all five focused Bazel targets
   pass: `semantic_write_contract`, `semantic_write_store`,
   `semantic_write_publication`, `semantic_write_failures`, and
-  `semantic_write_capabilities`.
+  `semantic_write_capabilities`. Exact command, invocation, target, and terminal
+  output are retained in `docs/issues/0027-bazel-5-of-5.txt`.
 
 Independent residual gates:
 
-- Full vocabulary-checker output is byte-for-byte identical to `31a87f1a` and
-  remains red on its pre-existing terminal-name/approval inventory.
+- Full vocabulary checking remains red on the repository's pre-existing
+  terminal-name/approval inventory; the changed `WriteStore` and
+  `SignatureState` canonical API inventories are generated for review rather
+  than bypassing that approval gate.
 - Full `cargo fmt --all -- --check` reports the same eleven pre-existing files
   as `31a87f1a`.
+- Modified-crate README inventory is current except `fava-nip02`; its existing
+  extractor failure on the public-key iterator associated type prevents the
+  inventory generator from creating that README.

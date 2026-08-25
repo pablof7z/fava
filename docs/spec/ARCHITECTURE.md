@@ -221,6 +221,18 @@ effects. It re-reads the receipt after custody loading and after router-session
 opening. A changed receipt invalidates the candidate activation; any opened
 session closes and activation restarts from current durable custody before an
 effect is committed.
+Signer invocation has an additional store-owned transition rather than a
+third receipt read. Exact-generation authorization and coordinate reservation
+compete atomically. A reservation winner composes first and leaves retryable
+authorization evidence; an authorization winner keeps its generation current
+and admits at most one durable coordinate successor, promoted only when that
+authorized operation resolves. The same bounded successor slot covers a
+source-driven rematerialization, so recovery and live materialization cannot
+retire custody whose signer invocation remains authorized. Restart rewrites an
+interrupted authorization without a successor as exact retryable evidence. If
+the same durable row already contains a successor, restart promotes that
+successor, including its generation-bound route plan, before the facade or any
+signer attachment exists; the authorized predecessor is never invoked again.
 
 ### Query results are merged source state
 

@@ -125,8 +125,11 @@ at their exported path and are classified by the re-exported item's kind.
 | Method | `fava_write::ReplaceableEventMaterializer::materialize` |  |
 | Method | `fava_write::ReplaceableEventMaterializer::supports` |  |
 | Enum | `fava_write::SignatureState` |  |
+| Enum variant | `fava_write::SignatureState::Authorized` |  |
 | Enum variant | `fava_write::SignatureState::Refused` |  |
 | Public field | `fava_write::SignatureState::Refused::0` |  |
+| Enum variant | `fava_write::SignatureState::Retryable` |  |
+| Public field | `fava_write::SignatureState::Retryable::0` |  |
 | Enum variant | `fava_write::SignatureState::Signed` |  |
 | Enum variant | `fava_write::SignatureState::Unsigned` |  |
 | Public field | `fava_write::Tag` |  |
