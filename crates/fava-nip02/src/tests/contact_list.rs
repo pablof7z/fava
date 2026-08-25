@@ -241,20 +241,6 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         Err(ContactListError::InvalidEvent(_))
     ));
 
-    let too_many = source(
-        &author,
-        Kind::ContactList,
-        4,
-        "",
-        (0..2_001)
-            .map(|index| tag(&["x", &index.to_string()]))
-            .collect(),
-    );
-    assert!(matches!(
-        ContactList::from_event(&EventValue::Signed(too_many)),
-        Err(ContactListError::TooManyTags { .. })
-    ));
-
     let too_large = source(
         &author,
         Kind::ContactList,
@@ -266,6 +252,25 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         ContactList::from_event(&EventValue::Signed(too_large)),
         Err(ContactListError::TooLarge { .. })
     ));
+}
+
+#[test]
+fn signed_contact_list_input_is_not_subject_to_the_local_write_builder_tag_bound() {
+    let author = Keys::generate();
+    let signed = source(
+        &author,
+        Kind::ContactList,
+        4,
+        "",
+        (0..2_001)
+            .map(|index| tag(&["x", &index.to_string()]))
+            .collect(),
+    );
+
+    let decoded = ContactList::from_event(&EventValue::Signed(signed))
+        .expect("valid signed input is decoded under its owning byte bound");
+    assert!(decoded.follows().is_empty());
+    assert!(decoded.evidence().is_empty());
 }
 
 /// A duplicate relay in the publication route is a routing defect. Reporting

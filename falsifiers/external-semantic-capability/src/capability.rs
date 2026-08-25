@@ -217,7 +217,7 @@ impl ReplaceableEventMaterializer for ExternalSetMaterializer {
         }
         builder
             .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
+            .map_err(WriteIntentError::from)
     }
 }
 
