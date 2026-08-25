@@ -237,18 +237,15 @@ Conceptually:
 
 ```rust
 pub struct EventRecord {
-    pub event: EventValue,
-    pub relay_evidence: RelayEvidence,
-    pub publication: Option<PublicationEvidence>,
+    /* private event-id-bound fields */
 }
 ```
 
-`RelayEvidence` records relays that actually served the event:
+`RelayOccurrences` records exact relay-access sessions that actually served
+the same event id:
 
 ```rust
-pub struct RelayEvidence {
-    pub seen_on: BTreeSet<RelayUrl>,
-}
+pub struct RelayOccurrence { pub session: RelaySessionKey, pub observed_at: Timestamp }
 ```
 
 The exact shape may grow, but the distinction is:
@@ -508,9 +505,9 @@ fn show_feed(
     state: &ArticleFeedState,
 ) {
     for record in state.snapshot.events.iter() {
-        ui.heading(article_title(&record.event));
-        ui.label(article_summary(&record.event));
-        ui.small(format!("by {}", record.event.pubkey()));
+        ui.heading(article_title(record.event()));
+        ui.label(article_summary(record.event()));
+        ui.small(format!("by {}", record.event().pubkey()));
         ui.separator();
     }
 }

@@ -2818,3 +2818,4 @@ neither operand qualified for; an empty tag value set may be unioned in, while
 an absent tag name may not. `search`, `since`/`until`, the `limit` rule
 including the equal-limits case, the `QueryBounds` gate, the cross-product
 refusal, and the `default_filter_limit` guard are unchanged.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

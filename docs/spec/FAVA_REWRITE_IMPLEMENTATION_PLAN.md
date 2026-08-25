@@ -316,7 +316,7 @@ Prove the central local-state model before networking: live query state is the d
 - Event cache accepts only admitted signed relay events.
 - Write store exposes current local unsigned/signed materializations as a query source.
 - Same-event source contributions merge into one `EventRecord`.
-- A local pending replacement can shadow a cached predecessor without deleting it.
+- A query-matching local pending replacement can shadow a matching cached predecessor without deleting it; an out-of-selection candidate cannot displace a selected event.
 - Cancelling the local write retracts its source contribution and naturally reveals the cached predecessor.
 - Query opening is all-or-nothing and returns one complete local snapshot.
 - Equivalent query descriptions have stable identity.

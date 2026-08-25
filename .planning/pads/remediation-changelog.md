@@ -456,4 +456,4 @@ recursion, not fan-out.
 saying dependency direction was the one gate the audit found clean
 workspace-wide. Irrelevant to what the design should be. The capability and
 cycle arguments above are the actual reasons.
-
+> Historical pad export. Superseded by STATE-ARCH-1; not current implementation guidance.

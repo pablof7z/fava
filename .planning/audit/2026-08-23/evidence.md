@@ -1658,3 +1658,4 @@ Each item below came from a search or a read that actually ran.
 5. **`RelayAccess::named` has zero uses** (`grep -rn "RelayAccess::named" crates apps falsifiers` →
    0). Every test uses `RelayAccess::public()`. Is relay-access isolation (GOAL-007, RELAY-007)
    deferred, or is the axis dead?
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

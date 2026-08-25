@@ -1069,3 +1069,4 @@ Each of these was checked against the cited authority and found to match.
    (`ARCHITECTURE.md:1204-1210`), and nothing constrains it to agree with `open().current()`. Either
    remove it in favor of a non-acquiring `open` mode, or make the (missing) conformance kit enforce
    equality.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

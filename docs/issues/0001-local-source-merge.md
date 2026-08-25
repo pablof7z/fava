@@ -21,7 +21,7 @@ revision changes update the same open observation.
 - The write store exposes unsigned and signed local events independently.
 - Equal event IDs merge into one `EventRecord` with relay and publication
   evidence.
-- A local replaceable event shadows a cached predecessor; cancellation reveals
+- A query-matching local replaceable event shadows a matching cached predecessor; cancellation reveals
   the predecessor without changing the cache.
 - Query opening is all-or-nothing.
 - Equivalent query construction produces equal values and hashes.

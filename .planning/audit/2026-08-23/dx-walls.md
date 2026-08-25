@@ -475,3 +475,4 @@ needs `fava-signer` because the trait is not re-exported: WALL-9.
 6. **Share connections and subscriptions across observations of equal queries.**
    (WALL-6)
 7. Re-export what the facade returns and what its builder accepts. (WALL-9)
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

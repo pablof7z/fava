@@ -402,6 +402,21 @@ pub fn encoded_len(message: &ClientMessage)
 
 ---
 
+## `fava-relay`
+
+**Responsibility:** inert logical relay/access identity shared across transport,
+subscription, state, query, and write domains.
+
+```rust
+pub enum RelayAccess { Public, Authenticated(PublicKey) }
+pub struct RelaySessionKey { pub relay: RelayUrl, pub access: RelayAccess }
+```
+
+These values own no connection, authentication exchange, generation, retry,
+serialization, or policy lifecycle.
+
+---
+
 ## `fava-state`
 
 **Responsibility:** deterministic semantics for signed event state learned from relays.
@@ -411,73 +426,44 @@ pub fn encoded_len(message: &ClientMessage)
 ### Core values
 
 ```rust
-pub struct RelayObservation {
-    pub relay: RelayUrl,
-    pub access: RelayAccess,
+pub struct RelayOccurrence {
+    pub session: RelaySessionKey,
     pub observed_at: Timestamp,
 }
 
-pub struct RelayEvidence {
-    pub observations: BTreeMap<RelaySessionKey, RelayObservation>,
-}
+pub struct RelayEvent { /* one signed event plus one admitted occurrence */ }
 
-pub struct CachedEvent {
-    pub event: Event,
-    pub evidence: RelayEvidence,
-}
-
-pub enum CacheMutation {
-    Insert(CachedEvent),
-    Replace {
-        coordinate: EventCoordinate,
-        previous: EventId,
-        current: CachedEvent,
-    },
-    MergeEvidence {
-        event_id: EventId,
-        evidence: RelayEvidence,
-    },
+pub enum EventStateMutation {
+    Upsert(RelayEvent),
     Retract {
         event_id: EventId,
+        session: RelaySessionKey,
         cause: RetractionCause,
     },
-    RecordTombstone(Tombstone),
-}
-
-pub struct EventStateDecision {
-    pub mutations: Vec<CacheMutation>,
-    pub affected: AffectedEventState,
 }
 ```
 
 ### Deterministic operations
 
 ```rust
-pub fn admit_observation(
-    current: &StateSlice,
-    event: VerifiedRelayEvent,
-) -> Result<EventStateDecision, StateError>;
-
-pub fn apply_expiration(
-    current: &StateSlice,
-    now: Timestamp,
-) -> EventStateDecision;
-
-pub fn select_replaceable_winner<'a>(
-    candidates: impl IntoIterator<Item = &'a Event>,
-) -> Option<&'a Event>;
+pub fn event_coordinate(...) -> EventCoordinate;
+pub fn event_is_newer(candidate: (Timestamp, EventId), current: (Timestamp, EventId)) -> bool;
+pub fn deletion_applies(deletion: &Event, target: &Event) -> bool;
+pub fn event_is_expired(event: &Event, now: Timestamp) -> bool;
+pub fn relay_occurrences_for_event(...) -> Option<RelayOccurrences>;
+pub fn mutations_for_event(...) -> Vec<EventStateMutation>;
+pub fn mutations_for_expiration(...) -> Vec<EventStateMutation>;
 ```
 
 ### Owned semantics
 
-- event-id deduplication;
-- relay-evidence merge;
+- exact event-id contribution aggregation;
+- earliest relay occurrence per exact relay/access session;
 - ordinary and replaceable event identity, including addressable coordinates;
 - deterministic winner selection;
-- NIP-09 deletion authorization and tombstones;
+- NIP-09 deletion authorization and exact retraction causes;
 - NIP-40 expiration consequences;
-- prevention of resurrection within the cache guarantees provided by the selected implementation;
-- exact affected-state descriptions used to invalidate queries.
+- exact ordered mutation batches for one finite contribution set.
 
 ### State/cache boundary
 
@@ -486,16 +472,18 @@ pub fn select_replaceable_winner<'a>(
 A typical flow is:
 
 ```text
-fava-ingest obtains the relevant cache state slice
+fava-ingest constructs one verified RelayEvent
         ↓
-fava-state calculates one mutation batch
+the observation owner applies fava-state mutations to its bounded live source
         ↓
-fava-event-cache commits the batch atomically
+the selected EventCache independently decides optional retention
         ↓
-CommittedCacheChange is published
+query sources publish their own revisions
 ```
 
-The Fava instance has one serialized event-state writer. This allows a pure read/decide/commit boundary without requiring cache implementations to duplicate Nostr rules.
+`fava-state` is the one universal rule owner. Live observation state and an
+optional event cache are independent retention owners; cache refusal never
+rejects an admitted live contribution.
 
 ---
 
@@ -636,6 +624,7 @@ pub enum Selection {
 
 impl Query {
     pub fn events() -> Query;
+    pub fn with_relay_access(self, access: RelayAccess) -> Query;
     pub fn from_relays(
         self,
         relays: impl IntoIterator<Item = RelayUrl>,
@@ -654,6 +643,11 @@ Every `Query` is valid. Construction rejects invalid inputs. Equality and
 hashing give queries that mean the same thing the same identity, regardless of
 insignificant construction order, while retaining source, access, freshness,
 and acquisition distinctions.
+
+Relay access is part of query identity. Relay contributions are filtered by
+both exact URL authority and exact `RelayAccess` before same-event occurrence
+aggregation. `AnyLocal` keeps accepted local writes access-neutral; the
+evaluator then chooses one cross-source winner for each event coordinate.
 
 ### Query-source contract
 
@@ -712,7 +706,7 @@ An evaluator owns matching, derived-selection evaluation, cross-source merge, or
 
 ```rust
 pub enum SourceEvent {
-    Cached(CachedEvent),
+    Relay(RelayEvent),
     Local(LocalWriteEvent),
 }
 
@@ -726,13 +720,13 @@ pub struct LocalWriteEvent {
 
 ```rust
 pub struct EventRecord {
-    pub event: EventValue,
-    pub relay_evidence: RelayEvidence,
-    pub publication: Option<PublicationEvidence>,
+    /* private event-id-bound fields */
 }
 ```
 
-`EventRecord` is the query-domain value delivered to applications. It combines relay evidence from the event cache with local publication evidence from the write store.
+`EventRecord` is the query-domain value delivered to applications. Accessors
+expose the event, exact event-id-bound relay occurrences, and optional local
+publication state without allowing mismatched construction.
 
 ### Result and change vocabulary
 
@@ -838,37 +832,39 @@ The local query system observes `EventCache` and `WriteStore` independently and 
 
 ```rust
 pub trait EventCache: QuerySource + Send + Sync {
-    fn state_slice(
+    fn transact(
         &self,
-        key: StateLookup,
-    ) -> Result<StateSlice, EventCacheError>;
+        decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,
+    ) -> Result<usize, EventCacheError>;
+
+    fn admit(&self, event: RelayEvent, now: Timestamp)
+        -> Result<bool, EventCacheError>;
+
+    fn expire(&self, now: Timestamp) -> Result<usize, EventCacheError>;
 
     fn commit(
         &self,
-        mutations: Vec<CacheMutation>,
-    ) -> Result<CommittedCacheChange, EventCacheError>;
+        mutations: Vec<EventStateMutation>,
+    ) -> Result<(), EventCacheError>;
 
     fn event(
         &self,
         id: EventId,
-    ) -> Result<Option<CachedEvent>, EventCacheError>;
+    ) -> Result<Option<RelayEvent>, EventCacheError>;
 
-    fn maintain(
-        &self,
-        request: CacheMaintenance,
-    ) -> Result<CacheMaintenanceResult, EventCacheError>;
+    fn len(&self) -> Result<usize, EventCacheError>;
+    fn is_empty(&self) -> Result<bool, EventCacheError>;
 }
 ```
 
 ### Owned state
 
 - signed relay-observed events;
-- relay and relay-access evidence;
+- exact relay/access occurrences retained with each event;
 - replaceable-event indexes;
-- deletion tombstones retained according to the implementation's guarantee;
+- optional deletion-suppression state owned by the implementation;
 - expiration indexes;
 - query indexes;
-- optional historical coverage records;
 - cache eviction and maintenance state.
 
 ### Baseline behavior
@@ -2072,14 +2068,13 @@ projection, disagreement, discovery, management-event, or runtime policy.
 
 ## `fava-ingest`
 
-**Responsibility:** turn untrusted relay frames into committed event-cache facts.
+**Responsibility:** turn untrusted relay frames into verified, attributed relay events.
 
 ### Inputs
 
 - decoded `RelayMessage` values;
 - exact relay-session and subscription attribution;
 - current subscription attribution plan;
-- event-cache state slices;
 - current clock.
 
 ### Owned lifecycle
@@ -2088,15 +2083,22 @@ projection, disagreement, discovery, management-event, or runtime policy.
 2. attribute an event to an accepted wire subscription and logical demand;
 3. verify event id and Schnorr signature;
 4. verify the event matches at least one attributed logical filter;
-5. construct `VerifiedRelayEvent`;
-6. ask `fava-state` for the cache decision;
-7. commit the decision through `EventCache`;
-8. emit `CommittedCacheChange` and per-relay evidence;
-9. emit typed rejected-input diagnostics when validation fails.
+5. construct one atomic `RelayEvent` carrying exact session and observation time;
+6. return it to the observation owner for live-state mutation;
+7. let optional cache retention proceed independently;
+8. emit typed rejected-input diagnostics when validation fails.
 
 ### State ownership
 
-`fava-ingest` owns current ingress operation identity and serialized admission order. Event state belongs to `EventCache`; universal state semantics belong to `fava-state`; relay sessions belong to transport.
+`fava-ingest` owns current ingress validation and attribution. Each observation
+owns its exact live state, bounded to 4,096 events per exact `RelaySessionKey`
+with typed `LiveRetentionLimit` refusal. Overflowing atomic transitions are
+refused without partial mutation; replacement or deletion transitions whose
+final state remains within the bound still apply. This is a provisionally
+authorized Fava observation policy, not a Nostr protocol rule, and Pablo may
+overrule it before merge. Optional retained state belongs to `EventCache`;
+universal state semantics belong to `fava-state`; relay sessions belong to
+transport.
 
 ---
 
@@ -2786,15 +2788,13 @@ fava-ingest verifies exact session/subscription attribution
         ↓
 event id and signature are verified
         ↓
-event is checked against attributed logical filters
+event is checked against attributed logical filters and becomes RelayEvent
         ↓
-fava-state calculates CacheMutation batch
+fava-observe applies fava-state mutations to bounded live state
         ↓
-EventCache commits
+EventCache independently attempts optional retention
         ↓
-CommittedCacheChange is emitted
-        ↓
-fava-observe updates affected query-source projections
+live and retained query sources publish their own revisions
         ↓
 routers observing explicit/local queries may update contributions
         ↓
@@ -2803,7 +2803,8 @@ publication owners may recognize relay echo or a newer relevant source event
 diagnostics update
 ```
 
-The same committed cache fact can drive query projection, routing knowledge, and publication reconciliation without any of those consumers acquiring ownership of the event cache.
+The same admitted relay fact can drive live query projection and optional
+retention without making cache admission a precondition for observation.
 
 ---
 
@@ -2882,7 +2883,7 @@ application may await write.settled(all())
 If a newer source kind-3 arrives before settlement:
 
 ```text
-CommittedCacheChange identifies affected coordinate
+the source query publishes its new selected EventRecord
         ↓
 publication owner reloads current source record
         ↓

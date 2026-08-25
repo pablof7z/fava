@@ -744,3 +744,4 @@ that actually ran.
 4. **`vocabulary.toml:716` lists `fava-relay-lab`, which `ARCHITECTURE.md:3659` forbids.**
    Noted inside `websocketrelaysession-unapproved-lifecycle-noun`; it may belong to whichever area
    owns the vocabulary file rather than to this area.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

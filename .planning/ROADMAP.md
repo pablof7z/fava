@@ -49,7 +49,7 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Success Criteria** (what must be TRUE):
 
   1. An application opens a local query and immediately receives one complete deterministic snapshot whose identity, replacement/addressability, deletion, expiry, ordering, and same-event evidence merge semantics are stable.
-  2. A pending local replacement shadows a cached predecessor without cache pollution; cancellation or source removal retracts only the owning contribution and every affected open query naturally reveals the still-qualified state.
+  2. A query-matching pending local replacement shadows a matching cached predecessor without cache pollution; out-of-selection candidates cannot displace selected state, and cancellation or source removal reveals the still-qualified state.
   3. Equivalent query descriptions have stable semantic identity, and slow consumers remain bounded while each delivered value rebases them onto the exact latest result with truthful coalescing.
   4. An ordinary downstream application uses only the public Fava facade to inspect cache/write-store evidence and passes the same semantic corpus against the independent memory providers without relay, transport, or runtime networking.
 
