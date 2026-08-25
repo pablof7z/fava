@@ -7,13 +7,54 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import json
 from pathlib import Path
 
 
 SCRIPT = Path(__file__).parents[1] / "check_vocabulary.py"
+sys.path.insert(0, str(SCRIPT.parent))
+import check_vocabulary as checker  # noqa: E402
 
 
 class VocabularyCheckTest(unittest.TestCase):
+    def test_complete_public_symbols_use_compiler_snapshot_root_identities(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "docs" / "internals" / "vocabulary-structure.json"
+            path.parent.mkdir(parents=True)
+            paths = [
+                "sample",
+                "sample::Thing",
+                "sample::free_operation",
+                "sample::Thing::method",
+            ]
+            path.write_text(
+                json.dumps(
+                    {
+                        "terms": [
+                            {
+                                "structure": {
+                                    "public_api": [
+                                        {"path": value, "declaration": value}
+                                        for value in paths
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            symbols, problems = checker.complete_public_symbols(
+                root, frozenset({"sample"})
+            )
+
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            symbols, {"sample", "sample::Thing", "sample::free_operation"}
+        )
+
     def test_rejects_an_undocumented_public_symbol(self) -> None:
         result = self.run_check(
             source="pub struct Query;\npub struct ResolvedQuery;\n",

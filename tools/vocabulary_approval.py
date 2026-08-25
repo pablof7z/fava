@@ -545,6 +545,14 @@ def item_kind_for_term(term: dict[str, Any], root: Path = ROOT) -> str:
             # fields. Preserve a non-Rust classification unless the owning
             # crate is explicit.
             kind = None
+        elif symbol == term.get("name"):
+            owner = term.get("owner")
+            if (
+                isinstance(owner, str)
+                and owner.replace("-", "_") == symbol
+                and _crate_root_path(root, symbol) is not None
+            ):
+                kind = "Module"
     if kind is None:
         kind = item_kind_for_name_within_crates(term.get("name", ""), root, term)
     return kind or "non-Rust Concept"

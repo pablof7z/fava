@@ -223,9 +223,14 @@ class Handler(BaseHTTPRequestHandler):
         approvals, approval_problems = approval.load_approvals(
             self.root / approval.APPROVALS_PATH
         )
-        structures, structure_problems = structure.read_snapshot(
-            self.root / approval.STRUCTURE_PATH
+        structure_path = self.root / approval.STRUCTURE_PATH
+        structures, structure_problems = structure.read_snapshot(structure_path)
+        inputs_current = structure.snapshot_inputs_current(self.root, structure_path)
+        drift_problem = (
+            "compiler/doc inputs changed after the review snapshot; regenerate exact packets"
         )
+        if not inputs_current:
+            structure_problems = [drift_problem, *structure_problems]
         problems = [
             *candidate_problems,
             *approval_problems,
@@ -245,7 +250,10 @@ class Handler(BaseHTTPRequestHandler):
             signatures = approvals.get(term["name"], [])
             signed = approval.authoritative_approval(signatures, markdown)
             concealed = approval.structural_problems_for_term(term, hidden)
-            if packet is None:
+            if not inputs_current:
+                status = "stale" if signatures else "blocked"
+                concealed = [drift_problem, *concealed]
+            elif packet is None:
                 status = "invalid"
                 concealed = ["missing compiler-derived structure", *concealed]
             elif packet["review_problems"]:
@@ -289,7 +297,11 @@ class Handler(BaseHTTPRequestHandler):
             blocked = term["disposition"] == "blocked"
             signed = None if blocked else approval.authoritative_approval(signatures, markdown)
             status = (
-                "invalid"
+                "stale"
+                if not inputs_current and signatures
+                else "blocked"
+                if not inputs_current
+                else "invalid"
                 if packet is None or packet["review_problems"]
                 else "blocked"
                 if blocked
@@ -312,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
                     "status": status,
                     "signed_at": signed["created_at"] if signed else None,
                     "signed_content": latest["content"] if latest else None,
-                    "structural_problems": [],
+                    "structural_problems": [drift_problem] if not inputs_current else [],
                     "missing_term": False,
                     "candidate": True,
                     "disposition": term["disposition"],
@@ -323,6 +335,7 @@ class Handler(BaseHTTPRequestHandler):
             "owner": approval.OWNER,
             "terms": payload,
             "problems": problems,
+            "snapshot_inputs_current": inputs_current,
             "hidden_occurrences": sum(len(items) for items in hidden.values()),
             "hidden_names": len(hidden),
         }

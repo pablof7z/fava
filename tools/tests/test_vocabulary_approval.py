@@ -383,6 +383,19 @@ class LiveTermClassificationAuditTest(unittest.TestCase):
         self.assertEqual(approval.symbol_for_term(term), "fava_simple_groups::SimpleGroup")
         self.assertEqual(approval.item_kind_for_term(term, Path(__file__).parents[2]), "Struct")
 
+    def test_simple_groups_crate_root_is_a_module(self) -> None:
+        term = self._term("fava_simple_groups")
+        self.assertEqual(approval.symbol_for_term(term), "fava_simple_groups")
+        self.assertEqual(
+            approval.item_kind_for_term(term, Path(__file__).parents[2]), "Module"
+        )
+
+    def test_saved_group_lists_is_a_function(self) -> None:
+        term = self._term("saved_group_lists")
+        self.assertEqual(
+            approval.item_kind_for_term(term, Path(__file__).parents[2]), "Function"
+        )
+
     def test_querysource_uses_trait_symbol(self) -> None:
         term = self._term("QuerySource")
         self.assertEqual(approval.symbol_for_term(term), "fava_query::QuerySource")
@@ -912,7 +925,7 @@ def read_snapshot(path):
         for entry in raw["terms"]
     }, []
 def snapshot_inputs_current(root, path):
-    return path.is_file()
+    return path.is_file() and not (root / ".snapshot-inputs-stale").exists()
 def compile_snapshot(root):
     return json.loads((root / "docs/internals/vocabulary-structure.json").read_text(encoding="utf-8"))
 def render_snapshot(value):
@@ -1126,6 +1139,33 @@ class ServerTest(unittest.TestCase):
         )
         self.assertEqual(term["rust_item"], "SavedGroupListMaterializer")
         self.assertEqual(term["rust_item_kind"], "Struct")
+
+    def test_get_blocks_unsigned_and_stales_signed_terms_on_input_drift(self) -> None:
+        approval_event = dict(
+            THROWAWAY_EVENT,
+            id="1" * 64,
+            content=_markdown(EVENT_TERM),
+            tags=[["name", "Event"]],
+        )
+        approvals_path = self._root / "docs" / "internals" / "approvals.jsonl"
+        approvals_path.write_text(json.dumps(approval_event) + "\n", encoding="utf-8")
+        (self._root / ".snapshot-inputs-stale").write_text("stale", encoding="utf-8")
+
+        with self._get("/api/terms") as resp:
+            payload = json.loads(resp.read())
+
+        self.assertFalse(payload["snapshot_inputs_current"])
+        event = next(term for term in payload["terms"] if term["name"] == "Event")
+        unsigned = next(
+            term
+            for term in payload["terms"]
+            if term["name"] == "SimpleGroupStateEventKind"
+        )
+        self.assertEqual(event["status"], "stale")
+        self.assertEqual(unsigned["status"], "blocked")
+        self.assertTrue(
+            any("compiler/doc inputs" in problem for problem in event["structural_problems"])
+        )
 
     def test_wrong_path_returns_404(self) -> None:
         import urllib.error

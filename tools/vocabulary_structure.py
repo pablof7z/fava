@@ -206,6 +206,8 @@ def reexports(rustdoc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _root_matches(path: str, root: str) -> bool:
+    if "::" not in root:
+        return path == root
     return (
         path == root
         or path.startswith(root + "::")
@@ -349,9 +351,7 @@ def input_fingerprint(root: Path) -> str:
 
 
 def _terms(root: Path) -> list[dict[str, Any]]:
-    registry = tomllib.loads(
-        (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
-    )["term"]
+    registry = _registry(root)["term"]
     research, _ = approval.load_candidate_research(root / approval.CANDIDATES_PATH)
     candidates, _ = approval.candidate_terms(registry, research, root)
     by_name = {term["name"]: term for term in registry}
@@ -359,8 +359,43 @@ def _terms(root: Path) -> list[dict[str, Any]]:
     return [by_name[name] for name in sorted(by_name)]
 
 
+def _registry(root: Path) -> dict[str, Any]:
+    return tomllib.loads(
+        (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
+    )
+
+
+def public_api_binding_coverage(
+    records: list[dict[str, str]], packets: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """One-to-one ownership report for a compiler-rendered crate public API."""
+    compiler_items = {canonical_structure(record): record for record in records}
+    bindings: dict[str, list[str]] = {identity: [] for identity in compiler_items}
+    for name, packet in packets.items():
+        structure = packet.get("structure", packet)
+        for record in structure.get("public_api", []):
+            identity = canonical_structure(record)
+            if identity in bindings:
+                bindings[identity].append(name)
+    unbound = [compiler_items[key] for key, owners in bindings.items() if not owners]
+    multiply_bound = [
+        {"item": compiler_items[key], "owners": owners}
+        for key, owners in bindings.items()
+        if len(owners) > 1
+    ]
+    return {
+        "bound_items": sum(len(owners) == 1 for owners in bindings.values()),
+        "multiply_bound": sorted(
+            multiply_bound, key=lambda value: canonical_structure(value["item"])
+        ),
+        "public_items": len(compiler_items),
+        "unbound": sorted(unbound, key=canonical_structure),
+    }
+
+
 def compile_snapshot(root: Path) -> dict[str, Any]:
     public_api.verify_extractor(root)
+    registry = _registry(root)
     terms = _terms(root)
     structures = {name["name"]: {key: [] for key in EMPTY_STRUCTURE} for name in terms}
     packages = [
@@ -370,6 +405,9 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
     ]
     catalog = public_api_catalog(root, packages)
     documentation: dict[str, str] = {}
+    required_coverage = set(registry.get("complete_public_api_crates", []))
+    semantic_crates = {name.replace("-", "_") for name in required_coverage}
+    covered_packages: set[str] = set()
     for package in sorted(packages, key=lambda value: value.name):
         output, public_json, private_json = _compiled_package(root, package)
         records = public_records(output, package.crate_name)
@@ -387,6 +425,37 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
             structures[term["name"]]["private_architectural_state"].extend(
                 private_state_records(root, package, private_json, term)
             )
+        if package.name in required_coverage:
+            covered_packages.add(package.name)
+            coverage = public_api_binding_coverage(
+                records,
+                {
+                    name: {"structure": value}
+                    for name, value in structures.items()
+                },
+            )
+            if coverage["unbound"] or coverage["multiply_bound"]:
+                unbound = ", ".join(item["path"] for item in coverage["unbound"])
+                repeated = ", ".join(
+                    f"{item['item']['path']} ({', '.join(item['owners'])})"
+                    for item in coverage["multiply_bound"]
+                )
+                details = "; ".join(
+                    value
+                    for value in (
+                        f"unbound: {unbound}" if unbound else "",
+                        f"multiply bound: {repeated}" if repeated else "",
+                    )
+                    if value
+                )
+                raise StructureError(
+                    f"{package.name}: public API vocabulary coverage failed: {details}"
+                )
+    missing_coverage = sorted(required_coverage - covered_packages)
+    if missing_coverage:
+        raise StructureError(
+            "public API coverage names unknown packages: " + ", ".join(missing_coverage)
+        )
     entries = []
     terms_by_name = {term["name"]: term for term in terms}
     for name, structure in structures.items():
@@ -396,7 +465,11 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
                 key=canonical_structure,
             )
         interface, review_problems = human_review_inventory(
-            terms_by_name[name], structure, catalog, documentation
+            terms_by_name[name],
+            structure,
+            catalog,
+            documentation,
+            semantic_crates=semantic_crates,
         )
         packet = {
             "interface": interface,

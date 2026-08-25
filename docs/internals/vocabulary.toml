@@ -1,4 +1,5 @@
 version = 1
+complete_public_api_crates = ["fava-simple-groups"]
 
 # Established Nostr vocabulary. These meanings come from the cited protocol,
 # not from Fava.
@@ -221,7 +222,7 @@ name = "SimpleGroupStateEventKind"
 source = "nostr"
 protocol = "NIP-29"
 nearest_nostr = "Relay-generated group state kinds 39000 through 39005"
-meaning = "A closed selector for one relay-generated simple-group state-event kind."
+meaning = "The closed selector mapping Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005."
 owner = "fava-simple-groups"
 distinction = "It names the exact six-family domain without owning an observation or arbitrary kind policy."
 counterexample = "An arbitrary event Kind or content kind selected through h is not a SimpleGroupStateEventKind."
@@ -391,6 +392,118 @@ lifecycle = "Returned for the whole event or retained inside one SavedGroupList 
 forcing_requirement = "Malformed saved-list entries must remain attributable without erasing valid sibling entries."
 falsifier = "Saved-list tests fail if wrong kinds pass, indexes disappear, invalid relay URLs succeed, or one malformed entry aborts the event."
 symbols = ["fava_simple_groups::SavedGroupListDecodeError"]
+crates = []
+
+[[term]]
+name = "fava_simple_groups"
+source = "fava"
+nearest_nostr = "NIP-29 relay-based groups and NIP-51 kind-10009 Simple Group Lists"
+meaning = "The pure public crate boundary for simple-group queries, event preparation, state decoding, saved-list queries, and saved-list edits."
+owner = "fava-simple-groups"
+distinction = "It composes protocol semantics over neutral query and write contracts without owning observation, provenance, routing, signing, storage, publication, or lifecycle work."
+counterexample = "A provider, group-state projection, relay authority, or runtime facade is not the fava_simple_groups crate boundary."
+lifecycle = "Compiled as one stateless library boundary; every public operation is synchronous and returns neutral Fava values or typed refusals."
+forcing_requirement = "Applications need one coherent public home for NIP-29 and kind-10009 semantics without making a NIP document or provider lifecycle the crate boundary."
+falsifier = "The complete-public-API vocabulary test fails if any compiler-rendered fava_simple_groups identity has no exact owning term."
+symbols = ["fava_simple_groups"]
+crates = []
+
+[[term]]
+name = "save_simple_group"
+source = "fava"
+nearest_nostr = "Kind-10009 group tag"
+meaning = "A pure edit constructor ensuring one saved `group` tag for every normalized relay of a SimpleGroup."
+owner = "fava-simple-groups"
+distinction = "It keeps the first exact id/relay match, removes later matches, appends missing relays in group order, and carries an optional display name without selecting publication routes."
+counterexample = "Publishing, signing, routing, or mutating a stored event directly is not save_simple_group."
+lifecycle = "Encodes one bounded ReplaceableEventEdit synchronously and retains no state."
+forcing_requirement = "Applications must save every selected group relay through the neutral rematerialization contract while preserving unrelated source material."
+falsifier = "Saved-list edit tests fail if a selected relay is omitted, duplicates survive, existing order changes, or the display name is applied outside matching group entries."
+symbols = ["fava_simple_groups::save_simple_group"]
+crates = []
+
+[[term]]
+name = "remove_saved_simple_group"
+source = "fava"
+nearest_nostr = "Kind-10009 group tag"
+meaning = "A pure edit constructor removing every saved `group` tag matching the SimpleGroup id and any of its normalized relays."
+owner = "fava-simple-groups"
+distinction = "It removes saved-list entries only; the group, relay data, routing, and published group events remain untouched."
+counterexample = "Deleting a group, removing content events, or removing an inert saved `r` relay tag is not remove_saved_simple_group."
+lifecycle = "Encodes one bounded ReplaceableEventEdit synchronously and retains no state."
+forcing_requirement = "Applications need exact id/relay removal across all selected relays without rebuilding or normalizing unrelated kind-10009 tags."
+falsifier = "Saved-list edit tests fail if a matching group tag survives or an unrelated, malformed, trailing, or foreign tag changes."
+symbols = ["fava_simple_groups::remove_saved_simple_group"]
+crates = []
+
+[[term]]
+name = "rename_saved_simple_group"
+source = "fava"
+nearest_nostr = "Kind-10009 group tag display name"
+meaning = "A pure edit constructor setting one display name for every selected SimpleGroup id/relay entry."
+owner = "fava-simple-groups"
+distinction = "It retains the first matching position, removes later matches, appends absent selected relays, and preserves unused trailing values on retained tags."
+counterexample = "Changing the opaque group id, relay selection, group metadata name, or unrelated saved entries is not rename_saved_simple_group."
+lifecycle = "Encodes one bounded ReplaceableEventEdit synchronously and retains no state."
+forcing_requirement = "Applications need consistent display-name edits across a multi-relay saved group without conflating display data with group identity."
+falsifier = "Saved-list edit tests fail if any selected id/relay entry has the old name, absent relays are not appended, duplicates survive, or trailing values disappear."
+symbols = ["fava_simple_groups::rename_saved_simple_group"]
+crates = []
+
+[[term]]
+name = "save_relay"
+source = "fava"
+nearest_nostr = "Kind-10009 r tag"
+meaning = "A pure edit constructor ensuring one inert saved `r` tag for an exact RelayUrl."
+owner = "fava-simple-groups"
+distinction = "It keeps the first exact relay match, removes later matches, and appends an absent relay without granting routing or acquisition authority."
+counterexample = "Adding a relay to SimpleGroup, Query acquisition, or an explicit publication route is not save_relay."
+lifecycle = "Encodes one bounded ReplaceableEventEdit synchronously and retains no state."
+forcing_requirement = "Applications need saved relay preferences to remain inert kind-10009 data while duplicates normalize predictably."
+falsifier = "Saved-list edit tests fail if duplicate exact r tags survive, an absent relay is not appended, or unrelated tags or content change."
+symbols = ["fava_simple_groups::save_relay"]
+crates = []
+
+[[term]]
+name = "remove_saved_relay"
+source = "fava"
+nearest_nostr = "Kind-10009 r tag"
+meaning = "A pure edit constructor removing every inert saved `r` tag for an exact RelayUrl."
+owner = "fava-simple-groups"
+distinction = "It removes only exact saved relay entries and does not change SimpleGroup relay selection, query acquisition, or publication routing."
+counterexample = "Removing a group entry or disconnecting a live relay session is not remove_saved_relay."
+lifecycle = "Encodes one bounded ReplaceableEventEdit synchronously and retains no state."
+forcing_requirement = "Applications need exact relay-preference removal without parsing or rewriting unrelated kind-10009 material."
+falsifier = "Saved-list edit tests fail if an exact r tag survives or any nonmatching, malformed, trailing, foreign, or content value changes."
+symbols = ["fava_simple_groups::remove_saved_relay"]
+crates = []
+
+[[term]]
+name = "saved_group_list_materializer"
+source = "fava"
+nearest_nostr = "Kind-10009 Simple Group List replacement"
+meaning = "A constructor returning a fresh stateless kind-10009 edit materializer behind ReplaceableEventMaterializer."
+owner = "fava-simple-groups"
+distinction = "It exposes only the neutral contract, accepts this crate's qualified private edit bytes, preserves opaque content and unrelated tags, and reports WriteIntentError."
+counterexample = "A public materializer type, signer, author selector, router, store, publisher, or retained service is not saved_group_list_materializer."
+lifecycle = "Allocates one fresh Arc-backed stateless implementation; Fava invokes it synchronously for rematerialization and may then drop it."
+forcing_requirement = "Neutral replaceable edits require a concrete codec owner without exposing private edit representation or a parallel provider contract."
+falsifier = "Materializer tests fail if the returned contract has another kind, accepts an unrelated edit, loses source content/tags, or retains mutable state across calls."
+symbols = ["fava_simple_groups::saved_group_list_materializer"]
+crates = []
+
+[[term]]
+name = "saved_group_lists"
+source = "fava"
+nearest_nostr = "Kind-10009 Simple Group List event"
+meaning = "A query constructor selecting kind 10009 for the exact supplied author set, with empty input matching nothing."
+owner = "fava-simple-groups"
+distinction = "It returns an ordinary Query, delegates author bounds and refusal to fava-query, and owns no observation or replacement selection."
+counterexample = "A decoded SavedGroupList, relay-specific query, observation handle, or unconstrained kind-10009 filter is not saved_group_lists."
+lifecycle = "Consumes the finite author iterator synchronously into one Query or returns the exact QueryError; it retains no work."
+forcing_requirement = "Applications need one query for both saved-group and saved-relay entries without synonym functions or a match-all empty-author accident."
+falsifier = "Query tests fail if kind 10009 is absent, authors change, empty input broadens the query, or QueryError is translated."
+symbols = ["fava_simple_groups::saved_group_lists"]
 crates = []
 
 [[term]]

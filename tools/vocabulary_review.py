@@ -13,6 +13,14 @@ import crate_readme_api as public_api
 MISSING_DESCRIPTION = (
     "Review blocked: no human description is bound for this compiler-visible item."
 )
+TAUTOLOGICAL_DESCRIPTIONS = (
+    re.compile(r"^Compiler-visible (?:.+ owned by|(?:struct|enum|trait|union|module)?) ?.+\.$"),
+    re.compile(r"^Provides the compiler-visible .+ shown below\.$"),
+    re.compile(r"^Exposes the .+ value with the exact type shown below\.$"),
+    re.compile(r"^Represents the .+ case of the containing enum\.$"),
+    re.compile(r"^Names the exact type shown below\.$"),
+    re.compile(r"^Bound implementation state for this term\.$"),
+)
 
 
 class ReviewError(RuntimeError):
@@ -222,11 +230,18 @@ def _generated_description(kind: str, path: str) -> str:
     return f"Provides the compiler-visible `{leaf}` {kind.lower()} shown below."
 
 
+def tautological_description(description: str) -> bool:
+    """Whether prose merely restates compiler visibility, kind, or name."""
+    normalized = _single_line(description)
+    return any(pattern.fullmatch(normalized) for pattern in TAUTOLOGICAL_DESCRIPTIONS)
+
+
 def human_review_inventory(
     term: dict[str, Any],
     structure: dict[str, Any],
     catalog: dict[str, dict[str, str]],
     documentation: dict[str, str] | None = None,
+    semantic_crates: set[str] | None = None,
 ) -> tuple[list[dict[str, str]], list[str]]:
     """Readable one-to-one projection of every bound structural identity."""
     interface: list[dict[str, str]] = []
@@ -286,4 +301,14 @@ def human_review_inventory(
             "path": path,
             "signature": f"pub use {source} as {path}",
         })
+    for item in interface:
+        crate = item["path"].lstrip("<").split("::", maxsplit=1)[0]
+        if (
+            item["description"] != MISSING_DESCRIPTION
+            and tautological_description(item["description"])
+            and (semantic_crates is None or crate in semantic_crates)
+        ):
+            problems.append(
+                f"{item['path']}: tautological human interface description"
+            )
     return interface, problems

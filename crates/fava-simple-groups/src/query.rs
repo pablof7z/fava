@@ -1,6 +1,7 @@
 use fava_query::{Kind, PublicKey, Query, QueryError};
 
-/// One NIP-29 relay-generated simple-group state-event kind.
+/// Exact NIP-29 state mapping: Metadata→39000, Admins→39001, Members→39002,
+/// Roles→39003, LivekitParticipants→39004, and Pins→39005.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SimpleGroupStateEventKind {
     /// Kind 39000 metadata.
@@ -30,6 +31,9 @@ impl SimpleGroupStateEventKind {
 }
 
 impl From<SimpleGroupStateEventKind> for Kind {
+    /// Convert each closed selector to its exact NIP-29 numeric kind:
+    /// Metadata→39000, Admins→39001, Members→39002, Roles→39003,
+    /// LivekitParticipants→39004, and Pins→39005.
     fn from(value: SimpleGroupStateEventKind) -> Self {
         let kind = match value {
             SimpleGroupStateEventKind::Metadata => 39_000,

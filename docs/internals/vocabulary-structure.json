@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "84e1d93292b61ec7ddecaca6c873a31c958182f6b724438b00763961a638afd8",
+  "inputs_sha256": "effc5a057577cc5cad354a8536d6dbe35e65ffb7d8c16f2d3e635ca6be9f8d6a",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -20927,7 +20927,7 @@
     {
       "interface": [
         {
-          "description": "A closed selector for one relay-generated simple-group state-event kind. Lifecycle: An inert copyable query input consumed synchronously by state_events.",
+          "description": "The closed selector mapping Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005. Lifecycle: An inert copyable query input consumed synchronously by state_events.",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::query::SimpleGroupStateEventKind",
           "signature": "pub enum SimpleGroupStateEventKind {\n    /// Kind 39000 metadata.\n    Metadata,\n    /// Kind 39001 administrators.\n    Admins,\n    /// Kind 39002 members.\n    Members,\n    /// Kind 39003 roles.\n    Roles,\n    /// Kind 39004 `LiveKit` participants.\n    LivekitParticipants,\n    /// Kind 39005 pins.\n    Pins,\n}"
@@ -20939,49 +20939,49 @@
           "signature": "pub const fava_simple_groups::SimpleGroupStateEventKind::ALL: [Self; 6]"
         },
         {
-          "description": "Closed selector for the six relay-generated NIP-29 state-event families, used only to build a query.",
+          "description": "Closed query selector with the exact mapping Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005.",
           "kind": "Enum",
           "path": "fava_simple_groups::SimpleGroupStateEventKind",
           "signature": "pub enum fava_simple_groups::SimpleGroupStateEventKind"
         },
         {
-          "description": "Selects kind 39001 group administrators and their role labels.",
+          "description": "Admins selects kind 39001 group administrators and their role labels.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::Admins",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Admins"
         },
         {
-          "description": "Selects kind 39004 current `LiveKit` participation, not membership.",
+          "description": "LivekitParticipants selects kind 39004 current `LiveKit` participation, not membership.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants"
         },
         {
-          "description": "Selects kind 39002 positive member entries.",
+          "description": "Members selects kind 39002 positive member entries.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::Members",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Members"
         },
         {
-          "description": "Selects kind 39000 group metadata.",
+          "description": "Metadata selects kind 39000 group metadata.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::Metadata",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Metadata"
         },
         {
-          "description": "Selects kind 39005 ordered group pins.",
+          "description": "Pins selects kind 39005 ordered group pins.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::Pins",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Pins"
         },
         {
-          "description": "Selects kind 39003 role definitions.",
+          "description": "Roles selects kind 39003 role definitions.",
           "kind": "Enum variant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::Roles",
           "signature": "pub fava_simple_groups::SimpleGroupStateEventKind::Roles"
         },
         {
-          "description": "One NIP-29 relay-generated simple-group state-event kind.",
+          "description": "Exact NIP-29 state mapping: Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005.",
           "kind": "Function",
           "path": "fava_simple_groups::SimpleGroupStateEventKind",
           "signature": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self"
@@ -28596,6 +28596,259 @@
           }
         ],
         "reexports": []
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Pure simple-group domain composition for NIP-29 and the kind-10009 Simple Group List; owns no engine, verifier, bound policy, router, store, publication, projection, or lifecycle.",
+          "kind": "Module",
+          "path": "fava_simple_groups",
+          "signature": "pub mod fava_simple_groups"
+        }
+      ],
+      "name": "fava_simple_groups",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub mod fava_simple_groups",
+            "path": "fava_simple_groups"
+          }
+        ],
+        "reexports": []
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Produces a kind-10009 edit removing every semantic `r` tag for the exact relay. The URL does not acquire routing or publication meaning.",
+          "kind": "Function",
+          "path": "fava_simple_groups::remove_saved_relay",
+          "signature": "pub fn fava_simple_groups::remove_saved_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::remove_saved_relay` from `edit::remove_saved_relay`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::remove_saved_relay",
+          "signature": "pub use edit::remove_saved_relay as fava_simple_groups::remove_saved_relay"
+        }
+      ],
+      "name": "remove_saved_relay",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::remove_saved_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::remove_saved_relay"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::remove_saved_relay",
+            "source": "edit::remove_saved_relay"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Produces a kind-10009 edit removing every semantic `group` tag whose id and parsed relay match a selected relay. The name states removal from saved state, not deletion of the group.",
+          "kind": "Function",
+          "path": "fava_simple_groups::remove_saved_simple_group",
+          "signature": "pub fn fava_simple_groups::remove_saved_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::remove_saved_simple_group` from `edit::remove_saved_simple_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::remove_saved_simple_group",
+          "signature": "pub use edit::remove_saved_simple_group as fava_simple_groups::remove_saved_simple_group"
+        }
+      ],
+      "name": "remove_saved_simple_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::remove_saved_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::remove_saved_simple_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::remove_saved_simple_group",
+            "source": "edit::remove_saved_simple_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Produces a kind-10009 edit setting the display name for every selected id/relay entry, retaining first positions, removing later matches, and appending absent selected relays. Preserves unused trailing values on retained tags.",
+          "kind": "Function",
+          "path": "fava_simple_groups::rename_saved_simple_group",
+          "signature": "pub fn fava_simple_groups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::rename_saved_simple_group` from `edit::rename_saved_simple_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::rename_saved_simple_group",
+          "signature": "pub use edit::rename_saved_simple_group as fava_simple_groups::rename_saved_simple_group"
+        }
+      ],
+      "name": "rename_saved_simple_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::rename_saved_simple_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::rename_saved_simple_group",
+            "source": "edit::rename_saved_simple_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Produces a kind-10009 edit ensuring one semantic `r` tag for the exact inert relay URL, keeping the first match, removing later matches, and appending when absent.",
+          "kind": "Function",
+          "path": "fava_simple_groups::save_relay",
+          "signature": "pub fn fava_simple_groups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::save_relay` from `edit::save_relay`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::save_relay",
+          "signature": "pub use edit::save_relay as fava_simple_groups::save_relay"
+        }
+      ],
+      "name": "save_relay",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::save_relay"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::save_relay",
+            "source": "edit::save_relay"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Produces a kind-10009 edit ensuring one semantic `group` tag for every normalized relay. Keeps the first existing match unchanged, removes later matches, and appends missing relays in group order.",
+          "kind": "Function",
+          "path": "fava_simple_groups::save_simple_group",
+          "signature": "pub fn fava_simple_groups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::save_simple_group` from `edit::save_simple_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::save_simple_group",
+          "signature": "pub use edit::save_simple_group as fava_simple_groups::save_simple_group"
+        }
+      ],
+      "name": "save_simple_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::save_simple_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::save_simple_group",
+            "source": "edit::save_simple_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Returns a fresh kind-10009 materializer behind the existing neutral contract. Its type and edit codec stay private; it trusts the contract’s qualified source, preserves opaque content and unrelated tags, and reports only `WriteIntentError`.",
+          "kind": "Function",
+          "path": "fava_simple_groups::saved_group_list_materializer",
+          "signature": "pub fn fava_simple_groups::saved_group_list_materializer() -> alloc::sync::Arc<dyn fava_write::materialization::ReplaceableEventMaterializer>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::saved_group_list_materializer` from `edit::saved_group_list_materializer`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::saved_group_list_materializer",
+          "signature": "pub use edit::saved_group_list_materializer as fava_simple_groups::saved_group_list_materializer"
+        }
+      ],
+      "name": "saved_group_list_materializer",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::saved_group_list_materializer() -> alloc::sync::Arc<dyn fava_write::materialization::ReplaceableEventMaterializer>",
+            "path": "fava_simple_groups::saved_group_list_materializer"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::saved_group_list_materializer",
+            "source": "edit::saved_group_list_materializer"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds the ordinary kind-10009 query for the exact supplied author set. Empty input intentionally matches nothing; callers own observation. Replaces the current identical saved-group and saved-relay queries.",
+          "kind": "Function",
+          "path": "fava_simple_groups::saved_group_lists",
+          "signature": "pub fn fava_simple_groups::saved_group_lists(impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> core::result::Result<fava_query::Query, fava_query::QueryError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::saved_group_lists` from `query::saved_group_lists`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::saved_group_lists",
+          "signature": "pub use query::saved_group_lists as fava_simple_groups::saved_group_lists"
+        }
+      ],
+      "name": "saved_group_lists",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::saved_group_lists(impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> core::result::Result<fava_query::Query, fava_query::QueryError>",
+            "path": "fava_simple_groups::saved_group_lists"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::saved_group_lists",
+            "source": "query::saved_group_lists"
+          }
+        ]
       }
     }
   ]

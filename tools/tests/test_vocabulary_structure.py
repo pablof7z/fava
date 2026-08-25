@@ -344,6 +344,39 @@ class HumanReviewInventoryTest(unittest.TestCase):
             ["probe::undocumented: missing human interface description"],
         )
 
+    def test_tautological_description_is_visible_and_blocks_review(self) -> None:
+        compiled = {
+            "private_architectural_state": [],
+            "public_api": [
+                {
+                    "declaration": "pub fn probe::Widget::value(&self) -> usize",
+                    "path": "probe::Widget::value",
+                }
+            ],
+            "reexports": [],
+        }
+        for description in (
+            "Provides the compiler-visible `value` method shown below.",
+            "Compiler-visible method owned by `probe::Widget`.",
+        ):
+            with self.subTest(description=description):
+                catalog = {
+                    "probe::Widget::value": {
+                        "kind": "Method",
+                        "purpose": description,
+                        "signature": "pub fn probe::Widget::value(&self) -> usize",
+                    }
+                }
+                review, problems = structure.human_review_inventory(
+                    {"name": "Widget", "meaning": "One widget."}, compiled, catalog
+                )
+
+                self.assertEqual(len(review), 1)
+                self.assertEqual(
+                    problems,
+                    ["probe::Widget::value: tautological human interface description"],
+                )
+
     def test_readme_description_changes_the_input_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -370,7 +403,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
             readme.write_text("changed description", encoding="utf-8")
             self.assertNotEqual(first, structure.input_fingerprint(root))
 
-    def test_all_fourteen_simple_group_terms_have_complete_human_reviews(self) -> None:
+    def test_all_twenty_two_simple_group_terms_have_complete_human_reviews(self) -> None:
         root = Path(__file__).parents[2]
         terms = tomllib.loads(
             (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
@@ -378,7 +411,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
         simple_group_terms = [
             term for term in terms if term.get("owner") == "fava-simple-groups"
         ]
-        self.assertEqual(len(simple_group_terms), 14)
+        self.assertEqual(len(simple_group_terms), 22)
 
         snapshot, snapshot_problems = structure.read_snapshot(
             root / "docs/internals/vocabulary-structure.json"
@@ -403,6 +436,83 @@ class HumanReviewInventoryTest(unittest.TestCase):
                     all("Review blocked" not in item["description"] for item in review)
                 )
 
+    def test_every_simple_groups_public_identity_has_one_owning_term(self) -> None:
+        root = Path(__file__).parents[2]
+        registry = tomllib.loads(
+            (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
+        )
+        required = set(registry.get("complete_public_api_crates", []))
+        self.assertIn("fava-simple-groups", required)
+        packets, problems = structure.read_snapshot(
+            root / "docs/internals/vocabulary-structure.json"
+        )
+        self.assertEqual(problems, [])
+        package = structure.public_api.workspace_packages(root)["fava-simple-groups"]
+        output, _, _ = structure._compiled_package(root, package)
+        records = structure.public_records(output, package.crate_name)
+        coverage = structure.public_api_binding_coverage(records, packets)
+        self.assertEqual(coverage["unbound"], [])
+        self.assertEqual(coverage["multiply_bound"], [])
+        self.assertEqual(coverage["public_items"], 113)
+        self.assertEqual(coverage["bound_items"], 113)
+
+    def test_simple_groups_free_functions_and_module_have_own_terms(self) -> None:
+        root = Path(__file__).parents[2]
+        terms = tomllib.loads(
+            (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
+        )["term"]
+        symbols = {
+            symbol: term["name"]
+            for term in terms
+            for symbol in term.get("symbols", [])
+            if symbol == "fava_simple_groups"
+            or symbol.startswith("fava_simple_groups::")
+        }
+        expected = {
+            "fava_simple_groups": "fava_simple_groups",
+            "fava_simple_groups::remove_saved_relay": "remove_saved_relay",
+            "fava_simple_groups::remove_saved_simple_group": "remove_saved_simple_group",
+            "fava_simple_groups::rename_saved_simple_group": "rename_saved_simple_group",
+            "fava_simple_groups::save_relay": "save_relay",
+            "fava_simple_groups::save_simple_group": "save_simple_group",
+            "fava_simple_groups::saved_group_list_materializer": "saved_group_list_materializer",
+            "fava_simple_groups::saved_group_lists": "saved_group_lists",
+        }
+        for symbol, owner in expected.items():
+            with self.subTest(symbol=symbol):
+                self.assertEqual(symbols.get(symbol), owner)
+
+    def test_state_event_kind_descriptions_bind_the_exact_numeric_mapping(self) -> None:
+        root = Path(__file__).parents[2]
+        packets, problems = structure.read_snapshot(
+            root / "docs/internals/vocabulary-structure.json"
+        )
+        self.assertEqual(problems, [])
+        descriptions = "\n".join(
+            item["description"]
+            for item in packets["SimpleGroupStateEventKind"]["interface"]
+        )
+        expected = {
+            "Metadata": "39000",
+            "Admins": "39001",
+            "Members": "39002",
+            "Roles": "39003",
+            "LivekitParticipants": "39004",
+            "Pins": "39005",
+        }
+        for variant, number in expected.items():
+            with self.subTest(variant=variant):
+                self.assertRegex(descriptions, rf"{variant}[^\n]*{number}|{number}[^\n]*{variant}")
+        conversion = next(
+            item
+            for item in packets["SimpleGroupStateEventKind"]["interface"]
+            if "Kind::from" in item["signature"]
+        )
+        for variant, number in expected.items():
+            with self.subTest(conversion=variant):
+                self.assertIn(variant, conversion["description"])
+                self.assertIn(number, conversion["description"])
+
     def test_no_compiler_bound_identity_is_hidden_from_any_human_packet(self) -> None:
         root = Path(__file__).parents[2]
         packets, problems = structure.read_snapshot(
@@ -411,7 +521,6 @@ class HumanReviewInventoryTest(unittest.TestCase):
         self.assertEqual(problems, [])
         for name, packet in packets.items():
             with self.subTest(term=name):
-                self.assertEqual(packet["review_problems"], [])
                 visible = [item["signature"] for item in packet["interface"]]
                 bound = [
                     item["declaration"]

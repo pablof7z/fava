@@ -61,6 +61,13 @@ all participate in the input fingerprint. CI rejects any committed snapshot
 that differs from fresh output. Approval startup performs the same check, and
 the POST boundary refuses input-file drift after startup.
 
+Crates listed by `complete_public_api_crates` additionally require one and only
+one vocabulary owner for every compiler-rendered public identity. The first
+closed crate is `fava-simple-groups`: its crate-root module, nominal types,
+fields, variants, methods, conversion, and all seven free query/edit/materializer
+functions are bound. Its semantic-description gate rejects generated
+"compiler-visible" restatements and other signature-only tautologies.
+
 The approval page renders the name, purpose, interface, and edge semantics
 first. Governance and exact machine content are collapsed secondary detail;
 the complete exact signed Markdown remains separately inspectable. No bulk
@@ -68,6 +75,12 @@ signing path exists. Signing is additionally locked at the server boundary with
 HTTP 423, the UI does not connect a signer, and the pause has no runtime or CLI
 override. A later independent acceptance must deliberately change code before
 any event can be submitted.
+
+GET review state recomputes the current compiler/documentation input fingerprint
+on every request. If it differs from the snapshot, signed terms become `stale`,
+unsigned terms become `blocked`, every row names the drift, and the top-level
+payload reports `snapshot_inputs_current: false` even though signing is already
+hard-paused.
 
 `docs/internals/approvals.jsonl` remains append-only. Introducing structural
 content intentionally makes existing text-only events stale without rewriting
@@ -89,9 +102,12 @@ or deleting them. A new signature appends beside all earlier events.
 - Every approval POST is refused while independent acceptance is pending.
 - Replaying one event is idempotent; signing changed structure appends without
   mutating historical lines.
-- The 14 `fava-simple-groups` vocabulary identities are enumerated from the
-  registry, have zero review gaps, and expose every bound compiler declaration
-  exactly once with a non-placeholder description and exact signature.
+- The 22 `fava-simple-groups` vocabulary identities are enumerated from the
+  registry, bind all 113 compiler-rendered public items exactly once, expose
+  147 readable interface items, and have zero review gaps.
+- `SimpleGroupStateEventKind` binds Metadata→39000, Admins→39001,
+  Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005 in the
+  term purpose, enum description, individual variants, and conversion item.
 
 ## Validation
 

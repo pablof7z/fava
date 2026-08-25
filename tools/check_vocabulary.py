@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tomllib
@@ -40,6 +41,7 @@ class Registry:
     crates: frozenset[str]
     spec_symbols: frozenset[str]
     spec_crates: frozenset[str]
+    complete_public_api_crates: frozenset[str]
 
 
 def words(name: str) -> tuple[str, ...]:
@@ -67,6 +69,16 @@ def load_registry(path: Path) -> tuple[Registry | None, list[str]]:
     spec_symbols: set[str] = set()
     spec_crates: set[str] = set()
     terms: list[dict[str, object]] = []
+    raw_complete_crates = data.get("complete_public_api_crates", [])
+    complete_public_api_crates: set[str] = set()
+    if not isinstance(raw_complete_crates, list):
+        problems.append("complete_public_api_crates must be a list")
+    else:
+        for value in raw_complete_crates:
+            if not isinstance(value, str) or not value.strip():
+                problems.append("complete_public_api_crates contains an invalid value")
+            else:
+                complete_public_api_crates.add(value)
     for index, raw_term in enumerate(raw_terms, start=1):
         if not isinstance(raw_term, dict):
             problems.append(f"term {index} must be a table")
@@ -149,6 +161,7 @@ def load_registry(path: Path) -> tuple[Registry | None, list[str]]:
         frozenset(crates),
         frozenset(spec_symbols),
         frozenset(spec_crates),
+        frozenset(complete_public_api_crates),
     ), problems
 
 
@@ -227,6 +240,36 @@ def collect_rust_vocabulary(
                         public_symbols.add(f"{rust_crate}::{name}")
                         nominal_symbols.add(f"{rust_crate}::{name}")
     return public_symbols, nominal_symbols, crates, problems
+
+
+def complete_public_symbols(
+    root: Path, packages: frozenset[str]
+) -> tuple[set[str], list[str]]:
+    """Exact crate-root identities from the committed compiler snapshot."""
+    if not packages:
+        return set(), []
+    path = root / "docs/internals/vocabulary-structure.json"
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return set(), [f"cannot read complete public API snapshot: {error}"]
+    crate_names = {package.replace("-", "_") for package in packages}
+    found: set[str] = set()
+    for entry in snapshot.get("terms", []):
+        structure = entry.get("structure", {})
+        for item in structure.get("public_api", []):
+            symbol = item.get("path")
+            if not isinstance(symbol, str):
+                continue
+            crate = symbol.split("::", maxsplit=1)[0]
+            if crate in crate_names and (symbol == crate or symbol.count("::") == 1):
+                found.add(symbol)
+    missing = sorted(crate_names - {symbol.split("::", maxsplit=1)[0] for symbol in found})
+    problems = [
+        f"complete public API snapshot has no identities for crate: {crate}"
+        for crate in missing
+    ]
+    return found, problems
 
 
 def is_structural_crate_metadata(line: str, candidate: re.Match[str]) -> bool:
@@ -371,6 +414,11 @@ def check(root: Path) -> list[str]:
         collect_rust_vocabulary(root)
     )
     problems.extend(source_problems)
+    complete_symbols, complete_problems = complete_public_symbols(
+        root, registry.complete_public_api_crates
+    )
+    public_symbols.update(complete_symbols)
+    problems.extend(complete_problems)
     spec_symbols, spec_crates, spec_problems = collect_spec_vocabulary(root)
     problems.extend(spec_problems)
     for symbol in sorted(public_symbols - registry.symbols):
