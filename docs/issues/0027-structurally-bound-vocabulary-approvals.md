@@ -1,6 +1,6 @@
 # 0027 — Vocabulary approvals are not bound to Rust structure
 
-**Status:** implemented; signing hard-paused pending independent acceptance
+**Status:** implemented; awaiting final independent signing-package review
 **Raised:** 2026-08-25, by Pablo
 
 ## Problem
@@ -71,16 +71,15 @@ functions are bound. Its semantic-description gate rejects generated
 The approval page renders the name, purpose, interface, and edge semantics
 first. Governance and exact machine content are collapsed secondary detail;
 the complete exact signed Markdown remains separately inspectable. No bulk
-signing path exists. Signing is additionally locked at the server boundary with
-HTTP 423, the UI does not connect a signer, and the pause has no runtime or CLI
-override. A later independent acceptance must deliberately change code before
-any event can be submitted.
+signing path exists. The UI signs one displayed term at a time, and the server
+accepts only that term's exact current canonical Markdown after cryptographic,
+identity, structural, drift, and review-gap checks pass.
 
 GET review state recomputes the current compiler/documentation input fingerprint
 on every request. If it differs from the snapshot, signed terms become `stale`,
 unsigned terms become `blocked`, every row names the drift, and the top-level
-payload reports `snapshot_inputs_current: false` even though signing is already
-hard-paused.
+payload reports `snapshot_inputs_current: false`. The POST boundary refuses
+every approval until the exact snapshot is regenerated.
 
 `docs/internals/approvals.jsonl` remains append-only. Introducing structural
 content intentionally makes existing text-only events stale without rewriting
@@ -99,7 +98,8 @@ or deleting them. A new signature appends beside all earlier events.
 - Python and Rust render byte-identical complete SimpleGroup approval Markdown.
 - The page contains no multi-term signing control, shows the readable signed
   sections first, and retains the exact raw `term.markdown`.
-- Every approval POST is refused while independent acceptance is pending.
+- One exact per-term approval POST is accepted and persisted after every gate
+  passes; no multi-term request or signing control exists.
 - Replaying one event is idempotent; signing changed structure appends without
   mutating historical lines.
 - The 22 `fava-simple-groups` vocabulary identities are enumerated from the
