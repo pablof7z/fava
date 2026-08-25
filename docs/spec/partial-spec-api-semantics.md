@@ -23,12 +23,26 @@ EventRecord         // an event plus Fava's evidence about it
 
 `Query` and `ValueSet<T>` are inert descriptions. Relay work and observation begin only when a final query is opened.
 
+Literal iterator collections are bounded at `fava-query`: `authors`, `ids`,
+`kinds`, `tag_values`, `intersect_tag_values`, `from_relays`, and `only_from_relays` return
+`Result<Query, QueryError>`. Every axis currently stops before consuming more
+than 4,096 items. This number is a provisional `fava-query` implementation
+shortcut for resource safety, not a Nostr limit or query-domain semantic. The
+axis-specific error retains the observed `actual` and configured `maximum`.
+Duplicates and infinite iterators cannot evade the cap. Singleton kind
+selection uses `kinds([kind])`; there is no parallel scalar accumulator.
+`tag_values` unions repeated values for one key. `intersect_tag_values` instead
+adds an exact AND constraint: absent becomes the supplied set, present becomes
+the set intersection, and a disjoint or empty intersection remains a
+present-empty match-nothing axis. Both use the same tag-input bound and exact
+`TooManyTagValues` refusal.
+
 `Auto` routing is the default and SHOULD require no syntax in the ordinary case.
 
 ```rust
 let articles = events()
-    .kind(30_023)
-    .authors(authors);
+    .kinds([30_023])?
+    .authors(authors)?;
 ```
 
 is equivalent in routing intent to an explicit `Auto` source policy.
@@ -43,15 +57,15 @@ For example:
 
 ```rust
 let follows = events()
-    .kind(3)
-    .authors(CurrentAccount::pubkey());
+    .kinds([3])?
+    .authors(CurrentAccount::pubkey())?;
 
 let followed_pubkeys =
     follows.tag_pubkeys("p");
 
 let articles = events()
-    .kind(30_023)
-    .authors(followed_pubkeys);
+    .kinds([30_023])?
+    .authors(followed_pubkeys)?;
 ```
 
 `tag_pubkeys("p")` does **not** return a `Vec<PublicKey>`. It returns a reactive value:
@@ -115,8 +129,8 @@ let muted = mutes::muted_pubkeys(followed)
     .freshness(Freshness::Live);
 
 let articles = events()
-    .kind(30_023)
-    .authors(muted);
+    .kinds([30_023])?
+    .authors(muted)?;
 ```
 
 The exact syntax may differ, but the policies MUST remain scoped to the query expression they decorate.
@@ -133,8 +147,8 @@ If the application says nothing:
 
 ```rust
 let query = events()
-    .kind(30_023)
-    .authors(authors);
+    .kinds([30_023])?
+    .authors(authors)?;
 ```
 
 Fava uses the configured automatic router composition.
@@ -147,12 +161,12 @@ The application may explicitly say:
 
 ```rust
 let query = events()
-    .kind(30_023)
-    .authors(authors)
+    .kinds([30_023])?
+    .authors(authors)?
     .from_relays([
         "wss://relay-a.example",
         "wss://relay-b.example",
-    ]);
+    ])?;
 ```
 
 Meaning:
@@ -177,12 +191,12 @@ The application may instead say:
 
 ```rust
 let query = events()
-    .kind(30_023)
-    .authors(authors)
+    .kinds([30_023])?
+    .authors(authors)?
     .only_from_relays([
         "wss://relay-a.example",
         "wss://relay-b.example",
-    ]);
+    ])?;
 ```
 
 Meaning:
@@ -317,20 +331,6 @@ impl Observation {
 
     pub async fn changed(
         &mut self,
-    ) -> Result<Arc<QuerySnapshot>, QueryClosed>;
-
-    pub fn close(&self);
-}
-```
-
-The public contract is latest state, not a required queue of every intermediate mutation.
-
-A slow application MAY skip intermediate states, but it MUST eventually receive an exact current state reflecting all accepted changes relevant to the query.
-
-Fava SHOULD expose these semantics rather than exposing a concrete runtime primitive such as Tokio's `watch::Receiver`, even if a similar mechanism is used internally.
-
----
-
 ## 8. Example: articles by people muted by people I follow
 
 Assume protocol crates expose common typed query combinators.
@@ -343,24 +343,24 @@ The low-level composition could be:
 
 ```rust
 let follows = events()
-    .kind(3)
-    .authors(CurrentAccount::pubkey());
+    .kinds([3])?
+    .authors(CurrentAccount::pubkey())?;
 
 let followed =
     follows.tag_pubkeys("p");
 
 let mute_lists = events()
-    .kind(10_000)
-    .authors(followed);
+    .kinds([10_000])?
+    .authors(followed)?;
 
 let muted =
     mute_lists.tag_pubkeys("p");
 
 let articles = events()
-    .kind(30_023)
-    .authors(muted)
+    .kinds([30_023])?
+    .authors(muted)?
     .newest_first()
-    .limit(100);
+    .limit(100)?;
 
 let mut feed = fava.observe(articles).await?;
 ```
@@ -375,10 +375,10 @@ let muted =
     mutes::muted_pubkeys(followed);
 
 let articles = events()
-    .kind(30_023)
-    .authors(muted)
+    .kinds([30_023])?
+    .authors(muted)?
     .newest_first()
-    .limit(100);
+    .limit(100)?;
 
 let mut feed = fava.observe(articles).await?;
 ```
@@ -435,6 +435,20 @@ muted = { Carol, Dave, Frank }
 ```
 
 Frank's matching articles enter the same open feed. Cached articles may appear immediately; additional relay work may be added asynchronously by the configured routers.
+
+If Alice later unmutes Carol:
+
+```text
+muted = { Dave, Frank }
+```
+
+Carol's articles retract from the current feed automatically.
+
+The application does not manually filter them out.
+
+If the current account changes, `CurrentAccount::pubkey()` changes as a reactive root and the same open query reroots to the new account's dependency graph.
+
+---
 
 If Alice later unmutes Carol:
 
@@ -570,48 +584,49 @@ No current NIP-02 or simple-groups API is documented as returning it.
 
 `fava-simple-groups` applies the same rule to NIP-29. A `SimpleGroup` is an
 inert query/write description over one simple group id and a non-empty
-host-relay set:
+relay sequence:
 
 ```rust
-let photos = SimpleGroup::on(
-    ["wss://bob.relay.example", "wss://alice.relay.example"],
-    "photos",
-)?;
+let bob = RelayUrl::parse("wss://bob.relay.example")?;
+let alice = RelayUrl::parse("wss://alice.relay.example")?;
+let photos = SimpleGroup::from_relays("photos", bob, vec![alice]);
 
-let feed = photos.events(Query::events().kind(Kind::from(9)).limit(50)?)?;
-let records = photos.records(SimpleGroupRecords::metadata())?;
+let feed = photos.events(Query::events().kinds([Kind::from(9)])?.limit(50)?)?;
+let state = photos.state_events([SimpleGroupStateEventKind::Metadata])?;
 ```
 
-`feed` lowers to the ordinary exact `h` tag-value axis plus
-`from_relays(hosts)`. This keeps explicit acquisition and optimistic local write
-visibility. `records` lowers to kinds 39000 through 39005, the exact `d`
-tag-value axis, and `only_from_relays(hosts)` because relay-authored simple
-group state is authoritative per host.
+`feed` uses query-owned `Query::intersect_tag_values` to constrain the `h` axis
+to the exact group id without widening existing values, then applies
+`from_relays(relays)`. A disjoint axis stays present-empty and matches nothing.
+This keeps explicit acquisition and
+optimistic local write visibility without moving query algebra into the
+protocol crate. `state` lowers to the exact `d` tag-value axis and
+`only_from_relays(relays)` because relay-generated state is authoritative per
+relay. Kind, tag-value, and relay inputs delegate to `fava-query`; the helper
+returns exact `QueryError` values and adds no private result limit.
 
-Several hosts do not become one protocol authority. The final content snapshot
-deduplicates identical event ids and retains exact serving-relay evidence. A
-pure `SimpleGroupSnapshot` projection exposes each host's records and explicit
-`metadata_differ`, member/admin attribution, and `at(host)` views. It never
-opens another observation or chooses the winning fork.
+The observation remains an ordinary `QuerySnapshot`. Applications use its
+generic `EventRecord::relay_evidence` for relay-local selection. The protocol
+crate decodes each individual state event; it does not project snapshots,
+compare relays, select a fork, or verify events.
 
-Discovery helpers return ordinary core queries and pure projections:
+Kind-10009 uses one ordinary query and one decoded value per event:
 
 ```text
-SimpleGroups::saved_simple_groups(authors)          -> Query
-SimpleGroups::saved_relays(authors)                 -> Query
-SimpleGroups::simple_groups_where_admin(subjects)   -> Query
-SimpleGroups::simple_groups_where_member(subjects)  -> Query
-SimpleGroups::simple_groups_saved_by(snapshot, simple_group) -> Vec<PublicKey>
+saved_group_lists(authors) -> Result<Query, QueryError>
+SavedGroupList::from_event(event) -> Result<SavedGroupList, SavedGroupListDecodeError>
 ```
 
-Typed projections turn matching records and kind-10009 rows into bounded
-protocol values without opening private observations.
+The list exposes ordered saved-group and relay entry results. Crate-root save,
+rename, remove, and relay functions return pure `ReplaceableEventEdit` values;
+the materializer joins Fava's ordinary semantic-write lifecycle.
 
 Simple group publication produces an ordinary event or replaceable edit. The
-application supplies the selected hosts to the universal door with
-`fava.to(simple_group.hosts()).publish(payload)`. The protocol helper supplies
-or validates the simple group tag but does not create a protocol-specific
-publication or receipt lifecycle.
+application supplies the selected relays to the universal door with
+`fava.to(simple_group.relays()).publish(payload)`. `prepare` accepts only an
+unsigned event, preserves every existing tag, and appends one matching `h` tag
+only when none already matches. It creates no protocol-specific publication or
+receipt lifecycle.
 
 ---
 
