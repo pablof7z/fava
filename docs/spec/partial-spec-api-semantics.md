@@ -223,18 +223,15 @@ Conceptually:
 
 ```rust
 pub struct EventRecord {
-    pub event: EventValue,
-    pub relay_evidence: RelayEvidence,
-    pub publication: Option<PublicationEvidence>,
+    /* private event-id-bound fields */
 }
 ```
 
-`RelayEvidence` records relays that actually served the event:
+`RelayOccurrences` records exact relay-access sessions that actually served
+the same event id:
 
 ```rust
-pub struct RelayEvidence {
-    pub seen_on: BTreeSet<RelayUrl>,
-}
+pub struct RelayOccurrence { pub session: RelaySessionKey, pub observed_at: Timestamp }
 ```
 
 The exact shape may grow, but the distinction is:
@@ -494,9 +491,9 @@ fn show_feed(
     state: &ArticleFeedState,
 ) {
     for record in state.snapshot.events.iter() {
-        ui.heading(article_title(&record.event));
-        ui.label(article_summary(&record.event));
-        ui.small(format!("by {}", record.event.pubkey()));
+        ui.heading(article_title(record.event()));
+        ui.label(article_summary(record.event()));
+        ui.small(format!("by {}", record.event().pubkey()));
         ui.separator();
     }
 }
@@ -584,15 +581,16 @@ let records = photos.records(SimpleGroupRecords::metadata())?;
 
 `feed` lowers to the ordinary exact `h` tag-value axis plus
 `from_relays(hosts)`. This keeps explicit acquisition and optimistic local write
-visibility. `records` lowers to kinds 39000 through 39005, the exact `d`
-tag-value axis, and `only_from_relays(hosts)` because relay-authored simple
-group state is authoritative per host.
+visibility. `records` returns one `(RelayUrl, Query)` per selected host. Every
+query lowers to kinds 39000 through 39005, the exact `d` tag-value axis, and
+`only_from_relays([host])` because relay-authored simple group state is
+authoritative per host.
 
 Several hosts do not become one protocol authority. The final content snapshot
-deduplicates identical event ids and retains exact serving-relay evidence. A
-pure `SimpleGroupSnapshot` projection exposes each host's records and explicit
-`metadata_differ`, member/admin attribution, and `at(host)` views. It never
-opens another observation or chooses the winning fork.
+deduplicates identical event ids and retains exact serving-relay occurrences.
+Applications observe each host record query independently, decode complete
+events through the typed one-event parsers, and compare host records without
+field merging or a hidden winning fork.
 
 Discovery helpers return ordinary core queries and pure projections:
 

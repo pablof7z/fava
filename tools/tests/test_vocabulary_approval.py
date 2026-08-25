@@ -528,7 +528,6 @@ class CandidateCoverageTest(unittest.TestCase):
     REQUESTED_NAMES = {
         "DesiredPlanEvidence",
         "QueryEvidence",
-        "RelayEvidence",
         "RelayQueryEvidence",
         "SourceEvidence",
     }
@@ -569,7 +568,6 @@ class CandidateCoverageTest(unittest.TestCase):
             {
                 "DesiredPlanEvidence": "blocked",
                 "QueryEvidence": "blocked",
-                "RelayEvidence": "blocked",
                 "RelayQueryEvidence": "blocked",
                 "SourceEvidence": "blocked",
             },
@@ -583,7 +581,6 @@ class CandidateCoverageTest(unittest.TestCase):
             {
                 "DesiredPlanEvidence": "remove",
                 "QueryEvidence": "retain as QueryResultStatus",
-                "RelayEvidence": "retain as EventRelayObservations",
                 "RelayQueryEvidence": "retain as QueryRelayStatus",
                 "SourceEvidence": "retain as SourceContributionState",
             },

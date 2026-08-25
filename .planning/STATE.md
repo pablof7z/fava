@@ -178,9 +178,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Relay-authored records accept signed EventValue only and distinguish invalid id from invalid signature before typed decoding.
 - [Phase 07.1.1]: Recognized multi-row inputs expose bounded source-ordered Result values; only a successfully parsed row reserves its exact duplicate key.
 - [Phase 07.1.1]: Pinned addresses reuse EventCoordinate, saved hosts reuse RelayUrl, and people rows reuse PublicKey/String tuples without new row or attribution vocabulary.
-- [Phase 07.1.1]: GroupSnapshot retains configured first-occurrence host order and selects one complete newest-valid typed record independently for each exact RelayUrl.
+- [Phase 07.1.1]: SimpleGroup record access returns one bounded exact-host query per configured RelayUrl; typed decoders interpret one complete selected event.
 - [Phase 07.1.1]: Disagreement compares complete optional typed records, so observed versus unobserved differs without turning an empty view into a negative claim.
-- [Phase 07.1.1]: Content keeps QuerySnapshot order, deduplicates repeated ids defensively, and merges every actual RelayEvidence observation.
+- [Phase 07.1.1]: Content keeps QuerySnapshot order and each event exposes exact event-id-bound RelayOccurrences.
 - [Phase 07.1.1]: Discovery counts total author or subject inputs before Query canonicalization and refuses exactly at bound plus one.
 - [Phase 07.1.1]: groups_saved_by projects canonical authors from exact group-id and selected-host pairs without ValueSet or lifecycle state.
 - [Phase 07.1.1]: Kind-10009 saved-list edits preserve opaque content and foreign order through target-local surgery.

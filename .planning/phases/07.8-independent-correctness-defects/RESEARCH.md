@@ -501,3 +501,4 @@ None. Recommendations are proposals, not claims of approved vocabulary. Router-b
 ## Research Verdict
 
 Ready to replace Plans 02–05 exactly as locked. 07.8-02 is next and must end at Pablo's concrete `Freshness::MaxAge` / `SourceCoverage` checkpoint. Stale imperative-opener research is not reusable.
+> Historical phase record. Superseded by STATE-ARCH-1; not current implementation guidance.

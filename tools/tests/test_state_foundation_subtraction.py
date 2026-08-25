@@ -223,18 +223,13 @@ class StateFoundationSubtraction(unittest.TestCase):
         self.assertIn("dead owner calls are not proof", source)
         self.assertNotIn('source.contains("event_is_newer")', source)
 
-    def test_nip65_decoder_donor_is_explicitly_outside_state_foundation(self) -> None:
-        donor = (ROOT / "docs/issues/0024-nip65-approved-decoder-donor.md").read_text()
+    def test_nip65_composes_query_ownership_without_local_selection(self) -> None:
         source = (ROOT / "crates/fava-nip65/src/lib.rs").read_text()
-        self.assertIn("nip65-approved-decoder", donor)
-        self.assertIn("intentionally absent from state-foundation", donor)
         self.assertIn("pub fn relay_lists", source)
-        self.assertIn("WrongKind(u16)", source)
-        self.assertIn("InvalidRelay(String)", source)
-        self.assertIn('None | Some("")', source)
-        self.assertNotIn("WrongKind {", source)
-        self.assertFalse((ROOT / "crates/fava-nip65/README.md").exists())
-        self.assertFalse((ROOT / "crates/fava-nip65/tests").exists())
+        self.assertNotIn("fn supersedes", source)
+        self.assertIn("WrongKind {", source)
+        self.assertTrue((ROOT / "crates/fava-nip65/README.md").exists())
+        self.assertTrue((ROOT / "crates/fava-nip65/tests/decoder.rs").exists())
 
     def test_access_lifecycle_and_overflow_retraction_proofs_are_causal(self) -> None:
         access = (ROOT / "crates/fava/tests/access_isolation.rs").read_text()
