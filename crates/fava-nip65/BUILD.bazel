@@ -17,15 +17,47 @@ rust_library(
 )
 
 rust_test(
-    name = "unit_tests",
+    name = "lib_unit_tests",
     crate_name = "fava_nip65_tests",
     srcs = ["src/lib.rs"],
     edition = crate_edition(),
-    aliases = aliases(normal_dev = True, proc_macro_dev = True),
-    deps = all_crate_deps(normal = True, normal_dev = True) + [
+    aliases = aliases(normal = True, proc_macro = True),
+    deps = all_crate_deps(normal = True) + [
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
     ],
-    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "decoder",
+    crate_name = "fava_nip65_decoder",
+    srcs = ["tests/decoder.rs"],
+    edition = crate_edition(),
+    deps = [
+        ":lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write:lib",
+    ],
+)
+
+test_suite(
+    name = "unit_tests",
+    tests = [
+        ":decoder",
+        ":lib_unit_tests",
+        ":public_api",
+    ],
+)
+
+rust_test(
+    name = "public_api",
+    crate_name = "fava_nip65_public_api",
+    srcs = ["tests/public_api.rs"],
+    edition = crate_edition(),
+    deps = [
+        ":lib",
+        "//crates/fava-write:lib",
+    ],
 )

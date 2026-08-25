@@ -9,8 +9,5 @@ fava-state.workspace = true
 fava-write.workspace = true
 thiserror.workspace = true
 
-[dev-dependencies]
-nostr.workspace = true
-
 [lints]
 workspace = true
