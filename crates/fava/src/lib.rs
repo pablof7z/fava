@@ -27,7 +27,6 @@ use fava_routing::{RouteRequest, Router};
 pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;
-pub use fava_state::{EventCoordinate, RelayUrl};
 pub use fava_write::{
     Event, EventBuildError, EventBuilder, EventValue, Kind, MaterializationId, PublicKey, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit,
@@ -36,6 +35,7 @@ pub use fava_write::{
 };
 use fava_write_store::WriteStore;
 pub use fava_write_store::WriteStoreError;
+pub use nostr::types::RelayUrl;
 pub use publication::{PublishAs, PublishError, PublishTo, Write, all, at_least};
 use tokio::sync::broadcast;
 

@@ -61,7 +61,7 @@ pub(crate) fn accepted(
 #[cfg(test)]
 mod tests {
     use fava_query::{ObservationId, QueryBounds, QueryBranchId};
-    use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+    use fava_relay::{RelayAccess, RelaySessionKey};
     use fava_subscriptions::{
         PlanRevision, RelayDemand, RelayReadConstraints, SubscriptionPlanner,
     };
@@ -70,14 +70,15 @@ mod tests {
     use nostr::event::Kind;
     use nostr::filter::Filter;
     use nostr::key::Keys;
+    use nostr::types::RelayUrl;
 
     use super::*;
 
     fn relay() -> RelaySessionKey {
-        RelaySessionKey::new(
-            RelayUrl::parse("wss://relay.example").expect("relay URL"),
-            RelayAccess::public(),
-        )
+        RelaySessionKey {
+            relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
+            access: RelayAccess::Public,
+        }
     }
 
     fn demand(owner: u64, filter: Filter) -> RelayDemand {

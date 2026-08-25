@@ -9,7 +9,7 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent, RetractionCause};
+use fava_state::{EventStateMutation, RetractionCause};
 use fava_write::{WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -104,8 +104,8 @@ async fn first_value_edit_publishes_through_public_fava() {
         MaterializationId::from_u64(1)
     );
     assert_eq!(visible.events.len(), 1);
-    assert_eq!(visible.events[0].event.author(), keys.public_key());
-    assert_eq!(visible.events[0].event.kind(), Kind::ContactList);
+    assert_eq!(visible.events[0].event().author(), keys.public_key());
+    assert_eq!(visible.events[0].event().kind(), Kind::ContactList);
     assert_eq!(materializer.calls().len(), 1);
     assert!(materializer.calls()[0].source.is_none());
     assert_eq!(signer.calls(), 1);
@@ -228,9 +228,9 @@ async fn first_value_receives_exact_injected_timestamp() {
         &["remote"],
     );
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("source enters canonical cache");
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -273,9 +273,9 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         &["first"],
     );
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             first.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("first source enters cache");
     let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -305,9 +305,9 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         &["unrelated"],
     );
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             newer.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("newer source enters cache");
 
@@ -373,8 +373,8 @@ async fn source_removal_selects_next_or_empty_once() {
     let current = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "current", &[]);
     cache
         .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(current.clone(), relay_evidence())),
+            EventStateMutation::Upsert(relay_event(older, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(current.clone(), relay_occurrence())),
         ])
         .expect("source history enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
@@ -397,8 +397,9 @@ async fn source_removal_selects_next_or_empty_once() {
     wait_for_signer(&signer, 1).await;
 
     cache
-        .commit(vec![CacheMutation::Retract {
+        .commit(vec![EventStateMutation::Retract {
             event_id: current.id,
+            session: relay_session(),
             cause: RetractionCause::Evicted,
         }])
         .expect("current source retracts");
@@ -408,8 +409,9 @@ async fn source_removal_selects_next_or_empty_once() {
     assert!(materializer.calls()[1].source.is_none());
 
     cache
-        .commit(vec![CacheMutation::Retract {
+        .commit(vec![EventStateMutation::Retract {
             event_id: current.id,
+            session: relay_session(),
             cause: RetractionCause::Evicted,
         }])
         .expect("duplicate removal is accepted");
@@ -430,9 +432,9 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         &[],
     );
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("preview source enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));

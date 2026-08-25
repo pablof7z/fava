@@ -5,8 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-fava-state.workspace = true
+fava-query.workspace = true
 fava-write.workspace = true
+nostr.workspace = true
 thiserror.workspace = true
 
 [lints]

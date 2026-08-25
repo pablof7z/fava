@@ -2,14 +2,81 @@
 # @crates via all_crate_deps(); first-party path deps are explicit.
 
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//:test_deps.bzl", "deduplicated_deps")
+
+OBSERVE_TEST_DEPS = [
+    "//crates/fava-diagnostics:lib",
+    "//crates/fava-event-cache:lib",
+    "//crates/fava-event-cache-memory:lib",
+    "//crates/fava-ingest:lib",
+    "//crates/fava-query:lib",
+    "//crates/fava-query-standard:lib",
+    "//crates/fava-relay:lib",
+    "//crates/fava-router-app-relays:lib",
+    "//crates/fava-router-testkit:lib",
+    "//crates/fava-routing:lib",
+    "//crates/fava-runtime:lib",
+    "//crates/fava-state:lib",
+    "//crates/fava-subscriptions:lib",
+    "//crates/fava-subscriptions-no-grouping:lib",
+    "//crates/fava-subscriptions-standard:lib",
+    "//crates/fava-subscriptions-testkit:lib",
+    "//crates/fava-transport:lib",
+    "//crates/fava-transport-testkit:lib",
+    "//crates/fava-wire:lib",
+    "//crates/fava-write-store-memory:lib",
+]
 
 # Source set exported for the cross-crate architecture gates that assert the
 # universal owners stay kind-blind.
 filegroup(
     name = "architecture_sources",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
     visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "access_work_isolation",
+    crate_name = "access_work_isolation",
+    srcs = ["tests/access_work_isolation.rs", "tests/support/mod.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-relay:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-transport:lib",
+        "//crates/fava-transport-testkit:lib",
+        "//crates/fava-wire:lib",
+    ], OBSERVE_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "live_null_cache",
+    crate_name = "live_null_cache",
+    srcs = ["tests/live_null_cache.rs", "tests/support/mod.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-event-cache:lib", "//crates/fava-query:lib", "//crates/fava-query-standard:lib", "//crates/fava-relay:lib", "//crates/fava-state:lib", "//crates/fava-transport:lib", "//crates/fava-transport-testkit:lib", "//crates/fava-wire:lib"], OBSERVE_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "relay_occurrence_bound",
+    crate_name = "relay_occurrence_bound",
+    srcs = ["tests/relay_occurrence_bound.rs", "tests/support/mod.rs"],
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [":lib", "//crates/fava-event-cache:lib", "//crates/fava-query:lib", "//crates/fava-query-standard:lib", "//crates/fava-relay:lib", "//crates/fava-state:lib", "//crates/fava-transport:lib", "//crates/fava-transport-testkit:lib", "//crates/fava-wire:lib"], OBSERVE_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
 )
 
 rust_library(
@@ -18,7 +85,19 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(),
-    deps = all_crate_deps(normal = True) + ["//crates/fava-query:lib"],
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-diagnostics:lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-ingest:lib",
+        "//crates/fava-query:lib",
+        "//crates/fava-relay:lib",
+        "//crates/fava-routing:lib",
+        "//crates/fava-runtime:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-subscriptions:lib",
+        "//crates/fava-transport:lib",
+        "//crates/fava-wire:lib",
+    ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],

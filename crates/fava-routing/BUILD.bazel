@@ -1,6 +1,12 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_routing",
@@ -8,6 +14,7 @@ rust_library(
     edition = crate_edition(),
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
+        "//crates/fava-relay:lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",
         "//crates/fava-write:lib",
@@ -24,6 +31,7 @@ rust_test(
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
     deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//crates/fava-relay:lib",
         ":lib",
         "//crates/fava-query:lib",
         "//crates/fava-state:lib",

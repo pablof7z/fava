@@ -5,12 +5,14 @@ use std::future::Future;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySource, SourceKind, SourceRevision};
-use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::EventValue;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 async fn assert_add_remove_corpus<S, Add, Remove, Added>(
     source: &S,
@@ -67,27 +69,29 @@ fn memory_event_cache_runs_the_source_corpus() {
         .finalize(&keys)
         .expect("event signs");
     let event_id = event.id;
-    let evidence = RelayEvidence::one(
-        RelaySessionKey::new(
-            RelayUrl::parse("wss://relay.example").expect("relay url"),
-            RelayAccess::public(),
-        ),
-        Timestamp::from(11),
-    );
+    let session = RelaySessionKey {
+        relay: RelayUrl::parse("wss://relay.example").expect("relay url"),
+        access: RelayAccess::Public,
+    };
 
+    let removal_session = session.clone();
     run(assert_add_remove_corpus(
         &cache,
         SourceKind::EventCache,
         || {
             cache
-                .admit(CachedEvent::new(event, evidence), Timestamp::from(11))
+                .admit(
+                    RelayEvent::new(event, session.clone(), Timestamp::from(11)),
+                    Timestamp::from(11),
+                )
                 .expect("event admits");
             event_id
         },
         |id| {
             cache
-                .commit(vec![fava_state::CacheMutation::Retract {
+                .commit(vec![EventStateMutation::Retract {
                     event_id: id,
+                    session: removal_session,
                     cause: fava_state::RetractionCause::Evicted,
                 }])
                 .expect("event retracts");

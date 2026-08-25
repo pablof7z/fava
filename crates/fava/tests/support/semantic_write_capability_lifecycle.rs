@@ -9,8 +9,9 @@ use fava::{
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{OpenedQuerySource, Query, QuerySource, QuerySourceError};
+use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
-use fava_state::{CacheMutation, CachedEvent, RelaySessionKey, RetractionCause};
+use fava_state::{EventStateMutation, RetractionCause};
 use fava_write::{EventId, LocalWriteEvent, WriteIntent};
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
@@ -21,8 +22,8 @@ use tokio::sync::broadcast;
 use super::capability_protocol::assert_source_removal;
 use super::capability_signer::GatedSigner;
 use super::support::{
-    BlockingSigner, RecordingPublisher, publication_builder, relay_evidence, relay_url,
-    wait_for_materialization, wait_for_signer,
+    BlockingSigner, RecordingPublisher, publication_builder, relay_event, relay_occurrence,
+    relay_session, relay_url, wait_for_materialization, wait_for_signer,
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
@@ -62,8 +63,8 @@ async fn prove_source_removal<Add>(
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(current.clone(), relay_evidence())),
+            EventStateMutation::Upsert(relay_event(older, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(current.clone(), relay_occurrence())),
         ])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());
@@ -84,8 +85,9 @@ async fn prove_source_removal<Add>(
         .expect("accepted receipt remains readable");
     wait_for_signer(&signer, 1).await;
     cache
-        .commit(vec![CacheMutation::Retract {
+        .commit(vec![EventStateMutation::Retract {
             event_id: current.id,
+            session: relay_session(),
             cause: RetractionCause::Evicted,
         }])
         .unwrap();
@@ -126,7 +128,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .admit(
-            CachedEvent::new(initial.clone(), relay_evidence()),
+            relay_event(initial.clone(), relay_occurrence()),
             Timestamp::from(1),
         )
         .unwrap();
@@ -231,7 +233,7 @@ fn admit_twice(cache: &Arc<MemoryEventCache>, successor: &Event) {
                 barrier.wait();
                 cache
                     .admit(
-                        CachedEvent::new(successor, relay_evidence()),
+                        relay_event(successor, relay_occurrence()),
                         Timestamp::from(2),
                     )
                     .unwrap();

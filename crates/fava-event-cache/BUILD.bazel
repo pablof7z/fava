@@ -4,6 +4,12 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
+filegroup(
+    name = "architecture_sources",
+    srcs = glob(["**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "lib",
     crate_name = "fava_event_cache",

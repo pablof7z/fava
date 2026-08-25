@@ -183,7 +183,7 @@ impl Observer {
                 });
             }
         };
-        let sources = OpenSources::new(cache, writes);
+        let mut sources = OpenSources::new(cache, writes);
 
         let binding = if live {
             match routes::bind(&query, &self.routers) {
@@ -197,17 +197,6 @@ impl Observer {
             None
         };
 
-        let initial = match self.evaluate_initial(&query, &sources) {
-            Ok(initial) => initial,
-            Err(error) => {
-                sources.close();
-                if let Some(binding) = binding {
-                    binding.close();
-                }
-                return Err(error);
-            }
-        };
-
         let installation = self.registry.install(self.runtime.cancellation_token());
         let branch = QueryBranchId::ROOT;
         if let Some(binding) = binding {
@@ -219,6 +208,16 @@ impl Observer {
                 &installation.cancel,
             );
         }
+        sources.refresh_live(&self.registry, installation.id);
+
+        let initial = match self.evaluate_initial(&query, &sources) {
+            Ok(initial) => initial,
+            Err(error) => {
+                sources.close();
+                self.registry.withdraw(installation.id);
+                return Err(error);
+            }
+        };
         let mut initial = initial;
         decorate(&self.registry, installation.id, &mut initial.evidence);
         publish(

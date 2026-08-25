@@ -96,11 +96,10 @@ pub const BLOCKED: &[Blocked] = &[
     },
     Blocked {
         id: "protocol-crate-n-plus-one",
-        workaround: "NoopTransport plus the canary Publisher, and a hand-built RelayEvidence for \
-                     a relay called wss://m7-semantic.example that no process ever ran",
-        wall: "Relay provenance can only be fabricated, never obtained, from outside Fava. \
-               fava_state::RelayEvidence is an internal type that appears in public query \
-               results, so an application can read provenance but cannot construct or seed it.",
+        workaround: "NoopTransport plus the canary Publisher; protocol semantics are exercised \
+                     without claiming fabricated live relay provenance",
+        wall: "Fava still has no public import door that can establish verified live provenance; \
+               RelayOccurrence is intentionally produced only by attributed admission.",
         severity: "major",
     },
     Blocked {
@@ -119,8 +118,8 @@ pub const BLOCKED: &[Blocked] = &[
     },
     Blocked {
         id: "local-source-merge",
-        workaround: "called EventCache::admit with a hand-built CachedEvent carrying \
-                     RelayEvidence for wss://m1.local, a relay that does not exist",
+        workaround: "called the concrete local providers directly and therefore could not prove \
+                     a public local-state import door",
         wall: "Fava has no public door for putting an event into local state. \
                Fava::accept_event is documented as a compile-fail. An application therefore \
                cannot import a backup, restore a cache, seed a first run, or write a local-only \

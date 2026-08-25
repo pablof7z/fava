@@ -29,7 +29,7 @@ mod wire;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::num::NonZeroUsize;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     RelayDemand, RelayReadConstraints, ShortfallReason, SubscriptionPlan, SubscriptionPlanError,

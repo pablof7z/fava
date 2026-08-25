@@ -2,11 +2,8 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
-use fava_state::RelayUrl;
-use fava_write::{
-    EventBuildError, EventBuilder, EventId, EventValue, Kind, PublicKey, Timestamp,
-    WriteIntentError,
-};
+use fava_write::{EventBuildError, EventBuilder, EventValue, Kind, PublicKey, WriteIntentError};
+use nostr::types::RelayUrl;
 
 use crate::bounds;
 
@@ -14,8 +11,6 @@ use crate::bounds;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactList {
     author: PublicKey,
-    event_id: EventId,
-    created_at: Timestamp,
     follows: Vec<Follow>,
     evidence: Vec<ContactListRowEvidence>,
 }
@@ -32,7 +27,7 @@ impl ContactList {
             return Err(ContactListError::WrongKind(event.kind().as_u16()));
         }
         validate_event(event)?;
-        let event_id = event.id().ok_or(ContactListError::MissingEventId)?;
+        let _ = event.id().ok_or(ContactListError::MissingEventId)?;
         let mut follows = Vec::new();
         let mut evidence = Vec::new();
         let mut seen = BTreeSet::new();
@@ -53,8 +48,6 @@ impl ContactList {
 
         Ok(Self {
             author: event.author(),
-            event_id,
-            created_at: event.created_at(),
             follows,
             evidence,
         })
@@ -76,14 +69,6 @@ impl ContactList {
     #[must_use]
     pub const fn evidence(&self) -> &[ContactListRowEvidence] {
         self.evidence.as_slice()
-    }
-
-    /// Whether this event supersedes another same-coordinate list.
-    #[must_use]
-    pub fn supersedes(&self, current: &Self) -> bool {
-        self.author == current.author
-            && (self.created_at > current.created_at
-                || (self.created_at == current.created_at && self.event_id < current.event_id))
     }
 }
 

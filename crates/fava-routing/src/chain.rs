@@ -552,7 +552,8 @@ fn validate_names(routers: &[Arc<dyn Router>]) -> Result<(), RouterError> {
 mod tests {
     use std::collections::BTreeSet;
 
-    use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+    use fava_relay::{RelayAccess, RelaySessionKey};
+    use nostr::types::RelayUrl;
 
     use super::*;
     use crate::RouteDestination;
@@ -562,10 +563,10 @@ mod tests {
         let destinations = (0..=MAX_DESTINATIONS)
             .map(|index| {
                 RouteDestination::new(
-                    RelaySessionKey::new(
-                        RelayUrl::parse(&format!("wss://relay-{index}.example")).unwrap(),
-                        RelayAccess::public(),
-                    ),
+                    RelaySessionKey {
+                        relay: RelayUrl::parse(&format!("wss://relay-{index}.example")).unwrap(),
+                        access: RelayAccess::Public,
+                    },
                     BTreeSet::from([RouteTarget::WholeRequest]),
                     "test route",
                 )

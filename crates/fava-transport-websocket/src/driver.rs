@@ -4,13 +4,13 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use fava_state::Timestamp;
 use fava_transport::{
     BoundedReason, HandoffCorrelation, HandoffOutcome, RelayInbound, RelaySessionIdentity,
     TransportAmbiguity, TransportFailure,
 };
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
+use nostr::types::Timestamp;
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;

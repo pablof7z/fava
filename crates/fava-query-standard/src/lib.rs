@@ -6,8 +6,10 @@ use fava_query::{
     BoundedText, EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator,
     QueryOrdering, QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
 };
-use fava_state::{EventCoordinate, RelayEvidence, RelayUrl};
-use fava_write::EventValue;
+use fava_state::{
+    EventCoordinate, RelayEvent, event_coordinate, event_is_newer, relay_occurrences_for_event,
+};
+use fava_write::{EventValue, PublicationEvidence};
 use nostr::event::EventId;
 
 /// Deliberately simple full-reevaluation oracle.
@@ -20,20 +22,21 @@ impl QueryEvaluator for StandardQueryEvaluator {
         query: &Query,
         sources: &[SourceSnapshot],
     ) -> Result<QuerySnapshot, QueryEvaluationError> {
-        let mut by_id = BTreeMap::<EventId, EventRecord>::new();
+        let mut by_id = BTreeMap::<EventId, Candidate>::new();
         for source in sources {
             for contribution in &source.events {
-                merge_contribution(&mut by_id, contribution)?;
+                merge_qualifying_contribution(&mut by_id, query, contribution)?;
             }
         }
 
-        let mut events: Vec<_> = coordinate_winners(query.source().authority(), by_id)?
+        let records = by_id
             .into_iter()
-            .filter(|record| {
-                matches_selection(query.selection(), record)
-                    && matches_authority(query.source().authority(), record)
-            })
+            .map(|(id, candidate)| candidate.into_record(id))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|record| matches_selection(query.selection(), record))
             .collect();
+        let mut events = coordinate_winners(records);
         events.sort_by(|left, right| match query.ordering() {
             QueryOrdering::NewestFirst => right
                 .created_at()
@@ -51,121 +54,112 @@ impl QueryEvaluator for StandardQueryEvaluator {
     }
 }
 
-/// Resolve replaceable coordinates within the authority's candidate universe.
-///
-/// Result provenance authority selects the candidates, it does not merely filter the
-/// winners. `docs/spec/partial-spec-api-semantics.md:194` scopes an `only_from_relays`
-/// match to events whose provenance "MUST include at least one relay in the specified
-/// set", so a record without qualifying relay provenance is not a candidate at any
-/// coordinate and cannot displace one that is. Admitting it into selection and dropping
-/// it afterwards would let a purely local write erase a relay-qualified result, which
-/// `:200` and `:214` forbid: an unpublished local event "MUST NOT appear", and differing
-/// source modes "MUST NOT accidentally share evidence or local-result visibility in a way
-/// that changes either query's results".
-///
-/// Acquisition scope never reaches here: `from_relays` leaves the authority
-/// [`ResultAuthority::AnyLocal`], so asking a relay set cannot narrow local visibility.
-fn coordinate_winners(
-    authority: &ResultAuthority,
-    records: BTreeMap<EventId, EventRecord>,
-) -> Result<Vec<EventRecord>, QueryEvaluationError> {
-    match authority {
-        ResultAuthority::AnyLocal => {
-            let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
-            for record in records.into_values() {
-                let coordinate = record
-                    .event
-                    .coordinate()
-                    .map_err(|_| QueryEvaluationError::MissingEventId)?;
-                insert_newest(&mut by_coordinate, coordinate, record);
-            }
-            Ok(by_coordinate.into_values().collect())
-        }
-        ResultAuthority::OnlyRelays(relays) => {
-            let mut by_relay_coordinate =
-                BTreeMap::<(RelayUrl, EventCoordinate), EventRecord>::new();
-            for record in records.into_values() {
-                let coordinate = record
-                    .event
-                    .coordinate()
-                    .map_err(|_| QueryEvaluationError::MissingEventId)?;
-                for observation in record.relay_evidence.observations() {
-                    if relays.contains(&observation.session.relay) {
-                        insert_newest(
-                            &mut by_relay_coordinate,
-                            (observation.session.relay.clone(), coordinate.clone()),
-                            record.clone(),
-                        );
-                    }
-                }
-            }
-            let mut by_id = BTreeMap::new();
-            for record in by_relay_coordinate.into_values() {
-                by_id.entry(record.id()).or_insert(record);
-            }
-            Ok(by_id.into_values().collect())
-        }
+struct Candidate {
+    event: EventValue,
+    relay: Vec<RelayEvent>,
+    publication: Option<PublicationEvidence>,
+}
+
+impl Candidate {
+    fn into_record(self, id: EventId) -> Result<EventRecord, QueryEvaluationError> {
+        let occurrences = relay_occurrences_for_event(id, &self.relay).ok_or(
+            QueryEvaluationError::RelayOccurrenceEventMismatch {
+                event: id,
+                occurrences: self
+                    .relay
+                    .iter()
+                    .find(|contribution| contribution.event().id != id)
+                    .map_or(id, |contribution| contribution.event().id),
+            },
+        )?;
+        EventRecord::new(self.event, occurrences, self.publication)
     }
 }
 
-fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, candidate: EventRecord) {
-    match records.entry(key) {
-        std::collections::btree_map::Entry::Vacant(entry) => {
-            entry.insert(candidate);
-        }
-        std::collections::btree_map::Entry::Occupied(mut entry) => {
-            if record_is_newer(&candidate, entry.get()) {
-                entry.insert(candidate);
-            }
-        }
-    }
-}
-
-fn merge_contribution(
-    records: &mut BTreeMap<EventId, EventRecord>,
+fn merge_qualifying_contribution(
+    records: &mut BTreeMap<EventId, Candidate>,
+    query: &Query,
     contribution: &SourceEvent,
 ) -> Result<(), QueryEvaluationError> {
     match contribution {
-        SourceEvent::Cached(cached) => {
-            let id = cached.event.id;
-            let record = match records.entry(id) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(EventRecord::new(
-                        EventValue::Signed(cached.event.clone()),
-                        RelayEvidence::default(),
-                        None,
-                    )?)
-                }
-                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            };
-            record.relay_evidence.merge(&cached.evidence);
-            if matches!(record.event, EventValue::Unsigned(_)) {
-                record.event = EventValue::Signed(cached.event.clone());
+        SourceEvent::Relay(relay_event) => {
+            if !relay_qualifies(query, relay_event) {
+                return Ok(());
+            }
+            let event = relay_event.event();
+            let candidate = records.entry(event.id).or_insert_with(|| Candidate {
+                event: EventValue::Signed(event.clone()),
+                relay: Vec::new(),
+                publication: None,
+            });
+            candidate.relay.push(relay_event.clone());
+            if matches!(candidate.event, EventValue::Unsigned(_)) {
+                candidate.event = EventValue::Signed(event.clone());
             }
         }
         SourceEvent::Local(local) => {
-            let id = local.id();
-            let record = match records.entry(id) {
-                std::collections::btree_map::Entry::Vacant(entry) => entry.insert(
-                    EventRecord::new(local.event.clone(), RelayEvidence::default(), None)?,
-                ),
-                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            };
-            if let Some(publication) = &record.publication {
+            if !matches!(query.source().authority(), ResultAuthority::AnyLocal) {
+                return Ok(());
+            }
+            let candidate = records.entry(local.id()).or_insert_with(|| Candidate {
+                event: local.event.clone(),
+                relay: Vec::new(),
+                publication: None,
+            });
+            if let Some(publication) = &candidate.publication {
                 if publication != &local.publication {
                     return Err(QueryEvaluationError::Refused(BoundedText::new(format!(
-                        "event {id} has conflicting local publication evidence"
+                        "event {} has conflicting local publication evidence",
+                        local.id()
                     ))));
                 }
             } else {
-                record.publication = Some(local.publication.clone());
+                candidate.publication = Some(local.publication.clone());
             }
             if matches!(local.event, EventValue::Signed(_)) {
-                record.event = local.event.clone();
+                candidate.event = local.event.clone();
             }
         }
     }
     Ok(())
+}
+
+fn relay_qualifies(query: &Query, relay_event: &RelayEvent) -> bool {
+    let occurrence = relay_event.occurrence();
+    if &occurrence.session.access != query.access() {
+        return false;
+    }
+    match query.source().authority() {
+        ResultAuthority::AnyLocal => true,
+        ResultAuthority::OnlyRelays(relays) => relays.contains(&occurrence.session.relay),
+    }
+}
+
+fn coordinate_winners(records: Vec<EventRecord>) -> Vec<EventRecord> {
+    let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
+    for record in records {
+        let id = record.id();
+        let event = record.event();
+        let coordinate = event_coordinate(id, event.author(), event.kind(), event.tags());
+        insert_newest(&mut by_coordinate, coordinate, record);
+    }
+    by_coordinate.into_values().collect()
+}
+
+fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, incoming: EventRecord) {
+    match records.entry(key) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(incoming);
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry) => {
+            if event_is_newer(
+                (incoming.created_at(), incoming.id()),
+                (entry.get().created_at(), entry.get().id()),
+            ) {
+                entry.insert(incoming);
+            }
+        }
+    }
 }
 
 fn matches_selection(selection: &FilterSelection, record: &EventRecord) -> bool {
@@ -176,27 +170,15 @@ fn matches_selection(selection: &FilterSelection, record: &EventRecord) -> bool 
         && selection
             .authors
             .as_ref()
-            .is_none_or(|authors| authors.contains(&record.event.author()))
+            .is_none_or(|authors| authors.contains(&record.event().author()))
         && selection
             .kinds
             .as_ref()
-            .is_none_or(|kinds| kinds.contains(&record.event.kind()))
+            .is_none_or(|kinds| kinds.contains(&record.event().kind()))
         && selection.tag_values.iter().all(|(key, values)| {
-            record.event.tags().iter().any(|tag| {
+            record.event().tags().iter().any(|tag| {
                 tag.single_letter_tag() == Some(*key)
                     && tag.content().is_some_and(|value| values.contains(value))
             })
         })
-}
-
-fn matches_authority(authority: &ResultAuthority, record: &EventRecord) -> bool {
-    match authority {
-        ResultAuthority::AnyLocal => true,
-        ResultAuthority::OnlyRelays(relays) => record.relay_evidence.includes_any_relay(relays),
-    }
-}
-
-fn record_is_newer(candidate: &EventRecord, current: &EventRecord) -> bool {
-    candidate.created_at() > current.created_at()
-        || (candidate.created_at() == current.created_at() && candidate.id() < current.id())
 }

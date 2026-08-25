@@ -6,11 +6,11 @@ use std::time::Duration;
 use fava::{EventValue, Fava, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::Timestamp;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
+use nostr::types::Timestamp;
 
 fn assembly() -> (Fava, Arc<MemoryWriteStore>) {
     let writes = Arc::new(MemoryWriteStore::default());

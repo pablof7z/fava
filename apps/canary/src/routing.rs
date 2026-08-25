@@ -10,15 +10,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use fava::{Fava, Observation, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_fallback_relays::FallbackRelayRouter;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{Event, EventBuilder, EventId, FinalizeEvent, Kind};
+use nostr::types::{RelayUrl, Timestamp};
 use serde_json::json;
 
 use crate::artifacts::{RunArtifacts, unix_ms};
@@ -246,7 +247,10 @@ fn assembly() -> fava::FavaBuilder {
 
 fn contribution(relay: &RelayUrl) -> RouteContribution {
     let target = RouteTarget::WholeRequest;
-    let session = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+    let session = RelaySessionKey {
+        relay: relay.clone(),
+        access: RelayAccess::Public,
+    };
     RouteContribution {
         destinations: vec![RouteDestination::new(
             session.clone(),

@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+nostr.workspace = true
 fava-signer.workspace = true
 fava-write.workspace = true
 thiserror.workspace = true

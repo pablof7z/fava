@@ -3,8 +3,9 @@ use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
 use crate::{
-    SimpleGroupAdmins, SimpleGroupError, SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupParticipants, SimpleGroupPins, SimpleGroupRoles,
-    PinnedItem, SavedSimpleGroup, SavedRelay,
+    PinnedItem, SavedRelay, SavedSimpleGroup, SimpleGroupAdmins, SimpleGroupError,
+    SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupParticipants, SimpleGroupPins,
+    SimpleGroupRoles,
 };
 
 fn tag(values: &[&str]) -> Tag {
@@ -337,7 +338,8 @@ fn people_records_preserve_positive_order_and_attribution() {
         ],
         "",
     );
-    let members = SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    let members =
+        SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
     assert_eq!(members.id(), "g");
     assert_eq!(members.author(), keys.public_key());
     assert_eq!(members.members(), [Ok(alice), Ok(bob)]);
@@ -412,7 +414,8 @@ fn invalid_people_rows_do_not_reserve_later_valid_rows() {
         ],
         "",
     );
-    let members = SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
+    let members =
+        SimpleGroupMembers::from_event(&EventValue::Signed(members_event)).expect("members");
     assert!(matches!(
         &members.members()[0],
         Err(SimpleGroupError::MalformedRecordRow { tag_index: 1, .. })

@@ -64,8 +64,10 @@ fn event_at(payload: &Value, index: usize) -> CanaryResult<Event> {
 
 fn select_current(current: &mut Option<Event>, candidate: Event) {
     let replace = current.as_ref().is_none_or(|existing| {
-        candidate.created_at > existing.created_at
-            || (candidate.created_at == existing.created_at && candidate.id < existing.id)
+        fava_state::event_is_newer(
+            (candidate.created_at, candidate.id),
+            (existing.created_at, existing.id),
+        )
     });
     if replace {
         *current = Some(candidate);

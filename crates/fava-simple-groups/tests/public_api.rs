@@ -4,14 +4,13 @@ use std::collections::BTreeSet;
 use std::error::Error;
 
 use fava::{Fava, Observation, Write};
-use fava_query::{
-    Kind, Query, QueryAcquisition, QuerySnapshot, RelayUrl, ResultAuthority, SingleLetterTag,
-};
+use fava_query::{Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, SingleLetterTag};
 use fava_write::{EventBuilder, PublicKey, Timestamp};
 
 use fava_simple_groups::{
-    SimpleGroup, SimpleGroupAdmins, SimpleGroupError, SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupParticipants, SimpleGroupPins,
-    SimpleGroupRecords, SimpleGroupRoles, SimpleGroupSnapshot, PinnedItem, SavedSimpleGroup, SavedRelay, SimpleGroups,
+    PinnedItem, SavedRelay, SavedSimpleGroup, SimpleGroup, SimpleGroupAdmins, SimpleGroupError,
+    SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupParticipants, SimpleGroupPins,
+    SimpleGroupRecords, SimpleGroupRoles, SimpleGroups,
 };
 
 type ReadmePublishResult = Result<Write, Box<dyn Error>>;
@@ -19,7 +18,9 @@ type PublishUnsigned = fn(&Fava, &SimpleGroup, fava_write::UnsignedEvent) -> Rea
 type PublishSigned = fn(&Fava, &SimpleGroup, fava_write::Event) -> ReadmePublishResult;
 type PublishSavedEdit = fn(&Fava, &SimpleGroup, PublicKey) -> ReadmePublishResult;
 
-fn metadata_signature_is_public(event: &fava_write::EventValue) -> Result<String, SimpleGroupError> {
+fn metadata_signature_is_public(
+    event: &fava_write::EventValue,
+) -> Result<String, SimpleGroupError> {
     SimpleGroupMetadata::from_event(event).map(|metadata| metadata.id().to_owned())
 }
 
@@ -40,7 +41,8 @@ fn simple_group(host: RelayUrl, id: &str) -> Result<SimpleGroup, SimpleGroupErro
 fn one_host_group_traces_pure_preparation_and_queries() {
     let host = relay("wss://groups.example");
     let simple_group_id = " photos ";
-    let simple_group = simple_group(host.clone(), simple_group_id).expect("one host is a valid group");
+    let simple_group =
+        simple_group(host.clone(), simple_group_id).expect("one host is a valid group");
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
             .expect("generator public key");
@@ -70,7 +72,11 @@ fn one_host_group_traces_pure_preparation_and_queries() {
         .collect();
     let hosts: Vec<_> = simple_group.hosts().collect();
 
-    assert_eq!(simple_group.id(), simple_group_id, "the opaque id must not be trimmed");
+    assert_eq!(
+        simple_group.id(),
+        simple_group_id,
+        "the opaque id must not be trimmed"
+    );
     assert_eq!(hosts.len(), 1);
     assert_eq!(hosts[0], host);
     assert_eq!(
@@ -97,6 +103,9 @@ fn group_records_uses_exact_fixed_kind_set() {
     let records = simple_group
         .records(SimpleGroupRecords::all())
         .expect("ordinary record query");
+    let [(actual_host, records)] = records.as_slice() else {
+        panic!("one host yields one record query");
+    };
     let d = SingleLetterTag::from_char('d').expect("tag key");
     let kinds = BTreeSet::from([
         Kind::from_u16(39_000),
@@ -118,9 +127,10 @@ fn group_records_uses_exact_fixed_kind_set() {
             Some(&kinds),
             Some(&BTreeSet::from(["photos".to_owned()])),
             &QueryAcquisition::Explicit(BTreeSet::from([host.clone()])),
-            &ResultAuthority::OnlyRelays(BTreeSet::from([host])),
+            &ResultAuthority::OnlyRelays(BTreeSet::from([host.clone()])),
         )
     );
+    assert_eq!(actual_host, &host);
 }
 
 #[test]
@@ -132,42 +142,31 @@ fn metadata_parser_accessors_compile_externally() {
 
 #[test]
 fn people_parser_signatures_compile_externally() {
-    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupAdmins, SimpleGroupError> = SimpleGroupAdmins::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupAdmins, SimpleGroupError> =
+        SimpleGroupAdmins::from_event;
     let _: fn(&fava_write::EventValue) -> Result<SimpleGroupMembers, SimpleGroupError> =
         SimpleGroupMembers::from_event;
-    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupRoles, SimpleGroupError> = SimpleGroupRoles::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupRoles, SimpleGroupError> =
+        SimpleGroupRoles::from_event;
     let _: fn(&fava_write::EventValue) -> Result<SimpleGroupParticipants, SimpleGroupError> =
         SimpleGroupParticipants::from_event;
 }
 
 #[test]
 fn pin_and_saved_parser_signatures_compile_externally() {
-    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupPins, SimpleGroupError> = SimpleGroupPins::from_event;
+    let _: fn(&fava_write::EventValue) -> Result<SimpleGroupPins, SimpleGroupError> =
+        SimpleGroupPins::from_event;
     let _: fn(&fava_write::EventValue) = saved_signatures_are_public;
     let target: Option<PinnedItem> = None;
     assert!(target.is_none());
 }
 
 #[test]
-fn group_snapshot_signatures_compile_externally() {
-    let host = relay("wss://groups.example");
-    let simple_group = simple_group(host.clone(), "photos").expect("one host");
-    let input = QuerySnapshot::evaluated(Vec::new(), &[]);
-    let snapshot: SimpleGroupSnapshot = simple_group.project(&input).expect("bounded projection");
-
-    let mut hosts = snapshot.hosts();
-    assert_eq!(hosts.next(), Some(&host));
-    assert!(hosts.next().is_none());
-    assert!(snapshot.at(&host).is_some());
-    assert!(snapshot.events().is_empty());
-    assert!(snapshot.metadata().next().is_none());
-    assert!(snapshot.admins().next().is_none());
-    assert!(snapshot.members().next().is_none());
-}
-
-#[test]
 fn saved_edit_signatures_compile_externally() {
-    let _: fn(&SimpleGroup, Option<&str>) -> Result<fava_write::ReplaceableEventEdit, SimpleGroupError> =
+    let _: fn(
+        &SimpleGroup,
+        Option<&str>,
+    ) -> Result<fava_write::ReplaceableEventEdit, SimpleGroupError> =
         SimpleGroups::save_simple_group;
     let _: fn(&SimpleGroup) -> Result<fava_write::ReplaceableEventEdit, SimpleGroupError> =
         SimpleGroups::remove_simple_group;
@@ -183,10 +182,14 @@ fn saved_edit_signatures_compile_externally() {
 
 #[test]
 fn management_event_signatures_compile_externally() {
-    let _: fn(&SimpleGroup, fava_write::UnsignedEvent) -> Result<fava_write::UnsignedEvent, SimpleGroupError> =
-        SimpleGroup::edit_metadata;
-    let _: fn(&SimpleGroup, fava_write::UnsignedEvent) -> Result<fava_write::UnsignedEvent, SimpleGroupError> =
-        SimpleGroup::set_pins;
+    let _: fn(
+        &SimpleGroup,
+        fava_write::UnsignedEvent,
+    ) -> Result<fava_write::UnsignedEvent, SimpleGroupError> = SimpleGroup::edit_metadata;
+    let _: fn(
+        &SimpleGroup,
+        fava_write::UnsignedEvent,
+    ) -> Result<fava_write::UnsignedEvent, SimpleGroupError> = SimpleGroup::set_pins;
 }
 
 fn readme_publishes_prepared_unsigned(

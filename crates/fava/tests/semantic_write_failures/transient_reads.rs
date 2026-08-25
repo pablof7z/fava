@@ -4,14 +4,14 @@ use std::time::Duration;
 use fava::{Kind, ReceiptOutcome, all};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use nostr::key::Keys;
 
 use super::failure_support::publish_edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
     BlockingSigner, CountingSigner, RecordingPublisher, TestMaterializer, publication_builder,
-    relay_evidence, signed_source, wait_for_materialization, wait_for_signer,
+    relay_event, relay_occurrence, signed_source, wait_for_materialization, wait_for_signer,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -36,9 +36,9 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     wait_for_signer(&signer, 1).await;
     let source = signed_source(&keys, Kind::ContactList, 10, "new source", &[]);
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("source change commits");
     let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;

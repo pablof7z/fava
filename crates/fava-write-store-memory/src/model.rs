@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fava_state::{RelayAccess, RelaySessionKey};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{Event, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
 
 pub(super) fn destinations(
@@ -13,7 +13,10 @@ pub(super) fn destinations(
             .cloned()
             .map(|relay| {
                 (
-                    RelaySessionKey::new(relay, RelayAccess::public()),
+                    RelaySessionKey {
+                        relay,
+                        access: RelayAccess::Public,
+                    },
                     RelayDeliveryOutcome::Pending,
                 )
             })
@@ -74,8 +77,8 @@ impl<'a> From<&'a Event> for UnsignedEventView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use fava_state::RelayUrl;
     use fava_write::WriteRouting;
+    use nostr::types::RelayUrl;
 
     use super::destinations;
 

@@ -27,7 +27,7 @@ let query = photos.events(
 )?;
 let observation = fava.observe(query).await?;
 for record in &observation.current().events {
-    println!("{}", record.event.content());
+    println!("{}", record.event().content());
 }
 
 let draft = EventBuilder::new(me, Kind::from_u16(9))
@@ -44,38 +44,82 @@ let write: Write = fava.to(photos.hosts())?.publish(prepared)?;
 ## Records and fork visibility
 
 Relay-authored kinds 39000 through 39005 use exact `d` selection and
-`OnlyRelays` authority for the configured hosts. Projection never invents a
-record for an unobserved host and never lets one host speak for another.
+`OnlyRelays` authority. One bounded query is returned for each configured host,
+in configured-host order. Query owns same-id aggregation and coordinate winner
+selection; typed simple-group values decode one already-selected event.
 
+<a id="exact-host-records-1"></a>
 ```rust
-use fava_simple_groups::SimpleGroupRecords;
+//! Exact-host record query proof through the public API.
 
-let records = photos.records(SimpleGroupRecords::all())?;
-let observation = fava.observe(records).await?;
-let snapshot = photos.project(&observation.current())?;
+use fava_query::{QueryAcquisition, ResultAuthority};
+use fava_simple_groups::{SimpleGroup, SimpleGroupRecords};
+use nostr::types::RelayUrl;
+use std::collections::BTreeSet;
 
-for (host, metadata) in snapshot.metadata() {
-    println!("{}: {:?}", host, metadata.name());
-}
-for (host, member) in snapshot.members() {
-    println!("member {} was listed by {}", member, host);
-}
-
-if snapshot.metadata_differ() {
-    let bob = fava::RelayUrl::parse("wss://bob.groups.example")?;
-    if let Some(bob_view) = snapshot.at(&bob) {
-        for (_, metadata) in bob_view.metadata() {
-            println!("Bob host: {:?}", metadata.about());
-        }
+#[test]
+fn exact_host_records_1_builds_one_query_per_configured_host()
+-> Result<(), Box<dyn std::error::Error>> {
+    let b = RelayUrl::parse("wss://b.groups.example")?;
+    let a = RelayUrl::parse("wss://a.groups.example")?;
+    let group = SimpleGroup::on([b.clone(), a.clone()], "photos")?;
+    let queries = group.records(SimpleGroupRecords::all())?;
+    assert_eq!(queries.len(), 2);
+    assert_eq!(
+        queries.iter().map(|(host, _)| host).collect::<Vec<_>>(),
+        [&b, &a]
+    );
+    for (host, query) in queries {
+        let only = BTreeSet::from([host]);
+        assert_eq!(
+            query.source().acquisition(),
+            &QueryAcquisition::Explicit(only.clone())
+        );
+        assert_eq!(
+            query.source().authority(),
+            &ResultAuthority::OnlyRelays(only)
+        );
+        assert_eq!(
+            query.result_limit().map(std::num::NonZeroUsize::get),
+            Some(4_096)
+        );
     }
+    Ok(())
+}
+
+#[test]
+fn exact_host_records_1_preserves_all_256_exact_hosts() -> Result<(), Box<dyn std::error::Error>> {
+    let hosts = (0..256)
+        .map(|index| RelayUrl::parse(&format!("wss://host-{index}.groups.example")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let group = SimpleGroup::on(hosts.clone(), "photos")?;
+    let queries = group.records(SimpleGroupRecords::all())?;
+    assert_eq!(queries.len(), 256);
+    for ((host, query), expected) in queries.into_iter().zip(hosts) {
+        assert_eq!(host, expected);
+        let only = BTreeSet::from([expected]);
+        assert_eq!(
+            query.source().acquisition(),
+            &QueryAcquisition::Explicit(only.clone())
+        );
+        assert_eq!(
+            query.source().authority(),
+            &ResultAuthority::OnlyRelays(only)
+        );
+        assert_eq!(
+            query.result_limit().map(std::num::NonZeroUsize::get),
+            Some(4_096)
+        );
+    }
+    Ok(())
 }
 ```
 
-`SimpleGroupSnapshot::at` is an explicit application choice. An empty host view is
-only an empty positive-evidence view; it is not an absence or completeness
-claim. Disagreement compares complete optional host-local records. Projection
-refuses a 4,097th input row after examining at most the bound plus one; it never
-silently truncates a snapshot.
+Applications open the returned queries as independent ordinary observations,
+decode records with the existing typed `from_event(record.event())` parsers,
+and compare decoded values when fork visibility matters. The query vector is
+bounded by `SimpleGroup`'s 256-host construction bound; each query has a 4,096
+result bound.
 
 ## Discovery and saved lists
 
@@ -88,7 +132,7 @@ use fava_simple_groups::{SavedSimpleGroup, SimpleGroups};
 let query = SimpleGroups::saved_simple_groups([me])?;
 let observation = fava.observe(query).await?;
 for record in &observation.current().events {
-    for row in SavedSimpleGroup::from_event(&record.event)? {
+    for row in SavedSimpleGroup::from_event(record.event())? {
         let saved = row?;
         println!("{} @ {} {:?}", saved.id(), saved.relay(), saved.name());
     }
@@ -164,13 +208,13 @@ ordinary receipt and its current publication phase.
 
 ## Public values
 
-- `SimpleGroup`, `SimpleGroupRecords`, `SimpleGroupSnapshot`, `SimpleGroups`, and `SimpleGroupError`.
+- `SimpleGroup`, `SimpleGroupRecords`, `SimpleGroups`, and `SimpleGroupError`.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`, `SimpleGroupRoles`,
   `SimpleGroupParticipants`, and `SimpleGroupPins` for exact relay-authored records.
 - `PinnedItem`, `SavedSimpleGroup`, and `SavedRelay` for bounded typed rows.
 
-The crate's normal dependencies are exactly `fava-query`, `fava-state`, and
-`fava-write`. It owns no engine, provider, signer, router, store, publisher,
+The crate's normal dependencies are exactly `fava-query`, `fava-relay`,
+`fava-state`, and `fava-write`. It owns no engine, provider, signer, router, store, publisher,
 transport, runtime, observation, delivery, cancellation, or receipt state.
 Universal Fava owners contain no NIP-29 kind switch, simple-group-id branch, or
 production dependency on this capability.
@@ -207,7 +251,6 @@ at their exported path and are classified by the re-exported item's kind.
 | Method | `fava_simple_groups::SimpleGroup::id` |  |
 | Method | `fava_simple_groups::SimpleGroup::on` |  |
 | Method | `fava_simple_groups::SimpleGroup::prepare` |  |
-| Method | `fava_simple_groups::SimpleGroup::project` |  |
 | Method | `fava_simple_groups::SimpleGroup::records` |  |
 | Method | `fava_simple_groups::SimpleGroup::set_pins` |  |
 | Struct | `fava_simple_groups::SimpleGroupAdmins` |  |
@@ -332,24 +375,6 @@ at their exported path and are classified by the re-exported item's kind.
 | Method | `fava_simple_groups::SimpleGroupRoles::from_event` |  |
 | Method | `fava_simple_groups::SimpleGroupRoles::id` |  |
 | Method | `fava_simple_groups::SimpleGroupRoles::roles` |  |
-| Struct | `fava_simple_groups::SimpleGroupSnapshot` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::admin_records` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::admins` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::admins_differ` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::at` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::events` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::hosts` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::member_records` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::members` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::members_differ` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::metadata` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::metadata_differ` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::participant_records` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::participants_differ` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::pin_records` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::pins_differ` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::role_records` |  |
-| Method | `fava_simple_groups::SimpleGroupSnapshot::roles_differ` |  |
 | Struct | `fava_simple_groups::SimpleGroups` |  |
 | Method | `fava_simple_groups::SimpleGroups::materializer` |  |
 | Method | `fava_simple_groups::SimpleGroups::remove_relay` |  |

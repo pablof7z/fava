@@ -9,7 +9,10 @@
 
 use std::num::NonZeroUsize;
 
-use fava_state::{EventId, RelaySessionKey, RelayUrl, RetractionCause, Timestamp};
+use fava_relay::RelaySessionKey;
+use fava_state::RetractionCause;
+use nostr::event::EventId;
+use nostr::types::{RelayUrl, Timestamp};
 
 use crate::SourceRevision;
 use crate::identity::{ObservationId, OperationGeneration, QueryBranchId};
@@ -333,6 +336,16 @@ pub enum QueryShortfall {
     ResultLimitApplied {
         /// The bound applied.
         limit: NonZeroUsize,
+    },
+    /// The observation owner refused an otherwise valid live transition
+    /// because retaining it would exceed one exact session's live-state bound.
+    LiveRetentionLimit {
+        /// Exact relay/access contribution whose live state reached the bound.
+        session: RelaySessionKey,
+        /// Maximum live events retained for that exact session.
+        limit: NonZeroUsize,
+        /// Valid transitions refused since this session's live state opened.
+        refused: u64,
     },
     /// A source could not be opened at all.
     SourceUnavailable {

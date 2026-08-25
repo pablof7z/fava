@@ -12,6 +12,7 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_app_relays::AppRelayRouter;
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{
@@ -19,7 +20,6 @@ use fava_routing::{
     Router, RouterError, RouterSession,
 };
 use fava_signer_local::LocalSigner;
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -28,6 +28,7 @@ use fava_write::{Kind, Tag};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
@@ -221,7 +222,10 @@ fn contribution(
     let mut coverage = BTreeMap::new();
     let mut destinations = Vec::new();
     for (relay, target) in values {
-        let session = RelaySessionKey::new(relay.clone(), RelayAccess::public());
+        let session = RelaySessionKey {
+            relay: relay.clone(),
+            access: RelayAccess::Public,
+        };
         coverage.insert(
             target.clone(),
             CoverageState::Covered(BTreeSet::from([session.clone()])),

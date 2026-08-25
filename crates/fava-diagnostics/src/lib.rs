@@ -28,7 +28,7 @@ use std::sync::{Mutex, MutexGuard};
 pub use fava_query::{
     BoundedText, ObservationId, OperationGeneration, QueryBounds, QueryBranchId, RelaySourceState,
 };
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 
 pub use crate::limits::{BoundKind, LimitDiagnostic, LimitScope};
 pub use crate::providers::{

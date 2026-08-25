@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use fava_routing::RoutePlan;
+use fava_state::event_is_newer;
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
@@ -230,7 +231,13 @@ impl RedbWriteStore {
             return Ok(receipt);
         }
         require_qualified_source(current_source, selected_source)?;
-        if event.created_at <= receipt.current.event.created_at() {
+        let event_id = event.id.ok_or_else(|| {
+            WriteStoreError::Refused("successor materialization has no stable id".to_owned())
+        })?;
+        if !event_is_newer(
+            (event.created_at, event_id),
+            (receipt.current.event.created_at(), receipt.current.id()),
+        ) {
             return Err(WriteStoreError::Refused(
                 "successor materialization is not newer than current event".to_owned(),
             ));

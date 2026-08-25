@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fava_query::{OpenedQuerySource, Query, SourceEvent, SourceKind, SourceSnapshot};
+use fava_relay::RelayAccess;
 use fava_routing::{RoutePlan, RouteRequest};
-use fava_state::{EventCoordinate, RelayAccess, event_coordinate};
+use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
     Event, EventValue, Kind, PublicKey, ReceiptId, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
@@ -71,14 +72,14 @@ impl OpenedSemanticSources {
         let selected_id = selected_id?;
         self.snapshots.iter().find_map(|snapshot| {
             snapshot.events.iter().find_map(|event| match event {
-                SourceEvent::Cached(cached) if cached.event.id == selected_id => {
-                    Some(cached.event.clone())
+                SourceEvent::Relay(relay) if relay.event().id == selected_id => {
+                    Some(relay.event().clone())
                 }
                 SourceEvent::Local(local) => match &local.event {
                     EventValue::Signed(event) if event.id == selected_id => Some(event.clone()),
                     EventValue::Unsigned(_) | EventValue::Signed(_) => None,
                 },
-                SourceEvent::Cached(_) => None,
+                SourceEvent::Relay(_) => None,
             })
         })
     }
@@ -293,12 +294,12 @@ impl Publication {
         let coordinate = edit_coordinate(edit, author);
         for source in &mut qualified {
             source.events.retain(|event| match event {
-                SourceEvent::Cached(cached) => {
+                SourceEvent::Relay(relay) => {
                     event_coordinate(
-                        cached.event.id,
-                        cached.event.pubkey,
-                        cached.event.kind,
-                        cached.event.tags.as_slice(),
+                        relay.event().id,
+                        relay.event().pubkey,
+                        relay.event().kind,
+                        relay.event().tags.as_slice(),
                     ) == coordinate
                 }
                 SourceEvent::Local(local) => {
@@ -322,7 +323,7 @@ impl Publication {
         Ok(snapshot
             .events
             .first()
-            .and_then(|record| match &record.event {
+            .and_then(|record| match record.event() {
                 EventValue::Signed(event) => Some(event.clone()),
                 EventValue::Unsigned(_) => None,
             }))
@@ -337,7 +338,7 @@ impl Publication {
         match routing {
             WriteRouting::Explicit(relays) => RoutePlan::explicit(
                 relays.iter().cloned(),
-                &RelayAccess::public(),
+                &RelayAccess::Public,
                 &request.targets(),
             )
             .map_err(|error| PublicationError::Routing(error.to_string())),
@@ -370,11 +371,10 @@ impl Publication {
         match candidate {
             Some(candidate)
                 if state.source_floor.is_none_or(|floor| {
-                    candidate.created_at > floor
-                        || (candidate.created_at == floor
-                            && state
-                                .selected_id
-                                .is_some_and(|selected_id| candidate.id < selected_id))
+                    event_is_newer(
+                        (candidate.created_at, candidate.id),
+                        (floor, state.selected_id.unwrap_or(candidate.id)),
+                    )
                 }) =>
             {
                 Ok((true, Some(candidate)))
@@ -389,7 +389,7 @@ impl Publication {
 fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventId) -> bool {
     sources.iter().any(|source| {
         source.events.iter().any(|event| match event {
-            SourceEvent::Cached(cached) => cached.event.id == selected_id,
+            SourceEvent::Relay(relay) => relay.event().id == selected_id,
             SourceEvent::Local(local) => {
                 matches!(&local.event, EventValue::Signed(event) if event.id == selected_id)
             }

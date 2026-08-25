@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava_query::{BoundedText, OperationGeneration};
+use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
-use fava_state::RelaySessionKey;
 use fava_subscriptions::{PlanRevision, SubscriptionPlan, WithdrawalReason};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,

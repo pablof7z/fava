@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::relay_session_serde::{decode, encode};
 
 pub(super) fn serialize<S>(
     value: &BTreeMap<RelaySessionKey, u32>,
@@ -11,7 +13,11 @@ pub(super) fn serialize<S>(
 where
     S: Serializer,
 {
-    value.iter().collect::<Vec<_>>().serialize(serializer)
+    value
+        .iter()
+        .map(|(session, attempts)| (encode(session), attempts))
+        .collect::<Vec<_>>()
+        .serialize(serializer)
 }
 
 pub(super) fn deserialize<'de, D>(
@@ -20,9 +26,14 @@ pub(super) fn deserialize<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let pairs = Vec::<(RelaySessionKey, u32)>::deserialize(deserializer)?;
+    let pairs = Vec::<((nostr::types::RelayUrl, Option<nostr::key::PublicKey>), u32)>::deserialize(
+        deserializer,
+    )?;
     let count = pairs.len();
-    let map: BTreeMap<_, _> = pairs.into_iter().collect();
+    let map: BTreeMap<_, _> = pairs
+        .into_iter()
+        .map(|(session, attempts)| (decode(session), attempts))
+        .collect();
     if map.len() == count {
         Ok(map)
     } else {

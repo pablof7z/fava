@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava::EventBuilder;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{RouteContribution, RouteDestination, RoutePlan, RouteRequest};
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
 use fava_write::{
     EventValue, Kind, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteIntent,
     WriteIntentError, WriteRouting,
@@ -13,6 +13,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 #[tokio::test(flavor = "current_thread")]
 async fn slow_receipt_consumer_gets_explicit_lag_instead_of_silent_loss() {
@@ -153,10 +154,10 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
     let destinations = (0..257)
         .map(|index| {
             RouteDestination::new(
-                RelaySessionKey::new(
-                    RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap(),
-                    RelayAccess::public(),
-                ),
+                RelaySessionKey {
+                    relay: RelayUrl::parse(&format!("wss://automatic-{index}.example")).unwrap(),
+                    access: RelayAccess::Public,
+                },
                 BTreeSet::new(),
                 "bounded route",
             )
@@ -207,10 +208,10 @@ fn automatic_route_shortfall_bound_is_atomic() {
         .accept(WriteIntent::event(event, WriteRouting::Automatic).unwrap())
         .unwrap();
     let destination = RouteDestination::new(
-        RelaySessionKey::new(
-            RelayUrl::parse("wss://atomic-route.example").unwrap(),
-            RelayAccess::public(),
-        ),
+        RelaySessionKey {
+            relay: RelayUrl::parse("wss://atomic-route.example").unwrap(),
+            access: RelayAccess::Public,
+        },
         BTreeSet::new(),
         "initial route",
     );
@@ -267,10 +268,10 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
     let accepted = store
         .accept(WriteIntent::presigned(event, WriteRouting::Automatic).unwrap())
         .unwrap();
-    let session = RelaySessionKey::new(
-        RelayUrl::parse("wss://withdrawn-in-flight.example").unwrap(),
-        RelayAccess::public(),
-    );
+    let session = RelaySessionKey {
+        relay: RelayUrl::parse("wss://withdrawn-in-flight.example").unwrap(),
+        access: RelayAccess::Public,
+    };
     let first = RoutePlan::from_contribution(
         1,
         &RouteContribution {

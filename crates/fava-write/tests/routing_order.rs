@@ -1,7 +1,7 @@
 //! Neutral ordered explicit-route evidence.
 
-use fava_state::RelayUrl;
 use fava_write::{WriteIntentError, WriteRouting};
+use nostr::types::RelayUrl;
 
 #[test]
 fn explicit_route_preserves_first_occurrences() {

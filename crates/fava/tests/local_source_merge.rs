@@ -7,9 +7,8 @@ use fava::{Fava, Query, SingleLetterTag};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{
-    CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
-};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::EventValue;
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -17,6 +16,7 @@ use nostr::event::{
     Event, EventBuilder, FinalizeEvent, FinalizeUnsignedEvent, Kind, Tag, UnsignedEvent,
 };
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 use tokio::time::timeout;
 
 fn assembly() -> (Fava, Arc<MemoryEventCache>, Arc<MemoryWriteStore>) {
@@ -79,14 +79,24 @@ fn literal_tag(key: char, value: &str, later_cells: &[&str]) -> Tag {
     Tag::parse(cells).expect("valid literal tag")
 }
 
-fn evidence(relay: &str, observed_at: u64) -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(
-            RelayUrl::parse(relay).expect("test relay url"),
-            RelayAccess::public(),
-        ),
-        Timestamp::from(observed_at),
-    )
+#[derive(Clone)]
+struct TestRelayOccurrence {
+    session: RelaySessionKey,
+    observed_at: Timestamp,
+}
+
+fn occurrence(relay: &str, observed_at: u64) -> TestRelayOccurrence {
+    TestRelayOccurrence {
+        session: RelaySessionKey {
+            relay: RelayUrl::parse(relay).expect("test relay url"),
+            access: RelayAccess::Public,
+        },
+        observed_at: Timestamp::from(observed_at),
+    }
+}
+
+fn relay_event(event: Event, occurrence: TestRelayOccurrence) -> RelayEvent {
+    RelayEvent::new(event, occurrence.session, occurrence.observed_at)
 }
 
 async fn next_snapshot(feed: &mut fava_observe::Observation) -> Arc<fava::QuerySnapshot> {
@@ -117,8 +127,7 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
     assert_eq!(visible.events[0].id(), id);
     assert_eq!(
         visible.events[0]
-            .publication
-            .as_ref()
+            .publication()
             .map(|publication| publication.receipt_id),
         Some(accepted.receipt_id)
     );
@@ -138,9 +147,9 @@ async fn cancelling_local_replacement_reveals_cached_predecessor() {
     let keys = Keys::generate();
     let predecessor = signed_event(&keys, Kind::ContactList, 10, "cached");
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             predecessor.clone(),
-            evidence("wss://relay.example", 1),
+            occurrence("wss://relay.example", 1),
         ))])
         .expect("cache mutation commits");
     let successor = unsigned_event(&keys, Kind::ContactList, 20, "local");
@@ -177,9 +186,9 @@ async fn relay_echo_enriches_one_record_without_erasing_receipt() {
         .accept_materialized(EventValue::Signed(event.clone()))
         .expect("signed local event accepts");
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             event.clone(),
-            evidence("wss://relay-a.example", 1),
+            occurrence("wss://relay-a.example", 1),
         ))])
         .expect("first relay evidence commits");
     let mut feed = fava
@@ -187,22 +196,21 @@ async fn relay_echo_enriches_one_record_without_erasing_receipt() {
         .await
         .expect("query opens");
     assert_eq!(feed.current().events.len(), 1);
-    assert_eq!(feed.current().events[0].relay_evidence.len(), 1);
+    assert_eq!(feed.current().events[0].relay_occurrences().len(), 1);
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             event,
-            evidence("wss://relay-b.example", 2),
+            occurrence("wss://relay-b.example", 2),
         ))])
         .expect("second relay evidence merges");
     let enriched = next_snapshot(&mut feed).await;
 
     assert_eq!(enriched.events.len(), 1);
-    assert_eq!(enriched.events[0].relay_evidence.len(), 2);
+    assert_eq!(enriched.events[0].relay_occurrences().len(), 2);
     assert_eq!(
         enriched.events[0]
-            .publication
-            .as_ref()
+            .publication()
             .map(|publication| publication.receipt_id),
         Some(accepted.receipt_id)
     );
@@ -214,9 +222,9 @@ async fn acquisition_only_and_provenance_constraint_stay_distinct() {
     let keys = Keys::generate();
     let event = signed_event(&keys, Kind::TextNote, 10, "authority");
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             event.clone(),
-            evidence("wss://other.example", 1),
+            occurrence("wss://other.example", 1),
         ))])
         .expect("other relay evidence commits");
     let asked = RelayUrl::parse("wss://asked.example").expect("relay url");
@@ -238,9 +246,9 @@ async fn acquisition_only_and_provenance_constraint_stay_distinct() {
     assert!(only_feed.current().events.is_empty());
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             event,
-            evidence("wss://asked.example", 2),
+            occurrence("wss://asked.example", 2),
         ))])
         .expect("qualifying relay evidence merges");
     assert_eq!(next_snapshot(&mut only_feed).await.events.len(), 1);
@@ -281,7 +289,7 @@ async fn deletion_and_expiration_update_the_same_open_query() {
         assert!(
             cache
                 .admit(
-                    CachedEvent::new(event, evidence("wss://relay.example", 15)),
+                    relay_event(event, occurrence("wss://relay.example", 15)),
                     Timestamp::from(15),
                 )
                 .expect("event admission commits")
@@ -300,7 +308,7 @@ async fn deletion_and_expiration_update_the_same_open_query() {
         .expect("deletion signs");
     cache
         .admit(
-            CachedEvent::new(deletion, evidence("wss://relay.example", 20)),
+            relay_event(deletion, occurrence("wss://relay.example", 20)),
             Timestamp::from(20),
         )
         .expect("deletion admission commits");
@@ -372,12 +380,12 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
         ],
     );
     let later_cell_only_id = later_cell_only.id.expect("builder computes id");
-    let relay = evidence("wss://relay.example", 1);
+    let relay = occurrence("wss://relay.example", 1);
     cache
         .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(signed.clone(), relay.clone())),
-            CacheMutation::Upsert(CachedEvent::new(opposite_key.clone(), relay.clone())),
-            CacheMutation::Upsert(CachedEvent::new(missing_conjunct.clone(), relay)),
+            EventStateMutation::Upsert(relay_event(signed.clone(), relay.clone())),
+            EventStateMutation::Upsert(relay_event(opposite_key.clone(), relay.clone())),
+            EventStateMutation::Upsert(relay_event(missing_conjunct.clone(), relay)),
         ])
         .expect("signed cache corpus commits");
     let accepted = writes
@@ -416,18 +424,17 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
         .iter()
         .find(|record| record.id() == signed.id)
         .expect("signed cache match remains visible");
-    assert_eq!(cached_record.relay_evidence.len(), 1);
-    assert!(cached_record.publication.is_none());
+    assert_eq!(cached_record.relay_occurrences().len(), 1);
+    assert!(cached_record.publication().is_none());
     let local_record = snapshot
         .events
         .iter()
         .find(|record| record.id() == unsigned_id)
         .expect("unsigned write-store match remains visible");
-    assert!(local_record.relay_evidence.is_empty());
+    assert!(local_record.relay_occurrences().is_empty());
     assert_eq!(
         local_record
-            .publication
-            .as_ref()
+            .publication()
             .map(|publication| publication.receipt_id),
         Some(accepted.receipt_id)
     );
@@ -460,7 +467,7 @@ async fn a_removed_event_reaches_the_application_with_the_rule_that_removed_it()
     let doomed = signed_event(&keys, Kind::TextNote, 10, "doomed");
     cache
         .admit(
-            CachedEvent::new(doomed.clone(), evidence("wss://relay.example", 11)),
+            relay_event(doomed.clone(), occurrence("wss://relay.example", 11)),
             Timestamp::from(11),
         )
         .expect("event admits");
@@ -478,7 +485,7 @@ async fn a_removed_event_reaches_the_application_with_the_rule_that_removed_it()
         .expect("test event signs");
     cache
         .admit(
-            CachedEvent::new(deletion.clone(), evidence("wss://relay.example", 12)),
+            relay_event(deletion.clone(), occurrence("wss://relay.example", 12)),
             Timestamp::from(12),
         )
         .expect("deletion admits");

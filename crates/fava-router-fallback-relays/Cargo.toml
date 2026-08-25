@@ -5,7 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+nostr.workspace = true
 fava-routing.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 tokio.workspace = true
 

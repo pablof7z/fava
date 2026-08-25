@@ -13,7 +13,7 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -26,6 +26,7 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use tokio::sync::Notify;
 
 #[test]
@@ -328,10 +329,10 @@ fn mixed_receipt() -> Receipt {
 }
 
 fn session(name: &str) -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
+        access: RelayAccess::Public,
+    }
 }
 
 fn relay(name: &str) -> RelayUrl {

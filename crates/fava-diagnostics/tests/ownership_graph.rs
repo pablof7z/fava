@@ -9,14 +9,15 @@ use fava_diagnostics::{
     ObservationId, ObservationWireBinding, OperationGeneration, QueryBranchId, QueryDiagnostic,
     RelayDiagnostic, RelaySessionState, RelaySourceState, WireSubscriptionDiagnostic,
 };
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_wire::SubscriptionId;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn session(name: &str) -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL"),
+        access: RelayAccess::Public,
+    }
 }
 
 fn observation(value: u64) -> ObservationId {
