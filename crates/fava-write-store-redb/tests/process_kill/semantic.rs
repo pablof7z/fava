@@ -6,13 +6,13 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
     Event, EventBuilder, Fava, FavaBuilder, Kind, MaterializationId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent,
+    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -237,6 +237,92 @@ async fn semantic_successor_and_failed_source_resume_once() {
     assert_eq!(second_materializer.calls(), 0);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identity() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let path = kill_at("first");
+    let store = Arc::new(RedbWriteStore::open(path).expect("semantic store reopens"));
+    let before = receipt_one(&store);
+    let cache = Arc::new(MemoryEventCache::default());
+    let source = signed_source(20, "post-kill source");
+    cache
+        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+            source,
+            relay_evidence(),
+        ))])
+        .expect("post-kill source enters canonical cache");
+    let materializer = Arc::new(TestMaterializer::with_tag_count(Kind::ContactList, 2_001));
+    let fava = Fava::builder()
+        .event_cache(cache)
+        .write_store(Arc::clone(&store))
+        .query_evaluator(Arc::new(StandardQueryEvaluator))
+        .transport(Arc::new(NoopTransport))
+        .signer(Arc::new(LocalSigner::new(keys())))
+        .publisher(Arc::new(PendingPublisher))
+        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
+        .materializer(Arc::clone(&materializer))
+        .build()
+        .expect("recovery assembles with the selected materializer mode");
+
+    let observed = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let Some(error) = materializer.observed_error() {
+                return error;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("recovery invokes the materializer");
+    assert_eq!(
+        observed,
+        WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        }
+    );
+    let after = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let receipt = receipt_one(&store);
+            if receipt
+                .current
+                .publication
+                .materialization_failure
+                .is_some()
+            {
+                return receipt;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("typed refusal is recorded against the existing generation");
+
+    assert_eq!(after.write_id, before.write_id);
+    assert_eq!(after.receipt_id, before.receipt_id);
+    assert_eq!(after.current.id(), before.current.id());
+    assert_eq!(
+        after.current.publication.materialization_id,
+        before.current.publication.materialization_id
+    );
+    assert_eq!(
+        after.current.publication.materialization_source,
+        before.current.publication.materialization_source
+    );
+    assert_eq!(
+        after.current.publication.retired_materializations,
+        before.current.publication.retired_materializations
+    );
+    assert_eq!(
+        after.current.publication.materialization_id,
+        MaterializationId::from_u64(1),
+        "failed rematerialization installed a successor generation"
+    );
+    drop(fava);
+}
+
 #[test]
 fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
     if env::var(SEMANTIC_BOUNDARY).is_ok() {
@@ -354,6 +440,8 @@ fn relay_evidence() -> RelayEvidence {
 struct TestMaterializer {
     kind: Kind,
     calls: AtomicU64,
+    tag_count: usize,
+    observed_error: Mutex<Option<WriteIntentError>>,
 }
 
 impl TestMaterializer {
@@ -361,11 +449,26 @@ impl TestMaterializer {
         Self {
             kind,
             calls: AtomicU64::new(0),
+            tag_count: 0,
+            observed_error: Mutex::new(None),
+        }
+    }
+
+    fn with_tag_count(kind: Kind, tag_count: usize) -> Self {
+        Self {
+            kind,
+            calls: AtomicU64::new(0),
+            tag_count,
+            observed_error: Mutex::new(None),
         }
     }
 
     fn calls(&self) -> u64 {
         self.calls.load(Ordering::SeqCst)
+    }
+
+    fn observed_error(&self) -> Option<WriteIntentError> {
+        self.observed_error.lock().unwrap().clone()
     }
 }
 
@@ -386,11 +489,18 @@ impl ReplaceableEventMaterializer for TestMaterializer {
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        EventBuilder::new(author, Kind::ContactList)
+        let result = EventBuilder::new(author, Kind::ContactList)
             .created_at(created_at)
             .content(source.map_or("edit", |event| event.content.as_str()))
+            .tags((0..self.tag_count).map(|index| {
+                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+            }))
             .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()));
+        if let Err(error) = &result {
+            *self.observed_error.lock().unwrap() = Some(error.clone());
+        }
+        result
     }
 }
 
@@ -423,6 +533,18 @@ impl Publisher for AcknowledgingPublisher {
                 message: "stored".to_owned(),
             }
         })
+    }
+}
+
+struct PendingPublisher;
+
+impl Publisher for PendingPublisher {
+    fn publish<'a>(
+        &'a self,
+        _attempt: PublishAttempt,
+        _transport: &'a dyn Transport,
+    ) -> Pin<Box<dyn Future<Output = PublishOutcome> + Send + 'a>> {
+        Box::pin(std::future::pending())
     }
 }
 

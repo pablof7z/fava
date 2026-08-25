@@ -243,6 +243,30 @@ fn saved_materializer_refuses_duplicate_encoded_hosts() {
     );
 }
 
+#[test]
+fn materializer_preserves_the_exact_event_builder_tag_refusal() {
+    let keys = Keys::generate();
+    let source = EventBuilder::new(Kind::from_u16(10_009), "opaque")
+        .tags((0..2_000).map(|index| Tag::parse(["x", &index.to_string()]).expect("ordinary tag")))
+        .custom_created_at(Timestamp::from(1))
+        .finalize(&keys)
+        .expect("source signs");
+    let edit = SimpleGroups::save_relay(relay("wss://absent.example")).expect("relay edit");
+
+    assert_eq!(
+        SimpleGroups::materializer().materialize(
+            &edit,
+            keys.public_key(),
+            Some(&source),
+            Timestamp::from(2),
+        ),
+        Err(fava_write::WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
+}
+
 fn signed_source(keys: &Keys, created_at: u64, content: &str, tags: Vec<Tag>) -> fava_write::Event {
     EventBuilder::new(Kind::from_u16(10_009), content)
         .tags(tags)

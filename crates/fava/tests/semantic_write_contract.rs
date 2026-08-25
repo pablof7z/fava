@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use fava_write::{
     Event, EventBuilder, Kind, MaterializationId, PublicationEvidence, ReceiptId,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, SignatureState, Timestamp, UnsignedEvent,
-    WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    ReplaceableEventEdit, ReplaceableEventMaterializer, SignatureState, Tag, Timestamp,
+    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use nostr::key::Keys;
 
@@ -47,7 +47,9 @@ fn edit_contract_is_bounded_and_round_trips() {
     );
 }
 
-struct ExactMaterializer;
+struct ExactMaterializer {
+    tag_count: usize,
+}
 
 impl ReplaceableEventMaterializer for ExactMaterializer {
     fn kind(&self) -> Kind {
@@ -69,6 +71,9 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
         EventBuilder::new(author, Kind::ContactList)
             .created_at(created_at)
             .content("first value")
+            .tags((0..self.tag_count).map(|index| {
+                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+            }))
             .build()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
     }
@@ -79,7 +84,7 @@ fn first_value_receives_no_prior_and_exact_timestamp() {
     let actor = Keys::generate().public_key();
     let edit = edit(Kind::ContactList, None);
     let timestamp = Timestamp::from(42);
-    let materializer = ExactMaterializer;
+    let materializer = ExactMaterializer { tag_count: 0 };
 
     assert!(materializer.supports(&edit));
     let event = materializer
@@ -87,6 +92,25 @@ fn first_value_receives_no_prior_and_exact_timestamp() {
         .expect("first value materializes");
     assert_eq!(event.pubkey, actor);
     assert_eq!(event.created_at, timestamp);
+}
+
+#[test]
+fn exact_materializer_preserves_the_event_builder_tag_refusal() {
+    let actor = Keys::generate().public_key();
+    let materializer = ExactMaterializer { tag_count: 2_001 };
+
+    assert_eq!(
+        materializer.materialize(
+            &edit(Kind::ContactList, None),
+            actor,
+            None,
+            Timestamp::from(42),
+        ),
+        Err(WriteIntentError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    );
 }
 
 #[test]
