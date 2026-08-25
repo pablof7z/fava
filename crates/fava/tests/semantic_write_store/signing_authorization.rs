@@ -137,3 +137,47 @@ fn memory_authorization_wins_and_holds_one_bounded_successor() {
     };
     assert_eq!(current.content, "one|two");
 }
+
+#[test]
+fn memory_authorized_cancellation_without_successor_is_exact_retryable_work() {
+    let keys = Keys::generate();
+    let store = MemoryWriteStore::default();
+    let accepted = store
+        .accept_materialized_edit(
+            intent(keys.public_key(), 1),
+            event(keys.public_key(), 1, "one"),
+            None,
+        )
+        .unwrap();
+    store
+        .authorize_signing(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            accepted.current.id(),
+        )
+        .unwrap();
+
+    let cancelled = store
+        .record_signer_retryable(
+            accepted.write_id,
+            accepted.receipt_id,
+            MaterializationId::from_u64(1),
+            accepted.current.id(),
+            "authorized signer invocation cancelled before effect; retry is permitted".to_owned(),
+        )
+        .unwrap();
+
+    assert_eq!(cancelled.write_id, accepted.write_id);
+    assert_eq!(cancelled.receipt_id, accepted.receipt_id);
+    assert_eq!(cancelled.current.id(), accepted.current.id());
+    assert_eq!(
+        cancelled.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    assert!(matches!(
+        cancelled.current.publication.signature,
+        SignatureState::Retryable(reason)
+            if reason.contains("cancelled") && reason.contains("retry is permitted")
+    ));
+}

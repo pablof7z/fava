@@ -4,7 +4,7 @@ use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use fava::{EventBuilder, EventValue, Fava, FavaBuilder, Kind, ReceiptOutcome, all};
@@ -19,8 +19,10 @@ use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
 };
-use fava_write::{Event, PublicKey, UnsignedEvent};
+use fava_write::{Event, PublicKey, SignatureState, UnsignedEvent};
+use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
+use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
 use tokio::sync::watch;
 
@@ -191,14 +193,148 @@ async fn replaced_signer_stale_valid_completion_cannot_install_or_deliver() {
     assert_eq!(publisher.attempts().len(), 1);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn memory_replacement_between_snapshot_and_invoke_skips_retired_signer() {
+    replacement_between_snapshot_and_invoke(Arc::new(MemoryWriteStore::default())).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn redb_replacement_between_snapshot_and_invoke_skips_retired_signer() {
+    replacement_between_snapshot_and_invoke(Arc::new(
+        RedbWriteStore::open(unique_redb_path("pre-invoke-replacement")).unwrap(),
+    ))
+    .await;
+}
+
+async fn replacement_between_snapshot_and_invoke<W>(store: Arc<W>)
+where
+    W: WriteStore + 'static,
+{
+    let alice = Keys::generate();
+    let public_key = alice.public_key();
+    let selected = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+    let retired = Arc::new(SnapshotWindowSigner::new(
+        public_key,
+        Arc::clone(&selected),
+        Arc::clone(&release),
+    ));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let fava = assembly_with_store(Arc::clone(&publisher), store)
+        .signer(Arc::clone(&retired))
+        .build()
+        .expect("publication assembly");
+    let replacement_fava = fava.clone();
+    let replacement = std::thread::spawn(move || {
+        selected.wait();
+        replacement_fava
+            .replace_signer(Arc::new(LocalSigner::new(alice)))
+            .expect("replacement commits while the old snapshot is paused");
+        release.wait();
+    });
+    let write = fava
+        .to([relay("pre-invoke-replacement")])
+        .unwrap()
+        .publish(
+            EventBuilder::new(public_key, Kind::TextNote)
+                .content("replacement wins after snapshot and before invocation")
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
+
+    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+        .await
+        .expect("replacement signer settles")
+        .expect("write remains admitted");
+    replacement.join().expect("replacement thread completes");
+    assert_eq!(retired.calls(), 0, "retired provider method was invoked");
+    assert!(matches!(settled.current.event, EventValue::Signed(_)));
+    assert_eq!(publisher.attempts().len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn memory_no_successor_cancellation_leaves_exact_retryable_custody() {
+    no_successor_cancellation(Arc::new(MemoryWriteStore::default())).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn redb_no_successor_cancellation_leaves_exact_retryable_custody() {
+    no_successor_cancellation(Arc::new(
+        RedbWriteStore::open(unique_redb_path("no-successor-cancellation")).unwrap(),
+    ))
+    .await;
+}
+
+async fn no_successor_cancellation<W>(store: Arc<W>)
+where
+    W: WriteStore + 'static,
+{
+    let alice = Keys::generate();
+    let signer = Arc::new(CancelledSigner::new(alice.public_key()));
+    let fava = assembly_with_store(Arc::new(RecordingPublisher::default()), store)
+        .signer(Arc::clone(&signer))
+        .build()
+        .expect("publication assembly");
+    let write = fava
+        .to([relay("cancelled-without-successor")])
+        .unwrap()
+        .publish(
+            EventBuilder::new(alice.public_key(), Kind::TextNote)
+                .content("cancelled authorization remains attributable")
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
+
+    let receipt = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let receipt = write.receipt().unwrap();
+            if matches!(
+                receipt.current.publication.signature,
+                SignatureState::Retryable(_)
+            ) {
+                break receipt;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("authorized cancellation becomes durable retryable custody");
+    let SignatureState::Retryable(reason) = receipt.current.publication.signature else {
+        unreachable!()
+    };
+    assert_eq!(signer.calls(), 1);
+    assert!(reason.contains("cancelled"));
+    assert!(reason.contains("retry is permitted"));
+    assert_eq!(receipt.write_id, write.write_id());
+    assert_eq!(receipt.receipt_id, write.receipt_id());
+}
+
 fn assembly(publisher: Arc<RecordingPublisher>) -> FavaBuilder {
+    assembly_with_store(publisher, Arc::new(MemoryWriteStore::default()))
+}
+
+fn assembly_with_store<W>(publisher: Arc<RecordingPublisher>, store: Arc<W>) -> FavaBuilder
+where
+    W: WriteStore + 'static,
+{
     Fava::builder()
         .event_cache(Arc::new(MemoryEventCache::default()))
-        .write_store(Arc::new(MemoryWriteStore::default()))
+        .write_store(store)
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
+}
+
+fn unique_redb_path(name: &str) -> std::path::PathBuf {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    std::env::temp_dir().join(format!(
+        "fava-r5-{name}-{}-{}.redb",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 fn relay(name: &str) -> RelayUrl {
@@ -305,6 +441,86 @@ struct BlockingSigner {
     public_key: PublicKey,
     calls: AtomicU64,
     cancellations: AtomicU64,
+}
+
+struct SnapshotWindowSigner {
+    public_key: PublicKey,
+    selected: Arc<Barrier>,
+    release: Arc<Barrier>,
+    calls: AtomicU64,
+}
+
+impl SnapshotWindowSigner {
+    fn new(public_key: PublicKey, selected: Arc<Barrier>, release: Arc<Barrier>) -> Self {
+        Self {
+            public_key,
+            selected,
+            release,
+            calls: AtomicU64::new(0),
+        }
+    }
+
+    fn calls(&self) -> u64 {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl Signer for SnapshotWindowSigner {
+    fn public_key(&self) -> PublicKey {
+        self.public_key
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        self.selected.wait();
+        self.release.wait();
+        SignerAvailability::Available
+    }
+
+    fn sign_event(
+        &self,
+        _event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(std::future::ready(Err(SignerError::Cancelled)))
+    }
+}
+
+struct CancelledSigner {
+    public_key: PublicKey,
+    calls: AtomicU64,
+}
+
+impl CancelledSigner {
+    fn new(public_key: PublicKey) -> Self {
+        Self {
+            public_key,
+            calls: AtomicU64::new(0),
+        }
+    }
+
+    fn calls(&self) -> u64 {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl Signer for CancelledSigner {
+    fn public_key(&self) -> PublicKey {
+        self.public_key
+    }
+
+    fn availability(&self) -> SignerAvailability {
+        SignerAvailability::Available
+    }
+
+    fn sign_event(
+        &self,
+        _event: UnsignedEvent,
+        _cancel: watch::Receiver<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(std::future::ready(Err(SignerError::Cancelled)))
+    }
 }
 
 struct GatedValidSigner {

@@ -139,6 +139,26 @@ fn semantic_boundary_child() {
                 )
                 .expect("post-authorization successor commits before SIGKILL");
         }
+        "authorized-cancelled" => {
+            store
+                .authorize_signing(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    MaterializationId::from_u64(1),
+                    accepted.current.id(),
+                )
+                .expect("pre-kill signer authorization commits");
+            store
+                .record_signer_retryable(
+                    accepted.write_id,
+                    accepted.receipt_id,
+                    MaterializationId::from_u64(1),
+                    accepted.current.id(),
+                    "authorized signer invocation cancelled before effect; retry is permitted"
+                        .to_owned(),
+                )
+                .expect("pre-kill cancelled authorization remains retryable");
+        }
         "terminal" => {
             store
                 .apply_route(
@@ -466,6 +486,27 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
         successor.current.publication.signature,
         SignatureState::Signed
     );
+}
+
+#[test]
+fn authorized_cancellation_without_successor_survives_sigkill_exactly() {
+    if env::var(SEMANTIC_BOUNDARY).is_ok() {
+        return;
+    }
+    let path = kill_at("authorized-cancelled");
+    let store = RedbWriteStore::open(path).expect("cancelled authorization store reopens");
+    let recovered = receipt_one(&store);
+    assert_eq!(recovered.write_id.as_u64(), 1);
+    assert_eq!(recovered.receipt_id.as_u64(), 1);
+    assert_eq!(
+        recovered.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
+        panic!("cancelled authorization reopened without retry disposition")
+    };
+    assert!(reason.contains("cancelled"));
+    assert!(reason.contains("retry is permitted"));
 }
 
 #[tokio::test(flavor = "current_thread")]

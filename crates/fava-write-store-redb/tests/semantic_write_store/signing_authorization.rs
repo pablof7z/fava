@@ -162,3 +162,54 @@ fn redb_authorized_generation_without_successor_reopens_as_exact_retryable_work(
     assert!(reason.contains(&accepted.current.id().to_string()));
     assert!(reason.contains("retry is permitted"));
 }
+
+#[test]
+fn redb_authorized_cancellation_without_successor_survives_reopen_exactly() {
+    let path = unique_path("authorized-cancelled-retryable");
+    let keys = Keys::generate();
+    let author = keys.public_key();
+    let accepted = {
+        let store = RedbWriteStore::open(&path).unwrap();
+        let accepted = store
+            .accept_materialized_edit(
+                WriteIntent::edit_as(edit(), author, WriteRouting::Automatic).unwrap(),
+                materialization(author, 1, "one"),
+                None,
+            )
+            .unwrap();
+        store
+            .authorize_signing(
+                accepted.write_id,
+                accepted.receipt_id,
+                MaterializationId::from_u64(1),
+                accepted.current.id(),
+            )
+            .unwrap();
+        store
+            .record_signer_retryable(
+                accepted.write_id,
+                accepted.receipt_id,
+                MaterializationId::from_u64(1),
+                accepted.current.id(),
+                "authorized signer invocation cancelled before effect; retry is permitted"
+                    .to_owned(),
+            )
+            .unwrap();
+        accepted
+    };
+
+    let reopened = RedbWriteStore::open(&path).unwrap();
+    let recovered = reopened.receipt(accepted.receipt_id).unwrap().unwrap();
+    assert_eq!(recovered.write_id, accepted.write_id);
+    assert_eq!(recovered.receipt_id, accepted.receipt_id);
+    assert_eq!(recovered.current.id(), accepted.current.id());
+    assert_eq!(
+        recovered.current.publication.materialization_id,
+        MaterializationId::from_u64(1)
+    );
+    assert!(matches!(
+        recovered.current.publication.signature,
+        SignatureState::Retryable(reason)
+            if reason.contains("cancelled") && reason.contains("retry is permitted")
+    ));
+}
