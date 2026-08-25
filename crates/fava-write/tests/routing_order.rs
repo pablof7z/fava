@@ -27,6 +27,15 @@ fn explicit_route_refuses_empty_and_over_bound_inputs() {
             maximum: 256,
         })
     );
+
+    let repeated = relay("repeated");
+    assert_eq!(
+        WriteRouting::explicit(std::iter::repeat(repeated)),
+        Err(WriteIntentError::TooManyExplicitRelays {
+            actual: 257,
+            maximum: 256,
+        })
+    );
 }
 
 #[test]
