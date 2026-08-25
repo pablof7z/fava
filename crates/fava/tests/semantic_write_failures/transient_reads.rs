@@ -119,6 +119,44 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     })
     .await
     .expect("runner observes the injected durable custody failure");
+    let third_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![3]).unwrap();
+    let third_event = materializer
+        .materialize(
+            &third_edit,
+            keys.public_key(),
+            Some(&composed.current.event),
+            Timestamp::from(
+                composed
+                    .current
+                    .event
+                    .created_at()
+                    .as_secs()
+                    .checked_add(1)
+                    .unwrap(),
+            ),
+        )
+        .unwrap();
+    let third_reservation = store
+        .reserve_active(&third_edit, keys.public_key())
+        .expect("same coordinate reserves another bounded composition");
+    let third = store
+        .accept_reserved_materialized_edit(
+            third_reservation,
+            WriteIntent::edit_as(
+                third_edit,
+                keys.public_key(),
+                WriteRouting::explicit([super::support::relay_url()]).unwrap(),
+            )
+            .unwrap(),
+            third_event,
+            Some(&composed.current.event),
+            None,
+        )
+        .expect("newer durable composition supersedes the failed refresh target");
+    assert_eq!(
+        third.current.publication.materialization_id,
+        MaterializationId::from_u64(3)
+    );
     let source = signed_source(&keys, Kind::ContactList, 20, "new source", &[]);
     cache
         .commit(vec![CacheMutation::Upsert(CachedEvent::new(
@@ -139,17 +177,17 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
             .current
             .publication
             .materialization_id,
-        MaterializationId::from_u64(2),
+        MaterializationId::from_u64(3),
         "stale replay installed while durable sequence refresh was unavailable"
     );
 
     store.fail_materialized_reads(false);
-    let replayed = wait_for_materialization(&fava, first.receipt_id(), 3).await;
+    let replayed = wait_for_materialization(&fava, first.receipt_id(), 4).await;
     wait_for_signer(&signer, 3).await;
     let EventValue::Unsigned(event) = replayed.current.event else {
         panic!("blocking signer keeps replay unsigned");
     };
-    assert_eq!(event.content, "new source|edit|edit");
+    assert_eq!(event.content, "new source|edit|edit|edit");
 }
 
 #[tokio::test(flavor = "current_thread")]

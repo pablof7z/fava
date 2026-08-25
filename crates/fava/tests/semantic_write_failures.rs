@@ -335,6 +335,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
                 EventBuilder::new(keys.public_key(), Kind::ContactList)
                     .created_at(Timestamp::from(source_time + 1))
                     .content(format!("generation {generation}"))
@@ -355,6 +356,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
                 EventBuilder::new(keys.public_key(), Kind::ContactList)
                     .created_at(Timestamp::from(1_001))
                     .content("overflow generation")

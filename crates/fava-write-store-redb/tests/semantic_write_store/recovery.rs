@@ -158,6 +158,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
+            std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
         )
@@ -171,6 +172,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
                 Some(base.id),
+                std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
             )
@@ -186,6 +188,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             accepted.receipt_id,
             MaterializationId::from_u64(2),
             Some(successor_source.id),
+            std::slice::from_ref(&edit()),
             successor_event,
             Some(&EventValue::Signed(successor_source.clone())),
         )

@@ -203,6 +203,13 @@ atomically, retains bounded retired-generation evidence, and refuses stale
 completions by exact operation and generation identity. Recovery restores the
 same ordered sequence before new work is admitted. This is universal semantic
 custody; protocol crates do not own queues, batches, or publication lifecycles.
+Pre-provider reservations are one-per-coordinate and carry that coordinate in
+write-store authority: inactive reserved coordinates consume the global active
+bound, repeated reservation of one active coordinate refuses, and a mismatched
+coordinate cannot consume the reservation. A live publication runner may
+advance its local signer and route generation only after an exact-generation
+custody refresh succeeds. Successor installation compares the complete applied
+edit sequence with durable custody before accepting the new event.
 
 ### Query results are merged source state
 
@@ -2132,7 +2139,8 @@ close.rs            cancellation and teardown
 The durable state is in `WriteStore`. The publication owner owns the live orchestration and current operation generations:
 
 - accepted write identity and receipt;
-- current replaceable-event edit or exact event;
+- current exact event and, for semantic custody, a generation-qualified live
+  copy of the durable ordered edit sequence;
 - current materialization generation;
 - current unsigned or signed event;
 - current signer operation;
@@ -2159,13 +2167,16 @@ The event is verified before acceptance, committed verbatim, exposed through the
 
 When a newer relevant source event arrives:
 
-1. the owning protocol crate applies the accepted edit again;
-2. a new unsigned event and materialization generation are produced;
-3. `WriteStore` atomically replaces the current local materialization;
-4. query observations receive the write-source change;
-5. stale signing and route completions are rejected;
-6. a new route session is opened for the current event when event-dependent routing changed; and
-7. prior delivery facts remain scoped to their exact predecessor event id.
+1. the publication owner refreshes the complete durable edit sequence for the
+   exact current materialization generation;
+2. the owning protocol crates apply every accepted edit again in order;
+3. a new unsigned event and materialization generation are produced;
+4. `WriteStore` proves the applied sequence equals durable custody and
+   atomically replaces the current local materialization;
+5. query observations receive the write-source change;
+6. stale signing and route completions are rejected;
+7. a new route session is opened for the current event when event-dependent routing changed; and
+8. prior delivery facts remain scoped to their exact predecessor event id.
 
 ### Signing and routing progress independently
 
@@ -2839,9 +2850,11 @@ CommittedCacheChange identifies affected coordinate
         ↓
 publication owner reloads current source record
         ↓
-fava-nip02 applies the accepted edit again
+publication owner refreshes exact-generation durable edit custody
         ↓
-WriteStore installs successor materialization generation
+protocol materializers apply the complete sequence in order
+        ↓
+WriteStore verifies the applied sequence and installs successor generation
         ↓
 query result changes directly from old local materialization to new
         ↓

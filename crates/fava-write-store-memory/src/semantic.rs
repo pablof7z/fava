@@ -19,8 +19,8 @@ use super::semantic_acceptance::{
     require_current, route_matches, validate_materialization, validate_source,
 };
 use super::state::{
-    active_count, attributed_failure, capacity_reached, edit_coordinate, next_revision,
-    require_failure_source, require_qualified_source,
+    attributed_failure, capacity_reached, edit_coordinate, next_revision, require_failure_source,
+    require_qualified_source,
 };
 
 #[derive(Clone, Debug)]
@@ -28,7 +28,7 @@ pub(super) struct WriteState {
     pub(super) revision: u64,
     pub(super) next_identity: u64,
     pub(super) next_reservation: u64,
-    pub(super) reservations: BTreeSet<u64>,
+    pub(super) reservations: BTreeMap<u64, EventCoordinate>,
     pub(super) writes: BTreeMap<ReceiptId, Receipt>,
     pub(super) coordinates: BTreeMap<EventCoordinate, ReceiptId>,
     #[allow(clippy::type_complexity)] // Existing values deliberately avoid a state wrapper.
@@ -49,7 +49,7 @@ impl Default for WriteState {
             revision: 0,
             next_identity: 1,
             next_reservation: 1,
-            reservations: BTreeSet::new(),
+            reservations: BTreeMap::new(),
             writes: BTreeMap::new(),
             coordinates: BTreeMap::new(),
             edits: BTreeMap::new(),
@@ -115,12 +115,6 @@ impl MemoryWriteStore {
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock_state()?;
-        let reserved = reservation.is_some();
-        if reservation.is_some_and(|reservation| !state.reservations.remove(&reservation)) {
-            return Err(WriteStoreError::Refused(
-                "active reservation is not current".to_owned(),
-            ));
-        }
         let (payload, routing) = intent.into_parts();
         let WritePayload::Edit { edit, author } = payload else {
             return Err(WriteStoreError::Refused(
@@ -128,6 +122,22 @@ impl MemoryWriteStore {
             ));
         };
         let coordinate = edit_coordinate(&edit, author);
+        let reserved = if let Some(reservation) = reservation {
+            let Some(reserved_coordinate) = state.reservations.get(&reservation) else {
+                return Err(WriteStoreError::Refused(
+                    "active reservation is not current".to_owned(),
+                ));
+            };
+            if reserved_coordinate != &coordinate {
+                return Err(WriteStoreError::Refused(
+                    "active reservation belongs to a different replaceable coordinate".to_owned(),
+                ));
+            }
+            state.reservations.remove(&reservation);
+            true
+        } else {
+            false
+        };
         let selected_source = validate_materialization(&edit, author, &event, source, &routing)?;
 
         if let Some(receipt_id) = state.coordinates.get(&coordinate).copied() {
@@ -221,51 +231,14 @@ impl MemoryWriteStore {
         })
     }
 
-    pub(super) fn reserve_active_slot(
-        &self,
-        edit: &ReplaceableEventEdit,
-        author: PublicKey,
-    ) -> Result<u64, WriteStoreError> {
-        let mut state = self.lock_state()?;
-        let coordinate_is_active = state
-            .coordinates
-            .contains_key(&edit_coordinate(edit, author));
-        if !coordinate_is_active
-            && active_count(&state)
-                .checked_add(state.reservations.len())
-                .is_none_or(|used| used >= self.capacity.get())
-        {
-            return Err(WriteStoreError::Refused(format!(
-                "bounded write-store capacity {} reached",
-                self.capacity
-            )));
-        }
-        let reservation = state.next_reservation;
-        state.next_reservation = reservation
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("active reservation exhausted".to_owned()))?;
-        state.reservations.insert(reservation);
-        Ok(reservation)
-    }
-
-    pub(super) fn release_active_slot(&self, reservation: u64) -> Result<(), WriteStoreError> {
-        let mut state = self.lock_state()?;
-        if state.reservations.remove(&reservation) {
-            Ok(())
-        } else {
-            Err(WriteStoreError::Refused(
-                "active reservation is not current".to_owned(),
-            ))
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     pub(super) fn install_semantic(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
+        applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
@@ -279,12 +252,6 @@ impl MemoryWriteStore {
             state.edits.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody does not exist".to_owned())
             })?;
-        let edit = edits.last().ok_or_else(|| {
-            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
-        })?;
-        let selected_source =
-            validate_materialization(edit, author, &event, source, &receipt.routing)?;
-
         require_current(
             &receipt,
             write_id,
@@ -292,6 +259,16 @@ impl MemoryWriteStore {
             expected_source,
             current_source,
         )?;
+        if edits.as_slice() != applied_edits {
+            return Err(WriteStoreError::Refused(
+                "successor did not apply the complete durable semantic edit sequence".to_owned(),
+            ));
+        }
+        let edit = edits.last().ok_or_else(|| {
+            WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
+        })?;
+        let selected_source =
+            validate_materialization(edit, author, &event, source, &receipt.routing)?;
         if receipt.current.event == EventValue::Unsigned(event.clone())
             && receipt.current.publication.materialization_source
                 == selected_source.map(|(id, _)| id)
@@ -465,6 +442,7 @@ impl MemoryWriteStore {
     pub(super) fn semantic_custody(
         &self,
         receipt_id: ReceiptId,
+        expected: MaterializationId,
     ) -> Result<
         Option<(
             Vec<ReplaceableEventEdit>,
@@ -474,6 +452,15 @@ impl MemoryWriteStore {
         )>,
         WriteStoreError,
     > {
-        Ok(self.lock_state()?.edits.get(&receipt_id).cloned())
+        let state = self.lock_state()?;
+        let Some(receipt) = state.writes.get(&receipt_id) else {
+            return Ok(None);
+        };
+        if receipt.current.publication.materialization_id != expected {
+            return Err(WriteStoreError::Refused(
+                "semantic custody generation is not current".to_owned(),
+            ));
+        }
+        Ok(state.edits.get(&receipt_id).cloned())
     }
 }

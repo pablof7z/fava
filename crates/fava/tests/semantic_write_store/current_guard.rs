@@ -20,6 +20,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
+            std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
         )
@@ -33,6 +34,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
                 Some(successor_source.id),
+                std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
             )
@@ -46,6 +48,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(2),
                 Some(base.id),
+                std::slice::from_ref(&edit()),
                 successor_event.clone(),
                 Some(&EventValue::Signed(successor_source.clone())),
             )
@@ -67,6 +70,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             accepted.receipt_id,
             MaterializationId::from_u64(2),
             Some(successor_source.id),
+            std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(successor_source.clone())),
         )
@@ -86,6 +90,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(2),
                 Some(successor_source.id),
+                std::slice::from_ref(&edit()),
                 successor_event,
                 Some(&EventValue::Signed(successor_source.clone())),
             )

@@ -286,6 +286,7 @@ fn redb_generation_and_failure_state_match_memory() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
+            std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
             Some(&EventValue::Signed(failed_source.clone())),
         )
@@ -350,6 +351,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(9),
                 None,
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 3, "stale"),
                 Some(&EventValue::Signed(stale_source.clone())),
             )
@@ -372,6 +374,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&edit()),
                 materialization(
                     keys.public_key(),
                     source_time + 1,
@@ -393,6 +396,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 1_001, "evidence overflow"),
                 Some(&EventValue::Signed(overflow_source.clone())),
             )
@@ -511,9 +515,12 @@ fn redb_active_reservation_is_bounded_and_consumed_on_refusal() {
             )
             .is_err()
     );
+    store
+        .release_active(consumed)
+        .expect("nonsemantic refusal preserves the coordinate reservation");
     let reusable = store
         .reserve_active(&edit(), keys.public_key())
-        .expect("refused acceptance consumed its reservation");
+        .expect("released reservation is reusable");
     store.release_active(reusable).unwrap();
     drop(store);
     std::fs::remove_file(path).ok();
@@ -591,7 +598,7 @@ fn redb_successor_refuses_an_incomplete_accepted_edit_sequence() {
     );
     let composed = store
         .accept_materialized_edit(
-            WriteIntent::edit_as(second_edit, actor, WriteRouting::Automatic).unwrap(),
+            WriteIntent::edit_as(second_edit.clone(), actor, WriteRouting::Automatic).unwrap(),
             materialization(actor, 2, "first|second"),
             Some(&first.current.event),
         )
@@ -606,6 +613,7 @@ fn redb_successor_refuses_an_incomplete_accepted_edit_sequence() {
                 first.receipt_id,
                 composed.current.publication.materialization_id,
                 composed.current.publication.materialization_source,
+                std::slice::from_ref(&second_edit),
                 materialization(actor, 11, "newer|second-only"),
                 Some(&EventValue::Signed(successor)),
             )

@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use fava_delivery::DeliveryPolicy;
 use fava_publisher::Publisher;
@@ -20,9 +21,12 @@ use tokio::sync::watch;
 mod delivery;
 mod materialization;
 mod run;
+mod semantic_refresh;
 mod sign;
 
 use materialization::{PreparedSemantic, SemanticState};
+
+const STORE_READ_RETRY_DELAY: Duration = Duration::from_millis(10);
 
 /// Live owner for accepted write signing and destination delivery.
 #[derive(Clone)]
@@ -119,8 +123,10 @@ impl Publication {
                     return Err(error.into());
                 }
             };
-            let Some((edits, author, selected, failed_id)) =
-                self.store.materialized_edits(accepted.receipt_id)?
+            let Some((edits, author, selected, failed_id)) = self.store.materialized_edits(
+                accepted.receipt_id,
+                accepted.current.publication.materialization_id,
+            )?
             else {
                 let terminal = self
                     .store

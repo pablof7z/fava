@@ -125,6 +125,17 @@ pub(super) fn active_count(state: &StoreState) -> usize {
         .count()
 }
 
+pub(super) fn capacity_reached(state: &StoreState, capacity: usize) -> bool {
+    let reserved_new_coordinates = state
+        .reservations
+        .values()
+        .filter(|coordinate| !state.coordinates.contains_key(*coordinate))
+        .count();
+    active_count(state)
+        .checked_add(reserved_new_coordinates)
+        .is_none_or(|used| used >= capacity)
+}
+
 pub(crate) fn settle(receipt: &mut Receipt) {
     if receipt.route_settled
         && receipt

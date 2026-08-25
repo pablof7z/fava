@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use fava_query::SourceKind;
 use fava_routing::{RouteContribution, RoutePlan, RouteRequest, RouterSession};
@@ -7,10 +6,8 @@ use fava_write::{EventValue, Receipt, ReceiptId, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
 
-use super::Publication;
 use super::materialization::SemanticState;
-
-const STORE_READ_RETRY_DELAY: Duration = Duration::from_millis(10);
+use super::{Publication, STORE_READ_RETRY_DELAY};
 
 impl Publication {
     pub(super) fn start(&self, receipt_id: ReceiptId) {
@@ -63,14 +60,24 @@ impl Publication {
         let mut route_revision = receipt.route_revision;
 
         loop {
-            let Some(current) = self.read_receipt(receipt_id, &mut cancel).await else {
+            let Some(mut current) = self.read_receipt(receipt_id, &mut cancel).await else {
                 break;
             };
+            if current.is_terminal() {
+                break;
+            }
             let current_materialization = current.current.publication.materialization_id;
             if current_materialization > materialization_id {
                 if let Some(state) = &mut semantic {
-                    self.refresh_semantic(receipt_id, state);
+                    let Some(refreshed) = self
+                        .refresh_semantic(current.clone(), state, &mut cancel)
+                        .await
+                    else {
+                        break;
+                    };
+                    current = refreshed;
                 }
+                let current_materialization = current.current.publication.materialization_id;
                 route_revision = self.reopen_materialization(
                     &current,
                     &mut routes,
@@ -85,9 +92,6 @@ impl Publication {
                 signing_generation = None;
             }
             self.start_lanes(&current, &mut active, &lane_finished, &cancel);
-            if current.is_terminal() {
-                break;
-            }
 
             tokio::select! {
                 biased;
@@ -134,15 +138,26 @@ impl Publication {
                 change = receipt_changes.recv() => {
                     match change {
                         Ok((changed, None)) if changed == receipt_id => break,
-                        Ok((changed, Some(latest))) if changed == receipt_id => {
+                        Ok((changed, Some(mut latest))) if changed == receipt_id => {
+                            if latest.is_terminal() {
+                                break;
+                            }
                             let next_materialization =
                                 latest.current.publication.materialization_id;
                             if next_materialization == materialization_id {
                                 route_revision = route_revision.max(latest.route_revision);
                             } else if next_materialization > materialization_id {
                                 if let Some(state) = &mut semantic {
-                                    self.refresh_semantic(receipt_id, state);
+                                    let Some(refreshed) = self
+                                        .refresh_semantic(latest.clone(), state, &mut cancel)
+                                        .await
+                                    else {
+                                        break;
+                                    };
+                                    latest = refreshed;
                                 }
+                                let next_materialization =
+                                    latest.current.publication.materialization_id;
                                 route_revision = self.reopen_materialization(
                                     &latest,
                                     &mut routes,
@@ -293,6 +308,7 @@ impl Publication {
             receipt.receipt_id,
             expected,
             expected_source,
+            &state.edits,
             event,
             successor.as_ref(),
         );
@@ -329,21 +345,6 @@ impl Publication {
             state.source_floor = Some(source.created_at());
         }
         state.failed_id = None;
-    }
-
-    fn refresh_semantic(&self, receipt_id: ReceiptId, state: &mut SemanticState) {
-        let Ok(Some((edits, author, selected, failed_id))) =
-            self.store.materialized_edits(receipt_id)
-        else {
-            return;
-        };
-        state.edits = edits;
-        state.author = author;
-        state.selected_id = selected.map(|(id, _)| id);
-        if let Some((_, timestamp)) = selected {
-            state.source_floor = Some(timestamp);
-        }
-        state.failed_id = failed_id;
     }
 
     fn open_routes(&self, receipt: &Receipt) -> (Option<Box<dyn RouterSession>>, u64) {

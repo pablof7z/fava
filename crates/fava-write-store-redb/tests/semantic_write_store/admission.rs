@@ -183,6 +183,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(higher_id.id),
+            std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
         )
@@ -198,6 +199,7 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(2),
                 Some(lower_id.id),
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
             )

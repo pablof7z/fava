@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
-use fava::{EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, Timestamp};
+use fava::{
+    EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, ReplaceableEventEdit,
+    Timestamp,
+};
 use fava_routing::RoutePlan;
 use fava_state::{RelayAccess, RelaySessionKey};
 use fava_write::{WriteIntent, WritePayload, WriteRouting};
@@ -19,6 +22,10 @@ fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::Unsigne
         .content(content)
         .build()
         .expect("materialization builds")
+}
+
+fn edit() -> ReplaceableEventEdit {
+    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }
 
 fn accepted(store: &MemoryWriteStore, keys: &Keys) -> fava_write_store::AcceptedWrite {
@@ -57,6 +64,7 @@ fn retired_completion_is_attributable_and_inert() {
             accepted.receipt_id,
             generation_one,
             None,
+            std::slice::from_ref(&edit()),
             materialization(&keys, 3, "generation two"),
             Some(&EventValue::Signed(source.clone())),
         )
@@ -168,6 +176,7 @@ fn simultaneous_source_and_completion_converge_once() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
                 None,
+                std::slice::from_ref(&edit()),
                 materialization(&keys, 3, "generation two"),
                 Some(&EventValue::Signed(source.clone())),
             )
@@ -339,6 +348,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(higher_id.id),
+            std::slice::from_ref(&edit()),
             materialization(&keys, 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
         )
@@ -354,6 +364,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(2),
                 Some(lower_id.id),
+                std::slice::from_ref(&edit()),
                 materialization(&keys, 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
             )

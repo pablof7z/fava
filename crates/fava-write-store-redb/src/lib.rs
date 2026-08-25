@@ -1,6 +1,6 @@
 //! Durable Redb authority for accepted publication obligations and receipts.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -49,7 +49,7 @@ struct StoreState {
     revision: u64,
     next_identity: u64,
     next_reservation: u64,
-    reservations: BTreeSet<u64>,
+    reservations: BTreeMap<u64, EventCoordinate>,
     receipts: BTreeMap<ReceiptId, Receipt>,
     coordinates: BTreeMap<EventCoordinate, ReceiptId>,
     semantics: BTreeMap<ReceiptId, SemanticCustody>,
@@ -93,7 +93,7 @@ impl RedbWriteStore {
             revision: 0,
             next_identity,
             next_reservation: 1,
-            reservations: BTreeSet::new(),
+            reservations: BTreeMap::new(),
             receipts,
             coordinates,
             semantics,

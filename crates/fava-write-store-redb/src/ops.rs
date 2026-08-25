@@ -12,7 +12,7 @@ use fava_write_store::{
 use tokio::sync::broadcast;
 
 use crate::RedbWriteStore;
-use crate::lifecycle::{UnsignedEventView, destinations, next_revision, settle};
+use crate::lifecycle::{UnsignedEventView, capacity_reached, destinations, next_revision, settle};
 
 impl WriteStore for RedbWriteStore {
     fn active_capacity(&self) -> usize {
@@ -37,15 +37,7 @@ impl WriteStore for RedbWriteStore {
 
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
         let mut state = self.lock()?;
-        let active = state
-            .receipts
-            .values()
-            .filter(|receipt| !receipt.is_terminal())
-            .count();
-        if active
-            .checked_add(state.reservations.len())
-            .is_none_or(|used| used >= self.limits.active.get())
-        {
+        if capacity_reached(&state, self.limits.active.get()) {
             return Err(WriteStoreError::Refused(format!(
                 "active write bound {} reached",
                 self.limits.active
@@ -135,6 +127,7 @@ impl WriteStore for RedbWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
+        applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
@@ -143,6 +136,7 @@ impl WriteStore for RedbWriteStore {
             receipt_id,
             expected,
             expected_source,
+            applied_edits,
             event,
             source,
         )
@@ -187,6 +181,7 @@ impl WriteStore for RedbWriteStore {
     fn materialized_edits(
         &self,
         receipt_id: ReceiptId,
+        expected: MaterializationId,
     ) -> Result<
         Option<(
             Vec<ReplaceableEventEdit>,
@@ -196,7 +191,7 @@ impl WriteStore for RedbWriteStore {
         )>,
         WriteStoreError,
     > {
-        self.semantic_custody(receipt_id)
+        self.semantic_custody(receipt_id, expected)
     }
 
     fn install_signed(

@@ -71,6 +71,7 @@ fn semantic_boundary_child() {
                     accepted.receipt_id,
                     MaterializationId::from_u64(1),
                     Some(base.id),
+                    std::slice::from_ref(&edit()),
                     materialization(created_at, "generation two"),
                     Some(&EventValue::Signed(successor.clone())),
                 )
@@ -292,6 +293,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
                 recovered[0].0.receipt_id,
                 recovered[0].0.current.publication.materialization_id,
                 recovered[0].0.current.publication.materialization_source,
+                std::slice::from_ref(&recovered[0].1[1]),
                 materialization(21, "incomplete replay source|2"),
                 Some(&EventValue::Signed(incomplete_source)),
             )
@@ -433,6 +435,7 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
                 before.receipt_id,
                 MaterializationId::from_u64(1),
                 before.current.publication.materialization_source,
+                std::slice::from_ref(&edit()),
                 materialization(31, "late retired completion"),
                 Some(&EventValue::Signed(late_source.clone())),
             )

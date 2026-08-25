@@ -504,7 +504,7 @@ spec_crates = ["fava-publication"]
 [[term]]
 name = "WriteStore"
 source = "fava"
-meaning = "The authority for accepted local publication obligations, receipts, current materialized events, and bounded ordered edit custody for each active replaceable coordinate."
+meaning = "The authority for accepted local publication obligations, receipts, current materialized events, coordinate-bound bounded reservations, and exact-generation ordered edit custody whose complete applied sequence gates each successor."
 owner = "fava-write-store"
 nearest_nostr = "EVENT and OK messages"
 distinction = "Relay messages do not define durable local custody, ordered same-coordinate edit composition, or recovery of publication obligations."
@@ -597,7 +597,7 @@ spec_symbols = ["ReplaceableEventEdit"]
 [[term]]
 name = "ReplaceableEventMaterializer"
 source = "fava"
-meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified signed or unsigned source or defined empty state and produces an unsigned replacement event; universal publication may invoke it sequentially for durable same-coordinate composition."
+meaning = "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified signed or unsigned source or defined empty state and produces an unsigned replacement event; universal publication invokes the exact refreshed durable sequence in order and attests that complete sequence at successor installation."
 owner = "fava-write"
 nearest_nostr = "replaceable Event and Coordinate"
 distinction = "Nostr defines replacement events but not a client-side provider contract for replaying durable ordered intentions across changing source state without owning custody, queues, or publication."
@@ -608,7 +608,7 @@ spec_symbols = ["ReplaceableEventMaterializer"]
 [[term]]
 name = "MaterializationId"
 source = "fava"
-meaning = "The exact identity of one immutable event materialization generation under a stable accepted write and receipt, including generations produced by appending a pre-signature same-coordinate edit."
+meaning = "The exact identity of one immutable event materialization generation under a stable accepted write and receipt, including generations produced by appending a pre-signature same-coordinate edit; live signing, routing, and replay cannot advance across a failed generation-qualified custody refresh."
 owner = "fava-write"
 nearest_nostr = "EventId"
 distinction = "An EventId identifies one completed event body; MaterializationId correlates every effect and late completion to the exact generation that authorized it."

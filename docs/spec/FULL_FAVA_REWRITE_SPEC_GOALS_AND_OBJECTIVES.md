@@ -794,6 +794,15 @@ the exact materialization generation, retires prior generation evidence, and
 refuses atomically when that evidence bound is exhausted. Protocol-specific
 queues or batching are not part of this lifecycle.
 
+Any pre-provider reservation MUST be bound to one exact
+author/kind/identifier coordinate. At most one reservation may exist per
+coordinate; reserved inactive coordinates count against the global active
+bound, while an active coordinate's one reservation cannot grow that bound.
+Only matching-coordinate acceptance consumes it. Before installing a
+source-driven successor, publication MUST refresh custody for that exact
+materialization generation and prove that the complete durable edit sequence,
+not merely its final edit, produced the successor.
+
 Rematerialization MUST:
 
 - preserve unrelated source changes;

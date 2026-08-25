@@ -267,6 +267,7 @@ impl WriteStore for FaultingWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
+        applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
@@ -275,6 +276,7 @@ impl WriteStore for FaultingWriteStore {
             receipt_id,
             expected,
             expected_source,
+            applied_edits,
             event,
             source,
         )
@@ -316,6 +318,7 @@ impl WriteStore for FaultingWriteStore {
     fn materialized_edits(
         &self,
         receipt_id: ReceiptId,
+        expected: MaterializationId,
     ) -> Result<
         Option<(
             Vec<ReplaceableEventEdit>,
@@ -332,7 +335,7 @@ impl WriteStore for FaultingWriteStore {
                 "injected durable semantic custody read failure".to_owned(),
             ));
         }
-        self.inner.materialized_edits(receipt_id)
+        self.inner.materialized_edits(receipt_id, expected)
     }
     fn install_signed(
         &self,

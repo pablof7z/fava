@@ -23,6 +23,7 @@ mod model;
 mod semantic;
 mod semantic_acceptance;
 mod semantic_composition;
+mod semantic_reservation;
 mod state;
 
 use model::destinations;
@@ -185,6 +186,7 @@ impl WriteStore for MemoryWriteStore {
         receipt_id: ReceiptId,
         expected: MaterializationId,
         expected_source: Option<EventId>,
+        applied_edits: &[ReplaceableEventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
@@ -193,6 +195,7 @@ impl WriteStore for MemoryWriteStore {
             receipt_id,
             expected,
             expected_source,
+            applied_edits,
             event,
             source,
         )
@@ -237,6 +240,7 @@ impl WriteStore for MemoryWriteStore {
     fn materialized_edits(
         &self,
         receipt_id: ReceiptId,
+        expected: MaterializationId,
     ) -> Result<
         Option<(
             Vec<ReplaceableEventEdit>,
@@ -246,7 +250,7 @@ impl WriteStore for MemoryWriteStore {
         )>,
         WriteStoreError,
     > {
-        self.semantic_custody(receipt_id)
+        self.semantic_custody(receipt_id, expected)
     }
 
     fn install_signed(

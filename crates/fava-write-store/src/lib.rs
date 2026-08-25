@@ -40,15 +40,18 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
     /// Reserve one active semantic-write slot before invoking external providers.
     ///
-    /// The primitive identity is store-local and has no meaning after it is
-    /// released or consumed by [`WriteStore::accept_reserved_materialized_edit`].
+    /// The primitive identity is store-local, bound to the edit's exact
+    /// author/kind/identifier coordinate, and has no meaning after it is
+    /// released or consumed by matching
+    /// [`WriteStore::accept_reserved_materialized_edit`].
     ///
     /// # Errors
     ///
-    /// Returns [`WriteStoreError`] without a reservation when a new coordinate's
-    /// active custody plus existing reservations has reached
-    /// [`WriteStore::active_capacity`]. An already-active coordinate reserves
-    /// against its existing operation and must still pass composition bounds.
+    /// Returns [`WriteStoreError`] without a reservation when the coordinate is
+    /// already reserved or when active custody plus reserved inactive
+    /// coordinates has reached [`WriteStore::active_capacity`]. An
+    /// already-active coordinate may hold one reservation against its operation
+    /// and must still pass composition bounds.
     fn reserve_active(
         &self,
         _edit: &ReplaceableEventEdit,
@@ -105,13 +108,14 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
     /// Atomically consume one active reservation while accepting an edit.
     ///
-    /// Success and refusal both consume the reservation, so a provider failure
-    /// cannot leak pre-custody capacity.
+    /// Success and post-coordinate-validation refusal consume the reservation,
+    /// so a provider failure cannot leak pre-custody capacity. A different
+    /// coordinate refuses without consuming another coordinate's reservation.
     ///
     /// # Errors
     ///
-    /// Returns [`WriteStoreError`] when the reservation is stale or the complete
-    /// acceptance mutation refuses. The reservation is consumed in either case.
+    /// Returns [`WriteStoreError`] when the reservation is stale, belongs to a
+    /// different coordinate, or the complete acceptance mutation refuses.
     fn accept_reserved_materialized_edit(
         &self,
         _reservation: u64,
@@ -125,7 +129,8 @@ pub trait WriteStore: QuerySource + Send + Sync {
         ))
     }
 
-    /// Atomically replace the exact current semantic materialization.
+    /// Atomically replace the exact current semantic materialization after
+    /// proving the caller applied the complete durable edit sequence.
     ///
     /// Repeating an already-committed exact update is idempotent. Every other
     /// stale generation, write, source, body, or terminal update refuses.
@@ -141,6 +146,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         _receipt_id: ReceiptId,
         _expected: MaterializationId,
         _expected_source: Option<EventId>,
+        _applied_edits: &[ReplaceableEventEdit],
         _event: UnsignedEvent,
         _source: Option<&EventValue>,
     ) -> Result<Receipt, WriteStoreError> {
@@ -208,6 +214,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     fn materialized_edits(
         &self,
         _receipt_id: ReceiptId,
+        _expected: MaterializationId,
     ) -> Result<
         Option<(
             Vec<ReplaceableEventEdit>,

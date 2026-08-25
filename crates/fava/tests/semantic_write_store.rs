@@ -201,6 +201,7 @@ fn memory_generation_swap_is_compare_and_set() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
+            std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
             Some(&EventValue::Signed(successor_source.clone())),
         )
@@ -235,6 +236,7 @@ fn memory_generation_swap_is_compare_and_set() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
                 Some(successor_source.id),
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 31, "stale swap"),
                 Some(&EventValue::Signed(later_source.clone())),
             )
@@ -268,6 +270,7 @@ fn memory_unqualified_source_is_inert() {
                     accepted.receipt_id,
                     MaterializationId::from_u64(1),
                     Some(selected.id),
+                    std::slice::from_ref(&edit()),
                     materialization(keys.public_key(), 22, "inert"),
                     Some(&EventValue::Signed(candidate.clone())),
                 )
@@ -281,6 +284,7 @@ fn memory_unqualified_source_is_inert() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(1),
                 Some(selected.id),
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 22, "missing source"),
                 None,
             )
@@ -298,6 +302,7 @@ fn memory_unqualified_source_is_inert() {
                 accepted.receipt_id,
                 MaterializationId::from_u64(2),
                 None,
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 23, "already empty"),
                 None,
             )
@@ -392,6 +397,7 @@ fn memory_successful_retry_clears_failure_atomically() {
             accepted.receipt_id,
             MaterializationId::from_u64(1),
             Some(base.id),
+            std::slice::from_ref(&edit()),
             successor_event.clone(),
             Some(&EventValue::Signed(retry_source.clone())),
         )
@@ -421,6 +427,7 @@ fn memory_successful_retry_clears_failure_atomically() {
             accepted.receipt_id,
             MaterializationId::from_u64(2),
             Some(retry_source.id),
+            std::slice::from_ref(&edit()),
             successor_event,
             Some(&EventValue::Signed(retry_source.clone())),
         )
@@ -536,6 +543,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&edit()),
                 materialization(
                     keys.public_key(),
                     source_time + 1,
@@ -557,6 +565,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                 accepted.receipt_id,
                 expected,
                 expected_source,
+                std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 1_001, "overflow generation"),
                 Some(&EventValue::Signed(overflow_source.clone())),
             )
@@ -631,7 +640,7 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
     );
     let composed = store
         .accept_materialized_edit(
-            WriteIntent::edit_as(second_edit, actor, WriteRouting::Automatic).unwrap(),
+            WriteIntent::edit_as(second_edit.clone(), actor, WriteRouting::Automatic).unwrap(),
             materialization(actor, 2, "first|second"),
             Some(&first.current.event),
         )
@@ -646,6 +655,7 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
                 first.receipt_id,
                 composed.current.publication.materialization_id,
                 composed.current.publication.materialization_source,
+                std::slice::from_ref(&second_edit),
                 materialization(actor, 11, "newer|second-only"),
                 Some(&EventValue::Signed(successor)),
             )
@@ -688,7 +698,13 @@ fn memory_composed_edit_bound_refuses_atomically() {
     }
 
     let before = store.receipt(first.receipt_id).unwrap().unwrap();
-    let edits_before = store.materialized_edits(first.receipt_id).unwrap().unwrap();
+    let edits_before = store
+        .materialized_edits(
+            first.receipt_id,
+            current.current.publication.materialization_id,
+        )
+        .unwrap()
+        .unwrap();
     let mut changes = store.receipt_changes();
     let overflow = ReplaceableEventEdit::new(Kind::ContactList, None, vec![3, 4, 5]).unwrap();
     assert!(
@@ -702,7 +718,12 @@ fn memory_composed_edit_bound_refuses_atomically() {
     );
     assert_eq!(store.receipt(first.receipt_id).unwrap(), Some(before));
     assert_eq!(
-        store.materialized_edits(first.receipt_id).unwrap(),
+        store
+            .materialized_edits(
+                first.receipt_id,
+                current.current.publication.materialization_id,
+            )
+            .unwrap(),
         Some(edits_before)
     );
     assert!(changes.try_recv().is_err());
