@@ -403,7 +403,6 @@ version = "0.1.0"
 dependencies = [
  "fava-state",
  "fava-write",
- "nostr",
  "thiserror",
 ]
 
