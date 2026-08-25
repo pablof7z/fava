@@ -137,7 +137,7 @@ fn initial_route(
         revision: 1,
         destinations: BTreeMap::new(),
         coverage,
-        unresolved: BTreeSet::new(),
+        unresolved: BTreeSet::from([RouteTarget::WholeRequest]),
         shortfalls,
     }
 }
