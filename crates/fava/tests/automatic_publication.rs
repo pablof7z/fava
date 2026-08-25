@@ -83,7 +83,7 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         &RouteRequest::Write(EventValue::Unsigned(event.clone())),
     )
     .expect("routing-provider preview");
-    assert!(!preview.settled);
+    assert!(!preview.settled());
     assert_eq!(preview.destinations.len(), 3);
     assert_eq!(delayed.open_count(), 0);
     assert_eq!(publisher.count(), 0);

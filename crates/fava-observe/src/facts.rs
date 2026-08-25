@@ -71,7 +71,7 @@ impl Engine {
         let Some(slot) = self.slots.get(relay) else {
             return;
         };
-        let revision = planned.map_or(slot.revision.0, |plan| plan.revision.0);
+        let revision = planned.map_or(slot.revision.get(), |plan| plan.revision.get());
         for item in cohort {
             let id = item.id();
             let shared_with = slot
@@ -122,7 +122,7 @@ impl Engine {
             self.registry.record_sharing(
                 owner,
                 relay,
-                slot.revision.0,
+                slot.revision.get(),
                 slot.owners(id),
                 Some(RelayShortfall {
                     branches,

@@ -14,7 +14,27 @@ use crate::demand::DemandId;
 /// Authority: ARCH:1511 "plan diff values"; GOALS:426 (QUERY-010) stale
 /// completion rejection.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PlanRevision(pub u64);
+pub struct PlanRevision(u64);
+
+impl PlanRevision {
+    /// Mint a plan revision. Only `fava-observe` should call this.
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Raw revision counter, for diagnostics and persistence encoding.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// Advance to the next revision. Saturating.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
 
 /// One wire subscription the plan wants opened.
 ///

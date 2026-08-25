@@ -264,7 +264,7 @@ async fn execute_flow(
     let edit_id = edit_write.receipt().map_err(error)?.current.id();
     wait_record(&mut observation, edit_id, 0).await?;
     let local = record(&observation, edit_id)?;
-    let local_revision = observation.current().revision.0;
+    let local_revision = observation.current().revision.get();
     let local_publication = local.publication.as_ref().ok_or_else(|| {
         CanaryError::new("local NIP-02 materialization lacked publication evidence")
     })?;
@@ -280,7 +280,7 @@ async fn execute_flow(
     let edit_receipt = wait_terminal(&edit_write).await?;
     require_terminal(&edit_write, &edit_receipt, 3)?;
     wait_record(&mut observation, edit_receipt.current.id(), 1).await?;
-    let relay_revision = observation.current().revision.0;
+    let relay_revision = observation.current().revision.get();
     let relayed = record(&observation, edit_receipt.current.id())?;
     validate_final(&relayed.event, target, &relay, &group_id)?;
     if relay_revision <= local_revision

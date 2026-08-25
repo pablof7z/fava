@@ -35,7 +35,7 @@ async fn a_router_that_never_answered_cannot_produce_settled_absence() {
         "a target no router answered for is outstanding, not settled absent"
     );
     assert!(
-        !plan.settled,
+        !plan.settled(),
         "the chain cannot settle while a configured router never answered"
     );
     assert!(
@@ -69,7 +69,7 @@ async fn a_chain_whose_routers_all_answer_absence_still_settles() {
         "an answered absence is settled absence"
     );
     assert!(
-        plan.settled,
+        plan.settled(),
         "every configured router answered, so the plan settles"
     );
     assert!(plan.unresolved.is_empty());
@@ -88,7 +88,7 @@ async fn a_chain_with_no_configured_routers_settles_absent() {
         Some(&CoverageState::SettledAbsent),
         "no configured router is vacuously every router answering"
     );
-    assert!(plan.settled);
+    assert!(plan.settled());
     assert!(plan.unresolved.is_empty());
 }
 
@@ -112,7 +112,7 @@ async fn the_upstream_plan_never_reports_an_unasked_target_as_settled_absent() {
         "the observing router has not answered yet, so its upstream view is outstanding"
     );
     assert!(
-        !upstream.settled,
+        !upstream.settled(),
         "an upstream view built from earlier routers only can never claim settlement"
     );
 }

@@ -121,9 +121,8 @@ fn initial_route(
         revision: 1,
         destinations: BTreeMap::new(),
         coverage,
-        unresolved: BTreeSet::new(),
+        unresolved: BTreeSet::from([RouteTarget::WholeRequest]),
         shortfalls,
-        settled: false,
     }
 }
 
@@ -472,7 +471,6 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
                 coverage: BTreeMap::new(),
                 unresolved: BTreeSet::new(),
                 shortfalls: Vec::new(),
-                settled: true,
             },
         )
         .expect("empty route settles terminally");

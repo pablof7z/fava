@@ -7,8 +7,8 @@ use std::pin::Pin;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_state::RelaySessionKey;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
-    TransportDeadlines,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
+    Transport, TransportBounds, TransportDeadlines,
 };
 use fava_wire::{ClientMessage, RelayMessage, decode_relay, encode_client};
 
@@ -33,6 +33,7 @@ fn open_request(key: &RelaySessionKey, timeout: std::time::Duration) -> OpenRela
             max_frame_bytes: frames(1_048_576),
         },
         reconnect_attempts: None,
+        initial_generation: OperationGeneration::new(1),
     }
 }
 

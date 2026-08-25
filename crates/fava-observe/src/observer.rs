@@ -264,7 +264,7 @@ impl Observer {
         sources: &OpenSources,
     ) -> Result<QuerySnapshot, ObserveError> {
         let mut initial = self.evaluator.evaluate(query, &sources.snapshots)?;
-        initial.revision = QueryRevision(1);
+        initial.revision = QueryRevision::new(1);
         Ok(initial)
     }
 

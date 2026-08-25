@@ -81,11 +81,23 @@ impl ObservationIds {
 /// `GOALS:401` (QUERY-008) "Per-branch and per-relay evidence MUST remain
 /// associated with the branch and source that produced it."
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct QueryBranchId(pub u32);
+pub struct QueryBranchId(u32);
 
 impl QueryBranchId {
     /// The single branch of an unbranched Query.
     pub const ROOT: Self = Self(0);
+
+    /// Mint a branch id. Only `fava-observe` should call this.
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Raw branch id for diagnostics.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
 }
 
 /// Whole-query bounds carried with demand so a planner can refuse to merge
@@ -113,9 +125,22 @@ pub struct QueryBounds {
 /// request identity so a late EOSE or event from the old request cannot settle
 /// the new one."; `ARCH:1610` "Reconnected sessions are new authorities."
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct OperationGeneration(pub u64);
+pub struct OperationGeneration(u64);
 
 impl OperationGeneration {
+    /// Mint one generation value. Only `fava-observe` and transport crates that
+    /// receive the initial value from `fava-observe` should call this.
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Raw generation counter, for diagnostics and transport-layer encoding.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// Advance to the next generation. Saturating: exhaustion is not a panic.
     #[must_use]
     pub const fn next(self) -> Self {

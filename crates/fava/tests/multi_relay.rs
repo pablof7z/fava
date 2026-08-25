@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -13,7 +13,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_state::{RelaySessionKey, RelayUrl, Timestamp};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound,
     RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity,
     ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
     TransportShutdownFuture,
@@ -27,7 +27,6 @@ use tokio::sync::Notify;
 
 #[derive(Default)]
 struct ScriptedTransport {
-    next_generation: AtomicU64,
     sessions: Mutex<BTreeMap<RelayUrl, Vec<Arc<ScriptedSession>>>>,
     changed: Notify,
 }
@@ -57,12 +56,11 @@ impl ScriptedTransport {
 impl Transport for ScriptedTransport {
     fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
-            let generation = self.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: OperationGeneration(generation),
+                    generation: request.initial_generation,
                 },
                 mailbox: Arc::new(Mailbox::default()),
                 sent: Mutex::new(Vec::new()),

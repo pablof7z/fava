@@ -328,7 +328,7 @@ fn planned_evidence(
 ) -> RelayQueryEvidence {
     RelayQueryEvidence {
         session,
-        generation: OperationGeneration(0),
+        generation: OperationGeneration::new(0),
         plan_revision: 0,
         branches: vec![branch],
         state: RelaySourceState::Planned,

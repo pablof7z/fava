@@ -167,7 +167,7 @@ async fn deliver(
             break;
         };
         revision = bumped;
-        next.revision = QueryRevision(revision);
+        next.revision = QueryRevision::new(revision);
         decorate(&registry, id, &mut next.evidence);
         publish(&facts, &registry, id, &next.evidence);
         latest_tx.send_replace(Arc::new(next));

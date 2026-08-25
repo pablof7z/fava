@@ -446,7 +446,21 @@ impl EventRecord {
 
 /// Monotonic revision delivered by one live observation.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct QueryRevision(pub u64);
+pub struct QueryRevision(u64);
+
+impl QueryRevision {
+    /// Mint a revision. Only `fava-observe` should call this.
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Raw revision counter for interop (e.g. converting to `SourceRevision`).
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 /// Complete immutable current query state.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -464,7 +478,7 @@ impl QuerySnapshot {
     #[must_use]
     pub fn evaluated(events: Vec<EventRecord>, sources: &[SourceSnapshot]) -> Self {
         Self {
-            revision: QueryRevision(0),
+            revision: QueryRevision::new(0),
             events: events.into(),
             evidence: QueryEvidence {
                 sources: sources

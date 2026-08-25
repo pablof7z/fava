@@ -22,17 +22,17 @@ pub(crate) struct LiveIdentity {
 }
 
 impl LiveIdentity {
-    pub(crate) fn new(key: RelaySessionKey) -> Self {
+    pub(crate) fn new(key: RelaySessionKey, initial_generation: OperationGeneration) -> Self {
         Self {
             key,
-            generation: AtomicU64::new(1),
+            generation: AtomicU64::new(initial_generation.get()),
         }
     }
 
     pub(crate) fn read(&self) -> RelaySessionIdentity {
         RelaySessionIdentity {
             key: self.key.clone(),
-            generation: OperationGeneration(self.generation.load(Ordering::SeqCst)),
+            generation: OperationGeneration::new(self.generation.load(Ordering::SeqCst)),
         }
     }
 

@@ -38,7 +38,6 @@ fn automatic_route(revision: u64) -> RoutePlan {
         coverage: BTreeMap::new(),
         unresolved: BTreeSet::new(),
         shortfalls: vec!["held generation-one route".to_owned()],
-        settled: false,
     }
 }
 

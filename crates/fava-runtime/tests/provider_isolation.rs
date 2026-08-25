@@ -20,7 +20,7 @@ use support::{config, runtime};
 const SIGN: OperationName = OperationName("sign_event");
 
 fn generation(value: u64) -> OperationGeneration {
-    OperationGeneration(value)
+    OperationGeneration::new(value)
 }
 
 #[tokio::test]
@@ -335,8 +335,8 @@ async fn generations_advance_monotonically_and_saturate() {
     assert_eq!(OperationGeneration::default(), generation(0));
     assert!(generation(1).next() > generation(1));
     assert_eq!(
-        OperationGeneration(u64::MAX).next(),
-        OperationGeneration(u64::MAX)
+        OperationGeneration::new(u64::MAX).next(),
+        OperationGeneration::new(u64::MAX)
     );
 }
 

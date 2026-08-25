@@ -23,7 +23,7 @@ impl LiveIdentity {
     pub(crate) fn read(&self) -> RelaySessionIdentity {
         RelaySessionIdentity {
             key: self.key.clone(),
-            generation: OperationGeneration(self.generation.load(Ordering::SeqCst)),
+            generation: OperationGeneration::new(self.generation.load(Ordering::SeqCst)),
         }
     }
 }
