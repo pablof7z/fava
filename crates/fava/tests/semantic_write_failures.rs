@@ -131,7 +131,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
             }))
             .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
+            .map_err(WriteIntentError::from)
     }
 }
 

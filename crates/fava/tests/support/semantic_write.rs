@@ -228,7 +228,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
         }
         builder
             .build()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))
+            .map_err(WriteIntentError::from)
     }
 }
 

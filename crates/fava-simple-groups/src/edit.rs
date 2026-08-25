@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use fava_state::RelayUrl;
 use fava_write::{
-    Event, EventBuildError, EventBuilder, Kind, PublicKey, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    Event, EventBuilder, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
+    Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 use crate::records::MAX_RECORD_VALUE_BYTES;
@@ -326,7 +326,7 @@ impl ReplaceableEventMaterializer for SavedListMaterializer {
         let event =
             EventBuilder::from_parts(author, saved_kind(), created_at, tags, content.to_owned())
                 .build()
-                .map_err(map_build_error)?;
+                .map_err(WriteIntentError::from)?;
         event
             .verify_id()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
@@ -486,19 +486,6 @@ fn simple_group_row(id: &str, host: &RelayUrl, name: Option<&str>) -> Result<Tag
 
 fn saved_kind() -> Kind {
     Kind::from_u16(SAVED_KIND)
-}
-
-fn map_build_error(error: EventBuildError) -> WriteIntentError {
-    match error {
-        EventBuildError::TooManyTags { actual, maximum } => WriteIntentError::TooLarge {
-            bytes: actual,
-            maximum,
-        },
-        EventBuildError::TooLarge { bytes, maximum } => {
-            WriteIntentError::TooLarge { bytes, maximum }
-        }
-        EventBuildError::Encoding(reason) => WriteIntentError::Encoding(reason),
-    }
 }
 
 fn codec_refusal(reason: &str) -> WriteIntentError {
