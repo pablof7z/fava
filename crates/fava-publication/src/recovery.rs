@@ -15,9 +15,7 @@ impl Publication {
         cancel: &mut watch::Receiver<bool>,
     ) -> Option<Receipt> {
         for _ in 0..=destination_evidence_capacity() {
-            if receipt.current.publication.materialization_id != state.materialization_id {
-                receipt = self.refresh_semantic(receipt, state, cancel).await?;
-            }
+            receipt = self.refresh_semantic(receipt, state, cancel).await?;
             self.rematerialize(&receipt, state);
             let current = self.read_receipt(receipt.receipt_id, cancel).await?;
             if current.current.publication.materialization_id == state.materialization_id {
@@ -40,14 +38,26 @@ impl Publication {
             if receipt.is_terminal() {
                 return Ok(());
             }
-            if receipt.current.publication.materialization_id != state.materialization_id {
-                self.refresh_recovered_custody(&receipt, state)?;
+            if let Err(error) = self.refresh_recovered_custody(&receipt, state) {
+                let current = self.store.receipt(receipt_id)?.ok_or_else(|| {
+                    WriteStoreError::Refused("revalidated semantic receipt is missing".to_owned())
+                })?;
+                if current != receipt {
+                    continue;
+                }
+                return Err(error);
             }
-            self.rematerialize(&receipt, state);
             let current = self.store.receipt(receipt_id)?.ok_or_else(|| {
+                WriteStoreError::Refused("revalidated semantic receipt is missing".to_owned())
+            })?;
+            if current != receipt {
+                continue;
+            }
+            self.rematerialize(&current, state);
+            let applied = self.store.receipt(receipt_id)?.ok_or_else(|| {
                 WriteStoreError::Refused("reconciled semantic receipt is missing".to_owned())
             })?;
-            if current.current.publication.materialization_id == state.materialization_id {
+            if applied.current.publication.materialization_id == state.materialization_id {
                 return Ok(());
             }
         }
@@ -63,6 +73,9 @@ impl Publication {
         receipt: &Receipt,
         state: &mut SemanticState,
     ) -> Result<(), PublicationError> {
+        let retry_persisted_failure = receipt.current.publication.materialization_id
+            == state.materialization_id
+            && state.failed_id.is_none();
         let Some((edits, author, selected, failed_id)) = self.store.materialized_edits(
             receipt.receipt_id,
             receipt.current.publication.materialization_id,
@@ -86,6 +99,12 @@ impl Publication {
             selected,
             failed_id,
         );
+        // Assembly deliberately authorizes one retry of the failure already
+        // persisted for the recovered generation. Exact custody refresh must
+        // not accidentally suppress that existing recovery contract.
+        if retry_persisted_failure {
+            state.failed_id = None;
+        }
         Ok(())
     }
 }

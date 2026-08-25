@@ -1,6 +1,7 @@
 //! Generation-qualified durable semantic custody refresh.
 
 use fava_write::Receipt;
+use fava_write_store::destination_evidence_capacity;
 use tokio::sync::watch;
 
 use super::materialization::SemanticState;
@@ -13,7 +14,7 @@ impl Publication {
         state: &mut SemanticState,
         cancel: &mut watch::Receiver<bool>,
     ) -> Option<Receipt> {
-        loop {
+        for _ in 0..=destination_evidence_capacity() {
             if *cancel.borrow() {
                 return None;
             }
@@ -29,7 +30,14 @@ impl Publication {
                         selected,
                         failed_id,
                     );
-                    return Some(receipt);
+                    let current = self.read_receipt(receipt.receipt_id, cancel).await?;
+                    if current == receipt {
+                        return Some(current);
+                    }
+                    if current.is_terminal() {
+                        return None;
+                    }
+                    receipt = current;
                 }
                 Ok(Some(_) | None) => return None,
                 Err(_) => {
@@ -48,5 +56,6 @@ impl Publication {
                 }
             }
         }
+        None
     }
 }

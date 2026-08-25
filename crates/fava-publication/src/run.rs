@@ -49,6 +49,16 @@ impl Publication {
         else {
             return;
         };
+        if receipt.is_terminal() {
+            if let Some(mut routes) = routes {
+                routes.close();
+            }
+            if let Some(mut semantic) = semantic {
+                semantic.close();
+            }
+            self.finished(receipt_id);
+            return;
+        }
         let mut signer_changes = self.session.subscribe();
         let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
         let mut signing_generation = self.start_signing(&receipt, signing_cancel_rx);
@@ -68,23 +78,30 @@ impl Publication {
             }
             let current_materialization = current.current.publication.materialization_id;
             if current_materialization > materialization_id {
-                if let Some(state) = &mut semantic {
-                    let Some(refreshed) = self
-                        .refresh_semantic(current.clone(), state, &mut cancel)
-                        .await
-                    else {
-                        break;
-                    };
-                    current = refreshed;
+                signing_cancel.send_replace(true);
+                if let Some(open) = &mut routes {
+                    open.close();
                 }
-                let current_materialization = current.current.publication.materialization_id;
-                route_revision = self.reopen_materialization(
-                    &current,
-                    &mut routes,
-                    &mut signing_cancel,
-                    &mut signing_generation,
-                );
-                materialization_id = current_materialization;
+                routes = None;
+                let Some((opened_receipt, mut opened_routes)) = self
+                    .open_generation(current, &mut semantic, &mut cancel)
+                    .await
+                else {
+                    break;
+                };
+                if opened_receipt.is_terminal() {
+                    if let Some(open) = &mut opened_routes {
+                        open.close();
+                    }
+                    break;
+                }
+                current = opened_receipt;
+                routes = opened_routes;
+                let (next_cancel, next_cancel_rx) = watch::channel(false);
+                signing_cancel = next_cancel;
+                signing_generation = self.start_signing(&current, next_cancel_rx);
+                materialization_id = current.current.publication.materialization_id;
+                route_revision = current.route_revision;
             } else if current_materialization == materialization_id {
                 route_revision = route_revision.max(current.route_revision);
             }
@@ -104,6 +121,15 @@ impl Publication {
                     if changed.is_err() {
                         break;
                     }
+                    let Some(revalidated) = self.read_receipt(receipt_id, &mut cancel).await else {
+                        break;
+                    };
+                    if revalidated.current.publication.materialization_id != materialization_id
+                        || revalidated.current.id() != current.current.id()
+                    {
+                        continue;
+                    }
+                    current = revalidated;
                     let current_generation = self.signer_generation(&current);
                     if current_generation != signing_generation {
                         signing_cancel.send_replace(true);
@@ -114,12 +140,29 @@ impl Publication {
                 }
                 route = next_route(&mut routes), if routes.is_some() => {
                     let Ok(contribution) = route else { routes = None; continue; };
+                    let Some(revalidated) = self.read_receipt(receipt_id, &mut cancel).await else {
+                        break;
+                    };
+                    if revalidated.current.publication.materialization_id != materialization_id
+                        || revalidated.current.id() != current.current.id()
+                    {
+                        continue;
+                    }
+                    current = revalidated;
+                    route_revision = route_revision.max(current.route_revision);
                     route_revision = self.apply_route_change(&current, route_revision, &contribution);
                 }
                 source = next_semantic_source(&mut semantic), if semantic.is_some() => {
                     match source {
                         Some(Ok(_)) => {
                             if let Some(state) = &mut semantic {
+                                let Some(revalidated) = self
+                                    .refresh_semantic(current.clone(), state, &mut cancel)
+                                    .await
+                                else {
+                                    break;
+                                };
+                                current = revalidated;
                                 self.rematerialize(&current, state);
                             }
                         }
@@ -138,7 +181,7 @@ impl Publication {
                 change = receipt_changes.recv() => {
                     match change {
                         Ok((changed, None)) if changed == receipt_id => break,
-                        Ok((changed, Some(mut latest))) if changed == receipt_id => {
+                        Ok((changed, Some(latest))) if changed == receipt_id => {
                             if latest.is_terminal() {
                                 break;
                             }
@@ -146,25 +189,6 @@ impl Publication {
                                 latest.current.publication.materialization_id;
                             if next_materialization == materialization_id {
                                 route_revision = route_revision.max(latest.route_revision);
-                            } else if next_materialization > materialization_id {
-                                if let Some(state) = &mut semantic {
-                                    let Some(refreshed) = self
-                                        .refresh_semantic(latest.clone(), state, &mut cancel)
-                                        .await
-                                    else {
-                                        break;
-                                    };
-                                    latest = refreshed;
-                                }
-                                let next_materialization =
-                                    latest.current.publication.materialization_id;
-                                route_revision = self.reopen_materialization(
-                                    &latest,
-                                    &mut routes,
-                                    &mut signing_cancel,
-                                    &mut signing_generation,
-                                );
-                                materialization_id = next_materialization;
                             }
                             if !matches!(latest.current.event, EventValue::Unsigned(_)) {
                                 signing_generation = None;
@@ -204,33 +228,21 @@ impl Publication {
         semantic: &mut Option<SemanticState>,
         cancel: &mut watch::Receiver<bool>,
     ) -> Option<(Receipt, Option<Box<dyn RouterSession>>)> {
-        let Some(mut receipt) = self.read_receipt(receipt_id, cancel).await else {
+        let Some(receipt) = self.read_receipt(receipt_id, cancel).await else {
             if let Some(semantic) = semantic {
                 semantic.close();
             }
             self.finished(receipt_id);
             return None;
         };
-        if let Some(state) = semantic {
-            let Some(current) = self.initialize_semantic(receipt, state, cancel).await else {
-                state.close();
-                self.finished(receipt_id);
-                return None;
-            };
-            receipt = current;
-        }
-        // Route acquisition begins independently of signer acquisition: a refused
-        // router chain commits a typed route shortfall on the receipt and the write
-        // stays open, but it never gates signing or abandons durable custody.
-        let (routes, _) = self.open_routes(&receipt);
-        let Some(current) = self.read_receipt(receipt_id, cancel).await else {
+        let Some(opened) = self.open_generation(receipt, semantic, cancel).await else {
             if let Some(semantic) = semantic {
                 semantic.close();
             }
             self.finished(receipt_id);
             return None;
         };
-        Some((current, routes))
+        Some(opened)
     }
 
     pub(super) async fn read_receipt(
@@ -345,58 +357,6 @@ impl Publication {
             state.source_floor = Some(source.created_at());
         }
         state.failed_id = None;
-    }
-
-    fn open_routes(&self, receipt: &Receipt) -> (Option<Box<dyn RouterSession>>, u64) {
-        let WriteRouting::Automatic = receipt.routing else {
-            return (None, receipt.route_revision);
-        };
-        let request = RouteRequest::Write(receipt.current.event.clone());
-        match fava_routing::open(self.routers.as_slice(), &request) {
-            Ok(routes) => {
-                let revision = receipt.route_revision.saturating_add(1);
-                let committed = self.apply_route(receipt, revision, &request, &routes.current());
-                (Some(routes), committed)
-            }
-            Err(error) => {
-                let plan = RoutePlan::shortfall(
-                    receipt.route_revision.saturating_add(1),
-                    &request,
-                    error.to_string(),
-                );
-                let committed = self.store.apply_route(
-                    receipt.write_id,
-                    receipt.receipt_id,
-                    receipt.current.publication.materialization_id,
-                    receipt.current.id(),
-                    &plan,
-                );
-                let revision = committed.map_or_else(
-                    |_| self.committed_route_revision(receipt),
-                    |current| current.route_revision,
-                );
-                (None, revision)
-            }
-        }
-    }
-
-    fn reopen_materialization(
-        &self,
-        receipt: &Receipt,
-        routes: &mut Option<Box<dyn RouterSession>>,
-        signing_cancel: &mut watch::Sender<bool>,
-        signing_generation: &mut Option<u64>,
-    ) -> u64 {
-        signing_cancel.send_replace(true);
-        let (next_cancel, next_cancel_rx) = watch::channel(false);
-        *signing_cancel = next_cancel;
-        *signing_generation = self.start_signing(receipt, next_cancel_rx);
-        if let Some(open) = routes {
-            open.close();
-        }
-        let (opened, committed_revision) = self.open_routes(receipt);
-        *routes = opened;
-        committed_revision
     }
 
     fn apply_route(

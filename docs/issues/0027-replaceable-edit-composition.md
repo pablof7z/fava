@@ -119,20 +119,47 @@ exact-refreshes custody whenever the receipt advanced before opening signer or
 route work. Both reconciliation loops are bounded by the existing retained
 materialization-evidence capacity.
 
+## Exact-generation initialization blocker closure
+
+Review r3 identified two remaining windows. Recovery could read generation N,
+then materialize its stale loaded sequence after custody had advanced to N+1;
+the store rejected installation, but the stale provider invocation had already
+occurred. Separately, a router session opened for generation N could advance
+custody during `open`, after which initialization paired that stale session
+with its final generation-N+1 receipt and accepted the session's next route as
+current.
+
+The behavior-first proof places deterministic barriers at both windows. The
+custody-read barrier composes a second edit after recovery's first receipt read
+and requires exactly two materializer calls for the complete two-edit sequence,
+with no stale one-edit invocation. The router-open barrier composes while the
+first session opens and requires that session to close, a second session to
+open from the current event, and only its destination to commit. The latter
+runs through memory restart, clean redb restart, and redb SIGKILL recovery.
+
+Publication now uses one bounded generation-activation path for initialization
+and later successors. It exact-refreshes durable custody, re-reads the complete
+receipt, materializes only unchanged custody, opens routing for that exact
+event, re-reads again, and closes/restarts on any mismatch. Route application
+uses the write, receipt, materialization, and event identity accepted by that
+activation; signing starts only after it succeeds.
+
 ## Validation gates
 
 Green evidence:
 
 - `semantic_write_store`: memory 15 passed; redb 25 passed.
-- `semantic_write_failures`: 18 passed, including a persistent custody-read
+- `semantic_write_failures`: 19 passed, including a persistent custody-read
   failure across a further durable composition and newer source arrival, proved
-  through an observed read barrier without a timing sleep.
-- `semantic_write_publication`: 22 passed, including restart reconciliation,
+  through an observed read barrier without a timing sleep, plus recovery
+  generation change between receipt and custody reads.
+- `semantic_write_publication`: 23 passed, including restart reconciliation,
   immediate same-coordinate admission, and later complete replay;
   `semantic_write_contract`: 5 passed;
   `semantic_write_capabilities`: 4 passed.
-- Redb `process_kill`: 10 passed, including clean-reopen and SIGKILL
-  restart-then-immediate-edit barriers followed by complete late-source replay.
+- Redb `process_kill`: 12 passed, including clean-reopen and SIGKILL
+  restart-then-immediate-edit barriers, complete late-source replay, and route
+  session replacement when custody advances during initialization.
 - Bookmark, NIP-02, simple-groups, and the external semantic-capability
   falsifier all passed.
 - `cargo check --workspace --all-targets --locked` passed.
@@ -140,6 +167,10 @@ Green evidence:
 - `python3 -m unittest tools.tests.test_vocabulary_check`: 36 passed.
 - Every Rust file changed from `31a87f1a` passes `rustfmt --check`; `git diff
   --check` passes.
+- After rebasing onto main closure `863eef72`, all five focused Bazel targets
+  pass: `semantic_write_contract`, `semantic_write_store`,
+  `semantic_write_publication`, `semantic_write_failures`, and
+  `semantic_write_capabilities`.
 
 Independent residual gates:
 
@@ -147,6 +178,3 @@ Independent residual gates:
   remains red on its pre-existing terminal-name/approval inventory.
 - Full `cargo fmt --all -- --check` reports the same eleven pre-existing files
   as `31a87f1a`.
-- Focused Bazel analysis reaches the five requested targets but builds none:
-  `//crates/fava-observe:lib` still lacks declared first-party dependencies and
-  fails with 76 unresolved-import errors. No Bazel-green claim is made.

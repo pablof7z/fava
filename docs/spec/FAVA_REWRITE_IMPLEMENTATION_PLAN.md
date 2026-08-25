@@ -744,6 +744,10 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 - A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
 - One receipt remains stable across materialization generations.
 - Signer, route, and delivery completions for retired generations are rejected as stale.
+- Deterministic memory and durable-restart barriers advance the receipt during
+  custody loading and router-session opening; stale custody is never
+  materialized, stale sessions close, and only the complete current generation
+  reaches signing and route effects, including after process kill.
 - A second protocol crate proves the edit contract is not secretly NIP-02-shaped.
 - Adding protocol crate N+1 edits only its crate and selected assembly/artifact metadata.
 

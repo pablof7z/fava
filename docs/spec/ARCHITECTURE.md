@@ -215,6 +215,12 @@ coordinate against its initial source snapshots before the facade is returned;
 spawning its runner is not the admission boundary. Runner state carries the
 exact `MaterializationId` of its loaded sequence and refreshes custody before
 initial materialization, signing, or routing whenever the receipt is newer.
+One bounded generation-activation path couples that refreshed complete
+sequence with the exact receipt, router session, signing request, and route
+effects. It re-reads the receipt after custody loading and after router-session
+opening. A changed receipt invalidates the candidate activation; any opened
+session closes and activation restarts from current durable custody before an
+effect is committed.
 
 ### Query results are merged source state
 
@@ -2966,6 +2972,10 @@ means the complete durable sequence has been considered against the initial
 qualified source snapshot and any successor has committed. A runner spawned
 for that coordinate may initialize later, but it exact-refreshes its sequence
 if admission advanced the receipt generation in the meantime.
+The runner then opens routing against that exact event and re-reads the receipt
+before route or signer effects begin. A changed receipt closes the candidate
+router session and repeats custody refresh plus route opening for the new
+generation. Later materialization generations use the same activation path.
 
 A memory event cache starts empty after restart. A persistent event cache may serve cached relay events immediately. The durable standard write store still supplies open local writes through queries once the application reopens them.
 

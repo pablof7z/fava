@@ -809,6 +809,13 @@ that coordinate. A recovered runner that observes a receipt generation newer
 than its loaded sequence MUST refresh exact-generation custody before
 materialization, signing, or routing begins.
 
+Initialization MUST bind the complete durable edit sequence, current receipt,
+router session, signing request, and route effects to one exact materialization
+generation. Publication re-reads the receipt after loading custody and after
+opening an automatic router session. Any intervening receipt change discards
+that candidate state, closes the stale session, and restarts from current
+custody before materialization, signing, or route effects proceed.
+
 Rematerialization MUST:
 
 - preserve unrelated source changes;
@@ -1051,6 +1058,10 @@ Every recovered runner MUST bind its loaded sequence to the exact current
 materialization generation. If same-coordinate admission advances the receipt
 before that runner initializes, it MUST reload the newer complete sequence
 before opening signer or route work or reacting to later source state.
+Router-session opening is not generation validation: recovery MUST re-read the
+receipt after the session opens, close the session if the receipt changed, and
+reopen it from the current event before applying route state or starting
+signing. The same bounded activation path applies to later generations.
 
 Unchanged recovered state MUST NOT require rewriting every record merely to reopen.
 

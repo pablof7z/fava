@@ -19,6 +19,7 @@ use thiserror::Error;
 use tokio::sync::watch;
 
 mod delivery;
+mod generation;
 mod materialization;
 mod recovery;
 mod run;
