@@ -1942,17 +1942,18 @@ resolve application authors, construct route sessions, or own receipts.
 described by `crates/fava-simple-groups/README.md` using only ordinary query
 and write values.
 
-`SimpleGroup` is a pure value containing one opaque simple group id and a
-normalized non-empty sequence of application-selected relays. Empty ids are
-valid opaque values. Construction requires one parsed `RelayUrl` plus a finite
-owned `Vec<RelayUrl>` tail and removes later duplicates in first-occurrence
-order.
+`SimpleGroup` is a pure value containing one non-empty opaque simple group id
+and a normalized non-empty sequence of application-selected relays.
+Construction accepts a finite owned `Vec<RelayUrl>`, rejects exactly an empty
+id or empty vector through `SimpleGroupConstructionError`, and removes later
+relay duplicates in first-occurrence order. It does not trim or otherwise
+normalize accepted ids.
 
 `SimpleGroup` owns no socket, observation, store, signer, routing session,
 delivery, retry, cancellation, or receipt lifecycle:
 
 ```rust
-SimpleGroup::from_relays(id, first: RelayUrl, rest: Vec<RelayUrl>) -> SimpleGroup
+SimpleGroup::from_relays(id, relays: Vec<RelayUrl>) -> Result<SimpleGroup, SimpleGroupConstructionError>
 simple_group.events(selection) -> Result<Query, QueryError>
 simple_group.state_events(kinds) -> Result<Query, QueryError>
 simple_group.prepare(draft) -> Result<UnsignedEvent, EventBuildError>
