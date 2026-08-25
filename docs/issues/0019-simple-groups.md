@@ -76,7 +76,8 @@ values, repetitions according to the exact operation, and unrelated order.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
   `SimpleGroupDecodeError`.
-- `SavedSimpleGroup`, `SavedGroupList`, and `SavedGroupListDecodeError`.
+- `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
+  `SavedGroupListDecodeError`.
 
 `RelayUrl`, `Query`, `QuerySnapshot`, `EventCoordinate`, `PublicKey`,
 `UnsignedEvent`, `Write`, and `ReplaceableEventEdit` remain owned by their
