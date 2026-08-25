@@ -237,6 +237,50 @@ class RowPresentationTest(unittest.TestCase):
         self.assertEqual(approval.row_purpose(term), "A line. with extra spacing.")
 
 
+class LiveTermClassificationAuditTest(unittest.TestCase):
+    """Regression: avoid classifying terms from unrelated symbol declarations."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import tomllib
+
+        root = Path(__file__).parents[2]
+        registry = tomllib.loads(
+            (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
+        )
+        cls.terms = {
+            term["name"]: term
+            for term in registry["term"]
+            if isinstance(term, dict) and "name" in term
+        }
+
+    def _term(self, name: str) -> dict:
+        return self.terms[name]
+
+    def test_simple_group_uses_exact_symbol(self) -> None:
+        term = self._term("SimpleGroup")
+        self.assertEqual(approval.symbol_for_term(term), "fava_simple_groups::SimpleGroup")
+        self.assertEqual(approval.item_kind_for_term(term, Path(__file__).parents[2]), "Struct")
+
+    def test_querysource_uses_trait_symbol(self) -> None:
+        term = self._term("QuerySource")
+        self.assertEqual(approval.symbol_for_term(term), "fava_query::QuerySource")
+        self.assertEqual(approval.item_kind_for_term(term, Path(__file__).parents[2]), "Trait")
+
+    def test_writestore_uses_trait_symbol(self) -> None:
+        term = self._term("WriteStore")
+        self.assertEqual(approval.symbol_for_term(term), "fava_write_store::WriteStore")
+        self.assertEqual(approval.item_kind_for_term(term, Path(__file__).parents[2]), "Trait")
+
+    def test_relayingest_does_not_borrow_relayingesterror(self) -> None:
+        term = self._term("RelayIngest")
+        self.assertEqual(approval.symbol_for_term(term), "RelayIngest")
+        self.assertEqual(
+            approval.item_kind_for_term(term, Path(__file__).parents[2]),
+            "non-Rust Concept",
+        )
+
+
 class ApprovedNameTest(unittest.TestCase):
     def test_returns_name_for_single_name_tag(self) -> None:
         event = {"tags": [["name", "Query"]]}

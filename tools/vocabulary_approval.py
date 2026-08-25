@@ -478,6 +478,7 @@ def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
 
 def symbol_for_term(term: dict[str, Any]) -> str:
     """Return the symbol or term name that best identifies a term."""
+    term_name = str(term.get("name", ""))
     for field in ("symbols", "spec_symbols"):
         values = term.get(field)
         if not isinstance(values, list):
@@ -486,8 +487,15 @@ def symbol_for_term(term: dict[str, Any]) -> str:
             if isinstance(value, str):
                 value = value.strip()
                 if value:
-                    return value
-    return str(term.get("name", ""))
+                    if _terminal_name_for_symbol(value) == term_name:
+                        return value
+    return term_name
+
+
+def _terminal_name_for_symbol(value: str) -> str:
+    if "::" not in value:
+        return value
+    return value.rsplit("::", 1)[-1]
 
 
 def item_kind_for_term(term: dict[str, Any], root: Path = ROOT) -> str:
