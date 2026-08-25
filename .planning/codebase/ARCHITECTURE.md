@@ -417,7 +417,7 @@ does, then pass ordinary values through universal owners.
 
 **What happens:** A planned relay is credited as a source without serving the event.
 **Why it's wrong:** Acquisition intent is not result evidence.
-**Do this instead:** Record `RelayEvidence` only during exact admitted EVENT handling.
+**Do this instead:** Construct `RelayEvent` only during exact admitted EVENT handling and derive `RelayOccurrences` from those atomic contributions.
 
 ### Coalescing Causal Receipt Facts
 

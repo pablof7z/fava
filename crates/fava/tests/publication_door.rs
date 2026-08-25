@@ -89,7 +89,7 @@ async fn publish_returns_after_local_acceptance() {
             .current()
             .events
             .iter()
-            .any(|record| record.event.id() == Some(event_id))
+            .any(|record| record.event().id() == Some(event_id))
     );
     let receipt = write.receipt().expect("accepted receipt is readable");
     assert_eq!(receipt.write_id, write.write_id());

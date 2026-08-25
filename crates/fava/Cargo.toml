@@ -15,6 +15,7 @@ fava-routing.workspace = true
 fava-runtime.workspace = true
 fava-session.workspace = true
 fava-signer.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 fava-subscriptions.workspace = true
 fava-transport.workspace = true

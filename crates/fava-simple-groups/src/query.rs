@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use fava_query::RelayUrl;
 use fava_query::{Kind, PublicKey, Query, QuerySnapshot, SingleLetterTag};
 
 use crate::bounds::{MAX_DISCOVERY_INPUT_ITEMS, MAX_SIMPLE_GROUP_QUERY_RESULTS, collect_at_most};
@@ -166,7 +167,7 @@ impl SimpleGroups {
             .collect::<std::collections::BTreeSet<_>>();
         let mut authors = std::collections::BTreeSet::new();
         for record in records {
-            let Ok(rows) = crate::SavedSimpleGroup::from_event(&record.event) else {
+            let Ok(rows) = crate::SavedSimpleGroup::from_event(record.event()) else {
                 continue;
             };
             if let Some(author) = rows.into_iter().flatten().find_map(|saved| {
@@ -233,14 +234,21 @@ pub(crate) fn content(
 pub(crate) fn records(
     simple_group: &SimpleGroup,
     records: SimpleGroupRecords,
-) -> Result<Query, SimpleGroupError> {
+) -> Result<Vec<(RelayUrl, Query)>, SimpleGroupError> {
     let d = SingleLetterTag::from_char('d').expect("lowercase d is a valid tag key");
     let query = records.kinds().iter().fold(Query::events(), |query, kind| {
         query.kind(Kind::from_u16(*kind))
     });
-    bounded_query(
-        query
-            .tag_values(d, [simple_group.id()])
-            .only_from_relays(simple_group.hosts())?,
-    )
+    simple_group
+        .hosts()
+        .map(|host| {
+            let exact = bounded_query(
+                query
+                    .clone()
+                    .tag_values(d, [simple_group.id()])
+                    .only_from_relays([host.clone()])?,
+            )?;
+            Ok((host, exact))
+        })
+        .collect()
 }

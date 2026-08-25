@@ -7,18 +7,24 @@
 
 use std::collections::BTreeMap;
 
-use fava_event_cache::EventCache;
 use fava_query::BoundedText;
-use fava_state::{RelaySessionKey, Timestamp};
+use fava_relay::RelaySessionKey;
+use fava_state::RelayEvent;
 use fava_subscriptions::InstalledSubscriptions;
 use fava_wire::{RelayMessage, SubscriptionId, decode_relay};
+use nostr::types::Timestamp;
 
 /// What one inbound frame turned out to be.
 pub(crate) enum Accepted {
     /// Nothing the observation owner acts on.
     Nothing,
-    /// One verified event was admitted.
-    Event,
+    /// One verified event was admitted under one installed subscription.
+    Event {
+        /// Installed wire subscription that attributed the event.
+        subscription: SubscriptionId,
+        /// Atomic storage-neutral live contribution.
+        relay_event: Box<RelayEvent>,
+    },
     /// The relay has sent everything it stored for one wire subscription.
     StoredEventsComplete(SubscriptionId),
     /// The relay refused one wire subscription.
@@ -36,7 +42,6 @@ pub(crate) enum Accepted {
 
 /// Attribute one inbound frame against the installed plan.
 pub(crate) fn accept(
-    cache: &dyn EventCache,
     session: &RelaySessionKey,
     installed: &InstalledSubscriptions,
     frame: &[u8],
@@ -71,14 +76,16 @@ pub(crate) fn accept(
             // filter its own demand never accepted.
             let accepted = BTreeMap::from([(id.clone(), entry.filters.clone())]);
             match fava_ingest::admit_subscription_event(
-                cache,
                 session,
                 &accepted,
                 &id,
                 event,
                 Timestamp::now(),
             ) {
-                Ok(_) => Accepted::Event,
+                Ok(relay_event) => Accepted::Event {
+                    subscription: id,
+                    relay_event: Box::new(relay_event),
+                },
                 Err(error) => Accepted::Unattributed(BoundedText::new(error.to_string())),
             }
         }

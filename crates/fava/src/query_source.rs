@@ -5,7 +5,7 @@ use fava_query::{
     SourceChangeFuture, SourceChanges, SourceEvent, SourceKind, SourceRevision, SourceSnapshot,
     SourceStatus, SourceTerminationCause,
 };
-use fava_state::CachedEvent;
+use fava_state::RelayEvent;
 use fava_write::{EventValue, LocalWriteEvent};
 use tokio::sync::watch;
 
@@ -122,7 +122,7 @@ fn convert(snapshot: &fava_query::QuerySnapshot) -> SourceSnapshot {
         kind: SourceKind::EventCache,
         revision: SourceRevision(snapshot.revision.0),
         status: SourceStatus::Open,
-        events: snapshot.events.iter().filter_map(convert_record).collect(),
+        events: snapshot.events.iter().flat_map(convert_record).collect(),
         // Forward the retraction causes the underlying event cache reported.
         // A composed source that drops them turns every removal back into a
         // bare disappearance for the next consumer up the chain.
@@ -134,17 +134,22 @@ fn convert(snapshot: &fava_query::QuerySnapshot) -> SourceSnapshot {
     }
 }
 
-fn convert_record(record: &fava_query::EventRecord) -> Option<SourceEvent> {
-    if let Some(publication) = &record.publication {
-        return LocalWriteEvent::new(record.event.clone(), publication.clone())
-            .ok()
-            .map(SourceEvent::Local);
+fn convert_record(record: &fava_query::EventRecord) -> Vec<SourceEvent> {
+    let mut sources = Vec::new();
+    if let Some(publication) = record.publication()
+        && let Ok(local) = LocalWriteEvent::new(record.event().clone(), publication.clone())
+    {
+        sources.push(SourceEvent::Local(local));
     }
-    let EventValue::Signed(event) = &record.event else {
-        return None;
+    let EventValue::Signed(event) = record.event() else {
+        return sources;
     };
-    Some(SourceEvent::Cached(CachedEvent::new(
-        event.clone(),
-        record.relay_evidence.clone(),
-    )))
+    sources.extend(record.relay_occurrences().occurrences().map(|occurrence| {
+        SourceEvent::Relay(RelayEvent::new(
+            event.clone(),
+            occurrence.session.clone(),
+            occurrence.observed_at,
+        ))
+    }));
+    sources
 }

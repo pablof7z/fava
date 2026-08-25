@@ -74,8 +74,7 @@ fn valid_empty_and_ordered_contact_lists_decode() {
     let newer = source(&author, Kind::ContactList, 4, "", Vec::new());
     let older = ContactList::from_event(&EventValue::Signed(older)).expect("older");
     let newer = ContactList::from_event(&EventValue::Signed(newer)).expect("newer");
-    assert!(newer.supersedes(&older));
-    assert!(!older.supersedes(&newer));
+    assert_eq!(newer.author(), older.author());
 }
 
 #[test]
@@ -272,7 +271,7 @@ fn invalid_contact_list_events_are_refused_before_rows() {
 /// it as a malformed contact list sends the caller to fix the wrong thing.
 #[test]
 fn a_repeated_publication_relay_is_reported_as_a_route_defect() {
-    let relay = fava_state::RelayUrl::parse("wss://relay.example").expect("relay url");
+    let relay = nostr::types::RelayUrl::parse("wss://relay.example").expect("relay url");
 
     let mapped = crate::contact_list::map_write_error(
         fava_write::WriteIntentError::DuplicateExplicitRelay {

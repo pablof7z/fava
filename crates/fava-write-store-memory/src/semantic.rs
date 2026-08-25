@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use fava_query::{SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus};
 use fava_routing::RoutePlan;
-use fava_state::{EventCoordinate, event_coordinate};
+use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
     Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
@@ -274,7 +274,13 @@ impl MemoryWriteStore {
             return Ok(receipt);
         }
         require_qualified_source(current_source, selected_source)?;
-        if event.created_at <= receipt.current.event.created_at() {
+        let event_id = event.id.ok_or_else(|| {
+            WriteStoreError::Refused("successor materialization has no stable id".to_owned())
+        })?;
+        if !event_is_newer(
+            (event.created_at, event_id),
+            (receipt.current.event.created_at(), receipt.current.id()),
+        ) {
             return Err(WriteStoreError::Refused(
                 "successor materialization is not newer than current event".to_owned(),
             ));
@@ -468,10 +474,13 @@ fn validate_materialization(
         ));
     }
     let selected = validate_source(edit, author, source)?;
-    let Some((_, source_time)) = selected else {
+    let Some((source_id, source_time)) = selected else {
         return Ok(None);
     };
-    if source_time >= event.created_at {
+    let event_id = event
+        .id
+        .ok_or_else(|| WriteStoreError::Refused("materialization has no stable id".to_owned()))?;
+    if !event_is_newer((event.created_at, event_id), (source_time, source_id)) {
         return Err(WriteStoreError::Refused(
             "materialization is not newer than its selected source".to_owned(),
         ));

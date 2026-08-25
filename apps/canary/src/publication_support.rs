@@ -88,12 +88,9 @@ pub(crate) async fn wait_record(
 ) -> CanaryResult<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if observation
-                .current()
-                .events
-                .iter()
-                .any(|event| event.id() == event_id && event.relay_evidence.len() == relay_count)
-            {
+            if observation.current().events.iter().any(|event| {
+                event.id() == event_id && event.relay_occurrences().len() == relay_count
+            }) {
                 return Ok(());
             }
             observation.changed().await.map_err(error)?;

@@ -215,6 +215,7 @@ dependencies = [
  "fava-publication",
  "fava-publisher",
  "fava-query",
+ "fava-relay",
  "fava-routing",
  "fava-runtime",
  "fava-session",
@@ -241,8 +242,10 @@ name = "fava-diagnostics"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "fava-wire",
+ "nostr",
 ]
 
 [[package]]
@@ -263,6 +266,7 @@ dependencies = [
  "fava-event-cache",
  "fava-query",
  "fava-query-standard",
+ "fava-relay",
  "fava-state",
  "fava-write-store-memory",
  "nostr",
@@ -273,7 +277,7 @@ dependencies = [
 name = "fava-ingest"
 version = "0.1.0"
 dependencies = [
- "fava-event-cache",
+ "fava-relay",
  "fava-state",
  "nostr",
  "thiserror",
@@ -287,6 +291,7 @@ dependencies = [
  "fava-event-cache",
  "fava-ingest",
  "fava-query",
+ "fava-relay",
  "fava-routing",
  "fava-runtime",
  "fava-state",
@@ -305,6 +310,7 @@ dependencies = [
  "fava-delivery",
  "fava-publisher",
  "fava-query",
+ "fava-relay",
  "fava-routing",
  "fava-session",
  "fava-signer",
@@ -312,6 +318,7 @@ dependencies = [
  "fava-transport",
  "fava-write",
  "fava-write-store",
+ "nostr",
  "thiserror",
  "tokio",
 ]
@@ -320,6 +327,7 @@ dependencies = [
 name = "fava-publisher"
 version = "0.1.0"
 dependencies = [
+ "fava-relay",
  "fava-state",
  "fava-transport",
  "fava-write",
@@ -329,6 +337,7 @@ dependencies = [
 name = "fava-query"
 version = "0.1.0"
 dependencies = [
+ "fava-relay",
  "fava-state",
  "fava-write",
  "nostr",
@@ -340,6 +349,7 @@ name = "fava-query-standard"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "fava-write",
  "nostr",
@@ -347,12 +357,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-relay"
+version = "0.1.0"
+dependencies = [
+ "nostr",
+]
+
+[[package]]
 name = "fava-routing"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "fava-write",
+ "nostr",
  "thiserror",
  "tokio",
 ]
@@ -373,6 +392,7 @@ version = "0.1.0"
 dependencies = [
  "fava-signer",
  "fava-write",
+ "nostr",
  "thiserror",
  "tokio",
 ]
@@ -390,8 +410,8 @@ dependencies = [
 name = "fava-state"
 version = "0.1.0"
 dependencies = [
+ "fava-relay",
  "nostr",
- "serde",
 ]
 
 [[package]]
@@ -399,6 +419,7 @@ name = "fava-subscriptions"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "fava-transport",
  "fava-wire",
@@ -411,7 +432,9 @@ name = "fava-transport"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
+ "nostr",
  "thiserror",
 ]
 
@@ -427,6 +450,7 @@ dependencies = [
 name = "fava-write"
 version = "0.1.0"
 dependencies = [
+ "fava-relay",
  "fava-state",
  "nostr",
  "serde",
@@ -439,6 +463,7 @@ name = "fava-write-store"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-routing",
  "fava-state",
  "fava-write",
@@ -451,10 +476,12 @@ name = "fava-write-store-memory"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-routing",
  "fava-state",
  "fava-write",
  "fava-write-store",
+ "nostr",
  "thiserror",
  "tokio",
 ]

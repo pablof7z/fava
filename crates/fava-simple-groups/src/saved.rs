@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use fava_state::RelayUrl;
+use fava_query::RelayUrl;
 use fava_write::{EventValue, PublicKey};
 
 use crate::SimpleGroupError;

@@ -7,9 +7,9 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use fava_query::Query;
-use fava_state::RelayUrl;
 use nostr::event::Kind;
 use nostr::key::{Keys, PublicKey};
+use nostr::types::RelayUrl;
 use support::{assemble, relay, requests, session_key, settle, wait_until};
 
 /// The owner's fixed admission window, restated here because the constant it

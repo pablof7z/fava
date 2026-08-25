@@ -11,6 +11,7 @@ fava-ingest.workspace = true
 fava-query.workspace = true
 fava-routing.workspace = true
 fava-runtime.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 fava-subscriptions.workspace = true
 fava-transport.workspace = true

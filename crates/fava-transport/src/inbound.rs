@@ -1,6 +1,6 @@
 //! Items delivered to one inbound consumer of one relay session.
 
-use fava_state::Timestamp;
+use nostr::types::Timestamp;
 
 use crate::{RelaySessionIdentity, TransportFailure};
 

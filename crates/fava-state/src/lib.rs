@@ -1,207 +1,139 @@
-//! Deterministic Nostr rules for signed event state learned from relays.
+//! Pure universal Nostr event-state values and decisions.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use fava_relay::RelaySessionKey;
+use nostr::event::{Event, EventId, Kind, Tag};
+use nostr::key::PublicKey;
+use nostr::nips::nip01::Coordinate;
+use nostr::types::Timestamp;
 
-pub use nostr::event::{Event, EventId, Kind, Tag};
-pub use nostr::key::PublicKey;
-pub use nostr::types::{RelayUrl, Timestamp};
-
-/// The application-selected authorization identity for relay work.
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct RelayAccess(String);
-
-impl RelayAccess {
-    /// Ordinary unauthenticated public relay access.
-    #[must_use]
-    pub fn public() -> Self {
-        Self::default()
-    }
-
-    /// Construct named relay access without exposing provider-private state.
-    #[must_use]
-    pub fn named(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    /// Return the stable relay-access name.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Exact relay and access authority for an observation.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct RelaySessionKey {
-    /// Relay that served the event.
-    pub relay: RelayUrl,
-    /// Relay access under which the event was served.
-    pub access: RelayAccess,
-}
-
-impl RelaySessionKey {
-    /// Construct a relay session key.
-    #[must_use]
-    pub fn new(relay: RelayUrl, access: RelayAccess) -> Self {
-        Self { relay, access }
-    }
-}
-
-/// Exact evidence that one relay session served an event.
+/// One admitted occurrence under one stable logical relay/access identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RelayObservation {
-    /// Exact session authority.
+pub struct RelayOccurrence {
+    /// Exact stable logical relay/access identity.
     pub session: RelaySessionKey,
-    /// Local time at which the event was admitted.
+    /// Caller-supplied local ingress time.
     pub observed_at: Timestamp,
 }
 
-/// Relay observations currently known for one event id.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct RelayEvidence {
-    observations: BTreeMap<RelaySessionKey, RelayObservation>,
+/// Event-id-bound aggregate of exact qualifying relay occurrences.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RelayOccurrences {
+    event_id: EventId,
+    occurrences: BTreeMap<RelaySessionKey, RelayOccurrence>,
 }
 
-impl RelayEvidence {
-    /// Create evidence containing one actual relay observation.
+impl RelayOccurrences {
+    /// Event id validated during aggregate construction.
     #[must_use]
-    pub fn one(session: RelaySessionKey, observed_at: Timestamp) -> Self {
-        let observation = RelayObservation {
-            session: session.clone(),
-            observed_at,
-        };
-        Self {
-            observations: BTreeMap::from([(session, observation)]),
-        }
+    pub const fn event_id(&self) -> EventId {
+        self.event_id
     }
 
-    /// Merge observations without fabricating or dropping source identity.
-    pub fn merge(&mut self, other: &Self) {
-        for (session, observation) in &other.observations {
-            self.observations
-                .entry(session.clone())
-                .and_modify(|current| {
-                    if observation.observed_at < current.observed_at {
-                        current.observed_at = observation.observed_at;
-                    }
-                })
-                .or_insert_with(|| observation.clone());
-        }
-    }
-
-    /// Whether no relay has actually served the event.
+    /// Whether no relay contribution qualified.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.observations.is_empty()
+        self.occurrences.is_empty()
     }
 
-    /// Number of exact relay-session observations.
+    /// Number of distinct exact logical sessions.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.observations.len()
+        self.occurrences.len()
     }
 
-    /// Whether the event was served by a qualifying relay under any relay access.
-    #[must_use]
-    pub fn includes_any_relay(&self, relays: &BTreeSet<RelayUrl>) -> bool {
-        self.observations
-            .keys()
-            .any(|session| relays.contains(&session.relay))
-    }
-
-    /// Iterate over exact observations.
-    pub fn observations(&self) -> impl Iterator<Item = &RelayObservation> {
-        self.observations.values()
+    /// Iterate in deterministic exact-session order.
+    pub fn occurrences(&self) -> impl Iterator<Item = &RelayOccurrence> {
+        self.occurrences.values()
     }
 }
 
-/// One signed relay-observed event and its source evidence.
+/// One signed event plus exactly one admitted relay occurrence.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CachedEvent {
-    /// Exact signed Nostr event.
-    pub event: Event,
-    /// Relays that actually served this exact event.
-    pub evidence: RelayEvidence,
+pub struct RelayEvent {
+    event: Event,
+    occurrence: RelayOccurrence,
 }
 
-/// Why Nostr event-state rules removed one retained event.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RetractionCause {
-    /// An authorized NIP-09 deletion event covers the retained event.
-    Deleted {
-        /// The kind-5 event that authorized the retraction and remains retained
-        /// as the tombstone preventing resurrection.
-        deletion: EventId,
-    },
-    /// Another event won the same replaceable coordinate.
-    Superseded {
-        /// The coordinate whose current winner changed.
-        coordinate: EventCoordinate,
-    },
-    /// The event's NIP-40 expiration timestamp has passed.
-    Expired,
-    /// The provider removed retained state under its own bound or maintenance
-    /// rather than under a Nostr rule.
-    Evicted,
-}
-
-/// One atomic mutation decided by Nostr event-state rules.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CacheMutation {
-    /// Insert a new event or merge evidence for the same event id.
-    Upsert(CachedEvent),
-    /// Retract one retained event id for an exact cause.
-    Retract {
-        /// The retained event removed.
-        event_id: EventId,
-        /// The rule that removed it.
-        cause: RetractionCause,
-    },
-}
-
-impl CacheMutation {
-    /// Whether the mutation removes retained state.
-    ///
-    /// A retraction is always applicable: a provider may refuse an insertion
-    /// for capacity, but never a removal.
+impl RelayEvent {
+    /// Bind one signed event to one actual occurrence.
     #[must_use]
-    pub const fn is_retraction(&self) -> bool {
-        matches!(self, Self::Retract { .. })
+    pub fn new(event: Event, session: RelaySessionKey, observed_at: Timestamp) -> Self {
+        Self {
+            event,
+            occurrence: RelayOccurrence {
+                session,
+                observed_at,
+            },
+        }
     }
-}
 
-impl CachedEvent {
-    /// Construct an admitted cached event.
+    /// Borrow the exact signed event.
     #[must_use]
-    pub fn new(event: Event, evidence: RelayEvidence) -> Self {
-        Self { event, evidence }
+    pub const fn event(&self) -> &Event {
+        &self.event
     }
 
-    /// Merge evidence for the same event id.
-    pub fn merge_evidence(&mut self, evidence: &RelayEvidence) {
-        self.evidence.merge(evidence);
+    /// Borrow the one exact occurrence.
+    #[must_use]
+    pub const fn occurrence(&self) -> &RelayOccurrence {
+        &self.occurrence
     }
 }
 
-/// Identity of one immutable event or one current replaceable event.
+/// Aggregate exact occurrences from one complete finite same-event slice.
+///
+/// Returns `None` when any contribution carries another event id. Repeated
+/// delivery through one exact session keeps the earliest local observation
+/// time, so the output cardinality cannot exceed the input cardinality.
+#[must_use]
+pub fn relay_occurrences_for_event(
+    event_id: EventId,
+    contributions: &[RelayEvent],
+) -> Option<RelayOccurrences> {
+    if contributions
+        .iter()
+        .any(|contribution| contribution.event.id != event_id)
+    {
+        return None;
+    }
+    let mut occurrences = BTreeMap::<RelaySessionKey, RelayOccurrence>::new();
+    for contribution in contributions {
+        let incoming = contribution.occurrence();
+        occurrences
+            .entry(incoming.session.clone())
+            .and_modify(|current| {
+                if incoming.observed_at < current.observed_at {
+                    current.observed_at = incoming.observed_at;
+                }
+            })
+            .or_insert_with(|| incoming.clone());
+    }
+    Some(RelayOccurrences {
+        event_id,
+        occurrences,
+    })
+}
+
+/// Identity of one immutable event or one replaceable/addressable coordinate.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum EventCoordinate {
-    /// One immutable ordinary event.
+    /// Exact immutable event identity.
     Event(EventId),
-    /// Latest event for one author and replaceable coordinate.
+    /// Current-value coordinate for author, kind, and optional identifier.
     Replaceable {
-        /// Event author.
+        /// Exact author.
         author: PublicKey,
-        /// Replaceable event kind.
+        /// Exact replaceable/addressable kind.
         kind: Kind,
-        /// First `d` tag value for an addressable coordinate; otherwise absent.
+        /// `None` for plain replaceable kinds; `Some`, including empty, for
+        /// addressable kinds.
         identifier: Option<String>,
     },
 }
 
-/// Determine the identity of an event-shaped value.
+/// Derive immutable, replaceable, or addressable event identity.
 #[must_use]
 pub fn event_coordinate(
     id: EventId,
@@ -235,203 +167,227 @@ pub fn event_coordinate(
     }
 }
 
-/// Determine the identity of a signed event.
+/// Compare same-coordinate candidates using Nostr winner ordering.
 #[must_use]
-pub fn coordinate_for_event(event: &Event) -> EventCoordinate {
-    event_coordinate(event.id, event.pubkey, event.kind, event.tags.as_slice())
+pub fn event_is_newer(candidate: (Timestamp, EventId), current: (Timestamp, EventId)) -> bool {
+    candidate.0 > current.0 || (candidate.0 == current.0 && candidate.1 < current.1)
 }
 
-/// Compare two same-coordinate event candidates using Nostr winner rules.
+/// Whether an authorized kind-5 event deletes the target event.
+///
+/// Malformed, short, repeated, extra-valued, and unknown sibling tags remain
+/// scoped to themselves and never erase an independently valid target.
 #[must_use]
-pub fn candidate_is_newer(candidate: &Event, current: &Event) -> bool {
-    candidate.created_at > current.created_at
-        || (candidate.created_at == current.created_at && candidate.id < current.id)
+pub fn deletion_applies(
+    deletion: (PublicKey, Kind, Timestamp, &[Tag]),
+    target: (EventId, PublicKey, Kind, Timestamp, &[Tag]),
+) -> bool {
+    let (deletion_author, deletion_kind, deletion_at, deletion_tags) = deletion;
+    let (target_id, target_author, target_kind, target_at, target_tags) = target;
+    if deletion_kind != Kind::EventDeletion
+        || target_kind == Kind::EventDeletion
+        || deletion_author != target_author
+    {
+        return false;
+    }
+    if deletion_tags.iter().any(|tag| {
+        let values = tag.as_slice();
+        values.first().map(String::as_str) == Some("e")
+            && values
+                .get(1)
+                .and_then(|value| EventId::from_hex(value).ok())
+                == Some(target_id)
+    }) {
+        return true;
+    }
+    if target_at > deletion_at {
+        return false;
+    }
+    let target_coordinate = event_coordinate(target_id, target_author, target_kind, target_tags);
+    deletion_tags.iter().any(|tag| {
+        let values = tag.as_slice();
+        if values.first().map(String::as_str) != Some("a") {
+            return false;
+        }
+        values
+            .get(1)
+            .and_then(|value| Coordinate::parse(value).ok())
+            .is_some_and(|coordinate| {
+                target_coordinate
+                    == EventCoordinate::Replaceable {
+                        author: coordinate.public_key,
+                        kind: coordinate.kind,
+                        identifier: if (30_000..40_000).contains(&coordinate.kind.as_u16()) {
+                            Some(coordinate.identifier)
+                        } else {
+                            None
+                        },
+                    }
+            })
+    })
 }
 
-/// Decide cache mutations for one verified relay observation at an exact time.
+/// Whether any valid NIP-40 expiration tag is due at `now`.
 #[must_use]
-pub fn admission_mutations(
-    current: &[CachedEvent],
-    incoming: CachedEvent,
+pub fn event_is_expired(tags: &[Tag], now: Timestamp) -> bool {
+    tags.iter().any(|tag| {
+        let values = tag.as_slice();
+        values.first().map(String::as_str) == Some("expiration")
+            && values
+                .get(1)
+                .and_then(|value| value.parse::<u64>().ok())
+                .is_some_and(|expiry| Timestamp::from(expiry) <= now)
+    })
+}
+
+/// Exact reason one current source contribution was removed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RetractionCause {
+    /// An authorized kind-5 event covers the contribution.
+    Deleted {
+        /// Exact kind-5 event id.
+        deletion: EventId,
+    },
+    /// Another event became this session's coordinate winner.
+    Superseded {
+        /// Exact winning event id.
+        by: EventId,
+    },
+    /// NIP-40 expiration is due.
+    Expired,
+    /// A retaining provider removed the contribution under its own policy.
+    Evicted,
+}
+
+/// One element of an ordered atomic transition for relay contributions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EventStateMutation {
+    /// Insert or update one exact `(EventId, RelaySessionKey)` contribution.
+    Upsert(RelayEvent),
+    /// Remove one exact contribution.
+    Retract {
+        /// Exact event removed.
+        event_id: EventId,
+        /// Exact logical relay/access contribution removed.
+        session: RelaySessionKey,
+        /// Exact protocol or provider reason.
+        cause: RetractionCause,
+    },
+}
+
+/// Compute one ordered transition for a finite current contribution set.
+#[must_use]
+pub fn mutations_for_event(
+    current: &[RelayEvent],
+    incoming: RelayEvent,
     now: Timestamp,
-) -> Vec<CacheMutation> {
-    if event_is_expired(&incoming.event, now)
+) -> Vec<EventStateMutation> {
+    let incoming_event = incoming.event();
+    if event_is_expired(incoming_event.tags.as_slice(), now)
         || current
             .iter()
-            .any(|known| deletion_applies(&known.event, &incoming.event))
+            .any(|known| deletion_applies(event_tuple(known.event()), target_tuple(incoming_event)))
     {
         return Vec::new();
     }
 
-    if incoming.event.kind == Kind::EventDeletion {
-        // Retract first: a bounded provider must be able to free room before it
-        // records the kind-5 tombstone, so a full cache can still delete.
-        let mut mutations: Vec<_> = current
+    if incoming_event.kind == Kind::EventDeletion {
+        let mut mutations = current
             .iter()
-            .filter(|known| deletion_applies(&incoming.event, &known.event))
-            .map(|known| CacheMutation::Retract {
-                event_id: known.event.id,
+            .filter(|known| {
+                deletion_applies(event_tuple(incoming_event), target_tuple(known.event()))
+            })
+            .map(|known| EventStateMutation::Retract {
+                event_id: known.event().id,
+                session: known.occurrence().session.clone(),
                 cause: RetractionCause::Deleted {
-                    deletion: incoming.event.id,
+                    deletion: incoming_event.id,
                 },
             })
-            .collect();
-        mutations.push(CacheMutation::Upsert(incoming));
+            .collect::<Vec<_>>();
+        mutations.push(EventStateMutation::Upsert(incoming));
         return mutations;
     }
 
-    let coordinate = coordinate_for_event(&incoming.event);
-    let same_coordinate: Vec<_> = current
-        .iter()
-        .filter(|known| coordinate_for_event(&known.event) == coordinate)
-        .collect();
+    let incoming_session = &incoming.occurrence().session;
+    let coordinate = coordinate_of(incoming_event);
+    let exact_existing = current.iter().find(|known| {
+        known.event().id == incoming_event.id && known.occurrence().session == *incoming_session
+    });
+    if let Some(existing) = exact_existing {
+        if incoming.occurrence().observed_at < existing.occurrence().observed_at {
+            return vec![EventStateMutation::Upsert(incoming)];
+        }
+        return Vec::new();
+    }
+
     if matches!(coordinate, EventCoordinate::Replaceable { .. }) {
-        let mut candidates: Vec<_> = same_coordinate
+        let same_session = current
             .iter()
-            .map(|known| (*known).clone())
-            .collect();
-        let existing = candidates
-            .iter_mut()
-            .find(|known| known.event.id == incoming.event.id);
-        let evidence_changed = if let Some(existing) = existing {
-            if existing.event != incoming.event {
-                return vec![CacheMutation::Upsert(incoming)];
-            }
-            let previous = existing.evidence.clone();
-            existing.merge_evidence(&incoming.evidence);
-            existing.evidence != previous
-        } else {
-            candidates.push(incoming.clone());
-            true
-        };
-        let retained = relay_replaceable_winners(&candidates);
-        let mut mutations: Vec<_> = same_coordinate
-            .iter()
-            .filter(|known| !retained.contains(&known.event.id))
-            .map(|known| CacheMutation::Retract {
-                event_id: known.event.id,
+            .filter(|known| {
+                known.occurrence().session == *incoming_session
+                    && coordinate_of(known.event()) == coordinate
+            })
+            .collect::<Vec<_>>();
+        if same_session.iter().any(|known| {
+            !event_is_newer(
+                (incoming_event.created_at, incoming_event.id),
+                (known.event().created_at, known.event().id),
+            )
+        }) {
+            return Vec::new();
+        }
+        let mut mutations = same_session
+            .into_iter()
+            .filter(|known| known.event().id != incoming_event.id)
+            .map(|known| EventStateMutation::Retract {
+                event_id: known.event().id,
+                session: known.occurrence().session.clone(),
                 cause: RetractionCause::Superseded {
-                    coordinate: coordinate.clone(),
+                    by: incoming_event.id,
                 },
             })
-            .collect();
-        if retained.contains(&incoming.event.id) && evidence_changed {
-            mutations.push(CacheMutation::Upsert(incoming));
-        }
+            .collect::<Vec<_>>();
+        mutations.push(EventStateMutation::Upsert(incoming));
         return mutations;
     }
-    if same_coordinate
-        .iter()
-        .any(|known| known.event.id == incoming.event.id)
-    {
-        return vec![CacheMutation::Upsert(incoming)];
-    }
-    vec![CacheMutation::Upsert(incoming)]
+
+    vec![EventStateMutation::Upsert(incoming)]
 }
 
-fn relay_replaceable_winners(candidates: &[CachedEvent]) -> BTreeSet<EventId> {
-    let mut by_relay = BTreeMap::<RelayUrl, &CachedEvent>::new();
-    for candidate in candidates {
-        for observation in candidate.evidence.observations() {
-            by_relay
-                .entry(observation.session.relay.clone())
-                .and_modify(|current| {
-                    if candidate_is_newer(&candidate.event, &current.event) {
-                        *current = candidate;
-                    }
-                })
-                .or_insert(candidate);
-        }
-    }
-    if by_relay.is_empty() {
-        candidates
-            .iter()
-            .reduce(|current, candidate| {
-                if candidate_is_newer(&candidate.event, &current.event) {
-                    candidate
-                } else {
-                    current
-                }
-            })
-            .map(|winner| BTreeSet::from([winner.event.id]))
-            .unwrap_or_default()
-    } else {
-        by_relay
-            .into_values()
-            .map(|winner| winner.event.id)
-            .collect()
-    }
-}
-
-/// Decide retractions for events expired at an exact time.
+/// Compute exact due expiration retractions for a finite contribution set.
 #[must_use]
-pub fn expiration_mutations(current: &[CachedEvent], now: Timestamp) -> Vec<CacheMutation> {
+pub fn mutations_for_expiration(current: &[RelayEvent], now: Timestamp) -> Vec<EventStateMutation> {
     current
         .iter()
-        .filter(|known| event_is_expired(&known.event, now))
-        .map(|known| CacheMutation::Retract {
-            event_id: known.event.id,
+        .filter(|known| event_is_expired(known.event().tags.as_slice(), now))
+        .map(|known| EventStateMutation::Retract {
+            event_id: known.event().id,
+            session: known.occurrence().session.clone(),
             cause: RetractionCause::Expired,
         })
         .collect()
 }
 
-/// Whether a NIP-40 expiration timestamp has passed at an exact time.
-#[must_use]
-pub fn event_is_expired(event: &Event, now: Timestamp) -> bool {
-    event.tags.expiration().is_some_and(|expiry| expiry <= now)
+fn coordinate_of(event: &Event) -> EventCoordinate {
+    event_coordinate(event.id, event.pubkey, event.kind, event.tags.as_slice())
 }
 
-fn deletion_applies(deletion: &Event, target: &Event) -> bool {
-    if deletion.kind != Kind::EventDeletion
-        || target.kind == Kind::EventDeletion
-        || deletion.pubkey != target.pubkey
-    {
-        return false;
-    }
-    if deletion.tags.event_ids().any(|id| id == target.id) {
-        return true;
-    }
-    if target.created_at > deletion.created_at {
-        return false;
-    }
-    let target_coordinate = coordinate_for_event(target);
-    deletion.tags.coordinates().any(|coordinate| {
-        target_coordinate
-            == EventCoordinate::Replaceable {
-                author: coordinate.public_key,
-                kind: coordinate.kind,
-                identifier: if coordinate.identifier.is_empty() {
-                    None
-                } else {
-                    Some(coordinate.identifier)
-                },
-            }
-    })
+fn event_tuple(event: &Event) -> (PublicKey, Kind, Timestamp, &[Tag]) {
+    (
+        event.pubkey,
+        event.kind,
+        event.created_at,
+        event.tags.as_slice(),
+    )
 }
 
-#[cfg(test)]
-mod tests {
-    use nostr::event::{EventBuilder, FinalizeEvent, Tag};
-    use nostr::key::Keys;
-
-    use super::*;
-
-    #[test]
-    fn replaceable_coordinate_includes_addressable_identifier() {
-        let keys = Keys::generate();
-        let event = EventBuilder::new(Kind::from_u16(30_023), "article")
-            .tags([Tag::identifier("first"), Tag::identifier("second")])
-            .finalize(&keys)
-            .expect("event signs");
-
-        assert_eq!(
-            coordinate_for_event(&event),
-            EventCoordinate::Replaceable {
-                author: keys.public_key(),
-                kind: Kind::from_u16(30_023),
-                identifier: Some("first".to_owned()),
-            }
-        );
-    }
+fn target_tuple(event: &Event) -> (EventId, PublicKey, Kind, Timestamp, &[Tag]) {
+    (
+        event.id,
+        event.pubkey,
+        event.kind,
+        event.created_at,
+        event.tags.as_slice(),
+    )
 }

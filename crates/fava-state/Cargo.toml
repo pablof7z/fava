@@ -5,11 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-relay.workspace = true
 nostr.workspace = true
-serde.workspace = true
 
 [dev-dependencies]
 nostr = { workspace = true, features = ["os-rng"] }
+quote.workspace = true
+syn.workspace = true
 
 [lints]
 workspace = true

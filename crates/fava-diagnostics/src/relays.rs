@@ -1,7 +1,7 @@
 //! Current facts about the relay sessions Fava holds.
 
 use fava_query::{BoundedText, ObservationId, OperationGeneration};
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 
 /// Current state of one relay session Fava holds.

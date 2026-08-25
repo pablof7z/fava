@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fava_state::RelayUrl;
+use fava_query::RelayUrl;
 use fava_write::{
     Event, EventBuildError, EventBuilder, Kind, PublicKey, ReplaceableEventEdit,
     ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
@@ -342,8 +342,7 @@ fn qualified_source(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    crate::records::validate_structure(source)
-        .map_err(|error| simple_group_refusal(&error))?;
+    crate::records::validate_structure(source).map_err(|error| simple_group_refusal(&error))?;
     source
         .verify()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
@@ -399,8 +398,7 @@ fn apply_simple_group(
     let mut found = std::collections::BTreeSet::new();
     let mut tags = Vec::with_capacity(source.len().saturating_add(hosts.len()));
     for tag in source {
-        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host))
-        else {
+        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host)) else {
             tags.push(tag.clone());
             continue;
         };
@@ -476,7 +474,11 @@ fn renamed_row(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     Tag::parse(values).map_err(|error| codec_refusal(&error.to_string()))
 }
 
-fn simple_group_row(id: &str, host: &RelayUrl, name: Option<&str>) -> Result<Tag, WriteIntentError> {
+fn simple_group_row(
+    id: &str,
+    host: &RelayUrl,
+    name: Option<&str>,
+) -> Result<Tag, WriteIntentError> {
     let mut values = vec!["group".to_owned(), id.to_owned(), host.as_str().to_owned()];
     if let Some(name) = name {
         values.push(name.to_owned());

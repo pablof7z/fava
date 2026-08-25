@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 
 /// Fava-owned deadlines for one relay session. Never defaulted by transport.
 ///

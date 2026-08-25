@@ -6,8 +6,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use fava_query::Query;
-use fava_state::{PublicKey, RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{EventId, EventValue};
+use nostr::key::PublicKey;
+use nostr::types::RelayUrl;
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -80,7 +82,7 @@ impl RouteRequest {
     pub fn access(&self) -> RelayAccess {
         match self {
             Self::Read(query) => query.access().clone(),
-            Self::Write(_) => RelayAccess::public(),
+            Self::Write(_) => RelayAccess::Public,
         }
     }
 
@@ -296,7 +298,10 @@ impl RoutePlan {
                 .into_iter()
                 .map(|relay| {
                     let mut destination = RouteDestination::new(
-                        RelaySessionKey::new(relay, access.clone()),
+                        RelaySessionKey {
+                            relay,
+                            access: access.clone(),
+                        },
                         targets.clone(),
                         "application-selected relay",
                     );

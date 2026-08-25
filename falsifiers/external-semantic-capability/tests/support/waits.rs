@@ -74,7 +74,7 @@ pub async fn wait_generation_record(
         loop {
             let snapshot = observation.current();
             if let Some(record) = snapshot.events.iter().find(|record| {
-                record.publication.as_ref().is_some_and(|evidence| {
+                record.publication().is_some_and(|evidence| {
                     evidence.materialization_id == MaterializationId::from_u64(generation)
                 })
             }) {

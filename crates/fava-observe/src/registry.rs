@@ -9,15 +9,17 @@
 //! logical demand still visible to it.
 
 use std::collections::BTreeMap;
-use std::num::NonZeroU64;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Mutex;
 
 use fava_query::{
-    DesiredPlanEvidence, ObservationId, OperationGeneration, QueryBranchId, RelayQueryEvidence,
-    RelayShortfall, RelaySourceState, RouteOrigin,
+    DesiredPlanEvidence, ObservationId, OperationGeneration, QueryBranchId, QueryShortfall,
+    RelayQueryEvidence, RelayShortfall, RelaySourceState, RouteOrigin, SourceEvent, SourceKind,
+    SourceRetraction, SourceRevision, SourceSnapshot, SourceStatus,
 };
+use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, TaskHandle};
-use fava_state::RelaySessionKey;
+use fava_state::{EventStateMutation, RelayEvent, mutations_for_event};
 use fava_subscriptions::{DemandId, RelayDemand};
 use tokio::sync::watch;
 
@@ -34,9 +36,21 @@ struct Installed {
     plan: Option<DesiredPlanEvidence>,
     route_revision: Option<u64>,
     coalesced: u64,
+    live: BTreeMap<RelaySessionKey, LiveState>,
     wake: watch::Sender<u64>,
     tasks: Vec<TaskHandle<Option<()>>>,
 }
+
+#[derive(Default)]
+struct LiveState {
+    revision: u64,
+    events: BTreeMap<nostr::event::EventId, RelayEvent>,
+    retractions: Vec<SourceRetraction>,
+    refused: u64,
+}
+
+const LIVE_EVENTS_PER_SESSION: NonZeroUsize =
+    NonZeroUsize::new(4_096).expect("the live retention bound is nonzero");
 
 #[derive(Default)]
 struct State {
@@ -77,6 +91,7 @@ impl Registry {
                 plan: None,
                 route_revision: None,
                 coalesced: 0,
+                live: BTreeMap::new(),
                 wake,
                 tasks: Vec::new(),
             },
@@ -113,7 +128,11 @@ impl Registry {
         installed
             .relays
             .retain(|session, _| wanted.contains_key(session) || retain_withdrawn(withdrawal));
+        installed
+            .live
+            .retain(|session, _| wanted.contains_key(session));
         for (session, (demand, route)) in wanted {
+            installed.live.entry(session.clone()).or_default();
             if let Some(assigned) = installed.relays.get_mut(&session) {
                 assigned.demand = demand;
                 assigned.evidence.route = route;
@@ -237,6 +256,80 @@ impl Registry {
         });
     }
 
+    /// Atomically apply one admitted relay event to an observation-owned live source.
+    pub(crate) fn record_live_event(&self, id: ObservationId, relay_event: RelayEvent) {
+        self.update(id, |installed| {
+            let session = relay_event.occurrence().session.clone();
+            let Some(live) = installed.live.get_mut(&session) else {
+                return false;
+            };
+            let current = live.events.values().cloned().collect::<Vec<_>>();
+            let now = relay_event.occurrence().observed_at;
+            let mutations = mutations_for_event(&current, relay_event, now);
+            if mutations.is_empty() {
+                return false;
+            }
+            let mut next_events = live.events.clone();
+            let mut next_retractions = Vec::new();
+            for mutation in mutations {
+                match mutation {
+                    EventStateMutation::Upsert(incoming) => {
+                        next_events.insert(incoming.event().id, incoming);
+                    }
+                    EventStateMutation::Retract {
+                        event_id,
+                        session: retracted_session,
+                        cause,
+                    } => {
+                        if retracted_session == session && next_events.remove(&event_id).is_some() {
+                            next_retractions.push(SourceRetraction::new(event_id, cause));
+                        }
+                    }
+                }
+            }
+            // Retractions describe only the transition to one live-source
+            // revision. Overflow is itself a new refused revision, so it must
+            // not republish removals that belonged to the preceding accepted
+            // replacement or deletion.
+            live.retractions.clear();
+            if next_events.len() > LIVE_EVENTS_PER_SESSION.get() {
+                live.refused = live.refused.saturating_add(1);
+                live.revision = live.revision.saturating_add(1);
+                return true;
+            }
+            live.events = next_events;
+            live.retractions = next_retractions;
+            live.revision = live.revision.saturating_add(1);
+            true
+        });
+    }
+
+    /// Complete current live relay snapshots for one observation.
+    pub(crate) fn live_snapshots(&self, id: ObservationId) -> Vec<SourceSnapshot> {
+        let state = self.lock();
+        let Some(installed) = state.observations.get(&id) else {
+            return Vec::new();
+        };
+        installed
+            .live
+            .iter()
+            .map(|(session, live)| SourceSnapshot {
+                kind: SourceKind::LiveRelay {
+                    session: session.clone(),
+                },
+                revision: SourceRevision(live.revision),
+                status: SourceStatus::Open,
+                events: live
+                    .events
+                    .values()
+                    .cloned()
+                    .map(SourceEvent::Relay)
+                    .collect(),
+                retractions: live.retractions.clone(),
+            })
+            .collect()
+    }
+
     /// Current scoped evidence for one observation.
     pub(crate) fn evidence(&self, id: ObservationId) -> ObservationEvidence {
         let state = self.lock();
@@ -251,6 +344,16 @@ impl Registry {
                 .collect(),
             plan: installed.plan.clone(),
             coalesced: installed.coalesced,
+            live_shortfalls: installed
+                .live
+                .iter()
+                .filter(|(_, live)| live.refused > 0)
+                .map(|(session, live)| QueryShortfall::LiveRetentionLimit {
+                    session: session.clone(),
+                    limit: LIVE_EVENTS_PER_SESSION,
+                    refused: live.refused,
+                })
+                .collect(),
             route_revision: installed.route_revision,
         }
     }
@@ -312,6 +415,7 @@ pub(crate) struct ObservationEvidence {
     pub(crate) relays: Vec<RelayQueryEvidence>,
     pub(crate) plan: Option<DesiredPlanEvidence>,
     pub(crate) coalesced: u64,
+    pub(crate) live_shortfalls: Vec<QueryShortfall>,
     pub(crate) route_revision: Option<u64>,
 }
 

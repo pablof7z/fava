@@ -1,8 +1,8 @@
 //! Neutral contract for accepted local event materializations.
 
 use fava_query::QuerySource;
+use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
-use fava_state::RelaySessionKey;
 use fava_write::{
     Event, EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, PublicKey,
     Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent,

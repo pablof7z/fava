@@ -3,8 +3,8 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
 use fava::{EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
-use fava_state::{RelayAccess, RelaySessionKey};
 use fava_write::{WriteIntent, WritePayload, WriteRouting};
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
@@ -42,6 +42,13 @@ fn automatic_route(revision: u64) -> RoutePlan {
     }
 }
 
+fn public_session() -> RelaySessionKey {
+    RelaySessionKey {
+        relay: relay_url(),
+        access: RelayAccess::Public,
+    }
+}
+
 #[test]
 fn retired_completion_is_attributable_and_inert() {
     let keys = Keys::generate();
@@ -62,7 +69,7 @@ fn retired_completion_is_attributable_and_inert() {
             Some(&source),
         )
         .expect("successor installs");
-    let session = RelaySessionKey::new(relay_url(), RelayAccess::public());
+    let session = public_session();
     let signed_one = materialization(&keys, 1, "generation one")
         .finalize(&keys)
         .expect("retired event signs");

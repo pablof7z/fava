@@ -8,7 +8,7 @@
 
 use core::num::{NonZeroU32, NonZeroU64};
 
-use fava_state::Timestamp;
+use nostr::types::Timestamp;
 
 /// Identity of one open Observation. Minted only by `fava-observe`.
 ///

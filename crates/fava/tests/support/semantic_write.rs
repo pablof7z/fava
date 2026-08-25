@@ -17,6 +17,7 @@ use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query::{QueryEvaluator, QuerySource};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
@@ -24,7 +25,7 @@ use fava_routing::{
 use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
-use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey};
+use fava_state::RelayEvent;
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -361,7 +362,10 @@ impl CountingRouter {
     fn contribution(&self, request: &RouteRequest) -> RouteContribution {
         RouteContribution {
             destinations: vec![RouteDestination::new(
-                RelaySessionKey::new(self.relay.clone(), RelayAccess::public()),
+                RelaySessionKey {
+                    relay: self.relay.clone(),
+                    access: RelayAccess::Public,
+                },
                 request.targets(),
                 "semantic test route",
             )],
@@ -450,11 +454,27 @@ pub fn signed_source(
     builder.finalize(keys).expect("source signs")
 }
 
-pub fn relay_evidence() -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(relay_url(), RelayAccess::public()),
-        Timestamp::from(1),
-    )
+pub fn relay_session() -> RelaySessionKey {
+    RelaySessionKey {
+        relay: relay_url(),
+        access: RelayAccess::Public,
+    }
+}
+
+pub struct TestRelayOccurrence {
+    session: RelaySessionKey,
+    observed_at: Timestamp,
+}
+
+pub fn relay_occurrence() -> TestRelayOccurrence {
+    TestRelayOccurrence {
+        session: relay_session(),
+        observed_at: Timestamp::from(1),
+    }
+}
+
+pub fn relay_event(event: Event, occurrence: TestRelayOccurrence) -> RelayEvent {
+    RelayEvent::new(event, occurrence.session, occurrence.observed_at)
 }
 
 pub fn relay_url() -> RelayUrl {

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use fava_state::RelayUrl;
 use fava_write::{Event, EventBuilder, Kind, PublicKey, Tag, Timestamp, UnsignedEvent};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 use crate::{SimpleGroup, SimpleGroupError};
 
@@ -96,7 +96,10 @@ fn group_construction_refuses_empty_oversized_and_infinite_hosts() {
     );
     assert_eq!(pulls.load(Ordering::SeqCst), 257);
 
-    assert_eq!(SimpleGroup::on([host.clone()], ""), Err(SimpleGroupError::EmptyId));
+    assert_eq!(
+        SimpleGroup::on([host.clone()], ""),
+        Err(SimpleGroupError::EmptyId)
+    );
     assert_eq!(
         SimpleGroup::on([host.clone()], "x".repeat(4_097)),
         Err(SimpleGroupError::SimpleGroupIdTooLong {
@@ -145,7 +148,9 @@ fn group_prepare_unsigned_context_is_lossless() {
     let context = tag(&["h", "photos"]);
 
     let absent = unsigned(vec![first.clone(), second.clone()]);
-    let prepared_absent = simple_group.prepare(absent).expect("absent context is added");
+    let prepared_absent = simple_group
+        .prepare(absent)
+        .expect("absent context is added");
     assert_eq!(
         prepared_absent.tags.as_slice(),
         &[first.clone(), second.clone(), context.clone()]

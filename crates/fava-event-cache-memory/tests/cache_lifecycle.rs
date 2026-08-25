@@ -9,24 +9,22 @@ use std::time::Duration;
 
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{
-    CachedEvent, Event, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp,
-};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::RelayEvent;
+use nostr::event::Event;
 use nostr::event::{EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
-fn evidence(relay: &str, at: u64) -> RelayEvidence {
-    RelayEvidence::one(
-        RelaySessionKey::new(
-            RelayUrl::parse(relay).expect("relay url"),
-            RelayAccess::public(),
-        ),
+fn cached(event: Event, at: u64) -> RelayEvent {
+    RelayEvent::new(
+        event,
+        RelaySessionKey {
+            relay: RelayUrl::parse("wss://relay.example").expect("relay url"),
+            access: RelayAccess::Public,
+        },
         Timestamp::from(at),
     )
-}
-
-fn cached(event: Event, at: u64) -> CachedEvent {
-    CachedEvent::new(event, evidence("wss://relay.example", at))
 }
 
 fn note(keys: &Keys, at: u64, content: &str, tags: Vec<Tag>) -> Event {
@@ -196,10 +194,7 @@ fn concurrent_admissions_keep_one_replaceable_winner() {
                     .finalize(keys.as_ref())
                     .expect("event signs");
                 if cache
-                    .admit(
-                        CachedEvent::new(event, evidence("wss://relay.example", at)),
-                        Timestamp::from(at),
-                    )
+                    .admit(cached(event, at), Timestamp::from(at))
                     .expect("admission commits")
                 {
                     admitted.fetch_add(1, Ordering::Relaxed);
@@ -227,21 +222,40 @@ fn concurrent_admissions_keep_one_replaceable_winner() {
 }
 
 #[test]
-fn unpublished_local_events_cannot_reach_the_cache() {
-    // A CachedEvent can only hold a signed `nostr::Event`; an unsigned local
-    // write has no representation here. The remaining surface is a body that
-    // was altered after signing, which both cache doors must refuse.
+fn same_url_different_access_sessions_are_retained_independently() {
     let cache = MemoryEventCache::default();
     let keys = Keys::generate();
-    let mut tampered = note(&keys, 10, "signed", Vec::new());
-    tampered.content = "unpublished local edit".to_owned();
-
-    let admitted = cache.admit(cached(tampered.clone(), 11), Timestamp::from(11));
-    assert!(admitted.is_err(), "admit must verify the signature");
-
-    let committed = cache.commit(vec![fava_state::CacheMutation::Upsert(cached(
-        tampered, 11,
-    ))]);
-    assert!(committed.is_err(), "commit must verify the signature again");
-    assert!(cache.is_empty().expect("cache readable"));
+    let event = note(&keys, 10, "served under two authorities", Vec::new());
+    let relay = RelayUrl::parse("wss://same.example").unwrap();
+    let authenticated = Keys::generate().public_key();
+    for access in [
+        RelayAccess::Public,
+        RelayAccess::Authenticated(authenticated),
+    ] {
+        assert!(
+            cache
+                .admit(
+                    RelayEvent::new(
+                        event.clone(),
+                        RelaySessionKey {
+                            relay: relay.clone(),
+                            access,
+                        },
+                        Timestamp::from(11),
+                    ),
+                    Timestamp::from(11),
+                )
+                .unwrap()
+        );
+    }
+    cache
+        .transact(&|current| {
+            assert_eq!(current.len(), 2);
+            assert_ne!(
+                current[0].occurrence().session.access,
+                current[1].occurrence().session.access
+            );
+            Vec::new()
+        })
+        .unwrap();
 }

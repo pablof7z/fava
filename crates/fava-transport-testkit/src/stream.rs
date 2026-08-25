@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava_query::OperationGeneration;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::{
     RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionIdentity, TransportError,
     TransportFailure,

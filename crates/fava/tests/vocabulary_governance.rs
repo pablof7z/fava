@@ -270,7 +270,11 @@ fn load_candidate_markdown(root: &Path) -> Result<Vec<(String, String, String)>,
                 .get("disposition")
                 .and_then(serde_json::Value::as_str)
                 .ok_or_else(|| format!("{name}: candidate missing string disposition"))?;
-            Ok((name.to_string(), disposition.to_string(), markdown.to_string()))
+            Ok((
+                name.to_string(),
+                disposition.to_string(),
+                markdown.to_string(),
+            ))
         })
         .collect()
 }

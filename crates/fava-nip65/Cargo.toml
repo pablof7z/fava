@@ -5,12 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-fava-state.workspace = true
+nostr.workspace = true
+fava-query.workspace = true
 fava-write.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-nostr.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]
 workspace = true

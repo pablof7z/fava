@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use fava_delivery::{DeliveryDecision, DeliveryFacts};
 use fava_publisher::{PublishAttempt, PublishOutcome};
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_write::{
     EventId, EventValue, MaterializationId, Receipt, ReceiptId, RelayDeliveryOutcome, WriteId,
 };

@@ -14,9 +14,9 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
         (right, left)
     };
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             base.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("base source enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
@@ -44,11 +44,11 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     let equal_id = equal.id;
     cache
         .commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(equal, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(older, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(wrong_actor, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(wrong_kind, relay_evidence())),
-            CacheMutation::Upsert(CachedEvent::new(base.clone(), relay_evidence())),
+            EventStateMutation::Upsert(relay_event(equal, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(older, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(wrong_actor, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(wrong_kind, relay_occurrence())),
+            EventStateMutation::Upsert(relay_event(base.clone(), relay_occurrence())),
         ])
         .expect("winner and inert source facts enter cache");
     let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
@@ -60,9 +60,9 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     assert_eq!(materializer.calls().len(), 2);
 
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             base,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("losing equal-time source repeats");
     assert_no_receipt_change(&store).await;

@@ -2,8 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use fava_state::RelayUrl;
-use fava_write::{EventId, EventValue, Kind, PublicKey, Timestamp};
+use fava_query::{Query, QueryError};
+use fava_write::{EventValue, Kind, PublicKey};
+use nostr::types::RelayUrl;
 use thiserror::Error;
 
 const MAX_RELAYS: usize = 256;
@@ -12,8 +13,6 @@ const MAX_RELAYS: usize = 256;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayList {
     author: PublicKey,
-    event_id: EventId,
-    created_at: Timestamp,
     read_relays: BTreeSet<RelayUrl>,
     write_relays: BTreeSet<RelayUrl>,
 }
@@ -23,13 +22,12 @@ impl RelayList {
     ///
     /// # Errors
     ///
-    /// Returns [`RelayListError`] for the wrong kind, missing event id,
-    /// malformed relay URL, or excessive relay count.
+    /// Returns [`RelayListError`] for the wrong kind, malformed relay URL, or
+    /// excessive relay count.
     pub fn from_event(event: &EventValue) -> Result<Self, RelayListError> {
         if event.kind() != Kind::from(10_002_u16) {
             return Err(RelayListError::WrongKind(event.kind().as_u16()));
         }
-        let event_id = event.id().ok_or(RelayListError::MissingEventId)?;
         let mut read_relays = BTreeSet::new();
         let mut write_relays = BTreeSet::new();
         for tag in event.tags() {
@@ -65,8 +63,6 @@ impl RelayList {
         }
         Ok(Self {
             author: event.author(),
-            event_id,
-            created_at: event.created_at(),
             read_relays,
             write_relays,
         })
@@ -76,18 +72,6 @@ impl RelayList {
     #[must_use]
     pub const fn author(&self) -> PublicKey {
         self.author
-    }
-
-    /// Source event id.
-    #[must_use]
-    pub const fn event_id(&self) -> EventId {
-        self.event_id
-    }
-
-    /// Source event timestamp.
-    #[must_use]
-    pub const fn created_at(&self) -> Timestamp {
-        self.created_at
     }
 
     /// Relays where the author declares reading events.
@@ -101,13 +85,18 @@ impl RelayList {
     pub const fn write_relays(&self) -> &BTreeSet<RelayUrl> {
         &self.write_relays
     }
+}
 
-    /// Whether this event supersedes the current list by Nostr replacement order.
-    #[must_use]
-    pub fn supersedes(&self, current: &Self) -> bool {
-        self.created_at > current.created_at
-            || (self.created_at == current.created_at && self.event_id < current.event_id)
-    }
+/// Build the ordinary bounded query that owns NIP-65 winner selection.
+///
+/// # Errors
+///
+/// Returns the query owner's refusal unchanged.
+pub fn relay_lists(authors: impl IntoIterator<Item = PublicKey>) -> Result<Query, QueryError> {
+    Query::events()
+        .kind(Kind::from(10_002_u16))
+        .authors(authors)
+        .limit(4_096)
 }
 
 /// NIP-65 relay-list parsing refusal.
@@ -116,9 +105,6 @@ pub enum RelayListError {
     /// Event kind was not 10002.
     #[error("expected kind 10002, got {0}")]
     WrongKind(u16),
-    /// Unsigned event was not finalized.
-    #[error("relay-list event has no event id")]
-    MissingEventId,
     /// One `r` tag carried an invalid relay URL.
     #[error("invalid NIP-65 relay URL: {0}")]
     InvalidRelay(String),
@@ -136,6 +122,7 @@ pub enum RelayListError {
 mod tests {
     use fava_write::EventBuilder;
     use nostr::key::Keys;
+    use nostr::types::Timestamp;
 
     use super::*;
 

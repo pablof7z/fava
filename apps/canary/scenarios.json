@@ -23,7 +23,7 @@
         "M1 same-event source evidence merge"
       ],
       "status": "blocked",
-      "wall": "no public door for local state: EventCache::admit with fabricated RelayEvidence"
+      "wall": "no public local-state import door without bypassing the Fava facade"
     },
     {
       "id": "local-replaceable-shadow-and-cancel",

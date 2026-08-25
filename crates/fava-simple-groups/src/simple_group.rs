@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use fava_query::{Query, QueryError, QuerySnapshot};
-use fava_state::RelayUrl;
+use fava_query::RelayUrl;
+use fava_query::{Query, QueryError};
 use fava_write::{Event, EventBuildError, EventBuilder, Tag, UnsignedEvent, WriteIntentError};
 
 use crate::SimpleGroupRecords;
@@ -324,12 +324,13 @@ impl SimpleGroup {
                 maximum: MAX_SIMPLE_GROUP_ID_BYTES,
             });
         }
-        let inputs = collect_at_most(hosts, MAX_SIMPLE_GROUP_HOST_INPUT_ITEMS).map_err(
-            |actual| SimpleGroupError::TooManyHosts {
-                actual,
-                maximum: MAX_SIMPLE_GROUP_HOST_INPUT_ITEMS,
-            },
-        )?;
+        let inputs =
+            collect_at_most(hosts, MAX_SIMPLE_GROUP_HOST_INPUT_ITEMS).map_err(|actual| {
+                SimpleGroupError::TooManyHosts {
+                    actual,
+                    maximum: MAX_SIMPLE_GROUP_HOST_INPUT_ITEMS,
+                }
+            })?;
         let parsed = inputs
             .into_iter()
             .map(IntoRelayUrl::into_relay_url)
@@ -383,20 +384,11 @@ impl SimpleGroup {
     /// # Errors
     ///
     /// Returns [`SimpleGroupError`] when exact host authority cannot be represented.
-    pub fn records(&self, records: SimpleGroupRecords) -> Result<Query, SimpleGroupError> {
-        crate::query::records(self, records)
-    }
-
-    /// Project one immutable ordinary query snapshot into this simple group's exact host views.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SimpleGroupError`] when the snapshot exceeds the projection bound.
-    pub fn project(
+    pub fn records(
         &self,
-        snapshot: &QuerySnapshot,
-    ) -> Result<crate::SimpleGroupSnapshot, SimpleGroupError> {
-        crate::SimpleGroupSnapshot::project(self, snapshot)
+        records: SimpleGroupRecords,
+    ) -> Result<Vec<(RelayUrl, Query)>, SimpleGroupError> {
+        crate::query::records(self, records)
     }
 }
 

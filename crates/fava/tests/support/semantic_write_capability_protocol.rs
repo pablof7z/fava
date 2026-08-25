@@ -9,14 +9,16 @@ use fava::{
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::{EventId, Tag};
 use nostr::key::Keys;
 
-use super::support::{CountingSigner, RecordingPublisher, publication_builder, relay_evidence};
+use super::support::{
+    CountingSigner, RecordingPublisher, publication_builder, relay_event, relay_occurrence,
+};
 use super::{EditResult, explicit_intent, signed, target_count};
 
 pub fn assert_source_removal(
@@ -146,9 +148,9 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     );
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             base.clone(),
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());
@@ -245,9 +247,9 @@ fn prove_public_refusals<Add>(
     );
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             hostile,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .unwrap();
     let store = Arc::new(MemoryWriteStore::default());

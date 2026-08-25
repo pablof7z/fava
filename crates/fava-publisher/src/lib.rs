@@ -4,7 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_transport::Transport;
 use fava_write::{Event, MaterializationId, ReceiptId, WriteId};
 

@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 fava-publisher.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 fava-transport.workspace = true
 fava-wire.workspace = true

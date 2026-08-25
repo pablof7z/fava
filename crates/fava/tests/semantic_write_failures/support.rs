@@ -5,14 +5,14 @@ use fava::{Event, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CacheMutation, CachedEvent};
+use fava_state::EventStateMutation;
 use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use nostr::key::Keys;
 
 use super::ControlledMaterializer;
 use super::support::{
-    BlockingSigner, NoopTransport, RecordingPublisher, relay_evidence, relay_url,
+    BlockingSigner, NoopTransport, RecordingPublisher, relay_event, relay_occurrence, relay_url,
 };
 
 pub(super) fn edit_intent(author: fava::PublicKey, kind: Kind) -> WriteIntent {
@@ -90,8 +90,7 @@ pub(super) async fn wait_public_failure(observation: &mut fava::Observation) -> 
             let snapshot = observation.changed().await.expect("query stays open");
             if let Some(failure) = snapshot.events.iter().find_map(|record| {
                 record
-                    .publication
-                    .as_ref()
+                    .publication()
                     .and_then(|evidence| evidence.materialization_failure.clone())
             }) {
                 return failure;
@@ -104,9 +103,9 @@ pub(super) async fn wait_public_failure(observation: &mut fava::Observation) -> 
 
 pub(super) fn save_source(cache: &MemoryEventCache, source: Event) {
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
-            relay_evidence(),
+            relay_occurrence(),
         ))])
         .expect("source commits");
 }

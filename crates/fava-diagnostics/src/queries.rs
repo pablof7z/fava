@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 
 use fava_query::{BoundedText, ObservationId, QueryBranchId, RelaySourceState};
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 
 use crate::providers::ProviderOperation;

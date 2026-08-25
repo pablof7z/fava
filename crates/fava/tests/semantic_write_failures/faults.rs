@@ -6,8 +6,9 @@ use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
     SourceChanges,
 };
+use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
-use fava_state::{CacheMutation, CachedEvent, RelaySessionKey};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::{
     Event, EventId, EventValue, LocalWriteEvent, MaterializationId, Receipt, ReceiptId,
     RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent,
@@ -79,15 +80,15 @@ impl QuerySource for ClosingEventCache {
 }
 
 impl EventCache for ClosingEventCache {
-    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError> {
+    fn commit(&self, mutations: Vec<EventStateMutation>) -> Result<(), EventCacheError> {
         self.inner.commit(mutations)
     }
-    fn event(&self, id: NostrEventId) -> Result<Option<CachedEvent>, EventCacheError> {
+    fn event(&self, id: NostrEventId) -> Result<Option<RelayEvent>, EventCacheError> {
         self.inner.event(id)
     }
     fn transact(
         &self,
-        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+        decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,
     ) -> Result<usize, EventCacheError> {
         self.inner.transact(decide)
     }

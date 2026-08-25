@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
 use thiserror::Error;

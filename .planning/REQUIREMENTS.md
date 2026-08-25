@@ -93,7 +93,7 @@ a feature.
 - [ ] **LOCAL-02**: An event-cache provider accepts only admitted signed relay events and cannot retain unpublished local materializations.
 - [ ] **LOCAL-03**: A write-store provider exposes current local unsigned and signed materializations as an independent query source.
 - [ ] **LOCAL-04**: Contributions for the same event from event cache and write store merge into one `EventRecord` with source-specific evidence.
-- [ ] **LOCAL-05**: A pending local replaceable event can shadow a cached predecessor without mutating or deleting that predecessor in the event cache.
+- [ ] **LOCAL-05**: A query-matching pending local replaceable event can shadow a matching cached predecessor without mutating or deleting that predecessor in the event cache; candidates are filtered before coordinate selection.
 - [ ] **LOCAL-06**: Cancelling a local write retracts only its write-store contribution and naturally reveals any still-qualified cached predecessor.
 - [ ] **LOCAL-07**: Removal, deletion, expiry, or eviction of a source contribution revises every affected open query without a parallel removal API, including deletion applied across sources and expiry that becomes due while the query is open, and only for targets the deleting author is permitted to delete.
 - [ ] **LOCAL-08** *(rewritten 2026-08-23 - restores QUERY-004; reassigned Phase 1 to Phase 2)*: Opening **any** query - cache-only or live - is all-or-nothing and returns one complete current snapshot produced from the configured local query sources **without waiting for any relay response, connection attempt, session establishment, or transport handshake**. With every relay unreachable, open returns the local view or a local-source error and never hangs. Engine-shutdown refusal and local-source failure remain distinguishable.
@@ -667,7 +667,7 @@ marked complete.
 | ID | Reset reason |
 |---|---|
 | LOCAL-02, READ-05 | Graded SATISFIED while the project's own map recorded that the event-cache mutation contract exposes an admission bypass through which fabricated relay evidence becomes query-visible signed state. |
-| LOCAL-04, READ-15 | The relay echo in the cited test is two direct cache commits, and the source-authority distinction is decided by which `RelayEvidence` the fixture wrote. |
+| LOCAL-04, READ-15 | The historical relay echo test used two direct cache commits, and its source-authority distinction came from fixture-written provenance rather than admitted relay occurrences. This finding is superseded by STATE-ARCH-1 and is retained only as audit history. |
 | READ-03 | Graded SATISFIED for "bounded NIP-01 wire" while the configured inbound frame bound is unenforced - `crates/fava-transport-websocket/src/lib.rs:110` bounds outbound only. |
 | READ-16, LOCAL-10 | The only coalescing assertion is `coalesced_query_updates > 0` - Fava's own counter, and `> 0` cannot fail. |
 | READ-18 | The surface is a watch channel with no pull protocol; there is no backlog that could accumulate, so the assertion is vacuous. |

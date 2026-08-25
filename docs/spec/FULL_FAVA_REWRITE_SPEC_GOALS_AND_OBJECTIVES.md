@@ -1314,11 +1314,12 @@ application aggregation for independently authoritative relay-local forks.
 
 Simple group content reads MUST add the exact `h` constraint and ask the
 complete host set through an ordinary `Query`. Relay-authored
-simple-group-record reads MUST add the exact `d` constraint, retain actual
-per-host relay evidence, and expose record disagreement rather than
-field-merging it or silently selecting a winner. The same event id served by
-several selected hosts appears once with every actual serving-relay
-contribution.
+simple-group-record access MUST return one bounded ordinary query per selected
+host. Each query MUST add the exact `d` constraint and exact-host result
+authority. Applications decode each selected event through the typed one-event
+record parser and compare complete host records rather than field-merging them
+or silently selecting a host. The same content event id served by several
+selected hosts appears once with every actual exact-session contribution.
 
 Simple group publication MUST prepare the exact simple group context without
 restricting the carried event to a fixed set of event kinds. The application
@@ -1332,7 +1333,7 @@ routing cannot rewrite its tags.
 The capability MUST return ordinary `Query`, event, or
 `ReplaceableEventEdit` values and MUST NOT own a socket, observation, signer,
 store, delivery, retry, or receipt lifecycle. It MUST provide typed bounded
-parsing/projection for NIP-29 records and saved rows so ordinary applications do
+one-event parsing for NIP-29 records and bounded projection for saved rows so ordinary applications do
 not decode raw tags. Discovery remains declarative and makes no relay-global
 completeness, existence, membership-absence, or canonical-fork claim.
 

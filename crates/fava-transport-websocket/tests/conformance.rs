@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, ReleaseOutcome, Transport,
     TransportBounds, TransportDeadlines, TransportError, TransportFailure,
@@ -13,6 +13,7 @@ use fava_transport_testkit::{
     require_bounded_outbound_refusal,
 };
 use futures_util::{SinkExt, StreamExt};
+use nostr::types::RelayUrl;
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
@@ -29,7 +30,13 @@ async fn listener() -> (TcpListener, RelaySessionKey) {
         .expect("listener binds");
     let url = RelayUrl::parse(&format!("ws://{}", listener.local_addr().expect("address")))
         .expect("relay URL");
-    (listener, RelaySessionKey::new(url, RelayAccess::public()))
+    (
+        listener,
+        RelaySessionKey {
+            relay: url,
+            access: RelayAccess::Public,
+        },
+    )
 }
 
 fn request(key: RelaySessionKey) -> OpenRelaySession {

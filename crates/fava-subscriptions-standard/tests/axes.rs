@@ -297,11 +297,18 @@ fn grouping_is_invariant_under_demand_permutation() {
 /// `group()`, and this test exists so the question is not re-litigated.
 #[test]
 fn access_context_partitions_above_the_merge_predicate() {
-    use fava_state::{RelayAccess, RelaySessionKey, RelayUrl};
+    use fava_relay::{RelayAccess, RelaySessionKey};
+    use nostr::types::RelayUrl;
 
     let url = RelayUrl::parse("wss://relay.example").expect("relay URL");
-    let public = RelaySessionKey::new(url.clone(), RelayAccess::public());
-    let authenticated = RelaySessionKey::new(url, RelayAccess::named("nip42"));
+    let public = RelaySessionKey {
+        relay: url.clone(),
+        access: RelayAccess::Public,
+    };
+    let authenticated = RelaySessionKey {
+        relay: url,
+        access: RelayAccess::Authenticated(nostr::key::Keys::generate().public_key()),
+    };
     assert_ne!(
         public, authenticated,
         "access is part of the session identity a plan is scoped to"
@@ -337,5 +344,73 @@ fn access_context_partitions_above_the_merge_predicate() {
             .serves(&authenticated_plan.open[0].id)
             .len(),
         1
+    );
+}
+
+#[test]
+fn query_access_survives_real_demand_compilation_and_grouping() {
+    use std::num::NonZeroU64;
+
+    use fava_query::{ObservationId, Query, QueryBranchId};
+    use fava_relay::{RelayAccess, RelaySessionKey};
+    use fava_subscriptions::demand_for_query;
+    use nostr::types::RelayUrl;
+
+    let url = RelayUrl::parse("wss://same.example").expect("relay URL");
+    let authenticated = RelayAccess::Authenticated(Keys::generate().public_key());
+    let public_query = Query::events()
+        .kind(Kind::from_u16(1))
+        .with_relay_access(RelayAccess::Public);
+    let private_query = public_query
+        .clone()
+        .with_relay_access(authenticated.clone());
+    let public_key = RelaySessionKey {
+        relay: url.clone(),
+        access: public_query.access().clone(),
+    };
+    let private_key = RelaySessionKey {
+        relay: url,
+        access: private_query.access().clone(),
+    };
+    let observation =
+        |value| ObservationId::new(NonZeroU64::new(value).expect("non-zero observation identity"));
+    let public_demands = [
+        demand_for_query(observation(1), QueryBranchId::ROOT, &public_query),
+        demand_for_query(observation(2), QueryBranchId::ROOT, &public_query),
+    ];
+    let private_demands = [
+        demand_for_query(observation(3), QueryBranchId::ROOT, &private_query),
+        demand_for_query(observation(4), QueryBranchId::ROOT, &private_query),
+    ];
+
+    let public_plan = assert_conformant(
+        &planner(),
+        &PlannerScenario::fresh(
+            "public grouped",
+            public_key.clone(),
+            public_demands.to_vec(),
+        ),
+    );
+    let private_plan = assert_conformant(
+        &planner(),
+        &PlannerScenario::fresh(
+            "authenticated grouped",
+            private_key.clone(),
+            private_demands.to_vec(),
+        ),
+    );
+
+    assert_eq!(public_plan.relay, public_key);
+    assert_eq!(private_plan.relay, private_key);
+    assert_ne!(public_plan.relay, private_plan.relay);
+    assert_eq!(public_plan.open.len(), 1);
+    assert_eq!(private_plan.open.len(), 1);
+    assert_eq!(public_plan.open[0].serves.len(), 2);
+    assert_eq!(private_plan.open[0].serves.len(), 2);
+    assert!(
+        public_plan.open[0]
+            .serves
+            .is_disjoint(&private_plan.open[0].serves),
+        "grouping may share only within one exact relay-access plan"
     );
 }

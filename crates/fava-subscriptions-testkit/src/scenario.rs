@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand,
     RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,

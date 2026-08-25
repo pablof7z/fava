@@ -1,7 +1,7 @@
 //! Current facts about bounds that refused, backpressured, or fell short.
 
 use fava_query::ObservationId;
-use fava_state::RelaySessionKey;
+use fava_relay::RelaySessionKey;
 
 use crate::providers::ProviderOperation;
 

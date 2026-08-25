@@ -9,15 +9,17 @@ use fava_query::{
     SourceStatus, SourceTerminationCause,
 };
 use fava_query_standard::StandardQueryEvaluator;
-use fava_state::{CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
+use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_state::RelayEvent;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
 use nostr::key::Keys;
+use nostr::types::{RelayUrl, Timestamp};
 
 fn session(url: &str) -> RelaySessionKey {
-    RelaySessionKey::new(
-        RelayUrl::parse(url).expect("test relay url parses"),
-        RelayAccess::public(),
-    )
+    RelaySessionKey {
+        relay: RelayUrl::parse(url).expect("test relay url parses"),
+        access: RelayAccess::Public,
+    }
 }
 
 fn signed(keys: &Keys, created_at: u64, content: &str) -> Event {
@@ -28,10 +30,7 @@ fn signed(keys: &Keys, created_at: u64, content: &str) -> Event {
 }
 
 fn admitted(event: Event, session: RelaySessionKey) -> SourceEvent {
-    SourceEvent::Cached(CachedEvent::new(
-        event,
-        RelayEvidence::one(session, Timestamp::from(1)),
-    ))
+    SourceEvent::Relay(RelayEvent::new(event, session, Timestamp::from(1)))
 }
 
 fn live_relay(session: RelaySessionKey, events: Vec<SourceEvent>) -> SourceSnapshot {
@@ -69,8 +68,8 @@ fn live_relay_occurrences_enter_results_without_a_retaining_cache() {
     assert_eq!(result.events[0].id(), event.id);
     assert!(
         result.events[0]
-            .relay_evidence
-            .observations()
+            .relay_occurrences()
+            .occurrences()
             .any(|observation| observation.session == served),
         "the serving relay session survives into the record's evidence"
     );
@@ -157,7 +156,7 @@ fn live_relay_sources_are_scoped_per_session() {
 
     assert_eq!(result.events.len(), 1, "one event id yields one record");
     assert_eq!(
-        result.events[0].relay_evidence.len(),
+        result.events[0].relay_occurrences().len(),
         2,
         "both serving sessions merge into one record's evidence"
     );

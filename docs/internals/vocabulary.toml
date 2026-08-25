@@ -210,7 +210,6 @@ symbols = [
     "fava_simple_groups::SimpleGroupPins",
     "fava_simple_groups::SimpleGroupRecords",
     "fava_simple_groups::SimpleGroupRoles",
-    "fava_simple_groups::SimpleGroupSnapshot",
     "fava_simple_groups::SimpleGroups",
 ]
 crates = ["fava-simple-groups"]
@@ -352,7 +351,7 @@ crates = []
 [[term]]
 name = "QuerySnapshot"
 source = "fava"
-meaning = "One complete immutable answer delivered for an open Query revision."
+meaning = "One complete immutable answer delivered for an open Query revision, including typed result and live-retention shortfalls."
 owner = "fava-query"
 nearest_nostr = "EVENT and EOSE messages"
 distinction = "Relay messages are source facts; a QuerySnapshot is the merged application-visible current answer."
@@ -410,25 +409,51 @@ crates = ["fava-observe"]
 name = "RelayAccess"
 source = "fava"
 meaning = "The stable authorization identity under which relay work occurs."
-owner = "fava-state"
+owner = "fava-relay"
 nearest_nostr = "NIP-42 authentication"
 distinction = "NIP-42 defines authentication messages; RelayAccess identifies the isolated authorization used by queries and relay sessions."
-symbols = ["fava_state::RelayAccess", "fava_state::RelaySessionKey"]
+symbols = ["fava_relay::RelayAccess"]
+crates = ["fava-relay"]
+
+[[term]]
+name = "RelaySessionKey"
+source = "fava"
+meaning = "The stable logical pair of one relay URL and one RelayAccess authority."
+owner = "fava-relay"
+nearest_nostr = "RelayUrl and NIP-42 authentication"
+distinction = "A URL alone cannot distinguish public and authenticated work at the same endpoint."
+symbols = ["fava_relay::RelaySessionKey"]
 crates = []
 
 [[term]]
-name = "RelayEvidence"
+name = "RelayOccurrence"
 source = "fava"
-meaning = "The exact relay sessions and admission times from which Fava received one event."
+meaning = "One admitted event occurrence under one exact relay-access session."
 owner = "fava-state"
 nearest_nostr = "EVENT message"
-distinction = "An EVENT message carries an event; RelayEvidence records which attributed sessions actually supplied it locally."
-symbols = [
-    "fava_state::RelayObservation",
-    "fava_state::RelayEvidence",
-    "fava_state::CachedEvent",
-]
+distinction = "An EVENT message carries an event; RelayOccurrence preserves which attributed exact session actually supplied it and when it was admitted locally."
+symbols = ["fava_state::RelayOccurrence"]
 crates = ["fava-state"]
+
+[[term]]
+name = "RelayOccurrences"
+source = "fava"
+meaning = "The event-id-bound finite aggregate of exact qualifying RelayOccurrence values."
+owner = "fava-state"
+nearest_nostr = "Repeated EVENT messages carrying one EventId"
+distinction = "A free occurrence collection could combine different event ids; RelayOccurrences refuses that mismatch."
+symbols = ["fava_state::RelayOccurrences"]
+crates = []
+
+[[term]]
+name = "RelayEvent"
+source = "fava"
+meaning = "One signed Nostr event plus exactly one admitted RelayOccurrence."
+owner = "fava-state"
+nearest_nostr = "EVENT message"
+distinction = "The wire event does not retain the exact logical session and local admission time after decoding."
+symbols = ["fava_state::RelayEvent"]
+crates = []
 
 [[term]]
 name = "EventCoordinate"
@@ -441,24 +466,33 @@ symbols = ["fava_state::EventCoordinate"]
 crates = []
 
 [[term]]
-name = "CacheMutation"
+name = "EventStateMutation"
 source = "fava"
-meaning = "One atomic event-cache insertion, evidence merge, or caused retraction decided by Nostr event-state rules."
+meaning = "One atomic exact-session upsert or caused retraction decided by Nostr event-state rules."
 owner = "fava-state"
 nearest_nostr = "Event"
-distinction = "Nostr defines events; CacheMutation carries the local atomic change an EventCache must commit, and RetractionCause carries why a retraction removes state so a provider can tell a removal it must always apply from an insertion it may refuse."
-counterexample = "A bare event id is not a CacheMutation: removing an event because a kind-5 deletion authorized it, because a newer event won the coordinate, because NIP-40 expiry passed, and because the provider hit its own bound are four different facts, and collapsing them loses the tombstone that blocks resurrection."
+distinction = "Nostr defines events; EventStateMutation carries the local atomic contribution change an EventCache may retain, while RetractionCause preserves why an exact contribution was removed."
+counterexample = "A bare event id is not an EventStateMutation because it cannot identify the exact relay-access contribution or distinguish deletion, supersession, expiration, and eviction."
 lifecycle = "fava-state decides the batch from current state; the EventCache provider commits it atomically and never persists the cause beyond the commit."
 forcing_requirement = "A bounded EventCache must apply a NIP-09 deletion at capacity, so it must distinguish the retractions it must always apply from the insertions it may refuse."
-falsifier = "cache_lifecycle::a_full_cache_still_applies_a_deletion and event_state::every_retraction_names_its_cause fail when a retraction carries no cause or is ordered after the kind-5 upsert."
-symbols = ["fava_state::CacheMutation", "fava_state::RetractionCause"]
+falsifier = "cache_lifecycle::a_full_cache_still_applies_a_deletion and event_state_model fail when a retraction carries no exact session or cause."
+symbols = ["fava_state::EventStateMutation"]
 crates = []
-spec_symbols = ["EventStateDecision"]
+
+[[term]]
+name = "RetractionCause"
+source = "fava"
+meaning = "The exact protocol or provider reason an event contribution was removed."
+owner = "fava-state"
+nearest_nostr = "NIP-09 deletion, NIP-40 expiration, and NIP-01 replacement"
+distinction = "Absence alone cannot distinguish deletion, supersession, expiration, and provider eviction."
+symbols = ["fava_state::RetractionCause"]
+crates = []
 
 [[term]]
 name = "EventCache"
 source = "fava"
-meaning = "Storage for signed events observed from relays and their RelayEvidence."
+meaning = "Optional retention for admitted atomic RelayEvent contributions and their exact-session state mutations."
 owner = "fava-event-cache"
 nearest_nostr = "Event"
 distinction = "Nostr defines events but not client retention, eviction, persistence, or coherent local observation."

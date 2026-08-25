@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+fava-relay.workspace = true
 fava-state.workspace = true
 nostr.workspace = true
 serde.workspace = true

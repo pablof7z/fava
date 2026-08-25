@@ -19,8 +19,9 @@ use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
+use fava_relay::RelaySessionKey;
 use fava_signer_local::LocalSigner;
-use fava_state::{CacheMutation, CachedEvent, RelayEvidence, RelaySessionKey};
+use fava_state::{EventStateMutation, RelayEvent};
 use fava_transport::{
     BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
@@ -159,9 +160,9 @@ async fn semantic_successor_and_failed_source_resume_once() {
     let newer_source_id = newer_source.id;
     let successor_cache = Arc::new(MemoryEventCache::default());
     successor_cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             newer_source,
-            relay_evidence(),
+            session(),
         ))])
         .expect("newer source enters canonical cache");
     let successor_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -197,9 +198,9 @@ async fn semantic_successor_and_failed_source_resume_once() {
     let failed_source = signed_source(20, "failed source");
     let cache = Arc::new(MemoryEventCache::default());
     cache
-        .commit(vec![CacheMutation::Upsert(CachedEvent::new(
+        .commit(vec![EventStateMutation::Upsert(relay_event(
             failed_source,
-            relay_evidence(),
+            session(),
         ))])
         .expect("failed source enters canonical cache");
 
@@ -348,8 +349,8 @@ fn keys() -> Keys {
         .expect("fixed semantic key")
 }
 
-fn relay_evidence() -> RelayEvidence {
-    RelayEvidence::one(session(), Timestamp::from(1))
+fn relay_event(event: Event, _session: RelaySessionKey) -> RelayEvent {
+    RelayEvent::new(event, session(), Timestamp::from(1))
 }
 
 struct TestMaterializer {

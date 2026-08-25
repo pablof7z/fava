@@ -10,15 +10,16 @@ mod query;
 mod records;
 mod saved;
 mod simple_group;
-mod snapshot;
 
 #[cfg(test)]
 mod tests;
 
 pub use metadata::SimpleGroupMetadata;
-pub use people::{SimpleGroupAdmins, SimpleGroupMembers, SimpleGroupParticipants, SimpleGroupRoles};
+pub use people::SimpleGroupAdmins;
+pub use people::SimpleGroupMembers;
+pub use people::SimpleGroupParticipants;
+pub use people::SimpleGroupRoles;
 pub use pins::{PinnedItem, SimpleGroupPins};
 pub use query::{SimpleGroupRecords, SimpleGroups};
 pub use saved::{SavedRelay, SavedSimpleGroup};
 pub use simple_group::{SimpleGroup, SimpleGroupError};
-pub use snapshot::SimpleGroupSnapshot;

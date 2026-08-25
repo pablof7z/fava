@@ -66,7 +66,9 @@ fn content_query_preserves_any_local_visibility() {
         .expect("positive limit")
         .cache_only()
         .oldest_first();
-    let content = simple_group.events(selection).expect("bounded content query");
+    let content = simple_group
+        .events(selection)
+        .expect("bounded content query");
 
     assert_eq!(
         content.selection().kinds,
@@ -121,29 +123,39 @@ fn content_query_refuses_every_preexisting_group_context() {
 #[test]
 fn record_query_uses_exact_relay_authority() {
     let simple_group = simple_group();
-    let hosts = BTreeSet::from([relay("wss://z.example"), relay("wss://a.example")]);
-    let records = simple_group.records(SimpleGroupRecords::all()).expect("record query");
+    let records = simple_group
+        .records(SimpleGroupRecords::all())
+        .expect("record query");
 
-    assert_eq!(
-        records.source().acquisition(),
-        &QueryAcquisition::Explicit(hosts.clone())
-    );
-    assert_eq!(
-        records.source().authority(),
-        &ResultAuthority::OnlyRelays(hosts)
-    );
+    assert_eq!(records.len(), 2);
+    for (host, query) in records {
+        let singleton = BTreeSet::from([host]);
+        assert_eq!(
+            query.source().acquisition(),
+            &QueryAcquisition::Explicit(singleton.clone())
+        );
+        assert_eq!(
+            query.source().authority(),
+            &ResultAuthority::OnlyRelays(singleton)
+        );
+    }
 }
 
 #[test]
 fn group_queries_have_explicit_result_bounds() {
     let simple_group = simple_group();
-    let queries = [
-        simple_group.records(SimpleGroupRecords::all()).expect("record query"),
+    let mut queries = simple_group
+        .records(SimpleGroupRecords::all())
+        .expect("record query")
+        .into_iter()
+        .map(|(_, query)| query)
+        .collect::<Vec<_>>();
+    queries.extend([
         SimpleGroups::saved_simple_groups(Vec::<PublicKey>::new()).expect("saved-group query"),
         SimpleGroups::saved_relays(Vec::<PublicKey>::new()).expect("saved-relay query"),
         SimpleGroups::simple_groups_where_admin(Vec::<PublicKey>::new()).expect("admin query"),
         SimpleGroups::simple_groups_where_member(Vec::<PublicKey>::new()).expect("member query"),
-    ];
+    ]);
 
     for query in queries {
         assert_eq!(

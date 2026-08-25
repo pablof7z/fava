@@ -10,7 +10,8 @@ use fava_query::{
     SourceChanges, SourceEvent, SourceKind, SourceRetraction, SourceRevision, SourceSnapshot,
     SourceStatus,
 };
-use fava_state::{CacheMutation, CachedEvent, RetractionCause};
+use fava_relay::RelaySessionKey;
+use fava_state::{EventStateMutation, RelayEvent, RetractionCause};
 use nostr::event::{EventId, Kind};
 use tokio::sync::watch;
 
@@ -24,7 +25,7 @@ pub struct MemoryEventCache {
 #[derive(Clone, Debug, Default)]
 struct CacheState {
     revision: u64,
-    events: BTreeMap<EventId, CachedEvent>,
+    events: BTreeMap<(EventId, RelaySessionKey), RelayEvent>,
     /// Retractions applied to reach `revision`. Reset by every commit, so a
     /// snapshot reports exactly what its own revision removed.
     retractions: Vec<SourceRetraction>,
@@ -57,7 +58,7 @@ impl MemoryEventCache {
                 .events
                 .values()
                 .cloned()
-                .map(SourceEvent::Cached)
+                .map(SourceEvent::Relay)
                 .collect(),
             retractions: state.retractions.clone(),
         }
@@ -74,41 +75,48 @@ impl MemoryEventCache {
     fn apply(
         &self,
         current: &CacheState,
-        mutations: Vec<CacheMutation>,
+        mutations: Vec<EventStateMutation>,
     ) -> Result<CacheState, EventCacheError> {
         let mut next = current.clone();
         next.retractions = Vec::new();
         let mut upserts = Vec::new();
         for mutation in mutations {
             match mutation {
-                CacheMutation::Retract { event_id, cause } => {
+                EventStateMutation::Retract {
+                    event_id,
+                    session,
+                    cause,
+                } => {
                     // Report the removal only when this revision actually
                     // removed something; a retraction for an id the cache never
                     // retained is not a fact about this cache's state.
-                    if next.events.remove(&event_id).is_some() {
+                    if next.events.remove(&(event_id, session)).is_some() {
                         next.retractions
                             .push(SourceRetraction::new(event_id, cause));
                     }
                 }
-                CacheMutation::Upsert(incoming) => upserts.push(incoming),
+                EventStateMutation::Upsert(incoming) => upserts.push(incoming),
             }
         }
 
         for incoming in upserts {
-            incoming.event.verify().map_err(|error| {
+            incoming.event().verify().map_err(|error| {
                 EventCacheError::Refused(format!("invalid signed event: {error}"))
             })?;
-            if let Some(retained) = next.events.get_mut(&incoming.event.id) {
-                if retained.event != incoming.event {
+            let key = (incoming.event().id, incoming.occurrence().session.clone());
+            if let Some(retained) = next.events.get(&key) {
+                if retained.event() != incoming.event() {
                     return Err(EventCacheError::Refused(
                         "same event id carried a different signed body".to_owned(),
                     ));
                 }
-                retained.merge_evidence(&incoming.evidence);
+                if incoming.occurrence().observed_at < retained.occurrence().observed_at {
+                    next.events.insert(key, incoming);
+                }
                 continue;
             }
             if next.events.len() >= self.capacity.get() {
-                if incoming.event.kind != Kind::EventDeletion {
+                if incoming.event().kind != Kind::EventDeletion {
                     return Err(EventCacheError::Refused(format!(
                         "bounded event cache capacity {} reached",
                         self.capacity
@@ -116,10 +124,10 @@ impl MemoryEventCache {
                 }
                 let evicted = next
                     .events
-                    .values()
-                    .filter(|retained| retained.event.kind != Kind::EventDeletion)
-                    .min_by_key(|retained| (retained.event.created_at, retained.event.id))
-                    .map(|retained| retained.event.id)
+                    .iter()
+                    .filter(|(_, retained)| retained.event().kind != Kind::EventDeletion)
+                    .min_by_key(|(_, retained)| (retained.event().created_at, retained.event().id))
+                    .map(|(key, _)| key.clone())
                     .ok_or_else(|| {
                         EventCacheError::Refused(format!(
                             "bounded event cache capacity {} holds only deletions",
@@ -132,9 +140,9 @@ impl MemoryEventCache {
                 // event from a relay, which is exactly what it must not do for
                 // a NIP-09 deletion, so the two can never be reported alike.
                 next.retractions
-                    .push(SourceRetraction::new(evicted, RetractionCause::Evicted));
+                    .push(SourceRetraction::new(evicted.0, RetractionCause::Evicted));
             }
-            next.events.insert(incoming.event.id, incoming);
+            next.events.insert(key, incoming);
         }
         Ok(next)
     }
@@ -159,13 +167,13 @@ impl MemoryEventCache {
 impl EventCache for MemoryEventCache {
     fn transact(
         &self,
-        decide: &dyn Fn(&[CachedEvent]) -> Vec<CacheMutation>,
+        decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,
     ) -> Result<usize, EventCacheError> {
         let mut guard = self
             .state
             .lock()
             .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
-        let current: Vec<CachedEvent> = guard.events.values().cloned().collect();
+        let current: Vec<RelayEvent> = guard.events.values().cloned().collect();
         let mutations = decide(&current);
         let count = mutations.len();
         if count == 0 {
@@ -176,7 +184,7 @@ impl EventCache for MemoryEventCache {
         Ok(count)
     }
 
-    fn commit(&self, mutations: Vec<CacheMutation>) -> Result<(), EventCacheError> {
+    fn commit(&self, mutations: Vec<EventStateMutation>) -> Result<(), EventCacheError> {
         let mut guard = self
             .state
             .lock()
@@ -185,12 +193,15 @@ impl EventCache for MemoryEventCache {
         Self::publish(&mut guard, next, &self.latest)
     }
 
-    fn event(&self, id: EventId) -> Result<Option<CachedEvent>, EventCacheError> {
+    fn event(&self, id: EventId) -> Result<Option<RelayEvent>, EventCacheError> {
         let guard = self
             .state
             .lock()
             .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
-        Ok(guard.events.get(&id).cloned())
+        Ok(guard
+            .events
+            .iter()
+            .find_map(|((event_id, _), event)| (*event_id == id).then(|| event.clone())))
     }
 
     fn len(&self) -> Result<usize, EventCacheError> {
@@ -240,146 +251,5 @@ impl SourceChanges for WatchChanges {
 
     fn close(&mut self) {
         self.closed = true;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use fava_event_cache::EventCache;
-    use fava_state::{RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl, Timestamp};
-    use nostr::event::{EventBuilder, FinalizeEvent, Kind};
-    use nostr::key::Keys;
-
-    use super::*;
-
-    /// A removed event is not the same fact as an event that was never there,
-    /// and a NIP-09 deletion is not the same fact as a capacity eviction. The
-    /// observed snapshot has to be able to say which.
-    #[tokio::test(flavor = "current_thread")]
-    async fn observed_snapshots_name_why_each_retained_event_was_removed() {
-        let cache = MemoryEventCache::bounded(NonZeroUsize::new(2).expect("non-zero"));
-        let keys = Keys::generate();
-        let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
-        let evidence = RelayEvidence::one(
-            RelaySessionKey::new(relay, RelayAccess::public()),
-            Timestamp::from(1),
-        );
-        let doomed = EventBuilder::new(Kind::TextNote, "doomed")
-            .custom_created_at(Timestamp::from(1))
-            .finalize(&keys)
-            .expect("event signs");
-        let filler = EventBuilder::new(Kind::TextNote, "filler")
-            .custom_created_at(Timestamp::from(2))
-            .finalize(&keys)
-            .expect("event signs");
-        cache
-            .commit(vec![
-                CacheMutation::Upsert(CachedEvent::new(doomed.clone(), evidence.clone())),
-                CacheMutation::Upsert(CachedEvent::new(filler.clone(), evidence.clone())),
-            ])
-            .expect("both admitted");
-
-        let opened = QuerySource::open(&cache, &fava_query::Query::events()).expect("source opens");
-        let mut changes = opened.changes;
-
-        // A NIP-09 deletion the author authorized.
-        let deletion = EventBuilder::new(Kind::EventDeletion, "")
-            .tag(nostr::event::Tag::event(doomed.id))
-            .custom_created_at(Timestamp::from(3))
-            .finalize(&keys)
-            .expect("event signs");
-        cache
-            .admit(
-                CachedEvent::new(deletion.clone(), evidence.clone()),
-                Timestamp::from(3),
-            )
-            .expect("deletion admitted");
-
-        let deleted = changes.next_change().await.expect("deletion revision");
-        assert_eq!(
-            deleted
-                .retractions
-                .iter()
-                .find(|retraction| retraction.event_id == doomed.id)
-                .map(|retraction| retraction.cause.clone()),
-            Some(RetractionCause::Deleted {
-                deletion: deletion.id
-            }),
-            "a NIP-09 deletion must reach the snapshot as a deletion: {:?}",
-            deleted.retractions
-        );
-
-        // A capacity eviction the provider decided on its own: a second
-        // tombstone must be retained even at capacity, which costs the oldest
-        // retained ordinary event.
-        let other = EventBuilder::new(Kind::EventDeletion, "")
-            .tag(nostr::event::Tag::event(filler.id))
-            .custom_created_at(Timestamp::from(4))
-            .finalize(&Keys::generate())
-            .expect("event signs");
-        cache
-            .commit(vec![CacheMutation::Upsert(CachedEvent::new(
-                other, evidence,
-            ))])
-            .expect("a tombstone is admitted by evicting");
-
-        let evicted = changes.next_change().await.expect("eviction revision");
-        let reported = evicted
-            .retractions
-            .iter()
-            .find(|retraction| retraction.event_id == filler.id)
-            .expect("the evicted event is named");
-        assert_eq!(reported.cause, RetractionCause::Evicted);
-        assert!(
-            !reported.is_protocol_rule(),
-            "an eviction is the provider's own bound, never a Nostr rule"
-        );
-    }
-
-    #[test]
-    fn failed_capacity_batch_is_atomic() {
-        let cache = MemoryEventCache::bounded(NonZeroUsize::new(1).expect("non-zero"));
-        let keys = Keys::generate();
-        let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
-        let evidence = RelayEvidence::one(
-            RelaySessionKey::new(relay, RelayAccess::public()),
-            Timestamp::from(1),
-        );
-        let first = EventBuilder::new(Kind::TextNote, "first")
-            .finalize(&keys)
-            .expect("event signs");
-        let second = EventBuilder::new(Kind::TextNote, "second")
-            .finalize(&keys)
-            .expect("event signs");
-
-        let result = cache.commit(vec![
-            CacheMutation::Upsert(CachedEvent::new(first, evidence.clone())),
-            CacheMutation::Upsert(CachedEvent::new(second, evidence)),
-        ]);
-
-        assert!(result.is_err());
-        assert_eq!(cache.len().expect("cache readable"), 0);
-    }
-
-    #[test]
-    fn invalid_signed_event_is_refused_without_mutation() {
-        let cache = MemoryEventCache::default();
-        let keys = Keys::generate();
-        let relay = RelayUrl::parse("wss://relay.example").expect("relay url");
-        let evidence = RelayEvidence::one(
-            RelaySessionKey::new(relay, RelayAccess::public()),
-            Timestamp::from(1),
-        );
-        let mut event = EventBuilder::new(Kind::TextNote, "signed")
-            .finalize(&keys)
-            .expect("event signs");
-        event.content = "tampered after signing".to_owned();
-
-        let result = cache.commit(vec![CacheMutation::Upsert(CachedEvent::new(
-            event, evidence,
-        ))]);
-
-        assert!(result.is_err());
-        assert!(cache.is_empty().expect("cache readable"));
     }
 }

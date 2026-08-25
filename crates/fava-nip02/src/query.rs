@@ -110,7 +110,7 @@ pub fn contact_list(authors: impl IntoContactAuthors) -> Query {
 pub fn follows_of(snapshot: &QuerySnapshot) -> Vec<PublicKey> {
     let mut follows = Vec::new();
     for record in snapshot.events.iter() {
-        let Ok(list) = ContactList::from_event(&record.event) else {
+        let Ok(list) = ContactList::from_event(record.event()) else {
             continue;
         };
         follows.extend(list.follows().iter().map(crate::Follow::pubkey));
