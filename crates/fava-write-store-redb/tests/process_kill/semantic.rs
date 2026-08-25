@@ -723,3 +723,5 @@ async fn wait_terminal(fava: &Fava, receipt_id: ReceiptId) -> Receipt {
     .await
     .expect("recovered publication settles")
 }
+
+mod restart;

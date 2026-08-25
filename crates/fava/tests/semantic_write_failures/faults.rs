@@ -15,7 +15,7 @@ use fava_write::{
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::event::EventId as NostrEventId;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 fn controlled_open(
     source: &dyn QuerySource,
@@ -103,6 +103,7 @@ pub(super) struct FaultingWriteStore {
     failing_reads: AtomicUsize,
     fail_materialized_reads: AtomicBool,
     materialized_read_failures: AtomicU64,
+    materialized_read_barrier: watch::Sender<u64>,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
     reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
@@ -118,6 +119,7 @@ impl FaultingWriteStore {
         let inner = MemoryWriteStore::default();
         let mut inner_changes = inner.receipt_changes();
         let (receipt_changes, _) = broadcast::channel(64);
+        let (materialized_read_barrier, _) = watch::channel(0);
         let forwarded_changes = receipt_changes.clone();
         let drop_receipt_changes = Arc::new(AtomicBool::new(false));
         let drop_changes = Arc::clone(&drop_receipt_changes);
@@ -135,6 +137,7 @@ impl FaultingWriteStore {
             failing_reads: AtomicUsize::new(0),
             fail_materialized_reads: AtomicBool::new(false),
             materialized_read_failures: AtomicU64::new(0),
+            materialized_read_barrier,
             receipt_changes,
             reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
@@ -159,6 +162,10 @@ impl FaultingWriteStore {
 
     pub(super) fn materialized_read_failures(&self) -> u64 {
         self.materialized_read_failures.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn materialized_read_barrier(&self) -> watch::Receiver<u64> {
+        self.materialized_read_barrier.subscribe()
     }
 
     pub(super) fn fail_receipt_reads_after_signature(&self, count: usize) {
@@ -329,8 +336,11 @@ impl WriteStore for FaultingWriteStore {
         WriteStoreError,
     > {
         if self.fail_materialized_reads.load(Ordering::SeqCst) {
-            self.materialized_read_failures
-                .fetch_add(1, Ordering::SeqCst);
+            let failures = self
+                .materialized_read_failures
+                .fetch_add(1, Ordering::SeqCst)
+                .saturating_add(1);
+            self.materialized_read_barrier.send_replace(failures);
             return Err(WriteStoreError::Refused(
                 "injected durable semantic custody read failure".to_owned(),
             ));

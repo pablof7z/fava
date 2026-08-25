@@ -111,6 +111,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     let generation_one = first.receipt().expect("first generation remains live");
 
     store.fail_materialized_reads(true);
+    let mut custody_reads = store.materialized_read_barrier();
     let composed = compose_direct(&store, &materializer, keys.public_key(), &generation_one, 2);
     assert_eq!(
         composed.current.publication.materialization_id,
@@ -142,7 +143,14 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
             relay_evidence(),
         ))])
         .expect("successor source commits while custody reads fail");
-    tokio::time::sleep(Duration::from_millis(25)).await;
+    let failures_before_late_source = *custody_reads.borrow_and_update();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while *custody_reads.borrow() <= failures_before_late_source {
+            custody_reads.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("a post-source custody retry reaches the deterministic read barrier");
     assert_eq!(
         signer.calls(),
         1,

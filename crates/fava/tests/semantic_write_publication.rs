@@ -20,6 +20,8 @@ use nostr::key::Keys;
 mod author;
 #[path = "semantic_write_publication/interleavings.rs"]
 mod interleavings;
+#[path = "semantic_write_publication/restart.rs"]
+mod restart;
 #[path = "semantic_write_publication/route_revision.rs"]
 mod route_revision;
 #[path = "semantic_write_publication/shared_capacity.rs"]
