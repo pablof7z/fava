@@ -234,7 +234,7 @@ pub async fn run_croissant_simple_groups_scenario(
         "custom_destinations": completion.flow.custom_destinations,
         "custom_acknowledged": completion.flow.custom_acknowledged,
         "handoffs": completion.flow.handoffs,
-        "signed_refusals": completion.flow.signed_refusals,
+        "prepared_contexts": completion.flow.prepared_contexts,
         "observation_closed": completion.flow.observation_closed,
         "ready": completion.ready,
         "teardown": completion.teardown,

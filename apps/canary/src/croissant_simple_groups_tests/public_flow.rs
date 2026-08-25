@@ -78,7 +78,7 @@ async fn croissant_simple_groups_public_flow() {
     assert_eq!(facts.custom_destinations, 2);
     assert_eq!(facts.custom_acknowledged, 2);
     assert_eq!(facts.handoffs, [1, 1]);
-    assert_eq!(facts.signed_refusals, 3);
+    assert_eq!(facts.prepared_contexts, 3);
     assert!(facts.observation_closed);
     assert_pair_cleanup(&completion.ready, &completion.teardown);
 }
