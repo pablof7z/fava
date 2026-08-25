@@ -23,9 +23,17 @@ EMPTY_STRUCTURE = {
     "reexports": [],
 }
 
+EMPTY_PACKET = {
+    "interface": [],
+    "review_problems": [],
+    "structure": EMPTY_STRUCTURE,
+}
 
-def _markdown(term: dict, structure: dict = EMPTY_STRUCTURE) -> str:
-    return approval.canonical_markdown(term, structure)
+
+def _markdown(term: dict, packet: dict = EMPTY_PACKET) -> str:
+    if "structure" not in packet:
+        packet = {"interface": [], "review_problems": [], "structure": packet}
+    return approval.canonical_markdown(term, packet)
 
 # Real nostr-crate-generated fixtures (throwaway keys only; owner key is
 # unavailable here — owner approval is the Rust governance test's gate).
@@ -108,6 +116,55 @@ class CanonicalMarkdownTest(unittest.TestCase):
         md = _markdown({"name": "Foo"})
         self.assertTrue(md.startswith("# Foo\n"))
 
+    def test_name_purpose_and_human_interface_lead_the_packet(self) -> None:
+        packet = {
+            "interface": [
+                {
+                    "kind": "Constructor",
+                    "path": "probe::Thing::new",
+                    "signature": "pub fn probe::Thing::new() -> Self",
+                    "description": "Constructs one empty thing.",
+                }
+            ],
+            "review_problems": [],
+            "structure": EMPTY_STRUCTURE,
+        }
+        markdown = _markdown(
+            {
+                "name": "Thing",
+                "meaning": "One useful thing.",
+                "owner": "probe",
+                "counterexample": "An unrelated value is not a Thing.",
+            },
+            packet,
+        )
+        self.assertTrue(markdown.startswith("# Thing\n\nOne useful thing.\n"))
+        self.assertLess(markdown.index("## Human-readable interface"), markdown.index("## Edge and error semantics"))
+        self.assertLess(markdown.index("## Edge and error semantics"), markdown.index("## Governance metadata"))
+        self.assertLess(markdown.index("## Governance metadata"), markdown.index("## Deterministic compiler-derived structure"))
+        self.assertIn("### Constructor `probe::Thing::new`", markdown)
+        self.assertIn("Constructs one empty thing.", markdown)
+        self.assertIn("pub fn probe::Thing::new() -> Self", markdown)
+
+    def test_human_description_drift_invalidates_prior_content(self) -> None:
+        term = {"name": "Thing", "meaning": "One thing."}
+        prior = {
+            "interface": [{
+                "kind": "Method",
+                "path": "probe::Thing::value",
+                "signature": "pub fn probe::Thing::value(&self) -> usize",
+                "description": "Returns the retained value.",
+            }],
+            "review_problems": [],
+            "structure": EMPTY_STRUCTURE,
+        }
+        changed = json.loads(json.dumps(prior))
+        changed["interface"][0]["description"] = "Returns the normalized value."
+        event = {"id": "prior", "content": _markdown(term, prior)}
+        self.assertIsNone(
+            approval.authoritative_approval([event], _markdown(term, changed))
+        )
+
     def test_prose_fields_appear_in_order(self) -> None:
         term = {
             "name": "T",
@@ -116,11 +173,11 @@ class CanonicalMarkdownTest(unittest.TestCase):
             "falsifier": "test must fail.",
         }
         md = _markdown(term)
+        mean = md.index("A thing.")
         src = md.index("**source**")
-        mean = md.index("**meaning**")
         fals = md.index("**falsifier**")
-        self.assertLess(src, mean)
-        self.assertLess(mean, fals)
+        self.assertLess(mean, src)
+        self.assertLess(src, fals)
 
     def test_empty_prose_field_is_omitted(self) -> None:
         term = {"name": "T", "source": "nostr", "meaning": ""}
@@ -178,11 +235,14 @@ class CanonicalMarkdownTest(unittest.TestCase):
     def test_event_term_includes_explicit_empty_compiler_structure(self) -> None:
         expected = (
             "# Event\n\n"
+            "A signed Nostr event.\n\n"
+            "## Human-readable interface\n\n"
+            "No implemented Rust interface is bound to this term.\n\n"
+            "## Governance metadata\n\n"
             "**source**: nostr\n\n"
             "**protocol**: NIP-01\n\n"
             "**owner**: nostr\n\n"
-            "**meaning**: A signed Nostr event.\n\n"
-            "## Compiler-derived Rust structure\n\n"
+            "## Deterministic compiler-derived structure\n\n"
             "```json\n"
             '{"private_architectural_state":[],"public_api":[],"reexports":[]}\n'
             "```\n"
@@ -231,13 +291,23 @@ class ApprovalPageTest(unittest.TestCase):
 
     def test_renders_markdown_and_keeps_the_exact_raw_payload(self) -> None:
         self.assertIn("function renderMarkdown(markdown)", self.html)
-        self.assertIn("renderMarkdown(term.markdown)", self.html)
+        self.assertIn("splitReviewMarkdown(term.markdown)", self.html)
+        self.assertIn("renderMarkdown(reviewSections.primary)", self.html)
         self.assertIn("Exact signed Markdown (raw)", self.html)
         self.assertNotIn("innerHTML", self.html)
 
     def test_has_no_multi_term_signing_path(self) -> None:
         self.assertNotIn("sign-all", self.html)
         self.assertNotIn("Sign all", self.html)
+
+    def test_signing_pause_is_visible_and_cannot_connect_a_signer(self) -> None:
+        self.assertIn("const REVIEW_PAUSED = true", self.html)
+        self.assertNotIn("connect().then(load)", self.html)
+        self.assertIn("load();", self.html)
+
+    def test_governance_and_machine_sections_are_secondary_details(self) -> None:
+        self.assertIn("function splitReviewMarkdown(markdown)", self.html)
+        self.assertIn("Governance and exact machine payload", self.html)
 
     def test_supports_owner_scoped_pending_review_links(self) -> None:
         self.assertIn("new URLSearchParams(window.location.search)", self.html)
@@ -610,7 +680,14 @@ class CandidateCoverageTest(unittest.TestCase):
             markdown = _markdown(term)
             for field in approval.EXPLICIT_CANDIDATE_FIELDS:
                 with self.subTest(term=term["name"], field=field):
-                    self.assertIn(f"**{field}**:", markdown)
+                    if field == "meaning":
+                        self.assertTrue(
+                            markdown.startswith(
+                                f"# {term['name']}\n\n{approval.row_purpose(term)}\n"
+                            )
+                        )
+                    else:
+                        self.assertIn(f"**{field}**:", markdown)
 
     def test_parent_signature_cannot_approve_a_candidate(self) -> None:
         candidate = next(term for term in self.candidates if term["name"] == "QueryEvidence")
@@ -826,7 +903,14 @@ def canonical_structure(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 def read_snapshot(path):
     raw = json.loads(path.read_text(encoding="utf-8"))
-    return {entry["name"]: entry["structure"] for entry in raw["terms"]}, []
+    return {
+        entry["name"]: {
+            "interface": entry["interface"],
+            "review_problems": entry["review_problems"],
+            "structure": entry["structure"],
+        }
+        for entry in raw["terms"]
+    }, []
 def snapshot_inputs_current(root, path):
     return path.is_file()
 def compile_snapshot(root):
@@ -894,11 +978,16 @@ class ServerTest(unittest.TestCase):
         }
         snapshot = {
             "cargo_public_api": "mock",
-            "format": 1,
+            "format": 2,
             "inputs_sha256": "mock",
             "rustdoc_toolchain": "mock",
             "terms": [
-                {"name": name, "structure": empty_structure}
+                {
+                    "name": name,
+                    "interface": [],
+                    "review_problems": [],
+                    "structure": empty_structure,
+                }
                 for name in (
                     "Event",
                     "SavedGroupListMaterializer",
@@ -1013,7 +1102,7 @@ class ServerTest(unittest.TestCase):
         with self._get("/api/terms") as resp:
             payload = json.loads(resp.read())
         event = next(term for term in payload["terms"] if term["name"] == "Event")
-        self.assertEqual(event["markdown"], THROWAWAY_EVENT["content"])
+        self.assertEqual(event["markdown"], _markdown(EVENT_TERM))
         self.assertEqual(event["rust_item"], "Event")
         self.assertEqual(event["rust_item_kind"], "non-Rust Concept")
         self.assertEqual(
@@ -1046,88 +1135,12 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 404)
         ctx.exception.close()
 
-    def test_throwaway_event_rejected_as_wrong_pubkey(self) -> None:
-        """An event signed by a non-OWNER key is rejected by Python's structural
-        check before the verifier is called.  We submit the sk=0x02 event."""
-        wrong_key_event = json.loads(
-            '{"id":"a5da16e5cf91a2fa5ca407fcf31808092dfb917d4fdee7b3ad9375f9d8487ccb",'
-            '"pubkey":"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",'
-            '"created_at":1700000000,"kind":9999,'
-            '"tags":[["name","Event"]],'
-            '"content":"# Event\\n\\n**source**: nostr\\n\\n**protocol**: NIP-01\\n\\n'
-            '**owner**: nostr\\n\\n**meaning**: A signed Nostr event.\\n",'
-            '"sig":"05f4b05e4a2c0842a17b4f91daf4f5e8916a9d9328e07f86bdf1e7602c74ec09'
-            'aba2102211cf647ec90f4638e36a0a732a273e543faf4130c1b625987feff491"}'
-        )
-        status, body = self._post("/api/approvals", wrong_key_event)
-        self.assertEqual(status, 400)
-        self.assertIn("not signed by the owner", body["error"])
-
-    def test_correct_owner_event_accepted_and_persisted(self) -> None:
-        """OWNER is the throwaway key (sk=0x01); THROWAWAY_EVENT is signed by
-        that key and must be accepted by the mock verifier and written to disk."""
+    def test_signing_endpoint_is_hard_paused_without_writing(self) -> None:
         status, body = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status, 200, body)
-        self.assertEqual(body["stored"], "Event")
+        self.assertEqual(status, 423)
+        self.assertIn("independent acceptance", body["error"])
         path = self._root / "docs" / "internals" / "approvals.jsonl"
-        self.assertTrue(path.exists())
-        stored = json.loads(path.read_text(encoding="utf-8").strip())
-        self.assertEqual(stored["id"], THROWAWAY_EVENT["id"])
-
-    def test_replay_returns_already_stored_and_file_unchanged(self) -> None:
-        """Replaying an identical event returns 200 'already stored' and does
-        not append a second line to approvals.jsonl."""
-        status1, body1 = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status1, 200, body1)
-
-        status2, body2 = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status2, 200, body2)
-        self.assertEqual(body2.get("note"), "already stored")
-
-        path = self._root / "docs" / "internals" / "approvals.jsonl"
-        lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        self.assertEqual(len(lines), 1, "replay must not append a second line")
-
-    def test_final_signature_appends_beside_stale_signed_history(self) -> None:
-        path = self._root / "docs" / "internals" / "approvals.jsonl"
-        stale = dict(
-            THROWAWAY_EVENT,
-            id="1" * 64,
-            created_at=1,
-            content="older candidate markdown",
-            sig="1" * 128,
-        )
-        path.write_text(json.dumps(stale) + "\n", encoding="utf-8")
-
-        status, body = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status, 200, body)
-        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-        self.assertEqual(len(lines), 2)
-        self.assertEqual(json.loads(lines[0])["content"], "older candidate markdown")
-        self.assertEqual(json.loads(lines[1])["id"], THROWAWAY_EVENT["id"])
-
-    def test_bad_crypto_event_rejected_and_nothing_written(self) -> None:
-        """A structurally valid event (correct pubkey/kind/name) whose signature
-        the verifier rejects must return 400 and leave approvals.jsonl empty."""
-        bad_sig_event = dict(THROWAWAY_EVENT, sig="0" * 128)
-        status, body = self._post("/api/approvals", bad_sig_event)
-        self.assertEqual(status, 400)
-        self.assertIn("signature", body["error"])
-        path = self._root / "docs" / "internals" / "approvals.jsonl"
-        self.assertFalse(path.exists(), "file must not be created when verifier rejects")
-
-    def test_event_with_wrong_content_rejected(self) -> None:
-        """Content must exactly match canonical markdown of the named term."""
-        bad = dict(THROWAWAY_EVENT, content="tampered content")
-        status, body = self._post("/api/approvals", bad)
-        self.assertEqual(status, 400)
-        self.assertIn("signed text is not the term", body["error"])
-
-    def test_event_for_unknown_term_rejected(self) -> None:
-        bad = dict(THROWAWAY_EVENT, tags=[["name", "NonExistentTerm"]])
-        status, body = self._post("/api/approvals", bad)
-        self.assertEqual(status, 400)
-        self.assertIn("NonExistentTerm", body["error"])
+        self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":

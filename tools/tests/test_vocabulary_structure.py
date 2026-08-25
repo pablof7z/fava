@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -258,6 +259,169 @@ class CanonicalStructureTest(unittest.TestCase):
 
     def test_per_term_structure_has_an_explicit_refusal_bound(self) -> None:
         self.assertLess(structure.MAXIMUM_TERM_STRUCTURE_BYTES, 256 * 1024)
+
+
+class HumanReviewInventoryTest(unittest.TestCase):
+    def test_renders_every_bound_identity_with_description_and_signature(self) -> None:
+        term = {
+            "name": "Widget",
+            "meaning": "One useful widget.",
+            "lifecycle": "Constructed once and then immutable.",
+        }
+        compiled = {
+            "private_architectural_state": [
+                {
+                    "declaration": "pub struct Widget {\n    value: usize,\n}",
+                    "kind": "struct",
+                    "path": "probe::widget::Widget",
+                    "source": "crates/probe/src/lib.rs",
+                    "visibility": "public",
+                }
+            ],
+            "public_api": [
+                {
+                    "declaration": "pub struct probe::Widget",
+                    "path": "probe::Widget",
+                },
+                {
+                    "declaration": "pub fn probe::Widget::from_value(usize) -> Self",
+                    "implementation": "impl probe::Widget",
+                    "path": "probe::Widget::from_value",
+                },
+            ],
+            "reexports": [{"path": "probe::Widget", "source": "widget::Widget"}],
+        }
+        catalog = {
+            "probe::Widget": {
+                "kind": "Struct",
+                "purpose": "Stores one validated value.",
+                "signature": "pub struct probe::Widget",
+            },
+            "probe::Widget::from_value": {
+                "kind": "Method",
+                "purpose": "Constructs a widget from one value or refuses overflow.",
+                "signature": "pub fn probe::Widget::from_value(usize) -> Self",
+            },
+        }
+
+        review, problems = structure.human_review_inventory(term, compiled, catalog)
+
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            [item["kind"] for item in review],
+            ["Bound declaration", "Struct", "Constructor", "Public export"],
+        )
+        self.assertEqual(
+            [item["path"] for item in review],
+            [
+                "probe::widget::Widget",
+                "probe::Widget",
+                "probe::Widget::from_value",
+                "probe::Widget",
+            ],
+        )
+        self.assertTrue(all(item["description"] for item in review))
+        self.assertTrue(all(item["signature"] for item in review))
+
+    def test_missing_human_description_is_visible_and_blocks_review(self) -> None:
+        compiled = {
+            "private_architectural_state": [],
+            "public_api": [
+                {
+                    "declaration": "pub fn probe::undocumented()",
+                    "path": "probe::undocumented",
+                }
+            ],
+            "reexports": [],
+        }
+        review, problems = structure.human_review_inventory(
+            {"name": "Undocumented", "meaning": "A probe."}, compiled, {}
+        )
+        self.assertEqual(len(review), 1)
+        self.assertIn("Review blocked", review[0]["description"])
+        self.assertEqual(
+            problems,
+            ["probe::undocumented: missing human interface description"],
+        )
+
+    def test_readme_description_changes_the_input_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs/internals").mkdir(parents=True)
+            (root / "crates/probe/src").mkdir(parents=True)
+            for relative in (
+                "Cargo.lock",
+                "Cargo.toml",
+                "rust-toolchain.toml",
+                "docs/internals/vocabulary.toml",
+                "docs/internals/vocabulary-candidates.jsonl",
+                "tools/crate_readme_api.py",
+                "tools/vocabulary_approval.py",
+                "tools/vocabulary_structure.py",
+                "crates/probe/Cargo.toml",
+                "crates/probe/src/lib.rs",
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(relative, encoding="utf-8")
+            readme = root / "crates/probe/README.md"
+            readme.write_text("first description", encoding="utf-8")
+            first = structure.input_fingerprint(root)
+            readme.write_text("changed description", encoding="utf-8")
+            self.assertNotEqual(first, structure.input_fingerprint(root))
+
+    def test_all_fourteen_simple_group_terms_have_complete_human_reviews(self) -> None:
+        root = Path(__file__).parents[2]
+        terms = tomllib.loads(
+            (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
+        )["term"]
+        simple_group_terms = [
+            term for term in terms if term.get("owner") == "fava-simple-groups"
+        ]
+        self.assertEqual(len(simple_group_terms), 14)
+
+        snapshot, snapshot_problems = structure.read_snapshot(
+            root / "docs/internals/vocabulary-structure.json"
+        )
+        self.assertEqual(snapshot_problems, [])
+        for term in simple_group_terms:
+            with self.subTest(term=term["name"]):
+                packet = snapshot[term["name"]]
+                self.assertEqual(packet["review_problems"], [])
+                review = packet["interface"]
+                visible_signatures = [item["signature"] for item in review]
+                bound_signatures = [
+                    item["declaration"]
+                    for item in packet["structure"]["private_architectural_state"]
+                ] + [
+                    item["declaration"]
+                    for item in packet["structure"]["public_api"]
+                ]
+                for signature in bound_signatures:
+                    self.assertEqual(visible_signatures.count(signature), 1)
+                self.assertTrue(
+                    all("Review blocked" not in item["description"] for item in review)
+                )
+
+    def test_no_compiler_bound_identity_is_hidden_from_any_human_packet(self) -> None:
+        root = Path(__file__).parents[2]
+        packets, problems = structure.read_snapshot(
+            root / "docs/internals/vocabulary-structure.json"
+        )
+        self.assertEqual(problems, [])
+        for name, packet in packets.items():
+            with self.subTest(term=name):
+                self.assertEqual(packet["review_problems"], [])
+                visible = [item["signature"] for item in packet["interface"]]
+                bound = [
+                    item["declaration"]
+                    for item in packet["structure"]["private_architectural_state"]
+                ] + [
+                    item["declaration"]
+                    for item in packet["structure"]["public_api"]
+                ]
+                for declaration in bound:
+                    self.assertEqual(visible.count(declaration), 1)
 
 
 if __name__ == "__main__":

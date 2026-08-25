@@ -41,6 +41,10 @@ PROSE_FIELDS = (
     "falsifier",
 )
 LIST_FIELDS = ("symbols", "crates", "spec_symbols", "spec_crates")
+EDGE_FIELDS = ("distinction", "counterexample", "lifecycle")
+GOVERNANCE_PROSE_FIELDS = tuple(
+    field for field in PROSE_FIELDS if field not in {"meaning", *EDGE_FIELDS}
+)
 
 REQUIRED_CANDIDATE_FIELDS = (
     "owner",
@@ -376,15 +380,64 @@ def candidate_terms(
 
 
 def canonical_markdown(
-    term: dict[str, Any], structure: dict[str, Any]
+    term: dict[str, Any], packet: dict[str, Any]
 ) -> str:
     """Render one registry term as the exact text an approval signs.
 
     Raises ValueError if any field value has an unexpected type so that a
     malformed term cannot silently produce an unrendered or wrong approval.
     """
-    lines = [f"# {term['name']}", ""]
-    for field in PROSE_FIELDS:
+    meaning = term.get("meaning")
+    if meaning is not None and not isinstance(meaning, str):
+        raise ValueError(
+            f"field 'meaning' must be a str, got {type(meaning).__name__}"
+        )
+    purpose = " ".join((meaning or "").split())
+    if not purpose:
+        purpose = "Review blocked: no plain-language purpose is recorded."
+    lines = [f"# {term['name']}", "", purpose, "", "## Human-readable interface", ""]
+
+    interface = packet.get("interface")
+    review_problems = packet.get("review_problems")
+    structure = packet.get("structure")
+    if not isinstance(interface, list):
+        raise ValueError("review packet interface must be a list")
+    if not isinstance(review_problems, list) or any(
+        not isinstance(problem, str) for problem in review_problems
+    ):
+        raise ValueError("review packet problems must be a list of strings")
+    if not isinstance(structure, dict):
+        raise ValueError("review packet structure must be an object")
+    if not interface:
+        lines.extend(["No implemented Rust interface is bound to this term.", ""])
+    for number, item in enumerate(interface):
+        if not isinstance(item, dict):
+            raise ValueError(f"interface[{number}] must be an object")
+        values = {}
+        for field in ("kind", "path", "signature", "description"):
+            value = item.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"interface[{number}].{field} must be non-empty text")
+            values[field] = value.strip()
+        lines.extend(
+            [
+                f"### {values['kind']} `{values['path']}`",
+                "",
+                values["description"],
+                "",
+                "```rust",
+                values["signature"],
+                "```",
+                "",
+            ]
+        )
+    if review_problems:
+        lines.extend(["## Review blockers", ""])
+        lines.extend(f"- {problem}" for problem in review_problems)
+        lines.append("")
+
+    edge_values: list[tuple[str, str]] = []
+    for field in EDGE_FIELDS:
         value = term.get(field)
         if value is None:
             continue
@@ -394,8 +447,24 @@ def canonical_markdown(
             )
         stripped = value.strip()
         if stripped:
-            lines.append(f"**{field}**: {stripped}")
-            lines.append("")
+            edge_values.append((field, stripped))
+    if edge_values:
+        lines.extend(["## Edge and error semantics", ""])
+        for field, value in edge_values:
+            lines.extend([f"**{field}**: {value}", ""])
+
+    lines.extend(["## Governance metadata", ""])
+    for field in GOVERNANCE_PROSE_FIELDS:
+        value = term.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(
+                f"field '{field}' must be a str, got {type(value).__name__}"
+            )
+        stripped = value.strip()
+        if stripped:
+            lines.extend([f"**{field}**: {stripped}", ""])
     for field in LIST_FIELDS:
         value = term.get(field)
         if value is None:
@@ -431,7 +500,7 @@ def canonical_markdown(
 
     lines.extend(
         [
-            "## Compiler-derived Rust structure",
+            "## Deterministic compiler-derived structure",
             "",
             "```json",
             canonical_structure(structure),
@@ -705,7 +774,14 @@ def unapproved_terms(
         else:
             from vocabulary_structure import EMPTY_STRUCTURE
 
-            compiled = (structures or {}).get(str(name), EMPTY_STRUCTURE)
+            compiled = (structures or {}).get(
+                str(name),
+                {
+                    "interface": [],
+                    "review_problems": [],
+                    "structure": EMPTY_STRUCTURE,
+                },
+            )
             if authoritative_approval(
                 events, canonical_markdown(term, compiled)
             ) is not None:

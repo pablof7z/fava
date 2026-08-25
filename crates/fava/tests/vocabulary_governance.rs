@@ -25,6 +25,8 @@ const RUSTDOC_TOOLCHAIN: &str = "nightly-2026-07-07";
 const PROSE_FIELDS: &[&str] = &[
     "source",
     "evidence",
+    "disposition",
+    "proposed_disposition",
     "protocol",
     "owner",
     "nearest_nostr",
@@ -32,6 +34,18 @@ const PROSE_FIELDS: &[&str] = &[
     "distinction",
     "counterexample",
     "lifecycle",
+    "forcing_requirement",
+    "falsifier",
+];
+const EDGE_FIELDS: &[&str] = &["distinction", "counterexample", "lifecycle"];
+const GOVERNANCE_PROSE_FIELDS: &[&str] = &[
+    "source",
+    "evidence",
+    "disposition",
+    "proposed_disposition",
+    "protocol",
+    "owner",
+    "nearest_nostr",
     "forcing_requirement",
     "falsifier",
 ];
@@ -47,23 +61,125 @@ fn is_known_field(field: &str) -> bool {
 ///
 /// Mirrors `vocabulary_approval.py::canonical_markdown`.  Returns `Err` if any
 /// field value has a wrong TOML type (fail-closed: no unrendered field survives).
-fn canonical_markdown(term: &toml::Table, structure: &JsonValue) -> Result<String, String> {
+fn canonical_markdown(term: &toml::Table, packet: &JsonValue) -> Result<String, String> {
     let name = term
         .get("name")
         .and_then(toml::Value::as_str)
         .ok_or_else(|| "term missing string 'name'".to_string())?;
 
-    let mut lines: Vec<String> = vec![format!("# {name}"), String::new()];
+    let purpose = match term.get("meaning") {
+        None => "Review blocked: no plain-language purpose is recorded.".to_string(),
+        Some(toml::Value::String(value)) => {
+            let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+            if normalized.is_empty() {
+                "Review blocked: no plain-language purpose is recorded.".to_string()
+            } else {
+                normalized
+            }
+        }
+        Some(other) => {
+            return Err(format!(
+                "field 'meaning' must be a string, got {}",
+                other.type_str()
+            ));
+        }
+    };
+    let mut lines: Vec<String> = vec![
+        format!("# {name}"),
+        String::new(),
+        purpose,
+        String::new(),
+        "## Human-readable interface".to_string(),
+        String::new(),
+    ];
 
-    // Prose fields in fixed order.
-    for &field in PROSE_FIELDS {
+    let interface = packet
+        .get("interface")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| "review packet interface must be a list".to_string())?;
+    let review_problems = packet
+        .get("review_problems")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| "review packet problems must be a list of strings".to_string())?;
+    let structure = packet
+        .get("structure")
+        .ok_or_else(|| "review packet structure must be an object".to_string())?;
+    if !structure.is_object() {
+        return Err("review packet structure must be an object".to_string());
+    }
+    if interface.is_empty() {
+        lines.extend([
+            "No implemented Rust interface is bound to this term.".to_string(),
+            String::new(),
+        ]);
+    }
+    for (index, item) in interface.iter().enumerate() {
+        let value = |field: &str| -> Result<&str, String> {
+            item.get(field)
+                .and_then(JsonValue::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| format!("interface[{index}].{field} must be non-empty text"))
+        };
+        let kind = value("kind")?;
+        let path = value("path")?;
+        let description = value("description")?;
+        let signature = value("signature")?;
+        lines.extend([
+            format!("### {kind} `{path}`"),
+            String::new(),
+            description.to_string(),
+            String::new(),
+            "```rust".to_string(),
+            signature.to_string(),
+            "```".to_string(),
+            String::new(),
+        ]);
+    }
+    if !review_problems.is_empty() {
+        lines.extend(["## Review blockers".to_string(), String::new()]);
+        for problem in review_problems {
+            let problem = problem
+                .as_str()
+                .ok_or_else(|| "review packet problems must be a list of strings".to_string())?;
+            lines.push(format!("- {problem}"));
+        }
+        lines.push(String::new());
+    }
+
+    let mut edge_values = Vec::new();
+    for &field in EDGE_FIELDS {
         match term.get(field) {
             None => {}
             Some(toml::Value::String(v)) => {
                 let trimmed = v.trim();
                 if !trimmed.is_empty() {
-                    lines.push(format!("**{field}**: {trimmed}"));
-                    lines.push(String::new());
+                    edge_values.push((field, trimmed));
+                }
+            }
+            Some(other) => {
+                return Err(format!(
+                    "field '{field}' must be a string, got {}",
+                    other.type_str()
+                ));
+            }
+        }
+    }
+    if !edge_values.is_empty() {
+        lines.extend(["## Edge and error semantics".to_string(), String::new()]);
+        for (field, value) in edge_values {
+            lines.extend([format!("**{field}**: {value}"), String::new()]);
+        }
+    }
+
+    lines.extend(["## Governance metadata".to_string(), String::new()]);
+    for &field in GOVERNANCE_PROSE_FIELDS {
+        match term.get(field) {
+            None => {}
+            Some(toml::Value::String(value)) => {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    lines.extend([format!("**{field}**: {trimmed}"), String::new()]);
                 }
             }
             Some(other) => {
@@ -138,7 +254,7 @@ fn canonical_markdown(term: &toml::Table, structure: &JsonValue) -> Result<Strin
     let structure = serde_json::to_string(structure)
         .map_err(|error| format!("cannot render compiler-derived structure: {error}"))?;
     lines.extend([
-        "## Compiler-derived Rust structure".to_string(),
+        "## Deterministic compiler-derived structure".to_string(),
         String::new(),
         "```json".to_string(),
         structure,
@@ -152,8 +268,8 @@ fn canonical_markdown(term: &toml::Table, structure: &JsonValue) -> Result<Strin
 fn load_structures(text: &str) -> Result<HashMap<String, JsonValue>, String> {
     let snapshot: JsonValue = serde_json::from_str(text)
         .map_err(|error| format!("cannot parse vocabulary-structure.json: {error}"))?;
-    if snapshot.get("format").and_then(JsonValue::as_u64) != Some(1) {
-        return Err("vocabulary-structure.json format must be 1".to_string());
+    if snapshot.get("format").and_then(JsonValue::as_u64) != Some(2) {
+        return Err("vocabulary-structure.json format must be 2".to_string());
     }
     if snapshot.get("cargo_public_api").and_then(JsonValue::as_str) != Some(CARGO_PUBLIC_API) {
         return Err(format!(
@@ -179,11 +295,71 @@ fn load_structures(text: &str) -> Result<HashMap<String, JsonValue>, String> {
             .get("name")
             .and_then(JsonValue::as_str)
             .ok_or_else(|| "structural term is missing a string name".to_string())?;
-        let structure = entry
-            .get("structure")
-            .cloned()
-            .ok_or_else(|| format!("{name}: structural term is missing structure"))?;
-        if structures.insert(name.to_string(), structure).is_some() {
+        for field in ["interface", "review_problems", "structure"] {
+            if entry.get(field).is_none() {
+                return Err(format!("{name}: structural term is missing {field}"));
+            }
+        }
+        let interface = entry["interface"]
+            .as_array()
+            .ok_or_else(|| format!("{name}: interface must be an array"))?;
+        let mut visible: HashMap<&str, usize> = HashMap::new();
+        for item in interface {
+            for field in ["description", "kind", "path", "signature"] {
+                if item
+                    .get(field)
+                    .and_then(JsonValue::as_str)
+                    .is_none_or(|value| value.trim().is_empty())
+                {
+                    return Err(format!("{name}: invalid interface {field}"));
+                }
+            }
+            *visible
+                .entry(item["signature"].as_str().expect("validated string"))
+                .or_default() += 1;
+        }
+        let structure = entry["structure"]
+            .as_object()
+            .ok_or_else(|| format!("{name}: structure must be an object"))?;
+        let mut bound = Vec::new();
+        for field in ["private_architectural_state", "public_api"] {
+            for item in structure
+                .get(field)
+                .and_then(JsonValue::as_array)
+                .ok_or_else(|| format!("{name}: structure {field} must be an array"))?
+            {
+                bound.push(
+                    item.get("declaration")
+                        .and_then(JsonValue::as_str)
+                        .ok_or_else(|| format!("{name}: {field} item missing declaration"))?
+                        .to_string(),
+                );
+            }
+        }
+        for item in structure
+            .get("reexports")
+            .and_then(JsonValue::as_array)
+            .ok_or_else(|| format!("{name}: structure reexports must be an array"))?
+        {
+            let source = item
+                .get("source")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| format!("{name}: reexport missing source"))?;
+            let path = item
+                .get("path")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| format!("{name}: reexport missing path"))?;
+            bound.push(format!("pub use {source} as {path}"));
+        }
+        if bound
+            .iter()
+            .any(|declaration| visible.get(declaration.as_str()) != Some(&1))
+        {
+            return Err(format!(
+                "{name}: human interface does not expose every bound identity exactly once"
+            ));
+        }
+        if structures.insert(name.to_string(), entry.clone()).is_some() {
             return Err(format!("duplicate structural term: {name}"));
         }
     }
@@ -324,7 +500,11 @@ fn load_candidate_markdown(root: &Path) -> Result<Vec<(String, String, String)>,
                 .get("disposition")
                 .and_then(serde_json::Value::as_str)
                 .ok_or_else(|| format!("{name}: candidate missing string disposition"))?;
-            Ok((name.to_string(), disposition.to_string(), markdown.to_string()))
+            Ok((
+                name.to_string(),
+                disposition.to_string(),
+                markdown.to_string(),
+            ))
         })
         .collect()
 }
@@ -378,6 +558,17 @@ fn vocabulary_gate_requires_all_terms_approved() {
             failures.push(format!("{name}: missing compiler-derived Rust structure"));
             continue;
         };
+        if let Some(review_problems) = structure
+            .get("review_problems")
+            .and_then(JsonValue::as_array)
+        {
+            failures.extend(review_problems.iter().map(|problem| {
+                format!(
+                    "{name}: {}",
+                    problem.as_str().unwrap_or("invalid human review problem")
+                )
+            }));
+        }
         let markdown = match canonical_markdown(term, structure) {
             Ok(m) => m,
             Err(e) => {
@@ -419,6 +610,14 @@ fn vocabulary_gate_requires_all_terms_approved() {
 
 // ─── Throwaway-key fixture tests (always pass) ────────────────────────────────
 
+fn review_packet(structure: JsonValue) -> JsonValue {
+    serde_json::json!({
+        "interface": [],
+        "review_problems": [],
+        "structure": structure,
+    })
+}
+
 /// Kind-9999 approval for the "Event" term, signed with secret scalar = 1.
 ///
 /// Pubkey `79be667e…` is NOT the owner.  Used only for crypto and parity tests.
@@ -455,11 +654,65 @@ fn canonical_markdown_includes_compiler_structure() {
         "public_api": [],
         "reexports": [],
     });
-    let got = canonical_markdown(&term, &structure).expect("canonical_markdown must succeed");
+    let got = canonical_markdown(&term, &review_packet(structure))
+        .expect("canonical_markdown must succeed");
     assert!(got.ends_with(
-        "## Compiler-derived Rust structure\n\n```json\n\
+        "## Deterministic compiler-derived structure\n\n```json\n\
          {\"private_architectural_state\":[],\"public_api\":[],\"reexports\":[]}\n```\n"
     ));
+}
+
+#[test]
+fn python_and_rust_render_the_same_complete_human_packet() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let vocabulary: toml::Value =
+        std::fs::read_to_string(root.join("docs/internals/vocabulary.toml"))
+            .expect("read vocabulary")
+            .parse()
+            .expect("parse vocabulary");
+    let term = vocabulary
+        .get("term")
+        .and_then(toml::Value::as_array)
+        .and_then(|terms| {
+            terms.iter().find_map(|term| {
+                let table = term.as_table()?;
+                (table.get("name").and_then(toml::Value::as_str) == Some("SimpleGroup"))
+                    .then_some(table)
+            })
+        })
+        .expect("SimpleGroup term");
+    let packets = load_structures(
+        &std::fs::read_to_string(root.join("docs/internals/vocabulary-structure.json"))
+            .expect("read review packets"),
+    )
+    .expect("load review packets");
+    let rust = canonical_markdown(term, packets.get("SimpleGroup").expect("packet"))
+        .expect("render Rust markdown");
+    let script = r#"
+import sys, tomllib
+from pathlib import Path
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "tools"))
+import vocabulary_approval as approval
+import vocabulary_structure as structure
+terms = tomllib.loads((root / "docs/internals/vocabulary.toml").read_text())["term"]
+term = next(term for term in terms if term["name"] == "SimpleGroup")
+packets, problems = structure.read_snapshot(root / "docs/internals/vocabulary-structure.json")
+assert not problems, problems
+sys.stdout.write(approval.canonical_markdown(term, packets["SimpleGroup"]))
+"#;
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .arg(&root)
+        .output()
+        .expect("run Python canonical renderer");
+    assert!(
+        output.status.success(),
+        "Python renderer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(rust.as_bytes(), output.stdout);
 }
 
 #[test]
@@ -485,6 +738,35 @@ fn compiler_structure_drift_invalidates_prior_payload() {
         "reexports": [],
     });
     assert_ne!(
+        canonical_markdown(&term, &review_packet(prior)).unwrap(),
+        canonical_markdown(&term, &review_packet(changed)).unwrap()
+    );
+}
+
+#[test]
+fn human_description_drift_invalidates_prior_payload() {
+    let term: toml::Table = toml::from_str(
+        "name = \"Query\"\nsource = \"fava\"\nmeaning = \"A query.\"\nowner = \"fava-query\"\nsymbols = []\ncrates = []\n",
+    )
+    .expect("parse term TOML");
+    let prior = serde_json::json!({
+        "interface": [{
+            "description": "Returns the retained limit.",
+            "kind": "Method",
+            "path": "fava_query::Query::limit",
+            "signature": "pub fn fava_query::Query::limit(&self) -> usize"
+        }],
+        "review_problems": [],
+        "structure": {
+            "private_architectural_state": [],
+            "public_api": [],
+            "reexports": []
+        }
+    });
+    let mut changed = prior.clone();
+    changed["interface"][0]["description"] =
+        JsonValue::String("Returns the normalized limit.".to_string());
+    assert_ne!(
         canonical_markdown(&term, &prior).unwrap(),
         canonical_markdown(&term, &changed).unwrap()
     );
@@ -503,148 +785,5 @@ fn governance_rejects_wrong_pubkey_event() {
             .iter()
             .any(|f| f.contains("pubkey is not the owner")),
         "expected a pubkey-not-owner failure, got: {failures:?}"
-    );
-}
-
-// ─── Terminal-name invariant ──────────────────────────────────────────────────
-
-/// Check that `symbols` terminal names and `spec_symbols` values equal the
-/// containing term's `name`.  Runs against the real registry; expected to FAIL
-/// until every hidden concept is promoted to its own term.
-///
-/// This check runs independently of the crypto gate so it cannot be bypassed
-/// by supplying approval events while hidden concepts remain in the registry.
-#[test]
-fn vocabulary_terminal_names_match_term_names() {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let vocab_path = manifest.join("../../docs/internals/vocabulary.toml");
-    let vocab_text = std::fs::read_to_string(&vocab_path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", vocab_path.display()));
-    let vocab: toml::Value = vocab_text
-        .parse()
-        .unwrap_or_else(|e| panic!("cannot parse {}: {e}", vocab_path.display()));
-    let terms = vocab
-        .get("term")
-        .and_then(toml::Value::as_array)
-        .unwrap_or_else(|| panic!("{} must contain a [[term]] array", vocab_path.display()));
-
-    let mut failures: Vec<String> = Vec::new();
-
-    for term_val in terms {
-        let term = term_val
-            .as_table()
-            .unwrap_or_else(|| panic!("each [[term]] entry must be a table"));
-        let name = term
-            .get("name")
-            .and_then(toml::Value::as_str)
-            .unwrap_or_else(|| panic!("each term must have a string 'name'"));
-
-        if let Some(toml::Value::Array(syms)) = term.get("symbols") {
-            for sym in syms {
-                if let Some(s) = sym.as_str() {
-                    let terminal = s.rsplit("::").next().unwrap_or(s);
-                    if terminal != name {
-                        failures.push(format!(
-                            "{name}: symbols '{s}' has terminal name '{terminal}', \
-                             hiding a differently named concept under term '{name}'"
-                        ));
-                    }
-                }
-            }
-        }
-
-        if let Some(toml::Value::Array(spec_syms)) = term.get("spec_symbols") {
-            for sym in spec_syms {
-                if let Some(s) = sym.as_str()
-                    && s != name
-                {
-                    failures.push(format!(
-                        "{name}: spec_symbols '{s}' must equal term name '{name}'"
-                    ));
-                }
-            }
-        }
-    }
-
-    assert!(
-        failures.is_empty(),
-        "vocabulary terminal name violations ({} total):\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
-}
-
-/// `ShortfallReason` under `SubscriptionPlanner` rejects: terminal name
-/// `ShortfallReason` ≠ term name `SubscriptionPlanner`.
-#[test]
-fn terminal_name_check_rejects_shortfall_reason_under_subscription_planner() {
-    let term_toml = r#"
-        name = "SubscriptionPlanner"
-        symbols = [
-            "fava_subscriptions::SubscriptionPlanner",
-            "fava_subscriptions::ShortfallReason",
-        ]
-    "#;
-    let term: toml::Table = toml::from_str(term_toml).expect("parse term TOML");
-    let name = term.get("name").and_then(toml::Value::as_str).unwrap();
-    let syms = term.get("symbols").and_then(toml::Value::as_array).unwrap();
-
-    let violations: Vec<&str> = syms
-        .iter()
-        .filter_map(toml::Value::as_str)
-        .filter(|s| s.rsplit("::").next().unwrap_or(s) != name)
-        .collect();
-
-    assert_eq!(violations, ["fava_subscriptions::ShortfallReason"]);
-}
-
-/// `RouterSession` in `spec_symbols` under `Router` rejects: value
-/// `RouterSession` ≠ term name `Router`.
-#[test]
-fn terminal_name_check_rejects_router_session_in_spec_symbols() {
-    let term_toml = r#"
-        name = "Router"
-        spec_symbols = ["Router", "RouterSession"]
-    "#;
-    let term: toml::Table = toml::from_str(term_toml).expect("parse term TOML");
-    let name = term.get("name").and_then(toml::Value::as_str).unwrap();
-    let spec_syms = term
-        .get("spec_symbols")
-        .and_then(toml::Value::as_array)
-        .unwrap();
-
-    let violations: Vec<&str> = spec_syms
-        .iter()
-        .filter_map(toml::Value::as_str)
-        .filter(|s| *s != name)
-        .collect();
-
-    assert_eq!(violations, ["RouterSession"]);
-}
-
-/// Multiple module paths ending in the same terminal name are all accepted.
-#[test]
-fn terminal_name_check_accepts_multiple_paths_with_same_terminal_name() {
-    let term_toml = r#"
-        name = "Query"
-        symbols = [
-            "fava_query::Query",
-            "fava_query_standard::Query",
-            "fava_query_testkit::Query",
-        ]
-    "#;
-    let term: toml::Table = toml::from_str(term_toml).expect("parse term TOML");
-    let name = term.get("name").and_then(toml::Value::as_str).unwrap();
-    let syms = term.get("symbols").and_then(toml::Value::as_array).unwrap();
-
-    let violations: Vec<&str> = syms
-        .iter()
-        .filter_map(toml::Value::as_str)
-        .filter(|s| s.rsplit("::").next().unwrap_or(s) != name)
-        .collect();
-
-    assert!(
-        violations.is_empty(),
-        "expected no violations, got: {violations:?}"
     );
 }

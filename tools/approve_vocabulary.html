@@ -69,13 +69,13 @@
 <body>
 <header>
   <h1>Fava vocabulary approval</h1>
-  <span id="identity">connecting to NIP-07…</span>
+  <span id="identity">signing paused</span>
   <input type="search" id="filter" placeholder="filter terms" autocomplete="off">
-  <button id="connect">Connect signer</button>
+  <button id="connect" disabled>Signer unavailable pending acceptance</button>
   <span class="counts" id="counts"></span>
 </header>
 <main>
-  <div id="review-paused">Signing paused. The interface review is being rebuilt to lead with every field, variant, and method in readable form.</div>
+  <div id="review-paused">Signing paused pending independent acceptance. Review names, purposes, complete interfaces, edge semantics, and exact compiler structure below.</div>
   <div id="problems"></div>
   <div id="terms"></div>
 </main>
@@ -237,6 +237,16 @@ function renderMarkdown(markdown) {
   return rendered;
 }
 
+function splitReviewMarkdown(markdown) {
+  const marker = "## Governance metadata";
+  const offset = markdown.indexOf(marker);
+  if (offset < 0) return { primary: markdown, secondary: "" };
+  return {
+    primary: markdown.slice(0, offset).trimEnd() + "\n",
+    secondary: markdown.slice(offset),
+  };
+}
+
 function render() {
   const needle = document.getElementById("filter").value.toLowerCase();
   const visible = terms.filter((term) =>
@@ -304,7 +314,13 @@ function render() {
 
     const body = document.createElement("div");
     body.className = "body";
-    const renderedPayload = renderMarkdown(term.markdown);
+    const reviewSections = splitReviewMarkdown(term.markdown);
+    const renderedPayload = renderMarkdown(reviewSections.primary);
+    const secondaryPayload = document.createElement("details");
+    secondaryPayload.className = "exact-payload";
+    const secondarySummary = document.createElement("summary");
+    secondarySummary.textContent = "Governance and exact machine payload";
+    secondaryPayload.append(secondarySummary, renderMarkdown(reviewSections.secondary));
     const rawPayload = document.createElement("details");
     rawPayload.className = "exact-payload";
     const rawSummary = document.createElement("summary");
@@ -336,7 +352,7 @@ function render() {
       }
     });
     actions.append(button, status);
-    body.append(renderedPayload, rawPayload, actions);
+    body.append(renderedPayload, secondaryPayload, rawPayload, actions);
 
     summary.append(owner);
     details.append(summary, body);
@@ -363,9 +379,7 @@ async function approve(term) {
 }
 
 document.getElementById("filter").addEventListener("input", render);
-document.getElementById("connect").addEventListener("click", connect);
-
-connect().then(load);
+load();
 </script>
 </body>
 </html>

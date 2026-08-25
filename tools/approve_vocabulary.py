@@ -20,6 +20,7 @@ import vocabulary_structure as structure
 
 APP_HTML = Path(__file__).with_name("approve_vocabulary.html")
 MAXIMUM_BODY_BYTES = 256 * 1024
+SIGNING_PAUSED = True
 
 
 def _find_verifier(root: Path) -> Path | None:
@@ -78,6 +79,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path != "/api/approvals":
             self._send_json(404, {"error": "not found"})
+            return
+        if SIGNING_PAUSED:
+            self._send_json(
+                423,
+                {
+                    "error": (
+                        "vocabulary signing is paused until the human-first "
+                        "review contract receives independent acceptance"
+                    )
+                },
+            )
             return
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAXIMUM_BODY_BYTES:
@@ -145,14 +157,20 @@ class Handler(BaseHTTPRequestHandler):
         if structure_problems:
             self._send_json(409, {"error": "; ".join(structure_problems)})
             return
-        compiled = structures.get(name)
-        if compiled is None:
+        packet = structures.get(name)
+        if packet is None:
             self._send_json(
                 409, {"error": f"{name}: missing compiler-derived structure"}
             )
             return
+        if packet["review_problems"]:
+            self._send_json(
+                409,
+                {"error": f"{name}: " + "; ".join(packet["review_problems"])},
+            )
+            return
         try:
-            expected = approval.canonical_markdown(term, compiled)
+            expected = approval.canonical_markdown(term, packet)
         except ValueError as error:
             self._send_json(500, {"error": f"canonical_markdown error: {error}"})
             return
@@ -218,18 +236,21 @@ class Handler(BaseHTTPRequestHandler):
         for term in terms:
             if term["name"] in candidate_names:
                 continue
-            compiled = structures.get(term["name"])
+            packet = structures.get(term["name"])
             markdown = (
-                approval.canonical_markdown(term, compiled)
-                if compiled is not None
+                approval.canonical_markdown(term, packet)
+                if packet is not None
                 else ""
             )
             signatures = approvals.get(term["name"], [])
             signed = approval.authoritative_approval(signatures, markdown)
             concealed = approval.structural_problems_for_term(term, hidden)
-            if compiled is None:
+            if packet is None:
                 status = "invalid"
                 concealed = ["missing compiler-derived structure", *concealed]
+            elif packet["review_problems"]:
+                status = "invalid"
+                concealed = [*packet["review_problems"], *concealed]
             elif concealed:
                 status = "invalid"
             elif signed is not None:
@@ -258,10 +279,10 @@ class Handler(BaseHTTPRequestHandler):
             )
 
         for term in candidates:
-            compiled = structures.get(term["name"])
+            packet = structures.get(term["name"])
             markdown = (
-                approval.canonical_markdown(term, compiled)
-                if compiled is not None
+                approval.canonical_markdown(term, packet)
+                if packet is not None
                 else ""
             )
             signatures = approvals.get(term["name"], [])
@@ -269,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
             signed = None if blocked else approval.authoritative_approval(signatures, markdown)
             status = (
                 "invalid"
-                if compiled is None
+                if packet is None or packet["review_problems"]
                 else "blocked"
                 if blocked
                 else "approved"

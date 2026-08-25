@@ -15,10 +15,11 @@ from typing import Any, Sequence
 
 import crate_readme_api as public_api
 import vocabulary_approval as approval
+import vocabulary_review as review
 
 
 SNAPSHOT_PATH = Path("docs/internals/vocabulary-structure.json")
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 TARGET_DIRECTORY = Path("target/vocabulary-structure")
 MAXIMUM_TERM_STRUCTURE_BYTES = 192 * 1024
 NOMINAL_KINDS = frozenset({"enum", "struct", "trait", "type_alias", "union"})
@@ -27,6 +28,10 @@ EMPTY_STRUCTURE: dict[str, list[Any]] = {
     "public_api": [],
     "reexports": [],
 }
+
+human_review_inventory = review.human_review_inventory
+public_api_catalog = review.public_api_catalog
+rustdoc_descriptions = review.rustdoc_descriptions
 
 
 class StructureError(RuntimeError):
@@ -325,11 +330,13 @@ def input_fingerprint(root: Path) -> str:
         root / "docs" / "internals" / "vocabulary-candidates.jsonl",
         root / "tools" / "crate_readme_api.py",
         root / "tools" / "vocabulary_approval.py",
+        root / "tools" / "vocabulary_review.py",
         root / "tools" / "vocabulary_structure.py",
     }
     paths.update((root / "crates").rglob("*.rs"))
     paths.update((root / "crates").rglob("Cargo.toml"))
     paths.update((root / "crates").rglob("build.rs"))
+    paths.update((root / "crates").rglob("README.md"))
     digest = hashlib.sha256()
     for path in sorted(path for path in paths if path.is_file()):
         relative = path.relative_to(root).as_posix().encode("utf-8")
@@ -361,10 +368,13 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
         for package in public_api.workspace_packages(root).values()
         if package.directory.parent == root / "crates"
     ]
+    catalog = public_api_catalog(root, packages)
+    documentation: dict[str, str] = {}
     for package in sorted(packages, key=lambda value: value.name):
         output, public_json, private_json = _compiled_package(root, package)
         records = public_records(output, package.crate_name)
         aliases = reexports(public_json)
+        documentation.update(rustdoc_descriptions(public_json, aliases))
         for term in terms:
             roots, bound_aliases = _term_roots(term, package.crate_name, aliases, public_json)
             if roots:
@@ -378,19 +388,28 @@ def compile_snapshot(root: Path) -> dict[str, Any]:
                 private_state_records(root, package, private_json, term)
             )
     entries = []
+    terms_by_name = {term["name"]: term for term in terms}
     for name, structure in structures.items():
         for field in structure:
             structure[field] = sorted(
                 {canonical_structure(item): item for item in structure[field]}.values(),
                 key=canonical_structure,
             )
-        encoded_bytes = len(canonical_structure(structure).encode("utf-8"))
+        interface, review_problems = human_review_inventory(
+            terms_by_name[name], structure, catalog, documentation
+        )
+        packet = {
+            "interface": interface,
+            "review_problems": review_problems,
+            "structure": structure,
+        }
+        encoded_bytes = len(canonical_structure(packet).encode("utf-8"))
         if encoded_bytes > MAXIMUM_TERM_STRUCTURE_BYTES:
             raise StructureError(
-                f"{name}: compiler-derived structure exceeds bound: "
+                f"{name}: vocabulary review packet exceeds bound: "
                 f"{encoded_bytes} > {MAXIMUM_TERM_STRUCTURE_BYTES} bytes"
             )
-        entries.append({"name": name, "structure": structure})
+        entries.append({"name": name, **packet})
     return {
         "cargo_public_api": public_api.PUBLIC_API_VERSION,
         "format": FORMAT_VERSION,
@@ -415,14 +434,60 @@ def read_snapshot(path: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
     terms: dict[str, dict[str, Any]] = {}
     for entry in raw.get("terms", []):
         name = entry.get("name")
+        interface = entry.get("interface")
+        review_problems = entry.get("review_problems")
         structure = entry.get("structure")
-        if not isinstance(name, str) or not isinstance(structure, dict):
+        if (
+            not isinstance(name, str)
+            or not isinstance(interface, list)
+            or not isinstance(review_problems, list)
+            or not isinstance(structure, dict)
+        ):
             problems.append("structural snapshot contains an invalid term entry")
             continue
         if name in terms:
             problems.append(f"structural snapshot repeats term: {name}")
             continue
-        terms[name] = structure
+        if any(not isinstance(problem, str) for problem in review_problems):
+            problems.append(f"{name}: review problems must be strings")
+            continue
+        if any(
+            not isinstance(item, dict)
+            or any(
+                not isinstance(item.get(field), str) or not item[field].strip()
+                for field in ("description", "kind", "path", "signature")
+            )
+            for item in interface
+        ):
+            problems.append(f"{name}: human interface contains an invalid item")
+            continue
+        if any(not isinstance(structure.get(field), list) for field in EMPTY_STRUCTURE):
+            problems.append(f"{name}: compiler-derived structure is incomplete")
+            continue
+        visible = [item["signature"] for item in interface]
+        bound = [
+            item.get("declaration")
+            for field in ("private_architectural_state", "public_api")
+            for item in structure[field]
+        ] + [
+            f"pub use {item.get('source')} as {item.get('path')}"
+            for item in structure["reexports"]
+        ]
+        concealed = [
+            declaration
+            for declaration in bound
+            if not isinstance(declaration, str) or visible.count(declaration) != 1
+        ]
+        if concealed:
+            problems.append(
+                f"{name}: human interface does not expose every bound identity exactly once"
+            )
+            continue
+        terms[name] = {
+            "interface": interface,
+            "review_problems": review_problems,
+            "structure": structure,
+        }
     return terms, problems
 
 
