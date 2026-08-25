@@ -409,10 +409,10 @@ impl Signer for BlockingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         self.retained.lock().unwrap().push(event);
         Box::pin(async move {

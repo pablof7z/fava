@@ -2,6 +2,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use fava_write::{Event, PublicKey, UnsignedEvent};
 use thiserror::Error;
@@ -26,10 +27,10 @@ pub trait Signer: Send + Sync {
 
     /// Sign one exact unsigned event unless its owner cancels the operation.
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>;
 }
 
 /// Exact signer refusal.

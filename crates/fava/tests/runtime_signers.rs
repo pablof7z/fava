@@ -130,6 +130,16 @@ async fn removed_signer_stale_valid_completion_is_inert_and_readd_wakes() {
     fava.remove_signer(alice.public_key())
         .expect("Alice signer removes");
     wait_until(|| old_signer.cancellations() == 1).await;
+    let parked = write
+        .receipt()
+        .expect("cancelled authorization remains durable while its future is detached");
+    let SignatureState::Retryable(reason) = parked.current.publication.signature else {
+        panic!("removed signer left authorized custody orphaned")
+    };
+    assert!(reason.contains(&write_id.as_u64().to_string()));
+    assert!(reason.contains(&receipt_id.as_u64().to_string()));
+    assert!(reason.contains("removed"));
+    assert!(reason.contains("retry is permitted"));
     old_signer.release();
     wait_until(|| old_signer.completions() == 1).await;
     tokio::task::yield_now().await;
@@ -401,14 +411,14 @@ impl Publisher for RecordingPublisher {
 }
 
 struct CountingSigner {
-    inner: LocalSigner,
+    inner: Arc<LocalSigner>,
     calls: AtomicU64,
 }
 
 impl CountingSigner {
     fn new(keys: Keys) -> Self {
         Self {
-            inner: LocalSigner::new(keys),
+            inner: Arc::new(LocalSigner::new(keys)),
             calls: AtomicU64::new(0),
         }
     }
@@ -428,12 +438,12 @@ impl Signer for CountingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        self.inner.sign_event(event, cancel)
+        Arc::clone(&self.inner).sign_event(event, cancel)
     }
 }
 
@@ -477,10 +487,10 @@ impl Signer for SnapshotWindowSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(std::future::ready(Err(SignerError::Cancelled)))
     }
@@ -514,17 +524,17 @@ impl Signer for CancelledSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(std::future::ready(Err(SignerError::Cancelled)))
     }
 }
 
 struct GatedValidSigner {
-    inner: LocalSigner,
+    inner: Arc<LocalSigner>,
     calls: AtomicU64,
     cancellations: AtomicU64,
     completions: AtomicU64,
@@ -535,7 +545,7 @@ impl GatedValidSigner {
     fn new(keys: Keys) -> Self {
         let (release, _) = watch::channel(false);
         Self {
-            inner: LocalSigner::new(keys),
+            inner: Arc::new(LocalSigner::new(keys)),
             calls: AtomicU64::new(0),
             cancellations: AtomicU64::new(0),
             completions: AtomicU64::new(0),
@@ -570,10 +580,10 @@ impl Signer for GatedValidSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let mut release = self.release.subscribe();
         Box::pin(async move {
@@ -594,7 +604,7 @@ impl Signer for GatedValidSigner {
                 }
             }
             let (keep_uncancelled, uncancelled) = watch::channel(false);
-            let result = self.inner.sign_event(event, uncancelled).await;
+            let result = Arc::clone(&self.inner).sign_event(event, uncancelled).await;
             drop(keep_uncancelled);
             self.completions.fetch_add(1, Ordering::SeqCst);
             result
@@ -630,10 +640,10 @@ impl Signer for BlockingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
             if !*cancel.borrow() {

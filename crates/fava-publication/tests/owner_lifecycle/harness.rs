@@ -235,10 +235,10 @@ impl Signer for ImmediateSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         Box::pin(async move {
             event
                 .finalize(&self.keys)
@@ -284,10 +284,10 @@ impl Signer for GatedSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         Box::pin(async move {
             let waiting = self.release.notified();
             tokio::pin!(waiting);

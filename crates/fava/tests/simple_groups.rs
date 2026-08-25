@@ -24,7 +24,7 @@ use fava_routing::{
     RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
 };
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_simple_groups::{SimpleGroup, SimpleGroupRecords, SavedRelay, SimpleGroups};
+use fava_simple_groups::{SavedRelay, SimpleGroup, SimpleGroupRecords, SimpleGroups};
 use fava_state::{
     CacheMutation, CachedEvent, RelayAccess, RelayEvidence, RelaySessionKey, RelayUrl,
 };
@@ -62,7 +62,9 @@ async fn simple_group_content_preserves_local_visibility() {
         .content("accepted local content")
         .build()
         .expect("payload builds");
-    let prepared = simple_group.prepare(payload).expect("group context prepares");
+    let prepared = simple_group
+        .prepare(payload)
+        .expect("group context prepares");
     let id = prepared.id.expect("prepared id");
     let _write = harness
         .fava
@@ -286,7 +288,9 @@ async fn simple_group_arbitrary_kind_publication_uses_complete_exact_route() {
         .content("kind-blind payload")
         .build()
         .expect("payload builds");
-    let prepared_once = simple_group.prepare(payload.clone()).expect("first preparation");
+    let prepared_once = simple_group
+        .prepare(payload.clone())
+        .expect("first preparation");
     let prepared_twice = simple_group.prepare(payload).expect("repeated preparation");
 
     assert_eq!(
@@ -384,7 +388,9 @@ async fn simple_group_presigned_context_refuses_before_custody() {
     let original_bytes = serde_json::to_vec(&signed).expect("signed event encodes");
     let original_id = signed.id;
     let original_signature = signed.sig;
-    let prepared = simple_group.prepare(signed).expect("valid context passes purely");
+    let prepared = simple_group
+        .prepare(signed)
+        .expect("valid context passes purely");
 
     assert_eq!(serde_json::to_vec(&prepared).unwrap(), original_bytes);
     assert_eq!(prepared.id, original_id);
@@ -660,10 +666,10 @@ impl Signer for ExactSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
             event
@@ -701,10 +707,10 @@ impl Signer for BlockingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
             let _ = cancel.changed().await;

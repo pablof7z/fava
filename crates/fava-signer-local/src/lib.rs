@@ -2,6 +2,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_write::{Event, PublicKey, UnsignedEvent};
@@ -32,10 +33,10 @@ impl Signer for LocalSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         Box::pin(async move {
             if event.pubkey != self.keys.public_key() {
                 return Err(SignerError::InvalidOutput(

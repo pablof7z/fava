@@ -81,7 +81,7 @@ struct AcceptedMarker {
 }
 
 pub(crate) struct GatedSigner {
-    inner: LocalSigner,
+    inner: Arc<LocalSigner>,
     gate: watch::Sender<bool>,
     calls: AtomicU64,
 }
@@ -90,7 +90,7 @@ impl GatedSigner {
     pub(crate) fn new(keys: Keys) -> Self {
         let (gate, _) = watch::channel(false);
         Self {
-            inner: LocalSigner::new(keys),
+            inner: Arc::new(LocalSigner::new(keys)),
             gate,
             calls: AtomicU64::new(0),
         }
@@ -121,10 +121,10 @@ impl Signer for GatedSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         let mut gate = self.gate.subscribe();
         Box::pin(async move {
@@ -135,7 +135,7 @@ impl Signer for GatedSigner {
                     _ = gate.changed() => {}
                 }
             }
-            self.inner.sign_event(event, cancel).await
+            Arc::clone(&self.inner).sign_event(event, cancel).await
         })
     }
 }

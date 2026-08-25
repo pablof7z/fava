@@ -226,7 +226,14 @@ third receipt read. Exact-generation authorization and coordinate reservation
 compete atomically. A reservation winner composes first and leaves retryable
 authorization evidence; an authorization winner keeps its generation current
 and admits at most one durable coordinate successor, promoted only when that
-authorized operation resolves. The same bounded successor slot covers a
+authorized operation resolves. After authorization, `fava-session` invokes the
+selected provider method while holding the attachment-generation gate against
+replacement and removal, then releases that gate before the returned future is
+awaited. A generation retired between snapshot and invocation is never called;
+an invoked generation may be cancelled or detached and any late completion is
+inert. Cancellation without a successor durably changes `Authorized` into an
+exact attributable `Retryable` fact instead of orphaning authorization. The
+same bounded successor slot covers a
 source-driven rematerialization, so recovery and live materialization cannot
 retire custody whose signer invocation remains authorized. Restart rewrites an
 interrupted authorization without a successor as exact retryable evidence. If
@@ -1817,7 +1824,7 @@ pub trait Signer: Send + Sync {
     fn availability(&self) -> SignerAvailability;
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
     ) -> SignFuture;
 
@@ -2290,7 +2297,15 @@ impl Session {
     pub fn signer(
         &self,
         public_key: PublicKey,
-    ) -> Option<(u64, Arc<dyn Signer>)>;
+    ) -> Option<(u64, SignerAvailability)>;
+
+    pub fn invoke_signer(
+        &self,
+        public_key: PublicKey,
+        generation: u64,
+        event: UnsignedEvent,
+        cancel: watch::Receiver<bool>,
+    ) -> Option<SignFuture>;
 
     pub fn is_current(
         &self,
@@ -2307,13 +2322,16 @@ succeeds; a 65th distinct attachment is refused atomically. Duplicate add and mi
 replace/remove operations are typed refusals without mutation. Replacement is explicit
 and remains valid at capacity.
 
-The returned signer generation identifies one exact attachment. Publication re-checks
-that generation immediately before installing a signer completion or recording its
-refusal. A completion from a replaced or removed generation is inert even if the
-provider ignored cancellation and returned a valid signature. The watch revision is
-only a coalescing change signal: after any change, each publication obligation reloads
-the signer for its own exact event pubkey and acts only when that attachment generation
-changed.
+The returned signer generation identifies one exact attachment. `invoke_signer`
+calls the matching provider method under the same mutex that owns replacement
+and removal, but the returned owned future carries no session lock. A stale
+generation returns `None` without calling any provider. Publication re-checks
+the generation immediately before installing a signer completion or recording
+its refusal. A completion from a replaced or removed generation is inert even
+if the provider ignored cancellation and returned a valid signature. The watch
+revision is only a coalescing change signal: after any change, each publication
+obligation reloads the signer for its own exact event pubkey and acts only when
+that attachment generation changed.
 
 The public `Fava` facade delegates runtime `add_signer`, explicit
 `replace_signer`, and `remove_signer` operations to this owner. Builder-supplied

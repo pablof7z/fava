@@ -11,6 +11,7 @@ use nostr::key::Keys;
 use super::{edit, materialization, unique_path};
 
 #[test]
+#[allow(clippy::too_many_lines)] // One restart proof preserves every exact successor fact.
 fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
     let path = unique_path("authorized-successor");
     let keys = Keys::generate();

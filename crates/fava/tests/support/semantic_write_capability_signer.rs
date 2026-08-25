@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use fava::{Event, PublicKey, UnsignedEvent};
 use fava_signer::{Signer, SignerAvailability, SignerError};
@@ -35,10 +36,10 @@ impl Signer for GatedSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         Box::pin(async move {
             let (complete, response) = oneshot::channel();
             self.pending

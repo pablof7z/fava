@@ -132,7 +132,12 @@ impl Publication {
                     current = revalidated;
                     let current_generation = self.signer_generation(&current);
                     if current_generation != signing_generation {
-                        signing_cancel.send_replace(true);
+                        self.cancel_authorized_signing(
+                            &current,
+                            signing_generation,
+                            &signing_cancel,
+                            "its signer attachment was replaced or removed",
+                        );
                         let (next_cancel, next_cancel_rx) = watch::channel(false);
                         signing_cancel = next_cancel;
                         signing_generation = self.start_signing(&current, next_cancel_rx);
@@ -202,7 +207,12 @@ impl Publication {
                                     )
                                     .unwrap_or(false)
                                 {
-                                    signing_cancel.send_replace(true);
+                                    self.cancel_authorized_signing(
+                                        &latest,
+                                        signing_generation,
+                                        &signing_cancel,
+                                        "a bounded durable successor became ready",
+                                    );
                                 }
                                 if signing_generation.is_none()
                                     && matches!(

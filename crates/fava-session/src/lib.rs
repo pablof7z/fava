@@ -1,10 +1,13 @@
 //! Bounded runtime signer attachment for exact account public keys.
 
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use fava_signer::Signer;
-use fava_write::PublicKey;
+use fava_signer::{Signer, SignerAvailability, SignerError};
+use fava_write::{Event, PublicKey, UnsignedEvent};
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -151,13 +154,45 @@ impl Session {
         Ok(())
     }
 
-    /// Clone the current exact signer attachment and its generation.
+    /// Snapshot the current exact attachment generation and availability.
     #[must_use]
-    pub fn signer(&self, public_key: PublicKey) -> Option<(u64, Arc<dyn Signer>)> {
-        self.lock_state()
+    pub fn signer(&self, public_key: PublicKey) -> Option<(u64, SignerAvailability)> {
+        let (generation, signer) = self
+            .lock_state()
             .signers
             .get(&public_key)
-            .map(|attachment| (attachment.generation, Arc::clone(&attachment.signer)))
+            .map(|attachment| (attachment.generation, Arc::clone(&attachment.signer)))?;
+        Some((generation, signer.availability()))
+    }
+
+    /// Invoke one exact attachment generation while replacement and removal are excluded.
+    ///
+    /// The session lock is held only through provider method invocation. The
+    /// returned future owns its provider and is awaited after the lock is released.
+    #[must_use]
+    #[allow(clippy::type_complexity)] // Reuse the Signer future shape without a wrapper noun.
+    pub fn invoke_signer(
+        &self,
+        public_key: PublicKey,
+        generation: u64,
+        event: UnsignedEvent,
+        cancel: watch::Receiver<bool>,
+    ) -> Option<Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>> {
+        let state = self.lock_state();
+        let attachment = state
+            .signers
+            .get(&public_key)
+            .filter(|attachment| attachment.generation == generation)?;
+        Some(
+            catch_unwind(AssertUnwindSafe(|| {
+                Arc::clone(&attachment.signer).sign_event(event, cancel)
+            }))
+            .unwrap_or_else(|_| {
+                Box::pin(std::future::ready(Err(SignerError::Unavailable(format!(
+                    "signer attachment generation {generation} for {public_key} panicked during provider invocation"
+                )))))
+            }),
+        )
     }
 
     /// Return whether one exact signer attachment generation is still current.

@@ -234,14 +234,14 @@ impl ReplaceableEventMaterializer for TestMaterializer {
 }
 
 pub struct CountingSigner {
-    inner: LocalSigner,
+    inner: Arc<LocalSigner>,
     calls: AtomicU64,
 }
 
 impl CountingSigner {
     pub fn new(keys: Keys) -> Self {
         Self {
-            inner: LocalSigner::new(keys),
+            inner: Arc::new(LocalSigner::new(keys)),
             calls: AtomicU64::new(0),
         }
     }
@@ -261,12 +261,12 @@ impl Signer for CountingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        self.inner.sign_event(event, cancel)
+        Arc::clone(&self.inner).sign_event(event, cancel)
     }
 }
 
@@ -297,10 +297,10 @@ impl Signer for UnavailableSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         Box::pin(std::future::ready(Err(SignerError::Unavailable(
             "test signer parked".to_owned(),
         ))))
@@ -341,10 +341,10 @@ impl Signer for WindowSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         event: UnsignedEvent,
         _cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls
             .lock()
             .unwrap()
@@ -386,10 +386,10 @@ impl Signer for BlockingSigner {
     }
 
     fn sign_event(
-        &self,
+        self: Arc<Self>,
         _event: UnsignedEvent,
         mut cancel: watch::Receiver<bool>,
-    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
             let _ = cancel.changed().await;

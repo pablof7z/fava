@@ -831,6 +831,13 @@ successor before facade construction or signer attachment; authorization
 without a successor becomes exact attributable retryable work. An authorization
 or activation retry bound MUST leave a typed retryable signing fact naming the
 exact work and retry disposition rather than silently ending the runner.
+After authorization, the signer session MUST invoke the selected provider
+method while replacement and removal of that attachment generation are
+excluded, and MUST release that exclusion before awaiting the returned future.
+A provider generation retired between snapshot and invocation MUST NOT be
+called. Cancellation of an authorized operation without a successor MUST
+persist exact attributable retryable custody; replacement or removal may detach
+the future, but its late completion MUST remain inert.
 
 Rematerialization MUST:
 
