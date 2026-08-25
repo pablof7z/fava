@@ -161,7 +161,7 @@ pub fn apply_route_to_receipt(
     }
 
     receipt.route_revision = plan.revision;
-    receipt.route_settled = plan.settled;
+    receipt.route_settled = plan.settled();
     receipt.route_shortfalls = shortfalls;
     receipt.desired_destinations = desired;
     settle_route(receipt);

@@ -54,7 +54,7 @@ async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
 
     let initial = RoutePlan::from_contribution(1, &session.current()).unwrap();
     assert_eq!(initial.destinations.len(), 2);
-    assert!(!initial.settled);
+    assert!(!initial.settled());
     assert_eq!(
         initial.unresolved,
         BTreeSet::from([RouteTarget::Recipient(recipient_b.public_key())])
@@ -76,7 +76,7 @@ async fn known_lists_are_immediate_and_missing_list_uses_exact_indexer_query() {
     source.replace(relay_list(&recipient_b, Some(&later_read_relay), None, 2));
     let changed = session.next_change().await.expect("later relay list");
     let final_plan = RoutePlan::from_contribution(2, &changed).unwrap();
-    assert!(final_plan.settled);
+    assert!(final_plan.settled());
     assert!(final_plan.unresolved.is_empty());
     assert_eq!(final_plan.destinations.len(), 3);
 }
@@ -243,7 +243,7 @@ async fn failed_discovery_source_stays_unresolved_and_never_becomes_settled_abse
         Some(&CoverageState::Unresolved),
         "a closed discovery source is not settled absence"
     );
-    assert!(!plan.settled, "unanswered discovery must not settle");
+    assert!(!plan.settled(), "unanswered discovery must not settle");
     assert!(
         plan.shortfalls
             .iter()
@@ -272,7 +272,7 @@ async fn discovery_source_completing_without_a_relay_list_settles_absence() {
         Some(&CoverageState::SettledAbsent),
         "a source that completes without a relay list settles absence"
     );
-    assert!(plan.settled);
+    assert!(plan.settled());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -352,5 +352,5 @@ async fn a_cleanly_closed_discovery_source_settles_absence_through_the_error_cha
         Some(&CoverageState::SettledAbsent),
         "a provider that closed cleanly proves the relay list is absent"
     );
-    assert!(plan.settled, "settled absence terminates the route");
+    assert!(plan.settled(), "settled absence terminates the route");
 }
