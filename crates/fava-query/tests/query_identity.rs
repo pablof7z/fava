@@ -3,7 +3,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use fava_query::{Kind, Query, QueryError, RelayUrl, SingleLetterTag};
+use fava_query::{EventId, Kind, PublicKey, Query, QueryError, RelayUrl, SingleLetterTag};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
@@ -16,11 +16,15 @@ fn hash(query: &Query) -> u64 {
 }
 
 #[test]
-fn repeated_kind_identity_is_canonical() {
+fn kind_set_identity_is_canonical() {
     let first = Kind::from_u16(30_001);
     let second = Kind::from_u16(30_002);
-    let left = Query::events().kind(first).kind(first).kind(second);
-    let right = Query::events().kind(second).kind(first).kind(second);
+    let left = Query::events()
+        .kinds([first, first, second])
+        .expect("three kind inputs are bounded");
+    let right = Query::events()
+        .kinds([second, first, second])
+        .expect("three kind inputs are bounded");
 
     assert_eq!(left, right);
     assert_eq!(hash(&left), hash(&right));
@@ -29,7 +33,12 @@ fn repeated_kind_identity_is_canonical() {
         Some(&std::collections::BTreeSet::from([first, second]))
     );
     assert_eq!(
-        Query::events().kind(first).selection().kinds.as_ref(),
+        Query::events()
+            .kinds([first])
+            .expect("one kind input is bounded")
+            .selection()
+            .kinds
+            .as_ref(),
         Some(&std::collections::BTreeSet::from([first]))
     );
 }
@@ -59,6 +68,96 @@ fn invalid_query_inputs_are_refused_during_construction() {
 }
 
 #[test]
+fn generic_query_inputs_stop_at_query_owned_bounds() {
+    let relay = relay("wss://bounded.example");
+    assert!(
+        Query::events()
+            .from_relays(std::iter::repeat_n(relay.clone(), 4_096))
+            .is_ok()
+    );
+    assert_eq!(
+        Query::events().from_relays(std::iter::repeat(relay)),
+        Err(QueryError::TooManyExplicitRelays {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+
+    let author =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .expect("public key");
+    assert!(
+        Query::events()
+            .authors(std::iter::repeat_n(author, 4_096))
+            .is_ok()
+    );
+    assert_eq!(
+        Query::events().authors(std::iter::repeat(author)),
+        Err(QueryError::TooManyAuthors {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+    assert_eq!(
+        Query::events().kinds(std::iter::repeat(Kind::from_u16(1))),
+        Err(QueryError::TooManyKinds {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+    assert!(
+        Query::events()
+            .kinds(std::iter::repeat_n(Kind::from_u16(1), 4_096))
+            .is_ok()
+    );
+    let id = EventId::from_byte_array([1; 32]);
+    assert!(Query::events().ids(std::iter::repeat_n(id, 4_096)).is_ok());
+    assert_eq!(
+        Query::events().ids(std::iter::repeat(id)),
+        Err(QueryError::TooManyIds {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+    let e = SingleLetterTag::from_char('e').expect("tag key");
+    assert!(
+        Query::events()
+            .tag_values(e, std::iter::repeat_n("same", 4_096))
+            .is_ok()
+    );
+    assert_eq!(
+        Query::events().tag_values(e, std::iter::repeat("same")),
+        Err(QueryError::TooManyTagValues {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+    assert!(
+        Query::events()
+            .intersect_tag_values(e, std::iter::repeat_n("same", 4_096))
+            .is_ok()
+    );
+    assert_eq!(
+        Query::events().intersect_tag_values(e, std::iter::repeat("same")),
+        Err(QueryError::TooManyTagValues {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+
+    let full_tag_axis = Query::events()
+        .tag_values(e, (0..4_096).map(|index| index.to_string()))
+        .expect("the declared maximum is accepted");
+    assert_eq!(
+        full_tag_axis.tag_values(e, ["overflow"]),
+        Err(QueryError::TooManyTagValues {
+            actual: 4_097,
+            maximum: 4_096,
+        })
+    );
+}
+
+#[test]
 fn all_ascii_letter_tag_axes_are_case_sensitive() {
     let mut keys = std::collections::BTreeSet::new();
 
@@ -66,8 +165,12 @@ fn all_ascii_letter_tag_axes_are_case_sensitive() {
         let uppercase = lowercase.to_ascii_uppercase();
         let lowercase = SingleLetterTag::from_char(lowercase).expect("lowercase ASCII tag key");
         let uppercase = SingleLetterTag::from_char(uppercase).expect("uppercase ASCII tag key");
-        let lowercase_query = Query::events().tag_values(lowercase, ["exact"]);
-        let uppercase_query = Query::events().tag_values(uppercase, ["exact"]);
+        let lowercase_query = Query::events()
+            .tag_values(lowercase, ["exact"])
+            .expect("one tag value is bounded");
+        let uppercase_query = Query::events()
+            .tag_values(uppercase, ["exact"])
+            .expect("one tag value is bounded");
 
         assert_ne!(lowercase_query, uppercase_query);
         assert_eq!(
@@ -91,12 +194,14 @@ fn literal_tag_values_have_canonical_query_identity() {
     let upper_p = SingleLetterTag::from_char('P').expect("tag key");
     let left = Query::events()
         .tag_values(e, ["café", "alpha", "café"])
-        .tag_values(upper_p, ["東京"])
-        .tag_values(e, ["omega", "alpha"]);
+        .and_then(|query| query.tag_values(upper_p, ["東京"]))
+        .and_then(|query| query.tag_values(e, ["omega", "alpha"]))
+        .expect("literal tag inputs are bounded");
     let right = Query::events()
         .tag_values(e, ["omega"])
-        .tag_values(upper_p, ["東京", "東京"])
-        .tag_values(e, ["alpha", "café"]);
+        .and_then(|query| query.tag_values(upper_p, ["東京", "東京"]))
+        .and_then(|query| query.tag_values(e, ["alpha", "café"]))
+        .expect("literal tag inputs are bounded");
 
     assert_eq!(left, right);
     assert_eq!(hash(&left), hash(&right));
@@ -114,13 +219,101 @@ fn literal_tag_values_have_canonical_query_identity() {
 fn absent_and_present_empty_tag_axes_are_distinct() {
     let e = SingleLetterTag::from_char('e').expect("tag key");
     let absent = Query::events();
-    let present_empty = Query::events().tag_values(e, std::iter::empty::<String>());
+    let present_empty = Query::events()
+        .tag_values(e, std::iter::empty::<String>())
+        .expect("empty tag input is bounded");
 
     assert_ne!(absent, present_empty);
     assert_eq!(
         present_empty.selection().tag_values.get(&e),
         Some(&std::collections::BTreeSet::new())
     );
+}
+
+#[test]
+fn tag_axis_intersection_never_broadens_an_existing_axis() {
+    let h = SingleLetterTag::from_char('h').expect("tag key");
+    let values = |query: &Query| query.selection().tag_values.get(&h).cloned();
+    let expected = |values: &[&str]| {
+        Some(
+            values
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect::<std::collections::BTreeSet<_>>(),
+        )
+    };
+
+    let absent = Query::events()
+        .intersect_tag_values(h, ["photos"])
+        .expect("one tag value is bounded");
+    assert_eq!(values(&absent), expected(&["photos"]));
+
+    let supplied_empty = Query::events()
+        .intersect_tag_values(h, std::iter::empty::<String>())
+        .expect("empty tag input is bounded");
+    assert_eq!(values(&supplied_empty), expected(&[]));
+
+    let matching = Query::events()
+        .tag_values(h, ["photos"])
+        .and_then(|query| query.intersect_tag_values(h, ["photos"]))
+        .expect("tag values are bounded");
+    assert_eq!(values(&matching), expected(&["photos"]));
+
+    let disjoint = Query::events()
+        .tag_values(h, ["other"])
+        .and_then(|query| query.intersect_tag_values(h, ["photos"]))
+        .expect("tag values are bounded");
+    assert_eq!(values(&disjoint), expected(&[]));
+
+    let narrowed = Query::events()
+        .tag_values(h, ["photos", "other"])
+        .and_then(|query| query.intersect_tag_values(h, ["photos"]))
+        .expect("tag values are bounded");
+    assert_eq!(values(&narrowed), expected(&["photos"]));
+    let same_narrowing = Query::events()
+        .tag_values(h, ["other", "photos"])
+        .and_then(|query| query.intersect_tag_values(h, ["photos", "photos"]))
+        .expect("tag values are bounded");
+    assert_eq!(narrowed, same_narrowing);
+    assert_eq!(hash(&narrowed), hash(&same_narrowing));
+
+    let present_empty = Query::events()
+        .tag_values(h, std::iter::empty::<String>())
+        .and_then(|query| query.intersect_tag_values(h, ["photos"]))
+        .expect("tag values are bounded");
+    assert_eq!(values(&present_empty), expected(&[]));
+}
+
+#[test]
+fn tag_axis_intersection_preserves_every_other_query_dimension() {
+    let h = SingleLetterTag::from_char('h').expect("tag key");
+    let e = SingleLetterTag::from_char('e').expect("tag key");
+    let relay = relay("wss://relay.example");
+    let before = Query::events()
+        .kinds([Kind::from_u16(9)])
+        .and_then(|query| query.tag_values(e, ["event-id"]))
+        .and_then(|query| query.from_relays([relay]))
+        .and_then(|query| query.limit(23))
+        .expect("query inputs are valid")
+        .cache_only()
+        .oldest_first();
+    let after = before
+        .clone()
+        .intersect_tag_values(h, ["photos"])
+        .expect("one tag value is bounded");
+
+    assert_eq!(after.selection().ids, before.selection().ids);
+    assert_eq!(after.selection().authors, before.selection().authors);
+    assert_eq!(after.selection().kinds, before.selection().kinds);
+    assert_eq!(
+        after.selection().tag_values.get(&e),
+        before.selection().tag_values.get(&e)
+    );
+    assert_eq!(after.source(), before.source());
+    assert_eq!(after.access(), before.access());
+    assert_eq!(after.freshness(), before.freshness());
+    assert_eq!(after.ordering(), before.ordering());
+    assert_eq!(after.result_limit(), before.result_limit());
 }
 
 /// One observation is one identity, however many relays carry its demand and

@@ -96,7 +96,13 @@ async fn an_explicit_and_an_automatic_observation_of_one_filter_stay_distinct() 
         .expect("explicit query opens");
     let automatic = assembly
         .observer
-        .open(Query::events().kind(Kind::Metadata).authors([alice]))
+        .open(
+            Query::events()
+                .kinds([Kind::Metadata])
+                .expect("one kind is bounded")
+                .authors([alice])
+                .expect("one author is bounded"),
+        )
         .expect("automatic query opens");
 
     wait_until(|| assembly.planner.widest(&key).len() == 2).await;
@@ -139,7 +145,13 @@ async fn a_route_withdrawal_leaves_the_explicit_observation_intact() {
         .expect("explicit query opens");
     let automatic = assembly
         .observer
-        .open(Query::events().kind(Kind::Metadata).authors([alice]))
+        .open(
+            Query::events()
+                .kinds([Kind::Metadata])
+                .expect("one kind is bounded")
+                .authors([alice])
+                .expect("one author is bounded"),
+        )
         .expect("automatic query opens");
     wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
     let peer = assembly.established(&shared);
@@ -294,8 +306,10 @@ async fn an_establishment_that_completes_after_withdrawal_is_released_not_instal
 
 fn metadata_of(author: PublicKey, relay: &RelayUrl) -> Query {
     Query::events()
-        .kind(Kind::Metadata)
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
         .authors([author])
+        .expect("one author is bounded")
         .only_from_relays([relay.clone()])
         .expect("explicit relay is valid")
 }

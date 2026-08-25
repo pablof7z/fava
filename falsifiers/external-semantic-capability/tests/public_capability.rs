@@ -259,7 +259,10 @@ async fn raw_future_event_kind_publishes_unchanged() {
     let expected_id = event.id.expect("builder assigned id");
     let mut observation = open_observation(
         &harness.fava,
-        Query::events().kind(future_kind).cache_only(),
+        Query::events()
+            .kinds([future_kind])
+            .expect("one future kind is bounded")
+            .cache_only(),
         "raw future observation open",
     )
     .await;

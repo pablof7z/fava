@@ -109,10 +109,14 @@ fn local_unsigned(event: UnsignedEvent) -> SourceSnapshot {
 }
 
 fn base_query() -> Query {
-    Query::events().kind(Kind::from_u16(30_001)).tag_values(
-        fava_query::SingleLetterTag::from_char('d').expect("tag key"),
-        ["same"],
-    )
+    Query::events()
+        .kinds([Kind::from_u16(30_001)])
+        .expect("one kind is bounded")
+        .tag_values(
+            fava_query::SingleLetterTag::from_char('d').expect("tag key"),
+            ["same"],
+        )
+        .expect("one tag value is bounded")
 }
 
 #[test]

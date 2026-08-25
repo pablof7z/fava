@@ -11,11 +11,14 @@ fn observation(value: u64) -> ObservationId {
 }
 
 #[test]
-fn repeated_kind_req_encoding_is_complete() {
+fn bounded_kind_set_req_encoding_is_complete() {
     let query = Query::events()
-        .kind(Kind::from_u16(30_002))
-        .kind(Kind::from_u16(30_001))
-        .kind(Kind::from_u16(30_002));
+        .kinds([
+            Kind::from_u16(30_002),
+            Kind::from_u16(30_001),
+            Kind::from_u16(30_002),
+        ])
+        .expect("three kinds are bounded");
     let demand = demand_for_query(observation(1), QueryBranchId::ROOT, &query);
     let encoded = encode_client(&ClientMessage::req(
         SubscriptionId::new("multi-kind"),

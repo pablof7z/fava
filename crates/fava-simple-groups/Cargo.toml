@@ -9,9 +9,9 @@ readme = "README.md"
 fava-query.workspace = true
 fava-state.workspace = true
 fava-write.workspace = true
+nostr.workspace = true
 
 [dev-dependencies]
-fava = { path = "../fava" }
 nostr = { workspace = true, features = ["os-rng"] }
 
 [lints]
