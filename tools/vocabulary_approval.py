@@ -476,15 +476,6 @@ def review_fields(term: dict[str, Any]) -> list[dict[str, Any]]:
     return fields
 
 
-def item_kind_for_term(term: dict[str, Any]) -> str:
-    """Return the authoritative Rust kind for a term, or non-Rust Concept."""
-    symbol = symbol_for_term(term)
-    if not symbol:
-        return "non-Rust Concept"
-    kind = item_kind_for_symbol(symbol)
-    return kind or "non-Rust Concept"
-
-
 def symbol_for_term(term: dict[str, Any]) -> str:
     """Return the symbol or term name that best identifies a term."""
     for field in ("symbols", "spec_symbols"):
@@ -499,13 +490,28 @@ def symbol_for_term(term: dict[str, Any]) -> str:
     return str(term.get("name", ""))
 
 
+def item_kind_for_term(term: dict[str, Any], root: Path = ROOT) -> str:
+    """Return the authoritative Rust kind for a term, or non-Rust Concept."""
+    symbol = symbol_for_term(term)
+    kind: str | None = None
+    if symbol:
+        crate, parts = _split_symbol(symbol)
+        if parts:
+            kind = item_kind_for_symbol(symbol, root)
+        elif crate and parts == [] and symbol == term.get("name"):
+            # Plain symbol-like names can be false positives from spec-only
+            # fields. Preserve a non-Rust classification unless the owning
+            # crate is explicit.
+            kind = None
+    if kind is None:
+        kind = item_kind_for_name_within_crates(term.get("name", ""), root, term)
+    return kind or "non-Rust Concept"
+
+
 def item_kind_for_symbol(symbol: str, root: Path = ROOT) -> str | None:
     """Return the Rust declaration kind for one symbol path."""
     symbol = symbol.strip()
-    if "::" in symbol:
-        crate, *parts = symbol.split("::")
-    else:
-        crate, parts = symbol, []
+    crate, parts = _split_symbol(symbol)
     if not crate:
         return None
     crate_root = _crate_root_path(root, crate)
@@ -546,6 +552,48 @@ def _item_kind_from_text(source: str, item: str) -> str | None:
 def _crate_root_path(root: Path, symbol_crate: str) -> Path | None:
     candidate = root / "crates" / symbol_crate.replace("_", "-")
     return candidate if candidate.exists() else None
+
+
+def _split_symbol(symbol: str) -> tuple[str, list[str]]:
+    """Return crate plus module/path segments for a Rust symbol reference."""
+    if "::" not in symbol:
+        return "", []
+    pieces = symbol.split("::")
+    return pieces[0], pieces[1:]
+
+
+def item_kind_for_name_within_crates(
+    name: str, root: Path, term: dict[str, Any]
+) -> str | None:
+    """Scan owning crates for a term's Rust declaration by terminal name."""
+    owning_crates: list[str] = []
+    owning_crates.extend(_string_list(term.get("crates", [])))
+    owning_crates.extend(_string_list(term.get("spec_crates", [])))
+    for owning_crate in owning_crates:
+        if not owning_crate:
+            continue
+        crate_root = _crate_root_path(root, owning_crate)
+        if crate_root is None:
+            continue
+        for source in crate_root.glob("src/**/*.rs"):
+            try:
+                declaration = source.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            kind = _item_kind_from_text(declaration, name)
+            if kind:
+                return RUST_KIND_LABELS[kind]
+    return None
+
+
+def _string_list(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [
+        value
+        for value in values
+        if isinstance(value, str) and value.strip()
+    ]
 
 
 def _source_candidates_for_item(crate_root: Path, module_path: list[str]) -> list[Path]:

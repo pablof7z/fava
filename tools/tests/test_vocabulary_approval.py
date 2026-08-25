@@ -746,6 +746,20 @@ class ServerTest(unittest.TestCase):
         'owner = "nostr"\n'
         'symbols = []\n'
         'crates = []\n'
+        '\n'
+        '[[term]]\n'
+        'name = "SimpleGroupStateEventKind"\n'
+        'source = "probe"\n'
+        'meaning = "Probe enum kind in local crate."\n'
+        'symbols = ["fava_probe::SimpleGroupStateEventKind"]\n'
+        'crates = ["fava-probe"]\n'
+        '\n'
+        '[[term]]\n'
+        'name = "SavedGroupListMaterializer"\n'
+        'source = "probe"\n'
+        'meaning = "Probe private struct in local crate."\n'
+        'symbols = []\n'
+        'crates = ["fava-probe"]\n'
     )
     _THROWAWAY_OWNER = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
@@ -757,6 +771,14 @@ class ServerTest(unittest.TestCase):
         internals.mkdir(parents=True)
         (internals / "vocabulary.toml").write_text(self._VOCAB, encoding="utf-8")
         (internals / "vocabulary-candidates.jsonl").write_text("", encoding="utf-8")
+
+        probe_crate = self._root / "crates" / "fava-probe" / "src"
+        probe_crate.mkdir(parents=True)
+        (probe_crate / "lib.rs").write_text(
+            "pub enum SimpleGroupStateEventKind {\n    Alpha,\n}\n"
+            "struct SavedGroupListMaterializer;\n",
+            encoding="utf-8",
+        )
 
         # Write the mock verifier and make it executable.
         self._verifier = self._root / "vocab-verify-mock"
@@ -860,6 +882,24 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(
             event["purpose"], "A signed Nostr event."
         )
+
+    def test_rooted_enum_is_discovered_from_symbol_path(self) -> None:
+        with self._get("/api/terms") as resp:
+            payload = json.loads(resp.read())
+        term = next(
+            t for t in payload["terms"] if t["name"] == "SimpleGroupStateEventKind"
+        )
+        self.assertEqual(term["rust_item"], "fava_probe::SimpleGroupStateEventKind")
+        self.assertEqual(term["rust_item_kind"], "Enum")
+
+    def test_rooted_private_struct_is_discovered_by_owning_crate(self) -> None:
+        with self._get("/api/terms") as resp:
+            payload = json.loads(resp.read())
+        term = next(
+            t for t in payload["terms"] if t["name"] == "SavedGroupListMaterializer"
+        )
+        self.assertEqual(term["rust_item"], "SavedGroupListMaterializer")
+        self.assertEqual(term["rust_item_kind"], "Struct")
 
     def test_wrong_path_returns_404(self) -> None:
         import urllib.error
