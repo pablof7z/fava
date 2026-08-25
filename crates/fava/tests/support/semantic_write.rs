@@ -459,20 +459,12 @@ pub fn relay_session() -> RelaySessionKey {
     }
 }
 
-pub struct TestRelayOccurrence {
-    session: RelaySessionKey,
-    observed_at: Timestamp,
+pub fn relay_occurrence() -> (RelaySessionKey, Timestamp) {
+    (relay_session(), Timestamp::from(1))
 }
 
-pub fn relay_occurrence() -> TestRelayOccurrence {
-    TestRelayOccurrence {
-        session: relay_session(),
-        observed_at: Timestamp::from(1),
-    }
-}
-
-pub fn relay_event(event: Event, occurrence: TestRelayOccurrence) -> RelayEvent {
-    RelayEvent::new(event, occurrence.session, occurrence.observed_at)
+pub fn relay_event(event: Event, occurrence: (RelaySessionKey, Timestamp)) -> RelayEvent {
+    RelayEvent::new(event, occurrence.0, occurrence.1)
 }
 
 pub fn relay_url() -> RelayUrl {
