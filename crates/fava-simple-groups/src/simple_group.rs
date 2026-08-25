@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fmt;
 
 use fava_query::{Query, QueryError, SingleLetterTag};
 use fava_state::RelayUrl;
@@ -13,8 +14,28 @@ pub struct SimpleGroup {
     relays: Vec<RelayUrl>,
 }
 
+/// A caller-attributable refusal to construct a [`SimpleGroup`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SimpleGroupConstructionError {
+    /// The supplied group id is exactly empty.
+    EmptyId,
+    /// The supplied relay vector is empty.
+    EmptyRelays,
+}
+
+impl fmt::Display for SimpleGroupConstructionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyId => formatter.write_str("simple group id must not be empty"),
+            Self::EmptyRelays => formatter.write_str("simple group relays must not be empty"),
+        }
+    }
+}
+
+impl std::error::Error for SimpleGroupConstructionError {}
+
 impl SimpleGroup {
-    /// Construct from one required relay and a finite owned remainder.
+    /// Construct from a non-empty id and finite non-empty owned relay vector.
     ///
     /// Later duplicate relay identities collapse while first-occurrence order
     /// is preserved. The concrete tail makes construction finite without a
@@ -27,46 +48,61 @@ impl SimpleGroup {
     ///
     /// let first = RelayUrl::parse("wss://a.example")?;
     /// let second = RelayUrl::parse("wss://b.example")?;
-    /// let group = SimpleGroup::from_relays("photos", first, vec![second]);
+    /// let group = SimpleGroup::from_relays("photos", vec![first, second])?;
     /// assert_eq!(group.relays().count(), 2);
-    /// # Ok::<(), nostr::error::Error>(())
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
-    /// Empty construction is impossible because the first relay is required.
-    ///
-    /// ```compile_fail
-    /// use fava_simple_groups::SimpleGroup;
-    /// use fava_state::RelayUrl;
-    ///
-    /// let no_relays: Vec<RelayUrl> = Vec::new();
-    /// let _ = SimpleGroup::from_relays("photos", no_relays);
-    /// ```
-    ///
-    /// Arbitrary iterators are not accepted as the finite tail.
+    /// Arbitrary iterators are not accepted as the finite relay input.
     ///
     /// ```compile_fail
     /// use fava_simple_groups::SimpleGroup;
     /// use fava_state::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
-    /// let _ = SimpleGroup::from_relays("photos", relay.clone(), std::iter::repeat(relay));
+    /// let _ = SimpleGroup::from_relays("photos", std::iter::repeat(relay));
     /// ```
-    #[must_use]
-    pub fn from_relays(id: impl Into<String>, first: RelayUrl, rest: Vec<RelayUrl>) -> Self {
+    ///
+    /// The superseded head-plus-tail signature is not retained.
+    ///
+    /// ```compile_fail
+    /// use fava_simple_groups::SimpleGroup;
+    /// use fava_state::RelayUrl;
+    ///
+    /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
+    /// let _ = SimpleGroup::from_relays("photos", relay.clone(), vec![relay]);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimpleGroupConstructionError::EmptyId`] when `id` is exactly
+    /// empty, or [`SimpleGroupConstructionError::EmptyRelays`] when `relays`
+    /// is empty.
+    pub fn from_relays(
+        id: impl Into<String>,
+        relays: Vec<RelayUrl>,
+    ) -> Result<Self, SimpleGroupConstructionError> {
+        let id = id.into();
+        if id.is_empty() {
+            return Err(SimpleGroupConstructionError::EmptyId);
+        }
+        if relays.is_empty() {
+            return Err(SimpleGroupConstructionError::EmptyRelays);
+        }
         let mut seen = BTreeSet::new();
-        let mut relays = Vec::with_capacity(rest.len().saturating_add(1));
-        for relay in std::iter::once(first).chain(rest) {
+        let mut normalized_relays = Vec::with_capacity(relays.len());
+        for relay in relays {
             if seen.insert(relay.clone()) {
-                relays.push(relay);
+                normalized_relays.push(relay);
             }
         }
-        Self {
-            id: id.into(),
-            relays,
-        }
+        Ok(Self {
+            id,
+            relays: normalized_relays,
+        })
     }
 
-    /// Borrow the opaque id exactly as supplied.
+    /// Borrow the non-empty opaque id exactly as supplied.
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id

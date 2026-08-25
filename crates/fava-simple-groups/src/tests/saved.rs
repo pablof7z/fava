@@ -175,7 +175,8 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
     let source = source(&keys);
     let relay_a = RelayUrl::parse("wss://a.example").unwrap();
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
-    let group = SimpleGroup::from_relays("photos", relay_a.clone(), vec![relay_b.clone()]);
+    let group = SimpleGroup::from_relays("photos", vec![relay_a.clone(), relay_b.clone()])
+        .expect("non-empty group");
     let materializer = saved_group_list_materializer();
 
     let renamed = materialize(
@@ -273,9 +274,9 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
 fn materializer_supports_only_its_private_edits() {
     let group = SimpleGroup::from_relays(
         "photos",
-        RelayUrl::parse("wss://a.example").expect("relay"),
-        Vec::new(),
-    );
+        vec![RelayUrl::parse("wss://a.example").expect("relay")],
+    )
+    .expect("non-empty group");
     let edit = save_simple_group(&group, None).unwrap();
     let materializer = saved_group_list_materializer();
     assert_eq!(materializer.kind(), Kind::from_u16(10_009));
