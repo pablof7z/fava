@@ -120,6 +120,88 @@ async fn first_value_edit_publishes_through_public_fava() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
+    let keys = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
+    let signer = Arc::new(BlockingSigner::new(keys.public_key()));
+    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let fava = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .materializer(Arc::clone(&materializer))
+    .build()
+    .expect("semantic publication assembly");
+
+    let first_edit =
+        ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("first bounded edit");
+    let second_edit =
+        ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).expect("distinct bounded edit");
+    let first = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("first route validates")
+        .publish(first_edit)
+        .expect("first edit accepts");
+    wait_for_signer(&signer, 1).await;
+    let generation_one = first.receipt().expect("first receipt");
+
+    let second = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("second route validates")
+        .publish(second_edit)
+        .expect("second edit composes at the occupied coordinate");
+    let generation_two = wait_for_materialization(&fava, second.receipt_id(), 2).await;
+    wait_for_signer(&signer, 2).await;
+
+    assert_eq!(second.write_id(), first.write_id());
+    assert_eq!(second.receipt_id(), first.receipt_id());
+    assert_eq!(store.len().expect("store readable"), 1);
+    let EventValue::Unsigned(composed) = &generation_two.current.event else {
+        panic!("blocking signer keeps the composed generation unsigned");
+    };
+    assert_eq!(composed.content, "edit|edit");
+    assert_eq!(
+        generation_two
+            .current
+            .publication
+            .retired_materializations
+            .len(),
+        1
+    );
+    assert_eq!(
+        generation_two.current.publication.retired_materializations[0],
+        (
+            MaterializationId::from_u64(1),
+            generation_one.current.id(),
+            None,
+            None,
+        )
+    );
+    assert!(
+        store
+            .record_signer_refusal(
+                first.write_id(),
+                first.receipt_id(),
+                MaterializationId::from_u64(1),
+                generation_one.current.id(),
+                "late generation-one refusal".to_owned(),
+            )
+            .is_err(),
+        "retired signer completion mutated the composed generation"
+    );
+    assert_eq!(
+        first
+            .receipt()
+            .expect("current receipt after stale completion"),
+        generation_two
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn materializer_selection_bounds_refuse_before_custody() {
     let keys = Keys::generate();
 

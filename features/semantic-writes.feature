@@ -24,6 +24,14 @@ Feature: Semantic replaceable-event writes
     When that completion reaches the write store after a successor is current
     Then the completion remains attributable and cannot change current receipt or event state
 
+  # fava:rust=fava/semantic_write_publication#distinct_unsigned_edits_compose_under_one_exact_operation
+  Scenario: same-coordinate unsigned composition
+    Given Alice has one accepted replaceable edit awaiting signature
+    When Alice publishes a distinct edit at the same coordinate
+    Then the same write and receipt identify the ordered composed materialization
+    And the materialization generation advances exactly once
+    And a signer completion for the retired generation is inert
+
   # fava:rust=fava/semantic_write_capabilities#nip02_passes_public_semantic_write_corpus
   Scenario: opposing operations
     Given a protocol capability has produced a bounded semantic edit
