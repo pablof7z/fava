@@ -62,6 +62,8 @@
   .row { display: flex; gap: 10px; align-items: center; }
   .error { color: #f87171; font-size: 12px; }
   #problems { color: #f87171; font-size: 12px; margin-bottom: 12px; white-space: pre-wrap; }
+  #review-paused { color: #fbbf24; border: 1px solid #6b4f20; background: #211a0e;
+                   border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
 </style>
 </head>
 <body>
@@ -73,12 +75,14 @@
   <span class="counts" id="counts"></span>
 </header>
 <main>
+  <div id="review-paused">Signing paused. The interface review is being rebuilt to lead with every field, variant, and method in readable form.</div>
   <div id="problems"></div>
   <div id="terms"></div>
 </main>
 <script>
 const OWNER = "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52";
 const KIND = 9999;
+const REVIEW_PAUSED = true;
 let terms = [];
 let signerReady = false;
 const review = new URLSearchParams(window.location.search);
@@ -313,9 +317,9 @@ function render() {
     actions.className = "summary-actions";
     const button = document.createElement("button");
     const signable = !["blocked", "invalid", "missing", "misfiled"].includes(term.status);
-    button.textContent = term.status === "approved" ? "Re-sign" :
-      signable ? "Sign approval" : "Cannot sign";
-    button.disabled = !signerReady || !signable;
+    button.textContent = REVIEW_PAUSED ? "Signing paused" :
+      term.status === "approved" ? "Re-sign" : signable ? "Sign approval" : "Cannot sign";
+    button.disabled = REVIEW_PAUSED || !signerReady || !signable;
     const status = document.createElement("span");
     status.className = "error";
     button.addEventListener("click", async () => {
