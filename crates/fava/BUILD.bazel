@@ -476,10 +476,7 @@ rust_test(
 
 rust_test(
     name = "simple_groups",
-    srcs = [
-        "tests/simple_groups.rs",
-        "tests/simple_groups/saved.rs",
-    ],
+    srcs = ["tests/simple_groups.rs"],
     crate_name = "simple_groups",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
