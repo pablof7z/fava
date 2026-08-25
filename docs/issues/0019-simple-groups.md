@@ -13,16 +13,16 @@ for the records it served.
 
 - Content queries add exact lowercase `h`, request the complete host set, and
   retain `AnyLocal` authority so local write-store events stay visible.
-- Record queries add exact lowercase `d`, select kinds 39000 through 39005,
-  and use `OnlyRelays` authority for the configured host set.
-- `SimpleGroupSnapshot` deduplicates content by event id while retaining every
-  actual `RelayEvidence` observation.
-- Each host's newest valid complete record is selected independently by Nostr
-  timestamp and event id.
+- Record access returns one query per host; each adds exact lowercase `d`,
+  selects kinds 39000 through 39005, and uses exact-host `OnlyRelays` authority.
+- Ordinary query evaluation deduplicates content by event id while retaining
+  every actual exact-session relay occurrence.
+- Each host's newest valid complete record is selected by ordinary query
+  evaluation and decoded by a typed one-event parser.
 - Disagreement compares complete optional per-host records. An unobserved host
   supplies no positive record and makes no absence or completeness claim.
-- `SimpleGroupSnapshot::at` applies an explicit application host choice; no
-  helper lets one relay speak for another.
+- The application keeps the explicit host/query association; no helper lets
+  one relay speak for another.
 
 ## Query and publication composition
 
@@ -70,8 +70,7 @@ discovery inputs have explicit bounds or typed refusal.
 
 The capability owns exactly these public nominal values:
 
-- `SimpleGroup`, `SimpleGroupError`, `SimpleGroupRecords`,
-  `SimpleGroupSnapshot`, and `SimpleGroups`.
+- `SimpleGroup`, `SimpleGroupError`, `SimpleGroupRecords`, and `SimpleGroups`.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupParticipants`, and `SimpleGroupPins`.
 - `PinnedItem`, `SavedSimpleGroup`, and `SavedRelay`.
@@ -89,7 +88,7 @@ receipt value is approved.
 2. The capability owns no engine, signer, router, store, publisher, transport,
    runtime, observation, publication, delivery, cancellation, or receipt
    lifecycle.
-3. Repeated preparation, query, record, projection, parser, discovery, and edit
+3. Repeated preparation, query, record, parser, discovery, and edit
    helpers retain no hidden mutable state or provider handle.
 4. Universal Fava owners have no production capability dependency, NIP-29
    constant branch, or simple-group-id semantic branch. Generic kind and tag

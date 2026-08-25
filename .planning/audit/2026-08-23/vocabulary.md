@@ -841,3 +841,4 @@ prose. This is no longer a theoretical hazard: `collect_spec_vocabulary`
 impossible to write an architecture finding whose id or falsifier mentions a
 `fava-` concept without breaking CI. Severity for `vocab-planning-md-is-authority`
 should be raised from minor to **major** on this evidence.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

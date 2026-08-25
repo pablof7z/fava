@@ -388,3 +388,4 @@ was to stop fabricating absence. Two owners, one disputed transition.
 Neither agent was willing to overrule the other, which is correct. Resolve in
 Phase 07.8 or 07.9 with a falsifier that states which outcome WRITE-027 requires
 when every router refuses but the chain itself is healthy.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

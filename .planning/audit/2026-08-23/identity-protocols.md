@@ -621,3 +621,4 @@ async fn group_content_query_asks_exactly_the_selected_hosts_over_real_sessions(
    (`docs/spec/ARCHITECTURE.md:2355` assigns "resource joining and shutdown deadlines" to the
    non-existent `fava-runtime`). Left to the runtime-absence auditor; noted because it compounds
    `signer-no-deadline-no-timed-out`.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

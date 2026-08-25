@@ -41,18 +41,16 @@ specified in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
   cache and local-source retractions without unrelated query sweeps; keep the
   clock contract replaceable and test time advance through the public facade.
 
-**The event-cache mutation contract exposes an admission bypass:**
-- Issue: Public callers can construct `CachedEvent`, `RelayEvidence`, and raw
-  `CacheMutation` values and call `EventCache::commit` directly. Signature
-  verification in the memory provider does not prove subscription attribution,
-  filter match, expiry/deletion processing, or genuine relay provenance.
+**The event-cache mutation contract requires trusted admitted input:**
+- Issue: Public providers can call `EventCache::commit` with raw
+  `EventStateMutation` values. `RelayEvent` construction validates event/session
+  identity but does not itself prove subscription attribution or filter match.
 - Files: `crates/fava-state/src/lib.rs`, `crates/fava-event-cache/src/lib.rs`,
   `crates/fava-event-cache-memory/src/lib.rs`, `crates/fava-ingest/src/lib.rs`
-- Impact: A consuming application or provider can create query-visible signed
-  state with fabricated relay evidence or bypass universal state consequences.
-- Fix approach: Make production mutation accept only the admitted/state-decision
-  value owned by `fava-ingest` and `fava-state`; keep arbitrary seeding in an
-  explicit testkit contract.
+- Impact: Custom cache providers remain responsible for exposing only state
+  admitted through their trusted assembly boundary.
+- Fix approach: Keep live admission owned by `fava-observe`; treat cache
+  retention as optional and do not use a cache write as live-admission proof.
 
 **Local-source contracts trust invariant-bearing provider output:**
 - Issue: `SourceSnapshot` lets a provider self-report `SourceKind`, revision,

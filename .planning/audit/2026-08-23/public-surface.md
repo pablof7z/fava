@@ -827,3 +827,4 @@ the finding.
    authorities do not actually contradict — the table is described as "concise".
 4. `apps/canary` is a separate Cargo workspace, so `tools/check_vocabulary.py` never scans
    its public symbols. Intentional (it is a downstream application) or a gate gap?
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.

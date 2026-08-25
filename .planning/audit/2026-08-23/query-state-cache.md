@@ -838,3 +838,4 @@ Does not compile today.
    Harmless for full-state snapshots, but the contract is silent, so a
    different provider could legally *lose* it instead. Needs a stated rule in
    `crates/fava-query/src/lib.rs:290`'s doc comment.
+> Historical audit record. Superseded by STATE-ARCH-1; not current implementation guidance.
