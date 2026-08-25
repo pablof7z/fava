@@ -41,10 +41,6 @@ pub use croissant_nip02::{
     CroissantNip02Options, CroissantNip02Outcome, run_croissant_nip02_scenario,
     verify_croissant_run_pair,
 };
-pub use croissant_simple_groups::{
-    CroissantSimpleGroupsOptions, CroissantSimpleGroupsOutcome,
-    run_croissant_simple_groups_scenario,
-};
 pub use croissant_simple_groups_evidence::verify_croissant_simple_groups_pair;
 pub use flows::{FlowOptions, run_flow_close_child, run_flows_scenario};
 pub use live::run_live_scenario;
@@ -135,6 +131,33 @@ impl From<nostr::error::Error> for CanaryError {
 
 /// Result type used by the canary.
 pub type CanaryResult<T> = Result<T, CanaryError>;
+
+/// Runs the controlled two-relay simple-groups scenario from CLI-owned inputs.
+///
+/// # Errors
+///
+/// Returns the scenario's attributed process, flow, cleanup, or evidence refusal.
+pub async fn run_croissant_simple_groups_scenario(
+    relay_binary: PathBuf,
+    source_checkout: PathBuf,
+    fava_build_attestation: PathBuf,
+    fava_build_source_manifest: PathBuf,
+    scenario_seed: String,
+    runs_directory: PathBuf,
+) -> CanaryResult<PathBuf> {
+    let outcome = croissant_simple_groups::run_croissant_simple_groups_scenario(
+        croissant_simple_groups::CroissantSimpleGroupsOptions {
+            relay_binary,
+            source_checkout,
+            fava_build_attestation,
+            fava_build_source_manifest,
+            scenario_seed,
+            runs_directory,
+        },
+    )
+    .await?;
+    Ok(outcome.run_directory)
+}
 
 /// One canary scenario known to this build.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
