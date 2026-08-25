@@ -11,7 +11,6 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from typing import Any
 
 _TOOLS = str(Path(__file__).parents[1])
 if _TOOLS not in sys.path:
@@ -301,14 +300,10 @@ class ApprovalPageTest(unittest.TestCase):
         self.assertNotIn("sign-all", self.html)
         self.assertNotIn("Sign all", self.html)
 
-    def test_single_term_signing_connects_without_a_pause(self) -> None:
-        self.assertNotIn("REVIEW_PAUSED", self.html)
-        self.assertNotIn("Signing paused", self.html)
-        self.assertIn("connect().then(load)", self.html)
-        self.assertIn(
-            'document.getElementById("connect").addEventListener("click", connect)',
-            self.html,
-        )
+    def test_signing_pause_is_visible_and_cannot_connect_a_signer(self) -> None:
+        self.assertIn("const REVIEW_PAUSED = true", self.html)
+        self.assertNotIn("connect().then(load)", self.html)
+        self.assertIn("load();", self.html)
 
     def test_governance_and_machine_sections_are_secondary_details(self) -> None:
         self.assertIn("function splitReviewMarkdown(markdown)", self.html)
@@ -1095,7 +1090,7 @@ class ServerTest(unittest.TestCase):
             f"http://127.0.0.1:{self._port}{path}"
         )
 
-    def _post(self, path: str, body: Any) -> tuple[int, dict]:
+    def _post(self, path: str, body: dict) -> tuple[int, dict]:
         import urllib.error
         import urllib.request
         data = json.dumps(body).encode("utf-8")
@@ -1180,21 +1175,10 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 404)
         ctx.exception.close()
 
-    def test_single_term_signing_endpoint_accepts_and_persists_exact_event(self) -> None:
+    def test_signing_endpoint_is_hard_paused_without_writing(self) -> None:
         status, body = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status, 200, body)
-        self.assertEqual(body["stored"], "Event")
-        path = self._root / "docs" / "internals" / "approvals.jsonl"
-        self.assertTrue(path.exists())
-        stored = json.loads(path.read_text(encoding="utf-8").strip())
-        self.assertEqual(stored["id"], THROWAWAY_EVENT["id"])
-
-    def test_bulk_approval_body_is_rejected_without_writing(self) -> None:
-        status, body = self._post(
-            "/api/approvals", [THROWAWAY_EVENT, THROWAWAY_EVENT]
-        )
-        self.assertEqual(status, 400)
-        self.assertIn("one event object", body["error"])
+        self.assertEqual(status, 423)
+        self.assertIn("independent acceptance", body["error"])
         path = self._root / "docs" / "internals" / "approvals.jsonl"
         self.assertFalse(path.exists())
 

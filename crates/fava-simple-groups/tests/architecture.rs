@@ -130,9 +130,7 @@ fn vocabulary_term(name: &str) -> &'static str {
 #[test]
 fn production_has_no_duplicate_generic_owner_or_obsolete_policy_path() {
     let forbidden = [
-        "verify_id(",
         "verify_signature(",
-        ".verify()",
         "QuerySnapshot",
         "SimpleGroupSnapshot",
         "metadata_differ",

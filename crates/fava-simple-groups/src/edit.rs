@@ -289,9 +289,7 @@ impl ReplaceableEventMaterializer for SavedGroupListMaterializer {
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         let (operation, id, relays, display_name) = decode_edit(edit)?;
-        let (content, source_tags) = source.map_or(("", &[][..]), |event| {
-            (event.content.as_str(), event.tags.as_slice())
-        });
+        let (content, source_tags) = qualified_source(author, source, created_at)?;
         let tags = apply(
             source_tags,
             operation,
@@ -299,9 +297,14 @@ impl ReplaceableEventMaterializer for SavedGroupListMaterializer {
             &relays,
             display_name.as_deref(),
         )?;
-        EventBuilder::from_parts(author, saved_kind(), created_at, tags, content.to_owned())
-            .build()
-            .map_err(WriteIntentError::from)
+        let event =
+            EventBuilder::from_parts(author, saved_kind(), created_at, tags, content.to_owned())
+                .build()
+                .map_err(WriteIntentError::from)?;
+        event
+            .verify_id()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;
+        Ok(event)
     }
 }
 
@@ -313,8 +316,7 @@ fn qualified_source(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    crate::records::validate_value_structure(source)
-        .map_err(|error| simple_group_refusal(&error))?;
+    validate_source_structure(source)?;
     match source {
         EventValue::Signed(event) => event
             .verify()
@@ -340,9 +342,71 @@ fn qualified_source(
     Ok((content, source.tags()))
 }
 
-fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {
-    match change {
-        Change::SaveSimpleGroup { id, hosts, name } => apply_simple_group(
+fn validate_source_structure(source: &EventValue) -> Result<(), WriteIntentError> {
+    const MAX_TAGS: usize = 2_000;
+    const MAX_BYTES: usize = 131_072;
+    const MAX_TAG_VALUES: usize = 256;
+    const MAX_VALUE_BYTES: usize = 4_096;
+
+    let content = match source {
+        EventValue::Unsigned(event) => event.content.as_str(),
+        EventValue::Signed(event) => event.content.as_str(),
+    };
+    if content.len() > MAX_BYTES {
+        return Err(WriteIntentError::TooLarge {
+            bytes: content.len().min(MAX_BYTES + 1),
+            maximum: MAX_BYTES,
+        });
+    }
+    if source.tags().len() > MAX_TAGS {
+        return Err(WriteIntentError::TooManyTags {
+            actual: source.tags().len().min(MAX_TAGS + 1),
+            maximum: MAX_TAGS,
+        });
+    }
+    let mut bytes = content.len();
+    for tag in source.tags() {
+        if tag.as_slice().len() > MAX_TAG_VALUES {
+            return Err(codec_refusal(
+                "saved-list source tag value count exceeds bound",
+            ));
+        }
+        for value in tag.as_slice() {
+            if value.len() > MAX_VALUE_BYTES {
+                return Err(WriteIntentError::TooLarge {
+                    bytes: value.len(),
+                    maximum: MAX_VALUE_BYTES,
+                });
+            }
+            bytes = bytes.checked_add(value.len().saturating_add(1)).ok_or(
+                WriteIntentError::TooLarge {
+                    bytes: MAX_BYTES + 1,
+                    maximum: MAX_BYTES,
+                },
+            )?;
+            if bytes > MAX_BYTES {
+                return Err(WriteIntentError::TooLarge {
+                    bytes: bytes.min(MAX_BYTES + 1),
+                    maximum: MAX_BYTES,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply(
+    source: &[Tag],
+    operation: u8,
+    id: &str,
+    relays: &[RelayUrl],
+    display_name: Option<&str>,
+) -> Result<Vec<Tag>, WriteIntentError> {
+    match operation {
+        SAVE_SIMPLE_GROUP | REMOVE_SIMPLE_GROUP | RENAME_SIMPLE_GROUP => {
+            apply_simple_group(source, id, relays, operation, display_name)
+        }
+        SAVE_RELAY => apply_relay(
             source,
             relays
                 .first()
@@ -374,7 +438,8 @@ fn apply_simple_group(
     let mut found = std::collections::BTreeSet::new();
     let mut tags = Vec::with_capacity(source.len().saturating_add(relays.len()));
     for tag in source {
-        let Some(host) = simple_group_target(tag, id).filter(|host| selected.contains(host)) else {
+        let Some(relay) = simple_group_target(tag, id).filter(|relay| selected.contains(relay))
+        else {
             tags.push(tag.clone());
             continue;
         };
@@ -461,7 +526,7 @@ fn renamed_tag(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     Tag::parse(values).map_err(|error| codec_refusal(&error.to_string()))
 }
 
-fn simple_group_row(
+fn simple_group_tag(
     id: &str,
     host: &RelayUrl,
     name: Option<&str>,
