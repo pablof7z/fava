@@ -174,3 +174,192 @@ The crate's normal dependencies are exactly `fava-query`, `fava-state`, and
 transport, runtime, observation, delivery, cancellation, or receipt state.
 Universal Fava owners contain no NIP-29 kind switch, group-id branch, or
 production dependency on this capability.
+
+## Complete public API inventory
+
+Generated from rustdoc with `python3 tools/crate_readme_api.py update <crate>`.
+Descriptions are hand-written and preserved across updates. Re-exports appear
+at their exported path and are classified by the re-exported item's kind.
+
+<!-- BEGIN crate-readme-api inventory -->
+| Kind | Item | Description |
+| --- | --- | --- |
+| Module | `fava_simple_groups` |  |
+| Struct | `fava_simple_groups::Group` |  |
+| Method | `fava_simple_groups::Group::edit_metadata` |  |
+| Method | `fava_simple_groups::Group::events` |  |
+| Method | `fava_simple_groups::Group::hosts` |  |
+| Method | `fava_simple_groups::Group::id` |  |
+| Method | `fava_simple_groups::Group::on` |  |
+| Method | `fava_simple_groups::Group::prepare` |  |
+| Method | `fava_simple_groups::Group::project` |  |
+| Method | `fava_simple_groups::Group::records` |  |
+| Method | `fava_simple_groups::Group::set_pins` |  |
+| Struct | `fava_simple_groups::GroupAdmins` |  |
+| Method | `fava_simple_groups::GroupAdmins::admins` |  |
+| Method | `fava_simple_groups::GroupAdmins::author` |  |
+| Method | `fava_simple_groups::GroupAdmins::from_event` |  |
+| Method | `fava_simple_groups::GroupAdmins::id` |  |
+| Enum | `fava_simple_groups::GroupError` |  |
+| Enum variant | `fava_simple_groups::GroupError::AmbiguousRecordField` |  |
+| Public field | `fava_simple_groups::GroupError::AmbiguousRecordField::0` |  |
+| Enum variant | `fava_simple_groups::GroupError::ConflictingGroupContext` |  |
+| Enum variant | `fava_simple_groups::GroupError::ConflictingRecordId` |  |
+| Enum variant | `fava_simple_groups::GroupError::DuplicateGroupContext` |  |
+| Enum variant | `fava_simple_groups::GroupError::DuplicateHost` |  |
+| Public field | `fava_simple_groups::GroupError::DuplicateHost::relay` |  |
+| Enum variant | `fava_simple_groups::GroupError::DuplicateRecordId` |  |
+| Enum variant | `fava_simple_groups::GroupError::DuplicateRecordRow` |  |
+| Public field | `fava_simple_groups::GroupError::DuplicateRecordRow::tag_index` |  |
+| Enum variant | `fava_simple_groups::GroupError::EmptyGroupContext` |  |
+| Enum variant | `fava_simple_groups::GroupError::EmptyHosts` |  |
+| Enum variant | `fava_simple_groups::GroupError::EmptyId` |  |
+| Enum variant | `fava_simple_groups::GroupError::EmptyRecordId` |  |
+| Enum variant | `fava_simple_groups::GroupError::Event` |  |
+| Public field | `fava_simple_groups::GroupError::Event::0` |  |
+| Enum variant | `fava_simple_groups::GroupError::GroupContextTooLong` |  |
+| Public field | `fava_simple_groups::GroupError::GroupContextTooLong::bytes` |  |
+| Public field | `fava_simple_groups::GroupError::GroupContextTooLong::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::GroupIdTooLong` |  |
+| Public field | `fava_simple_groups::GroupError::GroupIdTooLong::bytes` |  |
+| Public field | `fava_simple_groups::GroupError::GroupIdTooLong::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::InvalidHost` |  |
+| Public field | `fava_simple_groups::GroupError::InvalidHost::0` |  |
+| Enum variant | `fava_simple_groups::GroupError::InvalidRecordId` |  |
+| Enum variant | `fava_simple_groups::GroupError::InvalidRecordSignature` |  |
+| Enum variant | `fava_simple_groups::GroupError::MalformedRecordRow` |  |
+| Public field | `fava_simple_groups::GroupError::MalformedRecordRow::reason` |  |
+| Public field | `fava_simple_groups::GroupError::MalformedRecordRow::tag_index` |  |
+| Enum variant | `fava_simple_groups::GroupError::MissingGroupContext` |  |
+| Enum variant | `fava_simple_groups::GroupError::MissingRecordId` |  |
+| Enum variant | `fava_simple_groups::GroupError::Query` |  |
+| Public field | `fava_simple_groups::GroupError::Query::0` |  |
+| Enum variant | `fava_simple_groups::GroupError::RecordTooLarge` |  |
+| Public field | `fava_simple_groups::GroupError::RecordTooLarge::bytes` |  |
+| Public field | `fava_simple_groups::GroupError::RecordTooLarge::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::RecordValueTooLong` |  |
+| Public field | `fava_simple_groups::GroupError::RecordValueTooLong::bytes` |  |
+| Public field | `fava_simple_groups::GroupError::RecordValueTooLong::maximum` |  |
+| Public field | `fava_simple_groups::GroupError::RecordValueTooLong::tag_index` |  |
+| Public field | `fava_simple_groups::GroupError::RecordValueTooLong::value_index` |  |
+| Enum variant | `fava_simple_groups::GroupError::TooManyContextTags` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyContextTags::actual` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyContextTags::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::TooManyDiscoveryItems` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyDiscoveryItems::actual` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyDiscoveryItems::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::TooManyHosts` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyHosts::actual` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyHosts::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::TooManyRecordTagValues` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyRecordTagValues::actual` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyRecordTagValues::maximum` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyRecordTagValues::tag_index` |  |
+| Enum variant | `fava_simple_groups::GroupError::TooManyRecordTags` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyRecordTags::actual` |  |
+| Public field | `fava_simple_groups::GroupError::TooManyRecordTags::maximum` |  |
+| Enum variant | `fava_simple_groups::GroupError::UnsignedRecord` |  |
+| Enum variant | `fava_simple_groups::GroupError::WrongRecordKind` |  |
+| Public field | `fava_simple_groups::GroupError::WrongRecordKind::actual` |  |
+| Public field | `fava_simple_groups::GroupError::WrongRecordKind::expected` |  |
+| Method | `<fava_simple_groups::GroupError as core::fmt::Display>::fmt` |  |
+| Method | `<fava_simple_groups::GroupError as core::convert::From<fava_query::QueryError>>::from` |  |
+| Method | `<fava_simple_groups::GroupError as core::convert::From<fava_write::WriteIntentError>>::from` |  |
+| Method | `<fava_simple_groups::GroupError as core::convert::From<fava_write::builder::EventBuildError>>::from` |  |
+| Struct | `fava_simple_groups::GroupMembers` |  |
+| Method | `fava_simple_groups::GroupMembers::author` |  |
+| Method | `fava_simple_groups::GroupMembers::from_event` |  |
+| Method | `fava_simple_groups::GroupMembers::id` |  |
+| Method | `fava_simple_groups::GroupMembers::members` |  |
+| Struct | `fava_simple_groups::GroupMetadata` |  |
+| Method | `fava_simple_groups::GroupMetadata::about` |  |
+| Method | `fava_simple_groups::GroupMetadata::author` |  |
+| Method | `fava_simple_groups::GroupMetadata::banner` |  |
+| Method | `fava_simple_groups::GroupMetadata::children` |  |
+| Method | `fava_simple_groups::GroupMetadata::from_event` |  |
+| Method | `fava_simple_groups::GroupMetadata::has_livekit` |  |
+| Method | `fava_simple_groups::GroupMetadata::id` |  |
+| Method | `fava_simple_groups::GroupMetadata::is_closed` |  |
+| Method | `fava_simple_groups::GroupMetadata::is_hidden` |  |
+| Method | `fava_simple_groups::GroupMetadata::is_private` |  |
+| Method | `fava_simple_groups::GroupMetadata::is_restricted` |  |
+| Method | `fava_simple_groups::GroupMetadata::name` |  |
+| Method | `fava_simple_groups::GroupMetadata::parent` |  |
+| Method | `fava_simple_groups::GroupMetadata::picture` |  |
+| Method | `fava_simple_groups::GroupMetadata::supported_kinds` |  |
+| Struct | `fava_simple_groups::GroupParticipants` |  |
+| Method | `fava_simple_groups::GroupParticipants::author` |  |
+| Method | `fava_simple_groups::GroupParticipants::from_event` |  |
+| Method | `fava_simple_groups::GroupParticipants::id` |  |
+| Method | `fava_simple_groups::GroupParticipants::participants` |  |
+| Struct | `fava_simple_groups::GroupPins` |  |
+| Method | `fava_simple_groups::GroupPins::author` |  |
+| Method | `fava_simple_groups::GroupPins::from_event` |  |
+| Method | `fava_simple_groups::GroupPins::id` |  |
+| Method | `fava_simple_groups::GroupPins::items` |  |
+| Enum | `fava_simple_groups::GroupRecords` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Admins` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::All` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Members` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Metadata` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Participants` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Pins` |  |
+| Enum variant | `fava_simple_groups::GroupRecords::Roles` |  |
+| Method | `fava_simple_groups::GroupRecords::admins` |  |
+| Method | `fava_simple_groups::GroupRecords::all` |  |
+| Method | `fava_simple_groups::GroupRecords::members` |  |
+| Method | `fava_simple_groups::GroupRecords::metadata` |  |
+| Method | `fava_simple_groups::GroupRecords::participants` |  |
+| Method | `fava_simple_groups::GroupRecords::pins` |  |
+| Method | `fava_simple_groups::GroupRecords::roles` |  |
+| Struct | `fava_simple_groups::GroupRoles` |  |
+| Method | `fava_simple_groups::GroupRoles::author` |  |
+| Method | `fava_simple_groups::GroupRoles::from_event` |  |
+| Method | `fava_simple_groups::GroupRoles::id` |  |
+| Method | `fava_simple_groups::GroupRoles::roles` |  |
+| Struct | `fava_simple_groups::GroupSnapshot` |  |
+| Method | `fava_simple_groups::GroupSnapshot::admin_records` |  |
+| Method | `fava_simple_groups::GroupSnapshot::admins` |  |
+| Method | `fava_simple_groups::GroupSnapshot::admins_differ` |  |
+| Method | `fava_simple_groups::GroupSnapshot::at` |  |
+| Method | `fava_simple_groups::GroupSnapshot::events` |  |
+| Method | `fava_simple_groups::GroupSnapshot::hosts` |  |
+| Method | `fava_simple_groups::GroupSnapshot::member_records` |  |
+| Method | `fava_simple_groups::GroupSnapshot::members` |  |
+| Method | `fava_simple_groups::GroupSnapshot::members_differ` |  |
+| Method | `fava_simple_groups::GroupSnapshot::metadata` |  |
+| Method | `fava_simple_groups::GroupSnapshot::metadata_differ` |  |
+| Method | `fava_simple_groups::GroupSnapshot::participant_records` |  |
+| Method | `fava_simple_groups::GroupSnapshot::participants_differ` |  |
+| Method | `fava_simple_groups::GroupSnapshot::pin_records` |  |
+| Method | `fava_simple_groups::GroupSnapshot::pins_differ` |  |
+| Method | `fava_simple_groups::GroupSnapshot::role_records` |  |
+| Method | `fava_simple_groups::GroupSnapshot::roles_differ` |  |
+| Enum | `fava_simple_groups::PinnedItem` |  |
+| Enum variant | `fava_simple_groups::PinnedItem::Address` |  |
+| Public field | `fava_simple_groups::PinnedItem::Address::0` |  |
+| Enum variant | `fava_simple_groups::PinnedItem::Event` |  |
+| Public field | `fava_simple_groups::PinnedItem::Event::0` |  |
+| Struct | `fava_simple_groups::SavedGroup` |  |
+| Method | `fava_simple_groups::SavedGroup::author` |  |
+| Method | `fava_simple_groups::SavedGroup::from_event` |  |
+| Method | `fava_simple_groups::SavedGroup::id` |  |
+| Method | `fava_simple_groups::SavedGroup::name` |  |
+| Method | `fava_simple_groups::SavedGroup::relay` |  |
+| Struct | `fava_simple_groups::SavedRelay` |  |
+| Method | `fava_simple_groups::SavedRelay::author` |  |
+| Method | `fava_simple_groups::SavedRelay::from_event` |  |
+| Method | `fava_simple_groups::SavedRelay::relay` |  |
+| Struct | `fava_simple_groups::SimpleGroups` |  |
+| Method | `fava_simple_groups::SimpleGroups::groups_saved_by` |  |
+| Method | `fava_simple_groups::SimpleGroups::groups_where_admin` |  |
+| Method | `fava_simple_groups::SimpleGroups::groups_where_member` |  |
+| Method | `fava_simple_groups::SimpleGroups::materializer` |  |
+| Method | `fava_simple_groups::SimpleGroups::remove_group` |  |
+| Method | `fava_simple_groups::SimpleGroups::remove_relay` |  |
+| Method | `fava_simple_groups::SimpleGroups::rename_saved_group` |  |
+| Method | `fava_simple_groups::SimpleGroups::save_group` |  |
+| Method | `fava_simple_groups::SimpleGroups::save_relay` |  |
+| Method | `fava_simple_groups::SimpleGroups::saved_groups` |  |
+| Method | `fava_simple_groups::SimpleGroups::saved_relays` |  |
+<!-- END crate-readme-api inventory -->
