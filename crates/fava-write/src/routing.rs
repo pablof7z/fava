@@ -23,10 +23,30 @@ impl WriteRouting {
     /// until the normalized bound is exceeded, so an unbounded iterator cannot
     /// allocate an unbounded route.
     ///
+    /// # Arguments
+    ///
+    /// * `relays` - the relay sequence to publish to, in caller order
+    ///
     /// # Errors
     ///
     /// Returns [`WriteIntentError`] when no destination remains or more than
     /// 256 distinct relay identities are supplied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_write::WriteRouting;
+    /// use nostr::types::RelayUrl;
+    ///
+    /// let a = RelayUrl::parse("wss://relay.a").expect("valid relay URL");
+    /// let b = RelayUrl::parse("wss://relay.b").expect("valid relay URL");
+    ///
+    /// // Duplicates collapse, and the first-seen order is kept.
+    /// let routing = WriteRouting::explicit([a.clone(), b.clone(), a.clone()])
+    ///     .expect("non-empty route within bound");
+    ///
+    /// assert_eq!(routing, WriteRouting::Explicit(vec![a, b]));
+    /// ```
     pub fn explicit(relays: impl IntoIterator<Item = RelayUrl>) -> Result<Self, WriteIntentError> {
         let mut seen = BTreeSet::new();
         let mut ordered = Vec::new();

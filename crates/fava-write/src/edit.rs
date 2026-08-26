@@ -15,10 +15,34 @@ pub struct ReplaceableEventEdit {
 impl ReplaceableEventEdit {
     /// Construct one persistable opaque change to a replaceable coordinate.
     ///
+    /// # Arguments
+    ///
+    /// * `kind` - the replaceable or addressable kind the change targets
+    /// * `identifier` - the addressable `d` tag value; `None` for a plain
+    ///   replaceable kind, `Some` (including empty) for an addressable kind
+    /// * `change` - the opaque protocol-owned change bytes
+    ///
     /// # Errors
     ///
     /// Returns [`WriteIntentError`] when kind and identifier do not form a
     /// replaceable coordinate or a retained value exceeds its bound.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_write::{Kind, ReplaceableEventEdit};
+    ///
+    /// let edit = ReplaceableEventEdit::new(
+    ///     Kind::from_u16(30_023),
+    ///     Some("article".to_owned()),
+    ///     b"opaque change".to_vec(),
+    /// )
+    /// .expect("addressable kind with identifier is a valid coordinate");
+    ///
+    /// assert_eq!(edit.kind(), Kind::from_u16(30_023));
+    /// assert_eq!(edit.identifier(), Some("article"));
+    /// assert_eq!(edit.change(), b"opaque change");
+    /// ```
     pub fn new(
         kind: Kind,
         identifier: Option<String>,
@@ -55,6 +79,12 @@ impl ReplaceableEventEdit {
 
 impl WriteIntent {
     /// Validate one semantic edit, resolved author, and route before custody.
+    ///
+    /// # Arguments
+    ///
+    /// * `edit` - the already-validated protocol-owned change
+    /// * `author` - the author resolved for this edit, exactly once
+    /// * `routing` - the relay-routing mode to publish it under
     ///
     /// # Errors
     ///

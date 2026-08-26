@@ -87,6 +87,12 @@ impl RelayEvent {
 /// Returns `None` when any contribution carries another event id. Repeated
 /// delivery through one exact session keeps the earliest local observation
 /// time, so the output cardinality cannot exceed the input cardinality.
+///
+/// # Arguments
+///
+/// * `event_id` - the exact event id every contribution must share
+/// * `contributions` - the complete finite slice of relay contributions to
+///   aggregate
 #[must_use]
 pub fn relay_occurrences_for_event(
     event_id: EventId,
@@ -134,6 +140,48 @@ pub enum EventCoordinate {
 }
 
 /// Derive immutable, replaceable, or addressable event identity.
+///
+/// # Arguments
+///
+/// * `id` - the event's own id, used when `kind` is neither replaceable nor
+///   addressable
+/// * `author` - the event author
+/// * `kind` - the event kind, which decides which identity shape applies
+/// * `tags` - the event tags, searched for a `d` tag when `kind` is
+///   addressable
+///
+/// # Examples
+///
+/// ```
+/// use fava_state::{EventCoordinate, event_coordinate};
+/// use nostr::event::{EventId, Kind, Tag};
+/// use nostr::key::PublicKey;
+///
+/// let id = EventId::from_hex(
+///     "0000000000000000000000000000000000000000000000000000000000000000",
+/// )
+/// .expect("valid event id");
+/// let author = PublicKey::from_hex(
+///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+/// )
+/// .expect("valid hex public key");
+///
+/// // An ordinary kind keeps its own immutable event id.
+/// let note = event_coordinate(id, author, Kind::TextNote, &[]);
+/// assert_eq!(note, EventCoordinate::Event(id));
+///
+/// // An addressable kind resolves to author, kind, and its `d` tag value.
+/// let d_tag = Tag::parse(["d", "profile"]).expect("valid d tag");
+/// let addressable = event_coordinate(id, author, Kind::from_u16(30_023), &[d_tag]);
+/// assert_eq!(
+///     addressable,
+///     EventCoordinate::Replaceable {
+///         author,
+///         kind: Kind::from_u16(30_023),
+///         identifier: Some("profile".to_owned()),
+///     }
+/// );
+/// ```
 #[must_use]
 pub fn event_coordinate(
     id: EventId,
@@ -276,6 +324,12 @@ pub enum EventStateMutation {
 }
 
 /// Compute one ordered transition for a finite current contribution set.
+///
+/// # Arguments
+///
+/// * `current` - the finite set of contributions already admitted
+/// * `incoming` - the new contribution being evaluated against `current`
+/// * `now` - the time used to decide whether `incoming` is already expired
 #[must_use]
 pub fn mutations_for_event(
     current: &[RelayEvent],

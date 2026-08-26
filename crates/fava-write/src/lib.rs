@@ -77,6 +77,11 @@ pub struct WriteIntent {
 impl WriteIntent {
     /// Validate one unsigned event and its route before custody.
     ///
+    /// # Arguments
+    ///
+    /// * `event` - the unsigned event; its id is computed if absent
+    /// * `routing` - the relay-routing mode to publish it under
+    ///
     /// # Errors
     ///
     /// Returns [`WriteIntentError`] for an invalid, expired, or unroutable event.
@@ -104,6 +109,11 @@ impl WriteIntent {
     }
 
     /// Validate one signed event and its route before custody.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - the already-signed event to verify
+    /// * `routing` - the relay-routing mode to publish it under
     ///
     /// # Errors
     ///

@@ -26,6 +26,12 @@ pub trait Signer: Send + Sync {
     fn availability(&self) -> SignerAvailability;
 
     /// Sign one exact unsigned event unless its owner cancels the operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - the exact unsigned event to sign
+    /// * `cancel` - watched by the implementation; a `true` value cancels the
+    ///   operation before it returns a signature
     fn sign_event(
         self: Arc<Self>,
         event: UnsignedEvent,

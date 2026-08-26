@@ -35,6 +35,14 @@ pub trait ReplaceableEventMaterializer: Send + Sync {
     /// Implementations return only an unsigned event and receive no custody,
     /// signer, routing, publication, delivery, cache, or receipt authority.
     ///
+    /// # Arguments
+    ///
+    /// * `edit` - the opaque protocol-owned change to apply
+    /// * `author` - the accepted write's exact author
+    /// * `source` - the current qualified event for this coordinate, or
+    ///   `None` when the coordinate is protocol-defined empty state
+    /// * `created_at` - the accepted write's exact timestamp
+    ///
     /// # Errors
     ///
     /// Returns an existing typed write refusal when the opaque change or

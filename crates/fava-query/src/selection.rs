@@ -67,9 +67,33 @@ impl Query {
     /// Repeated calls for the same key union values. An empty iterator retains
     /// a present tag axis that intentionally matches nothing.
     ///
+    /// # Arguments
+    ///
+    /// * `key` - the case-sensitive single-letter tag key to constrain
+    /// * `values` - the exact values that satisfy this tag axis
+    ///
     /// # Errors
     ///
     /// Returns [`QueryError`] for empty relay sets or zero limits.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_query::{Query, SingleLetterTag};
+    ///
+    /// let e = SingleLetterTag::from_char('e').expect("valid single-letter tag key");
+    /// let query = Query::events()
+    ///     .tag_values(e, ["referenced-event-id"])
+    ///     .expect("non-empty bounded values");
+    ///
+    /// assert!(
+    ///     query
+    ///         .selection()
+    ///         .tag_values
+    ///         .get(&e)
+    ///         .is_some_and(|values| values.contains("referenced-event-id"))
+    /// );
+    /// ```
     pub fn tag_values<I, S>(mut self, key: SingleLetterTag, values: I) -> Result<Self, QueryError>
     where
         I: IntoIterator<Item = S>,
@@ -87,6 +111,11 @@ impl Query {
     /// An absent axis becomes the supplied set. A present axis becomes its
     /// intersection with the supplied set. A disjoint intersection remains a
     /// present empty axis and therefore intentionally matches nothing.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - the case-sensitive single-letter tag key to narrow
+    /// * `values` - the values to intersect the existing axis with
     ///
     /// # Errors
     ///

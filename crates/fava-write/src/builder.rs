@@ -7,7 +7,38 @@ use crate::MAX_EVENT_BYTES;
 
 const MAX_TAGS: usize = 2_000;
 
-/// Generic checked construction of one complete unsigned Nostr event.
+/// Incrementally assembles one complete unsigned Nostr event.
+///
+/// Every field of a Nostr event feeds the same deterministic event id, so
+/// filling fields in through separate, order-dependent mutations is a common
+/// source of subtly wrong ids. `EventBuilder` starts from just an author and
+/// a kind, accepts timestamp, content, and tags through owned builder calls
+/// in any order, and only computes the id and checks the declared tag and
+/// byte bounds once, in [`EventBuilder::build`]. Reach for it when assembling
+/// an event from application-level fields; when every field is already known
+/// up front, such as re-encoding a previously decoded event, construct it
+/// directly with [`EventBuilder::from_parts`] instead.
+///
+/// # Examples
+///
+/// ```
+/// use fava_write::{EventBuilder, Kind, PublicKey};
+///
+/// let author = PublicKey::from_hex(
+///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+/// )
+/// .expect("valid hex public key");
+///
+/// let event = EventBuilder::new(author, Kind::TextNote)
+///     .content("gm")
+///     .build()
+///     .expect("event stays within declared bounds");
+///
+/// assert_eq!(event.pubkey, author);
+/// assert_eq!(event.kind, Kind::TextNote);
+/// assert_eq!(event.content, "gm");
+/// assert!(event.id.is_some());
+/// ```
 pub struct EventBuilder {
     author: PublicKey,
     kind: Kind,
@@ -24,6 +55,14 @@ impl EventBuilder {
     }
 
     /// Begin one event from exact raw Nostr parts without interpreting any field.
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the event's signing public key
+    /// * `kind` - the event kind
+    /// * `created_at` - the exact event timestamp, taken as-is
+    /// * `tags` - the exact event tags, taken in the supplied order
+    /// * `content` - the opaque event content
     #[must_use]
     pub fn from_parts(
         author: PublicKey,

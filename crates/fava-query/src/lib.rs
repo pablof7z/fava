@@ -100,6 +100,35 @@ pub enum QueryOrdering {
 }
 
 /// Declarative request for events.
+///
+/// A `Query` never runs by itself: it is the neutral, hashable value that
+/// describes what to ask for, from where, and under what result guarantees,
+/// separate from any provider that actually resolves it. Build one starting
+/// from [`Query::events`], narrow it with the literal selection axes on
+/// [`FilterSelection`] (authors, kinds, ids, tag values), then optionally
+/// steer acquisition and freshness before handing it to whichever component
+/// opens the observation.
+///
+/// # Examples
+///
+/// ```
+/// use fava_query::{Kind, PublicKey, Query};
+///
+/// let author = PublicKey::from_hex(
+///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+/// )
+/// .expect("valid hex public key");
+///
+/// let query = Query::events()
+///     .authors([author])
+///     .expect("bounded author set")
+///     .kinds([Kind::TextNote])
+///     .expect("bounded kind set")
+///     .limit(50)
+///     .expect("non-zero limit");
+///
+/// assert_eq!(query.result_limit().map(|limit| limit.get()), Some(50));
+/// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Query {
     /// Event selection.
@@ -361,6 +390,10 @@ pub struct OpenedQuerySource {
 /// Neutral contract implemented by independent local source providers.
 pub trait QuerySource: Send + Sync {
     /// Open one continuous local observation.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - the declarative request this source is asked to observe
     ///
     /// # Errors
     ///
