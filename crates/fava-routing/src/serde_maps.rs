@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use nostr::key::PublicKey;
 use nostr::types::RelayUrl;
-use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{CoverageState, PlannedRelay, RouteTarget};
@@ -28,7 +27,10 @@ fn decode_session(value: (RelayUrl, Option<PublicKey>)) -> RelaySessionKey {
 }
 
 pub(super) mod session {
-    use super::*;
+    use super::{
+        Deserialize, Deserializer, PublicKey, RelaySessionKey, RelayUrl, Serialize, Serializer,
+        decode_session, encode_session,
+    };
 
     pub(crate) fn serialize<S>(value: &RelaySessionKey, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -48,7 +50,12 @@ pub(super) mod session {
 pub(super) mod sessions {
     use std::collections::BTreeSet;
 
-    use super::*;
+    use serde::de::Error as _;
+
+    use super::{
+        Deserialize, Deserializer, PublicKey, RelaySessionKey, RelayUrl, Serialize, Serializer,
+        decode_session, encode_session,
+    };
 
     pub(crate) fn serialize<S>(
         value: &BTreeSet<RelaySessionKey>,
@@ -85,7 +92,12 @@ pub(super) mod sessions {
 }
 
 pub(super) mod destinations {
-    use super::*;
+    use serde::de::Error as _;
+
+    use super::{
+        BTreeMap, Deserialize, Deserializer, PlannedRelay, PublicKey, RelaySessionKey, RelayUrl,
+        Serialize, Serializer, decode_session, encode_session,
+    };
 
     pub(crate) fn serialize<S>(
         value: &BTreeMap<RelaySessionKey, PlannedRelay>,
@@ -123,7 +135,11 @@ pub(super) mod destinations {
 }
 
 pub(super) mod coverage {
-    use super::*;
+    use serde::de::Error as _;
+
+    use super::{
+        BTreeMap, CoverageState, Deserialize, Deserializer, RouteTarget, Serialize, Serializer,
+    };
 
     pub(crate) fn serialize<S>(
         value: &BTreeMap<RouteTarget, CoverageState>,

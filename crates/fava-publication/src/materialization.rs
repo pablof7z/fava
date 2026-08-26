@@ -78,8 +78,7 @@ impl OpenedSemanticSources {
                 SourceEvent::Local(local) if local.event.id() == Some(selected_id) => {
                     Some(local.event.clone())
                 }
-                SourceEvent::Local(_) => None,
-                SourceEvent::Relay(_) => None,
+                SourceEvent::Local(_) | SourceEvent::Relay(_) => None,
             })
         })
     }

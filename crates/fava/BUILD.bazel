@@ -544,7 +544,10 @@ rust_test(
 
 rust_test(
     name = "simple_groups",
-    srcs = ["tests/simple_groups.rs"],
+    srcs = [
+        "tests/simple_groups.rs",
+        "tests/support/semantic_write.rs",
+    ],
     crate_name = "simple_groups",
     edition = crate_edition(),
     aliases = aliases(normal_dev = True, proc_macro_dev = True),
@@ -554,9 +557,11 @@ rust_test(
         "//crates/fava-delivery-standard:lib",
         "//crates/fava-event-cache:lib",
         "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-publication:lib",
         "//crates/fava-publisher:lib",
         "//crates/fava-query-standard:lib",
         "//crates/fava-routing:lib",
+        "//crates/fava-session:lib",
         "//crates/fava-signer:lib",
         "//crates/fava-simple-groups:lib",
         "//crates/fava-state:lib",

@@ -83,6 +83,14 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .unwrap()
         .finalize(&keys)
         .unwrap();
+    store
+        .authorize_signing(
+            accepted.write_id,
+            accepted.receipt_id,
+            accepted.current.publication.materialization_id,
+            accepted.current.id(),
+        )
+        .unwrap();
     assert!(
         store
             .install_signed(
@@ -98,7 +106,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
     assert!(matches!(receipt.current.event, EventValue::Unsigned(_)));
     assert_eq!(
         receipt.current.publication.signature,
-        SignatureState::Unsigned
+        SignatureState::Authorized
     );
 
     let EventValue::Unsigned(unsigned) = receipt.current.event.clone() else {

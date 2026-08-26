@@ -61,6 +61,7 @@ fn is_known_field(field: &str) -> bool {
 ///
 /// Mirrors `vocabulary_approval.py::canonical_markdown`.  Returns `Err` if any
 /// field value has a wrong TOML type (fail-closed: no unrendered field survives).
+#[allow(clippy::too_many_lines)] // Mirrors one fail-closed canonical renderer exactly.
 fn canonical_markdown(term: &toml::Table, packet: &JsonValue) -> Result<String, String> {
     let name = term
         .get("name")
@@ -610,7 +611,7 @@ fn vocabulary_gate_requires_all_terms_approved() {
 
 // ─── Throwaway-key fixture tests (always pass) ────────────────────────────────
 
-fn review_packet(structure: JsonValue) -> JsonValue {
+fn review_packet(structure: &JsonValue) -> JsonValue {
     serde_json::json!({
         "interface": [],
         "review_problems": [],
@@ -654,7 +655,7 @@ fn canonical_markdown_includes_compiler_structure() {
         "public_api": [],
         "reexports": [],
     });
-    let got = canonical_markdown(&term, &review_packet(structure))
+    let got = canonical_markdown(&term, &review_packet(&structure))
         .expect("canonical_markdown must succeed");
     assert!(got.ends_with(
         "## Deterministic compiler-derived structure\n\n```json\n\
@@ -738,8 +739,8 @@ fn compiler_structure_drift_invalidates_prior_payload() {
         "reexports": [],
     });
     assert_ne!(
-        canonical_markdown(&term, &review_packet(prior)).unwrap(),
-        canonical_markdown(&term, &review_packet(changed)).unwrap()
+        canonical_markdown(&term, &review_packet(&prior)).unwrap(),
+        canonical_markdown(&term, &review_packet(&changed)).unwrap()
     );
 }
 

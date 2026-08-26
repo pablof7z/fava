@@ -21,10 +21,10 @@ impl SimpleGroupPins {
         let pins = tags
             .iter()
             .enumerate()
-            .filter_map(|(tag_index, tag)| {
+            .filter(|(_, tag)| {
                 matches!(tag.as_slice().first().map(String::as_str), Some("e" | "a"))
-                    .then(|| parse_pin(tag, tag_index))
             })
+            .map(|(tag_index, tag)| parse_pin(tag, tag_index))
             .collect();
         Ok(Self {
             id: id.to_owned(),

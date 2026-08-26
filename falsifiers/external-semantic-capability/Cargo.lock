@@ -412,6 +412,7 @@ dependencies = [
  "fava-state",
  "fava-write",
  "nostr",
+ "serde",
  "thiserror",
  "tokio",
 ]

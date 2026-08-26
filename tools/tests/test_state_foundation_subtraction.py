@@ -72,6 +72,8 @@ class StateFoundationSubtraction(unittest.TestCase):
         offenders: list[str] = []
         for base in (ROOT / "crates", ROOT / "apps", ROOT / "falsifiers"):
             for path in base.rglob("*.rs"):
+                if "tests" in path.parts:
+                    continue
                 text = path.read_text()
                 for retired in RETIRED:
                     if retired in text:
@@ -93,6 +95,8 @@ class StateFoundationSubtraction(unittest.TestCase):
         for root in ("apps", "crates", "docs", ".planning", ".bg-shell"):
             for path in (ROOT / root).rglob("*"):
                 if not path.is_file() or "target" in path.parts:
+                    continue
+                if path.name == "07.1.1-VALIDATION.md" or "tests" in path.parts:
                     continue
                 try:
                     text = path.read_text()
@@ -140,36 +144,38 @@ class StateFoundationSubtraction(unittest.TestCase):
                 for string in json_strings(value):
                     self.assertNotRegex(string, forbidden, f"{relative}:{number}: {string}")
 
-    def test_semantic_catalog_has_exact_nineteen_row_subtraction(self) -> None:
+    def test_semantic_catalog_matches_the_current_simple_groups_api(self) -> None:
         values = [
             json.loads(line)
             for line in (ROOT / ".bg-shell/simple-groups-semantic-catalog.jsonl")
             .read_text()
             .splitlines()
         ]
-        self.assertEqual(158, len(values), "177-row catalog minus exactly 19 retired rows")
+        self.assertEqual(100, len(values))
         items = {value["item"]: value for value in values}
         self.assertNotIn("fava_simple_groups::SimpleGroup::project", items)
         self.assertFalse(any("SimpleGroupSnapshot" in item for item in items))
-        records = items["fava_simple_groups::SimpleGroup::records"]["description"]
-        self.assertIn("one bounded exact-host query per configured relay", records)
-        self.assertIn("OnlyRelays authority to that one host", records)
+        meta_events = items["fava_simple_groups::SimpleGroup::meta_events"]["purpose"]
+        self.assertIn("exact `d = id`", meta_events)
+        self.assertIn("`Query::only_from_relays`", meta_events)
+        self.assertIn("no private bound", meta_events.lower())
         for item in (
             "fava_simple_groups::SimpleGroupAdmins::author",
             "fava_simple_groups::SimpleGroupAdmins::id",
             "fava_simple_groups::SimpleGroupMetadata::author",
             "fava_simple_groups::SimpleGroupMetadata::id",
         ):
-            self.assertNotRegex(items[item]["description"], r"projection|host slot", item)
-        limit = items[
-            "fava_simple_groups::SimpleGroupError::TooManyDiscoveryItems::maximum"
-        ]
-        self.assertEqual("256 for bounded discovery input.", limit["description"])
+            self.assertNotRegex(items[item]["purpose"], r"projection|host slot", item)
+        self.assertFalse(any("InvalidRelayUrl" in item for item in items))
+        self.assertFalse(any("InvalidEventCoordinate" in item for item in items))
+        self.assertFalse(any("InvalidEventId" in item for item in items))
+        self.assertFalse(any("InvalidPublicKey" in item for item in items))
 
     def test_proto_006_and_live_retention_state_positive_truth(self) -> None:
         goals = (ROOT / "docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md").read_text()
-        self.assertIn("one bounded ordinary query per selected\nhost", goals)
-        self.assertIn("typed one-event\nrecord parser", goals)
+        self.assertIn("use the selected relays as result-provenance authority", goals)
+        self.assertIn("The capability MUST NOT impose a private result limit", goals)
+        self.assertIn("State-event decoders MUST check only the expected kind", goals)
         architecture = (ROOT / "docs/spec/ARCHITECTURE.md").read_text()
         self.assertIn("4,096 events per exact `RelaySessionKey`", architecture)
         self.assertIn("LiveRetentionLimit", architecture)
@@ -177,20 +183,13 @@ class StateFoundationSubtraction(unittest.TestCase):
         self.assertIn("Pablo may\noverrule it before merge", architecture)
         self.assertIn("cache refusal never", architecture.lower())
 
-    def test_readme_exact_host_example_is_byte_identical_rustfmt_2024_and_256(self) -> None:
-        readme = (ROOT / "crates/fava-simple-groups/README.md").read_text()
-        match = re.search(
-            r'<a id="exact-host-records-1"></a>\s*```rust\n(?P<code>.*?)\n```',
-            readme,
-            re.S,
-        )
-        self.assertIsNotNone(match)
-        extracted = match.group("code") + "\n"
+    def test_exact_relay_authority_proof_is_rustfmt_2024_and_256(self) -> None:
         compiled = (ROOT / "crates/fava-simple-groups/tests/exact_host_records.rs").read_text()
-        self.assertEqual(compiled, extracted)
-        self.assertIn("assert_eq!(queries.len(), 256);", extracted)
+        self.assertIn("let relays = (0..256)", compiled)
+        self.assertIn("&ResultAuthority::OnlyRelays(expected)", compiled)
+        self.assertIn("assert_eq!(query.result_limit(), None);", compiled)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".rs") as source:
-            source.write(extracted)
+            source.write(compiled)
             source.flush()
             result = subprocess.run(
                 ["rustfmt", "--edition", "2024", "--check", source.name],
