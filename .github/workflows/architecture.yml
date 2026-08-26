@@ -70,11 +70,13 @@ jobs:
       - name: Install pinned public API extractor
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Test architectural vocabulary gate
-        run: python3 -m unittest tools/tests/test_vocabulary_check.py tools/tests/test_vocabulary_structure.py
+        run: python3 -m unittest tools/tests/test_vocabulary_check.py tools/tests/test_vocabulary_structure.py tools/tests/test_vocabulary_package.py
       - name: Test structural approval payload and UI
         run: python3 -m unittest tools.tests.test_vocabulary_approval.CanonicalMarkdownTest tools.tests.test_vocabulary_approval.ApprovalPageTest
       - name: Recompile signed vocabulary structure
         run: python3 tools/vocabulary_structure.py check
+      - name: Check canonical SimpleGroup signing package
+        run: python3 tools/vocabulary_package.py check
       # AGENTS.md: "Architectural vocabulary is closed by default." This gate is
       # red on purpose while the ownership remediation runs; the violation list
       # is the work queue, not a flake. Do not silence it by widening

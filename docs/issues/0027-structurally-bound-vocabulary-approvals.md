@@ -82,6 +82,22 @@ unsigned terms become `blocked`, every row names the drift, and the top-level
 payload reports `snapshot_inputs_current: false` even though signing is already
 hard-paused.
 
+The independently reviewed `fava-simple-groups` signing package has a second,
+repository-owned canonical boundary. `tools/vocabulary_package.py` sorts the 22
+exact term names by their UTF-8 bytes and serializes each exact canonical
+Markdown payload as:
+
+`u64be(name UTF-8 byte length) || name UTF-8 || u64be(Markdown UTF-8 byte length) || Markdown UTF-8`
+
+The package is the concatenation of those records with no prefix, suffix,
+separator, terminator, Unicode normalization, or newline conversion. The
+unsigned 64-bit big-endian lengths make both fields and every record boundary
+unambiguous. The checked-in manifest records the ordered term index and name,
+both field lengths, frame length, payload SHA-256, total byte length, and whole
+package SHA-256. CI regenerates the package and rejects any byte difference in
+the manifest; a stale compiler/documentation input snapshot is rejected before
+package construction.
+
 `docs/internals/approvals.jsonl` remains append-only. Introducing structural
 content intentionally makes existing text-only events stale without rewriting
 or deleting them. A new signature appends beside all earlier events.
@@ -108,12 +124,18 @@ or deleting them. A new signature appends beside all earlier events.
 - `SimpleGroupStateEventKind` binds Metadata→39000, Admins→39001,
   Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005 in the
   term purpose, enum description, individual variants, and conversion item.
+- Reordering input rows cannot change canonical package bytes; changing one
+  Markdown byte changes both its term hash and the package hash; ambiguous raw
+  concatenations remain distinct under length framing; any manifest byte drift
+  fails the package check.
 
 ## Validation
 
 - `python3 -m unittest tools.tests.test_vocabulary_structure tools.tests.test_vocabulary_approval`
 - `python3 -m unittest tools.tests.test_vocabulary_check tools.tests.test_crate_readme_api`
 - `python3 tools/vocabulary_structure.py check`
+- `python3 -m unittest tools.tests.test_vocabulary_package`
+- `python3 tools/vocabulary_package.py check`
 - `python3 tools/check_vocabulary.py`
 - `cargo test -p fava --test vocabulary_governance` excluding the intentionally
   red all-terms approval and independent terminal-name gates
