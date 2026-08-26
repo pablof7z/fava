@@ -1,0 +1,126 @@
+format_version = 1
+repository_id = "sg-72f32129e6de51a54c34d5109669cdce"
+normalization_version = 1
+roots = [
+    "crates/fava",
+    "crates/fava-bookmarks",
+    "crates/fava-delivery",
+    "crates/fava-delivery-standard",
+    "crates/fava-diagnostics",
+    "crates/fava-event-cache",
+    "crates/fava-event-cache-memory",
+    "crates/fava-ingest",
+    "crates/fava-nip02",
+    "crates/fava-nip65",
+    "crates/fava-observe",
+    "crates/fava-publication",
+    "crates/fava-publisher",
+    "crates/fava-publisher-nip01",
+    "crates/fava-query",
+    "crates/fava-query-standard",
+    "crates/fava-router-app-relays",
+    "crates/fava-router-fallback-relays",
+    "crates/fava-router-hints",
+    "crates/fava-router-outbox",
+    "crates/fava-router-testkit",
+    "crates/fava-routing",
+    "crates/fava-runtime",
+    "crates/fava-session",
+    "crates/fava-signer",
+    "crates/fava-signer-local",
+    "crates/fava-simple-groups",
+    "crates/fava-state",
+    "crates/fava-subscriptions",
+    "crates/fava-subscriptions-no-grouping",
+    "crates/fava-subscriptions-standard",
+    "crates/fava-subscriptions-testkit",
+    "crates/fava-transport",
+    "crates/fava-transport-testkit",
+    "crates/fava-transport-websocket",
+    "crates/fava-wire",
+    "crates/fava-write",
+    "crates/fava-write-store",
+    "crates/fava-write-store-memory",
+    "crates/fava-write-store-redb",
+]
+exclude = [
+    "**/.git/**",
+    "**/.symbol-gate/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/target/**",
+    "**/vendor/**",
+]
+source_globs = [
+    "**/*.c",
+    "**/*.cc",
+    "**/*.cpp",
+    "**/*.cs",
+    "**/*.go",
+    "**/*.h",
+    "**/*.hpp",
+    "**/*.java",
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.kt",
+    "**/*.mjs",
+    "**/*.php",
+    "**/*.py",
+    "**/*.rb",
+    "**/*.rs",
+    "**/*.scala",
+    "**/*.swift",
+    "**/*.ts",
+    "**/*.tsx",
+]
+generated_code = "exclude"
+labels = []
+
+[[extractors]]
+id = "rust"
+language = "rust"
+preset = "rust-analyzer-scip"
+protocol = "scip"
+command = [
+    "rust-analyzer",
+    "scip",
+    ".",
+    "--output",
+    ".symbol-gate/work/rust.scip",
+]
+version_command = [
+    "rust-analyzer",
+    "--version",
+]
+pinned_version = "rust-analyzer 1.90.0 (1159e78c 2025-09-14)"
+output_path = ".symbol-gate/work/rust.scip"
+claims = ["**/*.rs"]
+timeout_secs = 900
+unindexed_files = "fail"
+
+[symbol_kinds]
+included = [
+    "class",
+    "constant",
+    "constructor",
+    "enum",
+    "enum_variant",
+    "field",
+    "function",
+    "interface",
+    "lifetime_parameter",
+    "macro",
+    "method",
+    "module",
+    "namespace",
+    "package",
+    "parameter",
+    "property",
+    "repository",
+    "static",
+    "struct",
+    "trait",
+    "type_alias",
+    "type_parameter",
+    "union",
+]
