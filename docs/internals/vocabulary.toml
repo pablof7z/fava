@@ -567,7 +567,6 @@ symbols = [
     "fava_runtime::TaskHandle",
     "fava_runtime::TaskFailure",
     "fava_runtime::OperationName",
-    "fava_runtime::OperationGeneration",
     "fava_runtime::ProviderCompletion",
     "fava_runtime::CancellationToken",
     "fava_runtime::Sender",
@@ -596,16 +595,8 @@ symbols = [
     "fava_query::QueryBounds",
     "fava_query::QueryBranchId",
     "fava_query::QueryError",
-    "fava_query::QueryBranchId",
-    "fava_query::QueryBounds",
-    "fava_query::RelaySourceState",
-    "fava_query::RelayDeadline",
-    "fava_query::RelayWithdrawal",
-    "fava_query::AuthenticationState",
-    "fava_query::BoundedText",
 ]
 crates = ["fava-query"]
-spec_symbols = ["QueryRouting", "Selection", "ValueSet"]
 
 [[term]]
 name = "QuerySource"
@@ -664,7 +655,6 @@ symbols = [
     "fava_query::QuerySnapshot",
 ]
 crates = []
-spec_symbols = ["QueryChange"]
 
 [[term]]
 name = "QueryEvaluator"
@@ -824,7 +814,6 @@ symbols = [
     "fava_publication::PublicationError",
 ]
 crates = ["fava-write", "fava-publication"]
-spec_symbols = ["RelayDeliveryOutcome"]
 spec_crates = ["fava-publication"]
 
 [[term]]
@@ -893,7 +882,7 @@ symbols = [
     "fava_write::WriteRouting",
 ]
 crates = []
-spec_symbols = ["WriteIntent", "WritePayload", "WriteRouting"]
+spec_symbols = ["WriteIntent"]
 
 [[term]]
 name = "WriteIntentError"
@@ -989,7 +978,7 @@ nearest_nostr = "RelayUrl"
 distinction = "Nostr identifies relays but does not define client-side relay selection for query or publication work."
 symbols = ["fava_routing::RouteRequest"]
 crates = []
-spec_symbols = ["ReadRouteRequest", "RouteRequest", "WriteRouteRequest"]
+spec_symbols = ["RouteRequest"]
 
 [[term]]
 name = "RouteTarget"
@@ -1058,7 +1047,6 @@ spec_symbols = [
     "RouteContribution",
     "RouteDestination",
     "RoutePlan",
-    "TargetCoverage",
 ]
 
 [[term]]
@@ -1313,7 +1301,6 @@ symbols = [
     "fava_diagnostics::WriteStall",
 ]
 crates = ["fava-diagnostics"]
-spec_symbols = ["DiagnosticsSnapshot"]
 spec_crates = ["fava-diagnostics"]
 
 [[term]]
@@ -1326,3 +1313,30 @@ distinction = "Nostr Events carry strings; ParsedContent exposes bounded recogni
 symbols = []
 crates = []
 spec_crates = ["fava-content"]
+
+[[term]]
+name = "GroupAccess"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "The open/closed access policy of a NIP-29 simple group."
+owner = "fava-nip29-management"
+symbols = ["fava_nip29_management::GroupAccess"]
+crates = ["fava-nip29-management"]
+
+[[term]]
+name = "GroupVisibility"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "The public/private visibility policy of a NIP-29 simple group."
+owner = "fava-nip29-management"
+symbols = ["fava_nip29_management::GroupVisibility"]
+crates = []
+
+[[term]]
+name = "MetadataEdit"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A partial metadata update for a NIP-29 simple group, expressed as a kind-9002 management event body."
+owner = "fava-nip29-management"
+symbols = ["fava_nip29_management::MetadataEdit"]
+crates = []
