@@ -83,17 +83,17 @@ overrule the fixed capacity or atomic-refusal policy before merge.
 
 ## Evidence
 
-The prepared integration-branch range starts from current main `1fe3fd6d`,
-including the compiler-structure-bound vocabulary approval contract.
-Behavior-first commit `51cefb14` establishes the accepted contracts. Against
+The prepared integration-branch range starts from current main `c627de48`, the
+direct child of the requested `41da1d27` integration base. Behavior-first
+commit `27eef1d5` establishes the accepted contracts. Against
 unchanged current-main production code, `event_state_model` fails to resolve
 the new state vocabulary and the 12 structural subtraction checks report eight
-failures, three errors, and one pass. Production commit `8cb4da02` then
-supplies the owning implementation. `67c98430` repairs a test fixture whose
+failures, three errors, and one pass. Production commit `40b37b7f` then
+supplies the owning implementation. `cf0dad9b` repairs a test fixture whose
 empty `unresolved` set became terminal after settlement was made derived;
-runtime behavior is unchanged. `7702d603` removes a test-only nominal wrapper.
-`2ee7897d` aligns the isolated dependency locks and `17143929` records the
-accepted current documentation and catalogs.
+runtime behavior is unchanged. `aff3a595` aligns the isolated dependency
+graphs. The remaining commits record accepted current documentation, catalogs,
+and the final integration seams.
 
 Fresh deliberate breaks prove the named boundaries causally:
 
@@ -110,9 +110,9 @@ Current validation:
 
 - `python3 tools/vocabulary_structure.py update` regenerated the pinned
   compiler-derived structure on this integration branch. Its embedded input
-  fingerprint is `24ead48a944e4f9c1b97003587fde2b3b8b0205a131babebcbbe586605e8f67a`,
+  fingerprint is `372919e362f19e3f4994b2fd00c1798bb18b759a07b1c4f3c00693397f2b0685`,
   exactly matching recomputation; the regenerated file SHA-256 is
-  `984c6ede2029ba6c0162720105417267820c5d77718b3905b0679bd0e831c94e`.
+  `f962b17eccaf91efd18aa23e5a7742f6e9e90db14d6038a5f655d352d0b70a77`.
   For the causal drift check, changing only the fingerprint's leading nibble
   to `3` made `python3 tools/vocabulary_structure.py check` exit 1 with the
   stale-snapshot diagnostic. Regeneration restored the fingerprint, and the
@@ -123,8 +123,8 @@ Current validation:
 - The workspace/all-target/all-feature test aggregate passes with only the two
   repository-wide vocabulary approval cases explicitly filtered. Those remain
   independently non-green: existing signatures predate compiler-structure
-  binding, and the terminal-name review reports 205 violations.
-- All 161 tooling unit tests pass. README API inventories are byte-current for
+  binding, and the terminal-name review reports 193 violations.
+- All 199 tooling unit tests pass. README API inventories are byte-current for
   `fava-relay`, `fava-state`, `fava-query`, `fava-nip65`, and
   `fava-simple-groups`.
 - Both external falsifiers pass tests and strict Clippy under locked manifests.
@@ -133,9 +133,8 @@ Current validation:
   approval, terminal-name, undocumented-symbol, and future-crate backlog; the
   reconstructed candidate evidence has no validation error. No signature is
   fabricated and no blocked candidate is claimed approved.
-- The clean-rebase Bazel run found one omitted build-only dependency from
-  `//crates/fava-routing:failure_isolation` to `//crates/fava-relay:lib`.
-  Adding that edge changes no Rust behavior. With isolated writable output and
-  disk-cache roots, the exact complete aggregate passes 87/87 tests. The
-  [compact source/toolchain manifest and binary BEP](../evidence/state-foundation/bazel-87.md)
-  retain the re-review run. The separate signature gate remains open.
+- The clean-rebase Bazel run found build-only dependency omissions in the Redb
+  restart and public-facade simple-groups test targets. Adding those exact
+  edges and the already-used shared support source changes no Rust behavior.
+  With isolated writable output and disk-cache roots, the exact complete
+  aggregate passes 88/88 tests. The separate signature gate remains open.

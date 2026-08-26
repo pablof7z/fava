@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "35a697a5ec1f1eb4b5d4c1c2b08984e944e633dd3960ae790316778590e58871",
+  "inputs_sha256": "372919e362f19e3f4994b2fd00c1798bb18b759a07b1c4f3c00693397f2b0685",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
