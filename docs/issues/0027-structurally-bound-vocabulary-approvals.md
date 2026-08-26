@@ -1,6 +1,6 @@
 # 0027 — Vocabulary approvals are not bound to Rust structure
 
-**Status:** implemented; signing hard-paused pending independent acceptance
+**Status:** implemented; exact one-term signing enabled after independent package acceptance
 **Raised:** 2026-08-25, by Pablo
 
 ## Problem
@@ -71,16 +71,16 @@ functions are bound. Its semantic-description gate rejects generated
 The approval page renders the name, purpose, interface, and edge semantics
 first. Governance and exact machine content are collapsed secondary detail;
 the complete exact signed Markdown remains separately inspectable. No bulk
-signing path exists. Signing is additionally locked at the server boundary with
-HTTP 423, the UI does not connect a signer, and the pause has no runtime or CLI
-override. A later independent acceptance must deliberately change code before
-any event can be submitted.
+signing path exists. Following independent acceptance of the exact owner
+package at `ca188ece`, the UI connects only the configured owner signer and
+offers one approval action per term. The server still accepts only one exact
+current term payload per verified event.
 
 GET review state recomputes the current compiler/documentation input fingerprint
 on every request. If it differs from the snapshot, signed terms become `stale`,
 unsigned terms become `blocked`, every row names the drift, and the top-level
 payload reports `snapshot_inputs_current: false` even though signing is already
-hard-paused.
+enabled.
 
 The independently reviewed `fava-simple-groups` signing package has a second,
 repository-owned canonical boundary. `tools/vocabulary_package.py` sorts the 22
@@ -115,7 +115,9 @@ or deleting them. A new signature appends beside all earlier events.
 - Python and Rust render byte-identical complete SimpleGroup approval Markdown.
 - The page contains no multi-term signing control, shows the readable signed
   sections first, and retains the exact raw `term.markdown`.
-- Every approval POST is refused while independent acceptance is pending.
+- Every approval POST binds exactly one current term name and canonical body,
+  passes the Rust signature verifier, refuses input drift and oversized bodies,
+  and appends new events without mutating signed history.
 - Replaying one event is idempotent; signing changed structure appends without
   mutating historical lines.
 - The 22 `fava-simple-groups` vocabulary identities are enumerated from the

@@ -20,7 +20,6 @@ import vocabulary_structure as structure
 
 APP_HTML = Path(__file__).with_name("approve_vocabulary.html")
 MAXIMUM_BODY_BYTES = 256 * 1024
-SIGNING_PAUSED = True
 
 
 def _find_verifier(root: Path) -> Path | None:
@@ -79,17 +78,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path != "/api/approvals":
             self._send_json(404, {"error": "not found"})
-            return
-        if SIGNING_PAUSED:
-            self._send_json(
-                423,
-                {
-                    "error": (
-                        "vocabulary signing is paused until the human-first "
-                        "review contract receives independent acceptance"
-                    )
-                },
-            )
             return
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAXIMUM_BODY_BYTES:

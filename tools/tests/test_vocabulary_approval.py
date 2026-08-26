@@ -300,10 +300,11 @@ class ApprovalPageTest(unittest.TestCase):
         self.assertNotIn("sign-all", self.html)
         self.assertNotIn("Sign all", self.html)
 
-    def test_signing_pause_is_visible_and_cannot_connect_a_signer(self) -> None:
-        self.assertIn("const REVIEW_PAUSED = true", self.html)
-        self.assertNotIn("connect().then(load)", self.html)
-        self.assertIn("load();", self.html)
+    def test_one_term_signing_connects_only_the_owner_signer(self) -> None:
+        self.assertNotIn("REVIEW_PAUSED", self.html)
+        self.assertNotIn('id="connect" disabled', self.html)
+        self.assertIn("connect().then(load);", self.html)
+        self.assertIn("if (pubkey !== OWNER)", self.html)
 
     def test_governance_and_machine_sections_are_secondary_details(self) -> None:
         self.assertIn("function splitReviewMarkdown(markdown)", self.html)
@@ -1175,12 +1176,84 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 404)
         ctx.exception.close()
 
-    def test_signing_endpoint_is_hard_paused_without_writing(self) -> None:
-        status, body = self._post("/api/approvals", THROWAWAY_EVENT)
-        self.assertEqual(status, 423)
-        self.assertIn("independent acceptance", body["error"])
+    def _current_event(self, **changes) -> dict:
+        event = dict(
+            THROWAWAY_EVENT,
+            content=_markdown(EVENT_TERM),
+            tags=[["name", "Event"]],
+        )
+        event.update(changes)
+        return event
+
+    def test_one_exact_current_term_is_stored_and_replay_is_idempotent(self) -> None:
+        event = self._current_event()
+        status, body = self._post("/api/approvals", event)
+        self.assertEqual((status, body), (200, {"stored": "Event"}))
         path = self._root / "docs" / "internals" / "approvals.jsonl"
-        self.assertFalse(path.exists())
+        self.assertEqual(
+            [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()],
+            [event],
+        )
+
+        status, body = self._post("/api/approvals", event)
+        self.assertEqual(
+            (status, body),
+            (200, {"stored": "Event", "note": "already stored"}),
+        )
+        self.assertEqual(len(path.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_multiple_term_names_are_rejected_without_writing(self) -> None:
+        event = self._current_event(tags=[["name", "Event"], ["name", "Other"]])
+        status, body = self._post("/api/approvals", event)
+        self.assertEqual(status, 400)
+        self.assertIn("exactly one name tag", body["error"])
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_noncanonical_markdown_is_rejected_without_writing(self) -> None:
+        status, body = self._post(
+            "/api/approvals", self._current_event(content="not the current body")
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("not the term's current text", body["error"])
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_oversized_body_is_rejected_without_writing(self) -> None:
+        status, body = self._post(
+            "/api/approvals",
+            self._current_event(extra="x" * (256 * 1024)),
+        )
+        self.assertEqual(status, 413)
+        self.assertIn("out of bounds", body["error"])
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_input_drift_is_rejected_without_writing(self) -> None:
+        (self._root / ".snapshot-inputs-stale").write_text("stale", encoding="utf-8")
+        status, body = self._post("/api/approvals", self._current_event())
+        self.assertEqual(status, 409)
+        self.assertIn("inputs changed", body["error"])
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_verifier_rejection_is_preserved_without_writing(self) -> None:
+        status, body = self._post(
+            "/api/approvals", self._current_event(sig="0" * 128)
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("signature verification failed", body["error"])
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_distinct_verified_events_append_without_rewriting_history(self) -> None:
+        first = self._current_event()
+        second = self._current_event(id="2" * 64, created_at=1700000001)
+        self.assertEqual(self._post("/api/approvals", first)[0], 200)
+        path = self._root / approval.APPROVALS_PATH
+        first_bytes = path.read_bytes()
+        self.assertEqual(self._post("/api/approvals", second)[0], 200)
+        final_bytes = path.read_bytes()
+        self.assertTrue(final_bytes.startswith(first_bytes))
+        self.assertEqual(
+            [json.loads(line) for line in final_bytes.decode("utf-8").splitlines()],
+            [first, second],
+        )
 
 
 if __name__ == "__main__":
