@@ -2,7 +2,9 @@ use fava_query::{Kind, Query, QueryAcquisition, ResultAuthority, SingleLetterTag
 use fava_write::{EventBuilder, Timestamp, WriteIntentError, WriteRouting};
 use nostr::types::RelayUrl;
 
-use crate::{SimpleGroup, SimpleGroupConstructionError, SimpleGroupStateEventKind};
+use crate::{
+    SimpleGroup, SimpleGroupConstructionError, SimpleGroupEventBuilder, SimpleGroupStateEventKind,
+};
 
 use super::{public_key, tag};
 
@@ -155,25 +157,37 @@ fn state_event_query_delegates_empty_and_non_empty_sets_to_query() {
 }
 
 #[test]
-fn prepare_preserves_every_existing_tag_and_adds_only_a_missing_match() {
-    let relay = RelayUrl::parse("wss://relay.example").expect("relay");
-    let group = SimpleGroup::new("photos", vec![relay]).expect("non-empty group");
-    let draft = EventBuilder::new(public_key(), Kind::from_u16(42))
+fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts() {
+    let first = RelayUrl::parse("wss://first.example").expect("relay");
+    let shared = RelayUrl::parse("wss://shared.example").expect("relay");
+    let second = RelayUrl::parse("wss://second.example").expect("relay");
+    let photos = SimpleGroup::new("photos", vec![first.clone(), shared.clone()])
+        .expect("non-empty group");
+    let notes = SimpleGroup::new("notes", vec![shared.clone(), second.clone()])
+        .expect("non-empty group");
+    let builder = EventBuilder::new(public_key(), Kind::from_u16(42))
         .created_at(Timestamp::from(2))
         .tags([
             tag(&["h"]),
-            tag(&["h", "other", "unused"]),
+            tag(&["h", "photos", "unused"]),
             tag(&["x", "kept"]),
         ])
-        .content("opaque")
-        .build()
-        .expect("draft");
-    let prepared = group.prepare(draft).expect("preparation");
+        .content("opaque");
+    let (event, routing) = builder
+        .simple_group(&photos)
+        .expect("first group composes")
+        .simple_group(&notes)
+        .expect("second group composes")
+        .simple_group(&photos)
+        .expect("same id remains idempotent")
+        .into_event_and_routing()
+        .expect("routed event builds");
 
-    assert_eq!(prepared.tags.len(), 4);
-    assert_eq!(prepared.tags[0], tag(&["h"]));
-    assert_eq!(prepared.tags[1], tag(&["h", "other", "unused"]));
-    assert_eq!(prepared.tags[2], tag(&["x", "kept"]));
-    assert_eq!(prepared.tags[3], tag(&["h", "photos"]));
-    assert_eq!(group.prepare(prepared.clone()).unwrap(), prepared);
+    assert_eq!(event.tags.len(), 5);
+    assert_eq!(event.tags[0], tag(&["h"]));
+    assert_eq!(event.tags[1], tag(&["h", "photos", "unused"]));
+    assert_eq!(event.tags[2], tag(&["x", "kept"]));
+    assert_eq!(event.tags[3], tag(&["h", "photos"]));
+    assert_eq!(event.tags[4], tag(&["h", "notes"]));
+    assert_eq!(routing, WriteRouting::Explicit(vec![first, shared, second]));
 }

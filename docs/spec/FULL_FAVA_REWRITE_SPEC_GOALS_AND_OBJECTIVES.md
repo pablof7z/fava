@@ -700,7 +700,9 @@ Fava MUST expose one general event-construction primitive that supports:
 
 - author, kind, content, and creation time;
 - validated Nostr tags; and
-- unsigned event output suitable for the one signing/publication path.
+- unsigned event output suitable for the one signing/publication path; and
+- bounded neutral local publication routing, kept separate from serialized event
+  fields and lowered only at the one publication door.
 
 Protocol crates own protocol meaning, calculate their exact tags, and compose
 this primitive. The event builder does not know about replies, reactions,
@@ -708,13 +710,15 @@ reposts, quotes, follows, bookmarks, groups, or other event-kind semantics.
 
 **Acceptance:** reply, reaction, repost, quote, and custom-kind protocol crates use the same primitive; removing protocol-specific methods from the event builder does not prevent any of them from constructing valid events.
 
-## WRITE-002 — A write has one of three accepted forms
+## WRITE-002 — A write has one of four accepted forms
 
 The publication lifecycle MUST accept:
 
-1. an unsigned event whose `pubkey` already identifies the author;
-2. a `ReplaceableEventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
-3. a complete pre-signed event.
+1. an `EventBuilder`, which may carry neutral local routing and whose event
+   body identifies the author;
+2. an unsigned event whose `pubkey` already identifies the author;
+3. a `ReplaceableEventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
+4. a complete pre-signed event.
 
 The accepted form determines the remaining work. It does not create separate publication or receipt systems.
 
@@ -1404,12 +1408,26 @@ semantics, not signature, id, provenance, replacement, or snapshot authority.
 Pins MUST retain interleaved `e` and `a` order using the existing
 `EventCoordinate` value.
 
-Simple group publication MUST remain kind-blind. Preparing an unsigned event
-MUST preserve every existing tag; it returns unchanged when any `h` tag's first
-value equals the group id and otherwise appends one matching tag. The
-application publishes through `fava.to(simple_group.relays()).publish(payload)`.
-The helper MUST NOT accept or verify signed events or provide management-event
-wrappers.
+Simple-group composition MUST remain kind-blind. `fava-simple-groups` provides
+`SimpleGroupEventBuilder::simple_group`, implemented for `EventBuilder`. Each
+call appends one exact two-cell `h` tag only when that exact tag is absent and
+contributes the group's relays to the builder's bounded explicit route.
+Different ids remain in selection order; a repeated id adds no duplicate exact
+tag but can add relays. Existing malformed, repeated, extended, or unrelated
+tags remain untouched. The extension returns the generic route owner's
+`WriteIntentError` directly when the normalized route exceeds its bound.
+
+`fava.publish(builder)` builds, signs, and publishes one event through the
+builder's explicit route, or uses automatic routing when it has none. The
+route is local publication intent: it is neither serialized nor signed. A
+builder carrying an explicit route and `fava.to(...).publish(builder)` are two
+route authorities and MUST refuse before signing or custody. Event-only
+construction MUST refuse rather than silently discard an attached route.
+
+Pre-signed events remain immutable. Selected simple-group validation requires
+the selected exact two-cell `h` tag, tolerates unrelated sibling tags, returns
+the byte-exact event, and leaves relay selection to the ordinary explicit
+facade scope. The capability provides no management-event wrapper.
 
 The capability MUST build the ordinary kind-10009 query for exact authors,
 decode one `SavedGroupList` per event, and provide pure saved-group and relay

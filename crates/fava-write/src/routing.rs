@@ -67,6 +67,32 @@ impl WriteRouting {
         Ok(Self::Explicit(ordered))
     }
 
+    pub(crate) fn append(
+        self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Self, WriteIntentError> {
+        let mut ordered = match self {
+            Self::Automatic => Vec::new(),
+            Self::Explicit(relays) => relays,
+        };
+        let mut seen = ordered.iter().cloned().collect::<BTreeSet<_>>();
+        for relay in relays {
+            if seen.insert(relay.clone()) {
+                ordered.push(relay);
+                if ordered.len() > MAX_EXPLICIT_RELAYS {
+                    return Err(WriteIntentError::TooManyExplicitRelays {
+                        actual: ordered.len(),
+                        maximum: MAX_EXPLICIT_RELAYS,
+                    });
+                }
+            }
+        }
+        if ordered.is_empty() {
+            return Err(WriteIntentError::EmptyExplicitRelays);
+        }
+        Ok(Self::Explicit(ordered))
+    }
+
     pub(crate) fn validate(&self) -> Result<(), WriteIntentError> {
         let Self::Explicit(relays) = self else {
             return Ok(());

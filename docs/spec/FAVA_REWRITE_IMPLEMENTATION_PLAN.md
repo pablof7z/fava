@@ -829,10 +829,18 @@ kind-10009 list without creating a second query/publication lifecycle.
 - State decoders check kind plus the first `d` value, ignore unknown and unused
   material, preserve repetitions and order, and retain malformed semantic entries
   as local typed errors.
-- Publication is kind-blind and routes to the exact complete relay sequence,
-  bypassing automatic routers.
-- Unsigned drafts preserve every tag and receive one matching `h` tag only when
-  none already matches; signed-event and management wrappers are absent.
+- Publication composition is kind-blind. `SimpleGroupEventBuilder` keeps the
+  concrete `EventBuilder` fluent while adding each distinct exact two-cell `h`
+  tag in selection order and accumulating the first-occurrence-deduplicated
+  relay union as bounded neutral routing.
+- `fava.publish(builder)` consumes that route through the ordinary write
+  lifecycle and bypasses automatic routers only when the builder carries an
+  explicit route. The route is local, not serialized or signed. Supplying both
+  a builder route and `fava.to(...)` refuses before signing or custody.
+- Event-only construction refuses an attached explicit route. Pre-signed
+  validation requires the selected exact group context, tolerates sibling
+  contexts, returns the byte-exact event, and receives its route through the
+  ordinary explicit facade scope. Management wrappers are absent.
 - Kind-10009 queries are ordinary exact-author queries. One event decodes to one
   `SavedGroupList` whose group and relay entries retain order, repetitions, and
   entry-local failures.

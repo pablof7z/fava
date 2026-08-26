@@ -338,6 +338,9 @@ fn map_build_error(error: EventBuildError) -> ContactListError {
             ContactListError::TooLarge { bytes, maximum }
         }
         EventBuildError::Encoding(reason) => ContactListError::Encoding(reason),
+        EventBuildError::ExplicitRoutingAttached => {
+            unreachable!("EventBuilder::from_parts always constructs automatic routing")
+        }
     }
 }
 
@@ -356,7 +359,9 @@ pub(crate) fn map_write_error(error: WriteIntentError) -> ContactListError {
             ContactListError::DuplicateRelay { relay }
         }
         error @ (WriteIntentError::EmptyExplicitRelays
-        | WriteIntentError::TooManyExplicitRelays { .. }) => {
+        | WriteIntentError::TooManyExplicitRelays { .. }
+        | WriteIntentError::ExplicitRoutingAttached
+        | WriteIntentError::ConflictingExplicitRoutes) => {
             ContactListError::InvalidRoute(error.to_string())
         }
         WriteIntentError::InvalidEvent(reason) => ContactListError::InvalidEvent(reason),

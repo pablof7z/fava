@@ -217,6 +217,12 @@ pub enum WriteIntentError {
     /// Exact serialization failed.
     #[error("event encoding failed: {0}")]
     Encoding(String),
+    /// Event-only construction would discard local explicit routing.
+    #[error("event-only construction cannot discard explicit publication routing")]
+    ExplicitRoutingAttached,
+    /// Builder and facade both selected an explicit publication route.
+    #[error("builder and facade cannot both select an explicit publication route")]
+    ConflictingExplicitRoutes,
 }
 
 impl From<EventBuildError> for WriteIntentError {
@@ -227,6 +233,7 @@ impl From<EventBuildError> for WriteIntentError {
             }
             EventBuildError::TooLarge { bytes, maximum } => Self::TooLarge { bytes, maximum },
             EventBuildError::Encoding(reason) => Self::Encoding(reason),
+            EventBuildError::ExplicitRoutingAttached => Self::ExplicitRoutingAttached,
         }
     }
 }

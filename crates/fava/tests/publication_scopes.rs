@@ -158,6 +158,43 @@ async fn relay_scope_publishes_unsigned_and_presigned_payloads() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn builder_routing_is_used_directly_and_conflicts_with_a_facade_route() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
+    let embedded = relay("embedded");
+    let builder = EventBuilder::new(author.public_key(), Kind::TextNote)
+        .content("builder route")
+        .to_relays([embedded.clone()])
+        .expect("embedded route validates");
+
+    let conflict = fava
+        .to([relay("facade")])
+        .expect("facade route validates")
+        .publish(builder);
+    assert!(matches!(
+        conflict,
+        Err(PublishError::Intent(
+            WriteIntentError::ConflictingExplicitRoutes
+        ))
+    ));
+    assert_no_effects(&store, &signer, &publisher);
+
+    let write = fava
+        .publish(
+            EventBuilder::new(author.public_key(), Kind::TextNote)
+                .content("builder route")
+                .to_relays([embedded.clone()])
+                .expect("embedded route validates"),
+        )
+        .expect("builder route publishes directly");
+    assert_eq!(
+        write.receipt().expect("receipt").routing,
+        WriteRouting::Explicit(vec![embedded])
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn publication_scopes_are_inert_before_valid_payload() {
     let author = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());

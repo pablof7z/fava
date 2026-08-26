@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use fava_query::{Query, QueryError, SingleLetterTag};
-use fava_write::{EventBuildError, EventBuilder, Tag, UnsignedEvent};
+use fava_write::{EventBuilder, Tag, WriteIntentError};
 use nostr::types::RelayUrl;
 
 use crate::SimpleGroupStateEventKind;
@@ -193,12 +193,21 @@ impl SimpleGroup {
             .tag_values(identifier_tag(), [self.id()])?
             .only_from_relays(self.relays())
     }
+}
 
-    /// Add one matching `h` tag to an unsigned event when none is already present.
+/// Fluent NIP-29 group composition for the concrete generic event builder.
+pub trait SimpleGroupEventBuilder {
+    /// Add this group's exact `h` context and local relay contribution.
+    ///
+    /// The returned value remains [`EventBuilder`]. Relays are local
+    /// publication intent, not Nostr event data. The generic route owner
+    /// handles normalization and boundedness.
     ///
     /// Existing tags are preserved unchanged. If an exact `h = <id>` tag is
-    /// already present the event is returned unmodified. Malformed, repeated,
-    /// extended, and unrelated tags are not affected.
+    /// already present no duplicate tag is added. Malformed, repeated,
+    /// extended, and unrelated tags are not affected. Calling this method for
+    /// several groups accumulates their distinct exact `h` tags and the union
+    /// of their relays in first-occurrence order.
     ///
     /// # Examples
     ///
@@ -212,46 +221,42 @@ impl SimpleGroup {
     /// let group = SimpleGroup::new("photos", vec![relay])?;
     /// let keys = Keys::generate();
     ///
-    /// let draft = EventBuilder::new(keys.public_key(), Kind::from_u16(9))
+    /// let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9))
     ///     .created_at(Timestamp::from(1))
     ///     .content("hello")
-    ///     .build()?;
+    ///     .simple_group(&group)?;
     ///
-    /// let prepared = group.prepare(draft)?;
-    /// let has_h = prepared.tags.iter().any(|t| {
+    /// let (event, routing) = builder.into_event_and_routing()?;
+    /// let has_h = event.tags.iter().any(|t| {
     ///     let s = t.as_slice();
     ///     s.first().map(String::as_str) == Some("h")
     ///         && s.get(1).map(String::as_str) == Some("photos")
     /// });
     /// assert!(has_h);
-    ///
-    /// // Calling prepare again on an already-tagged event leaves it unchanged.
-    /// let tag_count = prepared.tags.len();
-    /// let again = group.prepare(prepared)?;
-    /// assert_eq!(again.tags.len(), tag_count);
+    /// assert!(matches!(routing, fava_write::WriteRouting::Explicit(_)));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
     /// # Errors
     ///
-    /// Returns the generic builder's [`EventBuildError`] when rebuilding is refused.
-    pub fn prepare(&self, event: UnsignedEvent) -> Result<UnsignedEvent, EventBuildError> {
-        if event.tags.iter().any(|tag| matching_h(tag, self.id())) {
-            return Ok(event);
+    /// Returns [`WriteIntentError`] directly when generic route accumulation
+    /// is refused.
+    fn simple_group(self, group: &SimpleGroup) -> Result<EventBuilder, WriteIntentError>;
+}
+
+impl SimpleGroupEventBuilder for EventBuilder {
+    fn simple_group(self, group: &SimpleGroup) -> Result<EventBuilder, WriteIntentError> {
+        let tag = Tag::parse(["h", group.id()])
+            .expect("a non-empty opaque simple-group id forms a valid h tag");
+        let builder = self.to_relays(group.relays())?;
+        if builder
+            .event_tags()
+            .iter()
+            .any(|existing| exact_group_tag(existing, group.id()))
+        {
+            return Ok(builder);
         }
-        let mut tags = event.tags.to_vec();
-        tags.push(
-            Tag::parse(["h", self.id()])
-                .map_err(|error| EventBuildError::Encoding(error.to_string()))?,
-        );
-        EventBuilder::from_parts(
-            event.pubkey,
-            event.kind,
-            event.created_at,
-            tags,
-            event.content,
-        )
-        .build()
+        Ok(builder.tag(tag))
     }
 }
 
@@ -263,7 +268,9 @@ fn identifier_tag() -> SingleLetterTag {
     SingleLetterTag::from_char('d').expect("d is a valid single-letter tag")
 }
 
-fn matching_h(tag: &Tag, id: &str) -> bool {
+fn exact_group_tag(tag: &Tag, id: &str) -> bool {
     let values = tag.as_slice();
-    values.first().map(String::as_str) == Some("h") && values.get(1).map(String::as_str) == Some(id)
+    values.len() == 2
+        && values.first().map(String::as_str) == Some("h")
+        && values.get(1).map(String::as_str) == Some(id)
 }

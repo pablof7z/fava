@@ -619,11 +619,16 @@ The list exposes ordered saved-group and relay entry results. Crate-root save,
 rename, remove, and relay functions return pure `ReplaceableEventEdit` values;
 the materializer joins Fava's ordinary semantic-write lifecycle.
 
-Simple group publication produces an ordinary event or replaceable edit. The
-application supplies the selected relays to the universal door with
-`fava.to(simple_group.relays()).publish(payload)`. `prepare` accepts only an
-unsigned event, preserves every existing tag, and appends one matching `h` tag
-only when none already matches. It creates no protocol-specific publication or
+Simple-group composition extends `EventBuilder` without changing its concrete
+type. Each `.simple_group(&group)` call appends one exact two-cell `h` tag for
+that distinct id and adds the group's relays to the builder's bounded,
+first-occurrence-deduplicated explicit route. The route is local publication
+intent, not serialized or signed. `fava.publish(builder)` uses that embedded
+route; `fava.to(...).publish(builder)` refuses because it supplies a second
+explicit route. Repeated ids add no duplicate exact tag, while malformed or
+foreign sibling tags remain untouched. Pre-signed validation returns the exact
+event after requiring the selected exact context and leaves its route to the
+ordinary explicit facade scope. This creates no protocol-specific publisher or
 receipt lifecycle.
 
 ---

@@ -198,10 +198,24 @@ owner = "fava-simple-groups"
 distinction = "A raw id or relay URL alone cannot lower both exact group selection and the complete caller-selected relay sequence."
 counterexample = "A globally canonical group id or a value that silently chooses one relay is not this SimpleGroup."
 lifecycle = "Constructed synchronously from a complete finite owned RelayUrl vector after its id and relay selection validate; immutable thereafter and owns no query or publication work."
-forcing_requirement = "Applications must reuse one exact id and non-empty relay selection across content queries, state queries, preparation, and explicit publication without a shared numeric bound or new relay owner."
-falsifier = "Construction tests fail if an empty id or empty relay vector succeeds, a non-empty opaque id changes, first-occurrence relay order changes, or query/write lowering omits the id or any selected relay."
+forcing_requirement = "Applications must reuse one exact id and non-empty relay selection across content queries and concrete EventBuilder composition without a shared numeric bound or a new relay owner."
+falsifier = "Construction and composition tests fail if an empty id or empty relay vector succeeds, a non-empty opaque id changes, first-occurrence relay order changes, or group composition omits an id or any selected relay."
 symbols = ["fava_simple_groups::SimpleGroup"]
 crates = ["fava-simple-groups"]
+
+[[term]]
+name = "SimpleGroupEventBuilder"
+source = "fava"
+nearest_nostr = "NIP-29 h tag and relay URL"
+meaning = "The fava-simple-groups extension trait that adds one selected SimpleGroup's exact h context and relays to a concrete EventBuilder."
+owner = "fava-simple-groups"
+distinction = "SimpleGroup is an immutable group value and EventBuilder owns generic event and route construction; SimpleGroupEventBuilder alone owns fluent NIP-29 group-tag composition without a wrapper, publisher, signer, route store, or receipt."
+counterexample = "A wrapper around EventBuilder, a global group registry, or a helper that accepts a signed Event is not SimpleGroupEventBuilder."
+lifecycle = "An application imports the trait and calls simple_group on an EventBuilder before publication; each call returns the same concrete builder or the existing WriteIntentError from generic route accumulation, and the trait retains no state."
+forcing_requirement = "One unsigned event must carry several selected NIP-29 contexts and the exact bounded route union while protocol-neutral EventBuilder remains independent of NIP-29 and fluent builder methods remain available."
+falsifier = "Public API, composition, and facade tests fail if simple_group changes the concrete builder type, adds a duplicate owned exact h tag, translates the route-bound error, serializes relays, or leaves a selected relay out of the route union."
+symbols = ["fava_simple_groups::SimpleGroupEventBuilder"]
+crates = []
 
 [[term]]
 name = "SimpleGroupConstructionError"
@@ -954,7 +968,7 @@ owner = "fava-write"
 nearest_nostr = "EVENT message"
 distinction = "An EVENT message contains a signed event; WriteIntent coordinates neutral providers after the application has used Fava's payload-oriented publish door, and is not an application-facing facade input."
 counterexample = "An application calling fava.publish(edit) receives Write without constructing WriteIntent; WriteRouting remains facade-visible only because Receipt::routing exposes that durable fact."
-lifecycle = "The fava facade constructs WriteIntent privately after validating publication scopes; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends."
+lifecycle = "The fava facade constructs WriteIntent privately after resolving its publication scope and any EventBuilder-carried route; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends."
 forcing_requirement = "Publication, rematerialization, preview, and recovery require one provider-neutral payload and route contract without exposing provider custody vocabulary as an alternate application door."
 falsifier = "The facade_has_no_write_intent_compatibility_door test must fail if fava re-exports WriteIntent or WritePayload or accepts WriteIntent through Fava::publish."
 symbols = [
@@ -1026,10 +1040,13 @@ spec_symbols = ["UnsignedEvent"]
 [[term]]
 name = "EventBuilder"
 source = "fava"
-meaning = "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, and validated Tags."
+meaning = "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, and bounded neutral local publication routing."
 owner = "fava-write"
 nearest_nostr = "Event"
-distinction = "Nostr defines Event fields; EventBuilder provides checked construction without interpreting any event kind."
+distinction = "Nostr defines Event fields but not local delivery intent; EventBuilder provides checked construction and route accumulation without interpreting any event kind. Its route is neither serialized nor signed."
+lifecycle = "An application or protocol crate composes generic fields, tags, and optional local route before either event-only construction or Fava publication; event-only construction refuses an attached explicit route, while Fava consumes event and route together into WriteIntent."
+forcing_requirement = "One fluent concrete builder must retain a selected route through publication without teaching generic event construction about protocol group meaning or silently discarding delivery intent."
+falsifier = "Builder and facade tests fail if host-only route changes alter the event id, event-only construction drops an attached route, or Fava ignores the attached route or merges it with a facade explicit route."
 symbols = [
     "fava_write::EventBuilder",
 ]

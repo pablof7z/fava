@@ -6,15 +6,15 @@ use std::sync::Arc;
 use fava_query::{Kind, PublicKey, Query, RelayUrl};
 use fava_simple_groups::{
     SavedGroupList, SavedGroupListDecodeError, SavedSimpleGroup, SimpleGroup, SimpleGroupAdmins,
-    SimpleGroupConstructionError, SimpleGroupDecodeError, SimpleGroupLivekitParticipants,
-    SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles,
-    SimpleGroupStateEventKind, remove_saved_relay, remove_saved_simple_group,
+    SimpleGroupConstructionError, SimpleGroupDecodeError, SimpleGroupEventBuilder,
+    SimpleGroupLivekitParticipants, SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupPins,
+    SimpleGroupRoles, SimpleGroupStateEventKind, remove_saved_relay, remove_saved_simple_group,
     rename_saved_simple_group, save_relay, save_simple_group, saved_group_list_materializer,
     saved_group_lists,
 };
 use fava_write::{
-    EventBuildError, EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Tag, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
+    WriteIntentError, WriteRouting,
 };
 
 fn key() -> PublicKey {
@@ -53,7 +53,7 @@ fn inspect_decoders(
 }
 
 #[test]
-fn constructors_queries_and_preparation_compile_at_the_current_surface() {
+fn constructors_queries_and_builder_composition_compile_at_the_current_surface() {
     let constructor: Result<SimpleGroup, SimpleGroupConstructionError> =
         SimpleGroup::new("photos", vec![relay()]);
     let group = constructor.expect("valid public construction");
@@ -87,10 +87,13 @@ fn constructors_queries_and_preparation_compile_at_the_current_surface() {
             .contains(&Kind::from_u16(9))
     );
 
-    let draft = EventBuilder::new(key(), Kind::from_u16(42))
-        .build()
-        .unwrap();
-    let _: Result<UnsignedEvent, EventBuildError> = group.prepare(draft);
+    let builder: Result<EventBuilder, WriteIntentError> =
+        EventBuilder::new(key(), Kind::from_u16(42)).simple_group(&group);
+    let (_, routing) = builder
+        .expect("group composes")
+        .into_event_and_routing()
+        .expect("event builds");
+    assert_eq!(routing, WriteRouting::Explicit(vec![relay()]));
 }
 
 #[test]

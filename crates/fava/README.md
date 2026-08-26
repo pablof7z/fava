@@ -7,6 +7,12 @@ current publication erases it to
 survive that boundary. Structured attribution is owned by
 [issue 0025](../../docs/issues/0025-publication-materializer-error-attribution.md).
 
+`fava.publish(builder)` accepts an `EventBuilder` directly. A builder without
+an attached route uses automatic routers; a builder carrying local explicit
+relay routing lowers its event and route together through the same durable
+publication lifecycle. `fava.to(...).publish(builder)` refuses when the
+builder already carries an explicit route.
+
 ## Complete public API inventory
 
 Generated from rustdoc with `python3 tools/crate_readme_api.py update <crate>`.
@@ -153,6 +159,10 @@ Compiler-visible struct `fava::FavaBuilder`.
 Compiler-visible struct `fava::PublishAs`.
 <!-- api-item {"kind":"Struct","item":"fava::PublishAs","signature":"pub struct fava::PublishAs<'a>","evidence":"cargo-public-api@0.52.0: pub struct fava::PublishAs<'a>"} -->
 
+| Item | Purpose |
+| --- | --- |
+| _No standalone item_ | Public API is described by its owning sections. |
+
 ### `PublishError` (Enum)
 
 Compiler-visible enum `fava::PublishError`.
@@ -173,6 +183,10 @@ Compiler-visible enum `fava::PublishError`.
 
 Compiler-visible struct `fava::PublishTo`.
 <!-- api-item {"kind":"Struct","item":"fava::PublishTo","signature":"pub struct fava::PublishTo<'a>","evidence":"cargo-public-api@0.52.0: pub struct fava::PublishTo<'a>"} -->
+
+| Item | Purpose |
+| --- | --- |
+| _No standalone item_ | Public API is described by its owning sections. |
 
 ### `Write` (Struct)
 

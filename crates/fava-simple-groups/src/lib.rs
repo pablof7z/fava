@@ -30,4 +30,4 @@ pub use pins::SimpleGroupPins;
 pub use query::{SimpleGroupStateEventKind, saved_group_lists};
 pub use records::SimpleGroupDecodeError;
 pub use saved::{SavedGroupList, SavedGroupListDecodeError, SavedSimpleGroup};
-pub use simple_group::{SimpleGroup, SimpleGroupConstructionError};
+pub use simple_group::{SimpleGroup, SimpleGroupConstructionError, SimpleGroupEventBuilder};

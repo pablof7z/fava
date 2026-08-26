@@ -1,6 +1,9 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
-use fava_write::{EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError};
+use fava_state::RelayUrl;
+use fava_write::{
+    EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError, WriteRouting,
+};
 use nostr::key::Keys;
 
 fn keys() -> Keys {
@@ -140,4 +143,44 @@ fn event_build_encoding_refusal_converts_without_losing_fields() {
         converted.to_string(),
         "event encoding failed: exact encoding"
     );
+}
+
+#[test]
+fn builder_keeps_neutral_explicit_routing_out_of_the_event_body() {
+    let author = keys().public_key();
+    let first = relay("first");
+    let second = relay("second");
+    let builder = EventBuilder::new(author, Kind::Custom(60_003))
+        .created_at(Timestamp::from(9))
+        .content("same body")
+        .to_relays([first.clone(), second.clone(), first.clone()])
+        .expect("route composes");
+    let plain = EventBuilder::new(author, Kind::Custom(60_003))
+        .created_at(Timestamp::from(9))
+        .content("same body")
+        .build()
+        .expect("plain event builds");
+
+    let (routed, routing) = builder
+        .into_event_and_routing()
+        .expect("routed event builds");
+
+    assert_eq!(routed, plain);
+    assert_eq!(routing, WriteRouting::Explicit(vec![first, second]));
+}
+
+#[test]
+fn event_only_build_refuses_an_attached_explicit_route() {
+    let builder = EventBuilder::new(keys().public_key(), Kind::Custom(60_004))
+        .to_relays([relay("attached")])
+        .expect("route composes");
+
+    assert_eq!(
+        builder.build(),
+        Err(EventBuildError::ExplicitRoutingAttached)
+    );
+}
+
+fn relay(name: &str) -> RelayUrl {
+    RelayUrl::parse(&format!("wss://{name}.example")).expect("relay URL")
 }

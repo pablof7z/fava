@@ -9,8 +9,8 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
-    SavedGroupList, SimpleGroup, SimpleGroupMetadata, SimpleGroupStateEventKind, save_simple_group,
-    saved_group_list_materializer,
+    SavedGroupList, SimpleGroup, SimpleGroupEventBuilder, SimpleGroupMetadata,
+    SimpleGroupStateEventKind, save_simple_group, saved_group_list_materializer,
 };
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write_store_memory::MemoryWriteStore;
@@ -48,7 +48,7 @@ fn group_content_composition_stays_exact_through_the_public_facade() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn prepared_content_uses_the_ordinary_observation_and_write_doors() {
+async fn grouped_builder_uses_the_ordinary_observation_and_write_doors() {
     let keys = Keys::generate();
     let (fava, cache) = assembly(&keys);
     let group = group();
@@ -57,18 +57,18 @@ async fn prepared_content_uses_the_ordinary_observation_and_write_doors() {
         .expect("group query");
     let mut observation = fava.observe(query).await.expect("query opens");
 
-    let draft = EventBuilder::new(keys.public_key(), Kind::from_u16(9_007))
+    let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9_007))
         .created_at(Timestamp::from(10))
         .content("local group content")
-        .build()
-        .expect("draft");
-    let prepared = group.prepare(draft).expect("group tag prepares");
-    let id = prepared.id.expect("prepared id");
-    let _write = fava
-        .to(group.relays())
-        .expect("exact relay route")
-        .publish(prepared)
-        .expect("ordinary custody accepts");
+        .simple_group(&group)
+        .expect("group composes");
+    let (event, route) = builder
+        .clone()
+        .into_event_and_routing()
+        .expect("event builds");
+    let id = event.id.expect("grouped event id");
+    let write = fava.publish(builder).expect("ordinary custody accepts");
+    assert_eq!(write.receipt().expect("receipt").routing, route);
 
     let current = wait_for(&mut observation, |snapshot| {
         snapshot.events.iter().any(|record| record.id() == id)

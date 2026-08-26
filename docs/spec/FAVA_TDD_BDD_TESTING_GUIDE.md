@@ -115,6 +115,23 @@ Add or enable a public-API/system/canary scenario when the behavior crosses boun
 
 The capstone proves that the pieces compose. It does not replace owner, property, model, crash, or protocol tests.
 
+### 3.8 Multi-group builder publication evidence
+
+One event selected for several simple groups requires separate owner proofs:
+the neutral builder route accumulator proves order, duplicate collapse, bounds,
+and that route changes cannot alter event identity; the simple-groups extension
+proves ordered exact `h` tags while preserving its concrete `EventBuilder`; and
+the Fava publication door proves route selection and dual-route refusal before
+signing or custody. A restart proof must retain the exact accepted route.
+
+A controlled relay canary is additionally required: publish one signed event
+with two exact group contexts through the selected route union, query each
+context independently, and record the same event id and signature with actual
+serving-relay evidence. A relay acknowledgement alone never proves independent
+per-group acceptance. Deliberately dropping builder routing, duplicating an
+owned exact tag, or allowing a facade route to merge with builder routing must
+make the linked proof fail.
+
 ## 4. BDD: what belongs in behavior features
 
 BDD is for durable app-visible contracts and multi-step lifecycle guarantees.

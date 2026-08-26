@@ -1,9 +1,10 @@
+use fava_state::RelayUrl;
 use nostr::event::{Kind, Tag, UnsignedEvent};
 use nostr::key::PublicKey;
 use nostr::types::Timestamp;
 use thiserror::Error;
 
-use crate::MAX_EVENT_BYTES;
+use crate::{EventBuildError, MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
 
 const MAX_TAGS: usize = 2_000;
 
@@ -45,6 +46,7 @@ pub struct EventBuilder {
     created_at: Timestamp,
     content: String,
     tags: Vec<Tag>,
+    routing: WriteRouting,
 }
 
 impl EventBuilder {
@@ -77,6 +79,7 @@ impl EventBuilder {
             created_at,
             content,
             tags,
+            routing: WriteRouting::Automatic,
         }
     }
 
@@ -107,12 +110,58 @@ impl EventBuilder {
         self.tags([tag])
     }
 
+    /// Borrow every exact event tag in insertion order.
+    #[must_use]
+    pub fn event_tags(&self) -> &[Tag] {
+        &self.tags
+    }
+
+    /// Borrow the local publication route without serializing it.
+    #[must_use]
+    pub const fn routing(&self) -> &WriteRouting {
+        &self.routing
+    }
+
+    /// Add relays to the builder's local explicit publication route.
+    ///
+    /// The route is not serialized or signed. Duplicate relay identities
+    /// collapse in first-occurrence order under the write owner's bound.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning [`WriteIntentError`] when route accumulation is
+    /// empty or exceeds its declared bound.
+    pub fn to_relays(
+        mut self,
+        relays: impl IntoIterator<Item = RelayUrl>,
+    ) -> Result<Self, WriteIntentError> {
+        self.routing = self.routing.append(relays)?;
+        Ok(self)
+    }
+
     /// Produce the exact unsigned body and deterministic event id.
     ///
     /// # Errors
     ///
     /// Returns [`EventBuildError`] when event structure exceeds declared bounds.
     pub fn build(self) -> Result<UnsignedEvent, EventBuildError> {
+        if matches!(self.routing, WriteRouting::Explicit(_)) {
+            return Err(EventBuildError::ExplicitRoutingAttached);
+        }
+        self.build_event()
+    }
+
+    /// Consume the exact unsigned event and its neutral publication route.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EventBuildError`] when event structure exceeds declared bounds.
+    pub fn into_event_and_routing(self) -> Result<(UnsignedEvent, WriteRouting), EventBuildError> {
+        let routing = self.routing.clone();
+        Ok((self.build_event()?, routing))
+    }
+
+    fn build_event(self) -> Result<UnsignedEvent, EventBuildError> {
         if self.tags.len() > MAX_TAGS {
             return Err(EventBuildError::TooManyTags {
                 actual: self.tags.len(),
@@ -162,4 +211,7 @@ pub enum EventBuildError {
     /// Exact event serialization failed.
     #[error("event encoding failed: {0}")]
     Encoding(String),
+    /// Event-only construction would discard local explicit routing.
+    #[error("event-only construction cannot discard explicit publication routing")]
+    ExplicitRoutingAttached,
 }

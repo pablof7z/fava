@@ -9,7 +9,7 @@ use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
 use fava_write::{
-    Event, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
+    Event, EventBuilder, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
     UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use nostr::types::RelayUrl;
@@ -239,6 +239,28 @@ impl PublishPayload for UnsignedEvent {
         routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
         Ok(WriteIntent::event(self, routing)?)
+    }
+}
+
+impl PublishPayload for EventBuilder {
+    fn into_intent(
+        self,
+        _author: Option<PublicKey>,
+        facade_routing: WriteRouting,
+    ) -> Result<WriteIntent, PublishError> {
+        if matches!(self.routing(), WriteRouting::Explicit(_))
+            && matches!(facade_routing, WriteRouting::Explicit(_))
+        {
+            return Err(WriteIntentError::ConflictingExplicitRoutes.into());
+        }
+        let (event, builder_routing) = self
+            .into_event_and_routing()
+            .map_err(WriteIntentError::from)?;
+        let routing = match builder_routing {
+            WriteRouting::Automatic => facade_routing,
+            explicit @ WriteRouting::Explicit(_) => explicit,
+        };
+        Ok(WriteIntent::event(event, routing)?)
     }
 }
 

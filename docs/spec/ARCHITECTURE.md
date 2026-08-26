@@ -525,10 +525,13 @@ impl EventBuilder {
 }
 ```
 
-`EventBuilder` understands generic Nostr event fields and validated tags. It
-does not interpret reply, reaction, repost, quote, follow, bookmark, group, or
-other event-kind meaning. Protocol crates calculate those tags and compose the
-builder rather than constructing another signing or publication path.
+`EventBuilder` understands generic Nostr event fields, validated tags, and a
+bounded neutral local route. The route is not serialized, signed, or available
+to event-id construction. It does not interpret reply, reaction, repost,
+quote, follow, bookmark, group, or other event-kind meaning. Protocol crates
+calculate those tags and compose the builder rather than constructing another
+signing or publication path. Event-only construction refuses an explicit route;
+the Fava facade alone consumes the event and route together into `WriteIntent`.
 
 ### Write vocabulary
 
@@ -2000,7 +2003,7 @@ delivery, retry, cancellation, or receipt lifecycle:
 SimpleGroup::new(id, relays: Vec<RelayUrl>) -> Result<SimpleGroup, SimpleGroupConstructionError>
 simple_group.events(selection) -> Result<Query, QueryError>
 simple_group.meta_events(kinds) -> Result<Query, QueryError>
-simple_group.prepare(draft) -> Result<UnsignedEvent, EventBuildError>
+EventBuilder::simple_group(&simple_group) -> Result<EventBuilder, WriteIntentError>
 ```
 
 The implemented public nominal vocabulary is:
@@ -2047,11 +2050,21 @@ first usable singleton field and all child entries. Pins preserve interleaved `e
 and `a` order as `EventCoordinate` values. These values do not verify event ids
 or signatures and do not interpret relay evidence.
 
-Publication is kind-blind. An unsigned author-bearing draft receives exactly
-one matching `h` tag only when no existing `h` tag's first value matches. It
-preserves malformed, repeated, extended, and unrelated tags. The application
-calls `fava.to(simple_group.relays()).publish(payload)`; signed events and
-management-event wrappers are outside this owner.
+Publication composition is kind-blind. The `SimpleGroupEventBuilder` extension
+implemented for `EventBuilder` adds one exact two-cell `h` tag for each
+distinct selected group id in call order and carries the first-occurrence
+deduplicated union of selected relays as neutral explicit routing. It preserves
+malformed, repeated, extended, and unrelated sibling tags. Repeating one id
+does not add another exact tag but can add relays. Its only refusal is the
+generic `WriteIntentError` from bounded route accumulation.
+
+`fava.publish(builder)` consumes the built event and its route through the
+ordinary publication lifecycle. That route is local intent, not serialized or
+signed event data. A facade explicit route and a builder explicit route are
+mutually exclusive and refuse before signing or custody. Pre-signed validation
+requires the selected exact tag, tolerates sibling contexts, and returns the
+byte-exact event; its route remains an explicit facade input. No simple-groups
+publisher, signer, receipt, or management-event wrapper exists.
 
 `saved_group_lists(authors)` constructs the ordinary kind-10009 query through
 the neutral query owner's bounded author-input constructor and preserves its
@@ -2457,8 +2470,8 @@ Required ordering includes:
 
 - engine construction from selected providers and protocol crates;
 - open live query;
-- `publish(payload)` for unsigned events, replaceable-event edits, or
-  pre-signed events;
+- `publish(payload)` for event builders, unsigned events, replaceable-event
+  edits, or pre-signed events;
 - inert `by(author)` and `to(relays)` scopes, independently composable in
   either order before `publish(payload)`;
 - `Write` inspection and asynchronous `settled(all())` or

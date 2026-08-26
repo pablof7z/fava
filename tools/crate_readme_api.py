@@ -522,8 +522,8 @@ def current_evidence(item: ApiItem, entry: CatalogEntry | None) -> str:
 
 def default_purpose(item: ApiItem, owner: str | None = None) -> str:
     if owner is None:
-        return f"Compiler-visible {item.kind.lower()} `{item.path}`."
-    return f"Compiler-visible {item.kind.lower()} owned by `{owner}`."
+        return f"Public {item.kind.lower()} `{item.path}`."
+    return f"Public {item.kind.lower()} owned by `{owner}`."
 
 
 def item_metadata(item: ApiItem, evidence: str, example: str | None) -> str:
@@ -625,8 +625,8 @@ def render_body(
             anchor = entry.example.lower()
             lines.append(f"Example coverage: [{entry.example}](#{anchor}).")
         leaves = sorted(grouped[owner], key=item_sort_key)
+        lines.extend(["", "| Item | Purpose |", "| --- | --- |"])
         if leaves:
-            lines.extend(["", "| Item | Purpose |", "| --- | --- |"])
             for leaf in leaves:
                 leaf_entry = catalog.get((leaf.kind, leaf.path))
                 leaf_purpose = (
@@ -639,6 +639,8 @@ def render_body(
                     f"| **`{leaf_label(leaf, owner)}`**<br><sub>{leaf.kind}</sub>"
                     f"{item_metadata(leaf, leaf_evidence, leaf_entry.example if leaf_entry else None)} | {escape_purpose(leaf_purpose)} |"
                 )
+        else:
+            lines.append("| _No standalone item_ | Public API is described by its owning sections. |")
         example = examples.get((item.kind, item.path))
         if example:
             lines.extend(["", example])

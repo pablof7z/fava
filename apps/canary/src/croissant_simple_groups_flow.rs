@@ -15,7 +15,8 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
-    SimpleGroup, SimpleGroupAdmins, SimpleGroupMetadata, SimpleGroupStateEventKind,
+    SimpleGroup, SimpleGroupAdmins, SimpleGroupEventBuilder, SimpleGroupMetadata,
+    SimpleGroupStateEventKind,
 };
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
@@ -115,14 +116,11 @@ async fn execute_with_proxies(
     )?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-    let create = simple_group
-        .prepare(
-            EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
-                .created_at(Timestamp::from(now))
-                .content("controlled group bootstrap")
-                .build()
-                .map_err(error)?,
-        )
+    let create = EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
+        .created_at(Timestamp::from(now))
+        .content("controlled group bootstrap")
+        .tag(tag(&["h", &simple_group_id])?)
+        .build()
         .map_err(error)?
         .finalize(&author)
         .map_err(error)?;
@@ -145,14 +143,14 @@ async fn execute_with_proxies(
     .into_iter()
     .enumerate()
     {
-        let metadata = simple_group
-            .prepare(
-                EventBuilder::new(author.public_key(), Kind::from_u16(9_002))
-                    .created_at(Timestamp::from(now + 1 + index as u64))
-                    .tags([tag(&["name", name])?, tag(&["about", about])?])
-                    .build()
-                    .map_err(error)?,
-            )
+        let metadata = EventBuilder::new(author.public_key(), Kind::from_u16(9_002))
+            .created_at(Timestamp::from(now + 1 + index as u64))
+            .tags([
+                tag(&["name", name])?,
+                tag(&["about", about])?,
+                tag(&["h", &simple_group_id])?,
+            ])
+            .build()
             .map_err(error)?;
         require_terminal(
             &publish_unsigned(&publisher, [relay.clone()], metadata).await?,
@@ -163,14 +161,13 @@ async fn execute_with_proxies(
         .into_iter()
         .enumerate()
     {
-        let admin = simple_group
-            .prepare(
-                EventBuilder::new(author.public_key(), Kind::from_u16(9_000))
-                    .created_at(Timestamp::from(now + 3 + index as u64))
-                    .tag(tag(&["p", &target.to_hex(), "admin"])?)
-                    .build()
-                    .map_err(error)?,
-            )
+        let admin = EventBuilder::new(author.public_key(), Kind::from_u16(9_000))
+            .created_at(Timestamp::from(now + 3 + index as u64))
+            .tags([
+                tag(&["p", &target.to_hex(), "admin"])?,
+                tag(&["h", &simple_group_id])?,
+            ])
+            .build()
             .map_err(error)?;
         require_terminal(
             &publish_unsigned(&publisher, [relay.clone()], admin).await?,
@@ -278,20 +275,12 @@ async fn execute_with_proxies(
         }
     }
 
-    let custom = simple_group
-        .prepare(
-            EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND))
-                .created_at(Timestamp::from(now + 8))
-                .content("arbitrary kind across exact hosts")
-                .build()
-                .map_err(error)?,
-        )
+    let custom = EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND))
+        .created_at(Timestamp::from(now + 8))
+        .content("arbitrary kind across exact hosts")
+        .simple_group(&simple_group)
         .map_err(error)?;
-    let custom_write = publisher
-        .to(simple_group.relays())
-        .map_err(error)?
-        .publish(custom)
-        .map_err(error)?;
+    let custom_write = publisher.publish(custom).map_err(error)?;
     let custom_receipt = wait_terminal(&custom_write).await?;
     require_terminal(&custom_receipt, selected_relays)?;
     let custom_id = custom_receipt.current.id();
@@ -304,35 +293,37 @@ async fn execute_with_proxies(
     let drafts = [
         EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 9))
-            .build()
-            .map_err(error)?,
+            .content("missing context"),
         EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 10))
             .tags([
                 tag(&["h", &simple_group_id])?,
                 tag(&["h", &simple_group_id, "unused"])?,
             ])
-            .build()
-            .map_err(error)?,
+            .content("extended context"),
         EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 11))
             .tag(tag(&["h", "other-group"])?)
-            .build()
-            .map_err(error)?,
+            .content("foreign context"),
     ];
     let mut prepared_contexts = 0;
     for draft in drafts {
-        let prepared = simple_group.prepare(draft).map_err(error)?;
-        if prepared.tags.iter().any(|tag| {
-            tag.as_slice().first().map(String::as_str) == Some("h")
-                && tag.as_slice().get(1).map(String::as_str) == Some(&simple_group_id)
-        }) {
+        let (event, _) = draft
+            .simple_group(&simple_group)
+            .map_err(error)?
+            .into_event_and_routing()
+            .map_err(error)?;
+        if event
+            .tags
+            .iter()
+            .any(|tag| tag.as_slice() == ["h", simple_group_id.as_str()])
+        {
             prepared_contexts += 1;
         }
     }
     if publisher.open_receipts().map_err(error)?.len() != before_preparation {
         return Err(CanaryError::new(
-            "pure simple-group preparation reached Fava custody",
+            "pure simple-group builder composition reached Fava custody",
         ));
     }
 
@@ -479,14 +470,11 @@ fn signed_group_event(
     created: u64,
     content: &str,
 ) -> CanaryResult<Event> {
-    simple_group
-        .prepare(
-            EventBuilder::new(keys.public_key(), Kind::from_u16(9))
-                .created_at(Timestamp::from(created))
-                .content(content)
-                .build()
-                .map_err(error)?,
-        )
+    EventBuilder::new(keys.public_key(), Kind::from_u16(9))
+        .created_at(Timestamp::from(created))
+        .content(content)
+        .tag(tag(&["h", simple_group.id()])?)
+        .build()
         .map_err(error)?
         .finalize(keys)
         .map_err(error)
