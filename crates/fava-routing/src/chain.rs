@@ -11,7 +11,7 @@ use crate::{
     RouterSession, merge_coverage,
 };
 
-const MAX_ROUTERS: usize = 32;
+const CHAIN_ACCUMULATION_FACTOR: usize = 32;
 const MAX_DESTINATIONS: usize = 256;
 const MAX_TARGETS: usize = 256;
 const MAX_COVERAGE: usize = 256;
@@ -221,7 +221,7 @@ impl Composer {
         let mut combined = self.merged();
         combined.shortfalls.extend(self.shortfalls.iter().cloned());
         let mut discarded = self.discarded;
-        let maximum = MAX_SHORTFALLS * MAX_ROUTERS;
+        let maximum = MAX_SHORTFALLS * CHAIN_ACCUMULATION_FACTOR;
         if combined.shortfalls.len() >= maximum {
             discarded = discarded.saturating_add(combined.shortfalls.len() - maximum + 1);
             combined.shortfalls.truncate(maximum - 1);
@@ -466,7 +466,7 @@ pub(crate) fn validate_router_contribution(
 }
 
 pub(crate) fn validate_combined(contribution: &RouteContribution) -> Result<(), RouterError> {
-    validate_contribution(contribution, MAX_ROUTERS)
+    validate_contribution(contribution, CHAIN_ACCUMULATION_FACTOR)
 }
 
 fn validate_contribution(
@@ -531,7 +531,6 @@ fn bounded_text(label: &str, value: &str) -> Result<(), RouterError> {
 }
 
 fn validate_names(routers: &[Arc<dyn Router>]) -> Result<(), RouterError> {
-    bounded("configured routers", routers.len(), MAX_ROUTERS)?;
     let mut names = BTreeSet::new();
     for router in routers {
         if router.name().is_empty() {
@@ -581,16 +580,6 @@ mod tests {
         assert_eq!(
             error,
             RouterError::Refused("route destinations exceed bound: 257 > 256".to_owned())
-        );
-    }
-
-    #[test]
-    fn refuses_router_count_over_bound_with_exact_numbers() {
-        assert_eq!(
-            bounded("configured routers", MAX_ROUTERS + 1, MAX_ROUTERS),
-            Err(RouterError::Refused(
-                "configured routers exceed bound: 33 > 32".to_owned()
-            ))
         );
     }
 
