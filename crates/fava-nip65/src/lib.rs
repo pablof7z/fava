@@ -7,8 +7,6 @@ use fava_write::{EventValue, Kind, PublicKey};
 use nostr::types::RelayUrl;
 use thiserror::Error;
 
-const MAX_RELAYS: usize = 256;
-
 /// One valid NIP-65 kind:10002 relay list.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayList {
@@ -22,8 +20,7 @@ impl RelayList {
     ///
     /// # Errors
     ///
-    /// Returns [`RelayListError`] for the wrong kind, missing event id, or
-    /// excessive relay count.
+    /// Returns [`RelayListError`] for the wrong kind.
     pub fn from_event(event: &EventValue) -> Result<Self, RelayListError> {
         if event.kind() != Kind::from(10_002_u16) {
             return Err(RelayListError::WrongKind {
@@ -32,7 +29,6 @@ impl RelayList {
         }
         let mut read_relays = BTreeSet::new();
         let mut write_relays = BTreeSet::new();
-        let mut distinct_relays = BTreeSet::new();
         for tag in event.tags() {
             let values = tag.as_slice();
             if values.first().map(String::as_str) != Some("r") {
@@ -50,12 +46,6 @@ impl RelayList {
                 None => (true, true),
                 Some(_) => continue,
             };
-            if distinct_relays.insert(relay.clone()) && distinct_relays.len() > MAX_RELAYS {
-                return Err(RelayListError::TooManyRelays {
-                    actual: distinct_relays.len(),
-                    maximum: MAX_RELAYS,
-                });
-            }
             if read {
                 read_relays.insert(relay.clone());
             }
@@ -117,14 +107,6 @@ pub enum RelayListError {
     WrongKind {
         /// Exact received event kind.
         actual: u16,
-    },
-    /// Distinct relay count exceeded the protocol-crate bound.
-    #[error("relay-list count exceeds bound: {actual} > {maximum}")]
-    TooManyRelays {
-        /// Actual distinct relay count.
-        actual: usize,
-        /// Declared bound.
-        maximum: usize,
     },
 }
 

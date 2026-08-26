@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use fava_nip65::{RelayList, RelayListError};
+use fava_nip65::RelayList;
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag};
 use nostr::types::RelayUrl;
 
@@ -55,30 +55,6 @@ fn present_empty_marker_is_unknown_not_omitted() {
 
     assert!(list.read_relays().is_empty());
     assert!(list.write_relays().is_empty());
-}
-
-#[test]
-fn bound_refuses_at_maximum_plus_one_distinct_relay() {
-    let mut builder = EventBuilder::new(author(), Kind::from(10_002_u16));
-    for index in 0..300 {
-        let relay = format!("wss://relay-{index}.example");
-        builder = builder.tag(Tag::parse(["r", relay.as_str()]).expect("relay tag"));
-    }
-    let event = builder.build().expect("bounded event");
-
-    let error = RelayList::from_event(&EventValue::Unsigned(event)).expect_err("result bound");
-
-    assert_eq!(
-        error,
-        RelayListError::TooManyRelays {
-            actual: 257,
-            maximum: 256,
-        }
-    );
-    assert_eq!(
-        error.to_string(),
-        "relay-list count exceeds bound: 257 > 256"
-    );
 }
 
 #[test]
