@@ -12,7 +12,6 @@ use fava_transport::{
 };
 use fava_wire::{ClientMessage, RelayMessage, decode_relay, encode_client};
 
-const MAX_RESPONSE_BYTES: usize = 4_096;
 const MAX_INBOUND_FRAMES: usize = 64;
 
 /// Deadlines and bounds this publisher hands the transport for one attempt.
@@ -54,13 +53,7 @@ impl Publisher for Nip01Publisher {
                 .acquire_session(open_request(&attempt.session, attempt.timeout))
                 .await
             {
-                Ok(lease) if lease.session().identity().key == attempt.session => lease,
-                Ok(lease) => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::NotHandedOff {
-                        reason: "transport returned the wrong relay session identity".to_owned(),
-                    };
-                }
+                Ok(lease) => lease,
                 Err(error) => {
                     return PublishOutcome::NotHandedOff {
                         reason: error.to_string(),
@@ -116,11 +109,6 @@ impl Publisher for Nip01Publisher {
                             status,
                             message,
                         } if event_id == attempt.event.id => {
-                            if message.len() > MAX_RESPONSE_BYTES {
-                                return Err(format!(
-                                    "relay OK text exceeds {MAX_RESPONSE_BYTES}-byte bound"
-                                ));
-                            }
                             return Ok(if status {
                                 PublishOutcome::Acknowledged {
                                     message: message.into_owned(),

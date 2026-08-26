@@ -66,15 +66,9 @@ fn metadata_conserves_value_local_failures_and_repetitions() {
     .expect("metadata");
     assert!(metadata.is_private());
     let kinds = metadata.supported_kinds().expect("present");
-    assert_eq!(kinds[0], Ok(Kind::from_u16(1)));
-    assert!(matches!(
-        kinds[1],
-        Err(SimpleGroupDecodeError::InvalidKind {
-            tag_index: 2,
-            value_index: 2
-        })
-    ));
-    assert_eq!(kinds[2], Ok(Kind::from_u16(1)));
+    assert_eq!(kinds[0], "1");
+    assert_eq!(kinds[1], "bad");
+    assert_eq!(kinds[2], "1");
     assert_eq!(metadata.children()[0], Ok("one".to_owned()));
     assert!(matches!(
         metadata.children()[1],

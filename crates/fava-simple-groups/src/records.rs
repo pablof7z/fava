@@ -28,13 +28,6 @@ pub enum SimpleGroupDecodeError {
         /// Zero-based value index.
         value_index: usize,
     },
-    /// A `supported_kinds` value is not a decimal `u16`.
-    InvalidKind {
-        /// Zero-based event tag index.
-        tag_index: usize,
-        /// Zero-based value index.
-        value_index: usize,
-    },
 }
 
 impl fmt::Display for SimpleGroupDecodeError {
@@ -57,13 +50,6 @@ impl fmt::Display for SimpleGroupDecodeError {
             } => write!(
                 formatter,
                 "tag {tag_index} has an invalid LiveKit participant key at position {value_index}"
-            ),
-            Self::InvalidKind {
-                tag_index,
-                value_index,
-            } => write!(
-                formatter,
-                "tag {tag_index} has an invalid kind at position {value_index}"
             ),
         }
     }

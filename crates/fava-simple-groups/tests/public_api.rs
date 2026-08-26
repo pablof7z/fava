@@ -39,7 +39,7 @@ fn inspect_decoders(
     ),
 ) {
     let (metadata, admins, members, roles, participants, pins, list, saved) = values;
-    let _: Option<&[Result<Kind, SimpleGroupDecodeError>]> = metadata.supported_kinds();
+    let _: Option<&[String]> = metadata.supported_kinds();
     let _: &[Result<String, SimpleGroupDecodeError>] = metadata.children();
     let _: &[Result<(String, Vec<String>), SimpleGroupDecodeError>] = admins.admins();
     let _: &[Result<String, SimpleGroupDecodeError>] = members.members();

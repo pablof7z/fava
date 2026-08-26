@@ -183,16 +183,6 @@ fn parse_livekit_key(
     tag_index: usize,
 ) -> Result<PublicKey, SimpleGroupDecodeError> {
     let raw = required_value(values, tag_index, 1)?;
-    if raw.len() != 64
-        || !raw
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey {
-            tag_index,
-            value_index: 1,
-        });
-    }
     PublicKey::from_hex(raw).map_err(|_| {
         SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey {
             tag_index,

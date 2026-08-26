@@ -323,7 +323,6 @@ impl RoutePlan {
             unresolved: BTreeSet::new(),
             shortfalls: Vec::new(),
         };
-        chain::validate_router_contribution(&contribution)?;
         Self::from_contribution(1, &contribution)
     }
 }

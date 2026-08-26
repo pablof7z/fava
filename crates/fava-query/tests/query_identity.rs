@@ -3,7 +3,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use fava_query::{EventId, Kind, PublicKey, Query, QueryError, RelayUrl, SingleLetterTag};
+use fava_query::{Kind, Query, QueryError, RelayUrl, SingleLetterTag};
 
 fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("test relay URL")
@@ -65,96 +65,6 @@ fn invalid_query_inputs_are_refused_during_construction() {
         Err(QueryError::EmptyExplicitRelays)
     );
     assert_eq!(Query::events().limit(0), Err(QueryError::ZeroLimit));
-}
-
-#[test]
-fn generic_query_inputs_stop_at_query_owned_bounds() {
-    let relay = relay("wss://bounded.example");
-    assert!(
-        Query::events()
-            .from_relays(std::iter::repeat_n(relay.clone(), 4_096))
-            .is_ok()
-    );
-    assert_eq!(
-        Query::events().from_relays(std::iter::repeat(relay)),
-        Err(QueryError::TooManyExplicitRelays {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-
-    let author =
-        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
-            .expect("public key");
-    assert!(
-        Query::events()
-            .authors(std::iter::repeat_n(author, 4_096))
-            .is_ok()
-    );
-    assert_eq!(
-        Query::events().authors(std::iter::repeat(author)),
-        Err(QueryError::TooManyAuthors {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-    assert_eq!(
-        Query::events().kinds(std::iter::repeat(Kind::from_u16(1))),
-        Err(QueryError::TooManyKinds {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-    assert!(
-        Query::events()
-            .kinds(std::iter::repeat_n(Kind::from_u16(1), 4_096))
-            .is_ok()
-    );
-    let id = EventId::from_byte_array([1; 32]);
-    assert!(Query::events().ids(std::iter::repeat_n(id, 4_096)).is_ok());
-    assert_eq!(
-        Query::events().ids(std::iter::repeat(id)),
-        Err(QueryError::TooManyIds {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-    let e = SingleLetterTag::from_char('e').expect("tag key");
-    assert!(
-        Query::events()
-            .tag_values(e, std::iter::repeat_n("same", 4_096))
-            .is_ok()
-    );
-    assert_eq!(
-        Query::events().tag_values(e, std::iter::repeat("same")),
-        Err(QueryError::TooManyTagValues {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-    assert!(
-        Query::events()
-            .intersect_tag_values(e, std::iter::repeat_n("same", 4_096))
-            .is_ok()
-    );
-    assert_eq!(
-        Query::events().intersect_tag_values(e, std::iter::repeat("same")),
-        Err(QueryError::TooManyTagValues {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
-
-    let full_tag_axis = Query::events()
-        .tag_values(e, (0..4_096).map(|index| index.to_string()))
-        .expect("the declared maximum is accepted");
-    assert_eq!(
-        full_tag_axis.tag_values(e, ["overflow"]),
-        Err(QueryError::TooManyTagValues {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    );
 }
 
 #[test]

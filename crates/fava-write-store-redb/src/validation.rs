@@ -4,7 +4,7 @@ use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::event_is_newer;
 use fava_write::{
     EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    SignatureState, WriteIntent, WriteRouting,
+    SignatureState, WriteRouting,
 };
 use fava_write_store::{
     WriteStoreError, destination_evidence_capacity, validate_delivery_outcome,
@@ -229,13 +229,7 @@ fn validate_semantic(
     {
         return incoherent("durable semantic edit sequence and generations disagree");
     }
-    for edit in edits {
-        WriteIntent::edit_as(edit.clone(), *author, receipt.routing.clone())?;
-    }
-    if let Some((successor_edit, successor_event, successor_source, successor_route)) = successor {
-        if let Some(successor_edit) = successor_edit {
-            WriteIntent::edit_as(successor_edit.clone(), *author, receipt.routing.clone())?;
-        }
+    if let Some((_, successor_event, successor_source, successor_route)) = successor {
         successor_event
             .verify_id()
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?;

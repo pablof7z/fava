@@ -267,7 +267,7 @@ impl Publication {
                     )));
                 }
             };
-            validate_materialization(edit, author, &event, routing, created_at)?;
+            validate_materialization(edit, author, &event, created_at)?;
             input = Some(EventValue::Unsigned(event.clone()));
             output = Some(event);
         }
@@ -465,12 +465,8 @@ pub(super) fn validate_materialization(
     edit: &ReplaceableEventEdit,
     author: PublicKey,
     event: &UnsignedEvent,
-    routing: &WriteRouting,
     injected_created_at: Timestamp,
 ) -> Result<(), PublicationError> {
-    WriteIntent::event(event.clone(), routing.clone()).map_err(|error| {
-        PublicationError::Routing(format!("semantic materialization refused: {error}"))
-    })?;
     let id = event.id.ok_or_else(|| {
         PublicationError::Routing("semantic materialization has no event id".to_owned())
     })?;

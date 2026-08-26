@@ -316,7 +316,6 @@ fn qualified_source(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    validate_source_structure(source)?;
     match source {
         EventValue::Signed(event) => event
             .verify()
@@ -340,59 +339,6 @@ fn qualified_source(
         EventValue::Signed(event) => event.content.as_str(),
     };
     Ok((content, source.tags()))
-}
-
-fn validate_source_structure(source: &EventValue) -> Result<(), WriteIntentError> {
-    const MAX_TAGS: usize = 2_000;
-    const MAX_BYTES: usize = 131_072;
-    const MAX_TAG_VALUES: usize = 256;
-    const MAX_VALUE_BYTES: usize = 4_096;
-
-    let content = match source {
-        EventValue::Unsigned(event) => event.content.as_str(),
-        EventValue::Signed(event) => event.content.as_str(),
-    };
-    if content.len() > MAX_BYTES {
-        return Err(WriteIntentError::TooLarge {
-            bytes: content.len().min(MAX_BYTES + 1),
-            maximum: MAX_BYTES,
-        });
-    }
-    if source.tags().len() > MAX_TAGS {
-        return Err(WriteIntentError::TooManyTags {
-            actual: source.tags().len().min(MAX_TAGS + 1),
-            maximum: MAX_TAGS,
-        });
-    }
-    let mut bytes = content.len();
-    for tag in source.tags() {
-        if tag.as_slice().len() > MAX_TAG_VALUES {
-            return Err(codec_refusal(
-                "saved-list source tag value count exceeds bound",
-            ));
-        }
-        for value in tag.as_slice() {
-            if value.len() > MAX_VALUE_BYTES {
-                return Err(WriteIntentError::TooLarge {
-                    bytes: value.len(),
-                    maximum: MAX_VALUE_BYTES,
-                });
-            }
-            bytes = bytes.checked_add(value.len().saturating_add(1)).ok_or(
-                WriteIntentError::TooLarge {
-                    bytes: MAX_BYTES + 1,
-                    maximum: MAX_BYTES,
-                },
-            )?;
-            if bytes > MAX_BYTES {
-                return Err(WriteIntentError::TooLarge {
-                    bytes: bytes.min(MAX_BYTES + 1),
-                    maximum: MAX_BYTES,
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 fn apply(

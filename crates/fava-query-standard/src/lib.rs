@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use fava_query::{
-    BoundedText, EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator,
-    QueryOrdering, QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
+    EventRecord, FilterSelection, Query, QueryEvaluationError, QueryEvaluator, QueryOrdering,
+    QuerySnapshot, ResultAuthority, SourceEvent, SourceSnapshot,
 };
 use fava_state::{
     EventCoordinate, RelayEvent, event_coordinate, event_is_newer, relay_occurrences_for_event,
@@ -106,16 +106,7 @@ fn merge_qualifying_contribution(
                 relay: Vec::new(),
                 publication: None,
             });
-            if let Some(publication) = &candidate.publication {
-                if publication != &local.publication {
-                    return Err(QueryEvaluationError::Refused(BoundedText::new(format!(
-                        "event {} has conflicting local publication evidence",
-                        local.id()
-                    ))));
-                }
-            } else {
-                candidate.publication = Some(local.publication.clone());
-            }
+            candidate.publication.get_or_insert_with(|| local.publication.clone());
             if matches!(local.event, EventValue::Signed(_)) {
                 candidate.event = local.event.clone();
             }

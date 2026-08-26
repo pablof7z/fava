@@ -61,20 +61,12 @@ impl OutboxRouter {
     /// Configure one NIP-65 router and the ordinary query source it uses for
     /// exact indexer acquisition.
     ///
-    /// # Errors
-    ///
-    /// Returns [`RouterError`] when no indexer relay is configured.
     pub fn new(
         name: impl Into<String>,
         indexers: impl IntoIterator<Item = RelayUrl>,
         queries: Arc<dyn QuerySource>,
     ) -> Result<Self, RouterError> {
         let indexers: BTreeSet<_> = indexers.into_iter().collect();
-        if indexers.is_empty() {
-            return Err(RouterError::Refused(
-                "outbox routing requires at least one indexer relay".to_owned(),
-            ));
-        }
         Ok(Self {
             name: name.into(),
             indexers,
@@ -114,6 +106,11 @@ impl Router for OutboxRouter {
             shortfalls = Shortfalls::default();
             (BTreeMap::new(), None)
         } else {
+            if self.indexers.is_empty() {
+                return Err(RouterError::Refused(
+                    "outbox routing requires at least one indexer relay".to_owned(),
+                ));
+            }
             let query = relay_lists(queried.iter().copied())
                 .map_err(|error| RouterError::Refused(error.to_string()))?
                 .from_relays(self.indexers.iter().cloned())

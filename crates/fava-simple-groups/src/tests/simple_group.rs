@@ -1,4 +1,4 @@
-use fava_query::{Kind, Query, QueryAcquisition, QueryError, ResultAuthority, SingleLetterTag};
+use fava_query::{Kind, Query, QueryAcquisition, ResultAuthority, SingleLetterTag};
 use fava_write::{EventBuilder, Timestamp, WriteIntentError, WriteRouting};
 use nostr::types::RelayUrl;
 
@@ -39,23 +39,6 @@ fn construction_preserves_opaque_non_empty_id_and_first_relay_occurrences() {
 
 #[test]
 fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
-    let first = RelayUrl::parse("wss://relay-0.example").expect("relay");
-    let rest: Vec<_> = (1..4_097)
-        .map(|index| {
-            RelayUrl::parse(&format!("wss://relay-{index}.example")).expect("unique relay")
-        })
-        .collect();
-    let group = SimpleGroup::from_relays("g", std::iter::once(first).chain(rest).collect())
-        .expect("non-empty group");
-    assert_eq!(group.relays().count(), 4_097);
-    assert!(matches!(
-        group.events(Query::events()),
-        Err(QueryError::TooManyExplicitRelays {
-            actual: 4_097,
-            maximum: 4_096,
-        })
-    ));
-
     let first = RelayUrl::parse("wss://write-0.example").expect("relay");
     let rest: Vec<_> = (1..257)
         .map(|index| {
@@ -69,16 +52,6 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
         Err(WriteIntentError::TooManyExplicitRelays {
             actual: 257,
             maximum: 256,
-        })
-    ));
-
-    let relay = RelayUrl::parse("wss://bounded.example").expect("relay");
-    let group = SimpleGroup::from_relays("g", vec![relay]).expect("non-empty group");
-    assert!(matches!(
-        group.meta_events(std::iter::repeat(SimpleGroupStateEventKind::Metadata)),
-        Err(QueryError::TooManyKinds {
-            actual: 4_097,
-            maximum: 4_096,
         })
     ));
 }

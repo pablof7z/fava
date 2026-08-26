@@ -137,7 +137,6 @@ fn encode_coordinate(
     bytes: &mut Vec<u8>,
     coordinate: &EventCoordinate,
 ) -> Result<(), WriteIntentError> {
-    validate_target_coordinate(coordinate)?;
     let EventCoordinate::Replaceable {
         author,
         kind,
@@ -406,15 +405,10 @@ fn build(
 }
 
 fn validate_output(
-    author: PublicKey,
+    _author: PublicKey,
     event: &UnsignedEvent,
-    created_at: Timestamp,
+    _created_at: Timestamp,
 ) -> Result<(), WriteIntentError> {
-    if event.pubkey != author || event.kind != bookmark_kind() || event.created_at != created_at {
-        return Err(WriteIntentError::InvalidEvent(
-            "bookmark materializer produced the wrong author, kind, or timestamp".to_owned(),
-        ));
-    }
     event
         .verify_id()
         .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))

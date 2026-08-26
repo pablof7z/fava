@@ -53,10 +53,6 @@ impl ReplaceableEventEdit {
         &self.change
     }
 
-    pub(crate) fn validate_for_intent(&self) -> Result<(), WriteIntentError> {
-        validate_coordinate(self.kind, self.identifier())?;
-        validate_bytes(&self.change)
-    }
 }
 
 impl WriteIntent {
@@ -71,7 +67,6 @@ impl WriteIntent {
         author: PublicKey,
         routing: WriteRouting,
     ) -> Result<Self, WriteIntentError> {
-        edit.validate_for_intent()?;
         routing.validate()?;
         Ok(Self {
             payload: WritePayload::Edit { edit, author },

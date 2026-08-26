@@ -1,4 +1,4 @@
-use fava_write::{EventValue, Kind, PublicKey};
+use fava_write::{EventValue, PublicKey};
 
 use crate::records::{SimpleGroupDecodeError, required_value, state_event};
 
@@ -17,7 +17,7 @@ pub struct SimpleGroupMetadata {
     hidden: bool,
     closed: bool,
     livekit: bool,
-    supported_kinds: Option<Vec<Result<Kind, SimpleGroupDecodeError>>>,
+    supported_kinds: Option<Vec<String>>,
     parent: Option<String>,
     children: Vec<Result<String, SimpleGroupDecodeError>>,
 }
@@ -59,20 +59,8 @@ impl SimpleGroupMetadata {
                 Some("closed") => value.closed = true,
                 Some("livekit") => value.livekit = true,
                 Some("supported_kinds") if value.supported_kinds.is_none() => {
-                    value.supported_kinds = Some(
-                        values[1..]
-                            .iter()
-                            .enumerate()
-                            .map(|(offset, raw)| {
-                                raw.parse::<u16>().map(Kind::from_u16).map_err(|_| {
-                                    SimpleGroupDecodeError::InvalidKind {
-                                        tag_index,
-                                        value_index: offset + 1,
-                                    }
-                                })
-                            })
-                            .collect(),
-                    );
+                    value.supported_kinds =
+                        Some(values[1..].iter().map(String::clone).collect());
                 }
                 Some("parent") => set_first(&mut value.parent, values.get(1)),
                 Some("child") => value
@@ -150,9 +138,9 @@ impl SimpleGroupMetadata {
         self.livekit
     }
 
-    /// Values from the first `supported_kinds` tag, retaining value-local failures.
+    /// Raw values from the first `supported_kinds` tag.
     #[must_use]
-    pub fn supported_kinds(&self) -> Option<&[Result<Kind, SimpleGroupDecodeError>]> {
+    pub fn supported_kinds(&self) -> Option<&[String]> {
         self.supported_kinds.as_deref()
     }
 

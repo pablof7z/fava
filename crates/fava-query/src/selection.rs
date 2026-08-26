@@ -33,8 +33,7 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::TooManyAuthors`] before consuming more than the
-    /// provisional query resource cap.
+    /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn authors(
         mut self,
         authors: impl IntoIterator<Item = PublicKey>,
@@ -47,8 +46,7 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::TooManyKinds`] before consuming more than the
-    /// provisional query resource cap.
+    /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn kinds(mut self, kinds: impl IntoIterator<Item = Kind>) -> Result<Self, QueryError> {
         self.selection.kinds = Some(bounded_kinds(kinds)?);
         Ok(self)
@@ -58,8 +56,7 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::TooManyIds`] before consuming more than the
-    /// provisional query resource cap.
+    /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Result<Self, QueryError> {
         self.selection.ids = Some(bounded_ids(ids)?);
         Ok(self)
@@ -72,8 +69,7 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::TooManyTagValues`] before consuming or retaining
-    /// more than the provisional query resource cap for this key.
+    /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn tag_values<I, S>(mut self, key: SingleLetterTag, values: I) -> Result<Self, QueryError>
     where
         I: IntoIterator<Item = S>,
@@ -82,7 +78,6 @@ impl Query {
         extend_bounded(
             values.into_iter().map(Into::into),
             self.selection.tag_values.entry(key).or_default(),
-            |actual, maximum| QueryError::TooManyTagValues { actual, maximum },
         )?;
         Ok(self)
     }
@@ -95,8 +90,7 @@ impl Query {
     ///
     /// # Errors
     ///
-    /// Returns [`QueryError::TooManyTagValues`] before consuming more than the
-    /// provisional query resource cap for the supplied values.
+    /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn intersect_tag_values<I, S>(
         mut self,
         key: SingleLetterTag,
