@@ -31,8 +31,6 @@ const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const EVENT: u8 = 1;
 const COORDINATE: u8 = 2;
-const MAX_IDENTIFIER_BYTES: usize = 4_096;
-
 mod bounds;
 
 /// Produce a bounded edit that adds one public event bookmark.
@@ -59,8 +57,8 @@ pub fn unbookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIn
 ///
 /// # Errors
 ///
-/// Returns an existing write-intent refusal for an ordinary event coordinate,
-/// an invalid replaceable coordinate, or an oversized identifier.
+/// Returns an existing write-intent refusal for an ordinary event coordinate
+/// or an invalid replaceable coordinate.
 pub fn bookmark_coordinate(
     target: EventCoordinate,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
@@ -72,8 +70,8 @@ pub fn bookmark_coordinate(
 ///
 /// # Errors
 ///
-/// Returns an existing write-intent refusal for an ordinary event coordinate,
-/// an invalid replaceable coordinate, or an oversized identifier.
+/// Returns an existing write-intent refusal for an ordinary event coordinate
+/// or an invalid replaceable coordinate.
 pub fn unbookmark_coordinate(
     target: EventCoordinate,
 ) -> Result<ReplaceableEventEdit, WriteIntentError> {
@@ -150,10 +148,8 @@ fn encode_coordinate(
     };
     let identifier = identifier.as_deref();
     let identifier_bytes = identifier.unwrap_or_default().as_bytes();
-    let length = u16::try_from(identifier_bytes.len()).map_err(|_| WriteIntentError::TooLarge {
-        bytes: identifier_bytes.len(),
-        maximum: MAX_IDENTIFIER_BYTES,
-    })?;
+    let length = u32::try_from(identifier_bytes.len())
+        .map_err(|_| codec_refusal("identifier exceeds bookmark encoding capacity"))?;
     bytes.extend_from_slice(&kind.as_u16().to_be_bytes());
     bytes.push(u8::from(identifier.is_some()));
     bytes.extend_from_slice(author.as_bytes());
@@ -184,7 +180,7 @@ fn decode(bytes: &[u8]) -> Result<Change, WriteIntentError> {
 }
 
 fn decode_coordinate(bytes: &[u8]) -> Result<EventCoordinate, WriteIntentError> {
-    if bytes.len() < 37 {
+    if bytes.len() < 39 {
         return Err(codec_refusal("malformed bookmark coordinate"));
     }
     let kind = Kind::from_u16(u16::from_be_bytes([bytes[0], bytes[1]]));
@@ -195,13 +191,14 @@ fn decode_coordinate(bytes: &[u8]) -> Result<EventCoordinate, WriteIntentError> 
     };
     let author = PublicKey::from_slice(&bytes[3..35])
         .map_err(|_| codec_refusal("invalid bookmark coordinate author"))?;
-    let length = usize::from(u16::from_be_bytes([bytes[35], bytes[36]]));
-    if length > MAX_IDENTIFIER_BYTES || bytes.len() != 37 + length {
+    let length = usize::try_from(u32::from_be_bytes([bytes[35], bytes[36], bytes[37], bytes[38]]))
+        .map_err(|_| codec_refusal("bookmark coordinate identifier length overflow"))?;
+    if bytes.len() != 39 + length {
         return Err(codec_refusal(
             "invalid bookmark coordinate identifier length",
         ));
     }
-    let identifier = std::str::from_utf8(&bytes[37..])
+    let identifier = std::str::from_utf8(&bytes[39..])
         .map_err(|_| codec_refusal("bookmark coordinate identifier is not UTF-8"))?;
     let coordinate = EventCoordinate::Replaceable {
         author,
@@ -234,15 +231,6 @@ fn validate_target_coordinate(coordinate: &EventCoordinate) -> Result<(), WriteI
     else {
         return Err(invalid_coordinate());
     };
-    if identifier
-        .as_ref()
-        .is_some_and(|value| value.len() > MAX_IDENTIFIER_BYTES)
-    {
-        return Err(WriteIntentError::TooLarge {
-            bytes: identifier.as_ref().map_or(0, String::len),
-            maximum: MAX_IDENTIFIER_BYTES,
-        });
-    }
     let valid = match identifier {
         None => kind.is_replaceable(),
         Some(_) => kind.is_addressable(),

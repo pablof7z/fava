@@ -466,15 +466,12 @@ fn assert_codec_and_target_refusals(actor: &Keys, event_id: EventId, edit: &Repl
         bookmark_coordinate(invalid_coordinate),
         Err(WriteIntentError::InvalidEvent(_))
     ));
-    let oversized_coordinate = EventCoordinate::Replaceable {
+    let large_coordinate = EventCoordinate::Replaceable {
         author: actor.public_key(),
         kind: Kind::from_u16(30_023),
         identifier: Some("x".repeat(70_000)),
     };
-    assert!(matches!(
-        bookmark_coordinate(oversized_coordinate),
-        Err(WriteIntentError::TooLarge { .. })
-    ));
+    assert!(bookmark_coordinate(large_coordinate).is_ok());
 }
 
 fn assert_size_and_timestamp_refusals(actor: &Keys, edit: &ReplaceableEventEdit) {
