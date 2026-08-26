@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Any
 
 _TOOLS = str(Path(__file__).parents[1])
 if _TOOLS not in sys.path:
@@ -1091,7 +1092,7 @@ class ServerTest(unittest.TestCase):
             f"http://127.0.0.1:{self._port}{path}"
         )
 
-    def _post(self, path: str, body: dict) -> tuple[int, dict]:
+    def _post(self, path: str, body: Any) -> tuple[int, dict]:
         import urllib.error
         import urllib.request
         data = json.dumps(body).encode("utf-8")
@@ -1208,6 +1209,23 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("exactly one name tag", body["error"])
         self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_array_of_events_bulk_body_is_rejected_without_writing(self) -> None:
+        event = self._current_event()
+        status, body = self._post("/api/approvals", [event, event])
+        self.assertEqual(status, 400)
+        self.assertEqual(body, {"error": "approval body must be one JSON object"})
+        self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
+
+    def test_scalar_and_null_bodies_are_rejected_without_writing(self) -> None:
+        for value in (None, True, 7, "event"):
+            with self.subTest(value=value):
+                status, body = self._post("/api/approvals", value)
+                self.assertEqual(status, 400)
+                self.assertEqual(
+                    body, {"error": "approval body must be one JSON object"}
+                )
+                self.assertFalse((self._root / approval.APPROVALS_PATH).exists())
 
     def test_noncanonical_markdown_is_rejected_without_writing(self) -> None:
         status, body = self._post(

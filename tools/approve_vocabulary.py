@@ -88,6 +88,11 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as error:
             self._send_json(400, {"error": f"unreadable event: {error}"})
             return
+        if not isinstance(event, dict):
+            self._send_json(
+                400, {"error": "approval body must be one JSON object"}
+            )
+            return
 
         problems = approval.verify_event(event)
         if problems:
