@@ -7,7 +7,7 @@ use crate::records::{SimpleGroupDecodeError, required_value, state_event};
 pub struct SimpleGroupAdmins {
     id: String,
     author: PublicKey,
-    admins: Vec<Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>>,
+    admins: Vec<Result<(String, Vec<String>), SimpleGroupDecodeError>>,
 }
 
 /// Semantic kind-39002 member entries from one event.
@@ -15,7 +15,7 @@ pub struct SimpleGroupAdmins {
 pub struct SimpleGroupMembers {
     id: String,
     author: PublicKey,
-    members: Vec<Result<PublicKey, SimpleGroupDecodeError>>,
+    members: Vec<Result<String, SimpleGroupDecodeError>>,
 }
 
 /// Semantic kind-39003 role entries from one event.
@@ -79,7 +79,7 @@ impl SimpleGroupAdmins {
     }
 
     /// Return every `p` tag as key plus roles or a local failure.
-    pub fn admins(&self) -> &[Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>] {
+    pub fn admins(&self) -> &[Result<(String, Vec<String>), SimpleGroupDecodeError>] {
         &self.admins
     }
 }
@@ -96,7 +96,7 @@ impl SimpleGroupMembers {
             .iter()
             .enumerate()
             .filter(|(_, tag)| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .map(|(tag_index, tag)| parse_public_key(tag.as_slice(), tag_index))
+            .map(|(tag_index, tag)| required_value(tag.as_slice(), tag_index, 1).map(str::to_owned))
             .collect();
         Ok(Self {
             id: id.to_owned(),
@@ -105,8 +105,8 @@ impl SimpleGroupMembers {
         })
     }
 
-    /// Return every `p` tag as its parsed first value or a local failure.
-    pub fn members(&self) -> &[Result<PublicKey, SimpleGroupDecodeError>] {
+    /// Return every `p` tag as its exact first value or a local failure.
+    pub fn members(&self) -> &[Result<String, SimpleGroupDecodeError>] {
         &self.members
     }
 }
@@ -172,21 +172,10 @@ impl SimpleGroupLivekitParticipants {
 fn parse_admin(
     values: &[String],
     tag_index: usize,
-) -> Result<(PublicKey, Vec<String>), SimpleGroupDecodeError> {
-    let key = parse_public_key(values, tag_index)?;
+) -> Result<(String, Vec<String>), SimpleGroupDecodeError> {
+    let key = required_value(values, tag_index, 1)?.to_owned();
     required_value(values, tag_index, 2)?;
     Ok((key, values[2..].to_vec()))
-}
-
-fn parse_public_key(
-    values: &[String],
-    tag_index: usize,
-) -> Result<PublicKey, SimpleGroupDecodeError> {
-    let raw = required_value(values, tag_index, 1)?;
-    PublicKey::from_hex(raw).map_err(|_| SimpleGroupDecodeError::InvalidPublicKey {
-        tag_index,
-        value_index: 1,
-    })
 }
 
 fn parse_livekit_key(

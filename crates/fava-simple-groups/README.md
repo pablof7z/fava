@@ -174,7 +174,7 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
     let source = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags([
             Tag::parse(["group", "photos", "wss://a.example", "Old"])?,
-            Tag::parse(["r", "wss://a.example"])?,
+            Tag::parse(["r", "not a relay URL/ß"])?,
             Tag::parse(["x", "preserved"])?,
         ])
         .custom_created_at(Timestamp::from(1))
@@ -239,7 +239,7 @@ Example coverage: [SGL-1](#sgl-1).
 | --- | --- |
 | **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedGroupList::author","signature":"pub const fn fava_simple_groups::SavedGroupList::author(&self) -> nostr::key::public_key::PublicKey","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Simple Group List","example":"SGL-1"} --> | Returns the event author whose public preference list this is.<br><br>Example: [SGL-1](#sgl-1). |
 | **`from_event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedGroupList::from_event","signature":"pub fn fava_simple_groups::SavedGroupList::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SavedGroupListDecodeError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Simple Group List; current parsers crates/fava-simple-groups/src/saved.rs","example":"SGL-1"} --> | Checks kind 10009, then decodes every `group` and `r` tag independently. Unknown tags and unused extras are ignored; repetitions and valid siblings survive; no signature/id verification or generic bounds.<br><br>Example: [SGL-1](#sgl-1). |
-| **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedGroupList::relays","signature":"pub fn fava_simple_groups::SavedGroupList::relays(&self) -> &[core::result::Result<nostr::types::url::RelayUrl, fava_simple_groups::SavedGroupListDecodeError>]","evidence":"NIP-51 kind-10009 r tags","example":"SGL-1"} --> | Returns all parsed inert `r` relay URLs and local failures in their relative source order. No `SavedRelay` wrapper exists.<br><br>Example: [SGL-1](#sgl-1). |
+| **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedGroupList::relays","signature":"pub fn fava_simple_groups::SavedGroupList::relays(&self) -> &[core::result::Result<alloc::string::String, fava_simple_groups::SavedGroupListDecodeError>]","evidence":"NIP-51 kind-10009 r tags","example":"SGL-1"} --> | Returns every `r` tag's exact first value or a local missing-position failure in source order. Present strings are not URL-validated; repetitions survive.<br><br>Example: [SGL-1](#sgl-1). |
 | **`simple_groups`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedGroupList::simple_groups","signature":"pub fn fava_simple_groups::SavedGroupList::simple_groups(&self) -> &[core::result::Result<fava_simple_groups::SavedSimpleGroup, fava_simple_groups::SavedGroupListDecodeError>]","evidence":"NIP-51 kind-10009 group tags","example":"SGL-1"} --> | Returns all `group` entries and local failures in their relative source order.<br><br>Example: [SGL-1](#sgl-1). |
 
 <a id="sgl-1"></a>
@@ -256,7 +256,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .tags([
             Tag::parse(["group", "photos", "wss://a.example", "A", "ignored"])?,
             Tag::parse(["group", "missing-relay"])?,
-            Tag::parse(["group", "photos", "wss://a.example", "A"])?,
+            Tag::parse(["group", "photos", "not a relay URL/ß", "A"])?,
             Tag::parse(["r", "wss://a.example", "ignored"])?,
             Tag::parse(["r"])?,
             Tag::parse(["r", "wss://a.example"])?,
@@ -273,7 +273,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }) => assert_eq!((*tag_index, *value_index), (1, 2)),
         other => panic!("unexpected middle group: {other:?}"),
     }
-    assert_eq!(groups[2].as_ref().expect("repetition").id(), "photos");
+    assert_eq!(
+        groups[2].as_ref().expect("foreign relay").relay(),
+        "not a relay URL/ß"
+    );
     let relays = decoded.relays();
     assert_eq!(
         relays[0].as_ref().expect("first").as_str(),
@@ -287,8 +290,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         other => panic!("unexpected middle relay: {other:?}"),
     }
     assert_eq!(
-        relays[2].as_ref().expect("repetition").as_str(),
-        "wss://a.example"
+        relays[2].as_ref().expect("foreign relay").as_str(),
+        "not a relay URL/ß"
     );
     Ok(())
 }
@@ -302,9 +305,6 @@ Example coverage: [SGLE-1](#sgle-1).
 
 | Item | Purpose |
 | --- | --- |
-| **`InvalidRelayUrl`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl","signature":"pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl","evidence":"NIP-51 group/r relay values delegate to RelayUrl::parse","example":"SGLE-1"} --> | A required relay position failed the existing relay-URL parser.<br><br>Example: [SGLE-1](#sgle-1). |
-| **`Field `tag_index` of `InvalidRelayUrl``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::tag_index","signature":"pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::tag_index: usize","evidence":"source-position conservation","example":"SGLE-1"} --> | Zero-based failing tag index.<br><br>Example: [SGLE-1](#sgle-1). |
-| **`Field `value_index` of `InvalidRelayUrl``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::value_index","signature":"pub fava_simple_groups::SavedGroupListDecodeError::InvalidRelayUrl::value_index: usize","evidence":"source-position conservation","example":"SGLE-1"} --> | Zero-based failing value position.<br><br>Example: [SGLE-1](#sgle-1). |
 | **`MissingTagValue`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SavedGroupListDecodeError::MissingTagValue","signature":"pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue","evidence":"NIP-51 group and r required positions","example":"SGLE-1"} --> | A recognized `group` or `r` tag lacks a required position.<br><br>Example: [SGLE-1](#sgle-1). |
 | **`Field `tag_index` of `MissingTagValue``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::tag_index","signature":"pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::tag_index: usize","evidence":"source-position conservation","example":"SGLE-1"} --> | Zero-based failing tag index.<br><br>Example: [SGLE-1](#sgle-1). |
 | **`Field `value_index` of `MissingTagValue``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::value_index","signature":"pub fava_simple_groups::SavedGroupListDecodeError::MissingTagValue::value_index: usize","evidence":"source-position conservation","example":"SGLE-1"} --> | Zero-based missing value position.<br><br>Example: [SGLE-1](#sgle-1). |
@@ -346,27 +346,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         }) => assert_eq!((*tag_index, *value_index), (0, 2)),
         other => panic!("unexpected entry: {other:?}"),
     }
-    let invalid =
+    let foreign =
         SavedGroupList::from_event(&value(10_009, vec![Tag::parse(["r", "not-a-relay"])?])?)?;
-    match &invalid.relays()[0] {
-        Err(
-            error @ SavedGroupListDecodeError::InvalidRelayUrl {
-                tag_index,
-                value_index,
-            },
-        ) => {
-            assert_eq!((*tag_index, *value_index), (0, 1));
-            assert!(error.to_string().contains("relay"));
-        }
-        other => panic!("unexpected entry: {other:?}"),
-    }
+    assert_eq!(foreign.relays()[0], Ok("not-a-relay".to_owned()));
     Ok(())
 }
 ```
 
 ### `SavedSimpleGroup` (Struct)
 
-One valid public `group` tag semantic entry: exact id, parsed inert relay URL, and optional display name. It proves a saved preference, not group existence or authority.
+One public `group` tag semantic entry: exact id, exact inert relay string, and optional display name. It proves a saved preference, not group existence, URL validity, or authority.
 <!-- api-item {"kind":"Struct","item":"fava_simple_groups::SavedSimpleGroup","signature":"pub struct fava_simple_groups::SavedSimpleGroup","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Simple Group List; crates/fava-simple-groups/src/saved.rs; NIP-51 kind 10009","example":"SSG-1"} -->
 Example coverage: [SSG-1](#ssg-1).
 
@@ -374,7 +363,7 @@ Example coverage: [SSG-1](#ssg-1).
 | --- | --- |
 | **`display_name`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedSimpleGroup::display_name","signature":"pub fn fava_simple_groups::SavedSimpleGroup::display_name(&self) -> core::option::Option<&str>","evidence":"NIP-51 kind-10009 optional group name","example":"SSG-1"} --> | Returns the optional exact display name; `Some("")` differs from `None`.<br><br>Example: [SSG-1](#ssg-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedSimpleGroup::id","signature":"pub fn fava_simple_groups::SavedSimpleGroup::id(&self) -> &str","evidence":"NIP-51 kind-10009 group tag first value","example":"SSG-1"} --> | Borrows the exact group id; empty remains a value.<br><br>Example: [SSG-1](#ssg-1). |
-| **`relay`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedSimpleGroup::relay","signature":"pub const fn fava_simple_groups::SavedSimpleGroup::relay(&self) -> &nostr::types::url::RelayUrl","evidence":"NIP-51 kind-10009 group tag second value","example":"SSG-1"} --> | Borrows the parsed inert relay.<br><br>Example: [SSG-1](#ssg-1). |
+| **`relay`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SavedSimpleGroup::relay","signature":"pub fn fava_simple_groups::SavedSimpleGroup::relay(&self) -> &str","evidence":"NIP-51 kind-10009 group tag second value","example":"SSG-1"} --> | Borrows the exact inert relay string without URL validation.<br><br>Example: [SSG-1](#ssg-1). |
 
 <a id="ssg-1"></a>
 #### SSG-1 — concrete coverage
@@ -387,12 +376,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")?;
     let event = EventBuilder::new(author, Kind::from_u16(10_009))
         .created_at(Timestamp::from(1))
-        .tag(Tag::parse(["group", "photos", "wss://relay.example", ""])?)
+        .tag(Tag::parse(["group", "photos", "not a relay URL/ß", ""])?)
         .build()?;
     let list = SavedGroupList::from_event(&EventValue::Unsigned(event))?;
     let saved = list.simple_groups()[0].as_ref().expect("valid group entry");
     assert_eq!(saved.id(), "photos");
-    assert_eq!(saved.relay().as_str(), "wss://relay.example");
+    assert_eq!(saved.relay(), "not a relay URL/ß");
     assert_eq!(saved.display_name(), Some(""));
     Ok(())
 }
@@ -409,9 +398,9 @@ Example coverage: [SG-1](#sg-1).
 | **`events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::events","signature":"pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"docs/issues/0028-query-tag-axis-composition.md; crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/tests/query_identity.rs; NIP-29 The h tag","example":"SG-1"} --> | Narrows lowercase `h` through query-owned exact intersection, so absent becomes this id, overlap narrows to this id, and disjoint remains present-empty match-nothing. Then delegates acquisition to all retained relays and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
 | **`from_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::from_relays","signature":"pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.<br><br>Example: [SG-1](#sg-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.<br><br>Example: [SG-1](#sg-1). |
+| **`meta_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::meta_events","signature":"pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
 | **`prepare`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::prepare","signature":"pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Unsigned preparation; NIP-29 The h tag; current implementation crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.<br><br>Example: [SG-1](#sg-1). |
 | **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::relays","signature":"pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.<br><br>Example: [SG-1](#sg-1). |
-| **`meta_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::meta_events","signature":"pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
 
 <a id="sg-1"></a>
 #### SG-1 — concrete coverage
@@ -491,7 +480,7 @@ Example coverage: [ADM-1](#adm-1).
 
 | Item | Purpose |
 | --- | --- |
-| **`admins`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupAdmins::admins","signature":"pub fn fava_simple_groups::SimpleGroupAdmins::admins(&self) -> &[core::result::Result<(nostr::key::public_key::PublicKey, alloc::vec::Vec<alloc::string::String>), fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39001 p tags","example":"ADM-1"} --> | Returns every `p` tag in source order. Success contains the parsed key and all role values; a key and at least one role position are required. Repetitions survive.<br><br>Example: [ADM-1](#adm-1). |
+| **`admins`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupAdmins::admins","signature":"pub fn fava_simple_groups::SimpleGroupAdmins::admins(&self) -> &[core::result::Result<(alloc::string::String, alloc::vec::Vec<alloc::string::String>), fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39001 p tags","example":"ADM-1"} --> | Returns every `p` tag in source order. Success contains the exact key string and all role values; a key and at least one role position are required. Present keys are not public-key-validated; repetitions survive.<br><br>Example: [ADM-1](#adm-1). |
 | **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupAdmins::author","signature":"pub const fn fava_simple_groups::SimpleGroupAdmins::author(&self) -> nostr::key::public_key::PublicKey","evidence":"EventValue author","example":"ADM-1"} --> | Returns the event author without converting it into serving-relay authority.<br><br>Example: [ADM-1](#adm-1). |
 | **`from_event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupAdmins::from_event","signature":"pub fn fava_simple_groups::SimpleGroupAdmins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; current parser crates/fava-simple-groups/src/people.rs","example":"ADM-1"} --> | Checks kind 39001 and the first `d` position, then decodes each `p` tag independently without verification, bounds, or deduplication.<br><br>Example: [ADM-1](#adm-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupAdmins::id","signature":"pub fn fava_simple_groups::SimpleGroupAdmins::id(&self) -> &str","evidence":"NIP-29 first d-tag value","example":"ADM-1"} --> | Borrows the selected opaque id.<br><br>Example: [ADM-1](#adm-1). |
@@ -500,21 +489,19 @@ Example coverage: [ADM-1](#adm-1).
 #### ADM-1 — concrete coverage
 ```rust,no_run
 use std::error::Error;
-use fava_simple_groups::{SimpleGroupAdmins, SimpleGroupDecodeError};
+use fava_simple_groups::SimpleGroupAdmins;
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag, Timestamp};
 fn main() -> Result<(), Box<dyn Error>> {
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")?;
-    let admin =
-        PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")?;
-    let admin_hex = admin.to_hex();
+    let admin = "not-a-public-key-ß";
     let event = EventBuilder::new(author, Kind::from_u16(39_001))
         .created_at(Timestamp::from(1))
         .tags([
             Tag::parse(["d", "g", "ignored"])?,
-            Tag::parse(["p", &admin_hex, "admin", "moderator"])?,
-            Tag::parse(["p", "bad", "admin"])?,
-            Tag::parse(["p", &admin_hex, "admin", "moderator", "speaker"])?,
+            Tag::parse(["p", admin, "admin", "moderator"])?,
+            Tag::parse(["p", admin, "admin"])?,
+            Tag::parse(["p", admin, "admin", "moderator", "speaker"])?,
         ])
         .build()?;
     let decoded = SimpleGroupAdmins::from_event(&EventValue::Unsigned(event))?;
@@ -523,19 +510,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let entries = decoded.admins();
     assert_eq!(
         entries[0],
-        Ok((admin, vec!["admin".to_owned(), "moderator".to_owned()]))
+        Ok((admin.to_owned(), vec!["admin".to_owned(), "moderator".to_owned()]))
     );
-    match &entries[1] {
-        Err(SimpleGroupDecodeError::InvalidPublicKey {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (2, 1)),
-        other => panic!("unexpected middle entry: {other:?}"),
-    }
+    assert_eq!(entries[1], Ok((admin.to_owned(), vec!["admin".to_owned()])));
     assert_eq!(
         entries[2],
         Ok((
-            admin,
+            admin.to_owned(),
             vec![
                 "admin".to_owned(),
                 "moderator".to_owned(),
@@ -591,21 +572,12 @@ Example coverage: [DE-1](#de-1).
 
 | Item | Purpose |
 | --- | --- |
-| **`InvalidEventCoordinate`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate","evidence":"NIP-29 39005 a-tag addressable coordinate positions","example":"DE-1"} --> | One `a` pin value is not a valid addressable event coordinate.<br><br>Example: [DE-1](#de-1). |
-| **`Field `tag_index` of `InvalidEventCoordinate``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
-| **`Field `value_index` of `InvalidEventCoordinate``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventCoordinate::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
-| **`InvalidEventId`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventId","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId","evidence":"NIP-29 39005 e-tag EventId positions","example":"DE-1"} --> | One `e` pin value failed the existing `EventId` parser.<br><br>Example: [DE-1](#de-1). |
-| **`Field `tag_index` of `InvalidEventId``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
-| **`Field `value_index` of `InvalidEventId``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidEventId::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
 | **`InvalidKind`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind","evidence":"NIP-29 supported_kinds decimal kind values","example":"DE-1"} --> | One `supported_kinds` value is not a decimal `u16`.<br><br>Example: [DE-1](#de-1). |
 | **`Field `tag_index` of `InvalidKind``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
 | **`Field `value_index` of `InvalidKind``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
 | **`InvalidLivekitParticipantPublicKey`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey","evidence":"NIP-29 39004 lowercase 64-character hex requirement","example":"DE-1"} --> | A participant key is not exact lowercase 64-character hex or fails `PublicKey` parsing.<br><br>Example: [DE-1](#de-1). |
 | **`Field `tag_index` of `InvalidLivekitParticipantPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
 | **`Field `value_index` of `InvalidLivekitParticipantPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
-| **`InvalidPublicKey`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey","evidence":"NIP-29 39001/39002 PublicKey positions","example":"DE-1"} --> | An administrator or member key failed the existing `PublicKey` parser.<br><br>Example: [DE-1](#de-1). |
-| **`Field `tag_index` of `InvalidPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
-| **`Field `value_index` of `InvalidPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidPublicKey::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
 | **`MissingIdentifierTag`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::MissingIdentifierTag","signature":"pub fava_simple_groups::SimpleGroupDecodeError::MissingIdentifierTag","evidence":"NIP-29 relay-generated events require d tag","example":"DE-1"} --> | No `d` tag exists, so the event cannot supply its group id.<br><br>Example: [DE-1](#de-1). |
 | **`MissingTagValue`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::MissingTagValue","signature":"pub fava_simple_groups::SimpleGroupDecodeError::MissingTagValue","evidence":"crates/fava-simple-groups/src/records.rs; crates/fava-simple-groups/src/tests/codec.rs","example":"DE-1"} --> | A recognized repeated entry, or the first `d` tag, lacks a protocol-required position.<br><br>Example: [DE-1](#de-1). |
 | **`Field `tag_index` of `MissingTagValue``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::MissingTagValue::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based event tag index.<br><br>Example: [DE-1](#de-1). |
@@ -788,7 +760,7 @@ Example coverage: [MEM-1](#mem-1).
 | **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMembers::author","signature":"pub const fn fava_simple_groups::SimpleGroupMembers::author(&self) -> nostr::key::public_key::PublicKey","evidence":"EventValue author","example":"MEM-1"} --> | Returns the event author without converting it into serving-relay authority.<br><br>Example: [MEM-1](#mem-1). |
 | **`from_event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMembers::from_event","signature":"pub fn fava_simple_groups::SimpleGroupMembers::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; current parser crates/fava-simple-groups/src/people.rs","example":"MEM-1"} --> | Checks kind 39002 and the first `d` position, then decodes each `p` tag independently without verification, bounds, or deduplication.<br><br>Example: [MEM-1](#mem-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMembers::id","signature":"pub fn fava_simple_groups::SimpleGroupMembers::id(&self) -> &str","evidence":"NIP-29 first d-tag value","example":"MEM-1"} --> | Borrows the selected opaque id.<br><br>Example: [MEM-1](#mem-1). |
-| **`members`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMembers::members","signature":"pub fn fava_simple_groups::SimpleGroupMembers::members(&self) -> &[core::result::Result<nostr::key::public_key::PublicKey, fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39002 p tags","example":"MEM-1"} --> | Returns every `p` tag in source order as its parsed first value or local error. Unused extras are ignored and repetitions survive.<br><br>Example: [MEM-1](#mem-1). |
+| **`members`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMembers::members","signature":"pub fn fava_simple_groups::SimpleGroupMembers::members(&self) -> &[core::result::Result<alloc::string::String, fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39002 p tags","example":"MEM-1"} --> | Returns every `p` tag in source order as its parsed first value or local error. Unused extras are ignored and repetitions survive.<br><br>Example: [MEM-1](#mem-1). |
 
 <a id="mem-1"></a>
 #### MEM-1 — concrete coverage
@@ -935,7 +907,7 @@ Example coverage: [PIN-1](#pin-1).
 | **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupPins::author","signature":"pub const fn fava_simple_groups::SimpleGroupPins::author(&self) -> nostr::key::public_key::PublicKey","evidence":"EventValue author","example":"PIN-1"} --> | Returns the event author without converting it into serving-relay authority.<br><br>Example: [PIN-1](#pin-1). |
 | **`from_event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupPins::from_event","signature":"pub fn fava_simple_groups::SimpleGroupPins::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_simple_groups::SimpleGroupDecodeError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; current parser crates/fava-simple-groups/src/pins.rs","example":"PIN-1"} --> | Checks kind 39005 and the first `d` position, then decodes every `e` or `a` tag independently without verification, bounds, or deduplication.<br><br>Example: [PIN-1](#pin-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupPins::id","signature":"pub fn fava_simple_groups::SimpleGroupPins::id(&self) -> &str","evidence":"NIP-29 first d-tag value","example":"PIN-1"} --> | Borrows the selected opaque id.<br><br>Example: [PIN-1](#pin-1). |
-| **`pins`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupPins::pins","signature":"pub fn fava_simple_groups::SimpleGroupPins::pins(&self) -> &[core::result::Result<fava_state::EventCoordinate, fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39005 e/a tags; fava-state EventCoordinate","example":"PIN-1"} --> | Returns interleaved `e` and `a` tags in source order. `e` becomes `EventCoordinate::Event`; `a` becomes addressable `EventCoordinate::Replaceable`; unknown tags and unused extras are ignored; repetitions survive. No `PinnedItem` wrapper exists.<br><br>Example: [PIN-1](#pin-1). |
+| **`pins`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupPins::pins","signature":"pub fn fava_simple_groups::SimpleGroupPins::pins(&self) -> &[core::result::Result<nostr::event::tag::Tag, fava_simple_groups::SimpleGroupDecodeError>]","evidence":"NIP-29 kind 39005 e/a tags; fava-state EventCoordinate","example":"PIN-1"} --> | Returns interleaved `e` and `a` tags in source order. `e` becomes `EventCoordinate::Event`; `a` becomes addressable `EventCoordinate::Replaceable`; unknown tags and unused extras are ignored; repetitions survive. No `PinnedItem` wrapper exists.<br><br>Example: [PIN-1](#pin-1). |
 
 <a id="pin-1"></a>
 #### PIN-1 — concrete coverage

@@ -1,13 +1,12 @@
 use std::fmt;
 
-use fava_state::RelayUrl;
 use fava_write::{EventValue, Kind, PublicKey};
 
 /// One valid semantic `group` entry from a kind-10009 Simple Group List event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SavedSimpleGroup {
     id: String,
-    relay: RelayUrl,
+    relay: String,
     display_name: Option<String>,
 }
 
@@ -18,9 +17,9 @@ impl SavedSimpleGroup {
         &self.id
     }
 
-    /// Borrow the parsed inert relay URL.
+    /// Borrow the exact inert relay string.
     #[must_use]
-    pub const fn relay(&self) -> &RelayUrl {
+    pub fn relay(&self) -> &str {
         &self.relay
     }
 
@@ -36,7 +35,7 @@ impl SavedSimpleGroup {
 pub struct SavedGroupList {
     author: PublicKey,
     simple_groups: Vec<Result<SavedSimpleGroup, SavedGroupListDecodeError>>,
-    relays: Vec<Result<RelayUrl, SavedGroupListDecodeError>>,
+    relays: Vec<Result<String, SavedGroupListDecodeError>>,
 }
 
 impl SavedGroupList {
@@ -80,7 +79,7 @@ impl SavedGroupList {
     }
 
     /// Return all `r` entries and local failures in relative source order.
-    pub fn relays(&self) -> &[Result<RelayUrl, SavedGroupListDecodeError>] {
+    pub fn relays(&self) -> &[Result<String, SavedGroupListDecodeError>] {
         &self.relays
     }
 }
@@ -102,13 +101,6 @@ pub enum SavedGroupListDecodeError {
         /// Zero-based index in `Tag::as_slice()`.
         value_index: usize,
     },
-    /// A required relay value is invalid.
-    InvalidRelayUrl {
-        /// Zero-based event tag index.
-        tag_index: usize,
-        /// Zero-based value index.
-        value_index: usize,
-    },
 }
 
 impl fmt::Display for SavedGroupListDecodeError {
@@ -124,13 +116,6 @@ impl fmt::Display for SavedGroupListDecodeError {
                 formatter,
                 "tag {tag_index} has no value at position {value_index}"
             ),
-            Self::InvalidRelayUrl {
-                tag_index,
-                value_index,
-            } => write!(
-                formatter,
-                "tag {tag_index} has an invalid relay URL at position {value_index}"
-            ),
         }
     }
 }
@@ -142,12 +127,7 @@ fn parse_group(
     tag_index: usize,
 ) -> Result<SavedSimpleGroup, SavedGroupListDecodeError> {
     let id = required(values, tag_index, 1)?.to_owned();
-    let relay = RelayUrl::parse(required(values, tag_index, 2)?).map_err(|_| {
-        SavedGroupListDecodeError::InvalidRelayUrl {
-            tag_index,
-            value_index: 2,
-        }
-    })?;
+    let relay = required(values, tag_index, 2)?.to_owned();
     Ok(SavedSimpleGroup {
         id,
         relay,
@@ -155,13 +135,8 @@ fn parse_group(
     })
 }
 
-fn parse_relay(values: &[String], tag_index: usize) -> Result<RelayUrl, SavedGroupListDecodeError> {
-    RelayUrl::parse(required(values, tag_index, 1)?).map_err(|_| {
-        SavedGroupListDecodeError::InvalidRelayUrl {
-            tag_index,
-            value_index: 1,
-        }
-    })
+fn parse_relay(values: &[String], tag_index: usize) -> Result<String, SavedGroupListDecodeError> {
+    required(values, tag_index, 1).map(str::to_owned)
 }
 
 fn required(

@@ -13,6 +13,7 @@ use super::{public_key, tag, value};
 
 #[test]
 fn saved_list_decodes_both_tag_families_once_and_tolerantly() {
+    let foreign_relay = "not a relay URL/ß";
     let list = SavedGroupList::from_event(&value(
         10_009,
         vec![
@@ -20,7 +21,9 @@ fn saved_list_decodes_both_tag_families_once_and_tolerantly() {
             tag(&["r", "wss://b.example", "ignored"]),
             tag(&["group", "missing-relay"]),
             tag(&["r"]),
-            tag(&["group", "", "wss://a.example"]),
+            tag(&["group", "", foreign_relay]),
+            tag(&["r", foreign_relay, "exact-extra"]),
+            tag(&["r", foreign_relay]),
             tag(&["x", "ignored"]),
         ],
     ))
@@ -30,7 +33,7 @@ fn saved_list_decodes_both_tag_families_once_and_tolerantly() {
     assert_eq!(list.simple_groups().len(), 3);
     let first = list.simple_groups()[0].as_ref().expect("first group");
     assert_eq!(first.id(), "");
-    assert_eq!(first.relay().as_str(), "wss://a.example");
+    assert_eq!(first.relay(), "wss://a.example");
     assert_eq!(first.display_name(), Some(""));
     assert!(matches!(
         list.simple_groups()[1],
@@ -40,14 +43,11 @@ fn saved_list_decodes_both_tag_families_once_and_tolerantly() {
         })
     ));
     assert_eq!(
-        list.simple_groups()[2].as_ref().unwrap().relay().as_str(),
-        "wss://a.example"
+        list.simple_groups()[2].as_ref().unwrap().relay(),
+        foreign_relay
     );
-    assert_eq!(list.relays().len(), 2);
-    assert_eq!(
-        list.relays()[0].as_ref().unwrap().as_str(),
-        "wss://b.example"
-    );
+    assert_eq!(list.relays().len(), 4);
+    assert_eq!(list.relays()[0], Ok("wss://b.example".to_owned()));
     assert!(matches!(
         list.relays()[1],
         Err(SavedGroupListDecodeError::MissingTagValue {
@@ -55,6 +55,8 @@ fn saved_list_decodes_both_tag_families_once_and_tolerantly() {
             value_index: 1
         })
     ));
+    assert_eq!(list.relays()[2], Ok(foreign_relay.to_owned()));
+    assert_eq!(list.relays()[3], Ok(foreign_relay.to_owned()));
 }
 
 #[test]

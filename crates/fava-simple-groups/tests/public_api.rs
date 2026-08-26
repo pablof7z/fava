@@ -12,7 +12,6 @@ use fava_simple_groups::{
     rename_saved_simple_group, save_relay, save_simple_group, saved_group_list_materializer,
     saved_group_lists,
 };
-use fava_state::EventCoordinate;
 use fava_write::{
     EventBuildError, EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer,
     Tag, UnsignedEvent, WriteIntentError,
@@ -42,13 +41,14 @@ fn inspect_decoders(
     let (metadata, admins, members, roles, participants, pins, list, saved) = values;
     let _: Option<&[Result<Kind, SimpleGroupDecodeError>]> = metadata.supported_kinds();
     let _: &[Result<String, SimpleGroupDecodeError>] = metadata.children();
-    let _: &[Result<(PublicKey, Vec<String>), SimpleGroupDecodeError>] = admins.admins();
-    let _: &[Result<PublicKey, SimpleGroupDecodeError>] = members.members();
+    let _: &[Result<(String, Vec<String>), SimpleGroupDecodeError>] = admins.admins();
+    let _: &[Result<String, SimpleGroupDecodeError>] = members.members();
     let _: &[Result<(String, Option<String>), SimpleGroupDecodeError>] = roles.roles();
     let _: &[Result<PublicKey, SimpleGroupDecodeError>] = participants.participants();
-    let _: &[Result<EventCoordinate, SimpleGroupDecodeError>] = pins.pins();
+    let _: &[Result<Tag, SimpleGroupDecodeError>] = pins.pins();
     let _: &[Result<SavedSimpleGroup, SavedGroupListDecodeError>] = list.simple_groups();
-    let _: &[Result<RelayUrl, SavedGroupListDecodeError>] = list.relays();
+    let _: &[Result<String, SavedGroupListDecodeError>] = list.relays();
+    let _: &str = saved.relay();
     let _: Option<&str> = saved.display_name();
 }
 

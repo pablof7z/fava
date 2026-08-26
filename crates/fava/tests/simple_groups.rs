@@ -148,7 +148,7 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
         let saved = entry.as_ref().expect("saved group entry");
         assert_eq!(saved.id(), "group-29");
         assert_eq!(saved.display_name(), Some("Photos"));
-        assert_eq!(saved.relay(), &relay);
+        assert_eq!(saved.relay(), relay.as_str());
     }
 }
 

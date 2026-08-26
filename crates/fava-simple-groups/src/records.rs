@@ -21,13 +21,6 @@ pub enum SimpleGroupDecodeError {
         /// Zero-based index in `Tag::as_slice()`.
         value_index: usize,
     },
-    /// An administrator or member key is invalid.
-    InvalidPublicKey {
-        /// Zero-based event tag index.
-        tag_index: usize,
-        /// Zero-based value index.
-        value_index: usize,
-    },
     /// A `LiveKit` participant key is not exact lowercase hex.
     InvalidLivekitParticipantPublicKey {
         /// Zero-based event tag index.
@@ -37,20 +30,6 @@ pub enum SimpleGroupDecodeError {
     },
     /// A `supported_kinds` value is not a decimal `u16`.
     InvalidKind {
-        /// Zero-based event tag index.
-        tag_index: usize,
-        /// Zero-based value index.
-        value_index: usize,
-    },
-    /// An `e` pin value is not an event id.
-    InvalidEventId {
-        /// Zero-based event tag index.
-        tag_index: usize,
-        /// Zero-based value index.
-        value_index: usize,
-    },
-    /// An `a` pin value is not an addressable event coordinate.
-    InvalidEventCoordinate {
         /// Zero-based event tag index.
         tag_index: usize,
         /// Zero-based value index.
@@ -72,13 +51,6 @@ impl fmt::Display for SimpleGroupDecodeError {
                 formatter,
                 "tag {tag_index} has no value at position {value_index}"
             ),
-            Self::InvalidPublicKey {
-                tag_index,
-                value_index,
-            } => write!(
-                formatter,
-                "tag {tag_index} has an invalid public key at position {value_index}"
-            ),
             Self::InvalidLivekitParticipantPublicKey {
                 tag_index,
                 value_index,
@@ -92,20 +64,6 @@ impl fmt::Display for SimpleGroupDecodeError {
             } => write!(
                 formatter,
                 "tag {tag_index} has an invalid kind at position {value_index}"
-            ),
-            Self::InvalidEventId {
-                tag_index,
-                value_index,
-            } => write!(
-                formatter,
-                "tag {tag_index} has an invalid event id at position {value_index}"
-            ),
-            Self::InvalidEventCoordinate {
-                tag_index,
-                value_index,
-            } => write!(
-                formatter,
-                "tag {tag_index} has an invalid event coordinate at position {value_index}"
             ),
         }
     }

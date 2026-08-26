@@ -1,5 +1,4 @@
-use fava_state::EventCoordinate;
-use fava_write::{EventId, Kind, PublicKey};
+use fava_write::{Kind, PublicKey};
 
 use crate::{
     SimpleGroupAdmins, SimpleGroupDecodeError, SimpleGroupLivekitParticipants, SimpleGroupMembers,
@@ -91,12 +90,13 @@ fn metadata_conserves_value_local_failures_and_repetitions() {
 fn repeated_people_and_role_entries_survive_with_local_failures() {
     let alice = public_key();
     let bob = second_key();
+    let foreign_key = "not-a-public-key-ß";
     let admins = SimpleGroupAdmins::from_event(&value(
         39_001,
         vec![
             tag(&["d", "g"]),
             tag(&["p", &alice.to_hex(), "owner", "moderator"]),
-            tag(&["p", "bad", "owner"]),
+            tag(&["p", foreign_key, "owner"]),
             tag(&["p", &alice.to_hex(), "owner"]),
             tag(&["p", &bob.to_hex()]),
         ],
@@ -104,13 +104,16 @@ fn repeated_people_and_role_entries_survive_with_local_failures() {
     .expect("admins");
     assert_eq!(
         admins.admins()[0],
-        Ok((alice, vec!["owner".into(), "moderator".into()]))
+        Ok((alice.to_hex(), vec!["owner".into(), "moderator".into()]))
     );
-    assert!(matches!(
+    assert_eq!(
         admins.admins()[1],
-        Err(SimpleGroupDecodeError::InvalidPublicKey { tag_index: 2, .. })
-    ));
-    assert_eq!(admins.admins()[2], Ok((alice, vec!["owner".into()])));
+        Ok((foreign_key.to_owned(), vec!["owner".into()]))
+    );
+    assert_eq!(
+        admins.admins()[2],
+        Ok((alice.to_hex(), vec!["owner".into()]))
+    );
     assert!(matches!(
         admins.admins()[3],
         Err(SimpleGroupDecodeError::MissingTagValue {
@@ -124,11 +127,24 @@ fn repeated_people_and_role_entries_survive_with_local_failures() {
         vec![
             tag(&["d", "g"]),
             tag(&["p", &bob.to_hex(), "ignored"]),
+            tag(&["p", foreign_key, "ignored-extra"]),
             tag(&["p", &bob.to_hex()]),
+            tag(&["p"]),
         ],
     ))
     .unwrap();
-    assert_eq!(members.members(), [Ok(bob), Ok(bob)]);
+    assert_eq!(
+        members.members(),
+        [
+            Ok(bob.to_hex()),
+            Ok(foreign_key.to_owned()),
+            Ok(bob.to_hex()),
+            Err(SimpleGroupDecodeError::MissingTagValue {
+                tag_index: 4,
+                value_index: 1,
+            }),
+        ]
+    );
 
     let roles = SimpleGroupRoles::from_event(&value(
         39_003,
@@ -169,68 +185,37 @@ fn livekit_keys_require_exact_lowercase_hex() {
 }
 
 #[test]
-fn pins_use_event_coordinate_and_preserve_interleaving() {
-    let id = EventId::from_hex("00b6e5d3d2ec995b85fdfe7c46c6639f4f8cc62f79c0e5b57c92f3b75b0e3a68")
-        .expect("event id");
+fn pins_preserve_exact_raw_tags_and_interleaving() {
+    let id = "00b6e5d3d2ec995b85fdfe7c46c6639f4f8cc62f79c0e5b57c92f3b75b0e3a68";
     let address = format!("30023:{}:article", public_key().to_hex());
+    let expected = [
+        tag(&["e", id, "", "ignored-ß"]),
+        tag(&["a", &address, "wss://hint.example", "marker"]),
+        tag(&["e", "not-an-event-id", "exact-extra"]),
+        tag(&["e", id]),
+        tag(&["a", "not-a-coordinate", ""]),
+    ];
     let pins = SimpleGroupPins::from_event(&value(
         39_005,
         vec![
             tag(&["d", "g"]),
-            tag(&["e", &id.to_hex(), "ignored"]),
-            tag(&["a", &address, "ignored"]),
-            tag(&["e", "bad"]),
-            tag(&["e", &id.to_hex()]),
+            expected[0].clone(),
+            expected[1].clone(),
+            expected[2].clone(),
+            expected[3].clone(),
+            expected[4].clone(),
+            tag(&["e"]),
         ],
     ))
     .unwrap();
-    assert_eq!(pins.pins()[0], Ok(EventCoordinate::Event(id)));
+    for (actual, raw) in pins.pins()[..expected.len()].iter().zip(&expected) {
+        assert_eq!(actual, &Ok(raw.clone()));
+    }
     assert_eq!(
-        pins.pins()[1],
-        Ok(EventCoordinate::Replaceable {
-            author: public_key(),
-            kind: Kind::from_u16(30_023),
-            identifier: Some("article".to_owned()),
+        pins.pins()[5],
+        Err(SimpleGroupDecodeError::MissingTagValue {
+            tag_index: 6,
+            value_index: 1
         })
     );
-    assert!(matches!(
-        pins.pins()[2],
-        Err(SimpleGroupDecodeError::InvalidEventId { .. })
-    ));
-    assert_eq!(pins.pins()[3], Ok(EventCoordinate::Event(id)));
-}
-
-#[test]
-fn pin_coordinates_use_the_neutral_nostr_coordinate_parser() {
-    let key = public_key().to_hex();
-    let pins = SimpleGroupPins::from_event(&value(
-        39_005,
-        vec![
-            tag(&["d", "g"]),
-            tag(&["a", &format!("30023:{key}:article")]),
-            tag(&["a", &format!("1:{key}:")]),
-            tag(&["a", "not-a-coordinate"]),
-        ],
-    ))
-    .expect("pin event");
-
-    assert!(matches!(
-        &pins.pins()[0],
-        Ok(EventCoordinate::Replaceable { kind, identifier, .. })
-            if *kind == Kind::from_u16(30_023) && identifier.as_deref() == Some("article")
-    ));
-    assert!(matches!(
-        pins.pins()[1],
-        Err(SimpleGroupDecodeError::InvalidEventCoordinate {
-            tag_index: 2,
-            value_index: 1
-        })
-    ));
-    assert!(matches!(
-        pins.pins()[2],
-        Err(SimpleGroupDecodeError::InvalidEventCoordinate {
-            tag_index: 3,
-            value_index: 1
-        })
-    ));
 }

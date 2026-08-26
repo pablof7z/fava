@@ -403,7 +403,7 @@ fn admins_for_relay(
             .admins()
             .iter()
             .filter_map(|entry| entry.as_ref().ok())
-            .map(|(key, _)| key.to_hex())
+            .map(|(key, _)| key.clone())
             .find(|key| key != &author.to_hex())?;
         Some((target, admins.author().to_hex()))
     })

@@ -1,6 +1,4 @@
-use fava_state::EventCoordinate;
-use fava_write::{EventId, EventValue, PublicKey};
-use nostr::nips::nip01::Coordinate;
+use fava_write::{EventValue, PublicKey, Tag};
 
 use crate::records::{SimpleGroupDecodeError, required_value, state_event};
 
@@ -9,7 +7,7 @@ use crate::records::{SimpleGroupDecodeError, required_value, state_event};
 pub struct SimpleGroupPins {
     id: String,
     author: PublicKey,
-    pins: Vec<Result<EventCoordinate, SimpleGroupDecodeError>>,
+    pins: Vec<Result<Tag, SimpleGroupDecodeError>>,
 }
 
 impl SimpleGroupPins {
@@ -23,13 +21,10 @@ impl SimpleGroupPins {
         let pins = tags
             .iter()
             .enumerate()
-            .filter_map(
-                |(tag_index, tag)| match tag.as_slice().first().map(String::as_str) {
-                    Some("e") => Some(parse_event(tag.as_slice(), tag_index)),
-                    Some("a") => Some(parse_coordinate(tag.as_slice(), tag_index)),
-                    _ => None,
-                },
-            )
+            .filter_map(|(tag_index, tag)| {
+                matches!(tag.as_slice().first().map(String::as_str), Some("e" | "a"))
+                    .then(|| parse_pin(tag, tag_index))
+            })
             .collect();
         Ok(Self {
             id: id.to_owned(),
@@ -51,40 +46,12 @@ impl SimpleGroupPins {
     }
 
     /// Return interleaved `e` and `a` pins in source order with local failures.
-    pub fn pins(&self) -> &[Result<EventCoordinate, SimpleGroupDecodeError>] {
+    pub fn pins(&self) -> &[Result<Tag, SimpleGroupDecodeError>] {
         &self.pins
     }
 }
 
-fn parse_event(
-    values: &[String],
-    tag_index: usize,
-) -> Result<EventCoordinate, SimpleGroupDecodeError> {
-    let raw = required_value(values, tag_index, 1)?;
-    EventId::from_hex(raw)
-        .map(EventCoordinate::Event)
-        .map_err(|_| SimpleGroupDecodeError::InvalidEventId {
-            tag_index,
-            value_index: 1,
-        })
-}
-
-fn parse_coordinate(
-    values: &[String],
-    tag_index: usize,
-) -> Result<EventCoordinate, SimpleGroupDecodeError> {
-    let invalid = || SimpleGroupDecodeError::InvalidEventCoordinate {
-        tag_index,
-        value_index: 1,
-    };
-    let raw = required_value(values, tag_index, 1)?;
-    let coordinate = Coordinate::from_kpi_format(raw).map_err(|_| invalid())?;
-    if !coordinate.kind.is_addressable() {
-        return Err(invalid());
-    }
-    Ok(EventCoordinate::Replaceable {
-        author: coordinate.public_key,
-        kind: coordinate.kind,
-        identifier: Some(coordinate.identifier),
-    })
+fn parse_pin(tag: &Tag, tag_index: usize) -> Result<Tag, SimpleGroupDecodeError> {
+    required_value(tag.as_slice(), tag_index, 1)?;
+    Ok(tag.clone())
 }
