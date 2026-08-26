@@ -4,9 +4,7 @@ use crate::{
     Kind, MAX_EVENT_BYTES, PublicKey, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 
-const MAX_IDENTIFIER_BYTES: usize = 4_096;
-
-/// A bounded protocol-owned change to one exact replaceable event.
+/// A protocol-owned change to one exact replaceable event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReplaceableEventEdit {
     kind: Kind,
@@ -76,14 +74,6 @@ impl WriteIntent {
 }
 
 fn validate_coordinate(kind: Kind, identifier: Option<&str>) -> Result<(), WriteIntentError> {
-    if let Some(identifier) = identifier
-        && identifier.len() > MAX_IDENTIFIER_BYTES
-    {
-        return Err(WriteIntentError::TooLarge {
-            bytes: identifier.len(),
-            maximum: MAX_IDENTIFIER_BYTES,
-        });
-    }
     match identifier {
         None if kind.is_replaceable() => Ok(()),
         Some(_) if kind.is_addressable() => Ok(()),

@@ -1,8 +1,7 @@
 //! Public replaceable-edit coordinate, authorship, serialization, and bound proofs.
 
 use fava_write::{
-    Kind, PublicKey, ReplaceableEventEdit, WriteIntent, WriteIntentError, WritePayload,
-    WriteRouting,
+    Kind, PublicKey, ReplaceableEventEdit, WriteIntent, WritePayload, WriteRouting,
 };
 use serde_json::json;
 
@@ -29,18 +28,16 @@ fn edit_is_exact_coordinate_minus_author_plus_change() {
 }
 
 #[test]
-fn addressable_edit_shape_is_valid_and_bounded() {
+fn addressable_edit_shape_is_validated() {
     let edit =
         ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("article".to_owned()), vec![1])
             .expect("addressable coordinate");
     assert_eq!(edit.identifier(), Some("article"));
-    assert!(matches!(
-        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("x".repeat(4_097)), vec![1],),
-        Err(WriteIntentError::TooLarge {
-            bytes: 4_097,
-            maximum: 4_096
-        })
-    ));
+    assert!(
+        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("x".repeat(4_097)), vec![1])
+            .is_ok(),
+        "identifier size is caller data; no write-domain cap"
+    );
     assert!(
         ReplaceableEventEdit::new(
             Kind::ContactList,
