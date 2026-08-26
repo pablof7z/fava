@@ -17,6 +17,20 @@ const REMOVE_RELAY: u8 = 5;
 
 /// Produce a kind-10009 edit ensuring one entry for every selected group relay.
 ///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::{SimpleGroup, save_simple_group};
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+///
+/// let with_name = save_simple_group(&group, Some("Photography"))?;
+/// let unnamed = save_simple_group(&group, None)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
@@ -34,6 +48,19 @@ pub fn save_simple_group(
 
 /// Produce a kind-10009 edit removing every selected id/relay entry.
 ///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::{SimpleGroup, remove_saved_simple_group};
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+///
+/// let edit = remove_saved_simple_group(&group)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
@@ -49,6 +76,19 @@ pub fn remove_saved_simple_group(
 }
 
 /// Produce a kind-10009 edit naming every selected id/relay entry.
+///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::{SimpleGroup, rename_saved_simple_group};
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+///
+/// let edit = rename_saved_simple_group(&group, "Photography")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 ///
 /// # Errors
 ///
@@ -67,6 +107,17 @@ pub fn rename_saved_simple_group(
 
 /// Produce a kind-10009 edit ensuring one exact inert `r` relay entry.
 ///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::save_relay;
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let edit = save_relay(relay)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
@@ -76,6 +127,17 @@ pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentEr
 
 /// Produce a kind-10009 edit removing every exact inert `r` relay entry.
 ///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::remove_saved_relay;
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let edit = remove_saved_relay(relay)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
@@ -84,6 +146,26 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
 }
 
 /// Return a fresh kind-10009 materializer behind the neutral contract.
+///
+/// Register this with the Fava builder to enable semantic write lifecycle
+/// support for kind-10009 Simple Group List events.
+///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_materializer};
+/// use fava_write::ReplaceableEventMaterializer;
+/// use nostr::types::RelayUrl;
+///
+/// let materializer = saved_group_list_materializer();
+/// assert_eq!(materializer.kind(), fava_write::Kind::from_u16(10_009));
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+/// let edit = save_simple_group(&group, None)?;
+/// assert!(materializer.supports(&edit));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[must_use]
 pub fn saved_group_list_materializer() -> Arc<dyn ReplaceableEventMaterializer> {
     Arc::new(SavedGroupListMaterializer)

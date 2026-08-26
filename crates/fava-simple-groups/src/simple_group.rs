@@ -119,6 +119,34 @@ impl SimpleGroup {
     /// A disjoint axis remains present-empty and therefore matches nothing.
     /// This crate neither validates nor translates query failures.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroup;
+    /// use fava_query::{Query, SingleLetterTag};
+    /// use nostr::types::RelayUrl;
+    ///
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    ///
+    /// // An open query is narrowed to this group's h axis and relays.
+    /// let query = group.events(Query::events())?;
+    /// let h = SingleLetterTag::from_char('h').expect("h is a valid tag");
+    /// assert!(
+    ///     query.selection().tag_values.get(&h)
+    ///         .map_or(false, |v| v.contains("photos")),
+    /// );
+    ///
+    /// // A disjoint h axis produces a match-nothing query rather than being rewritten.
+    /// let disjoint = Query::events().tag_values(h, ["other"])?;
+    /// let nothing = group.events(disjoint)?;
+    /// assert_eq!(
+    ///     nothing.selection().tag_values.get(&h).map(|v| v.is_empty()),
+    ///     Some(true),
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns the owning [`QueryError`] when bounded tag or relay composition is refused.
@@ -129,6 +157,29 @@ impl SimpleGroup {
     }
 
     /// Build an exact-`d`, relay-authoritative query for selected NIP-29 meta-event kinds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::{SimpleGroup, SimpleGroupStateEventKind};
+    /// use nostr::types::RelayUrl;
+    ///
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    ///
+    /// // Query all six NIP-29 state kinds for this group.
+    /// let all_state = group.meta_events(SimpleGroupStateEventKind::ALL)?;
+    ///
+    /// // Query only metadata and members.
+    /// let subset = group.meta_events([
+    ///     SimpleGroupStateEventKind::Metadata,
+    ///     SimpleGroupStateEventKind::Members,
+    /// ])?;
+    ///
+    /// // Empty kind set produces a query that matches nothing.
+    /// let empty = group.meta_events([])?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -144,6 +195,42 @@ impl SimpleGroup {
     }
 
     /// Add one matching `h` tag to an unsigned event when none is already present.
+    ///
+    /// Existing tags are preserved unchanged. If an exact `h = <id>` tag is
+    /// already present the event is returned unmodified. Malformed, repeated,
+    /// extended, and unrelated tags are not affected.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroup;
+    /// use fava_write::{EventBuilder, Kind, Timestamp};
+    /// use nostr::key::Keys;
+    /// use nostr::types::RelayUrl;
+    ///
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    /// let keys = Keys::generate();
+    ///
+    /// let draft = EventBuilder::new(keys.public_key(), Kind::from_u16(9))
+    ///     .created_at(Timestamp::from(1))
+    ///     .content("hello")
+    ///     .build()?;
+    ///
+    /// let prepared = group.prepare(draft)?;
+    /// let has_h = prepared.tags.iter().any(|t| {
+    ///     let s = t.as_slice();
+    ///     s.first().map(String::as_str) == Some("h")
+    ///         && s.get(1).map(String::as_str) == Some("photos")
+    /// });
+    /// assert!(has_h);
+    ///
+    /// // Calling prepare again on an already-tagged event leaves it unchanged.
+    /// let tag_count = prepared.tags.len();
+    /// let again = group.prepare(prepared)?;
+    /// assert_eq!(again.tags.len(), tag_count);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///

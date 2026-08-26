@@ -60,6 +60,33 @@ common_accessors!(SimpleGroupLivekitParticipants);
 impl SimpleGroupAdmins {
     /// Decode one kind-39001 event, retaining `p`-tag-local failures.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroupAdmins;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let admin_key = Keys::generate().public_key().to_hex();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(39_001), "")
+    ///     .tags([
+    ///         Tag::parse(["d", "photos"])?,
+    ///         Tag::parse(["p", &admin_key, "add-user", "remove-user"])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let admins = SimpleGroupAdmins::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(admins.id(), "photos");
+    /// assert_eq!(admins.admins().len(), 1);
+    /// let (key, roles) = admins.admins()[0].as_ref().expect("valid entry");
+    /// assert_eq!(key, &admin_key);
+    /// assert_eq!(roles, &["add-user", "remove-user"]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
@@ -86,6 +113,31 @@ impl SimpleGroupAdmins {
 
 impl SimpleGroupMembers {
     /// Decode one kind-39002 event, retaining `p`-tag-local failures.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroupMembers;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let member_key = Keys::generate().public_key().to_hex();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(39_002), "")
+    ///     .tags([
+    ///         Tag::parse(["d", "photos"])?,
+    ///         Tag::parse(["p", &member_key])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let members = SimpleGroupMembers::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(members.id(), "photos");
+    /// assert_eq!(members.members().len(), 1);
+    /// assert_eq!(members.members()[0].as_deref(), Ok(member_key.as_str()));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///

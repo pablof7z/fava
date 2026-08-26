@@ -41,6 +41,33 @@ pub struct SavedGroupList {
 impl SavedGroupList {
     /// Decode one kind-10009 event without establishing trust or provenance.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SavedGroupList;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(10_009), "")
+    ///     .tags([
+    ///         Tag::parse(["group", "photos", "wss://relay.example", "Photography"])?,
+    ///         Tag::parse(["r", "wss://relay.example"])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let list = SavedGroupList::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(list.simple_groups().len(), 1);
+    /// let saved = list.simple_groups()[0].as_ref().expect("valid entry");
+    /// assert_eq!(saved.id(), "photos");
+    /// assert_eq!(saved.relay(), "wss://relay.example");
+    /// assert_eq!(saved.display_name(), Some("Photography"));
+    /// assert_eq!(list.relays().len(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns [`SavedGroupListDecodeError::WrongEventKind`] for another kind.

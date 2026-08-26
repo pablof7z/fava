@@ -25,6 +25,32 @@ pub struct SimpleGroupMetadata {
 impl SimpleGroupMetadata {
     /// Decode one kind-39000 event without establishing trust or provenance.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroupMetadata;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(39_000), "")
+    ///     .tags([
+    ///         Tag::parse(["d", "photos"])?,
+    ///         Tag::parse(["name", "Photography"])?,
+    ///         Tag::parse(["private"])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let metadata = SimpleGroupMetadata::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(metadata.id(), "photos");
+    /// assert_eq!(metadata.name(), Some("Photography"));
+    /// assert!(metadata.is_private());
+    /// assert!(!metadata.is_closed());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.

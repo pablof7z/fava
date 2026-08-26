@@ -49,6 +49,20 @@ impl From<SimpleGroupStateEventKind> for Kind {
 
 /// Build the ordinary kind-10009 Simple Group List query for exact authors.
 ///
+/// # Examples
+///
+/// ```
+/// use fava_simple_groups::saved_group_lists;
+/// use nostr::key::Keys;
+///
+/// let keys = Keys::generate();
+/// let query = saved_group_lists([keys.public_key()])?;
+///
+/// // Empty author set intentionally matches nothing.
+/// let empty = saved_group_lists([])?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`QueryError`] when the query owner refuses the author input under
