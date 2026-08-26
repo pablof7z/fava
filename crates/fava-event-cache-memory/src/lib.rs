@@ -99,11 +99,6 @@ impl MemoryEventCache {
                 EventCacheError::Refused(format!("invalid signed event: {error}"))
             })?;
             if let Some(retained) = next.events.get_mut(&incoming.event.id) {
-                if retained.event != incoming.event {
-                    return Err(EventCacheError::Refused(
-                        "same event id carried a different signed body".to_owned(),
-                    ));
-                }
                 retained.merge_evidence(&incoming.evidence);
                 continue;
             }

@@ -37,13 +37,9 @@ pub trait EventCache: QuerySource + Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns [`EventCacheError`] when verification, the current read, or the
-    /// atomic mutation cannot complete.
+    /// Returns [`EventCacheError`] when the current read or the atomic
+    /// mutation cannot complete.
     fn admit(&self, event: CachedEvent, now: Timestamp) -> Result<bool, EventCacheError> {
-        event
-            .event
-            .verify()
-            .map_err(|error| EventCacheError::Refused(format!("invalid signed event: {error}")))?;
         let admitted = Cell::new(false);
         self.transact(&|current| {
             let mut mutations = expiration_mutations(current, now);
