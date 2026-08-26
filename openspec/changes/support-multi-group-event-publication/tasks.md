@@ -1,7 +1,7 @@
 ## 1. Architecture Approval and Current-Model Documentation
 
 - [x] 1.1 Open one focused local architecture issue covering the closest existing concepts, multi-group distinction and counterexample, owners/lifecycles, forcing requirement, insufficient current state, relay limitation, and executable falsifier; verify Pablo's explicit approval is recorded before implementation begins.
-- [ ] 1.2 Update the authoritative goals, architecture, implementation plan, and testing guide to the approved builder-carried route model; verify an empty search for superseded unsigned `SimpleGroup::prepare` and single-group-only publication claims outside retained history.
+- [x] 1.2 Update the authoritative goals, architecture, implementation plan, and testing guide to the approved builder-carried route model; verify an empty search for superseded unsigned `SimpleGroup::prepare` and single-group-only publication claims outside retained history.
 - [ ] 1.3 Update `docs/internals/vocabulary.toml` for every added, removed, or changed public concept and symbol; verify `python3 tools/check_vocabulary.py` and all `tools/tests/test_vocabulary_*.py` tests pass.
 
 ## 2. Failing Behavioral Evidence
