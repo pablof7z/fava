@@ -592,8 +592,7 @@ Example coverage: [DE-1](#de-1).
 ```rust,no_run
 use std::error::Error;
 use fava_simple_groups::{
-    SimpleGroupAdmins, SimpleGroupDecodeError, SimpleGroupLivekitParticipants, SimpleGroupMetadata,
-    SimpleGroupPins,
+    SimpleGroupDecodeError, SimpleGroupLivekitParticipants, SimpleGroupMetadata,
 };
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag, Timestamp};
 fn value(kind: u16, tags: Vec<Tag>) -> Result<EventValue, Box<dyn Error>> {
@@ -630,17 +629,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         } => assert_eq!((tag_index, value_index), (0, 1)),
         other => panic!("unexpected error: {other}"),
     }
-    let invalid_key = SimpleGroupAdmins::from_event(&value(
-        39_001,
-        vec![Tag::parse(["d", "g"])?, Tag::parse(["p", "bad", "admin"])?],
-    )?)?;
-    match &invalid_key.admins()[0] {
-        Err(SimpleGroupDecodeError::InvalidPublicKey {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (1, 1)),
-        other => panic!("unexpected entry: {other:?}"),
-    }
     let invalid_live = SimpleGroupLivekitParticipants::from_event(&value(
         39_004,
         vec![Tag::parse(["d", "g"])?, Tag::parse(["participant", "ABC"])?],
@@ -650,47 +638,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             tag_index,
             value_index,
         }) => assert_eq!((*tag_index, *value_index), (1, 1)),
-        other => panic!("unexpected entry: {other:?}"),
-    }
-    let invalid_kind = SimpleGroupMetadata::from_event(&value(
-        39_000,
-        vec![
-            Tag::parse(["d", "g"])?,
-            Tag::parse(["supported_kinds", "bad"])?,
-        ],
-    )?)?;
-    match &invalid_kind.supported_kinds().expect("present")[0] {
-        Err(SimpleGroupDecodeError::InvalidKind {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (1, 1)),
-        other => panic!("unexpected entry: {other:?}"),
-    }
-    let invalid_id = SimpleGroupPins::from_event(&value(
-        39_005,
-        vec![Tag::parse(["d", "g"])?, Tag::parse(["e", "bad"])?],
-    )?)?;
-    match &invalid_id.pins()[0] {
-        Err(SimpleGroupDecodeError::InvalidEventId {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (1, 1)),
-        other => panic!("unexpected entry: {other:?}"),
-    }
-    let invalid_coordinate = SimpleGroupPins::from_event(&value(
-        39_005,
-        vec![Tag::parse(["d", "g"])?, Tag::parse(["a", "bad"])?],
-    )?)?;
-    match &invalid_coordinate.pins()[0] {
-        Err(
-            error @ SimpleGroupDecodeError::InvalidEventCoordinate {
-                tag_index,
-                value_index,
-            },
-        ) => {
-            assert_eq!((*tag_index, *value_index), (1, 1));
-            assert!(error.to_string().contains("coordinate"));
-        }
         other => panic!("unexpected entry: {other:?}"),
     }
     Ok(())
@@ -766,36 +713,28 @@ Example coverage: [MEM-1](#mem-1).
 #### MEM-1 — concrete coverage
 ```rust,no_run
 use std::error::Error;
-use fava_simple_groups::{SimpleGroupDecodeError, SimpleGroupMembers};
+use fava_simple_groups::SimpleGroupMembers;
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag, Timestamp};
 fn main() -> Result<(), Box<dyn Error>> {
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")?;
-    let member =
-        PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")?;
-    let member_hex = member.to_hex();
+    let member_hex = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
     let event = EventBuilder::new(author, Kind::from_u16(39_002))
         .created_at(Timestamp::from(1))
         .tags([
             Tag::parse(["d", "g"])?,
-            Tag::parse(["p", &member_hex, "ignored"])?,
+            Tag::parse(["p", member_hex, "ignored"])?,
             Tag::parse(["p", "bad"])?,
-            Tag::parse(["p", &member_hex])?,
+            Tag::parse(["p", member_hex])?,
         ])
         .build()?;
     let decoded = SimpleGroupMembers::from_event(&EventValue::Unsigned(event))?;
     assert_eq!(decoded.id(), "g");
     assert_eq!(decoded.author(), author);
     let entries = decoded.members();
-    assert_eq!(entries[0], Ok(member));
-    match &entries[1] {
-        Err(SimpleGroupDecodeError::InvalidPublicKey {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (2, 1)),
-        other => panic!("unexpected middle entry: {other:?}"),
-    }
-    assert_eq!(entries[2], Ok(member));
+    assert_eq!(entries[0], Ok(member_hex.to_owned()));
+    assert_eq!(entries[1], Ok("bad".to_owned()));
+    assert_eq!(entries[2], Ok(member_hex.to_owned()));
     Ok(())
 }
 ```
@@ -869,17 +808,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(decoded.has_livekit());
     assert_eq!(decoded.parent(), Some("root"));
     let kinds = decoded.supported_kinds().expect("tag was present");
-    assert_eq!(kinds[0], Ok(Kind::from_u16(1)));
-    match &kinds[1] {
-        Err(SimpleGroupDecodeError::InvalidKind {
-            tag_index,
-            value_index,
-        }) => {
-            assert_eq!((*tag_index, *value_index), (12, 2));
-        }
-        other => panic!("unexpected middle kind: {other:?}"),
-    }
-    assert_eq!(kinds[2], Ok(Kind::from_u16(1)));
+    assert_eq!(kinds[0], "1");
+    assert_eq!(kinds[1], "bad");
+    assert_eq!(kinds[2], "1");
     let children = decoded.children();
     assert_eq!(children[0], Ok("one".to_owned()));
     match &children[1] {
@@ -913,8 +844,7 @@ Example coverage: [PIN-1](#pin-1).
 #### PIN-1 — concrete coverage
 ```rust,no_run
 use std::error::Error;
-use fava_state::EventCoordinate;
-use fava_simple_groups::{SimpleGroupDecodeError, SimpleGroupPins};
+use fava_simple_groups::SimpleGroupPins;
 use fava_write::{EventBuilder, EventValue, Kind, PublicKey, Tag, Timestamp};
 fn main() -> Result<(), Box<dyn Error>> {
     let author =
@@ -939,23 +869,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(decoded.id(), "g");
     assert_eq!(decoded.author(), author);
     let pins = decoded.pins();
-    assert_eq!(pins[0], Ok(EventCoordinate::Event(target_id)));
-    match &pins[1] {
-        Err(SimpleGroupDecodeError::InvalidEventId {
-            tag_index,
-            value_index,
-        }) => assert_eq!((*tag_index, *value_index), (2, 1)),
-        other => panic!("unexpected middle pin: {other:?}"),
-    }
-    assert_eq!(pins[2], Ok(EventCoordinate::Event(target_id)));
-    assert_eq!(
-        pins[3],
-        Ok(EventCoordinate::Replaceable {
-            author,
-            kind: Kind::from_u16(30_023),
-            identifier: Some("article:one".to_owned()),
-        })
-    );
+    assert!(pins[0].is_ok());
+    assert_eq!(pins[0].as_ref().unwrap().as_slice()[0], "e");
+    assert_eq!(pins[0].as_ref().unwrap().as_slice()[1], target_id.to_hex());
+    assert!(pins[1].is_ok());
+    assert_eq!(pins[1].as_ref().unwrap().as_slice()[0], "e");
+    assert_eq!(pins[1].as_ref().unwrap().as_slice()[1], "bad");
+    assert!(pins[2].is_ok());
+    assert_eq!(pins[3].as_ref().unwrap().as_slice()[0], "a");
+    assert_eq!(pins[3].as_ref().unwrap().as_slice()[1], address);
     Ok(())
 }
 ```
