@@ -1,11 +1,9 @@
-//! Owner-level evidence for bounded exact-key signer attachment.
+//! Owner-level evidence for exact-key signer attachment.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::Barrier;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::thread;
 
 use fava_session::{Session, SessionError};
 use fava_signer::{Signer, SignerAvailability, SignerError};
@@ -92,79 +90,6 @@ fn replace_remove_and_missing_mutations_are_exact() {
     assert!(!changes.has_changed().unwrap());
 }
 
-#[test]
-fn sixty_fourth_succeeds_sixty_fifth_refuses_and_replace_still_succeeds() {
-    let keys: Vec<_> = (0..65).map(|_| Keys::generate().public_key()).collect();
-    let initial = keys[..63]
-        .iter()
-        .copied()
-        .map(|key| Arc::new(TestSigner(key)) as Arc<dyn Signer>);
-    let session = Session::new(initial).expect("63 signer session");
-
-    session
-        .add_signer(Arc::new(TestSigner(keys[63])))
-        .expect("64th signer succeeds");
-    assert_eq!(
-        session.add_signer(Arc::new(TestSigner(keys[64]))),
-        Err(SessionError::SignerCapacityExceeded { limit: 64 })
-    );
-    assert!(session.signer(keys[64]).is_none());
-
-    let replacement = Arc::new(TestSigner(keys[0])) as Arc<dyn Signer>;
-    session
-        .replace_signer(Arc::clone(&replacement))
-        .expect("replacement does not grow capacity");
-    assert!(session.signer(keys[0]).is_some());
-}
-
-#[test]
-fn concurrent_final_slot_growth_never_exceeds_capacity() {
-    let keys: Vec<_> = (0..65).map(|_| Keys::generate().public_key()).collect();
-    let initial = keys[..63]
-        .iter()
-        .copied()
-        .map(|key| Arc::new(TestSigner(key)) as Arc<dyn Signer>);
-    let session = Session::new(initial).expect("63 signer session");
-    let barrier = Arc::new(Barrier::new(3));
-    let contenders: Vec<_> = keys[63..]
-        .iter()
-        .copied()
-        .map(|key| {
-            let session = session.clone();
-            let barrier = Arc::clone(&barrier);
-            thread::spawn(move || {
-                barrier.wait();
-                (key, session.add_signer(Arc::new(TestSigner(key))))
-            })
-        })
-        .collect();
-    barrier.wait();
-    let outcomes: Vec<_> = contenders
-        .into_iter()
-        .map(|contender| contender.join().expect("contender does not panic"))
-        .collect();
-
-    assert_eq!(
-        outcomes.iter().filter(|(_, result)| result.is_ok()).count(),
-        1
-    );
-    assert_eq!(
-        outcomes
-            .iter()
-            .filter(|(_, result)| {
-                *result == Err(SessionError::SignerCapacityExceeded { limit: 64 })
-            })
-            .count(),
-        1
-    );
-    assert_eq!(
-        outcomes
-            .iter()
-            .filter(|(key, _)| session.signer(*key).is_some())
-            .count(),
-        1
-    );
-}
 
 #[test]
 fn invocation_is_exact_generation_and_returned_future_releases_replacement() {

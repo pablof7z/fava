@@ -1,4 +1,4 @@
-//! Bounded runtime signer attachment for exact account public keys.
+//! Runtime signer attachment for exact account public keys.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -10,8 +10,6 @@ use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_write::{Event, PublicKey, UnsignedEvent};
 use thiserror::Error;
 use tokio::sync::watch;
-
-const SIGNER_CAPACITY: usize = 64;
 
 /// Runtime authority for signer attachment to exact account public keys.
 #[derive(Clone)]
@@ -34,7 +32,7 @@ struct Attachment {
     signer: Arc<dyn Signer>,
 }
 
-/// Typed refusal from the bounded runtime signer owner.
+/// Typed refusal from the runtime signer owner.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum SessionError {
     /// A signer is already attached for this exact public key.
@@ -43,24 +41,18 @@ pub enum SessionError {
     /// No signer is attached for this exact public key.
     #[error("no signer attached for {0}")]
     MissingSigner(PublicKey),
-    /// The fixed signer attachment bound was reached.
-    #[error("signer capacity exceeded (limit {limit})")]
-    SignerCapacityExceeded {
-        /// Maximum number of simultaneous signer attachments.
-        limit: usize,
-    },
     /// A fresh attachment generation could not be represented.
     #[error("signer attachment generation exhausted")]
     GenerationExhausted,
 }
 
 impl Session {
-    /// Construct one session from bounded, uniquely keyed signer attachments.
+    /// Construct one session from uniquely keyed signer attachments.
     ///
     /// # Errors
     ///
-    /// Returns a typed refusal for duplicate keys, capacity overflow, or
-    /// generation exhaustion without publishing a partially built session.
+    /// Returns a typed refusal for duplicate keys or generation exhaustion
+    /// without publishing a partially built session.
     pub fn new(signers: impl IntoIterator<Item = Arc<dyn Signer>>) -> Result<Self, SessionError> {
         let mut indexed = BTreeMap::new();
         let mut generation = 0_u64;
@@ -68,11 +60,6 @@ impl Session {
             let public_key = signer.public_key();
             if indexed.contains_key(&public_key) {
                 return Err(SessionError::DuplicateSigner(public_key));
-            }
-            if indexed.len() == SIGNER_CAPACITY {
-                return Err(SessionError::SignerCapacityExceeded {
-                    limit: SIGNER_CAPACITY,
-                });
             }
             generation = generation
                 .checked_add(1)
@@ -95,18 +82,12 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Refuses duplicate keys, capacity overflow, or generation exhaustion
-    /// without changing current state.
+    /// Refuses duplicate keys or generation exhaustion without changing current state.
     pub fn add_signer(&self, signer: Arc<dyn Signer>) -> Result<(), SessionError> {
         let public_key = signer.public_key();
         let mut state = self.lock_state();
         if state.signers.contains_key(&public_key) {
             return Err(SessionError::DuplicateSigner(public_key));
-        }
-        if state.signers.len() == SIGNER_CAPACITY {
-            return Err(SessionError::SignerCapacityExceeded {
-                limit: SIGNER_CAPACITY,
-            });
         }
         let generation = next_generation(state.generation)?;
         state
