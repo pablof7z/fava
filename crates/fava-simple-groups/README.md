@@ -9,8 +9,8 @@ signing, routing, publication, delivery, cancellation, and receipts.
 ## Feed and publication
 
 Content reads retain local write-store visibility and request every selected host.
-They require an explicit positive result bound of at most 4,096 rows. Record
-and discovery helpers carry the same explicit whole-query bound.
+They preserve the ordinary query's caller-selected result limit, including no
+limit. Record and discovery helpers construct their own bounded queries.
 
 ```rust
 use fava::{EventBuilder, Kind, Query, Timestamp, Write};
@@ -22,8 +22,7 @@ let photos = SimpleGroup::on(
 )?;
 let query = photos.events(
     Query::events()
-        .kind(Kind::from_u16(9))
-        .limit(50)?,
+        .kind(Kind::from_u16(9)),
 )?;
 let observation = fava.observe(query).await?;
 for record in &observation.current().events {

@@ -210,15 +210,6 @@ pub(crate) fn content(
     simple_group: &SimpleGroup,
     selection: Query,
 ) -> Result<Query, SimpleGroupError> {
-    let limit = selection.result_limit().ok_or_else(|| {
-        SimpleGroupError::Query("simple group content requires an explicit result bound".to_owned())
-    })?;
-    if limit.get() > MAX_SIMPLE_GROUP_QUERY_RESULTS {
-        return Err(SimpleGroupError::Query(format!(
-            "simple group content result bound exceeds limit: {} > {MAX_SIMPLE_GROUP_QUERY_RESULTS}",
-            limit.get()
-        )));
-    }
     let h = SingleLetterTag::from_char('h').expect("lowercase h is a valid tag key");
     let selection = match selection.selection().tag_values.get(&h) {
         None => selection.tag_values(h, [simple_group.id()]),

@@ -47,13 +47,9 @@ async fn simple_group_content_preserves_local_visibility() {
     let harness = Harness::new(Arc::new(ExactSigner::new(keys.clone())));
     let simple_group = simple_group();
     let query = simple_group
-        .events(
-            Query::events()
-                .limit(16)
-                .expect("positive bound")
-                .cache_only(),
-        )
+        .events(Query::events().cache_only())
         .expect("group content query");
+    assert_eq!(query.result_limit(), None);
     let mut observation = harness.fava.observe(query).await.expect("query opens");
     assert!(observation.current().events.is_empty());
 

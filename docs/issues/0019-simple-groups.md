@@ -63,8 +63,9 @@ refused by pure preparation before Fava custody or wire interaction. Kinds
   content, foreign and malformed rows, unrelated order, and exact other-host
   rows.
 
-All externally influenced host, id, query, tag, row, string, projection, and
-discovery inputs have explicit bounds or typed refusal.
+All externally influenced host, id, tag, row, string, projection, and discovery
+inputs owned by this capability have explicit bounds or typed refusal. Content
+queries preserve query-owned result-limit policy.
 
 ## Approved vocabulary
 

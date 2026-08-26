@@ -54,12 +54,7 @@ fn one_host_group_traces_pure_preparation_and_queries() {
         .prepare(prepared.clone())
         .expect("repeated preparation is inert");
     let content = simple_group
-        .events(
-            Query::events()
-                .kind(Kind::from_u16(9))
-                .limit(50)
-                .expect("positive limit"),
-        )
+        .events(Query::events().kind(Kind::from_u16(9)))
         .expect("ordinary content query");
     let h = SingleLetterTag::from_char('h').expect("tag key");
     let contexts: Vec<_> = prepared
@@ -87,6 +82,7 @@ fn one_host_group_traces_pure_preparation_and_queries() {
             &ResultAuthority::AnyLocal,
         )
     );
+    assert_eq!(content.result_limit(), None);
     assert_eq!(repeated, prepared);
 }
 

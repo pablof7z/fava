@@ -20,34 +20,31 @@ fn simple_group() -> SimpleGroup {
 }
 
 #[test]
-fn content_query_refuses_unbounded_and_oversized_results() {
+fn content_query_preserves_caller_result_limit_policy() {
     let simple_group = simple_group();
 
-    assert!(matches!(
-        simple_group.events(Query::events()),
-        Err(SimpleGroupError::Query(_))
-    ));
-    assert!(matches!(
-        simple_group.events(Query::events().limit(4_097).expect("positive limit")),
-        Err(SimpleGroupError::Query(_))
-    ));
+    let unbounded = simple_group
+        .events(Query::events())
+        .expect("ordinary unbounded query");
+    assert_eq!(unbounded.result_limit(), None);
+
     assert_eq!(
         simple_group
             .events(Query::events().limit(1).expect("positive limit"))
-            .expect("minimum result bound")
+            .expect("caller-selected result bound")
             .result_limit()
-            .expect("retained result bound")
+            .expect("caller-selected result bound retained")
             .get(),
         1
     );
     assert_eq!(
         simple_group
-            .events(Query::events().limit(4_096).expect("positive limit"))
-            .expect("maximum result bound")
+            .events(Query::events().limit(8_192).expect("positive limit"))
+            .expect("large caller-selected result bound")
             .result_limit()
-            .expect("retained result bound")
+            .expect("large caller-selected result bound retained")
             .get(),
-        4_096
+        8_192
     );
 }
 

@@ -578,13 +578,14 @@ let photos = SimpleGroup::on(
     "photos",
 )?;
 
-let feed = photos.events(Query::events().kind(Kind::from(9)).limit(50)?)?;
+let feed = photos.events(Query::events().kind(Kind::from(9)))?;
 let records = photos.records(SimpleGroupRecords::metadata())?;
 ```
 
 `feed` lowers to the ordinary exact `h` tag-value axis plus
 `from_relays(hosts)`. This keeps explicit acquisition and optimistic local write
-visibility. `records` lowers to kinds 39000 through 39005, the exact `d`
+visibility while preserving the caller's ordinary result-limit policy,
+including an absent limit. `records` lowers to kinds 39000 through 39005, the exact `d`
 tag-value axis, and `only_from_relays(hosts)` because relay-authored simple
 group state is authoritative per host.
 
