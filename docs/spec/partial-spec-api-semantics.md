@@ -593,7 +593,7 @@ let alice = RelayUrl::parse("wss://alice.relay.example")?;
 let photos = SimpleGroup::from_relays("photos", vec![bob, alice])?;
 
 let feed = photos.events(Query::events().kinds([Kind::from(9)])?.limit(50)?)?;
-let state = photos.state_events([SimpleGroupStateEventKind::Metadata])?;
+let state = photos.meta_events([SimpleGroupStateEventKind::Metadata])?;
 ```
 
 `feed` uses query-owned `Query::intersect_tag_values` to constrain the `h` axis

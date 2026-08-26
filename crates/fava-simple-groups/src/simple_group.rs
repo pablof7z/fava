@@ -128,12 +128,12 @@ impl SimpleGroup {
             .from_relays(self.relays())
     }
 
-    /// Build an exact-`d`, relay-authoritative query for selected NIP-29 state-event kinds.
+    /// Build an exact-`d`, relay-authoritative query for selected NIP-29 meta-event kinds.
     ///
     /// # Errors
     ///
     /// Returns the owning [`QueryError`] when bounded kind, tag, or relay composition is refused.
-    pub fn state_events<I>(&self, kinds: I) -> Result<Query, QueryError>
+    pub fn meta_events<I>(&self, kinds: I) -> Result<Query, QueryError>
     where
         I: IntoIterator<Item = SimpleGroupStateEventKind>,
     {

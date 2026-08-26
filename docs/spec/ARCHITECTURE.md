@@ -2003,7 +2003,7 @@ delivery, retry, cancellation, or receipt lifecycle:
 ```rust
 SimpleGroup::from_relays(id, relays: Vec<RelayUrl>) -> Result<SimpleGroup, SimpleGroupConstructionError>
 simple_group.events(selection) -> Result<Query, QueryError>
-simple_group.state_events(kinds) -> Result<Query, QueryError>
+simple_group.meta_events(kinds) -> Result<Query, QueryError>
 simple_group.prepare(draft) -> Result<UnsignedEvent, EventBuildError>
 ```
 

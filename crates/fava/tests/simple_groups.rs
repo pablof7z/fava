@@ -86,7 +86,7 @@ async fn state_query_returns_generic_records_for_event_local_decoding() {
     let (fava, cache) = assembly(&keys);
     let group = group();
     let query = group
-        .state_events([SimpleGroupStateEventKind::Metadata])
+        .meta_events([SimpleGroupStateEventKind::Metadata])
         .expect("state query")
         .cache_only();
     let mut observation = fava.observe(query).await.expect("query opens");

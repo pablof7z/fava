@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "385dc148fdb01a8fa8f506a462cafdcd16e028998f2d64b7fdba66aa95bdd531",
+  "inputs_sha256": "ebf30f6aca70bcb71290a0ee269e6f41e7a547821ce64b6c4f59bb8b76b84d7f",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -20247,8 +20247,8 @@
         {
           "description": "Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.",
           "kind": "Method",
-          "path": "fava_simple_groups::SimpleGroup::state_events",
-          "signature": "pub fn fava_simple_groups::SimpleGroup::state_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>"
+          "path": "fava_simple_groups::SimpleGroup::meta_events",
+          "signature": "pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>"
         },
         {
           "description": "Immutable non-empty opaque simple-group id plus a normalized non-empty application-selected relay sequence. It lowers context into ordinary queries and unsigned events without opening work.",
@@ -20302,9 +20302,9 @@
             "path": "fava_simple_groups::SimpleGroup::relays"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::state_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>",
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>",
             "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::state_events"
+            "path": "fava_simple_groups::SimpleGroup::meta_events"
           },
           {
             "declaration": "pub struct fava_simple_groups::SimpleGroup",
@@ -21345,7 +21345,7 @@
     {
       "interface": [
         {
-          "description": "The closed selector mapping Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005. Lifecycle: An inert copyable query input consumed synchronously by state_events.",
+          "description": "The closed selector mapping Metadata→39000, Admins→39001, Members→39002, Roles→39003, LivekitParticipants→39004, and Pins→39005. Lifecycle: An inert copyable query input consumed synchronously by meta_events.",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::query::SimpleGroupStateEventKind",
           "signature": "pub enum SimpleGroupStateEventKind {\n    /// Kind 39000 metadata.\n    Metadata,\n    /// Kind 39001 administrators.\n    Admins,\n    /// Kind 39002 members.\n    Members,\n    /// Kind 39003 roles.\n    Roles,\n    /// Kind 39004 `LiveKit` participants.\n    LivekitParticipants,\n    /// Kind 39005 pins.\n    Pins,\n}"

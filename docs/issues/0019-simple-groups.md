@@ -33,7 +33,7 @@ or private numeric bound.
   It delegates exact narrowing to query-owned `Query::intersect_tag_values`;
   disjoint axes remain present-empty match-nothing queries. Issue 0028 records
   Pablo's architecture approval, not vocabulary approval.
-- `state_events` delegates its kind input to `Query::kinds`, adds exact
+- `meta_events` delegates its kind input to `Query::kinds`, adds exact
   `d = id`, and uses `only_from_relays` without a private limit.
 - `prepare` accepts only `UnsignedEvent`, preserves all existing tags, and
   appends one matching `h` tag only when no first value already matches.
@@ -114,7 +114,7 @@ bounds, observation, publication, cancellation, or receipt value exists.
 
 ## Query-error ownership
 
-`events` and `state_events` return `QueryError` from the query owner without
+`events` and `meta_events` return `QueryError` from the query owner without
 translation. No group-owned conflict error is permitted. The README catalog is
 compiler-derived from the current surface and does not constrain architecture.
 

@@ -44,7 +44,7 @@ are accepted because signing belongs to Fava.
 
 ## Relay-generated state
 
-`state_events` builds an exact-`d`, `OnlyRelays` query for kinds 39000 through
+`meta_events` builds an exact-`d`, `OnlyRelays` query for kinds 39000 through
 39005 by delegating the supplied set to `Query::kinds`. It applies no private
 result limit or validation and returns exact `QueryError` values. The returned
 value is an ordinary `QuerySnapshot`; provenance and relay-local selection
@@ -53,7 +53,7 @@ remain generic Fava/application responsibilities.
 ```rust,ignore
 use fava_simple_groups::{SimpleGroupMetadata, SimpleGroupStateEventKind};
 
-let query = photos.state_events([
+let query = photos.meta_events([
     SimpleGroupStateEventKind::Metadata,
     SimpleGroupStateEventKind::Members,
 ])?;
@@ -411,7 +411,7 @@ Example coverage: [SG-1](#sg-1).
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.<br><br>Example: [SG-1](#sg-1). |
 | **`prepare`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::prepare","signature":"pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Unsigned preparation; NIP-29 The h tag; current implementation crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.<br><br>Example: [SG-1](#sg-1). |
 | **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::relays","signature":"pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.<br><br>Example: [SG-1](#sg-1). |
-| **`state_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::state_events","signature":"pub fn fava_simple_groups::SimpleGroup::state_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
+| **`meta_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::meta_events","signature":"pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
 
 <a id="sg-1"></a>
 #### SG-1 — concrete coverage
@@ -451,18 +451,18 @@ fn exercise_simple_group() -> Result<(), Box<dyn Error>> {
         disjoint.selection().tag_values.get(&h),
         Some(&BTreeSet::new()),
     );
-    let state_events = group.state_events([SimpleGroupStateEventKind::Members])?;
+    let meta_events = group.meta_events([SimpleGroupStateEventKind::Members])?;
     let d = SingleLetterTag::from_char('d').expect("lowercase d");
     assert_eq!(
-        state_events.selection().kinds,
+        meta_events.selection().kinds,
         Some(BTreeSet::from([Kind::from_u16(39_002)])),
     );
     assert_eq!(
-        state_events.selection().tag_values.get(&d),
+        meta_events.selection().tag_values.get(&d),
         Some(&BTreeSet::from([" photos ".to_owned()])),
     );
     assert!(matches!(
-        state_events.source().authority(),
+        meta_events.source().authority(),
         ResultAuthority::OnlyRelays(relays) if relays.len() == 2
     ));
     let author =
@@ -1070,7 +1070,7 @@ fn selected(
     kind: SimpleGroupStateEventKind,
 ) -> Result<BTreeSet<Kind>, Box<dyn Error>> {
     Ok(group
-        .state_events([kind])?
+        .meta_events([kind])?
         .selection()
         .kinds
         .clone()
@@ -1103,7 +1103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         selected(&group, SimpleGroupStateEventKind::Pins)?,
         BTreeSet::from([Kind::from_u16(39_005)])
     );
-    let all = group.state_events(SimpleGroupStateEventKind::ALL)?;
+    let all = group.meta_events(SimpleGroupStateEventKind::ALL)?;
     assert_eq!(
         all.selection().kinds,
         Some((39_000..=39_005).map(Kind::from_u16).collect()),

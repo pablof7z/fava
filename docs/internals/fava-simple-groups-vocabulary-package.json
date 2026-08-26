@@ -7,8 +7,8 @@
   },
   "ordering": "ascending lexicographic order of exact UTF-8 term-name bytes",
   "owner": "fava-simple-groups",
-  "package_byte_length": 104794,
-  "package_sha256": "36321b93c4ba76c6069dbd759bdd5fdbaa916c5847b7b24b9e26d504e0b133f5",
+  "package_byte_length": 104788,
+  "package_sha256": "3b8a62f0545f187fb17258e1549fcf20f2e04d595923462f60d6e484cddf36d0",
   "term_count": 22,
   "terms": [
     {
@@ -44,10 +44,10 @@
       "name_utf8_byte_length": 16
     },
     {
-      "frame_byte_length": 7218,
+      "frame_byte_length": 7214,
       "index": 4,
-      "markdown_sha256": "663913ddee4672ca64e9e8ac8716a709f7d230116e0cbffb86d96429aba393d9",
-      "markdown_utf8_byte_length": 7191,
+      "markdown_sha256": "295a356d3f4483f070e04426998985d472cb72b9b383ddb70906e29639d9f03e",
+      "markdown_utf8_byte_length": 7187,
       "name": "SimpleGroup",
       "name_utf8_byte_length": 11
     },
@@ -116,10 +116,10 @@
       "name_utf8_byte_length": 16
     },
     {
-      "frame_byte_length": 6548,
+      "frame_byte_length": 6546,
       "index": 13,
-      "markdown_sha256": "bda2a8e04065d390ad05a16e288bb2da8c0c664cf327ba5a3547eb9ab22d956e",
-      "markdown_utf8_byte_length": 6507,
+      "markdown_sha256": "ce929caf38dc87950855e8291eb85d4b731da8836143e04fe6c8d38c57a8e93d",
+      "markdown_utf8_byte_length": 6505,
       "name": "SimpleGroupStateEventKind",
       "name_utf8_byte_length": 25
     },

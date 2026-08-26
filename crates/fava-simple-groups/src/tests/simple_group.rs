@@ -75,7 +75,7 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
     let relay = RelayUrl::parse("wss://bounded.example").expect("relay");
     let group = SimpleGroup::from_relays("g", vec![relay]).expect("non-empty group");
     assert!(matches!(
-        group.state_events(std::iter::repeat(SimpleGroupStateEventKind::Metadata)),
+        group.meta_events(std::iter::repeat(SimpleGroupStateEventKind::Metadata)),
         Err(QueryError::TooManyKinds {
             actual: 4_097,
             maximum: 4_096,
@@ -148,7 +148,7 @@ fn state_event_query_delegates_empty_and_non_empty_sets_to_query() {
     let relay = RelayUrl::parse("wss://relay.example").expect("relay");
     let group = SimpleGroup::from_relays("photos", vec![relay.clone()]).expect("non-empty group");
     let query = group
-        .state_events([
+        .meta_events([
             SimpleGroupStateEventKind::Pins,
             SimpleGroupStateEventKind::Metadata,
             SimpleGroupStateEventKind::Pins,
@@ -173,7 +173,7 @@ fn state_event_query_delegates_empty_and_non_empty_sets_to_query() {
     );
     assert_eq!(query.result_limit(), None);
     let empty = group
-        .state_events([])
+        .meta_events([])
         .expect("the query owner defines empty kinds as match-nothing");
     assert_eq!(
         empty.selection().kinds,

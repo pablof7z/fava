@@ -66,7 +66,7 @@ fn constructors_queries_and_preparation_compile_at_the_current_surface() {
             .expect("one kind is bounded"),
     );
     let content = content_result.unwrap();
-    let state_result: Result<Query, fava_query::QueryError> = group.state_events([
+    let state_result: Result<Query, fava_query::QueryError> = group.meta_events([
         SimpleGroupStateEventKind::Metadata,
         SimpleGroupStateEventKind::Pins,
     ]);

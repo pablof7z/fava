@@ -211,7 +211,7 @@ async fn execute_with_proxies(
     let mut records = observer
         .observe(
             simple_group
-                .state_events(SimpleGroupStateEventKind::ALL)
+                .meta_events(SimpleGroupStateEventKind::ALL)
                 .map_err(error)?,
         )
         .await
