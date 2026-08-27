@@ -7,6 +7,8 @@ use fava_write::{
 use crate::WriteStoreError;
 
 const MAX_RECEIPT_TEXT_BYTES: usize = 4_096;
+/// Shared cap on live relay destinations and on retained superseded
+/// materializations.
 const DESTINATION_EVIDENCE_CAPACITY: usize = 256;
 
 /// Refuse provider text that exceeds durable receipt bounds.
@@ -44,7 +46,8 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
     }
 }
 
-/// Shared bound for current destinations and retained publication evidence.
+/// Shared cap on live relay destinations and on retained superseded
+/// materializations.
 #[must_use]
 pub const fn destination_evidence_capacity() -> usize {
     DESTINATION_EVIDENCE_CAPACITY

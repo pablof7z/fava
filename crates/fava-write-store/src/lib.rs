@@ -156,8 +156,8 @@ pub trait WriteStore: QuerySource + Send + Sync {
         ))
     }
 
-    /// Record one bounded post-accept materialization failure against exact
-    /// current write, generation, and selected source identity.
+    /// Attribute one post-accept materialization failure to the exact current
+    /// write, generation, and selected source.
     ///
     /// # Errors
     ///
