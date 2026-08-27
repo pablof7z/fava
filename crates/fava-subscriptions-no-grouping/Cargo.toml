@@ -1,5 +1,6 @@
 [package]
 name = "fava-subscriptions-no-grouping"
+description = "One exact Nostr subscription per logical relay demand."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
