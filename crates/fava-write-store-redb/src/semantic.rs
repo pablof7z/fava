@@ -386,6 +386,8 @@ impl RedbWriteStore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Attribute one materialization failure to the exact generation and source
+    /// that produced it.
     pub(super) fn record_semantic_failure(
         &self,
         write_id: WriteId,

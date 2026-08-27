@@ -52,6 +52,8 @@ pub struct RedbWriteStore {
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
 }
 
+/// The whole in-memory ledger: coordinate reservations, retained receipts, which
+/// receipt owns which coordinate, and in-flight replaceable-event custody.
 #[derive(Clone, Debug)]
 struct StoreState {
     revision: u64,

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::{SemanticCustody, StoreState, refused, validation};
 
 const RECEIPTS: TableDefinition<u64, &[u8]> = TableDefinition::new("receipts");
+/// Redb table holding the on-disk schema version and the next receipt identity.
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const NEXT_ID: &str = "next_id";
 const SCHEMA_VERSION_KEY: &str = "schema_version";

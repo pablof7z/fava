@@ -122,6 +122,7 @@ impl RedbWriteStore {
         Ok(receipt)
     }
 
+    /// Mark signing retryable, promoting a pending successor when one is waiting.
     pub(super) fn record_signer_retryable_current(
         &self,
         write_id: WriteId,
@@ -232,6 +233,8 @@ impl RedbWriteStore {
         self.commit_receipt(&mut state, receipt)
     }
 
+    /// Commit a signer refusal, only from a generation the store durably
+    /// authorized.
     pub(super) fn record_signer_refusal_current(
         &self,
         write_id: WriteId,
