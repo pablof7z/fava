@@ -10,10 +10,12 @@ mod pinned_launcher;
 mod sealed_executable;
 
 use canary::{
-    CroissantNip02Options, FlowOptions, ReconOptions, SmokeOptions, run_croissant_nip02_scenario,
+    CroissantNip02Options, FlowOptions, PhaseFOptions, ReconOptions, SmokeOptions,
+    run_communities_lifecycle, run_crash_recovery, run_croissant_nip02_scenario,
     run_croissant_simple_groups_scenario, run_live_scenario, run_m3_live_scenario,
-    run_public_recon, run_publication_scenario, run_real_relay_smoke, run_routing_scenario,
-    scenario_registry, verify_croissant_run_pair, verify_croissant_simple_groups_pair,
+    run_public_recon, run_publication_scenario, run_real_relay_smoke, run_relay29_lifecycle,
+    run_routing_scenario, scenario_registry, verify_croissant_run_pair,
+    verify_croissant_simple_groups_pair,
 };
 
 struct CroissantSimpleGroupsCliOptions {
@@ -229,6 +231,27 @@ async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::Ca
             println!("evidence: {}", outcome.run_directory.display());
             return Ok(());
         }
+        "phase-f-relay29-lifecycle" => {
+            let options = phase_f_options(&mut arguments, &scenario)?;
+            let run = run_relay29_lifecycle(&options).await?;
+            println!("passed {scenario}");
+            println!("evidence: {}", run.display());
+            return Ok(());
+        }
+        "phase-f-communities-lifecycle" => {
+            let options = phase_f_options(&mut arguments, &scenario)?;
+            let run = run_communities_lifecycle(&options).await?;
+            println!("passed {scenario}");
+            println!("evidence: {}", run.display());
+            return Ok(());
+        }
+        "phase-f-crash-recovery" => {
+            let options = phase_f_options(&mut arguments, &scenario)?;
+            let run = run_crash_recovery(&options).await?;
+            println!("passed {scenario}");
+            println!("evidence: {}", run.display());
+            return Ok(());
+        }
         _ => {
             return Err(std::io::Error::other(format!(
                 "unknown or unimplemented scenario: {scenario}"
@@ -327,6 +350,32 @@ fn smoke_options(
     }
     Ok(SmokeOptions {
         relay_binary,
+        seed,
+        runs_directory,
+    })
+}
+
+fn phase_f_options(
+    arguments: &mut impl Iterator<Item = String>,
+    scenario: &str,
+) -> canary::CanaryResult<PhaseFOptions> {
+    let mut relay29_binary = PathBuf::from("relay29");
+    let mut communities_relay_binary = PathBuf::from("communities-relay");
+    let mut seed = scenario.to_owned();
+    let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+    while let Some(flag) = arguments.next() {
+        let value = arguments.next().ok_or_else(usage)?;
+        match flag.as_str() {
+            "--relay29-bin" => relay29_binary = PathBuf::from(value),
+            "--communities-relay-bin" => communities_relay_binary = PathBuf::from(value),
+            "--seed" => seed = value,
+            "--runs-dir" => runs_directory = PathBuf::from(value),
+            _ => return Err(usage()),
+        }
+    }
+    Ok(PhaseFOptions {
+        relay29_binary,
+        communities_relay_binary,
         seed,
         runs_directory,
     })

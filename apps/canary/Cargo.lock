@@ -134,6 +134,7 @@ dependencies = [
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-nip02",
+ "fava-nip29-management",
  "fava-publisher-nip01",
  "fava-query-standard",
  "fava-relay",
@@ -141,6 +142,7 @@ dependencies = [
  "fava-router-fallback-relays",
  "fava-router-testkit",
  "fava-routing",
+ "fava-session",
  "fava-signer",
  "fava-signer-local",
  "fava-simple-groups",
@@ -431,6 +433,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-nip29-management"
+version = "0.1.0"
+dependencies = [
+ "fava-simple-groups",
+ "fava-write",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
 name = "fava-observe"
 version = "0.1.0"
 dependencies = [
@@ -446,6 +458,7 @@ dependencies = [
  "fava-transport",
  "fava-wire",
  "nostr",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -486,9 +499,13 @@ version = "0.1.0"
 dependencies = [
  "fava-publisher",
  "fava-relay",
+ "fava-session",
+ "fava-signer",
  "fava-state",
  "fava-transport",
  "fava-wire",
+ "fava-write",
+ "nostr",
  "tokio",
 ]
 
