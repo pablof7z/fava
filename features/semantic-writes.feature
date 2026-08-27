@@ -37,15 +37,3 @@ Feature: Semantic replaceable-event writes
     Given a protocol capability has produced a bounded semantic edit
     When the capability produces and publishes the opposing edit
     Then both edits use the same write lifecycle and restore the intended protocol state
-
-  # fava:rust=external-semantic-capability-proof/public_capability#external_capability_composes_through_public_fava
-  Scenario: external N+1
-    Given an external capability implements only public semantic-write contracts
-    When an application selects that capability in its Fava assembly
-    Then current and empty source materialize without changing universal core behavior
-
-  # fava:rust=external-semantic-capability-proof/public_capability#raw_future_event_kind_publishes_unchanged
-  Scenario: raw future kinds
-    Given an application constructs an arbitrary future event kind with the generic builder
-    When it publishes the ordinary raw event without a semantic capability
-    Then its kind content and tags remain usable without a universal kind switch

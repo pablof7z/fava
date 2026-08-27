@@ -32,15 +32,15 @@ change uses it. This architecture slice changes no runtime behavior.
 - **Observable distinction:** a replaceable protocol provider applies one
   protocol-owned edit to qualified source or defined empty state without owning
   custody, signing, routing, publication, delivery, or receipts.
-- **Counterexample:** a NIP-02-specific branch inside publication makes an
-  external bookmarks or N+1 capability require universal-core edits.
+- **Counterexample:** a NIP-02-specific branch inside publication makes a
+  bookmarks or N+1 capability require universal-core edits.
 - **Owner/lifecycle:** neutral contract in `fava-write`; implementations live in
   protocol crates and are selected by application assembly before recovery.
 - **Forcing requirement:** PROTO-001 through PROTO-004 and CAP-07/CAP-08.
 - **Why existing state is insufficient:** no public replaceable provider contract
   can interpret durable opaque edit formats after acceptance or restart.
-- **Falsifier:** an external capability implementing only public contracts must
-  materialize current and empty source without editing universal owners.
+- **Falsifier:** a capability using only public contracts must materialize
+  current and empty source without editing universal owners.
 
 ### `MaterializationId`
 

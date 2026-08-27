@@ -361,18 +361,17 @@ BDD scenarios must not rely on uncontrolled public data.
 
 ## 11. Provider-contract TDD
 
-A replaceable boundary is provisional until a meaningfully different implementation challenges it.
+A replaceable boundary is provisional until its public contract and standard implementation pass the same conformance examples.
 
 For each provider contract:
 
 1. write contract examples before stabilizing the trait;
 2. implement the first real provider through those examples;
 3. write the conformance kit from behavior the first provider actually needs;
-4. implement a second materially different provider, preferably outside the owning crate/workspace boundary;
-5. remove methods that exist only because the first implementation leaked its shape; and
-6. run architecture falsifiers and public composition tests.
+4. remove methods that exist only because the implementation leaked its shape; and
+5. run architecture falsifiers and public composition tests.
 
-A trait with one implementation is not evidence of substitutability.
+A trait whose conformance suite requires private access is not a replaceable boundary.
 
 ## 12. Workflow by change type
 

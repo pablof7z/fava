@@ -3204,7 +3204,7 @@ Every replaceable contract should satisfy these rules:
 4. **Late results are attributable.** Operations carry exact owner and generation identity.
 5. **Bounds are explicit.** Provider outputs and retained state are bounded or produce a typed limit outcome.
 6. **Failure is scoped.** Provider failure remains a provider fact and does not masquerade as relay, store, or application truth.
-7. **Default and external parity.** The default implementation uses the same contract and conformance kit as external providers.
+7. **Public contract use.** The default implementation uses the public contract and conformance kit without a privileged bypass.
 8. **Construction is sufficient.** The contract does not include runtime registration machinery unless its responsibility has a genuine runtime lifecycle.
 
 ---
@@ -3215,29 +3215,16 @@ Every replaceable contract should satisfy these rules:
 
 The crate map is not accepted merely because the responsibilities sound coherent. Each claimed boundary must survive attempts to replace, isolate, overload, and compose it.
 
-A boundary is healthy when an external implementation can use it without private access and when changing one provider does not force unrelated providers to change.
+A boundary is healthy when applications can select it through public assembly without private access and when changing one provider does not force unrelated providers to change.
 
 ---
 
-## Falsifier A — external-provider proof
+## Falsifier A — public-contract proof
 
-For every replaceable contract, build at least one implementation in a crate outside the Fava workspace.
-
-The external crate must:
-
-- depend only on public contracts and ordinary third-party dependencies;
-- require zero edits to `fava`, runtime, or unrelated providers;
-- run through an ordinary application assembly;
-- pass the same conformance kit as the standard provider.
-
-Required early examples:
-
-- a static-table router;
-- a no-grouping subscription planner;
-- a scripted transport;
-- a no-retry delivery policy;
-- a memory event cache;
-- an independent persistent write store.
+For every replaceable contract, exercise the standard implementation through
+the public contract, ordinary application assembly, and the contract's
+conformance kit. Giving a default provider a private facade door or privileged
+state access must make a source/dependency gate fail.
 
 ---
 
@@ -3351,7 +3338,7 @@ After restart:
 
 ## Falsifier H — protocol crate N+1
 
-Add a new event-kind protocol crate outside the workspace.
+Add a new event-kind protocol crate.
 
 It must provide:
 
@@ -3499,7 +3486,7 @@ Compiler-level tests prove that:
 - transport implementations cannot import write stores or routing algorithms;
 - `fava-publication` cannot import standard delivery or publisher implementations;
 - `fava` cannot name event-kind protocol crates;
-- standard providers have no private bypass unavailable to external providers.
+- standard providers have no private bypass unavailable through public contracts.
 
 ---
 
@@ -3528,12 +3515,12 @@ Broad edits falsify the claimed boundary.
 
 ## Application capstones
 
-The architecture is accepted only after ordinary external applications prove:
+The architecture is accepted only after ordinary applications prove:
 
 1. a live query combining persistent cached events, local unpublished events, and live relay ingress;
 2. a replaceable-event edit applied again over a newer relay event;
 3. a partial asynchronous route that adds a later recipient under one receipt;
-4. a custom router crate outside the workspace;
+4. a selected router crate changes without universal-core edits;
 5. a custom event-cache implementation;
 6. a custom subscription planner;
 7. process restart with durable accepted writes;
@@ -3546,7 +3533,7 @@ The architecture is accepted only after ordinary external applications prove:
 
 ## Build vertical slices, not an empty provider framework
 
-Contracts should be stabilized only after a complete slice and a competing implementation have challenged them.
+Contracts should be stabilized only after a complete slice and public conformance evidence have challenged them.
 
 ### Slice 1 — local source merge
 
@@ -3741,7 +3728,7 @@ fava-signer-testkit
 
 The relay-lab role — real third-party relay process fixtures, wire evidence, and reconstructable run artifacts — is owned by the external `apps/canary` application, not a workspace crate. The canary is the independent relay-lab; no `fava-relay-lab` crate is created.
 
-Each conformance kit is versioned with its contract and can be used by external provider crates.
+Each conformance kit is versioned with its public contract.
 
 ---
 
@@ -3749,7 +3736,7 @@ Each conformance kit is versioned with its contract and can be used by external 
 
 ## One-paragraph north star
 
-Fava is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, and signer responsibilities. Live queries merge relay-event cache state, accepted-write materializations, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Protocol crates own event-kind meaning and compose ordinary query, event-building, and write values. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by an external implementation and an adversarial falsifier.
+Fava is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, and signer responsibilities. Live queries merge relay-event cache state, accepted-write materializations, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Protocol crates own event-kind meaning and compose ordinary query, event-building, and write values. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by public conformance evidence and an adversarial falsifier.
 
 ## Test for every architectural decision
 

@@ -19,9 +19,9 @@ use crate::plan::{SubscriptionPlan, WithdrawalReason};
 /// replaces the private `validate_plan` that lived in `crates/fava/src/relay.rs`,
 /// which is deleted, not adapted.
 ///
-/// Authority: ARCH:1514 "the conformance rules that define semantic
-/// equivalence"; ARCH:3148 external providers "pass the same conformance kit as
-/// the standard provider".
+/// Authority: ARCH "the conformance rules that define semantic equivalence";
+/// GOAL-005 requires each standard provider to pass its public conformance
+/// suite without a privileged facade bypass.
 ///
 /// # Errors
 ///

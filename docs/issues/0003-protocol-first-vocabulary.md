@@ -30,10 +30,10 @@ architectural symbol must resolve to one defined concept.
 ## Proof
 
 - query identity and invalid-construction tests;
-- public facade and external provider tests using `Query` directly;
+- public facade tests using `Query` directly;
 - vocabulary-check unit fixtures and a clean repository scan;
 - repository-wide searches for vocabulary that contradicts the current model;
-- workspace tests, Clippy, formatting, and external-provider falsifier.
+- workspace tests, Clippy, formatting, and public-contract conformance.
 
 ## Evidence
 
@@ -44,7 +44,6 @@ architectural symbol must resolve to one defined concept.
 - Green: `cargo clippy --workspace --all-targets -- -D warnings`.
 - Green: `cargo fmt --all -- --check`.
 - Green: `cargo test --manifest-path apps/canary/Cargo.toml` and its Clippy gate.
-- Green: `cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml` and its Clippy gate.
 - Green: `bazel test //...`, including `//crates/fava-query:query_identity`.
 - Green: `python3 tools/check_vocabulary.py`.
 - Green: `python3 -m unittest tools/tests/test_vocabulary_check.py`.

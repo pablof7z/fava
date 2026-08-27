@@ -24,8 +24,7 @@ rebuilding whole events.
   routing, publishing, and delivery.
 - Add two unrelated protocol crates: NIP-02 follows and a bookmarks capability.
 - Prove the complete behavior through the public `fava` API, a shared
-  capability corpus, restart evidence, dependency-negative checks, and an
-  external N+1 falsifier.
+  capability corpus, restart evidence, and dependency-negative checks.
 
 ## Non-goals
 
@@ -45,8 +44,8 @@ rebuilding whole events.
   unrelated source changes, keeps the same write/receipt identity, and makes
   retired completions inert but attributable.
 - Follow/unfollow and bookmark/unbookmark pass one public conformance corpus.
-- Adding an external capability changes only that crate and selected assembly
-  metadata; arbitrary/future raw kinds remain usable.
+- Adding a capability changes only that crate and selected assembly metadata;
+  arbitrary/future raw kinds remain usable.
 - The full proportional validation set passes and the focused issue records the
   deliberate-break evidence.
 

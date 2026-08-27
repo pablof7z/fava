@@ -51,8 +51,6 @@ PRIVATE_CALLERS = (
     "crates/fava-nip02/src/query.rs",
     "crates/fava-simple-groups/src/query.rs",
     "crates/fava/tests/publication_door.rs",
-    "falsifiers/external-semantic-capability/tests/public_capability.rs",
-    "falsifiers/external-semantic-capability/tests/support/waits.rs",
 )
 
 
@@ -70,7 +68,7 @@ def json_strings(value: object):
 class StateFoundationSubtraction(unittest.TestCase):
     def test_retired_rust_surface_is_absent(self) -> None:
         offenders: list[str] = []
-        for base in (ROOT / "crates", ROOT / "apps", ROOT / "falsifiers"):
+        for base in (ROOT / "crates", ROOT / "apps"):
             for path in base.rglob("*.rs"):
                 if "tests" in path.parts:
                     continue

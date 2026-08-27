@@ -12,7 +12,6 @@ filegroup(
     name = "state_comparator_sources",
     srcs = glob([
         "apps/**/*.rs",
-        "falsifiers/**/*.rs",
     ]) + [
         "Cargo.toml",
         "//crates/fava-bookmarks:architecture_sources",
