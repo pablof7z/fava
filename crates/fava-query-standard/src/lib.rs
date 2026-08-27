@@ -67,6 +67,7 @@ struct Candidate {
 }
 
 impl Candidate {
+    /// Finalizes into an [`EventRecord`], requiring every collected occurrence to match `id`.
     fn into_record(self, id: EventId) -> Result<EventRecord, QueryEvaluationError> {
         let occurrences = relay_occurrences_for_event(id, &self.relay).ok_or(
             QueryEvaluationError::RelayOccurrenceEventMismatch {
@@ -82,6 +83,11 @@ impl Candidate {
     }
 }
 
+/// Folds one source contribution into `records`, keyed by event id.
+///
+/// Relay contributions must pass [`relay_qualifies`]; local contributions are
+/// admitted only under [`ResultAuthority::AnyLocal`]. A signed copy always
+/// replaces an unsigned one already recorded for the same id.
 fn merge_qualifying_contribution(
     records: &mut BTreeMap<EventId, Candidate>,
     query: &Query,
@@ -123,6 +129,7 @@ fn merge_qualifying_contribution(
     Ok(())
 }
 
+/// True when a relay contribution's access and relay both satisfy the query's source policy.
 fn relay_qualifies(query: &Query, relay_event: &RelayEvent) -> bool {
     let occurrence = relay_event.occurrence();
     if &occurrence.session.access != query.access() {
@@ -134,6 +141,7 @@ fn relay_qualifies(query: &Query, relay_event: &RelayEvent) -> bool {
     }
 }
 
+/// Keeps the newest record per event coordinate, collapsing replaceable/addressable duplicates.
 fn coordinate_winners(records: Vec<EventRecord>) -> Vec<EventRecord> {
     let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
     for record in records {
@@ -145,6 +153,7 @@ fn coordinate_winners(records: Vec<EventRecord>) -> Vec<EventRecord> {
     by_coordinate.into_values().collect()
 }
 
+/// Inserts `incoming` under `key`, keeping whichever of the two is newer.
 fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, incoming: EventRecord) {
     match records.entry(key) {
         std::collections::btree_map::Entry::Vacant(entry) => {
@@ -161,6 +170,10 @@ fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, incomin
     }
 }
 
+/// True when `record` satisfies every configured axis in `selection`.
+///
+/// Absent axes are unconstrained; multiple configured tag keys are ANDed
+/// together, so a record must match at least one value under each key present.
 fn matches_selection(selection: &FilterSelection, record: &EventRecord) -> bool {
     selection
         .ids
