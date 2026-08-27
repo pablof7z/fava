@@ -1,6 +1,6 @@
 # 0033 — Multi-group event publication belongs in one `EventBuilder`
 
-**Status:** architecture approved by Pablo, 2026-08-26; implementation and focused gates complete; controlled two-group relay run pending
+**Status:** architecture approved by Pablo, 2026-08-26; implementation, focused gates, and controlled two-group relay run complete
 **Owner:** `fava-write` for neutral event-plus-route construction; `fava-simple-groups` for NIP-29 `h` composition; `fava` for universal publication admission
 **Related:** `docs/issues/0019-simple-groups.md`
 
