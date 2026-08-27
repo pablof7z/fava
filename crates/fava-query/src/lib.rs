@@ -256,6 +256,7 @@ impl Query {
     }
 }
 
+/// Collects `relays` into a set, or errors if it comes out empty.
 fn non_empty_relays(
     relays: impl IntoIterator<Item = RelayUrl>,
 ) -> Result<BTreeSet<RelayUrl>, QueryError> {
