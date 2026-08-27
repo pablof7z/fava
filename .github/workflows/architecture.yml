@@ -133,8 +133,34 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Clippy canary
         run: cargo clippy --manifest-path apps/canary/Cargo.toml --all-targets --locked -- -D warnings
+      # Both falsifier lock files are current and both are checked with
+      # `--locked`, so dependency drift in a standalone falsifier workspace is a
+      # CI failure rather than a silent re-resolve. Do not drop `--locked` to get
+      # past a stale lock: regenerate the lock, because a stale one means the
+      # falsifier is no longer proving what the workspace actually depends on.
+      - name: Clippy external null-cache falsifier
+        run: cargo clippy --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Clippy external semantic-capability falsifier
+        run: cargo clippy --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets --locked -- -D warnings
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+  falsifiers:
+    name: External falsifiers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+      - uses: Swatinem/rust-cache@v2
+      # Both falsifier packages are standalone workspaces that consume Fava only
+      # through its public contracts, so they are the replaceability proof and
+      # they run headless with no relay and no network.
+      - name: External null-cache proof
+        run: cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets --locked
+      - name: External semantic-capability proof
+        run: cargo test --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets --locked
 
   canary:
     name: Canary
@@ -169,7 +195,7 @@ jobs:
       - name: Refuse code files over the hard limit
         run: |
           set -euo pipefail
-          over=$(find crates apps -name '*.rs' -type f -exec awk 'END { if (FNR >= 800) print FILENAME ":" FNR }' {} \;)
+          over=$(find crates apps falsifiers -name '*.rs' -type f -exec awk 'END { if (FNR >= 800) print FILENAME ":" FNR }' {} \;)
           if [ -n "$over" ]; then
             echo "code files past the 800-line hard limit:" >&2
             echo "$over" >&2

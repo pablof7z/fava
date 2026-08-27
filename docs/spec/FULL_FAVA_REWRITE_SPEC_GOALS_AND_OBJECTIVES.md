@@ -175,7 +175,7 @@ The selected implementation set is fixed for an engine instance and compiled int
 
 Changing provider implementation in a later application release is an application/provider migration decision. Fava does not require one implementation to open another implementation's private persisted format.
 
-**Acceptance:** applications select storage or routing implementations through public contracts with zero Fava source changes.
+**Acceptance:** two external applications can compile different storage or routing implementations against the same public contracts with zero Fava source changes.
 
 ## GOAL-004 — One owner exists for each mutable fact and lifecycle
 
@@ -191,7 +191,7 @@ Every replaceable subsystem MUST expose a public, implementation-neutral contrac
 
 Provider contracts MUST use domain values and explicit facts. They MUST NOT expose implementation-specific database handles, runtime internals, or private state from another owner.
 
-**Acceptance:** each standard provider passes its public conformance suite without a privileged facade bypass.
+**Acceptance:** each standard provider and at least one deliberately different provider pass the same conformance suite.
 
 ## GOAL-006 — Higher-level policy remains independently selectable
 
@@ -1691,7 +1691,7 @@ When both are selected, configured order and each router's documented contributi
 
 ## PROFILE-006 — The standard provider distribution has no privilege
 
-Fava MAY publish a recommended full-client assembly, but its implementations use the same public contracts and conformance suites exposed to applications.
+Fava MAY publish a recommended full-client assembly, but its implementations use the same contracts and conformance suites as external providers.
 
 Applications can assemble smaller or different products without editing the universal core.
 

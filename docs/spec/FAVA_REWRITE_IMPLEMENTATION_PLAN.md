@@ -548,7 +548,7 @@ Introduce automatic read routing as an ordered chain of independently selectable
 
 - `fava-routing` contains no NIP-65, hint, app-relay, or fallback meaning.
 - Each higher-level routing policy is a separate crate.
-- Router selection remains isolated behind public contracts through M10.
+- A router outside the workspace can be implemented against public contracts by M10.
 - Planner substitution does not require router or observation changes.
 
 ### Falsifier
@@ -1076,18 +1076,28 @@ Run the ephemeral profile but reuse event-cache bytes from the prior process. Th
 
 ### Goal
 
-Attempt to falsify every replaceability claim through public contracts, conformance suites, and application assembly.
+Attempt to falsify every replaceability claim with implementations outside the core/default-provider crates.
 
-### Required qualification surfaces
+### Required alternative implementations
 
-At minimum, qualify event cache, write store, routing, subscription planning,
-transport, publisher, delivery policy, signer, and fetch-cache contracts through
-their public conformance kits and ordinary application assembly.
+At minimum:
+
+- a third-party/external router crate with its own asynchronous input;
+- a second event-cache implementation with materially different persistence/retention;
+- a second durable write-store implementation or a deliberately independent qualification prototype;
+- a no-grouping subscription planner beside the standard planner;
+- an alternative transport or transport wrapper;
+- an alternative publisher or gateway publisher;
+- a different delivery policy;
+- a delayed/remote signer provider; and
+- a shared fetch-cache provider used by both NIP-05 and NIP-11.
+
+These may live in a separate `examples/providers` workspace or an external fixture repository. They must depend only on public contract crates and the public assembly API.
 
 ### Required behavior
 
 - Standard providers have no privileged constructors or internal state access.
-- Provider conformance kits execute against standard implementations through public contracts.
+- Provider conformance kits execute against standard and alternative implementations.
 - The application can select profiles by changing assembly/dependencies, not core source.
 - Changing one provider does not require changing unrelated providers.
 - Provider failures remain isolated.
@@ -1107,9 +1117,9 @@ persistent cache A + durable write store A + standard routers + standard planner
 persistent cache B + durable write store B + custom router + no-grouping planner
 ```
 
-`router-selection`
+`external-router`
 
-- Select a router through ordinary application assembly.
+- Build a router outside the main Fava workspace.
 - It contributes immediate and delayed routes.
 - No core/runtime/facade source changes.
 
@@ -1133,7 +1143,7 @@ persistent cache B + durable write store B + custom router + no-grouping planner
 
 ### Falsifier
 
-Give the standard provider a private facade door unavailable through its public contract. A source/dependency gate must fail.
+Give the standard provider a private facade door unavailable to the external provider. A source/dependency gate and conformance comparison must fail.
 
 ---
 
@@ -1439,7 +1449,7 @@ An enabled scenario may never silently skip.
 | `nip05-cache-isolation` | M9 | EVENT-010, RELAY-010 |
 | `destructive-reset` | M9 | EVENT-012 |
 | `provider-matrix` | M10 | GOAL-003/005/009/010 |
-| `router-selection` | M10 | ROUTER contracts, architecture falsifier A |
+| `external-router` | M10 | ROUTER contracts, architecture falsifier A |
 | `planner-substitution` | M10 | RELAY-002/003, architecture falsifier J |
 | `teardown-resource-baseline` | M10 | OPS-004/009/011 |
 | `public-relay-recon` | M0+ | reconnaissance only |

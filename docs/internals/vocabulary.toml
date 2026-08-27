@@ -1046,7 +1046,7 @@ distinction = "WriteIntentError is the neutral outward materializer and intent-v
 counterexample = "Building an event with 2,001 tags returns EventBuildError::TooManyTags { actual: 2001, maximum: 2000 }; that count is neither serialized bytes nor an encoding string."
 lifecycle = "Created by EventBuilder after fields and tag order are fixed, either before custody or inside initial or post-custody materialization, then returned directly or converted immediately to WriteIntentError. Current fava-publication subsequently erases a materializer result to PublicationError::Routing(error.to_string()); neither typed error enters WriteStore."
 forcing_requirement = "The global boundedness gate and replaceable materializer contract require one protocol-agnostic constructor whose three refusal categories remain exact through the EventBuildError-to-WriteIntentError caller boundary; they make no typed-survival promise beyond current publication."
-falsifier = "Remove or mis-map the tag-count branch and run cargo test -p fava-write --test event_builder plus the shipped, internal, and Redb restart conversion tests; the 2,001-tag assertions must fail independently."
+falsifier = "Remove or mis-map the tag-count branch and run cargo test -p fava-write --test event_builder plus the shipped, internal, Redb restart, and external conversion falsifiers; the 2,001-tag assertions must fail independently."
 symbols = ["fava_write::EventBuildError"]
 crates = []
 

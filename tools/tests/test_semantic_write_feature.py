@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,6 +14,11 @@ MAPPING = re.compile(
     r"(?P<test>[a-z][a-z0-9_]*(?:::[a-z][a-z0-9_]*)*)$"
 )
 STEP = re.compile(r"^    (?:Given|When|Then|And) (.+)$")
+STANDALONE_MANIFESTS = {
+    "external-semantic-capability-proof": (
+        ROOT / "falsifiers" / "external-semantic-capability" / "Cargo.toml"
+    ),
+}
 
 
 def parse_feature(text: str):
@@ -79,7 +85,7 @@ def validate_mapping_target(target, listed_lines, expected_test):
 
 def cargo_mapping_evidence(mapping):
     package_name = mapping["package"]
-    manifest = ROOT / "Cargo.toml"
+    manifest = STANDALONE_MANIFESTS.get(package_name, ROOT / "Cargo.toml")
     lockfile = manifest.parent / "Cargo.lock"
     if not lockfile.is_file():
         raise FileNotFoundError(f"mapping lockfile does not exist: {lockfile}")
@@ -235,6 +241,81 @@ class SemanticWriteFeatureMappingTests(unittest.TestCase):
                     cargo_mapping_evidence(scenario["mapping"]),
                     scenario["mapping"]["test"],
                 )
+
+    def test_mapping_requires_an_existing_lockfile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.make_fixture_package(root, "missing-lock-fixture")
+            STANDALONE_MANIFESTS["missing-lock-fixture"] = manifest
+            try:
+                with self.assertRaises(FileNotFoundError):
+                    cargo_mapping_evidence(
+                        {
+                            "package": "missing-lock-fixture",
+                            "target": "mapped",
+                            "test": "mapped",
+                        }
+                    )
+            finally:
+                STANDALONE_MANIFESTS.pop("missing-lock-fixture")
+
+    def test_stale_lockfile_fails_closed_without_rewrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.make_fixture_package(root, "stale-lock-fixture")
+            subprocess.run(
+                [
+                    "cargo",
+                    "generate-lockfile",
+                    "--offline",
+                    "--manifest-path",
+                    str(manifest),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            lockfile = root / "Cargo.lock"
+            original_lock = lockfile.read_bytes()
+            dependency = root / "second-dependency"
+            dependency.mkdir()
+            (dependency / "src").mkdir()
+            (dependency / "src" / "lib.rs").write_text("pub fn value() {}\n")
+            (dependency / "Cargo.toml").write_text(
+                '[package]\nname = "second-dependency"\nversion = "0.1.0"\n'
+                'edition = "2024"\n'
+            )
+            with manifest.open("a", encoding="utf-8") as stream:
+                stream.write(
+                    '\n[dependencies]\nsecond-dependency = { path = "second-dependency" }\n'
+                )
+            STANDALONE_MANIFESTS["stale-lock-fixture"] = manifest
+            try:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    cargo_mapping_evidence(
+                        {
+                            "package": "stale-lock-fixture",
+                            "target": "mapped",
+                            "test": "mapped",
+                        }
+                    )
+            finally:
+                STANDALONE_MANIFESTS.pop("stale-lock-fixture")
+            self.assertEqual(lockfile.read_bytes(), original_lock)
+
+    @staticmethod
+    def make_fixture_package(root, package):
+        (root / "src").mkdir()
+        (root / "tests").mkdir()
+        (root / "src" / "lib.rs").write_text("pub fn value() {}\n")
+        (root / "tests" / "mapped.rs").write_text(
+            "#[test]\nfn mapped() { assert_eq!(2 + 2, 4); }\n"
+        )
+        manifest = root / "Cargo.toml"
+        manifest.write_text(
+            f'[package]\nname = "{package}"\nversion = "0.1.0"\nedition = "2024"\n'
+        )
+        return manifest
 
 
 if __name__ == "__main__":

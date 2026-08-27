@@ -224,7 +224,7 @@
       "id": "protocol-crate-n-plus-one",
       "milestone": "M7",
       "requirements": [
-        "M7 protocol capability and raw future-kind composition"
+        "M7 external capability and raw future-kind proof"
       ],
       "status": "blocked",
       "wall": "relay provenance can only be fabricated from outside the facade"

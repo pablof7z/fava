@@ -34,7 +34,7 @@ specification passages cataloged in revision 92 of the pad.
   lifecycle completion, and evaluation. Filter atomic relay contributions
   before same-id merge, then choose one cross-source winner per coordinate.
 - Discover every Rust file beneath every Cargo workspace member plus application
-  targets for comparator closure. Resolve free helpers,
+  and falsifier targets for comparator closure. Resolve free helpers,
   cross-file aliases, associated-function aliases, and `self.helper` paths to a
   fixed point; retain the exact path/module/impl/signature sink manifest as the
   closed allowlist. Classify every remaining arbitrary timestamp- or event-ID-
@@ -127,7 +127,8 @@ Current validation:
 - All 199 tooling unit tests pass. README API inventories are byte-current for
   `fava-relay`, `fava-state`, `fava-query`, `fava-nip65`, and
   `fava-simple-groups`.
-- The canary passes locked check and strict Clippy.
+- Both external falsifiers pass tests and strict Clippy under locked manifests.
+  The canary passes locked check and strict Clippy.
 - `python3 tools/check_vocabulary.py` reaches only the independent repository
   approval, terminal-name, undocumented-symbol, and future-crate backlog; the
   reconstructed candidate evidence has no validation error. No signature is

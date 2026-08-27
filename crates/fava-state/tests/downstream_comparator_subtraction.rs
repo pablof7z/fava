@@ -1140,7 +1140,7 @@ fn rust_files(root: &Path) -> BTreeSet<String> {
     }
 
     let mut output = BTreeSet::new();
-    for scope in ["crates", "apps"] {
+    for scope in ["crates", "apps", "falsifiers"] {
         let directory = root.join(scope);
         if directory.exists() {
             visit(root, &directory, &mut output);

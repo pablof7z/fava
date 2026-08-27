@@ -34,6 +34,8 @@ revision changes update the same open observation.
 - `cargo fmt --all -- --check`
 - `cargo test --manifest-path apps/canary/Cargo.toml`
 - `cargo clippy --manifest-path apps/canary/Cargo.toml --all-targets -- -D warnings`
+- `cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml`
+- `cargo clippy --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets -- -D warnings`
 - `bazel test //...`
 - `python3 tools/check_vocabulary.py`
 - `python3 -m unittest tools/tests/test_vocabulary_check.py`
