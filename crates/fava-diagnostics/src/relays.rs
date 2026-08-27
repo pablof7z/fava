@@ -11,7 +11,8 @@ pub struct RelayDiagnostic {
     pub session: RelaySessionKey,
     /// Current observation-owned provider-operation generation, when assigned.
     pub generation: Option<OperationGeneration>,
-    /// Current session state.
+    /// Whether this connection is establishing, live, reconnecting, out of
+    /// reconnect budget, or closed.
     pub state: RelaySessionState,
     /// Lease holders on this session — the shared-work refcount.
     pub holders: usize,
@@ -21,7 +22,8 @@ pub struct RelayDiagnostic {
     pub reconnect_attempts: usize,
 }
 
-/// State of one relay session, independent of any query.
+/// Whether one relay connection is establishing, live, reconnecting, out of
+/// reconnect budget, or closed, independent of any query.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RelaySessionState {
     /// Establishing.

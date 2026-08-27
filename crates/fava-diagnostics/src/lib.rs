@@ -82,6 +82,8 @@ pub struct Diagnostics {
     state: Mutex<State>,
 }
 
+/// One bounded fact queue per category: relays, queries, writes, providers, and
+/// limits.
 #[derive(Default)]
 struct State {
     relays: Category<RelayDiagnostic>,

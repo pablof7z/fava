@@ -40,7 +40,7 @@ pub struct LogicalDemandDiagnostic {
     pub session: RelaySessionKey,
     /// Branch that needs it.
     pub branch: QueryBranchId,
-    /// Current state of this relay's contribution to this observation.
+    /// How far this relay has got with this observation's demand.
     pub state: RelaySourceState,
 }
 
