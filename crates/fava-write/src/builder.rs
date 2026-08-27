@@ -3,6 +3,7 @@ use nostr::key::PublicKey;
 use nostr::types::{RelayUrl, Timestamp};
 use thiserror::Error;
 
+use crate::routing::refuse_raw_input;
 use crate::{MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
 
 const MAX_TAGS: usize = 2_000;
@@ -46,6 +47,7 @@ pub struct EventBuilder {
     content: String,
     tags: Vec<Tag>,
     routing: WriteRouting,
+    raw_routing_inputs: usize,
 }
 
 impl EventBuilder {
@@ -79,6 +81,7 @@ impl EventBuilder {
             content,
             tags,
             routing: WriteRouting::Automatic,
+            raw_routing_inputs: 0,
         }
     }
 
@@ -123,12 +126,19 @@ impl EventBuilder {
     /// # Errors
     ///
     /// Returns the owning [`WriteIntentError`] when route accumulation is
-    /// empty or exceeds its declared bound.
-    pub fn to_relays(
-        mut self,
-        relays: impl IntoIterator<Item = RelayUrl>,
-    ) -> Result<Self, WriteIntentError> {
+    /// empty, cumulative raw input exceeds 1,024 occurrences, or the normalized
+    /// route exceeds 256 distinct destinations.
+    pub fn to_relays(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, WriteIntentError> {
+        let relays = relays.into();
+        let raw_routing_inputs = self.raw_routing_inputs.checked_add(relays.len()).ok_or(
+            WriteIntentError::TooManyRawExplicitRelays {
+                actual: usize::MAX,
+                maximum: crate::routing::MAX_RAW_EXPLICIT_RELAYS,
+            },
+        )?;
+        refuse_raw_input(raw_routing_inputs)?;
         self.routing = self.routing.append(relays)?;
+        self.raw_routing_inputs = raw_routing_inputs;
         Ok(self)
     }
 

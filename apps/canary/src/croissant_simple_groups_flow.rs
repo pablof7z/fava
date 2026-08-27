@@ -608,7 +608,7 @@ fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
 
 async fn publish_unsigned(
     fava: &Fava,
-    relays: impl IntoIterator<Item = RelayUrl>,
+    relays: impl Into<Vec<RelayUrl>>,
     event: fava::UnsignedEvent,
 ) -> CanaryResult<Receipt> {
     let write = fava
@@ -621,7 +621,7 @@ async fn publish_unsigned(
 
 async fn publish_signed(
     fava: &Fava,
-    relays: impl IntoIterator<Item = RelayUrl>,
+    relays: impl Into<Vec<RelayUrl>>,
     event: Event,
 ) -> CanaryResult<Receipt> {
     let write = fava

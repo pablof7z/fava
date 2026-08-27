@@ -186,6 +186,14 @@ pub enum WriteIntentError {
         /// Declared maximum.
         maximum: usize,
     },
+    /// Raw explicit relay input exceeds the pre-normalization work bound.
+    #[error("raw explicit relay input exceeds bound: {actual} > {maximum}")]
+    TooManyRawExplicitRelays {
+        /// Raw input count before duplicate normalization.
+        actual: usize,
+        /// Declared raw-input maximum.
+        maximum: usize,
+    },
     /// A deserialized or reconstructed explicit route contains a duplicate.
     #[error("explicit publication route repeats relay identity {relay}")]
     DuplicateExplicitRelay {

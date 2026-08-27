@@ -215,7 +215,7 @@ async fn publication_scopes_are_inert_before_valid_payload() {
     drop(fava.to([relay("dropped")]).expect("route validates"));
     assert_no_effects(&store, &signer, &publisher);
 
-    match fava.to(std::iter::empty::<RelayUrl>()) {
+    match fava.to(Vec::<RelayUrl>::new()) {
         Err(PublishError::Intent(WriteIntentError::EmptyExplicitRelays)) => {}
         Err(error) => panic!("unexpected empty-route refusal: {error}"),
         Ok(scope) => {
@@ -231,13 +231,27 @@ async fn publication_scopes_are_inert_before_valid_payload() {
     }
     assert_no_effects(&store, &signer, &publisher);
 
-    let too_many = fava.to((0..257).map(|index| relay(&format!("bounded-{index}"))));
+    let too_many = fava.to((0..257)
+        .map(|index| relay(&format!("bounded-{index}")))
+        .collect::<Vec<_>>());
     assert!(matches!(
         too_many,
         Err(PublishError::Intent(
             WriteIntentError::TooManyExplicitRelays {
                 actual: 257,
                 maximum: 256
+            }
+        ))
+    ));
+    assert_no_effects(&store, &signer, &publisher);
+
+    let raw_too_many = fava.to(vec![relay("raw-bounded"); 1_025]);
+    assert!(matches!(
+        raw_too_many,
+        Err(PublishError::Intent(
+            WriteIntentError::TooManyRawExplicitRelays {
+                actual: 1_025,
+                maximum: 1_024
             }
         ))
     ));

@@ -9,7 +9,7 @@
 //! ```ignore
 //! // create_group returns a ready-to-publish UnsignedEvent.
 //! let event = create_group(author.public_key(), &group)?;
-//! let write = fava.to(group.relays())?.publish(event)?;
+//! let write = fava.to(group.relays().collect::<Vec<_>>())?.publish(event)?;
 //! ```
 //!
 //! # Encapsulation guarantee

@@ -248,7 +248,7 @@ impl SimpleGroupEventBuilder for EventBuilder {
     fn simple_group(self, group: &SimpleGroup) -> Result<EventBuilder, WriteIntentError> {
         let tag = Tag::parse(["h", group.id()])
             .expect("a non-empty opaque simple-group id forms a valid h tag");
-        let builder = self.to_relays(group.relays())?;
+        let builder = self.to_relays(group.relays().collect::<Vec<_>>())?;
         if builder
             .event_tags()
             .iter()

@@ -630,6 +630,14 @@ foreign sibling tags remain untouched. Pre-signed events remain outside this
 composition helper and use the ordinary explicit facade scope. This creates no
 protocol-specific publisher or receipt lifecycle.
 
+Public explicit write routes accept finite owned relay vectors. Route
+construction refuses more than 1,024 raw relay occurrences before
+normalization, including cumulatively across `EventBuilder` route additions.
+The separate normalized route bound remains 256 distinct destinations;
+duplicate occurrences consume raw-input capacity but never destination
+capacity. Both limits return distinct typed `WriteIntentError` variants before
+custody, signing, router, or transport work.
+
 ---
 
 ## 11. Design rules

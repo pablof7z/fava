@@ -136,7 +136,7 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
     let edit = save_simple_group(&group, Some("Photos")).expect("bounded saved-group edit");
     let write = fava
         .by(keys.public_key())
-        .to(group.relays())
+        .to(group.relays().collect::<Vec<_>>())
         .expect("explicit route")
         .publish(edit)
         .expect("semantic custody accepts");

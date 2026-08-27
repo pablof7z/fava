@@ -170,6 +170,23 @@ fn builder_keeps_neutral_explicit_routing_out_of_the_event_body() {
 }
 
 #[test]
+fn builder_bounds_cumulative_raw_routes_before_normalization() {
+    let repeated = relay("builder-raw");
+    let builder = EventBuilder::new(keys().public_key(), Kind::Custom(60_005))
+        .to_relays(vec![repeated.clone(); 512])
+        .expect("first finite batch fits")
+        .to_relays(vec![repeated; 512])
+        .expect("cumulative raw bound fits exactly");
+    assert!(matches!(
+        builder.to_relays([relay("overflow")]),
+        Err(WriteIntentError::TooManyRawExplicitRelays {
+            actual: 1_025,
+            maximum: 1_024,
+        })
+    ));
+}
+
+#[test]
 fn event_only_build_refuses_an_attached_explicit_route() {
     let builder = EventBuilder::new(keys().public_key(), Kind::Custom(60_004))
         .to_relays([relay("attached")])

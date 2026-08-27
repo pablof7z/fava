@@ -50,7 +50,7 @@ fn construction_has_no_domain_cap_and_operations_return_owning_errors() {
     let group = SimpleGroup::new("g", std::iter::once(first).chain(rest).collect())
         .expect("non-empty group");
     assert!(matches!(
-        WriteRouting::explicit(group.relays()),
+        WriteRouting::explicit(group.relays().collect::<Vec<_>>()),
         Err(WriteIntentError::TooManyExplicitRelays {
             actual: 257,
             maximum: 256,

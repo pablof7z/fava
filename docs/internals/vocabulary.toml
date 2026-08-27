@@ -982,11 +982,11 @@ spec_symbols = ["WriteIntent"]
 [[term]]
 name = "WriteIntentError"
 source = "fava"
-meaning = "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving tag cardinality, serialized bytes, encoding, routing, verification, and expiry as distinct concerns."
+meaning = "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving raw route input, distinct destinations, tag cardinality, serialized bytes, encoding, verification, and expiry as distinct concerns."
 owner = "fava-write"
 nearest_nostr = "NIP-01 event construction and verification, NIP-40 expiration, and client-selected relay destinations"
 distinction = "EventBuildError is the generic EventBuilder refusal; WriteIntentError is the outward error contract returned by complete intent validation and ReplaceableEventMaterializer before or after custody, but it owns no publication lifecycle attribution and does not survive the current publication boundary."
-counterexample = "A materializer reaching EventBuilder with 2,001 tags returns WriteIntentError::TooManyTags { actual: 2001, maximum: 2000 }, not TooLarge with a tag count mislabeled as bytes and not InvalidEvent text."
+counterexample = "A route with 1,025 duplicate relay occurrences returns TooManyRawExplicitRelays before normalization, while 257 distinct relays returns TooManyExplicitRelays; duplicates within the raw bound do not consume destination capacity."
 lifecycle = "Constructed during pre-custody intent validation or converted from EventBuildError during initial or post-custody materialization. Intent validation can return it directly; current fava-publication converts a materializer result to PublicationError::Routing(error.to_string()), so the typed value does not survive custody-side publication. Issue 0025 owns structured lifecycle attribution."
 forcing_requirement = "EventBuilder distinguishes tag cardinality, serialized bytes, and encoding, and every materializer must expose those distinctions exactly at its return boundary without duplicating conversion policy; current publication erasure is explicitly outside this contract."
 falsifier = "Mutate only the EventBuildError::TooManyTags conversion to TooLarge and run the fava-write owner test, all three shipped materializer tests, four internal fixture tests, and the external semantic-capability conversion test; every exact TooManyTags assertion must fail."
@@ -1044,9 +1044,9 @@ meaning = "A generic constructor for an UnsignedEvent from author, kind, content
 owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "Nostr defines Event fields but not local delivery intent; EventBuilder provides checked construction and route accumulation without interpreting any event kind. Its route is neither serialized nor signed."
-lifecycle = "An application or protocol crate composes generic fields, tags, and optional local route before either event-only construction or Fava publication; event-only construction refuses an attached explicit route, while Fava consumes event and route together into WriteIntent."
-forcing_requirement = "One fluent concrete builder must retain a selected route through publication without teaching generic event construction about protocol group meaning or silently discarding delivery intent."
-falsifier = "Builder and facade tests fail if host-only route changes alter the event id, event-only construction drops an attached route, or Fava ignores the attached route or merges it with a facade explicit route."
+lifecycle = "An application or protocol crate composes fields, tags, and an optional local route; each route addition consumes a finite owned vector and increments a transient raw-input count before normalization; Fava consumes the event and normalized route into WriteIntent."
+forcing_requirement = "One fluent concrete builder must retain a selected route, refuse cumulative raw routing work before normalization, and keep duplicate occurrences distinct from destination capacity without learning protocol group meaning."
+falsifier = "Builder and facade tests fail if raw route inputs can exceed 1,024 occurrences, duplicates consume the 256-destination capacity, event-only construction drops an attached route, or Fava mishandles the attached route."
 symbols = [
     "fava_write::EventBuilder",
 ]

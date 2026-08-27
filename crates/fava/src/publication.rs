@@ -118,9 +118,9 @@ impl PublishAs<'_> {
     ///
     /// # Errors
     ///
-    /// Returns [`PublishError`] when the normalized route is empty or exceeds
-    /// the explicit publication bound.
-    pub fn to(mut self, relays: impl IntoIterator<Item = RelayUrl>) -> Result<Self, PublishError> {
+    /// Returns [`PublishError`] when raw input exceeds its bound or the
+    /// normalized route is empty or exceeds its distinct-destination bound.
+    pub fn to(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, PublishError> {
         self.routing = explicit_routing(relays)?;
         Ok(self)
     }
@@ -305,7 +305,7 @@ pub(crate) fn by(fava: &crate::Fava, author: PublicKey) -> PublishAs<'_> {
 
 pub(crate) fn to(
     fava: &crate::Fava,
-    relays: impl IntoIterator<Item = RelayUrl>,
+    relays: impl Into<Vec<RelayUrl>>,
 ) -> Result<PublishTo<'_>, PublishError> {
     Ok(PublishTo {
         fava,
@@ -313,9 +313,7 @@ pub(crate) fn to(
     })
 }
 
-fn explicit_routing(
-    relays: impl IntoIterator<Item = RelayUrl>,
-) -> Result<WriteRouting, PublishError> {
+fn explicit_routing(relays: impl Into<Vec<RelayUrl>>) -> Result<WriteRouting, PublishError> {
     Ok(WriteRouting::explicit(relays)?)
 }
 

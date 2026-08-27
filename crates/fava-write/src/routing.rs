@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::WriteIntentError;
 
 const MAX_EXPLICIT_RELAYS: usize = 256;
+pub(crate) const MAX_RAW_EXPLICIT_RELAYS: usize = 1_024;
 
 /// Relay selection for one publication obligation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -19,9 +20,9 @@ pub enum WriteRouting {
 impl WriteRouting {
     /// Normalize an exact explicit route in caller first-occurrence order.
     ///
-    /// Duplicate relay identities collapse to one entry. Input is consumed only
-    /// until the normalized bound is exceeded, so an unbounded iterator cannot
-    /// allocate an unbounded route.
+    /// Duplicate relay identities collapse to one entry. The finite owned raw
+    /// input is refused before normalization when it exceeds 1,024 occurrences;
+    /// normalized routes separately refuse more than 256 distinct destinations.
     ///
     /// # Arguments
     ///
@@ -29,8 +30,8 @@ impl WriteRouting {
     ///
     /// # Errors
     ///
-    /// Returns [`WriteIntentError`] when no destination remains or more than
-    /// 256 distinct relay identities are supplied.
+    /// Returns [`WriteIntentError`] when no destination remains, raw input
+    /// exceeds 1,024 occurrences, or more than 256 distinct identities remain.
     ///
     /// # Examples
     ///
@@ -47,7 +48,18 @@ impl WriteRouting {
     ///
     /// assert_eq!(routing, WriteRouting::Explicit(vec![a, b]));
     /// ```
-    pub fn explicit(relays: impl IntoIterator<Item = RelayUrl>) -> Result<Self, WriteIntentError> {
+    ///
+    /// Arbitrary iterators are intentionally not accepted at this boundary:
+    ///
+    /// ```compile_fail
+    /// use fava_write::WriteRouting;
+    /// use nostr::types::RelayUrl;
+    /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
+    /// let _ = WriteRouting::explicit(std::iter::repeat(relay));
+    /// ```
+    pub fn explicit(relays: impl Into<Vec<RelayUrl>>) -> Result<Self, WriteIntentError> {
+        let relays = relays.into();
+        refuse_raw_input(relays.len())?;
         let mut seen = BTreeSet::new();
         let mut ordered = Vec::new();
         for relay in relays {
@@ -67,10 +79,7 @@ impl WriteRouting {
         Ok(Self::Explicit(ordered))
     }
 
-    pub(crate) fn append(
-        self,
-        relays: impl IntoIterator<Item = RelayUrl>,
-    ) -> Result<Self, WriteIntentError> {
+    pub(crate) fn append(self, relays: Vec<RelayUrl>) -> Result<Self, WriteIntentError> {
         let mut ordered = match self {
             Self::Automatic => Vec::new(),
             Self::Explicit(relays) => relays,
@@ -116,4 +125,14 @@ impl WriteRouting {
         }
         Ok(())
     }
+}
+
+pub(crate) fn refuse_raw_input(actual: usize) -> Result<(), WriteIntentError> {
+    if actual > MAX_RAW_EXPLICIT_RELAYS {
+        return Err(WriteIntentError::TooManyRawExplicitRelays {
+            actual,
+            maximum: MAX_RAW_EXPLICIT_RELAYS,
+        });
+    }
+    Ok(())
 }

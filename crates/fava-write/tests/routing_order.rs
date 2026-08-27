@@ -17,7 +17,7 @@ fn explicit_route_preserves_first_occurrences() {
 #[test]
 fn explicit_route_bounds_distinct_relay_identities_not_occurrences() {
     let repeated = relay("repeated");
-    let routing = WriteRouting::explicit(std::iter::repeat_n(repeated.clone(), 257))
+    let routing = WriteRouting::explicit(vec![repeated.clone(); 257])
         .expect("duplicate occurrences do not consume distinct-relay capacity");
 
     assert_eq!(routing, WriteRouting::Explicit(vec![repeated]));
@@ -26,14 +26,30 @@ fn explicit_route_bounds_distinct_relay_identities_not_occurrences() {
 #[test]
 fn explicit_route_refuses_empty_and_over_bound_inputs() {
     assert_eq!(
-        WriteRouting::explicit(std::iter::empty::<RelayUrl>()),
+        WriteRouting::explicit(Vec::<RelayUrl>::new()),
         Err(WriteIntentError::EmptyExplicitRelays)
     );
     assert_eq!(
-        WriteRouting::explicit((0..257).map(|index| relay(&format!("relay-{index}")))),
+        WriteRouting::explicit(
+            (0..257)
+                .map(|index| relay(&format!("relay-{index}")))
+                .collect::<Vec<_>>()
+        ),
         Err(WriteIntentError::TooManyExplicitRelays {
             actual: 257,
             maximum: 256,
+        })
+    );
+}
+
+#[test]
+fn raw_input_is_bounded_before_normalization() {
+    let repeated = relay("raw-repeated");
+    assert_eq!(
+        WriteRouting::explicit(vec![repeated; 1_025]),
+        Err(WriteIntentError::TooManyRawExplicitRelays {
+            actual: 1_025,
+            maximum: 1_024,
         })
     );
 }

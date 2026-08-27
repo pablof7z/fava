@@ -360,6 +360,7 @@ pub(crate) fn map_write_error(error: WriteIntentError) -> ContactListError {
         }
         error @ (WriteIntentError::EmptyExplicitRelays
         | WriteIntentError::TooManyExplicitRelays { .. }
+        | WriteIntentError::TooManyRawExplicitRelays { .. }
         | WriteIntentError::ExplicitRoutingAttached
         | WriteIntentError::ConflictingExplicitRoutes) => {
             ContactListError::InvalidRoute(error.to_string())

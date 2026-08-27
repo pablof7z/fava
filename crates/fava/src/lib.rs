@@ -166,20 +166,17 @@ impl Fava {
         publication::by(self, author)
     }
 
-    /// Narrow one publication to an exact bounded relay sequence.
+    /// Narrow one publication to an exact bounded finite owned relay sequence.
     ///
     /// # Errors
     ///
-    /// Returns [`PublishError`] when the normalized route is empty or exceeds
-    /// the explicit publication bound.
+    /// Returns [`PublishError`] when raw input exceeds its bound or the
+    /// normalized route is empty or exceeds its distinct-destination bound.
     #[allow(
         clippy::result_large_err,
         reason = "PublishError intentionally carries the complete terminal Receipt as evidence"
     )]
-    pub fn to(
-        &self,
-        relays: impl IntoIterator<Item = RelayUrl>,
-    ) -> Result<PublishTo<'_>, PublishError> {
+    pub fn to(&self, relays: impl Into<Vec<RelayUrl>>) -> Result<PublishTo<'_>, PublishError> {
         publication::to(self, relays)
     }
 

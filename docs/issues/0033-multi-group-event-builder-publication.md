@@ -19,7 +19,8 @@ signature or merge-readiness claim.
 
 `fava-simple-groups` supplies the extension trait and owns only the exact
 two-cell `h` contribution. `fava-write` owns generic tags, event construction,
-route normalization, bounds, and typed refusal. `fava.publish(builder)` lowers
+route normalization, the cumulative 1,024-occurrence raw-input bound, the
+separate 256-distinct-destination bound, and typed refusal. `fava.publish(builder)` lowers
 the two builder facts through the existing `WriteIntent` and universal
 publication lifecycle. It does not create a simple-groups publisher, signer,
 receipt, router, or provider.

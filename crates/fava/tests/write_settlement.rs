@@ -358,7 +358,7 @@ fn publish(fava: &Fava, relays: &[RelayUrl], content: &str) -> Write {
     let event = NostrEventBuilder::new(Kind::TextNote, content)
         .finalize(&keys)
         .expect("event signs");
-    fava.to(relays.iter().cloned())
+    fava.to(relays.to_vec())
         .expect("explicit route validates")
         .publish(event)
         .expect("publication accepts")
