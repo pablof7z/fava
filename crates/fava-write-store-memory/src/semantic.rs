@@ -22,6 +22,8 @@ use super::state::{
     require_failure_source, require_qualified_source,
 };
 
+/// The whole in-memory ledger behind one store: coordinate reservations,
+/// retained receipts, coordinate ownership, pending successors, and queued edits.
 #[derive(Clone, Debug)]
 pub(super) struct WriteState {
     pub(super) revision: u64,
@@ -387,6 +389,8 @@ impl MemoryWriteStore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Attribute one materialization failure to the exact generation and source
+    /// that produced it.
     pub(super) fn record_semantic_failure(
         &self,
         write_id: WriteId,

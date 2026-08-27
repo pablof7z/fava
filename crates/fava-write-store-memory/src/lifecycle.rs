@@ -67,6 +67,8 @@ impl MemoryWriteStore {
         Ok(current)
     }
 
+    /// Commit a signer refusal, only from a generation the store durably
+    /// authorized.
     pub(super) fn record_signer_refusal_current(
         &self,
         write_id: WriteId,
@@ -176,6 +178,7 @@ impl MemoryWriteStore {
         Ok(current)
     }
 
+    /// Mark signing retryable, promoting a pending successor when one is waiting.
     pub(super) fn record_signer_retryable_current(
         &self,
         write_id: WriteId,
@@ -406,6 +409,7 @@ impl MemoryWriteStore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Commit one relay's delivery outcome while that attempt is still current.
     pub(super) fn record_outcome_current(
         &self,
         write_id: WriteId,

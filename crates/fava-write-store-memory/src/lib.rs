@@ -63,6 +63,7 @@ impl MemoryWriteStore {
         }
     }
 
+    /// Take the ledger lock, refusing rather than panicking on a poisoned mutex.
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, WriteState>, WriteStoreError> {
         self.state
             .lock()

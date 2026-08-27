@@ -1,3 +1,6 @@
+//! Bookkeeping and validation helpers shared by every mutation path in this
+//! store.
+
 use fava_state::{EventCoordinate, event_is_newer};
 use fava_write::{
     EventId, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit, Timestamp,
