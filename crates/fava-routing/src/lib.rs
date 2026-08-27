@@ -123,7 +123,8 @@ pub enum RouteTarget {
     ReferencedEvent(EventId),
 }
 
-/// Current routing knowledge for one target.
+/// Where routing can place one target right now: exact relay sessions, nothing
+/// settled yet, or settled with no destination at all.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CoverageState {
     /// Exact relay sessions currently covering the target.
