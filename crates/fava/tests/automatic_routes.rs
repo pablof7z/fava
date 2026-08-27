@@ -16,9 +16,9 @@ use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInboundFuture,
-    RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity, ReleaseFuture,
-    ReleaseOutcome, Transport, TransportFailure, TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInboundFuture, RelayMessageStream,
+    RelaySession, RelaySessionFuture, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
+    ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
 };
 use fava_transport_testkit::detached_lease;
 use fava_wire::ClientMessage;
@@ -67,12 +67,17 @@ impl RecordingTransport {
 impl Transport for RecordingTransport {
     fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
+            let previous = self
+                .next_generation
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                    value.checked_add(1)
+                })
+                .map_err(|_| TransportError::GenerationExhausted)?;
             let session = Arc::new(RecordingSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: OperationGeneration(
-                        self.next_generation.fetch_add(1, Ordering::SeqCst) + 1,
-                    ),
+                    generation: RelaySessionGeneration::new(previous + 1)
+                        .expect("issued generation is non-zero"),
                 },
                 sent: Mutex::new(Vec::new()),
                 closed: AtomicBool::new(false),

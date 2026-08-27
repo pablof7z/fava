@@ -749,7 +749,6 @@ dependencies = [
 name = "fava-transport"
 version = "0.1.0"
 dependencies = [
- "fava-query",
  "fava-relay",
  "fava-state",
  "nostr",
@@ -760,7 +759,6 @@ dependencies = [
 name = "fava-transport-testkit"
 version = "0.1.0"
 dependencies = [
- "fava-query",
  "fava-relay",
  "fava-state",
  "fava-transport",
@@ -772,7 +770,6 @@ dependencies = [
 name = "fava-transport-websocket"
 version = "0.1.0"
 dependencies = [
- "fava-query",
  "fava-relay",
  "fava-state",
  "fava-transport",

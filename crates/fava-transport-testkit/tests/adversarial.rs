@@ -127,7 +127,7 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
 
     let outcome = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation(1))
+        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(1))
         .await;
     assert!(matches!(outcome, HandoffOutcome::HandedOff { .. }));
 
@@ -137,7 +137,7 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
         relay.unflushed_completions(),
         vec![HandoffOutcome::Ambiguous {
             identity: lease.session().identity(),
-            correlation: HandoffCorrelation(1),
+            correlation: HandoffCorrelation::new(1),
             reason: TransportAmbiguity::DisconnectedInFlight {
                 detail: fava_transport::BoundedReason::new("socket reset mid-write"),
             },
@@ -160,12 +160,12 @@ async fn cancelling_a_handoff_mid_operation_leaves_no_half_frame() {
 
     let send = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation(9));
+        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(9));
     let cancelled = tokio::time::timeout(Duration::from_millis(10), send).await;
 
     assert!(cancelled.is_err(), "the handoff must still be in flight");
     assert_eq!(relay.queued_frames(), Vec::<Vec<u8>>::new());
-    assert_eq!(relay.cancelled_handoffs(), vec![HandoffCorrelation(9)]);
+    assert_eq!(relay.cancelled_handoffs(), vec![HandoffCorrelation::new(9)]);
 }
 
 // -------------------------------------------------- 4. stale completion
@@ -200,7 +200,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
 
     assert_eq!(previous, before);
     assert_eq!(identity.key, before.key);
-    assert_eq!(identity.generation, before.generation.next());
+    assert_eq!(
+        identity.generation,
+        before.generation.checked_next().expect("successor exists")
+    );
     assert_eq!(lease.session().identity(), identity);
     assert_eq!(transport.dials(&key()), 2);
 }
@@ -217,7 +220,7 @@ async fn a_stale_generation_completion_is_attributable_to_the_generation_that_ma
     relay.stall_writer();
     let _ = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation(3))
+        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(3))
         .await;
 
     relay.reconnect();
@@ -230,7 +233,7 @@ async fn a_stale_generation_completion_is_attributable_to_the_generation_that_ma
 
     assert_ne!(stale, current);
     assert_eq!(completion.identity(), &stale);
-    assert_eq!(completion.correlation(), HandoffCorrelation(3));
+    assert_eq!(completion.correlation(), HandoffCorrelation::new(3));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -307,13 +310,15 @@ async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
     for attempt in 0..2_u64 {
         let _ = first
             .session()
-            .send(vec![b'a'], HandoffCorrelation(attempt))
+            .send(vec![b'a'], HandoffCorrelation::new(attempt))
             .await;
     }
 
     let refused = tokio::time::timeout(
         Duration::from_millis(200),
-        second.session().send(vec![b'b'], HandoffCorrelation(99)),
+        second
+            .session()
+            .send(vec![b'b'], HandoffCorrelation::new(99)),
     )
     .await
     .expect("the second holder is refused, never parked");
@@ -366,7 +371,7 @@ async fn shutdown_closes_every_registered_session() {
     assert!(matches!(
         lease
             .session()
-            .send(vec![b'a'], HandoffCorrelation(1))
+            .send(vec![b'a'], HandoffCorrelation::new(1))
             .await,
         HandoffOutcome::NotHandedOff {
             reason: TransportFailure::SessionClosed,

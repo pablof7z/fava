@@ -2,15 +2,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava_relay::RelaySessionKey;
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, LeaseRelease, OpenRelaySession, RelaySession,
-    RelaySessionFuture, RelaySessionIdentity, RelaySessionLease, ReleaseFuture, ReleaseOutcome,
-    Transport, TransportError, TransportFailure, TransportShutdownFuture,
+    RelaySessionFuture, RelaySessionGeneration, RelaySessionIdentity, RelaySessionLease,
+    ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use tokio::sync::Notify;
 
@@ -36,6 +37,7 @@ struct FakeState {
     held: Mutex<BTreeSet<RelaySessionKey>>,
     gate: Notify,
     shutting_down: AtomicBool,
+    generations: Arc<AtomicU64>,
 }
 
 struct Entry {
@@ -105,6 +107,16 @@ impl FakeTransport {
         self.state.gate.notify_waiters();
     }
 
+    /// Leave exactly one physical generation available for exhaustion tests.
+    pub fn leave_one_generation(&self) {
+        self.state.generations.store(u64::MAX - 1, Ordering::SeqCst);
+    }
+
+    /// Exhaust physical generation identity before the next acquisition.
+    pub fn exhaust_generations(&self) {
+        self.state.generations.store(u64::MAX, Ordering::SeqCst);
+    }
+
     async fn await_establishment(&self, key: &RelaySessionKey) {
         loop {
             let notified = self.state.gate.notified();
@@ -131,6 +143,10 @@ impl Transport for FakeTransport {
             if let Some(lease) = self.state.reuse(&request.key) {
                 return Ok(lease);
             }
+            let generation = self
+                .state
+                .mint_generation()
+                .ok_or(TransportError::GenerationExhausted)?;
             if tokio::time::timeout(
                 request.deadlines.establish,
                 self.await_establishment(&request.key),
@@ -144,7 +160,7 @@ impl Transport for FakeTransport {
                     },
                 ));
             }
-            Ok(self.state.dial(&request))
+            Ok(self.state.dial(&request, generation))
         })
     }
 
@@ -174,6 +190,16 @@ impl Transport for FakeTransport {
 }
 
 impl FakeState {
+    fn mint_generation(&self) -> Option<RelaySessionGeneration> {
+        let previous = self
+            .generations
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                value.checked_add(1)
+            })
+            .ok()?;
+        RelaySessionGeneration::new(previous + 1)
+    }
+
     fn reuse(self: &Arc<Self>, key: &RelaySessionKey) -> Option<RelaySessionLease> {
         let mut entries = self.entries.lock().expect("registry is not poisoned");
         let entry = entries.get_mut(key)?;
@@ -187,7 +213,11 @@ impl FakeState {
         ))
     }
 
-    fn dial(self: &Arc<Self>, request: &OpenRelaySession) -> RelaySessionLease {
+    fn dial(
+        self: &Arc<Self>,
+        request: &OpenRelaySession,
+        generation: RelaySessionGeneration,
+    ) -> RelaySessionLease {
         let counter = {
             let mut dials = self.dials.lock().expect("dial counters are not poisoned");
             Arc::clone(
@@ -196,7 +226,12 @@ impl FakeState {
                     .or_insert_with(|| Arc::new(AtomicUsize::new(0))),
             )
         };
-        let session = Arc::new(FakeSession::new(request, counter));
+        let session = Arc::new(FakeSession::new(
+            request,
+            counter,
+            generation,
+            Arc::clone(&self.generations),
+        ));
         let identity = session.identity();
         self.entries
             .lock()

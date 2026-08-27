@@ -38,7 +38,7 @@ pub enum RelayInbound {
     },
     /// Reconnect budget is exhausted; no further generation will appear.
     ReconnectExhausted {
-        /// Last generation attempted.
+        /// Last live generation. No successor will appear.
         identity: RelaySessionIdentity,
         /// Number of attempts actually made.
         attempts: usize,

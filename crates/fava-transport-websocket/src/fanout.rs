@@ -8,10 +8,10 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use fava_query::OperationGeneration;
 use fava_relay::RelaySessionKey;
 use fava_transport::{
-    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionIdentity, TransportError,
+    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionGeneration,
+    RelaySessionIdentity, TransportError,
 };
 use tokio::sync::Notify;
 
@@ -22,17 +22,18 @@ pub(crate) struct LiveIdentity {
 }
 
 impl LiveIdentity {
-    pub(crate) fn new(key: RelaySessionKey) -> Self {
+    pub(crate) fn new(key: RelaySessionKey, generation: RelaySessionGeneration) -> Self {
         Self {
             key,
-            generation: AtomicU64::new(1),
+            generation: AtomicU64::new(generation.get()),
         }
     }
 
     pub(crate) fn read(&self) -> RelaySessionIdentity {
         RelaySessionIdentity {
             key: self.key.clone(),
-            generation: OperationGeneration(self.generation.load(Ordering::SeqCst)),
+            generation: RelaySessionGeneration::new(self.generation.load(Ordering::SeqCst))
+                .expect("transport generations are non-zero"),
         }
     }
 
@@ -41,9 +42,12 @@ impl LiveIdentity {
     }
 
     /// Retire the current generation and return both identities.
-    pub(crate) fn advance(&self) -> (RelaySessionIdentity, RelaySessionIdentity) {
+    pub(crate) fn advance(
+        &self,
+        generation: RelaySessionGeneration,
+    ) -> (RelaySessionIdentity, RelaySessionIdentity) {
         let previous = self.read();
-        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.generation.store(generation.get(), Ordering::SeqCst);
         (previous, self.read())
     }
 }

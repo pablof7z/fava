@@ -102,7 +102,7 @@ impl Publisher for Nip42Publisher {
             match session
                 .send(
                     event_frame.clone(),
-                    HandoffCorrelation(u64::from(attempt.number)),
+                    HandoffCorrelation::new(u64::from(attempt.number)),
                 )
                 .await
             {
@@ -157,11 +157,8 @@ impl Publisher for Nip42Publisher {
                         RelayMessage::Auth { challenge } if !authed => {
                             let challenge = challenge.into_owned();
                             // Build and sign a kind-22242 auth event.
-                            let auth_event = match build_auth_event(
-                                pubkey,
-                                &relay_url,
-                                &challenge,
-                            ) {
+                            let auth_event = match build_auth_event(pubkey, &relay_url, &challenge)
+                            {
                                 Ok(ev) => ev,
                                 Err(_) => {
                                     return Ok(PublishOutcome::AuthenticationRequired);
@@ -170,14 +167,10 @@ impl Publisher for Nip42Publisher {
                             let Some((generation, _)) = session_ref.signer(pubkey) else {
                                 return Ok(PublishOutcome::AuthenticationRequired);
                             };
-                            let (cancel_tx, cancel_rx) =
-                                tokio::sync::watch::channel(false);
-                            let signed = match session_ref.invoke_signer(
-                                pubkey,
-                                generation,
-                                auth_event,
-                                cancel_rx,
-                            ) {
+                            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+                            let signed = match session_ref
+                                .invoke_signer(pubkey, generation, auth_event, cancel_rx)
+                            {
                                 Some(fut) => match fut.await {
                                     Ok(ev) => ev,
                                     Err(_) => {
@@ -190,14 +183,13 @@ impl Publisher for Nip42Publisher {
                                 }
                             };
                             drop(cancel_tx);
-                            let auth_frame =
-                                match encode_client(&ClientMessage::auth(signed)) {
-                                    Ok(f) => f.into_bytes(),
-                                    Err(e) => return Err(format!("AUTH encode: {e}")),
-                                };
+                            let auth_frame = match encode_client(&ClientMessage::auth(signed)) {
+                                Ok(f) => f.into_bytes(),
+                                Err(e) => return Err(format!("AUTH encode: {e}")),
+                            };
                             // Send AUTH response.
                             let auth_correlation =
-                                HandoffCorrelation(u64::from(attempt.number) | (1 << 32));
+                                HandoffCorrelation::new(u64::from(attempt.number) | (1 << 32));
                             match session.send(auth_frame, auth_correlation).await {
                                 HandoffOutcome::HandedOff { .. } => {}
                                 HandoffOutcome::NotHandedOff { reason, .. } => {
@@ -207,7 +199,7 @@ impl Publisher for Nip42Publisher {
                             }
                             // Resend the original EVENT after authenticating.
                             let resend_correlation =
-                                HandoffCorrelation(u64::from(attempt.number) | (2 << 32));
+                                HandoffCorrelation::new(u64::from(attempt.number) | (2 << 32));
                             match session.send(event_frame.clone(), resend_correlation).await {
                                 HandoffOutcome::HandedOff { .. } => {}
                                 HandoffOutcome::NotHandedOff { reason, .. } => {
@@ -307,7 +299,7 @@ impl Publisher for Nip01Publisher {
             match session
                 .send(
                     frame.into_bytes(),
-                    HandoffCorrelation(u64::from(attempt.number)),
+                    HandoffCorrelation::new(u64::from(attempt.number)),
                 )
                 .await
             {

@@ -5,11 +5,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava_query::OperationGeneration;
 use fava_relay::RelaySessionKey;
 use fava_transport::{
-    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionIdentity, TransportError,
-    TransportFailure,
+    RelayInbound, RelayInboundFuture, RelayMessageStream, RelaySessionGeneration,
+    RelaySessionIdentity, TransportError, TransportFailure,
 };
 use tokio::sync::Notify;
 
@@ -23,7 +22,8 @@ impl LiveIdentity {
     pub(crate) fn read(&self) -> RelaySessionIdentity {
         RelaySessionIdentity {
             key: self.key.clone(),
-            generation: OperationGeneration(self.generation.load(Ordering::SeqCst)),
+            generation: RelaySessionGeneration::new(self.generation.load(Ordering::SeqCst))
+                .expect("transport generations are non-zero"),
         }
     }
 }

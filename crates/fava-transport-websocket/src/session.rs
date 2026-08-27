@@ -2,12 +2,12 @@
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use fava_transport::{
     HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession, RelayMessageStream,
-    RelaySession, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, TransportAmbiguity,
-    TransportBounds, TransportDeadlines, TransportFailure,
+    RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome,
+    TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
 use tokio::sync::{Notify, mpsc, oneshot};
 
@@ -25,12 +25,18 @@ pub(crate) struct SessionShared {
     pub(crate) close_requested: Notify,
     pub(crate) close_finished: Notify,
     pub(crate) entropy: u64,
+    pub(crate) generations: Arc<AtomicU64>,
 }
 
 impl SessionShared {
-    pub(crate) fn new(request: &OpenRelaySession, entropy: u64) -> Self {
+    pub(crate) fn new(
+        request: &OpenRelaySession,
+        entropy: u64,
+        generation: RelaySessionGeneration,
+        generations: Arc<AtomicU64>,
+    ) -> Self {
         Self {
-            identity: Arc::new(LiveIdentity::new(request.key.clone())),
+            identity: Arc::new(LiveIdentity::new(request.key.clone(), generation)),
             bounds: request.bounds,
             deadlines: request.deadlines,
             reconnect_attempts: request.reconnect_attempts,
@@ -39,6 +45,7 @@ impl SessionShared {
             close_requested: Notify::new(),
             close_finished: Notify::new(),
             entropy,
+            generations,
         }
     }
 }

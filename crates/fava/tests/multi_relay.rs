@@ -13,10 +13,10 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::RelaySessionKey;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, OperationGeneration, RelayInbound,
-    RelayInboundFuture, RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionIdentity,
-    ReleaseFuture, ReleaseOutcome, Transport, TransportError, TransportFailure,
-    TransportShutdownFuture,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, RelayInboundFuture,
+    RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionGeneration,
+    RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
+    TransportFailure, TransportShutdownFuture,
 };
 use fava_transport_testkit::{FakeRelay, FakeTransport, detached_lease};
 use fava_wire::{ClientMessage, RelayMessage, SubscriptionId, encode_client};
@@ -58,12 +58,19 @@ impl ScriptedTransport {
 impl Transport for ScriptedTransport {
     fn acquire_session(&self, request: OpenRelaySession) -> RelaySessionFuture<'_> {
         Box::pin(async move {
-            let generation = self.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
+            let previous = self
+                .next_generation
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                    value.checked_add(1)
+                })
+                .map_err(|_| TransportError::GenerationExhausted)?;
+            let generation =
+                RelaySessionGeneration::new(previous + 1).expect("issued generation is non-zero");
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: OperationGeneration(generation),
+                    generation,
                 },
                 mailbox: Arc::new(Mailbox::default()),
                 sent: Mutex::new(Vec::new()),

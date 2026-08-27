@@ -5,8 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use fava_transport::{
     BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelayInbound, RelayMessageStream, RelaySession, RelaySessionIdentity, ReleaseFuture,
-    ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
+    RelayInbound, RelayMessageStream, RelaySession, RelaySessionGeneration, RelaySessionIdentity,
+    ReleaseFuture, ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines,
+    TransportFailure,
 };
 use nostr::types::Timestamp;
 
@@ -18,6 +19,7 @@ pub(crate) struct FakeSession {
     pub(crate) deadlines: TransportDeadlines,
     pub(crate) reconnect_attempts: usize,
     pub(crate) dials: Arc<AtomicUsize>,
+    pub(crate) generations: Arc<AtomicU64>,
     pub(crate) inner: Mutex<SessionState>,
 }
 
@@ -36,17 +38,23 @@ pub(crate) struct SessionState {
 }
 
 impl FakeSession {
-    pub(crate) fn new(request: &OpenRelaySession, dials: Arc<AtomicUsize>) -> Self {
+    pub(crate) fn new(
+        request: &OpenRelaySession,
+        dials: Arc<AtomicUsize>,
+        generation: RelaySessionGeneration,
+        generations: Arc<AtomicU64>,
+    ) -> Self {
         dials.fetch_add(1, Ordering::SeqCst);
         Self {
             identity: Arc::new(LiveIdentity {
                 key: request.key.clone(),
-                generation: AtomicU64::new(1),
+                generation: AtomicU64::new(generation.get()),
             }),
             bounds: request.bounds,
             deadlines: request.deadlines,
             reconnect_attempts: request.reconnect_attempts.map_or(0, std::num::NonZero::get),
             dials,
+            generations,
             inner: Mutex::new(SessionState::default()),
         }
     }
@@ -122,7 +130,24 @@ impl FakeSession {
         };
         Self::fan_out(&state, &disconnected);
 
-        self.identity.generation.fetch_add(1, Ordering::SeqCst);
+        let next = self
+            .generations
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                value.checked_add(1)
+            })
+            .ok()
+            .and_then(|previous| RelaySessionGeneration::new(previous + 1));
+        let Some(next) = next else {
+            let exhausted = RelayInbound::ReconnectExhausted {
+                identity: previous,
+                attempts: 0,
+                reason: TransportFailure::GenerationExhausted,
+            };
+            Self::fan_out(&state, &exhausted);
+            state.closed = true;
+            return;
+        };
+        self.identity.generation.store(next.get(), Ordering::SeqCst);
         self.dials.fetch_add(1, Ordering::SeqCst);
         let reconnected = RelayInbound::Reconnected {
             previous,

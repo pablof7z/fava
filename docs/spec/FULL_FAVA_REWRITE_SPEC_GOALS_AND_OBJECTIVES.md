@@ -1169,6 +1169,12 @@ Transport MUST NOT decide query meaning, route policy, durable retry, Nostr even
 
 Every reconnect creates fresh session/request identity. Frames and completions from earlier generations cannot mutate current work.
 
+The transport mints physical session generations; callers cannot supply an
+initial value. Generation identity remains fresh across reconnect and complete
+release/reacquisition within one transport lifetime. Exhaustion is typed and
+terminal for the affected acquisition or reconnect, never saturation, wrap, or
+reuse.
+
 Active logical demand is replayed automatically after reconnect. Work incomplete on the old session starts again under the new session rather than being spliced into one false lifecycle.
 
 ## RELAY-007 — NIP-42 authentication is explicit and isolated

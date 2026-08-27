@@ -80,7 +80,7 @@ async fn same_correlation_completions_remain_scoped_to_exact_key_and_generation(
         .expect("authenticated session");
     public_peer.stall_writer();
     private_peer.stall_writer();
-    let correlation = HandoffCorrelation(7);
+    let correlation = HandoffCorrelation::new(7);
     assert!(matches!(
         public_lease
             .session()

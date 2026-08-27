@@ -13,7 +13,9 @@ use std::time::Duration;
 use fava_query::{BoundedText, OperationGeneration};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
-use fava_subscriptions::{DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan, WithdrawalReason};
+use fava_subscriptions::{
+    DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan, WithdrawalReason,
+};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
     Transport,
@@ -127,7 +129,7 @@ pub(crate) fn install_plan(
     let owner = runtime.clone();
     let _ = runtime.spawn(OPEN_TASK, async move {
         let mut opened = BTreeSet::new();
-        let mut correlation = 0_u64;
+        let mut correlations = 1_u64..;
         for planned in &plan.open {
             let message = ClientMessage::Req {
                 subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
@@ -138,7 +140,7 @@ pub(crate) fn install_plan(
                     .map(std::borrow::Cow::Owned)
                     .collect(),
             };
-            correlation = correlation.saturating_add(1);
+            let correlation = correlations.next().expect("u64 range is unbounded");
             if hand_off(
                 &owner,
                 &session,
@@ -161,7 +163,7 @@ pub(crate) fn install_plan(
                 // The successor never opened. Keep the predecessor live.
                 continue;
             }
-            correlation = correlation.saturating_add(1);
+            let correlation = correlations.next().expect("u64 range is unbounded");
             let message = ClientMessage::close(entry.id.clone());
             if hand_off(
                 &owner,
@@ -201,9 +203,9 @@ pub(crate) fn release(
 ) {
     let owner = runtime.clone();
     let _ = runtime.spawn(RELEASE_TASK, async move {
-        let mut correlation = u64::MAX / 4;
-        for id in closing {
-            correlation = correlation.saturating_add(1);
+        for (index, id) in closing.into_iter().enumerate() {
+            let correlation =
+                u64::try_from(index).expect("a Vec cannot contain more than u64::MAX entries") + 1;
             let message = ClientMessage::close(id);
             let _ = hand_off(
                 &owner,
@@ -276,7 +278,9 @@ async fn hand_off(
     let session = Arc::clone(session);
     let outcome = runtime
         .call_provider(HANDOFF, generation, deadline, async move {
-            session.send(frame, HandoffCorrelation(correlation)).await
+            session
+                .send(frame, HandoffCorrelation::new(correlation))
+                .await
         })
         .await;
     match outcome {

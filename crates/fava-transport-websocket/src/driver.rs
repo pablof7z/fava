@@ -17,6 +17,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 use crate::backoff::ReconnectBackoff;
+use crate::mint_generation;
 use crate::session::SessionShared;
 
 pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -65,10 +66,10 @@ pub(crate) async fn drive(
             break;
         }
         match reconnect(&shared, &mut backoff).await {
-            Ok(next) => {
+            Ok((next, generation)) => {
                 socket = next;
                 backoff.reset();
-                let (previous, identity) = shared.identity.advance();
+                let (previous, identity) = shared.identity.advance(generation);
                 shared
                     .consumers
                     .fan_out(&RelayInbound::Reconnected { previous, identity });
@@ -94,7 +95,10 @@ pub(crate) async fn drive(
 async fn reconnect(
     shared: &SessionShared,
     backoff: &mut ReconnectBackoff,
-) -> Result<Socket, (usize, TransportFailure)> {
+) -> Result<(Socket, fava_transport::RelaySessionGeneration), (usize, TransportFailure)> {
+    let Some(generation) = mint_generation(&shared.generations) else {
+        return Err((0, TransportFailure::GenerationExhausted));
+    };
     let budget = shared
         .reconnect_attempts
         .map_or(usize::MAX, std::num::NonZeroUsize::get);
@@ -105,7 +109,7 @@ async fn reconnect(
             return Err((attempt, TransportFailure::SessionClosed));
         }
         match establish(shared).await {
-            Ok(socket) => return Ok(socket),
+            Ok(socket) => return Ok((socket, generation)),
             Err(reason) => last = reason,
         }
     }

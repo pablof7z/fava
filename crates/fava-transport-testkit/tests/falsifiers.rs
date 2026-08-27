@@ -82,6 +82,71 @@ async fn acquiring_a_live_session_does_not_dial() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn reacquiring_after_last_release_mints_a_fresh_physical_generation() {
+    let transport = FakeTransport::new();
+    let first = transport
+        .acquire_session(request())
+        .await
+        .expect("first session acquires");
+    let first_identity = first.session().identity();
+    first.release().await.expect("last lease releases");
+
+    let second = transport
+        .acquire_session(request())
+        .await
+        .expect("second session acquires");
+
+    assert_ne!(first_identity, second.session().identity());
+    assert_eq!(transport.dials(&key()), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn exhausted_initial_generation_refuses_before_a_dial() {
+    let transport = FakeTransport::new();
+    transport.exhaust_generations();
+
+    let error = transport
+        .acquire_session(request())
+        .await
+        .map(|_| ())
+        .expect_err("exhaustion refuses acquisition");
+
+    assert_eq!(error, fava_transport::TransportError::GenerationExhausted);
+    assert_eq!(transport.dials(&key()), 0);
+    assert_eq!(transport.holders(&key()), None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn exhausted_reconnect_generation_is_terminal_without_a_dial() {
+    let transport = FakeTransport::new();
+    transport.leave_one_generation();
+    let lease = transport
+        .acquire_session(request())
+        .await
+        .expect("last generation acquires");
+    let identity = lease.session().identity();
+    let mut stream = lease.session().messages();
+    let relay = transport.relay(&key()).expect("relay is registered");
+
+    relay.reconnect();
+
+    assert!(matches!(
+        stream.next_inbound().await.expect("disconnect item"),
+        RelayInbound::Disconnected { identity: item, .. } if item == identity
+    ));
+    assert!(matches!(
+        stream.next_inbound().await.expect("exhaustion item"),
+        RelayInbound::ReconnectExhausted {
+            identity: item,
+            attempts: 0,
+            reason: TransportFailure::GenerationExhausted,
+        } if item == identity
+    ));
+    assert_eq!(transport.dials(&key()), 1);
+    assert_eq!(lease.session().identity(), identity);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn stalled_relay_yields_bounded_refusal_not_an_unbounded_park() {
     let transport = FakeTransport::new();
     let lease = transport
@@ -97,7 +162,10 @@ async fn stalled_relay_yields_bounded_refusal_not_an_unbounded_park() {
     for attempt in 0..8_u64 {
         let outcome = lease
             .session()
-            .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation(attempt))
+            .send(
+                b"[\"REQ\",\"a\",{}]".to_vec(),
+                HandoffCorrelation::new(attempt),
+            )
             .await;
         if let HandoffOutcome::NotHandedOff { reason, .. } = outcome {
             refusal = Some(reason);
@@ -125,9 +193,9 @@ async fn handoff_completion_names_its_own_session_generation() {
 
     let outcome = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation(7))
+        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(7))
         .await;
 
     assert_eq!(outcome.identity(), &expected);
-    assert_eq!(outcome.correlation(), HandoffCorrelation(7));
+    assert_eq!(outcome.correlation(), HandoffCorrelation::new(7));
 }

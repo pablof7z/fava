@@ -30,13 +30,15 @@ use std::time::Duration;
 
 pub use bounded::BoundedReason;
 pub use error::TransportError;
-pub use fava_query::OperationGeneration;
 use fava_relay::RelaySessionKey;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use inbound::RelayInbound;
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
-pub use session::{HandoffCorrelation, RelayMessageStream, RelaySession, RelaySessionIdentity};
+pub use session::{
+    HandoffCorrelation, RelayMessageStream, RelaySession, RelaySessionGeneration,
+    RelaySessionIdentity,
+};
 
 /// Future yielding an acquired lease on the current session for one key.
 pub type RelaySessionFuture<'a> =

@@ -1221,6 +1221,16 @@ spec_crates = [
 ]
 
 [[term]]
+name = "RelaySessionGeneration"
+source = "fava"
+meaning = "The transport-minted identity of one physical relay connection generation."
+owner = "fava-transport"
+nearest_nostr = "client-relay connection"
+distinction = "NIP-01 identifies relay endpoints and messages but does not identify successive physical connections or prevent stale completions from crossing reconnect and reacquisition boundaries."
+symbols = ["fava_transport::RelaySessionGeneration"]
+crates = ["fava-transport"]
+
+[[term]]
 name = "Transport"
 source = "fava"
 meaning = "The replaceable owner of relay connections, byte handoff, reconnect generations, and correlated inbound messages."

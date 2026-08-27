@@ -110,7 +110,7 @@ pub async fn require_bounded_outbound_refusal<T: Transport>(
     for attempt in 0..attempts {
         let outcome = lease
             .session()
-            .send(frame.clone(), HandoffCorrelation(attempt))
+            .send(frame.clone(), HandoffCorrelation::new(attempt))
             .await;
         if let HandoffOutcome::NotHandedOff {
             reason: TransportFailure::OutboundQueueFull { .. },
@@ -143,7 +143,7 @@ pub async fn require_attributed_handoff<T: Transport>(
         .session()
         .send(
             b"[\"REQ\",\"conformance\",{}]".to_vec(),
-            HandoffCorrelation(41),
+            HandoffCorrelation::new(41),
         )
         .await;
 
@@ -153,7 +153,7 @@ pub async fn require_attributed_handoff<T: Transport>(
             outcome.identity()
         ));
     }
-    if outcome.correlation() != HandoffCorrelation(41) {
+    if outcome.correlation() != HandoffCorrelation::new(41) {
         return Err(format!(
             "completion carried correlation {:?}",
             outcome.correlation()

@@ -66,6 +66,8 @@ impl HandoffOutcome {
 pub enum TransportFailure {
     /// The session generation is closed.
     SessionClosed,
+    /// The transport cannot mint another unique physical generation.
+    GenerationExhausted,
     /// The outbound queue is full at its declared bound.
     OutboundQueueFull {
         /// Declared bound in frames.

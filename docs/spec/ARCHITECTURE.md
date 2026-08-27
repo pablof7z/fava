@@ -1654,7 +1654,15 @@ This boundary is used by publishers and subscription execution. It lets higher l
 
 ### Session identity
 
-Every inbound frame and handoff completion carries exact session generation and relay-access identity. Reconnected sessions are new authorities.
+Every inbound frame and handoff completion carries exact session generation and
+relay-access identity. `OpenRelaySession` carries no generation: the transport
+mints physical generations across initial connections, reconnects, and
+reacquisition after registry removal. Reconnected sessions are new authorities.
+A generation is never saturated, wrapped, or reused within one transport
+instance. Exhaustion is a typed refusal before opening another connection.
+
+`HandoffCorrelation` is instead minted by the caller and echoed unchanged in
+that handoff's outcome. It does not authorize or identify a physical session.
 
 ---
 

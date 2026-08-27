@@ -173,7 +173,7 @@ async fn complete_frame_handoff_reaches_the_relay() {
         .expect("session opens");
     let outcome = lease
         .session()
-        .send(b"[\"REQ\",\"one\",{}]".to_vec(), HandoffCorrelation(1))
+        .send(b"[\"REQ\",\"one\",{}]".to_vec(), HandoffCorrelation::new(1))
         .await;
 
     assert!(matches!(outcome, HandoffOutcome::HandedOff { .. }));
@@ -199,7 +199,7 @@ async fn an_oversized_frame_is_definitely_not_handed_off() {
         .expect("session opens");
     let outcome = lease
         .session()
-        .send(b"too-large".to_vec(), HandoffCorrelation(2))
+        .send(b"too-large".to_vec(), HandoffCorrelation::new(2))
         .await;
 
     assert!(matches!(
@@ -368,7 +368,10 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
     };
 
     assert_eq!(previous, before);
-    assert_eq!(identity.generation, before.generation.next());
+    assert_eq!(
+        identity.generation,
+        before.generation.checked_next().expect("successor exists")
+    );
     assert_eq!(lease.session().identity(), identity);
     server.abort();
 }
