@@ -18,9 +18,9 @@ PUBLIC_NOUN = re.compile(
     r"^\s*pub\s+(?:unsafe\s+)?(?:struct|enum|trait|type|union)\s+([A-Z][A-Za-z0-9_]*)",
     re.MULTILINE,
 )
-# Build output and retained canary evidence (`apps/canary/runs/`) hold no
-# package manifest and can be very large.
-IGNORED_DIRECTORY_NAMES = frozenset({"target", "node_modules", "runs"})
+# Build output, retained canary evidence (`apps/canary/runs/`), and runnable
+# consumer examples do not define Fava's architectural crate vocabulary.
+IGNORED_DIRECTORY_NAMES = frozenset({"examples", "node_modules", "runs", "target"})
 RUST_SOURCE_DIRECTORIES = ("src", "tests", "benches", "examples")
 SPEC_CRATE = re.compile(r"\b(fava(?:-[a-z0-9]+)+)(?![-a-z0-9])")
 CAMEL_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")

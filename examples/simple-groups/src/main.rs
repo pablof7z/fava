@@ -3,7 +3,8 @@
 //! Use an already-running relay:
 //!
 //! ```text
-//! cargo run -p fava-simple-groups --example demo -- --relay ws://127.0.0.1:8080
+//! cargo run --manifest-path examples/simple-groups/Cargo.toml -- \\
+//!   --relay ws://127.0.0.1:8080
 //! ```
 //!
 //! A generic Nostr relay stores the real management events but usually does not
@@ -12,12 +13,11 @@
 //! Alice key:
 //!
 //! ```text
-//! cargo run -p fava-simple-groups --example demo -- \
+//! cargo run --manifest-path examples/simple-groups/Cargo.toml -- \
 //!   --spawn-croissant /path/to/croissant \
 //!   --saved-relay ws://127.0.0.1:8080
 //! ```
 
-#[path = "demo/support.rs"]
 mod support;
 
 use std::error::Error;
@@ -27,8 +27,8 @@ use fava::{EventBuilder, Kind, Query, Tag};
 use fava_simple_groups::{
     GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupStateEventKind,
     create_group, delete_event, delete_group, edit_metadata, invite, join_request, leave_group,
-    put_user, remove_saved_relay, remove_saved_simple_group, remove_user, rename_saved_simple_group,
-    save_relay, save_simple_group, saved_group_lists,
+    put_user, remove_saved_relay, remove_saved_simple_group, remove_user,
+    rename_saved_simple_group, save_relay, save_simple_group, saved_group_lists,
 };
 use nostr::key::Keys;
 

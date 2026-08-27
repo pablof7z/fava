@@ -274,6 +274,17 @@ class VocabularyCheckTest(unittest.TestCase):
             "undocumented public architectural symbol: tool::ToolOutcome", result.stderr
         )
 
+    def test_ignores_runnable_consumer_example_packages(self) -> None:
+        result = self.run_check(
+            source="pub struct Query;\n",
+            symbols=["sample::Query"],
+            extra_packages={
+                "examples/consumer": ("consumer", "pub struct ConsumerOutcome;\n")
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_scans_public_declarations_in_crate_tests(self) -> None:
         result = self.run_check(
             source="pub struct Query;\n",

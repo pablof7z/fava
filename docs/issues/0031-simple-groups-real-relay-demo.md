@@ -7,7 +7,7 @@
 
 ## Outcome
 
-`fava-simple-groups` ships a literal `demo` example binary that generates
+`examples/simple-groups` ships a literal application binary that generates
 disposable Alice, Bob, and Carol keypairs and exercises the current public
 simple-group surface through an assembled `Fava` engine against real WebSocket
 relays. It is application code, not a test, fixture, mock, or testkit.
@@ -19,7 +19,7 @@ URL when one relay serves both roles.
 
 ## Scope
 
-The demo uses every current typed `fava-nip29-management` constructor, every
+The demo uses every current typed `fava-simple-groups` management constructor, every
 `SimpleGroup` method, every `SimpleGroupMetadata` accessor, all six typed state
 selectors and decoders, and the complete saved-group edit/query lifecycle. It
 prints the exact acknowledgement or decoded result for every step.
@@ -35,7 +35,8 @@ compatibility path, or architectural vocabulary.
 
 ## Executable evidence
 
-- `cargo build -p fava-simple-groups --example demo` builds the literal app.
+- `cargo build --manifest-path examples/simple-groups/Cargo.toml --locked`
+  builds the literal app.
 - A controlled run against an isolated Croissant group relay and an isolated
   `nostr-rs-relay` user relay receives acknowledgements for create, metadata,
   invite, join, member additions, leave, removal, content, all saved-list edits,

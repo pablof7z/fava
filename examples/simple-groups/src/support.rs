@@ -59,7 +59,7 @@ impl Options {
                 }
                 "-h" | "--help" => {
                     println!(
-                        "Usage: demo [--relay ws://127.0.0.1:8080] [--saved-relay ws://127.0.0.1:8080] [--spawn-croissant /path/to/croissant]\n\n--relay connects to an existing group relay.\n--saved-relay selects the user relay for kind-10009 saved lists (defaults to --relay).\n--spawn-croissant starts an isolated NIP-29 group relay owned by generated Alice."
+                        "Usage: simple-groups [--relay ws://127.0.0.1:8080] [--saved-relay ws://127.0.0.1:8080] [--spawn-croissant /path/to/croissant]\n\n--relay connects to an existing group relay.\n--saved-relay selects the user relay for kind-10009 saved lists (defaults to --relay).\n--spawn-croissant starts an isolated NIP-29 group relay owned by generated Alice."
                     );
                     std::process::exit(0);
                 }

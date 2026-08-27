@@ -13,14 +13,6 @@ fava-write.workspace = true
 nostr.workspace = true
 
 [dev-dependencies]
-fava = { path = "../fava" }
-fava-delivery-standard.workspace = true
-fava-publisher-nip01.workspace = true
-fava-query-standard.workspace = true
-fava-signer-local.workspace = true
-fava-subscriptions-no-grouping.workspace = true
-fava-transport-websocket.workspace = true
-fava-write-store-memory.workspace = true
 futures-util.workspace = true
 nostr = { workspace = true, features = ["os-rng"] }
 serde_json.workspace = true
