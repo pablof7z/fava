@@ -7,8 +7,8 @@ use fava_write::{
 use crate::WriteStoreError;
 
 const MAX_RECEIPT_TEXT_BYTES: usize = 4_096;
-/// Shared cap on live relay destinations and on retained superseded
-/// materializations.
+/// Shared cap reused for every bounded per-receipt count and for the
+/// publication crate's loop and channel ceilings.
 const DESTINATION_EVIDENCE_CAPACITY: usize = 256;
 
 /// Refuse provider text that exceeds durable receipt bounds.
@@ -46,8 +46,16 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
     }
 }
 
-/// Shared cap on live relay destinations and on retained superseded
-/// materializations.
+/// Shared cap reused for every bounded per-receipt count and for the
+/// publication crate's loop and channel ceilings.
+///
+/// One number applied independently to unrelated quantities, not a bound on a
+/// single thing. Callers apply it to route destination fan-out, route
+/// shortfalls, retired materializations, correction destinations, desired
+/// destinations, delivery attempts, and explicit routing relays; a write store
+/// that exceeds one refuses with a message naming that exact count.
+/// `fava-publication` reuses it again as its activation and recovery retry
+/// ceiling and as the depth of the finished-delivery-lane channel.
 #[must_use]
 pub const fn destination_evidence_capacity() -> usize {
     DESTINATION_EVIDENCE_CAPACITY
