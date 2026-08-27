@@ -41,6 +41,8 @@ pub struct RedbEventCache {
     latest: watch::Sender<Arc<SourceSnapshot>>,
 }
 
+/// In-memory mirror of the committed redb table, swapped in only after the
+/// matching write has landed on disk.
 #[derive(Clone, Debug, Default)]
 struct CacheState {
     revision: u64,

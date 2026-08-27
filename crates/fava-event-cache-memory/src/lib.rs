@@ -22,6 +22,8 @@ pub struct MemoryEventCache {
     latest: watch::Sender<Arc<SourceSnapshot>>,
 }
 
+/// The events this cache holds, keyed by event and relay session, and the
+/// revision they reached.
 #[derive(Clone, Debug, Default)]
 struct CacheState {
     revision: u64,

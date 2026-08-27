@@ -11,6 +11,7 @@ use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinitio
 use serde::{Deserialize, Serialize};
 
 pub(super) const EVENTS: TableDefinition<&str, &[u8]> = TableDefinition::new("events");
+/// Redb table holding the on-disk schema version.
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 const SCHEMA_VERSION_KEY: &str = "schema_version";
 const SCHEMA_VERSION: u64 = 1;
