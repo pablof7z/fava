@@ -31,7 +31,6 @@ const ADD: u8 = 1;
 const REMOVE: u8 = 2;
 const EVENT: u8 = 1;
 const COORDINATE: u8 = 2;
-mod bounds;
 
 /// Produce a bounded edit that adds one public event bookmark.
 ///
@@ -190,8 +189,10 @@ fn decode_coordinate(bytes: &[u8]) -> Result<EventCoordinate, WriteIntentError> 
     };
     let author = PublicKey::from_slice(&bytes[3..35])
         .map_err(|_| codec_refusal("invalid bookmark coordinate author"))?;
-    let length = usize::try_from(u32::from_be_bytes([bytes[35], bytes[36], bytes[37], bytes[38]]))
-        .map_err(|_| codec_refusal("bookmark coordinate identifier length overflow"))?;
+    let length = usize::try_from(u32::from_be_bytes([
+        bytes[35], bytes[36], bytes[37], bytes[38],
+    ]))
+    .map_err(|_| codec_refusal("bookmark coordinate identifier length overflow"))?;
     if bytes.len() != 39 + length {
         return Err(codec_refusal(
             "invalid bookmark coordinate identifier length",
@@ -263,6 +264,7 @@ impl ReplaceableEventMaterializer for BookmarkMaterializer {
         let (content, source_tags) = qualified_source(author, source, created_at)?;
         let tags = apply(source_tags, &change)?;
         let event = build(author, content, tags, created_at)?;
+        verify_source(source)?;
         validate_output(author, &event, created_at)?;
         Ok(event)
     }
@@ -276,15 +278,6 @@ fn qualified_source(
     let Some(source) = source else {
         return Ok(("", &[]));
     };
-    bounds::validate_value_source(source)?;
-    match source {
-        EventValue::Signed(event) => event
-            .verify()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
-        EventValue::Unsigned(event) => event
-            .verify_id()
-            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?,
-    }
     if source.author() != author || source.kind() != bookmark_kind() {
         return Err(WriteIntentError::InvalidEvent(
             "bookmark source author or kind does not match accepted write".to_owned(),
@@ -300,6 +293,20 @@ fn qualified_source(
         EventValue::Signed(event) => event.content.as_str(),
     };
     Ok((content, source.tags()))
+}
+
+fn verify_source(source: Option<&EventValue>) -> Result<(), WriteIntentError> {
+    let Some(source) = source else {
+        return Ok(());
+    };
+    match source {
+        EventValue::Signed(event) => event
+            .verify()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string())),
+        EventValue::Unsigned(event) => event
+            .verify_id()
+            .map_err(|error| WriteIntentError::InvalidEvent(error.to_string())),
+    }
 }
 
 fn apply(source: &[Tag], change: &Change) -> Result<Vec<Tag>, WriteIntentError> {

@@ -6,7 +6,8 @@
 encoding failures, but shipped and test materializers independently erase
 `EventBuildError::TooManyTags` into either byte overflow or invalid-event text.
 NIP-02 and bookmarks also duplicate the generic 2,000-tag construction bound
-before calling the neutral builder.
+before calling the neutral builder. Bookmarks additionally duplicated the
+builder's serialized-event byte calculation at its source boundary.
 
 ## Required outcome
 
@@ -57,6 +58,14 @@ The same owner mutation run left the byte and encoding conversion assertions
 green (two passed, one failed), proving the failure is specific to tag
 cardinality rather than a generic error-path assertion.
 
+The bookmark follow-up causal RED commit is `4cfe4d70`. Its oversized-source
+test failed against the protocol-local byte calculator with
+`TooLarge { bytes: 131073, maximum: 131072 }`: 2,001 duplicate target tags were
+refused before bookmark removal could reduce them to an empty, bounded output.
+The paired hostile-source assertions require retained oversized content and tag
+values to produce the exact generic `EventBuilder` refusal before authenticity
+verification.
+
 The owner assertions also freeze exact `Display` output for `TooManyTags`,
 `TooLarge`, and `Encoding`. The Redb restart fixture observes the exact typed
 value at the materializer boundary, then separately observes only string
@@ -72,6 +81,13 @@ its direct `EventBuildError -> ContactListError` decoder conversion exhaustive;
 valid signed contact-list input is governed by its encoded-byte bound, not the
 local write builder's tag bound.
 
+Bookmarks owns no generic event-size or tag-cardinality calculator. It applies
+bookmark semantics, asks `EventBuilder` to construct the candidate output, and
+uses the exhaustive `WriteIntentError::from` conversion. Source authenticity is
+then verified before the candidate can be returned. This ordering lets semantic
+removal reduce oversized duplicate target tags while retained hostile material
+still receives the generic builder's bounded refusal.
+
 Generated public-API inventories for `fava-write` and the `fava` facade include
 both error enums, all variants, and the public exhaustive conversion. Routing
 source and routing-test hashes remain respectively
@@ -83,6 +99,8 @@ identical to the pre-slice baseline.
 
 Green revision-9 gates:
 
+- bookmark follow-up all-target tests, doctests, generic builder-owner tests,
+  and clippy with warnings denied;
 - owner, exhaustive NIP-02, bookmarks, simple-groups, exact, controlled,
   semantic-write support, Redb process-kill, and external capability tests;
 - external capability full all-target test and clippy suites;
