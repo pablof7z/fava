@@ -493,7 +493,8 @@ impl Engine {
         self.publish_relay_diagnostic(relay);
     }
 
-    /// Record exactly what the transport accepted as the next baseline.
+    /// Replace this relay's installed-subscription baseline with exactly what the
+    /// transport accepted.
     ///
     /// On a plan the transport accepted in full this is
     /// `fava_subscriptions_testkit::apply_plan`, which the owner's own evidence

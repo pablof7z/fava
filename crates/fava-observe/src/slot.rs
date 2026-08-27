@@ -35,6 +35,7 @@ pub(crate) struct Slot {
     /// A fixed admission window is pending for this relay.
     pub(crate) armed: bool,
     pub(crate) busy: bool,
+    /// Connectivity of this relay session, independent of any query.
     pub(crate) state: fava_diagnostics::RelaySessionState,
     pub(crate) reconnects: usize,
 }

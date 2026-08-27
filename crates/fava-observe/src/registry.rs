@@ -41,6 +41,8 @@ struct Installed {
     tasks: Vec<TaskHandle<Option<()>>>,
 }
 
+/// Relay events one observation retains itself because no selected store keeps
+/// them, and how many valid transitions the retention bound refused.
 #[derive(Default)]
 struct LiveState {
     revision: u64,
@@ -52,6 +54,8 @@ struct LiveState {
 const LIVE_EVENTS_PER_SESSION: NonZeroUsize =
     NonZeroUsize::new(4_096).expect("the live retention bound is nonzero");
 
+/// Every installed observation, the counter that mints their identities, and the
+/// revision that wakes readers when aggregate demand changes.
 #[derive(Default)]
 struct State {
     next: u64,
@@ -196,7 +200,7 @@ impl Registry {
         desired
     }
 
-    /// Replace one relay's contribution state for one observation.
+    /// Replace how far one relay has got with one observation's demand.
     pub(crate) fn record_state(
         &self,
         id: ObservationId,
@@ -216,7 +220,8 @@ impl Registry {
         });
     }
 
-    /// Record which observations share the wire work behind one relay's demand.
+    /// Note which observations share one relay's wire work, under which plan
+    /// revision, and what that plan omits.
     pub(crate) fn record_sharing(
         &self,
         id: ObservationId,
@@ -239,7 +244,7 @@ impl Registry {
         });
     }
 
-    /// Replace the desired-plan evidence backing one observation's demand.
+    /// Replace the desired subscription plan backing one observation's demand.
     pub(crate) fn record_plan(&self, id: ObservationId, plan: DesiredPlanEvidence) {
         self.update(id, |installed| {
             let changed = installed.plan.as_ref() != Some(&plan);
@@ -330,7 +335,8 @@ impl Registry {
             .collect()
     }
 
-    /// Current scoped evidence for one observation.
+    /// Everything one observation currently reports about its relays, its plan, and
+    /// what it lost.
     pub(crate) fn evidence(&self, id: ObservationId) -> ObservationEvidence {
         let state = self.lock();
         let Some(installed) = state.observations.get(&id) else {
@@ -409,7 +415,8 @@ pub(crate) struct Installation {
     pub(crate) woken: watch::Receiver<u64>,
 }
 
-/// The owner-held evidence one observation currently reports.
+/// One observation's per-relay progress, the plan and route revision behind it,
+/// and the updates and live events it dropped.
 #[derive(Default)]
 pub(crate) struct ObservationEvidence {
     pub(crate) relays: Vec<RelayQueryEvidence>,
@@ -425,6 +432,7 @@ const fn retain_withdrawn(withdrawal: fava_query::RelayWithdrawal) -> bool {
     matches!(withdrawal, fava_query::RelayWithdrawal::RouteWithdrawn)
 }
 
+/// First report for a relay routing has named but no session has reached yet.
 fn planned_evidence(
     session: RelaySessionKey,
     branch: QueryBranchId,

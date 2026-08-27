@@ -15,6 +15,7 @@ use crate::diagnostics;
 use crate::engine::Engine;
 
 impl Engine {
+    /// Tell every listed demand owner how far this relay has got.
     pub(crate) fn publish_states(
         &self,
         relay: &RelaySessionKey,
@@ -28,6 +29,7 @@ impl Engine {
         }
     }
 
+    /// Tell every observation holding demand at this relay how far it has got.
     pub(crate) fn publish_state_for_relay(
         &self,
         relay: &RelaySessionKey,
@@ -171,6 +173,8 @@ impl Engine {
     }
 }
 
+/// Classify a transport failure reason as an expired establish or idle deadline,
+/// or else an ordinary disconnect.
 pub(crate) fn failure_state(detail: &BoundedText) -> RelaySourceState {
     if detail.as_str().contains("EstablishTimeout") {
         return RelaySourceState::TimedOut {
