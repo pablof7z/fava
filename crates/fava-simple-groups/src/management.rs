@@ -28,6 +28,7 @@ use crate::SimpleGroup;
 
 const KIND_PUT_USER: u16 = 9000;
 const KIND_REMOVE_USER: u16 = 9001;
+/// NIP-29 kind requesting a change to a group's metadata.
 const KIND_EDIT_METADATA: u16 = 9002;
 const KIND_DELETE_EVENT: u16 = 9005;
 const KIND_CREATE_GROUP: u16 = 9007;

@@ -28,7 +28,7 @@ pub enum SimpleGroupDecodeError {
     InvalidLivekitParticipantPublicKey {
         /// Zero-based event tag index.
         tag_index: usize,
-        /// Zero-based value index.
+        /// Zero-based index in `Tag::as_slice()`.
         value_index: usize,
     },
 }
@@ -87,7 +87,7 @@ pub(crate) fn state_event(
     Ok((id, event.author(), tags))
 }
 
-/// Returns `values[value_index]`, or a `MissingTagValue` error positioned at `tag_index`.
+/// Read one position out of a tag, or refuse with `MissingTagValue` located at `tag_index`.
 pub(crate) fn required_value(
     values: &[String],
     tag_index: usize,

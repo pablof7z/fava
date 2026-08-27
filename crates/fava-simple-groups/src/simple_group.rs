@@ -158,7 +158,8 @@ impl SimpleGroup {
             .from_relays(self.relays())
     }
 
-    /// Build an exact-`d`, relay-authoritative query for selected NIP-29 meta-event kinds.
+    /// Build an exact-`d`, relay-authoritative query for selected NIP-29 group
+    /// state-event kinds.
     ///
     /// # Examples
     ///
