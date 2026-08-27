@@ -22,6 +22,8 @@ struct Inner {
     revision: watch::Sender<u64>,
 }
 
+/// Which signer is attached to which account key, and the counter that advances
+/// whenever that set changes.
 struct State {
     signers: BTreeMap<PublicKey, Attachment>,
     generation: u64,
@@ -191,6 +193,7 @@ impl Session {
         self.inner.revision.subscribe()
     }
 
+    /// Take the attachment lock, recovering a poisoned mutex instead of panicking.
     fn lock_state(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner
             .state
