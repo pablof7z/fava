@@ -19,7 +19,7 @@ mod relay_session_serde;
 mod routing;
 mod session_set;
 
-pub use builder::{EventBuildError, EventBuilder, Taggable};
+pub use builder::{EventBuildError, EventBuilder};
 pub use edit::ReplaceableEventEdit;
 pub use materialization::{MaterializationId, ReplaceableEventMaterializer};
 pub use receipt::{
