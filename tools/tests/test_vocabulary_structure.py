@@ -623,7 +623,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
             readme.write_text("changed description", encoding="utf-8")
             self.assertNotEqual(first, structure.input_fingerprint(root))
 
-    def test_all_twenty_two_simple_group_terms_have_complete_human_reviews(self) -> None:
+    def test_all_thirty_four_simple_group_terms_have_complete_human_reviews(self) -> None:
         root = Path(__file__).parents[2]
         terms = tomllib.loads(
             (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
@@ -631,7 +631,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
         simple_group_terms = [
             term for term in terms if term.get("owner") == "fava-simple-groups"
         ]
-        self.assertEqual(len(simple_group_terms), 22)
+        self.assertEqual(len(simple_group_terms), 34)
 
         snapshot, snapshot_problems = structure.read_snapshot(
             root / "docs/internals/vocabulary-structure.json"
@@ -674,8 +674,8 @@ class HumanReviewInventoryTest(unittest.TestCase):
         self.assertEqual(coverage["unbound"], [])
         self.assertEqual(coverage["multiply_bound"], [])
         self.assertEqual(coverage["collisions"], [])
-        self.assertEqual(coverage["public_items"], 101)
-        self.assertEqual(coverage["bound_items"], 101)
+        self.assertEqual(coverage["public_items"], 119)
+        self.assertEqual(coverage["bound_items"], 119)
 
     def test_simple_groups_free_functions_and_module_have_own_terms(self) -> None:
         root = Path(__file__).parents[2]
@@ -691,8 +691,17 @@ class HumanReviewInventoryTest(unittest.TestCase):
         }
         expected = {
             "fava_simple_groups": "fava_simple_groups",
+            "fava_simple_groups::create_group": "create_group",
+            "fava_simple_groups::delete_event": "delete_event",
+            "fava_simple_groups::delete_group": "delete_group",
+            "fava_simple_groups::edit_metadata": "edit_metadata",
+            "fava_simple_groups::invite": "invite",
+            "fava_simple_groups::join_request": "join_request",
+            "fava_simple_groups::leave_group": "leave_group",
+            "fava_simple_groups::put_user": "put_user",
             "fava_simple_groups::remove_saved_relay": "remove_saved_relay",
             "fava_simple_groups::remove_saved_simple_group": "remove_saved_simple_group",
+            "fava_simple_groups::remove_user": "remove_user",
             "fava_simple_groups::rename_saved_simple_group": "rename_saved_simple_group",
             "fava_simple_groups::save_relay": "save_relay",
             "fava_simple_groups::save_simple_group": "save_simple_group",

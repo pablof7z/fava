@@ -111,7 +111,7 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
     let source = source(&keys);
     let relay_a = RelayUrl::parse("wss://a.example").unwrap();
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
-    let group = SimpleGroup::from_relays("photos", vec![relay_a.clone(), relay_b.clone()])
+    let group = SimpleGroup::new("photos", vec![relay_a.clone(), relay_b.clone()])
         .expect("non-empty group");
     let materializer = saved_group_list_materializer();
 
@@ -212,7 +212,7 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
 
 #[test]
 fn materializer_supports_only_its_private_edits() {
-    let group = SimpleGroup::from_relays(
+    let group = SimpleGroup::new(
         "photos",
         vec![RelayUrl::parse("wss://a.example").expect("relay")],
     )

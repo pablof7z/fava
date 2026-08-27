@@ -169,7 +169,7 @@ fn assembly(keys: &Keys) -> (Fava, Arc<MemoryEventCache>) {
 }
 
 fn group() -> SimpleGroup {
-    SimpleGroup::from_relays(
+    SimpleGroup::new(
         "group-29",
         vec![relay("a"), relay("b"), relay("contacted-but-not-serving")],
     )

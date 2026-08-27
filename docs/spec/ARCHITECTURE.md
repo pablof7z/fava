@@ -1997,7 +1997,7 @@ normalize accepted ids.
 delivery, retry, cancellation, or receipt lifecycle:
 
 ```rust
-SimpleGroup::from_relays(id, relays: Vec<RelayUrl>) -> Result<SimpleGroup, SimpleGroupConstructionError>
+SimpleGroup::new(id, relays: Vec<RelayUrl>) -> Result<SimpleGroup, SimpleGroupConstructionError>
 simple_group.events(selection) -> Result<Query, QueryError>
 simple_group.meta_events(kinds) -> Result<Query, QueryError>
 simple_group.prepare(draft) -> Result<UnsignedEvent, EventBuildError>
@@ -2021,11 +2021,13 @@ pub enum SavedGroupListDecodeError { /* kind-10009 event or entry failure */ }
 ```
 
 `fava-state` does not own reusable application relay selection. Requiring one
-relay and a concrete `Vec` tail makes empty and arbitrary-iterator construction
-impossible without a numeric limit. Callers parse through `RelayUrl::parse`.
+complete concrete `Vec<RelayUrl>` makes arbitrary-iterator construction
+impossible without a numeric limit, while `SimpleGroupConstructionError`
+attributes an empty id or empty vector before a reusable value exists. Callers
+parse through `RelayUrl::parse`.
 The query owner's current 4,096 cap and write owner's current 256 cap are
 distinct provisional resource-safety shortcuts, not Nostr limits or domain
-semantics. `SimpleGroup` has no domain refusal enum.
+semantics.
 
 Content queries preserve every unrelated selection axis, constrain lowercase
 `h` to exactly the group id without broadening an existing `h` axis, and use

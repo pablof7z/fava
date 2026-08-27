@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "372919e362f19e3f4994b2fd00c1798bb18b759a07b1c4f3c00693397f2b0685",
+  "inputs_sha256": "c277d4f78f85d1820621d87c2a72b739c330523329a86f936026e42c4c64b437",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -4944,6 +4944,12 @@
           "signature": "pub fn fava::FavaBuilder::event_cache<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_event_cache::EventCache + 'static"
         },
         {
+          "description": "Explicitly select an ephemeral (in-memory) event cache profile. The cache is empty on every open. Events are lost on process exit. Use this method to make the ephemeral choice explicit rather than implicit; it is equivalent to `event_cache(Arc::new(MemoryEventCache::default()))`.",
+          "kind": "Function",
+          "path": "fava::FavaBuilder::event_cache_ephemeral",
+          "signature": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self"
+        },
+        {
           "description": "Compiler-visible method owned by `fava::FavaBuilder`.",
           "kind": "Method",
           "path": "fava::FavaBuilder::materializer",
@@ -5256,12 +5262,6 @@
           "signature": "pub struct fava_runtime::TaskName(pub &'static str)"
         },
         {
-          "description": "Provides the compiler-visible `OperationGeneration` compiler-visible item shown below.",
-          "kind": "Compiler-visible item",
-          "path": "fava_runtime::OperationGeneration",
-          "signature": "pub use fava_runtime::OperationGeneration"
-        },
-        {
           "description": "Exports this term at `fava::BuildError` from `builder::BuildError`.",
           "kind": "Public export",
           "path": "fava::BuildError",
@@ -5278,12 +5278,6 @@
           "kind": "Public export",
           "path": "fava_runtime::CancellationToken",
           "signature": "pub use cancel::CancellationToken as fava_runtime::CancellationToken"
-        },
-        {
-          "description": "Exports this term at `fava_runtime::OperationGeneration` from `generation::OperationGeneration`.",
-          "kind": "Public export",
-          "path": "fava_runtime::OperationGeneration",
-          "signature": "pub use generation::OperationGeneration as fava_runtime::OperationGeneration"
         },
         {
           "description": "Exports this term at `fava_runtime::OperationName` from `name::OperationName`.",
@@ -5717,6 +5711,11 @@
             "path": "fava::FavaBuilder::event_cache"
           },
           {
+            "declaration": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self",
+            "implementation": "impl fava::FavaBuilder",
+            "path": "fava::FavaBuilder::event_cache_ephemeral"
+          },
+          {
             "declaration": "pub fn fava::FavaBuilder::materializer<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_write::materialization::ReplaceableEventMaterializer + 'static",
             "implementation": "impl fava::FavaBuilder",
             "path": "fava::FavaBuilder::materializer"
@@ -5949,10 +5948,6 @@
           {
             "declaration": "pub struct fava_runtime::TaskName(pub &'static str)",
             "path": "fava_runtime::TaskName"
-          },
-          {
-            "declaration": "pub use fava_runtime::OperationGeneration",
-            "path": "fava_runtime::OperationGeneration"
           }
         ],
         "reexports": [
@@ -5967,10 +5962,6 @@
           {
             "path": "fava_runtime::CancellationToken",
             "source": "cancel::CancellationToken"
-          },
-          {
-            "path": "fava_runtime::OperationGeneration",
-            "source": "generation::OperationGeneration"
           },
           {
             "path": "fava_runtime::OperationName",
@@ -6054,6 +6045,12 @@
           "kind": "Method",
           "path": "fava::FavaBuilder::event_cache",
           "signature": "pub fn fava::FavaBuilder::event_cache<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_event_cache::EventCache + 'static"
+        },
+        {
+          "description": "Explicitly select an ephemeral (in-memory) event cache profile. The cache is empty on every open. Events are lost on process exit. Use this method to make the ephemeral choice explicit rather than implicit; it is equivalent to `event_cache(Arc::new(MemoryEventCache::default()))`.",
+          "kind": "Function",
+          "path": "fava::FavaBuilder::event_cache_ephemeral",
+          "signature": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self"
         },
         {
           "description": "Compiler-visible method owned by `fava::FavaBuilder`.",
@@ -6174,6 +6171,11 @@
             "path": "fava::FavaBuilder::event_cache"
           },
           {
+            "declaration": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self",
+            "implementation": "impl fava::FavaBuilder",
+            "path": "fava::FavaBuilder::event_cache_ephemeral"
+          },
+          {
             "declaration": "pub fn fava::FavaBuilder::materializer<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_write::materialization::ReplaceableEventMaterializer + 'static",
             "implementation": "impl fava::FavaBuilder",
             "path": "fava::FavaBuilder::materializer"
@@ -6247,11 +6249,26 @@
       }
     },
     {
-      "interface": [],
+      "interface": [
+        {
+          "description": "Optional storage for opaque entries whose validity and freshness remain owned by the fetching protocol crate.",
+          "kind": "Bound declaration",
+          "path": "fava_fetch_cache::FetchCache",
+          "signature": "pub trait FetchCache: Send + Sync {\n    /// Query the cache for `key` using `ttl` to compute freshness.\n    fn get(&self, key: &str, ttl: Duration) -> FetchOutcome;\n\n    /// Store a successful response for `key` at the given `fetched_at` time.\n    fn set_ok(&self, key: &str, body: String, fetched_at: Instant);\n\n    /// Store a not-found result for `key` at the given `fetched_at` time.\n    fn set_not_found(&self, key: &str, fetched_at: Instant);\n\n    /// Store an error result for `key` at the given `fetched_at` time.\n    fn set_error(&self, key: &str, reason: String, fetched_at: Instant);\n\n    /// Remove any cached entry for `key`.\n    fn evict(&self, key: &str);\n}"
+        }
+      ],
       "name": "FetchCache",
       "review_problems": [],
       "structure": {
-        "private_architectural_state": [],
+        "private_architectural_state": [
+          {
+            "declaration": "pub trait FetchCache: Send + Sync {\n    /// Query the cache for `key` using `ttl` to compute freshness.\n    fn get(&self, key: &str, ttl: Duration) -> FetchOutcome;\n\n    /// Store a successful response for `key` at the given `fetched_at` time.\n    fn set_ok(&self, key: &str, body: String, fetched_at: Instant);\n\n    /// Store a not-found result for `key` at the given `fetched_at` time.\n    fn set_not_found(&self, key: &str, fetched_at: Instant);\n\n    /// Store an error result for `key` at the given `fetched_at` time.\n    fn set_error(&self, key: &str, reason: String, fetched_at: Instant);\n\n    /// Remove any cached entry for `key`.\n    fn evict(&self, key: &str);\n}",
+            "kind": "trait",
+            "path": "fava_fetch_cache::FetchCache",
+            "source": "crates/fava-fetch-cache/src/lib.rs",
+            "visibility": "public"
+          }
+        ],
         "public_api": [],
         "reexports": []
       }
@@ -6353,6 +6370,140 @@
           {
             "path": "fava_nip02::Follow",
             "source": "contact_list::Follow"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The open/closed access policy of a NIP-29 simple group.",
+          "kind": "Bound declaration",
+          "path": "fava_simple_groups::management::GroupAccess",
+          "signature": "pub enum GroupAccess {\n    /// Anyone may join; no `[\"closed\"]` tag emitted.\n    Open,\n    /// Joining requires admin approval; emits `[\"closed\"]` tag.\n    Closed,\n}"
+        },
+        {
+          "description": "Controls whether a kind-9002 metadata edit emits the NIP-29 `closed` tag that requires relay approval to join.",
+          "kind": "Enum",
+          "path": "fava_simple_groups::GroupAccess",
+          "signature": "pub enum fava_simple_groups::GroupAccess"
+        },
+        {
+          "description": "Emits `closed`, asking the relay to require approval before a user joins.",
+          "kind": "Enum variant",
+          "path": "fava_simple_groups::GroupAccess::Closed",
+          "signature": "pub fava_simple_groups::GroupAccess::Closed"
+        },
+        {
+          "description": "Emits no `closed` tag, leaving joining open under NIP-29 metadata semantics.",
+          "kind": "Enum variant",
+          "path": "fava_simple_groups::GroupAccess::Open",
+          "signature": "pub fava_simple_groups::GroupAccess::Open"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::GroupAccess` from `management::GroupAccess`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::GroupAccess",
+          "signature": "pub use management::GroupAccess as fava_simple_groups::GroupAccess"
+        }
+      ],
+      "name": "GroupAccess",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum GroupAccess {\n    /// Anyone may join; no `[\"closed\"]` tag emitted.\n    Open,\n    /// Joining requires admin approval; emits `[\"closed\"]` tag.\n    Closed,\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::management::GroupAccess",
+            "source": "crates/fava-simple-groups/src/management.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_simple_groups::GroupAccess",
+            "path": "fava_simple_groups::GroupAccess"
+          },
+          {
+            "declaration": "pub fava_simple_groups::GroupAccess::Closed",
+            "path": "fava_simple_groups::GroupAccess::Closed"
+          },
+          {
+            "declaration": "pub fava_simple_groups::GroupAccess::Open",
+            "path": "fava_simple_groups::GroupAccess::Open"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::GroupAccess",
+            "source": "management::GroupAccess"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The public/private visibility policy of a NIP-29 simple group.",
+          "kind": "Bound declaration",
+          "path": "fava_simple_groups::management::GroupVisibility",
+          "signature": "pub enum GroupVisibility {\n    /// Content is visible to all; no `[\"private\"]` tag emitted.\n    Public,\n    /// Content is withheld from non-members; emits `[\"private\"]` tag.\n    Private,\n}"
+        },
+        {
+          "description": "Controls whether a kind-9002 metadata edit emits the NIP-29 `private` tag that withholds group content from non-members.",
+          "kind": "Enum",
+          "path": "fava_simple_groups::GroupVisibility",
+          "signature": "pub enum fava_simple_groups::GroupVisibility"
+        },
+        {
+          "description": "Emits `private`, asking the relay to withhold group content from non-members.",
+          "kind": "Enum variant",
+          "path": "fava_simple_groups::GroupVisibility::Private",
+          "signature": "pub fava_simple_groups::GroupVisibility::Private"
+        },
+        {
+          "description": "Emits no `private` tag, leaving group content visible under NIP-29 metadata semantics.",
+          "kind": "Enum variant",
+          "path": "fava_simple_groups::GroupVisibility::Public",
+          "signature": "pub fava_simple_groups::GroupVisibility::Public"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::GroupVisibility` from `management::GroupVisibility`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::GroupVisibility",
+          "signature": "pub use management::GroupVisibility as fava_simple_groups::GroupVisibility"
+        }
+      ],
+      "name": "GroupVisibility",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum GroupVisibility {\n    /// Content is visible to all; no `[\"private\"]` tag emitted.\n    Public,\n    /// Content is withheld from non-members; emits `[\"private\"]` tag.\n    Private,\n}",
+            "kind": "enum",
+            "path": "fava_simple_groups::management::GroupVisibility",
+            "source": "crates/fava-simple-groups/src/management.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_simple_groups::GroupVisibility",
+            "path": "fava_simple_groups::GroupVisibility"
+          },
+          {
+            "declaration": "pub fava_simple_groups::GroupVisibility::Private",
+            "path": "fava_simple_groups::GroupVisibility::Private"
+          },
+          {
+            "declaration": "pub fava_simple_groups::GroupVisibility::Public",
+            "path": "fava_simple_groups::GroupVisibility::Public"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::GroupVisibility",
+            "source": "management::GroupVisibility"
           }
         ]
       }
@@ -8015,48 +8166,98 @@
     {
       "interface": [
         {
-          "description": "The stateless Publisher implementation that encodes one exact signed event, sends it to one relay session, and classifies the correlated NIP-01 outcome; approval is blocked because the crate currently has no behavioral test driving this implementation. Lifecycle: Constructed at assembly, invoked independently per attempt, acquires the exact requested relay session for that future, resolves once on matching OK or terminal handoff evidence, and retains no state after the future ends.",
+          "description": "A partial metadata update for a NIP-29 simple group, expressed as a kind-9002 management event body.",
           "kind": "Bound declaration",
-          "path": "fava_publisher_nip01::Nip01Publisher",
-          "signature": "pub struct Nip01Publisher;"
+          "path": "fava_simple_groups::management::MetadataEdit",
+          "signature": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n}"
         },
         {
-          "description": "Implements `fava_publisher::Publisher::publish` for `fava_publisher_nip01::Nip01Publisher`.",
-          "kind": "Function",
-          "path": "<fava_publisher_nip01::Nip01Publisher as fava_publisher::Publisher>::publish",
-          "signature": "pub fn fava_publisher_nip01::Nip01Publisher::publish<'a>(&'a self, fava_publisher::PublishAttempt, &'a dyn fava_transport::Transport) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = fava_publisher::PublishOutcome> + core::marker::Send + 'a)>>"
+          "description": "Supplies the exact group description; `None` emits no `about` tag.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::about",
+          "signature": "pub fava_simple_groups::MetadataEdit::about: core::option::Option<alloc::string::String>"
         },
         {
-          "description": "NIP-01 publisher using the selected relay transport.",
+          "description": "Selects open or approval-required joining; `None` emits no `closed` tag.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::access",
+          "signature": "pub fava_simple_groups::MetadataEdit::access: core::option::Option<fava_simple_groups::GroupAccess>"
+        },
+        {
+          "description": "Supplies the exact human-readable group name; `None` emits no `name` tag.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::name",
+          "signature": "pub fava_simple_groups::MetadataEdit::name: core::option::Option<alloc::string::String>"
+        },
+        {
+          "description": "Supplies the exact group-picture URL text; `None` emits no `picture` tag.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::picture",
+          "signature": "pub fava_simple_groups::MetadataEdit::picture: core::option::Option<alloc::string::String>"
+        },
+        {
+          "description": "Selects public or member-only content visibility; `None` emits no `private` tag.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::visibility",
+          "signature": "pub fava_simple_groups::MetadataEdit::visibility: core::option::Option<fava_simple_groups::GroupVisibility>"
+        },
+        {
+          "description": "The exact optional fields used to build one kind-9002 metadata replacement request; `None` omits that field's tag.",
           "kind": "Struct",
-          "path": "fava_publisher_nip01::Nip01Publisher",
-          "signature": "pub struct fava_publisher_nip01::Nip01Publisher"
+          "path": "fava_simple_groups::MetadataEdit",
+          "signature": "pub struct fava_simple_groups::MetadataEdit"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::MetadataEdit` from `management::MetadataEdit`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::MetadataEdit",
+          "signature": "pub use management::MetadataEdit as fava_simple_groups::MetadataEdit"
         }
       ],
-      "name": "Nip01Publisher",
+      "name": "MetadataEdit",
       "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct Nip01Publisher;",
+            "declaration": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n}",
             "kind": "struct",
-            "path": "fava_publisher_nip01::Nip01Publisher",
-            "source": "crates/fava-publisher-nip01/src/lib.rs",
+            "path": "fava_simple_groups::management::MetadataEdit",
+            "source": "crates/fava-simple-groups/src/management.rs",
             "visibility": "public"
           }
         ],
         "public_api": [
           {
-            "declaration": "pub fn fava_publisher_nip01::Nip01Publisher::publish<'a>(&'a self, fava_publisher::PublishAttempt, &'a dyn fava_transport::Transport) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = fava_publisher::PublishOutcome> + core::marker::Send + 'a)>>",
-            "implementation": "impl fava_publisher::Publisher for fava_publisher_nip01::Nip01Publisher",
-            "path": "<fava_publisher_nip01::Nip01Publisher as fava_publisher::Publisher>::publish"
+            "declaration": "pub fava_simple_groups::MetadataEdit::about: core::option::Option<alloc::string::String>",
+            "path": "fava_simple_groups::MetadataEdit::about"
           },
           {
-            "declaration": "pub struct fava_publisher_nip01::Nip01Publisher",
-            "path": "fava_publisher_nip01::Nip01Publisher"
+            "declaration": "pub fava_simple_groups::MetadataEdit::access: core::option::Option<fava_simple_groups::GroupAccess>",
+            "path": "fava_simple_groups::MetadataEdit::access"
+          },
+          {
+            "declaration": "pub fava_simple_groups::MetadataEdit::name: core::option::Option<alloc::string::String>",
+            "path": "fava_simple_groups::MetadataEdit::name"
+          },
+          {
+            "declaration": "pub fava_simple_groups::MetadataEdit::picture: core::option::Option<alloc::string::String>",
+            "path": "fava_simple_groups::MetadataEdit::picture"
+          },
+          {
+            "declaration": "pub fava_simple_groups::MetadataEdit::visibility: core::option::Option<fava_simple_groups::GroupVisibility>",
+            "path": "fava_simple_groups::MetadataEdit::visibility"
+          },
+          {
+            "declaration": "pub struct fava_simple_groups::MetadataEdit",
+            "path": "fava_simple_groups::MetadataEdit"
           }
         ],
-        "reexports": []
+        "reexports": [
+          {
+            "path": "fava_simple_groups::MetadataEdit",
+            "source": "management::MetadataEdit"
+          }
+        ]
       }
     },
     {
@@ -10983,22 +11184,10 @@
           "signature": "pub struct Query {\n    /// Event selection.\n    selection: FilterSelection,\n    /// Acquisition and provenance authority.\n    source: QuerySourcePolicy,\n    /// Relay access.\n    access: RelayAccess,\n    /// Whether live relay demand is permitted.\n    freshness: Freshness,\n    /// Deterministic result order.\n    ordering: QueryOrdering,\n    /// Whole-query result bound.\n    limit: Option<NonZeroUsize>,\n}"
         },
         {
-          "description": "Compiler-visible constant owned by `fava_query::BoundedText`.",
-          "kind": "Constant",
-          "path": "fava_query::BoundedText::MAX_BYTES",
-          "signature": "pub const fava_query::BoundedText::MAX_BYTES: usize"
-        },
-        {
           "description": "Compiler-visible constant owned by `fava_query::QueryBranchId`.",
           "kind": "Constant",
           "path": "fava_query::QueryBranchId::ROOT",
           "signature": "pub const fava_query::QueryBranchId::ROOT: Self"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::BoundedText`.",
-          "kind": "Method",
-          "path": "fava_query::BoundedText::truncated_bytes",
-          "signature": "pub const fn fava_query::BoundedText::truncated_bytes(&self) -> usize"
         },
         {
           "description": "Compiler-visible method owned by `fava_query::Query`.",
@@ -11061,12 +11250,6 @@
           "signature": "pub const fn fava_query::QuerySourcePolicy::authority(&self) -> &fava_query::ResultAuthority"
         },
         {
-          "description": "Compiler-visible enum `fava_query::AuthenticationState`.",
-          "kind": "Enum",
-          "path": "fava_query::AuthenticationState",
-          "signature": "pub enum fava_query::AuthenticationState"
-        },
-        {
           "description": "Compiler-visible enum `fava_query::Freshness`.",
           "kind": "Enum",
           "path": "fava_query::Freshness",
@@ -11091,64 +11274,10 @@
           "signature": "pub enum fava_query::QueryOrdering"
         },
         {
-          "description": "Compiler-visible enum `fava_query::RelayDeadline`.",
-          "kind": "Enum",
-          "path": "fava_query::RelayDeadline",
-          "signature": "pub enum fava_query::RelayDeadline"
-        },
-        {
-          "description": "Compiler-visible enum `fava_query::RelaySourceState`.",
-          "kind": "Enum",
-          "path": "fava_query::RelaySourceState",
-          "signature": "pub enum fava_query::RelaySourceState"
-        },
-        {
-          "description": "Compiler-visible enum `fava_query::RelayWithdrawal`.",
-          "kind": "Enum",
-          "path": "fava_query::RelayWithdrawal",
-          "signature": "pub enum fava_query::RelayWithdrawal"
-        },
-        {
           "description": "Compiler-visible enum `fava_query::ResultAuthority`.",
           "kind": "Enum",
           "path": "fava_query::ResultAuthority",
           "signature": "pub enum fava_query::ResultAuthority"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::AuthenticationState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::AuthenticationState::AcceptedButStillRefused",
-          "signature": "pub fava_query::AuthenticationState::AcceptedButStillRefused"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::AuthenticationState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::AuthenticationState::Attempted",
-          "signature": "pub fava_query::AuthenticationState::Attempted"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::AuthenticationState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::AuthenticationState::ChallengeReceived",
-          "signature": "pub fava_query::AuthenticationState::ChallengeReceived"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::AuthenticationState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::AuthenticationState::Declined",
-          "signature": "pub fava_query::AuthenticationState::Declined"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::AuthenticationState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::AuthenticationState::Rejected",
-          "signature": "pub fava_query::AuthenticationState::Rejected"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::AuthenticationState`.",
-          "kind": "Public field",
-          "path": "fava_query::AuthenticationState::Rejected::message",
-          "signature": "pub fava_query::AuthenticationState::Rejected::message: fava_query::BoundedText"
         },
         {
           "description": "Compiler-visible public field owned by `fava_query::FilterSelection`.",
@@ -11225,96 +11354,6 @@
         {
           "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
           "kind": "Enum variant",
-          "path": "fava_query::QueryError::TooManyAuthors",
-          "signature": "pub fava_query::QueryError::TooManyAuthors"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyAuthors::actual",
-          "signature": "pub fava_query::QueryError::TooManyAuthors::actual: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyAuthors::maximum",
-          "signature": "pub fava_query::QueryError::TooManyAuthors::maximum: usize"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
-          "kind": "Enum variant",
-          "path": "fava_query::QueryError::TooManyExplicitRelays",
-          "signature": "pub fava_query::QueryError::TooManyExplicitRelays"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyExplicitRelays::actual",
-          "signature": "pub fava_query::QueryError::TooManyExplicitRelays::actual: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyExplicitRelays::maximum",
-          "signature": "pub fava_query::QueryError::TooManyExplicitRelays::maximum: usize"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
-          "kind": "Enum variant",
-          "path": "fava_query::QueryError::TooManyIds",
-          "signature": "pub fava_query::QueryError::TooManyIds"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyIds::actual",
-          "signature": "pub fava_query::QueryError::TooManyIds::actual: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyIds::maximum",
-          "signature": "pub fava_query::QueryError::TooManyIds::maximum: usize"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
-          "kind": "Enum variant",
-          "path": "fava_query::QueryError::TooManyKinds",
-          "signature": "pub fava_query::QueryError::TooManyKinds"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyKinds::actual",
-          "signature": "pub fava_query::QueryError::TooManyKinds::actual: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyKinds::maximum",
-          "signature": "pub fava_query::QueryError::TooManyKinds::maximum: usize"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
-          "kind": "Enum variant",
-          "path": "fava_query::QueryError::TooManyTagValues",
-          "signature": "pub fava_query::QueryError::TooManyTagValues"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyTagValues::actual",
-          "signature": "pub fava_query::QueryError::TooManyTagValues::actual: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::QueryError`.",
-          "kind": "Public field",
-          "path": "fava_query::QueryError::TooManyTagValues::maximum",
-          "signature": "pub fava_query::QueryError::TooManyTagValues::maximum: usize"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::QueryError`.",
-          "kind": "Enum variant",
           "path": "fava_query::QueryError::ZeroLimit",
           "signature": "pub fava_query::QueryError::ZeroLimit"
         },
@@ -11331,180 +11370,6 @@
           "signature": "pub fava_query::QueryOrdering::OldestFirst"
         },
         {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayDeadline`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayDeadline::Close",
-          "signature": "pub fava_query::RelayDeadline::Close"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayDeadline`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayDeadline::Establish",
-          "signature": "pub fava_query::RelayDeadline::Establish"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayDeadline`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayDeadline::Idle",
-          "signature": "pub fava_query::RelayDeadline::Idle"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayDeadline`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayDeadline::Write",
-          "signature": "pub fava_query::RelayDeadline::Write"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::AuthenticationRequired",
-          "signature": "pub fava_query::RelaySourceState::AuthenticationRequired"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::AuthenticationRequired::at",
-          "signature": "pub fava_query::RelaySourceState::AuthenticationRequired::at: nostr::types::time::Timestamp"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::AuthenticationRequired::state",
-          "signature": "pub fava_query::RelaySourceState::AuthenticationRequired::state: fava_query::AuthenticationState"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Connecting",
-          "signature": "pub fava_query::RelaySourceState::Connecting"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Disconnected",
-          "signature": "pub fava_query::RelaySourceState::Disconnected"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Disconnected::detail",
-          "signature": "pub fava_query::RelaySourceState::Disconnected::detail: fava_query::BoundedText"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Open",
-          "signature": "pub fava_query::RelaySourceState::Open"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Open::requested_at",
-          "signature": "pub fava_query::RelaySourceState::Open::requested_at: nostr::types::time::Timestamp"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Planned",
-          "signature": "pub fava_query::RelaySourceState::Planned"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Refused",
-          "signature": "pub fava_query::RelaySourceState::Refused"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Refused::at",
-          "signature": "pub fava_query::RelaySourceState::Refused::at: nostr::types::time::Timestamp"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Refused::message",
-          "signature": "pub fava_query::RelaySourceState::Refused::message: fava_query::BoundedText"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::StoredEventsComplete",
-          "signature": "pub fava_query::RelaySourceState::StoredEventsComplete"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::StoredEventsComplete::at",
-          "signature": "pub fava_query::RelaySourceState::StoredEventsComplete::at: nostr::types::time::Timestamp"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::TimedOut",
-          "signature": "pub fava_query::RelaySourceState::TimedOut"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::TimedOut::after_ms",
-          "signature": "pub fava_query::RelaySourceState::TimedOut::after_ms: u64"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::TimedOut::deadline",
-          "signature": "pub fava_query::RelaySourceState::TimedOut::deadline: fava_query::RelayDeadline"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Unreachable",
-          "signature": "pub fava_query::RelaySourceState::Unreachable"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Unreachable::attempts",
-          "signature": "pub fava_query::RelaySourceState::Unreachable::attempts: usize"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Unreachable::detail",
-          "signature": "pub fava_query::RelaySourceState::Unreachable::detail: fava_query::BoundedText"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelaySourceState`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelaySourceState::Withdrawn",
-          "signature": "pub fava_query::RelaySourceState::Withdrawn"
-        },
-        {
-          "description": "Compiler-visible public field owned by `fava_query::RelaySourceState`.",
-          "kind": "Public field",
-          "path": "fava_query::RelaySourceState::Withdrawn::reason",
-          "signature": "pub fava_query::RelaySourceState::Withdrawn::reason: fava_query::RelayWithdrawal"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayWithdrawal`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayWithdrawal::ObservationClosed",
-          "signature": "pub fava_query::RelayWithdrawal::ObservationClosed"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayWithdrawal`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayWithdrawal::RouteWithdrawn",
-          "signature": "pub fava_query::RelayWithdrawal::RouteWithdrawn"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::RelayWithdrawal`.",
-          "kind": "Enum variant",
-          "path": "fava_query::RelayWithdrawal::Shutdown",
-          "signature": "pub fava_query::RelayWithdrawal::Shutdown"
-        },
-        {
           "description": "Compiler-visible enum variant owned by `fava_query::ResultAuthority`.",
           "kind": "Enum variant",
           "path": "fava_query::ResultAuthority::AnyLocal",
@@ -11515,18 +11380,6 @@
           "kind": "Enum variant",
           "path": "fava_query::ResultAuthority::OnlyRelays",
           "signature": "pub fava_query::ResultAuthority::OnlyRelays(alloc::collections::btree::set::BTreeSet<nostr::types::url::RelayUrl>)"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::BoundedText`.",
-          "kind": "Method",
-          "path": "fava_query::BoundedText::as_str",
-          "signature": "pub fn fava_query::BoundedText::as_str(&self) -> &str"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::BoundedText`.",
-          "kind": "Constructor",
-          "path": "fava_query::BoundedText::new",
-          "signature": "pub fn fava_query::BoundedText::new(impl core::convert::AsRef<str>) -> Self"
         },
         {
           "description": "Compiler-visible method owned by `fava_query::Query`.",
@@ -11601,12 +11454,6 @@
           "signature": "pub fn fava_query::QuerySourcePolicy::default() -> Self"
         },
         {
-          "description": "Compiler-visible struct `fava_query::BoundedText`.",
-          "kind": "Struct",
-          "path": "fava_query::BoundedText",
-          "signature": "pub struct fava_query::BoundedText"
-        },
-        {
           "description": "Compiler-visible struct `fava_query::FilterSelection`.",
           "kind": "Struct",
           "path": "fava_query::FilterSelection",
@@ -11637,18 +11484,6 @@
           "signature": "pub struct fava_query::QuerySourcePolicy"
         },
         {
-          "description": "Exports this term at `fava_query::AuthenticationState` from `evidence::AuthenticationState`.",
-          "kind": "Public export",
-          "path": "fava_query::AuthenticationState",
-          "signature": "pub use evidence::AuthenticationState as fava_query::AuthenticationState"
-        },
-        {
-          "description": "Exports this term at `fava_query::BoundedText` from `evidence::BoundedText`.",
-          "kind": "Public export",
-          "path": "fava_query::BoundedText",
-          "signature": "pub use evidence::BoundedText as fava_query::BoundedText"
-        },
-        {
           "description": "Exports this term at `fava_query::FilterSelection` from `selection::FilterSelection`.",
           "kind": "Public export",
           "path": "fava_query::FilterSelection",
@@ -11665,24 +11500,6 @@
           "kind": "Public export",
           "path": "fava_query::QueryBranchId",
           "signature": "pub use identity::QueryBranchId as fava_query::QueryBranchId"
-        },
-        {
-          "description": "Exports this term at `fava_query::RelayDeadline` from `evidence::RelayDeadline`.",
-          "kind": "Public export",
-          "path": "fava_query::RelayDeadline",
-          "signature": "pub use evidence::RelayDeadline as fava_query::RelayDeadline"
-        },
-        {
-          "description": "Exports this term at `fava_query::RelaySourceState` from `evidence::RelaySourceState`.",
-          "kind": "Public export",
-          "path": "fava_query::RelaySourceState",
-          "signature": "pub use evidence::RelaySourceState as fava_query::RelaySourceState"
-        },
-        {
-          "description": "Exports this term at `fava_query::RelayWithdrawal` from `evidence::RelayWithdrawal`.",
-          "kind": "Public export",
-          "path": "fava_query::RelayWithdrawal",
-          "signature": "pub use evidence::RelayWithdrawal as fava_query::RelayWithdrawal"
         }
       ],
       "name": "Query",
@@ -11699,19 +11516,9 @@
         ],
         "public_api": [
           {
-            "declaration": "pub const fava_query::BoundedText::MAX_BYTES: usize",
-            "implementation": "impl fava_query::BoundedText",
-            "path": "fava_query::BoundedText::MAX_BYTES"
-          },
-          {
             "declaration": "pub const fava_query::QueryBranchId::ROOT: Self",
             "implementation": "impl fava_query::QueryBranchId",
             "path": "fava_query::QueryBranchId::ROOT"
-          },
-          {
-            "declaration": "pub const fn fava_query::BoundedText::truncated_bytes(&self) -> usize",
-            "implementation": "impl fava_query::BoundedText",
-            "path": "fava_query::BoundedText::truncated_bytes"
           },
           {
             "declaration": "pub const fn fava_query::Query::access(&self) -> &fava_relay::RelayAccess",
@@ -11764,10 +11571,6 @@
             "path": "fava_query::QuerySourcePolicy::authority"
           },
           {
-            "declaration": "pub enum fava_query::AuthenticationState",
-            "path": "fava_query::AuthenticationState"
-          },
-          {
             "declaration": "pub enum fava_query::Freshness",
             "path": "fava_query::Freshness"
           },
@@ -11784,44 +11587,8 @@
             "path": "fava_query::QueryOrdering"
           },
           {
-            "declaration": "pub enum fava_query::RelayDeadline",
-            "path": "fava_query::RelayDeadline"
-          },
-          {
-            "declaration": "pub enum fava_query::RelaySourceState",
-            "path": "fava_query::RelaySourceState"
-          },
-          {
-            "declaration": "pub enum fava_query::RelayWithdrawal",
-            "path": "fava_query::RelayWithdrawal"
-          },
-          {
             "declaration": "pub enum fava_query::ResultAuthority",
             "path": "fava_query::ResultAuthority"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::AcceptedButStillRefused",
-            "path": "fava_query::AuthenticationState::AcceptedButStillRefused"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::Attempted",
-            "path": "fava_query::AuthenticationState::Attempted"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::ChallengeReceived",
-            "path": "fava_query::AuthenticationState::ChallengeReceived"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::Declined",
-            "path": "fava_query::AuthenticationState::Declined"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::Rejected",
-            "path": "fava_query::AuthenticationState::Rejected"
-          },
-          {
-            "declaration": "pub fava_query::AuthenticationState::Rejected::message: fava_query::BoundedText",
-            "path": "fava_query::AuthenticationState::Rejected::message"
           },
           {
             "declaration": "pub fava_query::FilterSelection::authors: core::option::Option<alloc::collections::btree::set::BTreeSet<nostr::key::public_key::PublicKey>>",
@@ -11872,66 +11639,6 @@
             "path": "fava_query::QueryError::EmptyExplicitRelays"
           },
           {
-            "declaration": "pub fava_query::QueryError::TooManyAuthors",
-            "path": "fava_query::QueryError::TooManyAuthors"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyAuthors::actual: usize",
-            "path": "fava_query::QueryError::TooManyAuthors::actual"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyAuthors::maximum: usize",
-            "path": "fava_query::QueryError::TooManyAuthors::maximum"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays",
-            "path": "fava_query::QueryError::TooManyExplicitRelays"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays::actual: usize",
-            "path": "fava_query::QueryError::TooManyExplicitRelays::actual"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyExplicitRelays::maximum: usize",
-            "path": "fava_query::QueryError::TooManyExplicitRelays::maximum"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyIds",
-            "path": "fava_query::QueryError::TooManyIds"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyIds::actual: usize",
-            "path": "fava_query::QueryError::TooManyIds::actual"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyIds::maximum: usize",
-            "path": "fava_query::QueryError::TooManyIds::maximum"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyKinds",
-            "path": "fava_query::QueryError::TooManyKinds"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyKinds::actual: usize",
-            "path": "fava_query::QueryError::TooManyKinds::actual"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyKinds::maximum: usize",
-            "path": "fava_query::QueryError::TooManyKinds::maximum"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyTagValues",
-            "path": "fava_query::QueryError::TooManyTagValues"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyTagValues::actual: usize",
-            "path": "fava_query::QueryError::TooManyTagValues::actual"
-          },
-          {
-            "declaration": "pub fava_query::QueryError::TooManyTagValues::maximum: usize",
-            "path": "fava_query::QueryError::TooManyTagValues::maximum"
-          },
-          {
             "declaration": "pub fava_query::QueryError::ZeroLimit",
             "path": "fava_query::QueryError::ZeroLimit"
           },
@@ -11944,138 +11651,12 @@
             "path": "fava_query::QueryOrdering::OldestFirst"
           },
           {
-            "declaration": "pub fava_query::RelayDeadline::Close",
-            "path": "fava_query::RelayDeadline::Close"
-          },
-          {
-            "declaration": "pub fava_query::RelayDeadline::Establish",
-            "path": "fava_query::RelayDeadline::Establish"
-          },
-          {
-            "declaration": "pub fava_query::RelayDeadline::Idle",
-            "path": "fava_query::RelayDeadline::Idle"
-          },
-          {
-            "declaration": "pub fava_query::RelayDeadline::Write",
-            "path": "fava_query::RelayDeadline::Write"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::AuthenticationRequired",
-            "path": "fava_query::RelaySourceState::AuthenticationRequired"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::AuthenticationRequired::at: nostr::types::time::Timestamp",
-            "path": "fava_query::RelaySourceState::AuthenticationRequired::at"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::AuthenticationRequired::state: fava_query::AuthenticationState",
-            "path": "fava_query::RelaySourceState::AuthenticationRequired::state"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Connecting",
-            "path": "fava_query::RelaySourceState::Connecting"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Disconnected",
-            "path": "fava_query::RelaySourceState::Disconnected"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Disconnected::detail: fava_query::BoundedText",
-            "path": "fava_query::RelaySourceState::Disconnected::detail"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Open",
-            "path": "fava_query::RelaySourceState::Open"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Open::requested_at: nostr::types::time::Timestamp",
-            "path": "fava_query::RelaySourceState::Open::requested_at"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Planned",
-            "path": "fava_query::RelaySourceState::Planned"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Refused",
-            "path": "fava_query::RelaySourceState::Refused"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Refused::at: nostr::types::time::Timestamp",
-            "path": "fava_query::RelaySourceState::Refused::at"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Refused::message: fava_query::BoundedText",
-            "path": "fava_query::RelaySourceState::Refused::message"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::StoredEventsComplete",
-            "path": "fava_query::RelaySourceState::StoredEventsComplete"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::StoredEventsComplete::at: nostr::types::time::Timestamp",
-            "path": "fava_query::RelaySourceState::StoredEventsComplete::at"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::TimedOut",
-            "path": "fava_query::RelaySourceState::TimedOut"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::TimedOut::after_ms: u64",
-            "path": "fava_query::RelaySourceState::TimedOut::after_ms"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::TimedOut::deadline: fava_query::RelayDeadline",
-            "path": "fava_query::RelaySourceState::TimedOut::deadline"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Unreachable",
-            "path": "fava_query::RelaySourceState::Unreachable"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Unreachable::attempts: usize",
-            "path": "fava_query::RelaySourceState::Unreachable::attempts"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Unreachable::detail: fava_query::BoundedText",
-            "path": "fava_query::RelaySourceState::Unreachable::detail"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Withdrawn",
-            "path": "fava_query::RelaySourceState::Withdrawn"
-          },
-          {
-            "declaration": "pub fava_query::RelaySourceState::Withdrawn::reason: fava_query::RelayWithdrawal",
-            "path": "fava_query::RelaySourceState::Withdrawn::reason"
-          },
-          {
-            "declaration": "pub fava_query::RelayWithdrawal::ObservationClosed",
-            "path": "fava_query::RelayWithdrawal::ObservationClosed"
-          },
-          {
-            "declaration": "pub fava_query::RelayWithdrawal::RouteWithdrawn",
-            "path": "fava_query::RelayWithdrawal::RouteWithdrawn"
-          },
-          {
-            "declaration": "pub fava_query::RelayWithdrawal::Shutdown",
-            "path": "fava_query::RelayWithdrawal::Shutdown"
-          },
-          {
             "declaration": "pub fava_query::ResultAuthority::AnyLocal",
             "path": "fava_query::ResultAuthority::AnyLocal"
           },
           {
             "declaration": "pub fava_query::ResultAuthority::OnlyRelays(alloc::collections::btree::set::BTreeSet<nostr::types::url::RelayUrl>)",
             "path": "fava_query::ResultAuthority::OnlyRelays"
-          },
-          {
-            "declaration": "pub fn fava_query::BoundedText::as_str(&self) -> &str",
-            "implementation": "impl fava_query::BoundedText",
-            "path": "fava_query::BoundedText::as_str"
-          },
-          {
-            "declaration": "pub fn fava_query::BoundedText::new(impl core::convert::AsRef<str>) -> Self",
-            "implementation": "impl fava_query::BoundedText",
-            "path": "fava_query::BoundedText::new"
           },
           {
             "declaration": "pub fn fava_query::Query::authors(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> core::result::Result<Self, fava_query::QueryError>",
@@ -12138,10 +11719,6 @@
             "path": "<fava_query::QuerySourcePolicy as core::default::Default>::default"
           },
           {
-            "declaration": "pub struct fava_query::BoundedText",
-            "path": "fava_query::BoundedText"
-          },
-          {
             "declaration": "pub struct fava_query::FilterSelection",
             "path": "fava_query::FilterSelection"
           },
@@ -12164,14 +11741,6 @@
         ],
         "reexports": [
           {
-            "path": "fava_query::AuthenticationState",
-            "source": "evidence::AuthenticationState"
-          },
-          {
-            "path": "fava_query::BoundedText",
-            "source": "evidence::BoundedText"
-          },
-          {
             "path": "fava_query::FilterSelection",
             "source": "selection::FilterSelection"
           },
@@ -12182,18 +11751,6 @@
           {
             "path": "fava_query::QueryBranchId",
             "source": "identity::QueryBranchId"
-          },
-          {
-            "path": "fava_query::RelayDeadline",
-            "source": "evidence::RelayDeadline"
-          },
-          {
-            "path": "fava_query::RelaySourceState",
-            "source": "evidence::RelaySourceState"
-          },
-          {
-            "path": "fava_query::RelayWithdrawal",
-            "source": "evidence::RelayWithdrawal"
           }
         ]
       }
@@ -13748,7 +13305,7 @@
           "description": "A local owner that supplies one complete current event contribution and later replacement snapshots for a Query.",
           "kind": "Bound declaration",
           "path": "fava_query::QuerySource",
-          "signature": "pub trait QuerySource: Send + Sync {\n    /// Open one continuous local observation.\n    ///\n    /// # Errors\n    ///\n    /// Returns [`QuerySourceError`] when the provider cannot establish one\n    /// coherent initial snapshot plus later revision sequence.\n    fn open(&self, query: &Query) -> Result<OpenedQuerySource, QuerySourceError>;\n}"
+          "signature": "pub trait QuerySource: Send + Sync {\n    /// Open one continuous local observation.\n    ///\n    /// # Arguments\n    ///\n    /// * `query` - the declarative request this source is asked to observe\n    ///\n    /// # Errors\n    ///\n    /// Returns [`QuerySourceError`] when the provider cannot establish one\n    /// coherent initial snapshot plus later revision sequence.\n    fn open(&self, query: &Query) -> Result<OpenedQuerySource, QuerySourceError>;\n}"
         },
         {
           "description": "Compiler-visible method owned by `fava_query::QuerySourceClosed`.",
@@ -14062,7 +13619,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub trait QuerySource: Send + Sync {\n    /// Open one continuous local observation.\n    ///\n    /// # Errors\n    ///\n    /// Returns [`QuerySourceError`] when the provider cannot establish one\n    /// coherent initial snapshot plus later revision sequence.\n    fn open(&self, query: &Query) -> Result<OpenedQuerySource, QuerySourceError>;\n}",
+            "declaration": "pub trait QuerySource: Send + Sync {\n    /// Open one continuous local observation.\n    ///\n    /// # Arguments\n    ///\n    /// * `query` - the declarative request this source is asked to observe\n    ///\n    /// # Errors\n    ///\n    /// Returns [`QuerySourceError`] when the provider cannot establish one\n    /// coherent initial snapshot plus later revision sequence.\n    fn open(&self, query: &Query) -> Result<OpenedQuerySource, QuerySourceError>;\n}",
             "kind": "trait",
             "path": "fava_query::QuerySource",
             "source": "crates/fava-query/src/lib.rs",
@@ -16036,24 +15593,6 @@
           "signature": "pub enum fava_nip65::RelayListError"
         },
         {
-          "description": "Refuses the 257th distinct valid accepted relay identity.",
-          "kind": "Enum variant",
-          "path": "fava_nip65::RelayListError::TooManyRelays",
-          "signature": "pub fava_nip65::RelayListError::TooManyRelays"
-        },
-        {
-          "description": "Distinct accepted relay count at refusal.",
-          "kind": "Public field",
-          "path": "fava_nip65::RelayListError::TooManyRelays::actual",
-          "signature": "pub fava_nip65::RelayListError::TooManyRelays::actual: usize"
-        },
-        {
-          "description": "Declared maximum of 256.",
-          "kind": "Public field",
-          "path": "fava_nip65::RelayListError::TooManyRelays::maximum",
-          "signature": "pub fava_nip65::RelayListError::TooManyRelays::maximum: usize"
-        },
-        {
           "description": "Refuses an event whose kind is not 10002.",
           "kind": "Enum variant",
           "path": "fava_nip65::RelayListError::WrongKind",
@@ -16109,18 +15648,6 @@
           {
             "declaration": "pub enum fava_nip65::RelayListError",
             "path": "fava_nip65::RelayListError"
-          },
-          {
-            "declaration": "pub fava_nip65::RelayListError::TooManyRelays",
-            "path": "fava_nip65::RelayListError::TooManyRelays"
-          },
-          {
-            "declaration": "pub fava_nip65::RelayListError::TooManyRelays::actual: usize",
-            "path": "fava_nip65::RelayListError::TooManyRelays::actual"
-          },
-          {
-            "declaration": "pub fava_nip65::RelayListError::TooManyRelays::maximum: usize",
-            "path": "fava_nip65::RelayListError::TooManyRelays::maximum"
           },
           {
             "declaration": "pub fava_nip65::RelayListError::WrongKind",
@@ -17220,7 +16747,7 @@
           "description": "A replaceable protocol provider that applies one durable semantic edit with the accepted write's frozen author to qualified signed or unsigned source or defined empty state and produces an unsigned replacement event; universal publication invokes the exact refreshed durable sequence in order and attests that complete sequence at successor installation.",
           "kind": "Bound declaration",
           "path": "fava_write::materialization::ReplaceableEventMaterializer",
-          "signature": "pub trait ReplaceableEventMaterializer: Send + Sync {\n    /// Exact replaceable or addressable event kind owned by this provider.\n    fn kind(&self) -> Kind;\n\n    /// Whether this provider owns the edit's coordinate and change encoding.\n    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;\n\n    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.\n    ///\n    /// The caller supplies the accepted write's exact author and timestamp.\n    /// Implementations return only an unsigned event and receive no custody,\n    /// signer, routing, publication, delivery, cache, or receipt authority.\n    ///\n    /// # Errors\n    ///\n    /// Returns an existing typed write refusal when the opaque change or\n    /// resulting event cannot be materialized.\n    fn materialize(\n        &self,\n        edit: &ReplaceableEventEdit,\n        author: PublicKey,\n        source: Option<&EventValue>,\n        created_at: Timestamp,\n    ) -> Result<UnsignedEvent, WriteIntentError>;\n}"
+          "signature": "pub trait ReplaceableEventMaterializer: Send + Sync {\n    /// Exact replaceable or addressable event kind owned by this provider.\n    fn kind(&self) -> Kind;\n\n    /// Whether this provider owns the edit's coordinate and change encoding.\n    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;\n\n    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.\n    ///\n    /// The caller supplies the accepted write's exact author and timestamp.\n    /// Implementations return only an unsigned event and receive no custody,\n    /// signer, routing, publication, delivery, cache, or receipt authority.\n    ///\n    /// # Arguments\n    ///\n    /// * `edit` - the opaque protocol-owned change to apply\n    /// * `author` - the accepted write's exact author\n    /// * `source` - the current qualified event for this coordinate, or\n    ///   `None` when the coordinate is protocol-defined empty state\n    /// * `created_at` - the accepted write's exact timestamp\n    ///\n    /// # Errors\n    ///\n    /// Returns an existing typed write refusal when the opaque change or\n    /// resulting event cannot be materialized.\n    fn materialize(\n        &self,\n        edit: &ReplaceableEventEdit,\n        author: PublicKey,\n        source: Option<&EventValue>,\n        created_at: Timestamp,\n    ) -> Result<UnsignedEvent, WriteIntentError>;\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -17263,7 +16790,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub trait ReplaceableEventMaterializer: Send + Sync {\n    /// Exact replaceable or addressable event kind owned by this provider.\n    fn kind(&self) -> Kind;\n\n    /// Whether this provider owns the edit's coordinate and change encoding.\n    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;\n\n    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.\n    ///\n    /// The caller supplies the accepted write's exact author and timestamp.\n    /// Implementations return only an unsigned event and receive no custody,\n    /// signer, routing, publication, delivery, cache, or receipt authority.\n    ///\n    /// # Errors\n    ///\n    /// Returns an existing typed write refusal when the opaque change or\n    /// resulting event cannot be materialized.\n    fn materialize(\n        &self,\n        edit: &ReplaceableEventEdit,\n        author: PublicKey,\n        source: Option<&EventValue>,\n        created_at: Timestamp,\n    ) -> Result<UnsignedEvent, WriteIntentError>;\n}",
+            "declaration": "pub trait ReplaceableEventMaterializer: Send + Sync {\n    /// Exact replaceable or addressable event kind owned by this provider.\n    fn kind(&self) -> Kind;\n\n    /// Whether this provider owns the edit's coordinate and change encoding.\n    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;\n\n    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.\n    ///\n    /// The caller supplies the accepted write's exact author and timestamp.\n    /// Implementations return only an unsigned event and receive no custody,\n    /// signer, routing, publication, delivery, cache, or receipt authority.\n    ///\n    /// # Arguments\n    ///\n    /// * `edit` - the opaque protocol-owned change to apply\n    /// * `author` - the accepted write's exact author\n    /// * `source` - the current qualified event for this coordinate, or\n    ///   `None` when the coordinate is protocol-defined empty state\n    /// * `created_at` - the accepted write's exact timestamp\n    ///\n    /// # Errors\n    ///\n    /// Returns an existing typed write refusal when the opaque change or\n    /// resulting event cannot be materialized.\n    fn materialize(\n        &self,\n        edit: &ReplaceableEventEdit,\n        author: PublicKey,\n        source: Option<&EventValue>,\n        created_at: Timestamp,\n    ) -> Result<UnsignedEvent, WriteIntentError>;\n}",
             "kind": "trait",
             "path": "fava_write::materialization::ReplaceableEventMaterializer",
             "source": "crates/fava-write/src/materialization.rs",
@@ -19420,7 +18947,7 @@
           "signature": "pub struct Session {\n    inner: Arc<Inner>,\n}"
         },
         {
-          "description": "Typed refusal from the bounded runtime signer owner.",
+          "description": "Typed refusal from the runtime signer owner.",
           "kind": "Enum",
           "path": "fava_session::SessionError",
           "signature": "pub enum fava_session::SessionError"
@@ -19444,19 +18971,7 @@
           "signature": "pub fava_session::SessionError::MissingSigner(nostr::key::public_key::PublicKey)"
         },
         {
-          "description": "The fixed signer attachment bound was reached.",
-          "kind": "Compiler-visible item",
-          "path": "fava_session::SessionError::SignerCapacityExceeded",
-          "signature": "pub fava_session::SessionError::SignerCapacityExceeded"
-        },
-        {
-          "description": "Maximum number of simultaneous signer attachments.",
-          "kind": "Compiler-visible item",
-          "path": "fava_session::SessionError::SignerCapacityExceeded::limit",
-          "signature": "pub fava_session::SessionError::SignerCapacityExceeded::limit: usize"
-        },
-        {
-          "description": "Attach one signer for its exact public key. Errors: Refuses duplicate keys, capacity overflow, or generation exhaustion without changing current state.",
+          "description": "Attach one signer for its exact public key. Errors: Refuses duplicate keys or generation exhaustion without changing current state.",
           "kind": "Function",
           "path": "fava_session::Session::add_signer",
           "signature": "pub fn fava_session::Session::add_signer(&self, alloc::sync::Arc<dyn fava_signer::Signer>) -> core::result::Result<(), fava_session::SessionError>"
@@ -19474,7 +18989,7 @@
           "signature": "pub fn fava_session::Session::is_current(&self, nostr::key::public_key::PublicKey, u64) -> bool"
         },
         {
-          "description": "Construct one session from bounded, uniquely keyed signer attachments. Errors: Returns a typed refusal for duplicate keys, capacity overflow, or generation exhaustion without publishing a partially built session.",
+          "description": "Construct one session from uniquely keyed signer attachments. Errors: Returns a typed refusal for duplicate keys or generation exhaustion without publishing a partially built session.",
           "kind": "Function",
           "path": "fava_session::Session::new",
           "signature": "pub fn fava_session::Session::new(impl core::iter::traits::collect::IntoIterator<Item = alloc::sync::Arc<dyn fava_signer::Signer>>) -> core::result::Result<Self, fava_session::SessionError>"
@@ -19540,14 +19055,6 @@
             "path": "fava_session::SessionError::MissingSigner"
           },
           {
-            "declaration": "pub fava_session::SessionError::SignerCapacityExceeded",
-            "path": "fava_session::SessionError::SignerCapacityExceeded"
-          },
-          {
-            "declaration": "pub fava_session::SessionError::SignerCapacityExceeded::limit: usize",
-            "path": "fava_session::SessionError::SignerCapacityExceeded::limit"
-          },
-          {
             "declaration": "pub fn fava_session::Session::add_signer(&self, alloc::sync::Arc<dyn fava_signer::Signer>) -> core::result::Result<(), fava_session::SessionError>",
             "implementation": "impl fava_session::Session",
             "path": "fava_session::Session::add_signer"
@@ -19601,10 +19108,10 @@
           "description": "Typed refusal for duplicate/missing exact-key signer attachment, the 64-signer capacity ceiling, or exhausted attachment generation. Lifecycle: Created synchronously by Session construction/add/replace/remove on invalid mutation, returned without publishing a new revision, and discarded or surfaced by the caller.",
           "kind": "Bound declaration",
           "path": "fava_session::SessionError",
-          "signature": "pub enum SessionError {\n    /// A signer is already attached for this exact public key.\n    #[error(\"signer already attached for {0}\")]\n    DuplicateSigner(PublicKey),\n    /// No signer is attached for this exact public key.\n    #[error(\"no signer attached for {0}\")]\n    MissingSigner(PublicKey),\n    /// The fixed signer attachment bound was reached.\n    #[error(\"signer capacity exceeded (limit {limit})\")]\n    SignerCapacityExceeded {\n        /// Maximum number of simultaneous signer attachments.\n        limit: usize,\n    },\n    /// A fresh attachment generation could not be represented.\n    #[error(\"signer attachment generation exhausted\")]\n    GenerationExhausted,\n}"
+          "signature": "pub enum SessionError {\n    /// A signer is already attached for this exact public key.\n    #[error(\"signer already attached for {0}\")]\n    DuplicateSigner(PublicKey),\n    /// No signer is attached for this exact public key.\n    #[error(\"no signer attached for {0}\")]\n    MissingSigner(PublicKey),\n    /// A fresh attachment generation could not be represented.\n    #[error(\"signer attachment generation exhausted\")]\n    GenerationExhausted,\n}"
         },
         {
-          "description": "Typed refusal from the bounded runtime signer owner.",
+          "description": "Typed refusal from the runtime signer owner.",
           "kind": "Enum",
           "path": "fava_session::SessionError",
           "signature": "pub enum fava_session::SessionError"
@@ -19626,18 +19133,6 @@
           "kind": "Compiler-visible item",
           "path": "fava_session::SessionError::MissingSigner",
           "signature": "pub fava_session::SessionError::MissingSigner(nostr::key::public_key::PublicKey)"
-        },
-        {
-          "description": "The fixed signer attachment bound was reached.",
-          "kind": "Compiler-visible item",
-          "path": "fava_session::SessionError::SignerCapacityExceeded",
-          "signature": "pub fava_session::SessionError::SignerCapacityExceeded"
-        },
-        {
-          "description": "Maximum number of simultaneous signer attachments.",
-          "kind": "Compiler-visible item",
-          "path": "fava_session::SessionError::SignerCapacityExceeded::limit",
-          "signature": "pub fava_session::SessionError::SignerCapacityExceeded::limit: usize"
         }
       ],
       "name": "SessionError",
@@ -19645,7 +19140,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub enum SessionError {\n    /// A signer is already attached for this exact public key.\n    #[error(\"signer already attached for {0}\")]\n    DuplicateSigner(PublicKey),\n    /// No signer is attached for this exact public key.\n    #[error(\"no signer attached for {0}\")]\n    MissingSigner(PublicKey),\n    /// The fixed signer attachment bound was reached.\n    #[error(\"signer capacity exceeded (limit {limit})\")]\n    SignerCapacityExceeded {\n        /// Maximum number of simultaneous signer attachments.\n        limit: usize,\n    },\n    /// A fresh attachment generation could not be represented.\n    #[error(\"signer attachment generation exhausted\")]\n    GenerationExhausted,\n}",
+            "declaration": "pub enum SessionError {\n    /// A signer is already attached for this exact public key.\n    #[error(\"signer already attached for {0}\")]\n    DuplicateSigner(PublicKey),\n    /// No signer is attached for this exact public key.\n    #[error(\"no signer attached for {0}\")]\n    MissingSigner(PublicKey),\n    /// A fresh attachment generation could not be represented.\n    #[error(\"signer attachment generation exhausted\")]\n    GenerationExhausted,\n}",
             "kind": "enum",
             "path": "fava_session::SessionError",
             "source": "crates/fava-session/src/lib.rs",
@@ -19668,14 +19163,6 @@
           {
             "declaration": "pub fava_session::SessionError::MissingSigner(nostr::key::public_key::PublicKey)",
             "path": "fava_session::SessionError::MissingSigner"
-          },
-          {
-            "declaration": "pub fava_session::SessionError::SignerCapacityExceeded",
-            "path": "fava_session::SessionError::SignerCapacityExceeded"
-          },
-          {
-            "declaration": "pub fava_session::SessionError::SignerCapacityExceeded::limit: usize",
-            "path": "fava_session::SessionError::SignerCapacityExceeded::limit"
           }
         ],
         "reexports": []
@@ -19791,7 +19278,7 @@
           "description": "A replaceable provider that signs an exact UnsignedEvent for its author.",
           "kind": "Bound declaration",
           "path": "fava_signer::Signer",
-          "signature": "pub trait Signer: Send + Sync {\n    /// Public key this provider can sign for.\n    fn public_key(&self) -> PublicKey;\n\n    /// Current provider availability.\n    fn availability(&self) -> SignerAvailability;\n\n    /// Sign one exact unsigned event unless its owner cancels the operation.\n    fn sign_event(\n        self: Arc<Self>,\n        event: UnsignedEvent,\n        cancel: watch::Receiver<bool>,\n    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>;\n}"
+          "signature": "pub trait Signer: Send + Sync {\n    /// Public key this provider can sign for.\n    fn public_key(&self) -> PublicKey;\n\n    /// Current provider availability.\n    fn availability(&self) -> SignerAvailability;\n\n    /// Sign one exact unsigned event unless its owner cancels the operation.\n    ///\n    /// # Arguments\n    ///\n    /// * `event` - the exact unsigned event to sign\n    /// * `cancel` - watched by the implementation; a `true` value cancels the\n    ///   operation before it returns a signature\n    fn sign_event(\n        self: Arc<Self>,\n        event: UnsignedEvent,\n        cancel: watch::Receiver<bool>,\n    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>;\n}"
         },
         {
           "description": "Take custody of one in-process keypair.",
@@ -19860,7 +19347,7 @@
           "signature": "pub fn fava_signer::Signer::public_key(&self) -> nostr::key::public_key::PublicKey"
         },
         {
-          "description": "Sign one exact unsigned event unless its owner cancels the operation.",
+          "description": "Sign one exact unsigned event unless its owner cancels the operation. Arguments: * `event` - the exact unsigned event to sign * `cancel` - watched by the implementation; a `true` value cancels the operation before it returns a signature",
           "kind": "Function",
           "path": "fava_signer::Signer::sign_event",
           "signature": "pub fn fava_signer::Signer::sign_event(alloc::sync::Arc<Self>, nostr::event::unsigned::UnsignedEvent, tokio::sync::watch::Receiver<bool>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<nostr::event::Event, fava_signer::SignerError>> + core::marker::Send + 'static)>>"
@@ -19901,7 +19388,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub trait Signer: Send + Sync {\n    /// Public key this provider can sign for.\n    fn public_key(&self) -> PublicKey;\n\n    /// Current provider availability.\n    fn availability(&self) -> SignerAvailability;\n\n    /// Sign one exact unsigned event unless its owner cancels the operation.\n    fn sign_event(\n        self: Arc<Self>,\n        event: UnsignedEvent,\n        cancel: watch::Receiver<bool>,\n    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>;\n}",
+            "declaration": "pub trait Signer: Send + Sync {\n    /// Public key this provider can sign for.\n    fn public_key(&self) -> PublicKey;\n\n    /// Current provider availability.\n    fn availability(&self) -> SignerAvailability;\n\n    /// Sign one exact unsigned event unless its owner cancels the operation.\n    ///\n    /// # Arguments\n    ///\n    /// * `event` - the exact unsigned event to sign\n    /// * `cancel` - watched by the implementation; a `true` value cancels the\n    ///   operation before it returns a signature\n    fn sign_event(\n        self: Arc<Self>,\n        event: UnsignedEvent,\n        cancel: watch::Receiver<bool>,\n    ) -> Pin<Box<dyn Future<Output = Result<Event, SignerError>> + Send + 'static>>;\n}",
             "kind": "trait",
             "path": "fava_signer::Signer",
             "source": "crates/fava-signer/src/lib.rs",
@@ -20132,12 +19619,6 @@
           "signature": "pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_query::QueryError>"
         },
         {
-          "description": "Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.",
-          "kind": "Constructor",
-          "path": "fava_simple_groups::SimpleGroup::from_relays",
-          "signature": "pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>"
-        },
-        {
           "description": "Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.",
           "kind": "Method",
           "path": "fava_simple_groups::SimpleGroup::id",
@@ -20148,6 +19629,12 @@
           "kind": "Method",
           "path": "fava_simple_groups::SimpleGroup::meta_events",
           "signature": "pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>"
+        },
+        {
+          "description": "Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.",
+          "kind": "Constructor",
+          "path": "fava_simple_groups::SimpleGroup::new",
+          "signature": "pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>"
         },
         {
           "description": "Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.",
@@ -20193,11 +19680,6 @@
             "path": "fava_simple_groups::SimpleGroup::events"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::from_relays"
-          },
-          {
             "declaration": "pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str",
             "implementation": "impl fava_simple_groups::SimpleGroup",
             "path": "fava_simple_groups::SimpleGroup::id"
@@ -20206,6 +19688,11 @@
             "declaration": "pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>",
             "implementation": "impl fava_simple_groups::SimpleGroup",
             "path": "fava_simple_groups::SimpleGroup::meta_events"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>",
+            "implementation": "impl fava_simple_groups::SimpleGroup",
+            "path": "fava_simple_groups::SimpleGroup::new"
           },
           {
             "declaration": "pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
@@ -20324,7 +19811,7 @@
     {
       "interface": [
         {
-          "description": "The exact EmptyId or EmptyRelays refusal to construct a SimpleGroup from an empty id or empty finite relay vector. Lifecycle: Created synchronously when from_relays refuses exactly one of its two input invariants; it owns no retained state or work.",
+          "description": "The exact EmptyId or EmptyRelays refusal to construct a SimpleGroup from an empty id or empty finite relay vector. Lifecycle: Created synchronously when new refuses exactly one of its two input invariants; it owns no retained state or work.",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::simple_group::SimpleGroupConstructionError",
           "signature": "pub enum SimpleGroupConstructionError {\n    /// The supplied group id is exactly empty.\n    EmptyId,\n    /// The supplied relay vector is empty.\n    EmptyRelays,\n}"
@@ -20405,31 +19892,13 @@
           "description": "A wrong event boundary or one semantic tag-value parse failure while decoding kinds 39000 through 39005. Lifecycle: Created synchronously for a whole-event refusal or retained inside one decoded entry Result.",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::records::SimpleGroupDecodeError",
-          "signature": "pub enum SimpleGroupDecodeError {\n    /// The selected decoder does not own the supplied kind.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// No `d` tag exists.\n    MissingIdentifierTag,\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// A `LiveKit` participant key is not exact lowercase hex.\n    InvalidLivekitParticipantPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// A `supported_kinds` value is not a decimal `u16`.\n    InvalidKind {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}"
+          "signature": "pub enum SimpleGroupDecodeError {\n    /// The selected decoder does not own the supplied kind.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// No `d` tag exists.\n    MissingIdentifierTag,\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// A `LiveKit` participant key is not exact lowercase hex.\n    InvalidLivekitParticipantPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}"
         },
         {
           "description": "Source-positioned NIP-29 semantic decode failures. Whole-event errors cover kind and required group id; repeated-entry errors remain local so valid siblings survive.",
           "kind": "Enum",
           "path": "fava_simple_groups::SimpleGroupDecodeError",
           "signature": "pub enum fava_simple_groups::SimpleGroupDecodeError"
-        },
-        {
-          "description": "One `supported_kinds` value is not a decimal `u16`.",
-          "kind": "Enum variant",
-          "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind",
-          "signature": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind"
-        },
-        {
-          "description": "Zero-based failing tag index.",
-          "kind": "Public field",
-          "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index",
-          "signature": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index: usize"
-        },
-        {
-          "description": "Zero-based failing value position.",
-          "kind": "Public field",
-          "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index",
-          "signature": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index: usize"
         },
         {
           "description": "A participant key is not exact lowercase 64-character hex or fails `PublicKey` parsing.",
@@ -20509,7 +19978,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub enum SimpleGroupDecodeError {\n    /// The selected decoder does not own the supplied kind.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// No `d` tag exists.\n    MissingIdentifierTag,\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// A `LiveKit` participant key is not exact lowercase hex.\n    InvalidLivekitParticipantPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n    /// A `supported_kinds` value is not a decimal `u16`.\n    InvalidKind {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}",
+            "declaration": "pub enum SimpleGroupDecodeError {\n    /// The selected decoder does not own the supplied kind.\n    WrongEventKind {\n        /// Required kind.\n        expected: Kind,\n        /// Supplied kind.\n        actual: Kind,\n    },\n    /// No `d` tag exists.\n    MissingIdentifierTag,\n    /// A recognized tag lacks a required position.\n    MissingTagValue {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based index in `Tag::as_slice()`.\n        value_index: usize,\n    },\n    /// A `LiveKit` participant key is not exact lowercase hex.\n    InvalidLivekitParticipantPublicKey {\n        /// Zero-based event tag index.\n        tag_index: usize,\n        /// Zero-based value index.\n        value_index: usize,\n    },\n}",
             "kind": "enum",
             "path": "fava_simple_groups::records::SimpleGroupDecodeError",
             "source": "crates/fava-simple-groups/src/records.rs",
@@ -20520,18 +19989,6 @@
           {
             "declaration": "pub enum fava_simple_groups::SimpleGroupDecodeError",
             "path": "fava_simple_groups::SimpleGroupDecodeError"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind",
-            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index: usize",
-            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index"
-          },
-          {
-            "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index: usize",
-            "path": "fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index"
           },
           {
             "declaration": "pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey",
@@ -20775,7 +20232,7 @@
           "description": "The semantic metadata fields decoded from one kind-39000 event. Lifecycle: Decoded synchronously from one EventValue and immutable thereafter.",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::metadata::SimpleGroupMetadata",
-          "signature": "pub struct SimpleGroupMetadata {\n    id: String,\n    author: PublicKey,\n    name: Option<String>,\n    picture: Option<String>,\n    banner: Option<String>,\n    about: Option<String>,\n    private: bool,\n    restricted: bool,\n    hidden: bool,\n    closed: bool,\n    livekit: bool,\n    supported_kinds: Option<Vec<Result<Kind, SimpleGroupDecodeError>>>,\n    parent: Option<String>,\n    children: Vec<Result<String, SimpleGroupDecodeError>>,\n}"
+          "signature": "pub struct SimpleGroupMetadata {\n    id: String,\n    author: PublicKey,\n    name: Option<String>,\n    picture: Option<String>,\n    banner: Option<String>,\n    about: Option<String>,\n    private: bool,\n    restricted: bool,\n    hidden: bool,\n    closed: bool,\n    livekit: bool,\n    supported_kinds: Option<Vec<String>>,\n    parent: Option<String>,\n    children: Vec<Result<String, SimpleGroupDecodeError>>,\n}"
         },
         {
           "description": "Returns the event author only; does not assert NIP-11 relay identity or serving-relay provenance.",
@@ -20862,10 +20319,10 @@
           "signature": "pub fn fava_simple_groups::SimpleGroupMetadata::picture(&self) -> core::option::Option<&str>"
         },
         {
-          "description": "Returns each value from the first `supported_kinds` tag in source order as a parsed kind or local error. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.",
+          "description": "Raw string values from the first `supported_kinds` tag in source order. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.",
           "kind": "Method",
           "path": "fava_simple_groups::SimpleGroupMetadata::supported_kinds",
-          "signature": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>"
+          "signature": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[alloc::string::String]>"
         },
         {
           "description": "One tolerant semantic decode of kind 39000: exact id and author, optional display fields, presence flags, supported kinds, and subgroup relationships.",
@@ -20885,7 +20342,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct SimpleGroupMetadata {\n    id: String,\n    author: PublicKey,\n    name: Option<String>,\n    picture: Option<String>,\n    banner: Option<String>,\n    about: Option<String>,\n    private: bool,\n    restricted: bool,\n    hidden: bool,\n    closed: bool,\n    livekit: bool,\n    supported_kinds: Option<Vec<Result<Kind, SimpleGroupDecodeError>>>,\n    parent: Option<String>,\n    children: Vec<Result<String, SimpleGroupDecodeError>>,\n}",
+            "declaration": "pub struct SimpleGroupMetadata {\n    id: String,\n    author: PublicKey,\n    name: Option<String>,\n    picture: Option<String>,\n    banner: Option<String>,\n    about: Option<String>,\n    private: bool,\n    restricted: bool,\n    hidden: bool,\n    closed: bool,\n    livekit: bool,\n    supported_kinds: Option<Vec<String>>,\n    parent: Option<String>,\n    children: Vec<Result<String, SimpleGroupDecodeError>>,\n}",
             "kind": "struct",
             "path": "fava_simple_groups::metadata::SimpleGroupMetadata",
             "source": "crates/fava-simple-groups/src/metadata.rs",
@@ -20964,7 +20421,7 @@
             "path": "fava_simple_groups::SimpleGroupMetadata::picture"
           },
           {
-            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>",
+            "declaration": "pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[alloc::string::String]>",
             "implementation": "impl fava_simple_groups::SimpleGroupMetadata",
             "path": "fava_simple_groups::SimpleGroupMetadata::supported_kinds"
           },
@@ -29240,6 +28697,138 @@
     {
       "interface": [
         {
+          "description": "Builds an unsigned kind-9007 create-group event with the exact group id in one `h` tag. It does not publish the event or decide relay authorization.",
+          "kind": "Function",
+          "path": "fava_simple_groups::create_group",
+          "signature": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::create_group` from `management::create_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::create_group",
+          "signature": "pub use management::create_group as fava_simple_groups::create_group"
+        }
+      ],
+      "name": "create_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::create_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::create_group",
+            "source": "management::create_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9005 group event-deletion request with exact `h` and `e` tags. Relay acceptance and deletion effects remain outside this constructor.",
+          "kind": "Function",
+          "path": "fava_simple_groups::delete_event",
+          "signature": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::delete_event` from `management::delete_event`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::delete_event",
+          "signature": "pub use management::delete_event as fava_simple_groups::delete_event"
+        }
+      ],
+      "name": "delete_event",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::delete_event"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::delete_event",
+            "source": "management::delete_event"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9008 delete-group request carrying the exact group id. It does not authorize, publish, or apply deletion.",
+          "kind": "Function",
+          "path": "fava_simple_groups::delete_group",
+          "signature": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::delete_group` from `management::delete_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::delete_group",
+          "signature": "pub use management::delete_group as fava_simple_groups::delete_group"
+        }
+      ],
+      "name": "delete_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::delete_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::delete_group",
+            "source": "management::delete_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9002 metadata replacement body from the exact optional fields, visibility, and access supplied by the caller. Omitted fields emit no corresponding tag.",
+          "kind": "Function",
+          "path": "fava_simple_groups::edit_metadata",
+          "signature": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::edit_metadata` from `management::edit_metadata`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::edit_metadata",
+          "signature": "pub use management::edit_metadata as fava_simple_groups::edit_metadata"
+        }
+      ],
+      "name": "edit_metadata",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::edit_metadata"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::edit_metadata",
+            "source": "management::edit_metadata"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
           "description": "Pure simple-group domain composition for NIP-29 and the kind-10009 Simple Group List; owns no engine, verifier, bound policy, router, store, publication, projection, or lifecycle.",
           "kind": "Module",
           "path": "fava_simple_groups",
@@ -29257,6 +28846,138 @@
           }
         ],
         "reexports": []
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9009 invitation with exact `h`, invitee `p`, and relay tags. It does not publish the invitation or establish membership.",
+          "kind": "Function",
+          "path": "fava_simple_groups::invite",
+          "signature": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &nostr::types::url::RelayUrl) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::invite` from `management::invite`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::invite",
+          "signature": "pub use management::invite as fava_simple_groups::invite"
+        }
+      ],
+      "name": "invite",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &nostr::types::url::RelayUrl) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::invite"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::invite",
+            "source": "management::invite"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9021 join request carrying the exact group id. Optional invitation context and publication remain caller composition.",
+          "kind": "Function",
+          "path": "fava_simple_groups::join_request",
+          "signature": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::join_request` from `management::join_request`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::join_request",
+          "signature": "pub use management::join_request as fava_simple_groups::join_request"
+        }
+      ],
+      "name": "join_request",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::join_request"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::join_request",
+            "source": "management::join_request"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9022 leave request for the author and exact group id. Relay acceptance and membership state remain outside this constructor.",
+          "kind": "Function",
+          "path": "fava_simple_groups::leave_group",
+          "signature": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::leave_group` from `management::leave_group`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::leave_group",
+          "signature": "pub use management::leave_group as fava_simple_groups::leave_group"
+        }
+      ],
+      "name": "leave_group",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::leave_group"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::leave_group",
+            "source": "management::leave_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9000 put-user event with the exact group id, user key, and caller-supplied role values in one `p` tag.",
+          "kind": "Function",
+          "path": "fava_simple_groups::put_user",
+          "signature": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &[&str]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::put_user` from `management::put_user`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::put_user",
+          "signature": "pub use management::put_user as fava_simple_groups::put_user"
+        }
+      ],
+      "name": "put_user",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &[&str]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::put_user"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::put_user",
+            "source": "management::put_user"
+          }
+        ]
       }
     },
     {
@@ -29321,6 +29042,39 @@
           {
             "path": "fava_simple_groups::remove_saved_simple_group",
             "source": "edit::remove_saved_simple_group"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Builds an unsigned kind-9001 remove-user event with exact `h` and user `p` tags. It does not authorize, publish, or apply membership removal.",
+          "kind": "Function",
+          "path": "fava_simple_groups::remove_user",
+          "signature": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::remove_user` from `management::remove_user`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::remove_user",
+          "signature": "pub use management::remove_user as fava_simple_groups::remove_user"
+        }
+      ],
+      "name": "remove_user",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "path": "fava_simple_groups::remove_user"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::remove_user",
+            "source": "management::remove_user"
           }
         ]
       }

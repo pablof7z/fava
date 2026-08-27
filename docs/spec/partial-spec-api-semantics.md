@@ -587,7 +587,7 @@ relay sequence:
 ```rust
 let bob = RelayUrl::parse("wss://bob.relay.example")?;
 let alice = RelayUrl::parse("wss://alice.relay.example")?;
-let photos = SimpleGroup::from_relays("photos", vec![bob, alice])?;
+let photos = SimpleGroup::new("photos", vec![bob, alice])?;
 
 let feed = photos.events(Query::events().kinds([Kind::from(9)])?.limit(50)?)?;
 let state = photos.meta_events([SimpleGroupStateEventKind::Metadata])?;

@@ -21,7 +21,7 @@ issue and commit series do not fabricate or claim replacement signatures.
 ## Delivered model
 
 `SimpleGroup` retains a non-empty opaque id plus normalized
-application-selected relays. `from_relays(id, relays)` accepts a finite owned
+application-selected relays. `new(id, relays)` accepts a finite owned
 `Vec<RelayUrl>` and returns `SimpleGroupConstructionError::EmptyId` or
 `EmptyRelays` for exactly those invalid inputs. Later duplicates collapse in
 first-occurrence order. Parsing remains with `RelayUrl`; there is no string

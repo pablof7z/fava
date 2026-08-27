@@ -105,7 +105,7 @@ pub enum GroupAccess {
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
 /// let event = create_group(keys.public_key(), &group)?;
@@ -141,7 +141,7 @@ pub fn create_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
 /// let event = edit_metadata(
@@ -195,7 +195,7 @@ pub fn edit_metadata(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay.clone()])?;
+/// let group = SimpleGroup::new("cats", vec![relay.clone()])?;
 /// let admin = Keys::generate();
 /// let invitee = Keys::generate();
 ///
@@ -232,7 +232,7 @@ pub fn invite(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
 /// let event = join_request(keys.public_key(), &group)?;
@@ -259,7 +259,7 @@ pub fn join_request(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
 /// let member = Keys::generate();
 ///
@@ -295,7 +295,7 @@ pub fn put_user(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
 /// let member = Keys::generate();
 ///
@@ -328,7 +328,7 @@ pub fn remove_user(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
 /// let target = EventId::from_byte_array([1u8; 32]);
 ///
@@ -361,7 +361,7 @@ pub fn delete_event(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
 ///
 /// let event = delete_group(admin.public_key(), &group)?;
@@ -388,7 +388,7 @@ pub fn delete_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("cats", vec![relay])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
 /// let event = leave_group(keys.public_key(), &group)?;
@@ -436,7 +436,7 @@ mod tests {
 
     fn group() -> SimpleGroup {
         let relay = RelayUrl::parse("wss://relay.example").unwrap();
-        SimpleGroup::from_relays("cats", vec![relay]).unwrap()
+        SimpleGroup::new("cats", vec![relay]).unwrap()
     }
 
     fn author() -> PublicKey {

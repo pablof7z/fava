@@ -226,7 +226,7 @@ async fn gate1_create_group_accepted() {
 
     let keys = Keys::generate();
     let r = RelayUrl::parse(&relay.url).unwrap();
-    let group = SimpleGroup::from_relays("phase-b-cats", vec![r]).unwrap();
+    let group = SimpleGroup::new("phase-b-cats", vec![r]).unwrap();
 
     let event = create_group(keys.public_key(), &group).expect("create_group");
 
@@ -258,7 +258,7 @@ async fn gate2_put_user_and_39001_observation() {
     let admin_keys = Keys::generate();
     let member_keys = Keys::generate();
     let r = RelayUrl::parse(&relay.url).unwrap();
-    let group = SimpleGroup::from_relays("phase-b-gate2", vec![r]).unwrap();
+    let group = SimpleGroup::new("phase-b-gate2", vec![r]).unwrap();
 
     // — create_group (kind 9007) —
     let cg = create_group(admin_keys.public_key(), &group).expect("create_group");
@@ -333,7 +333,7 @@ async fn gate3_wrong_authority_relay_rejects() {
     let mut ws = ws_connect(&relay.url).await;
 
     let r = RelayUrl::parse(&relay.url).unwrap();
-    let group = SimpleGroup::from_relays("phase-b-gate3", vec![r]).unwrap();
+    let group = SimpleGroup::new("phase-b-gate3", vec![r]).unwrap();
 
     let tampered = put_user(
         rogue_keys.public_key(),
@@ -366,7 +366,7 @@ async fn gate4_all_constructors_accepted() {
     let admin_keys = Keys::generate();
     let user_keys = Keys::generate();
     let r = RelayUrl::parse(&relay.url).unwrap();
-    let group = SimpleGroup::from_relays("phase-b-gate4", vec![r.clone()]).unwrap();
+    let group = SimpleGroup::new("phase-b-gate4", vec![r.clone()]).unwrap();
     let target_id = EventId::from_byte_array([0u8; 32]);
 
     let cases: Vec<(&str, UnsignedEvent, &Keys)> = vec![

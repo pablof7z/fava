@@ -105,7 +105,7 @@ async fn execute_with_proxies(
         hex::encode(Sha256::digest(format!("simple-groups\0{seed}")))[..32].to_owned();
 
     let simple_group =
-        SimpleGroup::from_relays(&simple_group_id, vec![relays[0].clone(), relays[1].clone()])
+        SimpleGroup::new(&simple_group_id, vec![relays[0].clone(), relays[1].clone()])
             .map_err(error)?;
     let signer: Arc<dyn Signer> = Arc::new(LocalSigner::new(author.clone()));
     let publisher = assembly(root.join("children/publisher.redb"), signer)?;

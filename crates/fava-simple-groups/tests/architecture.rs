@@ -8,6 +8,8 @@ const README: &str = include_str!("../README.md");
 const CATALOG: &str = include_str!("../../../.bg-shell/simple-groups-semantic-catalog.jsonl");
 const CONSTRUCTOR_DECISION: &str =
     include_str!("../../../docs/issues/0027-simple-group-relay-input-boundary.md");
+const API_SPELLING_DECISION: &str =
+    include_str!("../../../docs/issues/0032-simple-group-public-api-spelling.md");
 const VOCABULARY: &str = include_str!("../../../docs/internals/vocabulary.toml");
 
 fn sources() -> [(&'static str, &'static str); 10] {
@@ -59,6 +61,8 @@ fn normal_dependencies_are_exact_domain_and_composition_owners() {
 
 #[test]
 fn public_root_exports_only_the_current_nominal_surface() {
+    assert!(PUBLIC_ROOT.contains("mod management;"));
+    assert!(!PUBLIC_ROOT.contains("pub mod management;"));
     for required in [
         "SimpleGroup",
         "SimpleGroupConstructionError",
@@ -99,7 +103,7 @@ fn public_root_exports_only_the_current_nominal_surface() {
 #[test]
 fn constructor_decision_and_vocabulary_describe_the_exported_boundary() {
     for required in [
-        "from_relays(id, relays: Vec<RelayUrl>)",
+        "new(id, relays: Vec<RelayUrl>)",
         "Result<SimpleGroup, SimpleGroupConstructionError>",
         "`EmptyId` rejects exactly a zero-length id",
         "`EmptyRelays` rejects exactly an empty vector",
@@ -107,6 +111,17 @@ fn constructor_decision_and_vocabulary_describe_the_exported_boundary() {
         assert!(
             CONSTRUCTOR_DECISION.contains(required),
             "constructor decision lost {required}"
+        );
+    }
+
+    for required in [
+        "SimpleGroup::new(id, relays: Vec<RelayUrl>)",
+        "Source modules,\nincluding `management`, are private",
+        "Each public\nitem therefore has one canonical path",
+    ] {
+        assert!(
+            API_SPELLING_DECISION.contains(required),
+            "API spelling decision lost {required}"
         );
     }
 

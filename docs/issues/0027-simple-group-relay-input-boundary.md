@@ -10,7 +10,7 @@
 the two invariants required before the reusable value exists:
 
 ```rust
-SimpleGroup::from_relays(id, relays: Vec<RelayUrl>)
+SimpleGroup::new(id, relays: Vec<RelayUrl>)
     -> Result<SimpleGroup, SimpleGroupConstructionError>
 ```
 

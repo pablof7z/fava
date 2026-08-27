@@ -60,9 +60,9 @@ async fn main() -> DemoResult<()> {
     }
 
     let group_id = unique_group_id()?;
-    let group = SimpleGroup::from_relays(&group_id, vec![relay.clone(), relay.clone()])?;
+    let group = SimpleGroup::new(&group_id, vec![relay.clone(), relay.clone()])?;
     println!(
-        "3. SimpleGroup::from_relays({group_id:?}, [relay, duplicate relay]) -> id={}, normalized_relays={}",
+        "3. SimpleGroup::new({group_id:?}, [relay, duplicate relay]) -> id={}, normalized_relays={}",
         group.id(),
         group.relays().count()
     );

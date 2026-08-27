@@ -25,7 +25,7 @@ use fava_simple_groups::SimpleGroup;
 
 let bob = RelayUrl::parse("wss://bob.groups.example")?;
 let alice = RelayUrl::parse("wss://alice.groups.example")?;
-let photos = SimpleGroup::from_relays("photos", vec![bob, alice])?;
+let photos = SimpleGroup::new("photos", vec![bob, alice])?;
 let query = photos.events(Query::events().kinds([Kind::from_u16(9)])?)?;
 let observation = fava.observe(query).await?;
 
@@ -129,8 +129,17 @@ Example coverage: [MOD-1](#mod-1).
 
 | Item | Purpose |
 | --- | --- |
+| **`create_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::create_group","signature":"pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9007"} --> | Builds an unsigned kind-9007 create-group event with the exact group id in one `h` tag. It does not publish the event or decide relay authorization. |
+| **`delete_event`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::delete_event","signature":"pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9005"} --> | Builds an unsigned kind-9005 group event-deletion request with exact `h` and `e` tags. Relay acceptance and deletion effects remain outside this constructor. |
+| **`delete_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::delete_group","signature":"pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9008"} --> | Builds an unsigned kind-9008 delete-group request carrying the exact group id. It does not authorize, publish, or apply deletion. |
+| **`edit_metadata`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::edit_metadata","signature":"pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9002"} --> | Builds an unsigned kind-9002 metadata replacement body from the exact optional fields, visibility, and access supplied by the caller. Omitted fields emit no corresponding tag. |
+| **`invite`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::invite","signature":"pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &nostr::types::url::RelayUrl) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9009"} --> | Builds an unsigned kind-9009 invitation with exact `h`, invitee `p`, and relay tags. It does not publish the invitation or establish membership. |
+| **`join_request`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::join_request","signature":"pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9021"} --> | Builds an unsigned kind-9021 join request carrying the exact group id. Optional invitation context and publication remain caller composition. |
+| **`leave_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::leave_group","signature":"pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9022"} --> | Builds an unsigned kind-9022 leave request for the author and exact group id. Relay acceptance and membership state remain outside this constructor. |
+| **`put_user`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::put_user","signature":"pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey, &[&str]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9000"} --> | Builds an unsigned kind-9000 put-user event with the exact group id, user key, and caller-supplied role values in one `p` tag. |
 | **`remove_saved_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_relay","signature":"pub fn fava_simple_groups::remove_saved_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `r` tag for the exact relay. The URL does not acquire routing or publication meaning.<br><br>Example: [MOD-1](#mod-1). |
 | **`remove_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_simple_group","signature":"pub fn fava_simple_groups::remove_saved_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `group` tag whose id and parsed relay match a selected relay. The name states removal from saved state, not deletion of the group.<br><br>Example: [MOD-1](#mod-1). |
+| **`remove_user`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_user","signature":"pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::key::public_key::PublicKey) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9001"} --> | Builds an unsigned kind-9001 remove-user event with exact `h` and user `p` tags. It does not authorize, publish, or apply membership removal. |
 | **`rename_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::rename_saved_simple_group","signature":"pub fn fava_simple_groups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit setting the display name for every selected id/relay entry, retaining first positions, removing later matches, and appending absent selected relays. Preserves unused trailing values on retained tags.<br><br>Example: [MOD-1](#mod-1). |
 | **`save_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_relay","signature":"pub fn fava_simple_groups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `r` tag for the exact inert relay URL, keeping the first match, removing later matches, and appending when absent.<br><br>Example: [MOD-1](#mod-1). |
 | **`save_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_simple_group","signature":"pub fn fava_simple_groups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `group` tag for every normalized relay. Keeps the first existing match unchanged, removes later matches, and appends missing relays in group order.<br><br>Example: [MOD-1](#mod-1). |
@@ -170,7 +179,7 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
     let relay_a = RelayUrl::parse("wss://a.example")?;
     let relay_b = RelayUrl::parse("wss://b.example")?;
     let group =
-        SimpleGroup::from_relays("photos", vec![relay_a.clone(), relay_b.clone()])?;
+        SimpleGroup::new("photos", vec![relay_a.clone(), relay_b.clone()])?;
     let source = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags([
             Tag::parse(["group", "photos", "wss://a.example", "Old"])?,
@@ -227,6 +236,72 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     exercise_saved_edits()
 }
+```
+
+### `GroupAccess` (Enum)
+
+Controls whether a kind-9002 metadata edit emits the NIP-29 `closed` tag that requires relay approval to join.
+<!-- api-item {"kind":"Enum","item":"fava_simple_groups::GroupAccess","signature":"pub enum fava_simple_groups::GroupAccess","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9002 closed tag","example":"GA-1"} -->
+Example coverage: [GA-1](#ga-1).
+
+| Item | Purpose |
+| --- | --- |
+| **`Closed`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::GroupAccess::Closed","signature":"pub fava_simple_groups::GroupAccess::Closed","evidence":"NIP-29 closed group metadata","example":"GA-1"} --> | Emits `closed`, asking the relay to require approval before a user joins.<br><br>Example: [GA-1](#ga-1). |
+| **`Open`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::GroupAccess::Open","signature":"pub fava_simple_groups::GroupAccess::Open","evidence":"NIP-29 open group metadata","example":"GA-1"} --> | Emits no `closed` tag, leaving joining open under NIP-29 metadata semantics.<br><br>Example: [GA-1](#ga-1). |
+
+<a id="ga-1"></a>
+#### GA-1 — concrete coverage
+```rust,no_run
+use fava_simple_groups::GroupAccess;
+assert_eq!(GroupAccess::Open, GroupAccess::Open);
+assert_eq!(GroupAccess::Closed, GroupAccess::Closed);
+```
+
+### `GroupVisibility` (Enum)
+
+Controls whether a kind-9002 metadata edit emits the NIP-29 `private` tag that withholds group content from non-members.
+<!-- api-item {"kind":"Enum","item":"fava_simple_groups::GroupVisibility","signature":"pub enum fava_simple_groups::GroupVisibility","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9002 private tag","example":"GV-1"} -->
+Example coverage: [GV-1](#gv-1).
+
+| Item | Purpose |
+| --- | --- |
+| **`Private`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::GroupVisibility::Private","signature":"pub fava_simple_groups::GroupVisibility::Private","evidence":"NIP-29 private group metadata","example":"GV-1"} --> | Emits `private`, asking the relay to withhold group content from non-members.<br><br>Example: [GV-1](#gv-1). |
+| **`Public`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::GroupVisibility::Public","signature":"pub fava_simple_groups::GroupVisibility::Public","evidence":"NIP-29 public group metadata","example":"GV-1"} --> | Emits no `private` tag, leaving group content visible under NIP-29 metadata semantics.<br><br>Example: [GV-1](#gv-1). |
+
+<a id="gv-1"></a>
+#### GV-1 — concrete coverage
+```rust,no_run
+use fava_simple_groups::GroupVisibility;
+assert_eq!(GroupVisibility::Public, GroupVisibility::Public);
+assert_eq!(GroupVisibility::Private, GroupVisibility::Private);
+```
+
+### `MetadataEdit` (Struct)
+
+The exact optional fields used to build one kind-9002 metadata replacement request; `None` omits that field's tag.
+<!-- api-item {"kind":"Struct","item":"fava_simple_groups::MetadataEdit","signature":"pub struct fava_simple_groups::MetadataEdit","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9002","example":"ME-1"} -->
+Example coverage: [ME-1](#me-1).
+
+| Item | Purpose |
+| --- | --- |
+| **`about`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::MetadataEdit::about","signature":"pub fava_simple_groups::MetadataEdit::about: core::option::Option<alloc::string::String>","evidence":"NIP-29 kind 9002 about tag","example":"ME-1"} --> | Supplies the exact group description; `None` emits no `about` tag.<br><br>Example: [ME-1](#me-1). |
+| **`access`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::MetadataEdit::access","signature":"pub fava_simple_groups::MetadataEdit::access: core::option::Option<fava_simple_groups::GroupAccess>","evidence":"NIP-29 kind 9002 closed tag","example":"ME-1"} --> | Selects open or approval-required joining; `None` emits no `closed` tag.<br><br>Example: [ME-1](#me-1). |
+| **`name`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::MetadataEdit::name","signature":"pub fava_simple_groups::MetadataEdit::name: core::option::Option<alloc::string::String>","evidence":"NIP-29 kind 9002 name tag","example":"ME-1"} --> | Supplies the exact human-readable group name; `None` emits no `name` tag.<br><br>Example: [ME-1](#me-1). |
+| **`picture`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::MetadataEdit::picture","signature":"pub fava_simple_groups::MetadataEdit::picture: core::option::Option<alloc::string::String>","evidence":"NIP-29 kind 9002 picture tag","example":"ME-1"} --> | Supplies the exact group-picture URL text; `None` emits no `picture` tag.<br><br>Example: [ME-1](#me-1). |
+| **`visibility`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::MetadataEdit::visibility","signature":"pub fava_simple_groups::MetadataEdit::visibility: core::option::Option<fava_simple_groups::GroupVisibility>","evidence":"NIP-29 kind 9002 private tag","example":"ME-1"} --> | Selects public or member-only content visibility; `None` emits no `private` tag.<br><br>Example: [ME-1](#me-1). |
+
+<a id="me-1"></a>
+#### ME-1 — concrete coverage
+```rust,no_run
+use fava_simple_groups::{GroupAccess, GroupVisibility, MetadataEdit};
+let edit = MetadataEdit {
+    name: Some("Cats".to_owned()),
+    about: None,
+    picture: None,
+    visibility: Some(GroupVisibility::Private),
+    access: Some(GroupAccess::Closed),
+};
+assert_eq!(edit.name.as_deref(), Some("Cats"));
 ```
 
 ### `SavedGroupList` (Struct)
@@ -396,9 +471,9 @@ Example coverage: [SG-1](#sg-1).
 | Item | Purpose |
 | --- | --- |
 | **`events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::events","signature":"pub fn fava_simple_groups::SimpleGroup::events(&self, fava_query::Query) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"docs/issues/0028-query-tag-axis-composition.md; crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/tests/query_identity.rs; NIP-29 The h tag","example":"SG-1"} --> | Narrows lowercase `h` through query-owned exact intersection, so absent becomes this id, overlap narrows to this id, and disjoint remains present-empty match-nothing. Then delegates acquisition to all retained relays and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
-| **`from_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::from_relays","signature":"pub fn fava_simple_groups::SimpleGroup::from_relays(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.<br><br>Example: [SG-1](#sg-1). |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.<br><br>Example: [SG-1](#sg-1). |
 | **`meta_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::meta_events","signature":"pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::new","signature":"pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.<br><br>Example: [SG-1](#sg-1). |
 | **`prepare`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::prepare","signature":"pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Unsigned preparation; NIP-29 The h tag; current implementation crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.<br><br>Example: [SG-1](#sg-1). |
 | **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::relays","signature":"pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.<br><br>Example: [SG-1](#sg-1). |
 
@@ -415,7 +490,7 @@ use fava_write::{EventBuilder, PublicKey, Timestamp};
 fn exercise_simple_group() -> Result<(), Box<dyn Error>> {
     let first = RelayUrl::parse("wss://a.example")?;
     let second = RelayUrl::parse("wss://b.example")?;
-    let group = SimpleGroup::from_relays(
+    let group = SimpleGroup::new(
         " photos ",
         vec![first.clone(), second.clone(), first.clone()],
     )?;
@@ -549,11 +624,11 @@ use fava_simple_groups::{SimpleGroup, SimpleGroupConstructionError};
 fn main() -> Result<(), Box<dyn Error>> {
     let relay = RelayUrl::parse("wss://relay.example")?;
     assert_eq!(
-        SimpleGroup::from_relays("", vec![relay]),
+        SimpleGroup::new("", vec![relay]),
         Err(SimpleGroupConstructionError::EmptyId),
     );
     assert_eq!(
-        SimpleGroup::from_relays("photos", Vec::new()),
+        SimpleGroup::new("photos", Vec::new()),
         Err(SimpleGroupConstructionError::EmptyRelays),
     );
     assert_eq!(
@@ -572,9 +647,6 @@ Example coverage: [DE-1](#de-1).
 
 | Item | Purpose |
 | --- | --- |
-| **`InvalidKind`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind","evidence":"NIP-29 supported_kinds decimal kind values","example":"DE-1"} --> | One `supported_kinds` value is not a decimal `u16`.<br><br>Example: [DE-1](#de-1). |
-| **`Field `tag_index` of `InvalidKind``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
-| **`Field `value_index` of `InvalidKind``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidKind::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
 | **`InvalidLivekitParticipantPublicKey`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey","evidence":"NIP-29 39004 lowercase 64-character hex requirement","example":"DE-1"} --> | A participant key is not exact lowercase 64-character hex or fails `PublicKey` parsing.<br><br>Example: [DE-1](#de-1). |
 | **`Field `tag_index` of `InvalidLivekitParticipantPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::tag_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing tag index.<br><br>Example: [DE-1](#de-1). |
 | **`Field `value_index` of `InvalidLivekitParticipantPublicKey``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index","signature":"pub fava_simple_groups::SimpleGroupDecodeError::InvalidLivekitParticipantPublicKey::value_index: usize","evidence":"source-position conservation","example":"DE-1"} --> | Zero-based failing value position.<br><br>Example: [DE-1](#de-1). |
@@ -797,7 +869,7 @@ Example coverage: [META-1](#meta-1).
 | **`name`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::name","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::name(&self) -> core::option::Option<&str>","evidence":"NIP-29 kind 39000 name tag","example":"META-1"} --> | Returns the first usable exact display name; absent and present-empty remain distinct.<br><br>Example: [META-1](#meta-1). |
 | **`parent`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::parent","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::parent(&self) -> core::option::Option<&str>","evidence":"NIP-29 Subgroups parent tag","example":"META-1"} --> | Returns the first usable exact parent id; absence makes this event describe a root.<br><br>Example: [META-1](#meta-1). |
 | **`picture`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::picture","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::picture(&self) -> core::option::Option<&str>","evidence":"NIP-29 kind 39000 picture tag","example":"META-1"} --> | Returns the first usable picture URL text without fetching or validating it as a relay.<br><br>Example: [META-1](#meta-1). |
-| **`supported_kinds`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::supported_kinds","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; NIP-29 supported_kinds","example":"META-1"} --> | Raw string values from the first `supported_kinds` tag in source order. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.<br><br>Example: [META-1](#meta-1). |
+| **`supported_kinds`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::supported_kinds","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[alloc::string::String]>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; NIP-29 supported_kinds","example":"META-1"} --> | Raw string values from the first `supported_kinds` tag in source order. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.<br><br>Example: [META-1](#meta-1). |
 
 <a id="meta-1"></a>
 #### META-1 — concrete coverage
@@ -1015,7 +1087,7 @@ fn selected(
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let relay = RelayUrl::parse("wss://relay.example")?;
-    let group = SimpleGroup::from_relays("g", vec![relay])?;
+    let group = SimpleGroup::new("g", vec![relay])?;
     assert_eq!(
         selected(&group, SimpleGroupStateEventKind::Metadata)?,
         BTreeSet::from([Kind::from_u16(39_000)])

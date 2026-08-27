@@ -211,7 +211,7 @@ meaning = "The exact EmptyId or EmptyRelays refusal to construct a SimpleGroup f
 owner = "fava-simple-groups"
 distinction = "It attributes only invalid reusable group construction input; relay URL parsing, query bounds, write bounds, and event decoding retain their existing error owners."
 counterexample = "An invalid RelayUrl, a QueryError from lowering, or a SimpleGroupDecodeError from one state event is not a SimpleGroupConstructionError."
-lifecycle = "Created synchronously when from_relays refuses exactly one of its two input invariants; it owns no retained state or work."
+lifecycle = "Created synchronously when new refuses exactly one of its two input invariants; it owns no retained state or work."
 forcing_requirement = "Applications must distinguish an unusable group id from a missing relay selection before a reusable SimpleGroup exists without moving those invariants into query or write operations."
 falsifier = "Public constructor tests fail if empty ids and empty relay vectors do not return their distinct variants or if any other non-empty id is refused."
 symbols = ["fava_simple_groups::SimpleGroupConstructionError"]
@@ -504,6 +504,87 @@ lifecycle = "Consumes the finite author iterator synchronously into one Query or
 forcing_requirement = "Applications need one query for both saved-group and saved-relay entries without synonym functions or a match-all empty-author accident."
 falsifier = "Query tests fail if kind 10009 is absent, authors change, empty input broadens the query, or QueryError is translated."
 symbols = ["fava_simple_groups::saved_group_lists"]
+crates = []
+
+[[term]]
+name = "create_group"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9007 request to create the exact simple group identified by its h tag."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::create_group"]
+crates = []
+
+[[term]]
+name = "delete_event"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9005 request to delete one exact event from one simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::delete_event"]
+crates = []
+
+[[term]]
+name = "delete_group"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9008 request to delete one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::delete_group"]
+crates = []
+
+[[term]]
+name = "edit_metadata"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9002 request replacing the supplied metadata fields of one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::edit_metadata"]
+crates = []
+
+[[term]]
+name = "invite"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9009 invitation naming one simple group, invitee, and relay."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::invite"]
+crates = []
+
+[[term]]
+name = "join_request"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9021 request by its author to join one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::join_request"]
+crates = []
+
+[[term]]
+name = "leave_group"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9022 request by its author to leave one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::leave_group"]
+crates = []
+
+[[term]]
+name = "put_user"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9000 request assigning one user and supplied roles to one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::put_user"]
+crates = []
+
+[[term]]
+name = "remove_user"
+source = "nostr"
+protocol = "NIP-29"
+meaning = "A constructor for an unsigned kind-9001 request removing one user from one exact simple group."
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::remove_user"]
 crates = []
 
 [[term]]

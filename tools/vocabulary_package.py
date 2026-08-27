@@ -16,7 +16,7 @@ import vocabulary_structure as structure
 
 
 PACKAGE_OWNER = "fava-simple-groups"
-TERM_COUNT = 22
+TERM_COUNT = 34
 MANIFEST_PATH = Path(
     "docs/internals/fava-simple-groups-vocabulary-package.json"
 )

@@ -10,7 +10,7 @@ fn state_query_carries_every_configured_relay_as_exact_authority()
 -> Result<(), Box<dyn std::error::Error>> {
     let b = RelayUrl::parse("wss://b.groups.example")?;
     let a = RelayUrl::parse("wss://a.groups.example")?;
-    let group = SimpleGroup::from_relays("photos", vec![b.clone(), a.clone()])?;
+    let group = SimpleGroup::new("photos", vec![b.clone(), a.clone()])?;
     let query = group.meta_events([SimpleGroupStateEventKind::Metadata])?;
     let relays = BTreeSet::from([b, a]);
     assert_eq!(
@@ -31,7 +31,7 @@ fn state_query_preserves_all_256_exact_relays() -> Result<(), Box<dyn std::error
         .map(|index| RelayUrl::parse(&format!("wss://host-{index}.groups.example")))
         .collect::<Result<Vec<_>, _>>()?;
     let expected = relays.iter().cloned().collect::<BTreeSet<_>>();
-    let group = SimpleGroup::from_relays("photos", relays)?;
+    let group = SimpleGroup::new("photos", relays)?;
     let query = group.meta_events([SimpleGroupStateEventKind::Metadata])?;
     assert_eq!(
         query.source().acquisition(),

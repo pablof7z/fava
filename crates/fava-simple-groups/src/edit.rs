@@ -24,7 +24,7 @@ const REMOVE_RELAY: u8 = 5;
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+/// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
 /// let with_name = save_simple_group(&group, Some("Photography"))?;
 /// let unnamed = save_simple_group(&group, None)?;
@@ -55,7 +55,7 @@ pub fn save_simple_group(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+/// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
 /// let edit = remove_saved_simple_group(&group)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -84,7 +84,7 @@ pub fn remove_saved_simple_group(
 /// use nostr::types::RelayUrl;
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+/// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
 /// let edit = rename_saved_simple_group(&group, "Photography")?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -161,7 +161,7 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
 /// assert_eq!(materializer.kind(), fava_write::Kind::from_u16(10_009));
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+/// let group = SimpleGroup::new("photos", vec![relay])?;
 /// let edit = save_simple_group(&group, None)?;
 /// assert!(materializer.supports(&edit));
 /// # Ok::<(), Box<dyn std::error::Error>>(())

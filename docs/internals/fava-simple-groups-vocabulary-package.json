@@ -7,133 +7,221 @@
   },
   "ordering": "ascending lexicographic order of exact UTF-8 term-name bytes",
   "owner": "fava-simple-groups",
-  "package_byte_length": 104788,
-  "package_sha256": "3b8a62f0545f187fb17258e1549fcf20f2e04d595923462f60d6e484cddf36d0",
-  "term_count": 22,
+  "package_byte_length": 118797,
+  "package_sha256": "28396fb18017fd3ceb294210d79194570e96e402fb648146a811d599bb2deea6",
+  "term_count": 34,
   "terms": [
     {
-      "frame_byte_length": 5005,
+      "frame_byte_length": 2278,
       "index": 0,
-      "markdown_sha256": "4ad70ea1e73a458f69949fdd523ad3e6ea8b0eb944794827e889999b02cd4937",
-      "markdown_utf8_byte_length": 4975,
+      "markdown_sha256": "b15a0bd4c30b2ab87e68343abe71b909cf4d5ed2b38cb86d418ef7c3d3b429c6",
+      "markdown_utf8_byte_length": 2251,
+      "name": "GroupAccess",
+      "name_utf8_byte_length": 11
+    },
+    {
+      "frame_byte_length": 2438,
+      "index": 1,
+      "markdown_sha256": "5089a0e5732fa0d71811a33192001dbcdb9f4354a20418903c539ce0f6ceeae4",
+      "markdown_utf8_byte_length": 2407,
+      "name": "GroupVisibility",
+      "name_utf8_byte_length": 15
+    },
+    {
+      "frame_byte_length": 4559,
+      "index": 2,
+      "markdown_sha256": "5c406ccfe09c21f593ab981b4d808056329fd5a99e56b9148c8b4912b2581c07",
+      "markdown_utf8_byte_length": 4531,
+      "name": "MetadataEdit",
+      "name_utf8_byte_length": 12
+    },
+    {
+      "frame_byte_length": 5021,
+      "index": 3,
+      "markdown_sha256": "bf54659e37251dfe45332eeb592b977216a3a0ec425416e41195ed8e412f049c",
+      "markdown_utf8_byte_length": 4991,
       "name": "SavedGroupList",
       "name_utf8_byte_length": 14
     },
     {
-      "frame_byte_length": 7801,
-      "index": 1,
-      "markdown_sha256": "95c38044ffb562c9bee5f7e29ae1e83db17d9b4fd9b01ee1e13e9daeded61bbf",
-      "markdown_utf8_byte_length": 7760,
+      "frame_byte_length": 6174,
+      "index": 4,
+      "markdown_sha256": "e857b18deebb2b305a772198e4ba7418a55aba170671cbaf8a8064ff42f03b5a",
+      "markdown_utf8_byte_length": 6133,
       "name": "SavedGroupListDecodeError",
       "name_utf8_byte_length": 25
     },
     {
       "frame_byte_length": 2057,
-      "index": 2,
+      "index": 5,
       "markdown_sha256": "3a776a06809c41fe648803114861ecc8b22000f3d666e410f950c93dd4105cdb",
       "markdown_utf8_byte_length": 2015,
       "name": "SavedGroupListMaterializer",
       "name_utf8_byte_length": 26
     },
     {
-      "frame_byte_length": 3610,
-      "index": 3,
-      "markdown_sha256": "adff94b69ec45c0eccd4756b1c25ffba41860b73b8d08cf7cf33c76460f4bf22",
-      "markdown_utf8_byte_length": 3578,
+      "frame_byte_length": 3586,
+      "index": 6,
+      "markdown_sha256": "e64b1f2e7817f3db63d327e2125f6d007d3acda1defdb8244bb9d296dd40e1fc",
+      "markdown_utf8_byte_length": 3554,
       "name": "SavedSimpleGroup",
       "name_utf8_byte_length": 16
     },
     {
-      "frame_byte_length": 7214,
-      "index": 4,
-      "markdown_sha256": "295a356d3f4483f070e04426998985d472cb72b9b383ddb70906e29639d9f03e",
-      "markdown_utf8_byte_length": 7187,
+      "frame_byte_length": 7182,
+      "index": 7,
+      "markdown_sha256": "32f636df0993b68b181ca2dcd2dde2e3f3d827c76af4e40b88b48c0db16951d8",
+      "markdown_utf8_byte_length": 7155,
       "name": "SimpleGroup",
       "name_utf8_byte_length": 11
     },
     {
-      "frame_byte_length": 4741,
-      "index": 5,
-      "markdown_sha256": "6a37200dd6f07a8281c6977887b1059bb0c950c435bd40ffcac7a24d69109a1b",
-      "markdown_utf8_byte_length": 4708,
+      "frame_byte_length": 4760,
+      "index": 8,
+      "markdown_sha256": "e78ad469c58fe1099ca9226c328a632deb93dd09838fce301e285897d3b6e7c4",
+      "markdown_utf8_byte_length": 4727,
       "name": "SimpleGroupAdmins",
       "name_utf8_byte_length": 17
     },
     {
-      "frame_byte_length": 4485,
-      "index": 6,
-      "markdown_sha256": "932c8d1d758398d438fece0d278e408d6ff2ef71ff3672924cb2a85c1f14f406",
-      "markdown_utf8_byte_length": 4441,
+      "frame_byte_length": 4469,
+      "index": 9,
+      "markdown_sha256": "2a25af4c6b34a36de0c07a9b46fa97a3402b0a944d61336dce99087814582ba6",
+      "markdown_utf8_byte_length": 4425,
       "name": "SimpleGroupConstructionError",
       "name_utf8_byte_length": 28
     },
     {
-      "frame_byte_length": 15288,
-      "index": 7,
-      "markdown_sha256": "3ffe97ab43fdfe0533a96597b82a6a29a43c3aacd899371a0ac56399ff713b9f",
-      "markdown_utf8_byte_length": 15250,
+      "frame_byte_length": 8802,
+      "index": 10,
+      "markdown_sha256": "4afb111952d68ffaba92958bb6ac675b21013535c1b9602da83555ad9d3d25d5",
+      "markdown_utf8_byte_length": 8764,
       "name": "SimpleGroupDecodeError",
       "name_utf8_byte_length": 22
     },
     {
       "frame_byte_length": 5225,
-      "index": 8,
+      "index": 11,
       "markdown_sha256": "2c2bf2a7f3a223845b0172a4b49293183c6005f5c54cd13d08395c3f26394bf0",
       "markdown_utf8_byte_length": 5179,
       "name": "SimpleGroupLivekitParticipants",
       "name_utf8_byte_length": 30
     },
     {
-      "frame_byte_length": 4599,
-      "index": 9,
-      "markdown_sha256": "668ef22f32ed0834ebc6b8f5a06f0676eef7d0256cca49560587db0a36661a2c",
-      "markdown_utf8_byte_length": 4565,
+      "frame_byte_length": 4569,
+      "index": 12,
+      "markdown_sha256": "f6a5d8de78e25b6a73eec44c477087a073a38e7a61cf3c53f309440d668abc98",
+      "markdown_utf8_byte_length": 4535,
       "name": "SimpleGroupMembers",
       "name_utf8_byte_length": 18
     },
     {
-      "frame_byte_length": 10995,
-      "index": 10,
-      "markdown_sha256": "b95f1b09ef6d3fcd4574ae65dcb992f7cae14887d4ed5f1509ccc01e27b20183",
-      "markdown_utf8_byte_length": 10960,
+      "frame_byte_length": 10764,
+      "index": 13,
+      "markdown_sha256": "512e7d7043e83277b165ac5cbef2951ce8ce3753cc8069b0fb13270c717043c4",
+      "markdown_utf8_byte_length": 10729,
       "name": "SimpleGroupMetadata",
       "name_utf8_byte_length": 19
     },
     {
-      "frame_byte_length": 4704,
-      "index": 11,
-      "markdown_sha256": "f52125b33e320f8eb24ebc3d24e89a9fac4c75fafe8033f58c6dfb399f5d39f4",
-      "markdown_utf8_byte_length": 4673,
+      "frame_byte_length": 4670,
+      "index": 14,
+      "markdown_sha256": "8c6847620b9cf74d0727d7c9798c0a19049f4f7d84402135c34c47664ee9b94f",
+      "markdown_utf8_byte_length": 4639,
       "name": "SimpleGroupPins",
       "name_utf8_byte_length": 15
     },
     {
       "frame_byte_length": 4704,
-      "index": 12,
+      "index": 15,
       "markdown_sha256": "e56d7547142b7d2eaa9017b68935552a3221484b415a7d6416adf755ccbe011b",
       "markdown_utf8_byte_length": 4672,
       "name": "SimpleGroupRoles",
       "name_utf8_byte_length": 16
     },
     {
-      "frame_byte_length": 6546,
-      "index": 13,
-      "markdown_sha256": "ce929caf38dc87950855e8291eb85d4b731da8836143e04fe6c8d38c57a8e93d",
-      "markdown_utf8_byte_length": 6505,
+      "frame_byte_length": 6548,
+      "index": 16,
+      "markdown_sha256": "c7948fbc6ae40b3ba83f7b30d31ae00cce8aff4ce2088448d700a47ca28c3a79",
+      "markdown_utf8_byte_length": 6507,
       "name": "SimpleGroupStateEventKind",
       "name_utf8_byte_length": 25
     },
     {
+      "frame_byte_length": 1444,
+      "index": 17,
+      "markdown_sha256": "9e0fdb869ccf28ceb8e76b10ddd9ebcd248eb98413eff83b89f8c3bdd8f13c27",
+      "markdown_utf8_byte_length": 1416,
+      "name": "create_group",
+      "name_utf8_byte_length": 12
+    },
+    {
+      "frame_byte_length": 1500,
+      "index": 18,
+      "markdown_sha256": "6d6fe012dcd5aecc32e5391bf12510ad0e938622430a604eb218fcbcbc88d675",
+      "markdown_utf8_byte_length": 1472,
+      "name": "delete_event",
+      "name_utf8_byte_length": 12
+    },
+    {
+      "frame_byte_length": 1401,
+      "index": 19,
+      "markdown_sha256": "eb58fa85490648bce9fe60be29b061ccc92901c70666e0d90806a70443b8ef6e",
+      "markdown_utf8_byte_length": 1373,
+      "name": "delete_group",
+      "name_utf8_byte_length": 12
+    },
+    {
+      "frame_byte_length": 1563,
+      "index": 20,
+      "markdown_sha256": "99b672e0420f408ce9868c068812ff9ad19198e86c36d52a6b242c1b9c518b44",
+      "markdown_utf8_byte_length": 1534,
+      "name": "edit_metadata",
+      "name_utf8_byte_length": 13
+    },
+    {
       "frame_byte_length": 1685,
-      "index": 14,
+      "index": 21,
       "markdown_sha256": "b1f1bef12ce60f2fd3e11252840104fe9c09d71cb86209f6114d2fc17b2fb9db",
       "markdown_utf8_byte_length": 1651,
       "name": "fava_simple_groups",
       "name_utf8_byte_length": 18
     },
     {
+      "frame_byte_length": 1478,
+      "index": 22,
+      "markdown_sha256": "570d884d68fa330c8763b6744cf60332ca91272446fa16eb01b61dea07f8ee37",
+      "markdown_utf8_byte_length": 1456,
+      "name": "invite",
+      "name_utf8_byte_length": 6
+    },
+    {
+      "frame_byte_length": 1425,
+      "index": 23,
+      "markdown_sha256": "df2a278fca81b0a99df003015e77b1f255c3928c16633a445f66f30046ffa151",
+      "markdown_utf8_byte_length": 1397,
+      "name": "join_request",
+      "name_utf8_byte_length": 12
+    },
+    {
+      "frame_byte_length": 1419,
+      "index": 24,
+      "markdown_sha256": "4d563711333262eb60daa9e36becc44d2555ef15dfaa94549944e5ae6bf9f4a7",
+      "markdown_utf8_byte_length": 1392,
+      "name": "leave_group",
+      "name_utf8_byte_length": 11
+    },
+    {
+      "frame_byte_length": 1463,
+      "index": 25,
+      "markdown_sha256": "a4160a543f3138ec449c875cbe172a91901d8a92380e5992f7af8ca2c90f1798",
+      "markdown_utf8_byte_length": 1439,
+      "name": "put_user",
+      "name_utf8_byte_length": 8
+    },
+    {
       "frame_byte_length": 2058,
-      "index": 15,
+      "index": 26,
       "markdown_sha256": "34c247a7e04819a49acd351631a46ec0b35c0b22a6efafbcb1709183856ad66b",
       "markdown_utf8_byte_length": 2024,
       "name": "remove_saved_relay",
@@ -141,15 +229,23 @@
     },
     {
       "frame_byte_length": 2273,
-      "index": 16,
+      "index": 27,
       "markdown_sha256": "94580e86676c748bf5be832e7db294fb5ae45bebbe437bbcbabc740658464500",
       "markdown_utf8_byte_length": 2232,
       "name": "remove_saved_simple_group",
       "name_utf8_byte_length": 25
     },
     {
+      "frame_byte_length": 1484,
+      "index": 28,
+      "markdown_sha256": "8df4f7d73589bf43eae5e4495d56e7a3df6fa0b0b664eb33c88ee7074dd36717",
+      "markdown_utf8_byte_length": 1457,
+      "name": "remove_user",
+      "name_utf8_byte_length": 11
+    },
+    {
       "frame_byte_length": 2409,
-      "index": 17,
+      "index": 29,
       "markdown_sha256": "1efb26bf9c288209cdff276613f98309abd9134e9cd5331f6e62a5232408ea99",
       "markdown_utf8_byte_length": 2368,
       "name": "rename_saved_simple_group",
@@ -157,7 +253,7 @@
     },
     {
       "frame_byte_length": 1998,
-      "index": 18,
+      "index": 30,
       "markdown_sha256": "55fb20cdc2d2655fb402c3ac1348102d9e3947d679a29dd1621390358554652e",
       "markdown_utf8_byte_length": 1972,
       "name": "save_relay",
@@ -165,7 +261,7 @@
     },
     {
       "frame_byte_length": 2308,
-      "index": 19,
+      "index": 31,
       "markdown_sha256": "79be505184fc3b9e125fa0697a4c129819faaeac430536adcfa6ff8e0d66ce49",
       "markdown_utf8_byte_length": 2275,
       "name": "save_simple_group",
@@ -173,7 +269,7 @@
     },
     {
       "frame_byte_length": 2754,
-      "index": 20,
+      "index": 32,
       "markdown_sha256": "bfa0d82a6ba8e8634799d3e0ae7a8299f8940bf7355066f136a76e90e9b781c2",
       "markdown_utf8_byte_length": 2709,
       "name": "saved_group_list_materializer",
@@ -181,7 +277,7 @@
     },
     {
       "frame_byte_length": 2329,
-      "index": 21,
+      "index": 33,
       "markdown_sha256": "5cf33ed8ce2407b50c389f0db4a8625c5cc05086123b9b84e60c148331cdc61b",
       "markdown_utf8_byte_length": 2296,
       "name": "saved_group_lists",

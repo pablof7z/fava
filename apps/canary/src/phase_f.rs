@@ -205,7 +205,7 @@ async fn relay29_try_operations(
     // Use the author's pubkey hex as group ID (relay29's owner model requires groupId == owner pubkey).
     let group_id = author.public_key().to_hex();
     let group =
-        SimpleGroup::from_relays(&group_id, vec![relay.clone()]).map_err(error)?;
+        SimpleGroup::new(&group_id, vec![relay.clone()]).map_err(error)?;
 
     // Build a Nip42Publisher-backed Fava for this run.
     let fava = assembly_nip42(
@@ -492,7 +492,7 @@ async fn communities_run_lifecycle(
 
     // group_id: a short alphanumeric id derived from the seed.
     let group_id = format!("phasef{}", &options.seed[..8.min(options.seed.len())]);
-    let group = SimpleGroup::from_relays(&group_id, vec![relay.clone()]).map_err(error)?;
+    let group = SimpleGroup::new(&group_id, vec![relay.clone()]).map_err(error)?;
 
     let fava = assembly_nip42(
         artifacts.root().join("children/communities.redb"),

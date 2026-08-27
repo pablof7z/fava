@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 mod edit;
-pub mod management;
+mod management;
 mod metadata;
 mod people;
 mod pins;

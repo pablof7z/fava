@@ -48,7 +48,7 @@ impl SimpleGroup {
     ///
     /// let first = RelayUrl::parse("wss://a.example")?;
     /// let second = RelayUrl::parse("wss://b.example")?;
-    /// let group = SimpleGroup::from_relays("photos", vec![first, second])?;
+    /// let group = SimpleGroup::new("photos", vec![first, second])?;
     /// assert_eq!(group.relays().count(), 2);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -60,7 +60,7 @@ impl SimpleGroup {
     /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
-    /// let _ = SimpleGroup::from_relays("photos", std::iter::repeat(relay));
+    /// let _ = SimpleGroup::new("photos", std::iter::repeat(relay));
     /// ```
     ///
     /// The superseded head-plus-tail signature is not retained.
@@ -70,7 +70,7 @@ impl SimpleGroup {
     /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
-    /// let _ = SimpleGroup::from_relays("photos", relay.clone(), vec![relay]);
+    /// let _ = SimpleGroup::new("photos", relay.clone(), vec![relay]);
     /// ```
     ///
     /// # Errors
@@ -78,7 +78,7 @@ impl SimpleGroup {
     /// Returns [`SimpleGroupConstructionError::EmptyId`] when `id` is exactly
     /// empty, or [`SimpleGroupConstructionError::EmptyRelays`] when `relays`
     /// is empty.
-    pub fn from_relays(
+    pub fn new(
         id: impl Into<String>,
         relays: Vec<RelayUrl>,
     ) -> Result<Self, SimpleGroupConstructionError> {
@@ -127,7 +127,7 @@ impl SimpleGroup {
     /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example")?;
-    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    /// let group = SimpleGroup::new("photos", vec![relay])?;
     ///
     /// // An open query is narrowed to this group's h axis and relays.
     /// let query = group.events(Query::events())?;
@@ -165,7 +165,7 @@ impl SimpleGroup {
     /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example")?;
-    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    /// let group = SimpleGroup::new("photos", vec![relay])?;
     ///
     /// // Query all six NIP-29 state kinds for this group.
     /// let all_state = group.meta_events(SimpleGroupStateEventKind::ALL)?;
@@ -209,7 +209,7 @@ impl SimpleGroup {
     /// use nostr::types::RelayUrl;
     ///
     /// let relay = RelayUrl::parse("wss://relay.example")?;
-    /// let group = SimpleGroup::from_relays("photos", vec![relay])?;
+    /// let group = SimpleGroup::new("photos", vec![relay])?;
     /// let keys = Keys::generate();
     ///
     /// let draft = EventBuilder::new(keys.public_key(), Kind::from_u16(9))

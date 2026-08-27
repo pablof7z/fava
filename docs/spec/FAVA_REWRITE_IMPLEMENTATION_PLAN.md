@@ -814,7 +814,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 ### Required behavior
 
 - Construction accepts a finite owned `Vec<RelayUrl>`:
-  `SimpleGroup::from_relays(id, relays)`. It returns the public attributable
+  `SimpleGroup::new(id, relays)`. It returns the public attributable
   `SimpleGroupConstructionError` for exactly an empty id or empty relay vector,
   preserves every non-empty opaque id, and deduplicates relays by first
   occurrence without accepting arbitrary iterators.
@@ -848,7 +848,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 `simple-group-one-host`
 
 - Parse one string with `RelayUrl::parse`, then construct
-  `SimpleGroup::from_relays(id, vec![relay])` and require success.
+  `SimpleGroup::new(id, vec![relay])` and require success.
 - Observe kind-9 content and typed metadata/members through public Fava.
 - Publish an arbitrary custom kind through the exact host and inspect the
   ordinary receipt.
@@ -858,7 +858,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 - Run two controlled real relays with the same simple group id and divergent
   metadata, admins, and content.
 - Parse both relay strings with `RelayUrl::parse`, then construct
-  `SimpleGroup::from_relays(id, vec![relay_a, relay_b])` and require success.
+  `SimpleGroup::new(id, vec![relay_a, relay_b])` and require success.
 - Open one multi-relay simple group feed; duplicate one event across both
   relays.
 - Observe one event record with both serving-relay contributions, unique events

@@ -1417,7 +1417,7 @@ edits plus their materializer. Valid entries, repetitions, malformed siblings,
 unknown tags, opaque content, unused trailing values, and unrelated order MUST
 survive according to the edit's exact target semantics.
 
-`SimpleGroup::from_relays` MUST accept a finite owned `Vec<RelayUrl>` and return
+`SimpleGroup::new` MUST accept a finite owned `Vec<RelayUrl>` and return
 a public typed construction error for exactly an empty id or empty relay
 vector. It MUST preserve every non-empty id exactly, preserve first relay
 occurrences, reject arbitrary-iterator input at the type boundary, and impose
