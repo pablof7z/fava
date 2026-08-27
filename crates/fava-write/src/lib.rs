@@ -63,7 +63,8 @@ impl TryFrom<u64> for WriteId {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct ReceiptId(NonZeroU64);
 
-/// Event form accepted by the publication lifecycle in the current milestone.
+/// Which of three admission paths a write takes: an unsigned body, a durable
+/// protocol-owned edit, or an already-signed event.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum WritePayload {
     /// Complete unsigned event body.
@@ -149,7 +150,7 @@ impl WriteIntent {
         })
     }
 
-    /// Accepted event form.
+    /// Which of the three admission paths this intent takes.
     #[must_use]
     pub const fn payload(&self) -> &WritePayload {
         &self.payload
@@ -297,7 +298,8 @@ impl TryFrom<u64> for ReceiptId {
     }
 }
 
-/// Event body currently supplied by the write store.
+/// Whether the write store currently holds a signed event or an unsigned body
+/// still waiting for one.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum EventValue {
     /// Materialized event awaiting a valid signature.

@@ -7,7 +7,8 @@ use crate::{
     EventId, EventValue, InvalidEventValue, MaterializationId, ReceiptId, WriteId, WriteRouting,
 };
 
-/// Signing fact for the current local materialization.
+/// How far signing has got for the current materialization, and why it stopped
+/// if it did.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SignatureState {
     /// Exact unsigned event exists.
@@ -79,7 +80,8 @@ impl RelayDeliveryOutcome {
     }
 }
 
-/// Local evidence attached to an event record.
+/// Which generation of one locally owned write is current, how far signing and
+/// relay delivery got, and which generations this one superseded.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicationEvidence {
     /// Reattachable receipt identity.
