@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fava_subscriptions::{
-    DemandId, PlanRevision, RelayDemand, SubscriptionPlan, SubscriptionPlanner,
+    DemandId, PlanRevision, PlanRevisions, RelayDemand, SubscriptionPlan, SubscriptionPlanner,
 };
 use fava_wire::SubscriptionId;
 use nostr::event::Event;
@@ -137,7 +137,13 @@ pub fn assert_withdrawal_agrees(
         let next = scenario
             .clone()
             .demanding(surviving.to_vec())
-            .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+            .continuing(
+                installed.clone(),
+                PlanRevisions::new()
+                    .expect("test revision authority")
+                    .allocate()
+                    .expect("test revision"),
+            );
         let replan = assert_conformant(planner, &next);
 
         let served = every_settled(&replan);

@@ -24,7 +24,7 @@ impl Engine {
     ) {
         for item in demand {
             self.registry
-                .record_state(item.owner, relay, generation, state.clone());
+                .record_state(item.owner, relay, Some(generation), state.clone());
         }
     }
 
@@ -40,7 +40,7 @@ impl Engine {
         for owner in self.registry.open_observations() {
             if self.registry.demand_id(owner, relay).is_some() {
                 self.registry
-                    .record_state(owner, relay, generation, state.clone());
+                    .record_state(owner, relay, Some(generation), state.clone());
             }
         }
     }
@@ -57,7 +57,7 @@ impl Engine {
         let generation = slot.generation;
         for owner in slot.owners(id) {
             self.registry
-                .record_state(owner, relay, generation, state.clone());
+                .record_state(owner, relay, Some(generation), state.clone());
         }
     }
 
@@ -71,7 +71,10 @@ impl Engine {
         let Some(slot) = self.slots.get(relay) else {
             return;
         };
-        let revision = planned.map_or(slot.revision.0, |plan| plan.revision.0);
+        let revision = planned.map_or_else(
+            || slot.revision.map_or(0, |revision| revision.sequence().get()),
+            |plan| plan.revision.sequence().get(),
+        );
         for item in cohort {
             let id = item.id();
             let shared_with = slot
@@ -122,7 +125,7 @@ impl Engine {
             self.registry.record_sharing(
                 owner,
                 relay,
-                slot.revision.0,
+                slot.revision.map_or(0, |revision| revision.sequence().get()),
                 slot.owners(id),
                 Some(RelayShortfall {
                     branches,
@@ -132,7 +135,7 @@ impl Engine {
             self.registry.record_state(
                 owner,
                 relay,
-                generation,
+                Some(generation),
                 RelaySourceState::Open {
                     requested_at: nostr::types::Timestamp::now(),
                 },
@@ -146,7 +149,7 @@ impl Engine {
         };
         self.providers.diagnostics.relay(diagnostics::relay_fact(
             relay,
-            slot.generation,
+            Some(slot.generation),
             slot.state.clone(),
             usize::from(slot.lease.is_some()),
             slot.installed

@@ -232,6 +232,12 @@ The strongest scenarios distinguish two nearby cases that a broken implementatio
 - app relay always included versus fallback used only when coverage is insufficient;
 - cached event versus unpublished local materialization;
 - current request completion versus stale previous-generation completion.
+- two independent lifecycle owners minting their first operation generation or
+  plan revision without aliasing;
+- checked final-sequence issuance followed by typed exhaustion, with no wrap or
+  saturated identity reuse;
+- compile-fail refusal of direct identity construction, `Default`, and
+  caller-driven advance.
 
 ### 6.2 Set up causes, not conclusions
 

@@ -147,7 +147,7 @@ pub struct RelayQueryEvidence {
     /// Relay and access authority.
     pub session: RelaySessionKey,
     /// Transport connection generation these facts belong to.
-    pub generation: OperationGeneration,
+    pub generation: Option<OperationGeneration>,
     /// Desired-plan revision under which this relay's demand was requested.
     /// A completion carrying an older revision is stale (`GOALS:426`).
     pub plan_revision: u64,
@@ -236,6 +236,11 @@ pub enum RelaySourceState {
         /// Attempts actually made.
         attempts: usize,
         /// Bounded reason of the final attempt.
+        detail: BoundedText,
+    },
+    /// A local lifecycle owner refused to issue fresh identity for this work.
+    OwnerRefused {
+        /// Typed refusal rendered into a bounded diagnostic reason.
         detail: BoundedText,
     },
     /// Fava withdrew this relay's demand (route withdrawal or query close).

@@ -14,6 +14,7 @@ use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
 use support::{
     bounded_demand, declared, declaring_subscriptions, demand, demand_id, observation, relay,
+    revision,
 };
 
 fn planner() -> StandardSubscriptionPlanner {
@@ -98,7 +99,7 @@ fn replanning_retains_unchanged_wire_subscriptions() {
     let second = first
         .clone()
         .demanding(vec![stable, arriving])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
 
     let plan = assert_conformant(&planner(), &second);
 
@@ -122,7 +123,7 @@ fn joining_demand_reuses_the_installed_subscription_without_a_frame() {
     let second = first
         .clone()
         .demanding(vec![demand(1, filter.clone()), demand(2, filter)])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.is_noop(), "a second holder emits no frame");
@@ -144,7 +145,7 @@ fn withdrawal_only_plan_is_conformant() {
     let second = first
         .clone()
         .demanding(Vec::new())
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.open.is_empty());
@@ -172,7 +173,7 @@ fn one_of_two_holders_leaving_keeps_the_subscription_open() {
     let second = first
         .clone()
         .demanding(vec![demand(2, filter)])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.close.is_empty(), "the surviving holder keeps it open");
@@ -249,7 +250,7 @@ fn a_declared_ceiling_keeps_installed_subscriptions_first() {
     let second = first
         .clone()
         .demanding(later)
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.open.is_empty());
@@ -413,7 +414,7 @@ fn two_demands_with_one_identity_are_refused() {
             &asked,
             &RelayReadConstraints::unknown(),
             &InstalledSubscriptions::empty(),
-            PlanRevision(1),
+            revision(1),
         )
         .expect_err("one logical identity cannot appear twice");
 

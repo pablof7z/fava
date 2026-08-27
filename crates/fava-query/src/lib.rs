@@ -25,7 +25,8 @@ pub use evidence::{
     SourceTerminationCause,
 };
 pub use identity::{
-    ObservationId, ObservationIds, OperationGeneration, QueryBounds, QueryBranchId,
+    ObservationId, ObservationIds, OperationGeneration, OperationGenerationExhausted,
+    OperationGenerations, QueryBounds, QueryBranchId,
 };
 use thiserror::Error;
 

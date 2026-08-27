@@ -333,7 +333,7 @@ impl Observer {
         self.engine.get_or_init(|| {
             started = Engine::start(Arc::clone(&self.registry), providers, &self.runtime);
         });
-        started.map_err(|_| ObserveError::EngineClosed)
+        started
     }
 }
 

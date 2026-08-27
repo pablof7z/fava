@@ -35,9 +35,9 @@ pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranc
 pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
 pub use plan::{
-    AttributedSubscription, EoseCompleteness, PlanRevision, PlannedSubscription, ShortfallReason,
-    SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall, WithdrawalReason,
-    WithdrawnSubscription,
+    AttributedSubscription, EoseCompleteness, PlanRevision, PlanRevisionExhausted, PlanRevisions,
+    PlannedSubscription, ShortfallReason, SubscriptionAttribution, SubscriptionPlan,
+    SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription,
 };
 pub use planner::{SubscriptionPlanError, SubscriptionPlanner};
 

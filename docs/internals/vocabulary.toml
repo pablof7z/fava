@@ -779,6 +779,8 @@ symbols = [
     "fava_observe::ObservationClosed",
     "fava_query::ObservationId",
     "fava_query::OperationGeneration",
+    "fava_query::OperationGenerationExhausted",
+    "fava_query::OperationGenerations",
 ]
 crates = ["fava-observe"]
 
@@ -1191,6 +1193,8 @@ symbols = [
     "fava_subscriptions::InstalledSubscriptions",
     "fava_subscriptions::PlanConformanceError",
     "fava_subscriptions::PlanRevision",
+    "fava_subscriptions::PlanRevisionExhausted",
+    "fava_subscriptions::PlanRevisions",
     "fava_subscriptions::PlannedSubscription",
     "fava_subscriptions::RelayDemand",
     "fava_subscriptions::RelayReadConstraints",

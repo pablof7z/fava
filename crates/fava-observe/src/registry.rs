@@ -201,7 +201,7 @@ impl Registry {
         &self,
         id: ObservationId,
         session: &RelaySessionKey,
-        generation: OperationGeneration,
+        generation: Option<OperationGeneration>,
         next: RelaySourceState,
     ) {
         self.update(id, |installed| {
@@ -432,7 +432,7 @@ fn planned_evidence(
 ) -> RelayQueryEvidence {
     RelayQueryEvidence {
         session,
-        generation: OperationGeneration(0),
+        generation: None,
         plan_revision: 0,
         branches: vec![branch],
         state: RelaySourceState::Planned,

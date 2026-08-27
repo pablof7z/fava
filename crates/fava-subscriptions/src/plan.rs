@@ -1,11 +1,15 @@
 //! The desired wire plan for one relay session, expressed as a diff.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use fava_relay::RelaySessionKey;
 use fava_transport::BoundedReason;
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
+use thiserror::Error;
 
 use crate::demand::DemandId;
 
@@ -13,8 +17,125 @@ use crate::demand::DemandId;
 ///
 /// Authority: ARCH:1511 "plan diff values"; GOALS:426 (QUERY-010) stale
 /// completion rejection.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PlanRevision(pub u64);
+///
+/// The identity cannot be directly minted or advanced by a planner:
+///
+/// ```compile_fail
+/// let _ = fava_subscriptions::PlanRevision::default();
+/// ```
+///
+/// ```compile_fail
+/// let _ = fava_subscriptions::PlanRevision::new(1);
+/// ```
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PlanRevision {
+    authority: NonZeroU64,
+    sequence: NonZeroU64,
+}
+
+impl PlanRevision {
+    /// Opaque identity of the observation owner that minted this revision.
+    #[must_use]
+    pub const fn authority(self) -> NonZeroU64 {
+        self.authority
+    }
+
+    /// Monotonic sequence within this revision authority.
+    #[must_use]
+    pub const fn sequence(self) -> NonZeroU64 {
+        self.sequence
+    }
+}
+
+impl fmt::Display for PlanRevision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}-{}", self.authority, self.sequence)
+    }
+}
+
+static NEXT_PLAN_AUTHORITY: AtomicU64 = AtomicU64::new(0);
+
+/// The sole minting capability for one desired-plan revision authority.
+///
+/// This capability is intentionally not cloneable. Planners receive an opaque
+/// revision to copy into their answer; they never receive this issuer.
+#[derive(Debug)]
+pub struct PlanRevisions {
+    authority: NonZeroU64,
+    next: Option<NonZeroU64>,
+}
+
+impl PlanRevisions {
+    /// Create one independent revision authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed exhaustion rather than reusing an authority namespace.
+    pub fn new() -> Result<Self, PlanRevisionExhausted> {
+        let authority = NEXT_PLAN_AUTHORITY
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current.checked_add(1)
+            })
+            .ok()
+            .and_then(|previous| previous.checked_add(1))
+            .and_then(NonZeroU64::new)
+            .ok_or(PlanRevisionExhausted::Authorities)?;
+        Ok(Self {
+            authority,
+            next: NonZeroU64::new(1),
+        })
+    }
+
+    /// Mint the next desired-plan revision under this authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed exhaustion after the maximum sequence has been issued
+    /// once. It never wraps, saturates, or returns the same revision twice.
+    pub fn allocate(&mut self) -> Result<PlanRevision, PlanRevisionExhausted> {
+        let sequence = self.next.ok_or(PlanRevisionExhausted::Sequence)?;
+        self.next = sequence.get().checked_add(1).and_then(NonZeroU64::new);
+        Ok(PlanRevision {
+            authority: self.authority,
+            sequence,
+        })
+    }
+}
+
+/// Exact desired-plan revision allocation refusal.
+#[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
+pub enum PlanRevisionExhausted {
+    /// No fresh authority namespace remains in this process.
+    #[error("plan-revision authority space is exhausted")]
+    Authorities,
+    /// This authority issued its final sequence and cannot issue another.
+    #[error("plan-revision sequence is exhausted")]
+    Sequence,
+}
+
+#[cfg(test)]
+mod plan_revision_tests {
+    use super::*;
+
+    #[test]
+    fn separate_authorities_never_mint_the_same_revision() {
+        let mut first = PlanRevisions::new().expect("first authority");
+        let mut second = PlanRevisions::new().expect("second authority");
+        assert_ne!(first.allocate().unwrap(), second.allocate().unwrap());
+    }
+
+    #[test]
+    fn final_sequence_is_issued_once_then_refused() {
+        let mut revisions = PlanRevisions::new().expect("authority");
+        revisions.next = NonZeroU64::new(u64::MAX);
+        let last = revisions.allocate().expect("maximum issues once");
+        assert_eq!(last.sequence().get(), u64::MAX);
+        assert_eq!(
+            revisions.allocate(),
+            Err(PlanRevisionExhausted::Sequence)
+        );
+    }
+}
 
 /// One wire subscription the plan wants opened.
 ///

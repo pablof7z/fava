@@ -6,9 +6,9 @@
 use std::num::NonZeroU64;
 
 use fava_query::{
-    AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId, OperationGeneration,
-    QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence,
-    RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
+    AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId, OperationGenerations,
+    QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline,
+    RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
 use nostr::key::Keys;
@@ -26,9 +26,13 @@ fn observation(value: u64) -> ObservationId {
 }
 
 fn relay(session: RelaySessionKey, state: RelaySourceState) -> RelayQueryEvidence {
+    let generation = OperationGenerations::new()
+        .expect("generation authority")
+        .allocate()
+        .expect("generation");
     RelayQueryEvidence {
         session,
-        generation: OperationGeneration(1),
+        generation: Some(generation),
         plan_revision: 7,
         branches: vec![QueryBranchId::ROOT],
         state,
@@ -368,14 +372,10 @@ fn relay_supplied_text_is_bounded() {
 /// is comparable, so an owner can reject it.
 #[test]
 fn stale_completions_are_comparable_against_current_identity() {
-    let current = OperationGeneration(4);
-    assert!(OperationGeneration(3) < current);
-    assert_eq!(current.next(), OperationGeneration(5));
-    assert_eq!(
-        OperationGeneration(u64::MAX).next(),
-        OperationGeneration(u64::MAX),
-        "generation exhaustion saturates instead of panicking"
-    );
+    let mut generations = OperationGenerations::new().expect("generation authority");
+    let previous = generations.allocate().expect("previous generation");
+    let current = generations.allocate().expect("current generation");
+    assert!(previous < current);
 
     let stale = relay(
         session("wss://stale.example"),
@@ -384,5 +384,5 @@ fn stale_completions_are_comparable_against_current_identity() {
         },
     );
     assert_eq!(stale.plan_revision, 7);
-    assert_eq!(stale.generation, OperationGeneration(1));
+    assert!(stale.generation.is_some());
 }

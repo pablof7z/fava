@@ -1566,6 +1566,14 @@ Routing has already selected the relay. The planner decides only how the demand 
 
 The planner output does not open a socket and does not mutate observation state. `fava-observe` owns logical demand; `fava-transport` performs the plan.
 
+`fava-observe` also owns desired-plan revision issuance. It supplies one opaque
+`PlanRevision` to the planner, which must echo that revision into the plan.
+Neither planners nor callers can mint or advance revisions. The owner's
+non-cloneable issuer uses an authority-qualified checked sequence; exhaustion
+is a typed refusal, never wrap, saturation, or identity reuse. Wire
+subscription ids include the complete revision identity, so a late completion
+from a retired plan cannot name a successor plan even after an engine restart.
+
 ---
 
 ## `fava-subscriptions-standard`
@@ -3081,6 +3089,8 @@ Each resource is closed by its owner. The facade owns shutdown ordering.
 | Write route revision admitted for delivery | selected `WriteStore` | publication owner, delivery policy |
 | Query demand for one relay | `fava-observe` | subscription planner |
 | Wire subscription plan | `fava-observe` owns desired plan; planner computes it | transport executes it |
+| Query provider-operation generation | `fava-observe` | runtime, providers, diagnostics |
+| Desired subscription-plan revision | `fava-observe` | subscription planner, transport, diagnostics |
 | Relay connection generation | selected `Transport` | auth, ingest, publisher, observe |
 | NIP-42 challenge lifecycle | `fava-auth` | query/publication owners |
 | Signer registration and availability | `fava-session` plus signer provider | publication/auth owners |

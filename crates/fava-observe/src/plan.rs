@@ -63,7 +63,7 @@ mod tests {
     use fava_query::{ObservationId, QueryBounds, QueryBranchId};
     use fava_relay::{RelayAccess, RelaySessionKey};
     use fava_subscriptions::{
-        PlanRevision, RelayDemand, RelayReadConstraints, SubscriptionPlanner,
+        PlanRevision, PlanRevisions, RelayDemand, RelayReadConstraints, SubscriptionPlanner,
     };
     use fava_subscriptions_standard::StandardSubscriptionPlanner;
     use fava_subscriptions_testkit::apply_plan;
@@ -79,6 +79,15 @@ mod tests {
             relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
             access: RelayAccess::Public,
         }
+    }
+
+    fn revision(sequence: u64) -> PlanRevision {
+        let mut revisions = PlanRevisions::new().expect("revision authority");
+        let mut current = revisions.allocate().expect("first revision");
+        for _ in 1..sequence {
+            current = revisions.allocate().expect("requested revision");
+        }
+        current
     }
 
     fn demand(owner: u64, filter: Filter) -> RelayDemand {
@@ -108,7 +117,7 @@ mod tests {
                 &first,
                 &constraints,
                 &InstalledSubscriptions::empty(),
-                PlanRevision(1),
+                revision(1),
             )
             .expect("the planner accepts the cohort");
         let accepted_ids: BTreeSet<SubscriptionId> =
@@ -130,7 +139,7 @@ mod tests {
             demand(2, Filter::new().kind(Kind::Metadata)),
         ];
         let growing = planner
-            .plan(&relay(), &second, &constraints, &installed, PlanRevision(2))
+            .plan(&relay(), &second, &constraints, &installed, revision(2))
             .expect("the planner accepts the second cohort");
         let opened: BTreeSet<SubscriptionId> =
             growing.open.iter().map(|entry| entry.id.clone()).collect();
@@ -157,7 +166,7 @@ mod tests {
                 &cohort,
                 &constraints,
                 &InstalledSubscriptions::empty(),
-                PlanRevision(1),
+                revision(1),
             )
             .expect("the planner accepts the cohort");
 

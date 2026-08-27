@@ -1,6 +1,9 @@
 //! Scoped observation refusals and terminal facts.
 
-use fava_query::{QueryEvaluationError, QuerySourceError, SourceKind};
+use fava_query::{
+    OperationGenerationExhausted, QueryEvaluationError, QuerySourceError, SourceKind,
+};
+use fava_subscriptions::PlanRevisionExhausted;
 use thiserror::Error;
 
 /// Query-open refusal before a usable handle exists.
@@ -27,6 +30,12 @@ pub enum ObserveError {
     /// The engine is shutting down and admits no new observation.
     #[error("engine is shutting down")]
     EngineClosed,
+    /// The owner cannot mint another provider-operation generation.
+    #[error(transparent)]
+    OperationGenerationExhausted(#[from] OperationGenerationExhausted),
+    /// The owner cannot mint another desired-plan revision.
+    #[error(transparent)]
+    PlanRevisionExhausted(#[from] PlanRevisionExhausted),
 }
 
 /// Terminal observation fact.

@@ -138,7 +138,9 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
         .evidence
         .relay(&private_key)
         .expect("private evidence")
-        .generation;
+        .generation
+        .expect("live relay work has an exact generation");
+    let stale_wire = private_wire.clone();
     private_peer.reconnect();
     wait_until(|| requests(Some(private_peer.clone())).len() == 2).await;
     private_wire = requests(Some(private_peer.clone()))[1].0.clone();
@@ -147,9 +149,28 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
             .current()
             .evidence
             .relay(&private_key)
-            .is_some_and(|item| item.generation > private_generation)
+            .is_some_and(|item| {
+                item.generation
+                    .is_some_and(|current| current > private_generation)
+            })
     })
     .await;
+
+    let stale_event =
+        EventBuilder::new(Kind::TextNote, "stale generation").finalize(&Keys::generate())?;
+    push(
+        &private_peer,
+        &RelayMessage::event(stale_wire, stale_event.clone()),
+    );
+    settle().await;
+    assert!(
+        private
+            .current()
+            .events
+            .iter()
+            .all(|record| record.id() != stale_event.id),
+        "an event naming the superseded generation's exact wire request is inert"
+    );
     assert!(matches!(
         public
             .current()

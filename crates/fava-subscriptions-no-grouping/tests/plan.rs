@@ -5,7 +5,7 @@ use std::num::{NonZeroU64, NonZeroUsize};
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
-    DeclaredLimit, DemandId, InstalledSubscriptions, PlanRevision, RelayDemand,
+    DeclaredLimit, DemandId, InstalledSubscriptions, PlanRevision, PlanRevisions, RelayDemand,
     RelayReadConstraints, ShortfallReason, SubscriptionPlanError, SubscriptionPlanner,
     WithdrawalReason, validate_plan,
 };
@@ -18,6 +18,15 @@ fn relay() -> RelaySessionKey {
         relay: RelayUrl::parse("wss://relay.example").expect("relay URL"),
         access: RelayAccess::Public,
     }
+}
+
+fn revision(sequence: u64) -> PlanRevision {
+    let mut revisions = PlanRevisions::new().expect("revision authority");
+    let mut current = revisions.allocate().expect("first revision");
+    for _ in 1..sequence {
+        current = revisions.allocate().expect("requested revision");
+    }
+    current
 }
 
 fn demand(value: u64, filter: Filter) -> RelayDemand {
@@ -60,7 +69,7 @@ fn each_logical_demand_becomes_one_exact_req_with_attribution() {
         &asked,
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        revision(1),
     );
 
     assert_eq!(plan.relay, relay());
@@ -88,7 +97,7 @@ fn an_unchanged_demand_is_retained_across_replans() {
         &asked,
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        revision(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
         first.open.iter().map(|planned| {
@@ -106,7 +115,7 @@ fn an_unchanged_demand_is_retained_across_replans() {
         &asked,
         &RelayReadConstraints::unknown(),
         &installed,
-        PlanRevision(2),
+        revision(2),
     );
 
     assert!(second.is_noop());
@@ -120,7 +129,7 @@ fn withdrawn_demand_closes_its_own_subscription() {
         &[demand(1, filter.clone())],
         &RelayReadConstraints::unknown(),
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        revision(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
         first.open.iter().map(|planned| {
@@ -138,7 +147,7 @@ fn withdrawn_demand_closes_its_own_subscription() {
         &[],
         &RelayReadConstraints::unknown(),
         &installed,
-        PlanRevision(2),
+        revision(2),
     );
 
     assert_eq!(second.close.len(), 1);
@@ -164,7 +173,7 @@ fn a_declared_ceiling_produces_typed_shortfall_not_an_error() {
         &asked,
         &constraints,
         &InstalledSubscriptions::empty(),
-        PlanRevision(1),
+        revision(1),
     );
 
     assert_eq!(plan.open.len(), 2);
@@ -189,7 +198,7 @@ fn two_demands_with_one_identity_are_refused() {
             &asked,
             &RelayReadConstraints::unknown(),
             &InstalledSubscriptions::empty(),
-            PlanRevision(1),
+            revision(1),
         )
         .expect_err("one logical identity cannot appear twice");
 

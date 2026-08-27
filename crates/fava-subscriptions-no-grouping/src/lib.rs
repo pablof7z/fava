@@ -93,7 +93,7 @@ pub const fn planner() -> impl SubscriptionPlanner {
 /// (GOALS:426, QUERY-010). Nothing the relay advertises feeds it either, so a
 /// NIP-11 refetch cannot move an established id.
 fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
-    SubscriptionId::new(format!("fava-{}-{ordinal}", revision.0))
+    SubscriptionId::new(format!("fava-{revision}-{ordinal}"))
 }
 
 /// Set aside demand whose own `limit` exceeds a *declared* filter limit.

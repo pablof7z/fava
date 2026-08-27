@@ -4,9 +4,16 @@ use std::collections::BTreeSet;
 
 use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
-    DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand,
-    RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
+    DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisions,
+    RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
+
+fn fresh_revision() -> PlanRevision {
+    PlanRevisions::new()
+        .expect("test revision authority")
+        .allocate()
+        .expect("test revision")
+}
 
 /// One complete planning situation: the relay, the demand, what the relay
 /// declared, and what is already live on the session.
@@ -37,7 +44,7 @@ impl PlannerScenario {
             demand,
             constraints: RelayReadConstraints::unknown(),
             installed: InstalledSubscriptions::empty(),
-            revision: PlanRevision(1),
+            revision: fresh_revision(),
         }
     }
 
@@ -198,7 +205,7 @@ pub fn assert_running_subscriptions_are_immutable(
     let next = scenario
         .clone()
         .demanding(joined)
-        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+        .continuing(installed.clone(), fresh_revision());
     let replan = assert_conformant(planner, &next);
 
     for id in installed.ids() {
@@ -248,7 +255,7 @@ pub fn assert_partial_withdrawal_leaves_the_wire_alone(
     let next = scenario
         .clone()
         .demanding(surviving.to_vec())
-        .continuing(installed.clone(), PlanRevision(scenario.revision.0 + 1));
+        .continuing(installed.clone(), fresh_revision());
     let replan = assert_conformant(planner, &next);
 
     for id in installed.ids() {

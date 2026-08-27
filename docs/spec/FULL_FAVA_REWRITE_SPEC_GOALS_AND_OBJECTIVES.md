@@ -425,6 +425,11 @@ Timeout, disconnect, retry exhaustion, silence, local cancellation, and relay re
 
 Reopening dropped demand MUST use fresh request identity so a late EOSE or event from the old request cannot settle the new one.
 
+Operation generations and desired-plan revisions MUST be minted only by their
+lifecycle owner. Their public values MUST be opaque and non-defaultable. Every
+advance MUST either return a globally distinct identity or a typed exhaustion
+refusal; wrap, saturation, and silent reuse are forbidden.
+
 **Acceptance:** dropping and quickly reopening a request cannot inherit the old request's in-flight completion.
 
 ## QUERY-011 — Observation delivery is bounded and loss-honest

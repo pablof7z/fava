@@ -10,7 +10,7 @@ pub struct RelayDiagnostic {
     /// Relay and access authority.
     pub session: RelaySessionKey,
     /// Current transport connection generation.
-    pub generation: OperationGeneration,
+    pub generation: Option<OperationGeneration>,
     /// Current session state.
     pub state: RelaySessionState,
     /// Lease holders on this session — the shared-work refcount.

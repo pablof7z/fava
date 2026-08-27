@@ -10,6 +10,7 @@ use fava_diagnostics::{
     RelayDiagnostic, RelaySessionState, RelaySourceState, WireSubscriptionDiagnostic,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
+use fava_query::OperationGenerations;
 use fava_wire::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
 
@@ -32,9 +33,18 @@ fn shared(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("non-zero holder count")
 }
 
+fn generation(sequence: u64) -> OperationGeneration {
+    let mut generations = OperationGenerations::new().expect("generation authority");
+    let mut current = generations.allocate().expect("first generation");
+    for _ in 1..sequence.max(1) {
+        current = generations.allocate().expect("requested generation");
+    }
+    current
+}
+
 fn relay_fact(
     session: RelaySessionKey,
-    generation: u64,
+    sequence: u64,
     holders: usize,
     subscription: SubscriptionId,
     serves: Vec<ObservationId>,
@@ -42,7 +52,7 @@ fn relay_fact(
 ) -> RelayDiagnostic {
     RelayDiagnostic {
         session,
-        generation: OperationGeneration(generation),
+        generation: Some(generation(sequence)),
         state: RelaySessionState::Open,
         holders,
         subscriptions: vec![WireSubscriptionDiagnostic {
@@ -206,7 +216,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
     for index in 0..3u64 {
         diagnostics.relay(RelayDiagnostic {
             session: session(&format!("relay{index}")),
-            generation: OperationGeneration(index),
+            generation: Some(generation(index + 1)),
             state: RelaySessionState::Reconnecting {
                 detail: BoundedText::new(&hostile),
             },
@@ -242,7 +252,7 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
     let held = snapshot.relays[1].session.clone();
     diagnostics.relay(RelayDiagnostic {
         session: held.clone(),
-        generation: OperationGeneration(9),
+        generation: Some(generation(9)),
         state: RelaySessionState::Closed,
         holders: 0,
         subscriptions: Vec::new(),
@@ -256,7 +266,10 @@ fn hostile_relay_text_is_bounded_in_retained_diagnostics() {
         .iter()
         .find(|fact| fact.session == held)
         .expect("republished session is retained once");
-    assert_eq!(current.generation, OperationGeneration(9));
+    assert_eq!(
+        current.generation.map(OperationGeneration::sequence),
+        NonZeroU64::new(9)
+    );
     assert_eq!(current.state, RelaySessionState::Closed);
 }
 

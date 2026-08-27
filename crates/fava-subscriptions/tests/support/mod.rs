@@ -6,8 +6,8 @@ use std::num::NonZeroU64;
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
-    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlannedSubscription,
-    RelayDemand, SubscriptionAttribution, SubscriptionPlan,
+    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlanRevisions,
+    PlannedSubscription, RelayDemand, SubscriptionAttribution, SubscriptionPlan,
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
@@ -26,6 +26,17 @@ pub fn relay() -> RelaySessionKey {
 #[must_use]
 pub fn observation(value: u64) -> ObservationId {
     ObservationId::new(NonZeroU64::new(value).expect("non-zero observation identity"))
+}
+
+/// One independently minted plan revision at the requested small sequence.
+#[must_use]
+pub fn revision(sequence: u64) -> PlanRevision {
+    let mut revisions = PlanRevisions::new().expect("revision authority");
+    let mut current = revisions.allocate().expect("first revision");
+    for _ in 1..sequence {
+        current = revisions.allocate().expect("requested revision");
+    }
+    current
 }
 
 /// One root-branch demand for the given observation and filter.
@@ -67,7 +78,7 @@ pub fn opening(
 ) -> SubscriptionPlan {
     SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(1),
+        revision: revision(1),
         open: vec![PlannedSubscription {
             id: id.clone(),
             filters: filters.clone(),

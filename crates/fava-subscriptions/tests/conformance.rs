@@ -20,7 +20,7 @@ use fava_subscriptions::{
 use nostr::event::Kind;
 use nostr::filter::Filter;
 use nostr::types::RelayUrl;
-use support::{demand, demand_id, observation, opening, relay, wire};
+use support::{demand, demand_id, observation, opening, relay, revision, wire};
 
 fn unknown() -> RelayReadConstraints {
     RelayReadConstraints::unknown()
@@ -62,7 +62,7 @@ fn withdrawal_only_plan_is_conformant() {
     )]);
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: Vec::new(),
         retain: Vec::new(),
         close: vec![WithdrawnSubscription {
@@ -186,7 +186,7 @@ fn retaining_a_subscription_that_is_not_installed_is_refused() {
     let id = wire("imagined");
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(1),
+        revision: revision(1),
         open: Vec::new(),
         retain: vec![id.clone()],
         close: Vec::new(),
@@ -295,7 +295,7 @@ fn exceeding_a_declared_subscription_count_is_refused() {
     let second = demand(2, Filter::new().kind(Kind::from_u16(7)));
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(1),
+        revision: revision(1),
         open: vec![
             PlannedSubscription {
                 id: wire("one"),
@@ -392,7 +392,7 @@ fn unknown_declared_limits_constrain_nothing() {
     }
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(1),
+        revision: revision(1),
         open,
         retain: Vec::new(),
         close: Vec::new(),

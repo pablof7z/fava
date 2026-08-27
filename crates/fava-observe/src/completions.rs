@@ -117,6 +117,14 @@ impl Engine {
         generation: OperationGeneration,
         detail: &BoundedText,
     ) -> bool {
+        let next_generation = match self.next_operation_generation() {
+            Ok(generation) => generation,
+            Err(error) => {
+                let demand = self.registry.desired().remove(relay).unwrap_or_default();
+                self.publish_owner_refusal(relay, &demand, &error);
+                return false;
+            }
+        };
         let lease;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
@@ -130,7 +138,7 @@ impl Engine {
             };
             lease = slot.lease.take();
             slot.session = None;
-            slot.advance(&self.root);
+            slot.advance(&self.root, next_generation);
         }
         {
             if let Some(lease) = lease {
@@ -157,7 +165,7 @@ impl Engine {
             let Some(slot) = self.slots.get(relay) else {
                 return false;
             };
-            if slot.generation != generation || slot.revision != revision {
+            if slot.generation != generation || slot.revision != Some(revision) {
                 return false;
             }
         }
@@ -242,6 +250,14 @@ impl Engine {
 
     /// A new generation is live: every request is void and the demand replays.
     fn reconnected(&mut self, relay: &RelaySessionKey) -> bool {
+        let next_generation = match self.next_operation_generation() {
+            Ok(generation) => generation,
+            Err(error) => {
+                let demand = self.registry.desired().remove(relay).unwrap_or_default();
+                self.publish_owner_refusal(relay, &demand, &error);
+                return false;
+            }
+        };
         let next;
         let armed;
         {
@@ -250,7 +266,7 @@ impl Engine {
             };
             slot.reconnects = slot.reconnects.saturating_add(1);
             slot.state = fava_diagnostics::RelaySessionState::Open;
-            next = slot.advance(&self.root);
+            next = slot.advance(&self.root, next_generation);
             let session = slot.session.clone();
             if let Some(session) = session {
                 operations::listen(
@@ -380,11 +396,12 @@ impl Engine {
     }
 
     pub(crate) fn release_lease(&self, lease: Box<RelaySessionLease>) {
+        let generation = lease.session().identity().generation;
         operations::release(
             &self.runtime,
             lease,
             Vec::new(),
-            OperationGeneration(0),
+            generation,
             self.providers.deadlines.write,
             self.providers.deadlines.close,
         );

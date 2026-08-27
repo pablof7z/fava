@@ -26,12 +26,16 @@ use std::time::Duration;
 
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
-use fava_query::{BoundedText, OperationGeneration, RelaySourceState};
+use fava_query::{
+    BoundedText, OperationGeneration, OperationGenerationExhausted, OperationGenerations,
+    RelaySourceState,
+};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_subscriptions::{
-    InstalledSubscription, InstalledSubscriptions, PlanRevision, RelayDemand, RelayReadConstraints,
-    SubscriptionPlan, SubscriptionPlanner, filter_covers, validate_plan,
+    InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionExhausted,
+    PlanRevisions, RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner,
+    filter_covers, validate_plan,
 };
 use fava_transport::{
     OpenRelaySession, RelayInbound, RelaySession, RelaySessionLease, Transport, TransportBounds,
@@ -117,6 +121,8 @@ pub(crate) struct Engine {
     pub(crate) reports: Reports,
     pub(crate) inbox: tokio::sync::mpsc::Receiver<Report>,
     pub(crate) slots: BTreeMap<RelaySessionKey, Slot>,
+    /// Source of every operation generation this owner issues.
+    pub(crate) operation_generations: OperationGenerations,
     /// Source of every plan revision this owner issues, for every relay.
     ///
     /// Wire identity is minted from a revision, so a revision reused inside
@@ -128,7 +134,7 @@ pub(crate) struct Engine {
     /// assembly gives publication a lease on the very same session key.
     /// Engine-wide monotonicity is stronger than the promise needs and costs
     /// one `u64` for the life of the engine.
-    pub(crate) revision: PlanRevision,
+    pub(crate) plan_revisions: PlanRevisions,
 }
 
 impl Engine {
@@ -137,7 +143,7 @@ impl Engine {
         registry: Arc<Registry>,
         providers: RelayProviders,
         runtime: &Runtime,
-    ) -> Result<(), fava_runtime::RuntimeError> {
+    ) -> Result<(), crate::ObserveError> {
         let (sender, inbox) = tokio::sync::mpsc::channel(REPORTS);
         let root = runtime.cancellation_token();
         let engine = Self {
@@ -148,11 +154,13 @@ impl Engine {
             reports: Reports { sender },
             inbox,
             slots: BTreeMap::new(),
-            revision: PlanRevision(0),
+            operation_generations: OperationGenerations::new()?,
+            plan_revisions: PlanRevisions::new()?,
         };
         runtime
             .spawn_cancellable(TaskName("observe.engine"), root, engine.run())
             .map(|_| ())
+            .map_err(|_| crate::ObserveError::EngineClosed)
     }
 
     async fn run(mut self) {
@@ -279,7 +287,7 @@ impl Engine {
             self.registry.record_state(
                 id.owner,
                 relay,
-                generation,
+                Some(generation),
                 RelaySourceState::StoredEventsComplete {
                     at: nostr::types::Timestamp::now(),
                 },
@@ -290,12 +298,23 @@ impl Engine {
 
     /// Acquire the relay session this slot needs, once.
     fn establish(&mut self, relay: &RelaySessionKey, demand: &[RelayDemand]) {
+        if !self.slots.contains_key(relay) {
+            let generation = match self.next_operation_generation() {
+                Ok(generation) => generation,
+                Err(error) => {
+                    self.publish_owner_refusal(relay, demand, &error);
+                    return;
+                }
+            };
+            self.slots
+                .insert(relay.clone(), Slot::new(self.root.child(), generation));
+        }
         let generation;
         {
             let slot = self
                 .slots
-                .entry(relay.clone())
-                .or_insert_with(|| Slot::new(self.root.child()));
+                .get_mut(relay)
+                .expect("slot was inserted above");
             if slot.busy || slot.session.is_some() {
                 return;
             }
@@ -319,9 +338,33 @@ impl Engine {
         self.publish_states(relay, demand, generation, &RelaySourceState::Connecting);
     }
     /// The next plan revision, never reused for the life of this engine.
-    fn next_revision(&mut self) -> PlanRevision {
-        self.revision = PlanRevision(self.revision.0.saturating_add(1));
-        self.revision
+    fn next_revision(&mut self) -> Result<PlanRevision, PlanRevisionExhausted> {
+        self.plan_revisions.allocate()
+    }
+
+    pub(crate) fn next_operation_generation(
+        &mut self,
+    ) -> Result<OperationGeneration, OperationGenerationExhausted> {
+        self.operation_generations.allocate()
+    }
+
+    pub(crate) fn publish_owner_refusal(
+        &self,
+        relay: &RelaySessionKey,
+        demand: &[RelayDemand],
+        error: &impl std::fmt::Display,
+    ) {
+        let state = RelaySourceState::OwnerRefused {
+            detail: BoundedText::new(error.to_string()),
+        };
+        if let Some(slot) = self.slots.get(relay) {
+            self.publish_states(relay, demand, slot.generation, &state);
+        } else {
+            for item in demand {
+                self.registry
+                    .record_state(item.owner, relay, None, state.clone());
+            }
+        }
     }
 
     /// Arm one fixed, first-arrival-anchored admission window.
@@ -369,14 +412,20 @@ impl Engine {
             session = live;
             installed = slot.installed.clone();
         }
-        let revision = self.next_revision();
+        let revision = match self.next_revision() {
+            Ok(revision) => revision,
+            Err(error) => {
+                self.publish_owner_refusal(relay, &demand, &error);
+                return false;
+            }
+        };
         let constraints = self
             .slots
             .get_mut(relay)
             .map(|slot| {
                 // The last revision this slot issued, so a completion for an
                 // earlier one is refused rather than installed.
-                slot.revision = revision;
+                slot.revision = Some(revision);
                 slot.constraints
             })
             .unwrap_or_else(RelayReadConstraints::unknown);

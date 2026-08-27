@@ -15,7 +15,7 @@ use fava_wire::SubscriptionId;
 use nostr::event::{EventId, Kind};
 use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
-use support::{demand, demand_id, relay, wire};
+use support::{demand, demand_id, relay, revision, wire};
 
 fn unknown() -> RelayReadConstraints {
     RelayReadConstraints::unknown()
@@ -38,7 +38,7 @@ fn running(id: &SubscriptionId, filters: Vec<Filter>, serves: &[u64]) -> Install
 fn retaining(id: &SubscriptionId, filters: Vec<Filter>, serves: &[u64]) -> SubscriptionPlan {
     SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: Vec::new(),
         retain: vec![id.clone()],
         close: Vec::new(),
@@ -69,7 +69,7 @@ fn a_running_subscription_may_not_be_closed_while_it_is_still_wanted() {
     let merged = Filter::new().authors([alice, Keys::generate().public_key()]);
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: vec![PlannedSubscription {
             id: successor.clone(),
             filters: vec![merged.clone()],
@@ -135,7 +135,7 @@ fn opening_a_second_subscription_for_running_filters_is_refused() {
     let duplicate = wire("fava-2-0");
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: vec![PlannedSubscription {
             id: duplicate.clone(),
             filters: vec![filter.clone()],
@@ -183,7 +183,7 @@ fn a_withdrawal_naming_an_absent_successor_is_refused() {
     let absent = wire("never-opened");
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: Vec::new(),
         retain: Vec::new(),
         close: vec![WithdrawnSubscription {
@@ -237,7 +237,7 @@ fn a_lowered_declared_ceiling_does_not_condemn_what_is_already_running() {
     };
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: Vec::new(),
         retain: vec![first.clone(), second.clone()],
         close: Vec::new(),
@@ -287,7 +287,7 @@ fn opening_past_the_residual_budget_is_refused() {
     let opened = wire("fava-2-0");
     let plan = SubscriptionPlan {
         relay: relay(),
-        revision: PlanRevision(2),
+        revision: revision(2),
         open: vec![PlannedSubscription {
             id: opened.clone(),
             filters: vec![beta.clone()],

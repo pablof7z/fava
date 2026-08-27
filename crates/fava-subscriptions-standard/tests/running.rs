@@ -17,7 +17,7 @@ use fava_subscriptions_testkit::{
 use nostr::event::Kind;
 use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
-use support::{bounded_demand, declared, demand, demand_id, relay};
+use support::{bounded_demand, declared, demand, demand_id, relay, revision};
 
 fn planner() -> StandardSubscriptionPlanner {
     StandardSubscriptionPlanner::new()
@@ -50,7 +50,7 @@ fn new_demand_never_reopens_an_installed_subscription() {
     let second = first
         .clone()
         .demanding(vec![held, arriving])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(
@@ -88,7 +88,7 @@ fn withdrawing_one_member_leaves_the_survivors_subscription_untouched() {
     let second = first
         .clone()
         .demanding(vec![both[0].clone()])
-        .continuing(installed.clone(), PlanRevision(2));
+        .continuing(installed.clone(), revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.close.is_empty());
@@ -163,7 +163,7 @@ fn the_last_owner_leaving_closes_the_subscription() {
     let second = first
         .clone()
         .demanding(Vec::new())
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert_eq!(plan.close.len(), 1);
@@ -197,7 +197,7 @@ fn demand_covered_by_a_live_broader_subscription_opens_no_req() {
     let second = first
         .clone()
         .demanding(vec![broad, narrow])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.open.is_empty(), "the traffic is already arriving");
@@ -226,7 +226,7 @@ fn a_limited_subscription_never_absorbs_a_later_owner() {
     let second = first
         .clone()
         .demanding(vec![limited, narrow])
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert_eq!(plan.open.len(), 1, "the newcomer needs its own request");
@@ -249,7 +249,7 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
     let closing = first
         .clone()
         .demanding(Vec::new())
-        .continuing(installed.clone(), PlanRevision(2));
+        .continuing(installed.clone(), revision(2));
     let closed = assert_conformant(&planner(), &closing);
     assert_eq!(closed.close.len(), 1);
     let empty = apply_plan(&installed, &closed);
@@ -258,7 +258,7 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
     let reopening = first
         .clone()
         .demanding(vec![demand(1, filter)])
-        .continuing(empty, PlanRevision(3));
+        .continuing(empty, revision(3));
     let reopened = assert_conformant(&planner(), &reopening);
 
     assert_eq!(reopened.open.len(), 1);
@@ -289,7 +289,7 @@ fn a_changed_declared_id_length_does_not_move_installed_subscription_ids() {
             max_subscription_id_chars: declared(32),
             ..RelayReadConstraints::unknown()
         })
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert_eq!(plan.retain, vec![original]);
@@ -372,7 +372,7 @@ fn a_lowered_ceiling_spends_no_residual_and_closes_nothing() {
             max_subscriptions: declared(2),
             ..RelayReadConstraints::unknown()
         })
-        .continuing(installed, PlanRevision(2));
+        .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
     assert!(plan.close.is_empty(), "a lowered ceiling closes nothing");

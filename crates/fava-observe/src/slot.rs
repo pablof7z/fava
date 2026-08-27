@@ -31,7 +31,7 @@ pub(crate) struct Slot {
     /// The last plan revision this slot issued. The counter it is stamped
     /// from lives on the engine and outlives the slot, because wire identity
     /// is minted from it and a slot dies whenever its relay's demand drains.
-    pub(crate) revision: PlanRevision,
+    pub(crate) revision: Option<PlanRevision>,
     /// A fixed admission window is pending for this relay.
     pub(crate) armed: bool,
     pub(crate) busy: bool,
@@ -40,9 +40,9 @@ pub(crate) struct Slot {
 }
 
 impl Slot {
-    pub(crate) fn new(cancel: CancellationToken) -> Self {
+    pub(crate) fn new(cancel: CancellationToken, generation: OperationGeneration) -> Self {
         Self {
-            generation: OperationGeneration(1),
+            generation,
             cancel,
             lease: None,
             session: None,
@@ -50,7 +50,7 @@ impl Slot {
             installed: InstalledSubscriptions::empty(),
             completeness: BTreeMap::new(),
             settled: BTreeMap::new(),
-            revision: PlanRevision(0),
+            revision: None,
             armed: false,
             busy: false,
             state: fava_diagnostics::RelaySessionState::Connecting,
@@ -63,7 +63,11 @@ impl Slot {
     /// Work already issued is cancelled at its next boundary rather than
     /// aborted, so an operation that produced a provider resource always
     /// reaches the owner and the owner always releases it.
-    pub(crate) fn advance(&mut self, root: &CancellationToken) -> OperationGeneration {
+    pub(crate) fn advance(
+        &mut self,
+        root: &CancellationToken,
+        generation: OperationGeneration,
+    ) -> OperationGeneration {
         self.cancel.cancel();
         self.cancel = root.child();
         self.installed = InstalledSubscriptions::empty();
@@ -71,7 +75,7 @@ impl Slot {
         self.settled.clear();
         self.armed = false;
         self.busy = false;
-        self.generation = self.generation.next();
+        self.generation = generation;
         self.generation
     }
 

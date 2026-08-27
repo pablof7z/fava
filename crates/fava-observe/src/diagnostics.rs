@@ -11,7 +11,7 @@ use fava_wire::SubscriptionId;
 /// Current facts for one relay session this owner holds.
 pub(crate) fn relay_fact(
     session: &RelaySessionKey,
-    generation: OperationGeneration,
+    generation: Option<OperationGeneration>,
     state: RelaySessionState,
     holders: usize,
     subscriptions: Vec<WireSubscriptionDiagnostic>,
@@ -45,7 +45,7 @@ pub(crate) fn wire_fact(
 pub(crate) fn refused_plan(session: &RelaySessionKey, detail: BoundedText) -> RelayDiagnostic {
     RelayDiagnostic {
         session: session.clone(),
-        generation: OperationGeneration(0),
+        generation: None,
         state: RelaySessionState::Unreachable { detail },
         holders: 0,
         subscriptions: Vec::new(),
