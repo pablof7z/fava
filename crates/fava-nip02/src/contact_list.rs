@@ -107,7 +107,8 @@ impl Follow {
     }
 }
 
-/// Exact typed evidence for one non-valid NIP-02 `p` row.
+/// Why one NIP-02 `p` row was left out of `follows()`, with its original tag
+/// index and its untouched raw values.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContactListRowEvidence {
     /// The row contains no target column.

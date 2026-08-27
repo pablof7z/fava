@@ -2,6 +2,8 @@ use fava_write::{Event, EventValue, Kind, Tag, Timestamp, WriteIntentError};
 
 const MAX_EVENT_BYTES: usize = 131_072;
 const MIN_EVENT_WITH_ONE_TAG_BYTES: usize = 334;
+/// Most tag values a source event may carry and still encode inside the 128 KiB
+/// event bound.
 const MAX_TAG_VALUES: usize = (MAX_EVENT_BYTES - MIN_EVENT_WITH_ONE_TAG_BYTES) / 3;
 const EMPTY_EVENT_OBJECT_BYTES: usize = 71;
 const FIXED_HEX_BYTES: usize = 64 + 64 + 128;
@@ -10,6 +12,7 @@ pub(super) fn validate_source(source: &Event) -> Result<(), WriteIntentError> {
     encoded_len(source).map(|_| ())
 }
 
+/// Refuse a prior event that would not re-encode inside the NIP-02 size bounds.
 pub(super) fn validate_value_source(source: &EventValue) -> Result<(), WriteIntentError> {
     let content = match source {
         EventValue::Unsigned(event) => event.content.as_str(),

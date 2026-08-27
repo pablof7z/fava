@@ -11,6 +11,7 @@ use nostr::types::RelayUrl;
 
 const ADD: u8 = 1;
 const REMOVE: u8 = 2;
+/// Codec byte marking a follow that carries a relay hint or a petname.
 const ADD_WITH_METADATA: u8 = 3;
 const CODEC_LEN: usize = 33;
 const MAX_EDIT_BYTES: usize = 131_072;
@@ -141,6 +142,7 @@ fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
     Ok(bytes)
 }
 
+/// Encoded byte count for a `follow_with` edit, refusing one past the edit bound.
 fn metadata_encoded_len(
     relay: Option<&RelayUrl>,
     petname: Option<&str>,
@@ -175,6 +177,7 @@ fn decode(bytes: &[u8]) -> Result<Change, WriteIntentError> {
     Ok(Change { operation, target })
 }
 
+/// Read back the relay hint and petname a `follow_with` edit encoded.
 fn decode_metadata(bytes: &[u8]) -> Result<Operation, WriteIntentError> {
     let (relay_bytes, remaining) = take_length_prefixed(bytes)?;
     let relay_text = std::str::from_utf8(relay_bytes)
@@ -240,6 +243,8 @@ fn parse_target(target: &impl fmt::Display) -> Result<PublicKey, WriteIntentErro
 }
 
 struct BoundedTargetText {
+    /// Formatted target text kept so far, never longer than
+    /// `MAX_TARGET_TEXT_BYTES`.
     value: String,
     attempted: usize,
     exceeded: bool,
