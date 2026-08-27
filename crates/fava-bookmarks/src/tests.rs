@@ -296,7 +296,7 @@ fn bookmark_bounds_private_and_invalid_sources_are_typed_refusals() {
 }
 
 #[test]
-fn hostile_sources_are_bounded_before_signature_verification() {
+fn hostile_sources_preserve_the_generic_builder_refusal_before_signature_verification() {
     let actor = Keys::generate();
     let event_id = EventId::from_byte_array([13; 32]);
     let edit = bookmark_event(event_id).expect("bookmark edit");
@@ -309,14 +309,23 @@ fn hostile_sources_are_bounded_before_signature_verification() {
         Vec::new(),
     );
     escaped.id = EventId::from_byte_array([43; 32]);
-    assert!(matches!(
+    let expected = fava_write::EventBuilder::new(
+        actor.public_key(),
+        Kind::from_u16(BOOKMARK_KIND),
+    )
+    .created_at(Timestamp::from(2))
+    .content(escaped.content.clone())
+    .tag(Tag::event(event_id))
+    .build()
+    .expect_err("hostile content exceeds the generic event bound");
+    assert_eq!(
         materialize(actor.public_key(), &edit, Some(&escaped), 2),
-        Err(WriteIntentError::TooLarge { .. })
-    ));
+        Err(WriteIntentError::from(expected))
+    );
 
-    let mut nested_values = Vec::with_capacity(43_580);
+    let mut nested_values = Vec::with_capacity(50_000);
     nested_values.push("x".to_owned());
-    nested_values.resize(43_580, String::new());
+    nested_values.resize(50_000, String::new());
     let mut nested = source(
         &actor,
         Kind::from_u16(BOOKMARK_KIND),
@@ -325,26 +334,39 @@ fn hostile_sources_are_bounded_before_signature_verification() {
         vec![Tag::parse(nested_values).expect("nonempty hostile tag")],
     );
     nested.id = EventId::from_byte_array([44; 32]);
-    assert!(matches!(
+    let expected = fava_write::EventBuilder::new(
+        actor.public_key(),
+        Kind::from_u16(BOOKMARK_KIND),
+    )
+    .created_at(Timestamp::from(2))
+    .content(nested.content.clone())
+    .tag(nested.tags[0].clone())
+    .tag(Tag::event(event_id))
+    .build()
+    .expect_err("hostile tag values exceed the generic event bound");
+    assert_eq!(
         materialize(actor.public_key(), &edit, Some(&nested), 2),
-        Err(WriteIntentError::TooLarge { .. })
-    ));
+        Err(WriteIntentError::from(expected))
+    );
 }
 
 #[test]
-fn structural_size_matches_exact_nostr_json_encoding() {
+fn oversized_source_can_be_reduced_to_a_bounded_output() {
     let actor = Keys::generate();
-    let event = source(
+    let event_id = EventId::from_byte_array([15; 32]);
+    let edit = unbookmark_event(event_id).expect("unbookmark edit");
+    let source = source(
         &actor,
         Kind::from_u16(BOOKMARK_KIND),
-        123_456,
-        "quote=\" slash=\\ line=\n control=\u{0001} unicode=π",
-        vec![tag(&["x", "\"", "\\", "\n", "\u{0002}", "π"])],
+        1,
+        "",
+        (0..2_001).map(|_| Tag::event(event_id)).collect(),
     );
-    assert_eq!(
-        super::bounds::encoded_len(&event).expect("bounded exact size"),
-        event.as_json().len()
-    );
+    assert!(source.as_json().len() > 131_072);
+
+    let output = materialize(actor.public_key(), &edit, Some(&source), 2)
+        .expect("bookmark semantics reduce the hostile source before generic output bounds");
+    assert!(output.tags.is_empty());
 }
 
 #[test]
