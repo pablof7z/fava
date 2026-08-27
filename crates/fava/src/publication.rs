@@ -246,6 +246,8 @@ pub fn at_least(minimum: usize) -> Result<impl Fn(&Receipt) -> bool + Copy, Publ
     Ok(move |receipt: &Receipt| receipt.acknowledged() >= minimum)
 }
 
+/// Anything an application can hand to `Fava::publish`, converted once into a
+/// validated write intent.
 pub(crate) trait PublishPayload {
     fn into_intent(
         self,
