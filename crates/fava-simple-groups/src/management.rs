@@ -348,6 +348,24 @@ pub fn delete_event(
     build(author, KIND_DELETE_EVENT, group, extra)
 }
 
+/// Build a kind-9007 create-subgroup event for `child` under `parent_id`.
+///
+/// Emits `h` (child group id) and `parent` (parent group id) tags.
+/// The relay creates the child group and links it to the parent when it
+/// accepts this event from an authorized pubkey.
+///
+/// # Errors
+///
+/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+pub fn create_subgroup(
+    author: PublicKey,
+    child: &SimpleGroup,
+    parent_id: &str,
+) -> Result<UnsignedEvent, EventBuildError> {
+    let extra = [parse_tag(["parent", parent_id])?];
+    build(author, KIND_CREATE_GROUP, child, extra)
+}
+
 /// Build a kind-9008 delete-group event for `group`.
 ///
 /// The relay removes the group when it accepts this event from an authorized
