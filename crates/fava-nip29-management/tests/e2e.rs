@@ -27,8 +27,8 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use tokio_tungstenite::tungstenite::Message;
 
 use fava_nip29_management::{
-    GroupAccess, GroupVisibility, MetadataEdit, create_group, delete_event, delete_group,
-    edit_metadata, invite, join_request, leave_group, put_user, remove_user,
+    GroupAccess, GroupVisibility, MetadataEdit, create_group, create_subgroup, delete_event,
+    delete_group, edit_metadata, invite, join_request, leave_group, put_user, remove_user,
 };
 use fava_simple_groups::{SimpleGroup, SimpleGroupAdmins};
 use fava_write::{EventBuilder, EventId, Tag, UnsignedEvent};
@@ -382,8 +382,10 @@ async fn gate4_all_constructors_accepted() {
     let group = SimpleGroup::from_relays("phase-b-gate4", vec![r.clone()]).unwrap();
     let target_id = EventId::from_byte_array([0u8; 32]);
 
+    let parent_group = SimpleGroup::from_relays("phase-b-gate4-parent", vec![r.clone()]).unwrap();
     let cases: Vec<(&str, UnsignedEvent, &Keys)> = vec![
-        ("create_group",   create_group(admin_keys.public_key(), &group).unwrap(), &admin_keys),
+        ("create_group",    create_group(admin_keys.public_key(), &group).unwrap(), &admin_keys),
+        ("create_subgroup", create_subgroup(admin_keys.public_key(), &group, parent_group.id()).unwrap(), &admin_keys),
         ("edit_metadata",  edit_metadata(admin_keys.public_key(), &group, &MetadataEdit {
             name: Some("Gate4 Cats".to_owned()),
             visibility: Some(GroupVisibility::Private),

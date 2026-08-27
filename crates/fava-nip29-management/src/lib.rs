@@ -354,6 +354,41 @@ pub fn delete_event(
     build(author, KIND_DELETE_EVENT, group, extra)
 }
 
+/// Build a kind-9007 add-subgroup event: add `child` under `parent`.
+///
+/// Emits `h`=child group id and `parent`=parent group id. The relay links
+/// the child group to the parent when it accepts this event from an authorized
+/// pubkey.
+///
+/// # Examples
+///
+/// ```
+/// use fava_nip29_management::create_subgroup;
+/// use fava_simple_groups::SimpleGroup;
+/// use nostr::key::Keys;
+/// use nostr::types::RelayUrl;
+///
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let parent = SimpleGroup::from_relays("general", vec![relay.clone()])?;
+/// let child = SimpleGroup::from_relays("task-board", vec![relay])?;
+/// let admin = Keys::generate();
+///
+/// let event = create_subgroup(admin.public_key(), &child, parent.id())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+pub fn create_subgroup(
+    author: PublicKey,
+    child: &SimpleGroup,
+    parent_id: &str,
+) -> Result<UnsignedEvent, EventBuildError> {
+    let parent_tag = parse_tag(["parent", parent_id])?;
+    build(author, KIND_CREATE_GROUP, child, [parent_tag])
+}
+
 /// Build a kind-9008 delete-group event for `group`.
 ///
 /// The relay removes the group when it accepts this event from an authorized
@@ -623,6 +658,22 @@ mod tests {
     }
 
     #[test]
+    fn create_subgroup_kind_h_and_parent() {
+        let relay = RelayUrl::parse("wss://relay.example").unwrap();
+        let parent = SimpleGroup::from_relays("general", vec![relay.clone()]).unwrap();
+        let child = SimpleGroup::from_relays("task-board", vec![relay]).unwrap();
+        let event = create_subgroup(author(), &child, parent.id()).unwrap();
+        assert_eq!(event.kind.as_u16(), KIND_CREATE_GROUP);
+        assert!(h_tag(&event, "task-board"), "h tag must name the child group");
+        assert_eq!(
+            tag_value(&event, "parent", 1).as_deref(),
+            Some("general"),
+            "parent tag must name the parent group"
+        );
+        assert_eq!(event.tags.len(), 2, "only h and parent tags");
+    }
+
+    #[test]
     fn delete_group_kind_and_h() {
         let group = group();
         let event = delete_group(author(), &group).unwrap();
@@ -649,8 +700,10 @@ mod tests {
         let relay = RelayUrl::parse("wss://relay.example").unwrap();
         let target = EventId::from_byte_array([1u8; 32]);
 
+        let parent = SimpleGroup::from_relays("parent-group", vec![relay.clone()]).unwrap();
         let events = [
             create_group(a, &group).unwrap(),
+            create_subgroup(a, &group, parent.id()).unwrap(),
             edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
             invite(a, &group, &user, &relay).unwrap(),
             join_request(a, &group).unwrap(),
