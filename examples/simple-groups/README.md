@@ -64,6 +64,43 @@ ordinary unsigned values. The example uses the typed constructors, publishes
 them through the same Fava path, and observes the resulting relay state. It
 does not create a second NIP-29 runtime, socket, or publication lifecycle.
 
+## Management is checked, not just called
+
+Publishing a management event and printing the receipt proves the bytes left
+the process. The example goes further for all nine typed constructors, and
+fails loudly rather than printing a value nobody reads:
+
+- **Acknowledged.** Each publication settles on `all_terminal()` and then
+  requires relay acknowledgement evidence. A rejection therefore surfaces the
+  relay's own message instead of an unexplained timeout.
+- **Read back.** Each management event is waited for in the live
+  `SimpleGroup::events` observation and checked there — kind and the tags that
+  carry its meaning (`h`, `p`, `e`, `name`, `code`). Presence alone is not
+  accepted: the record must carry at least one relay occurrence, so the
+  application's own local write cannot masquerade as relay confirmation.
+- **Effect on group state.** After the sequence, the example states the
+  membership and metadata it expects and waits for exactly that: the name and
+  closed flag `edit_metadata` set, Alice holding the primary role in the derived
+  admin list, Alice and Bob in the derived member list, and Carol no longer in
+  it. Waiting for the *expected* state rather than the first state that decodes
+  is what makes `remove_user` and `leave_group` verifiable at all.
+- **Refusals.** Each constructor is then called again without the authority to
+  make it stick — `edit_metadata`, `invite` and `leave_group` by an outsider, a
+  `join_request` to the closed group with no invite code, `delete_group` by a
+  plain member, a duplicate `create_group`, a `put_user` that changes nothing, a
+  `remove_user` targeting someone already gone, and a `delete_event` for an
+  event the relay never stored. Each prints the expectation next to the relay's
+  verbatim refusal.
+- **Deletion.** `delete_event` is confirmed by the relay refusing to store the
+  deleted event again; `delete_group` by the relay no longer knowing the group.
+
+A generic relay stores management events without deriving NIP-29 state, and
+does not enforce NIP-29 authority either — it would acknowledge every refusal
+above. The example detects that from the absent derived state and prints each
+check it did not run, by name, under a `SKIPPED` heading, finishing with
+`PASS (partial)`. A relay that *does* derive state but derives the wrong state
+is a failure, not a skip.
+
 ## Run it
 
 Build from the repository root:
@@ -92,9 +129,12 @@ cargo run --manifest-path examples/simple-groups/Cargo.toml -- \
   --saved-relay ws://127.0.0.1:8080
 ```
 
-The app uses disposable Alice, Bob, and Carol keys, creates a unique group id,
-opens the content/state/saved-list observations before writing, then creates and
-edits the group, sends content, exercises saved-list edits, and removes its
+The app uses disposable Alice, Bob, Carol, and Dave keys — Alice administers the
+group, Bob is invited into it, Carol joins, leaves, is re-added and removed, and
+Dave never joins so his calls exercise the refusal paths. It creates a unique
+group id, opens the content/state/saved-list observations before writing, then
+creates and edits the group, sends content, asserts the derived group state,
+exercises every management refusal, runs the saved-list edits, and removes its
 state. It stops the child Croissant process and removes its temporary data on
 exit.
 
