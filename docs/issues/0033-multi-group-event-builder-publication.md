@@ -64,13 +64,6 @@ without coupling generic event construction to NIP-29.
 Pre-signed events remain outside builder composition and use the ordinary
 explicit facade route without a simple-groups validation or mutation path.
 
-## Relay limitation
-
-Repeated `h` tags are a Fava publication contract, not a claim that all
-third-party NIP-29 relays admit or moderate them as independent groups. A
-shared relay acknowledges one event delivery, not group-qualified admissions.
-Fava retains actual relay evidence and never infers unobserved group success.
-
 ## Executable falsifiers
 
 - `cargo test -p fava-write --test event_builder --test routing_order`
