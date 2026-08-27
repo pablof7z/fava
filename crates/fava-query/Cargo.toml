@@ -1,5 +1,6 @@
 [package]
 name = "fava-query"
+description = "Declarative event queries, local source contracts, and application snapshots."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
