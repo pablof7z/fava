@@ -56,6 +56,7 @@ impl LiveIdentity {
 /// parking the socket reader or silently discarding (GOALS:434, GOALS:1448).
 pub(crate) struct ConsumerState {
     capacity: usize,
+    /// Inbound frames buffered for this consumer, never more than `capacity`.
     items: Mutex<VecDeque<RelayInbound>>,
     dropped: AtomicU64,
     detached: AtomicBool,

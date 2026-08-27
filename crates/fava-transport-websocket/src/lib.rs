@@ -41,6 +41,7 @@ struct Registry {
     generations: Arc<AtomicU64>,
 }
 
+/// One live relay session and how many leases are still outstanding on it.
 struct Entry {
     session: Arc<WebSocketRelaySession>,
     holders: usize,
