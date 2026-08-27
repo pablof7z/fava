@@ -19,8 +19,8 @@ pub use edit::{
     save_simple_group, saved_group_list_materializer,
 };
 pub use management::{
-    GroupAccess, GroupVisibility, MetadataEdit, create_group, create_subgroup, delete_event,
-    delete_group, edit_metadata, invite, join_request, leave_group, put_user, remove_user,
+    GroupAccess, GroupVisibility, MetadataEdit, create_group, delete_event, delete_group,
+    edit_metadata, invite, join_request, leave_group, put_user, remove_user,
 };
 pub use metadata::SimpleGroupMetadata;
 pub use people::{
