@@ -912,6 +912,34 @@ crates = ["fava-write", "fava-publication"]
 spec_crates = ["fava-publication"]
 
 [[term]]
+name = "all_terminal"
+source = "fava"
+meaning = "A receipt predicate that accepts only after routing settles and every currently desired destination has an exact terminal fact."
+owner = "fava"
+nearest_nostr = "NIP-01 OK response"
+distinction = "Terminal destination evidence includes acknowledgement, rejection, exhausted delivery, and ambiguous handoff, so it proves completion rather than publication success."
+counterexample = "A settled receipt whose desired destinations are all rejected satisfies all_terminal even though no relay acknowledged the event."
+lifecycle = "The stateless predicate reads one current Receipt revision and retains no work or evidence."
+forcing_requirement = "Applications must be able to await complete attributable destination evidence without misrepresenting rejection or ambiguity as acknowledgement."
+falsifier = "write_settlement::all_terminal_and_custom_predicates_receive_complete_mixed_revisions fails if a mixed acknowledged, rejected, and ambiguous receipt does not satisfy all_terminal."
+symbols = ["fava::all_terminal"]
+crates = []
+
+[[term]]
+name = "all_acknowledged"
+source = "fava"
+meaning = "A receipt predicate that accepts only when a nonempty settled current route has exact acknowledgement evidence for every desired destination."
+owner = "fava"
+nearest_nostr = "NIP-01 OK response"
+distinction = "It evaluates exact current desired destination identity, not aggregate historical acknowledgement counts or generic terminal completion."
+counterexample = "An acknowledgement retained for a withdrawn destination cannot compensate for rejection at a destination still desired by the current route."
+lifecycle = "The stateless predicate reads one current Receipt revision and retains no work or evidence."
+forcing_requirement = "A caller claiming complete publication success must distinguish every-current-destination acknowledgement from a terminal, empty, or historically acknowledged receipt."
+falsifier = "write_settlement::withdrawn_acknowledgement_cannot_mask_current_rejection fails if aggregate acknowledgement counts satisfy a rejected current destination."
+symbols = ["fava::all_acknowledged"]
+crates = []
+
+[[term]]
 name = "WriteStore"
 source = "fava"
 meaning = "The authority for accepted local publication obligations, receipts, current materialized events, coordinate-bound bounded reservations, and exact-generation ordered edit custody whose complete applied sequence gates each successor."

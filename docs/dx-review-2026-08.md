@@ -72,21 +72,24 @@ No friction here.
 
 The nine typed constructors (`create_group`, `edit_metadata`, `invite`, `join_request`, `put_user`, `remove_user`, `delete_event`, `delete_group`, `leave_group`) are clean. `MetadataEdit` with `Default` is idiomatic. Kind numbers 9000–9022 are private constants in `management.rs` and appear nowhere else in the workspace. This is the right design.
 
-### Friction 1: kind-9 group message has no constant or constructor
+### Group content composes on `EventBuilder`
 
-The management module correctly hides kinds 9000–9022. But it exposes nothing for kind-9, the NIP-29 content event. The result: the demo app publishes the **wrong event kind** to the group:
+The caller chooses the ordinary event kind and payload, then composes one or
+more group contexts directly on the builder:
 
 ```rust
 // examples/simple-groups/src/main.rs
 let content = EventBuilder::new(alice.public_key(), Kind::TextNote)
     .content("Hello from the runnable Fava simple-groups demo")
-    .build()?;
-let prepared = group.prepare(content)?;
+    .simple_group(&group)?;
+let write = fava.publish(content)?;
 ```
 
-`Kind::TextNote` is kind-1 (standard Nostr text note). NIP-29 group chat messages are kind-9. Because there is no `KIND_GROUP_MESSAGE` constant or `SimpleGroup::content_event_builder()`, the demo author reached for the nearest named kind constant — which is wrong. nip29-test avoids this by hardcoding `Kind::from_u16(9)`, which is correct but requires knowing the number.
-
-This is a real correctness risk from a missing API. A `SimpleGroup::content_event_builder(author)` constructor, or at minimum a `fava_simple_groups::KIND_GROUP_MESSAGE` constant, would eliminate it.
+`simple_group()` adds the exact `h` tag and accumulates the group's finite relay
+route without taking ownership of content semantics. Repeating it publishes the
+same event to several groups while deduplicating shared relays. The chosen kind
+remains explicit caller input; the group capability does not silently rewrite
+it or introduce a parallel content-event constructor.
 
 ### Friction 2: `invite()` takes a redundant relay argument
 
@@ -213,38 +216,40 @@ let receipt = tokio::time::timeout(TIMEOUT, write.settled(at_least(1)?)).await??
 
 The chain is natural. `PublishError::NotReached { receipt }` carries the terminal receipt in the error — no second lookup needed. The demo uses `receipt.acknowledged()` and `receipt.rejected()` directly, which are the right counters.
 
-### Friction 6: `fava::all()` semantics are surprising (the #1 footgun)
+### Terminal completion and publication success are explicit
 
-`fava::all()` means "all desired destinations reached a terminal state" — which includes `Rejected`, `GivenUp`, and `AuthenticationDenied`. It does **not** mean "all acknowledged". nip29-test found this through live testing and added compensating logic:
+The facade now exposes separate predicates for the two user-visible meanings:
 
 ```rust
-// nip29-test/src/identity.rs
-match write.settled(fava::all()).await {
-    Ok(receipt) => {
-        // settled(all()) means all destinations became terminal —
-        // terminal includes GivenUp and Rejected, not just Acknowledged.
-        if receipt.acknowledged() > 0 {
-            Kind0State::Published { receipt_id }
-        } else {
-            Kind0State::PartiallyPublished { receipt_id }
-        }
-    }
-    ...
-}
+let complete = write.settled(fava::all_terminal()).await?;
+let successful = write.settled(fava::all_acknowledged()).await?;
 ```
 
-The demo avoids `all()` entirely and only uses `at_least(1)?`, which is correct. But a developer who reads `all()` and infers "all relays got the event" will silently accept rejected publication as success. The fix is the name: `all()` → `all_terminal()`. `at_least(n)` is correctly named and is what you actually want for acknowledgement-based settlement.
+`all_terminal()` waits for routing to settle and for every currently desired
+destination to have an exact terminal fact. Rejection, exhausted delivery, and
+ambiguous handoff satisfy it, so it is completion evidence rather than a success
+claim.
 
-### Friction 7: `at_least(n)` returns `Result` for guaranteed-positive n
+`all_acknowledged()` requires a nonempty settled current route and exact
+acknowledgement evidence for every desired destination. Historical
+acknowledgements retained for withdrawn destinations cannot mask a current
+rejection. If terminality makes the requested acknowledgement condition
+impossible, `PublishError::NotReached { receipt }` returns the complete evidence.
+
+`at_least(n)` remains the right predicate when success means a positive relay
+threshold rather than every current destination. There is no compatibility
+alias joining the two meanings.
+
+### Friction 6: `at_least(n)` returns `Result` for guaranteed-positive n
 
 ```rust
 // examples/simple-groups/src/support.rs
 write.settled(at_least(1)?).await?
 ```
 
-`at_least(0)` returns `Err`, `at_least(1)` always succeeds. The `?` in `at_least(1)?` is safe but unexpected in a predicate position. `at_least` should accept `NonZeroUsize` to eliminate the `Result`. Alternatively, a zero-arg `fava::all_acknowledged()` predicate for the single-relay case would be cleaner still.
+`at_least(0)` returns `Err`, `at_least(1)` always succeeds. The `?` in `at_least(1)?` is safe but unexpected in a predicate position. `at_least` could accept `NonZeroUsize` to eliminate the `Result`; `all_acknowledged()` already covers the distinct every-current-destination requirement.
 
-### Friction 8: `wait_next_second()` workaround for replaceable event timestamps
+### Friction 7: `wait_next_second()` workaround for replaceable event timestamps
 
 The demo sprinkles `support::wait_next_second()` (1100ms sleep) between consecutive replaceable event publishes:
 
@@ -285,12 +290,14 @@ Any app that displays per-relay delivery outcomes needs `fava-state` in its Carg
 ## What's genuinely good
 
 - `SimpleGroup::new(id, vec![relay])` — minimal args, clear error variants, silent deduplication.
+- `EventBuilder::simple_group(&group)` — composes exact group tags and finite routes without a parallel publication path.
 - Management constructor encapsulation — kind numbers 9000–9022 in one place only.
 - `MetadataEdit` with `Default` — idiomatic partial updates.
 - `SimpleGroupStateEventKind::ALL` — immediately usable constant.
 - `observe(query).await` → `obs.current()` → `obs.changed().await` — the reactive model is correct and natural.
 - `fava.to(relays).publish(event)` → `write.settled(predicate)` — chains naturally.
 - `PublishError::NotReached { receipt }` — evidence in the error, not a separate lookup.
+- `all_terminal()` / `all_acknowledged()` — completion and success are explicit and non-overlapping.
 - `BuildError` names the missing provider — you know exactly what to add.
 - `event_cache_ephemeral()` builder shortcut — shows the pattern for more presets.
 - `fava.diagnostics()` — snapshot-based, bounded, honest about what it measures.
@@ -298,23 +305,18 @@ Any app that displays per-relay delivery outcomes needs `fava-state` in its Carg
 
 ---
 
-## Priority friction list
+## Remaining friction
 
-| # | Friction | Evidence | Fix |
-|---|----------|----------|-----|
-| 1 | `fava::all()` means "all terminal" not "all acknowledged" | nip29-test adds `acknowledged() > 0` guard | Rename to `all_terminal()`; add `all_acknowledged()` |
-| 2 | No kind-9 constant → demo publishes wrong kind (kind-1) | demo uses `Kind::TextNote` | `SimpleGroup::content_event_builder()` or `KIND_GROUP_MESSAGE` |
-| 3 | Both apps independently write `append_tags` / `append_code` | Two identical `EventBuilder::from_parts` workarounds | Add `.with_tag()` / `.with_tags()` to `UnsignedEvent` |
-| 4 | Both apps independently implement observation polling helper | `wait_for` in demo, `cmd_read` in nip29-test | `obs.wait_until(predicate, timeout)` on `Observation` |
-| 5 | 9–10 provider crates + ~15 assembly lines per app | Every app repeats the same block | Standard preset profile (builder method or fn) |
-| 6 | `RelaySessionKey` not in `fava` re-exports | nip29-test needs `fava-state` for field access | Re-export from `fava` |
-| 7 | `invite()` takes a redundant relay arg | nip29-test calls `group.relays().next().expect(...)` | Default to first group relay; accept `Option<&RelayUrl>` |
-| 8 | No `TryFrom<Kind>` for `SimpleGroupStateEventKind` | nip29-test embeds raw kind-number match | Add the impl |
-| 9 | `at_least(n)` returns `Result` for guaranteed-positive n | `at_least(1)?` in predicate position is unexpected | Accept `NonZeroUsize`, or add `all_acknowledged()` |
-| 10 | Replaceable events need manual sleep for timestamp ordering | demo calls `wait_next_second()` 5 times | Auto-advance `created_at` in replaceable event builder |
+| Friction | Evidence | Possible boundary |
+|----------|----------|-------------------|
+| Both apps independently write `append_tags` / `append_code` | Two identical `EventBuilder::from_parts` workarounds | Builder-level tag composition without rebuilding `UnsignedEvent` |
+| Both apps independently implement observation polling | `wait_for` in the demo and `cmd_read` in nip29-test | A bounded `Observation` predicate wait |
+| 9–10 provider crates and a long assembly block per app | Every app repeats the same role selection | A documented standard profile without bypassing provider contracts |
+| `RelaySessionKey` is not in `fava` re-exports | nip29-test needs `fava-state` for receipt display | Re-export the receipt-facing type from `fava` |
+| `invite()` takes a relay already available from the group | nip29-test selects the first group relay manually | Make the ordinary group-relay choice explicit without hiding overrides |
+| No `TryFrom<Kind>` for `SimpleGroupStateEventKind` | nip29-test embeds a raw kind-number match | Add the typed conversion |
+| `at_least(n)` returns `Result` for known-positive literals | `at_least(1)?` in predicate position | Accept `NonZeroUsize` or another positive-by-construction input |
+| Replaceable events need manual timestamp spacing | demo calls `wait_next_second()` repeatedly | Own monotonic replacement time at the replaceable-edit lifecycle |
 
-The #1 fix is renaming `all()`. Every app that uses `all()` for acknowledgement detection is either subtly wrong or has added compensating checks. The name must match the behavior.
-
-The #2 fix (kind-9 constructor or constant) is the most concrete correctness issue: the demo app currently publishes kind-1 events to the group instead of kind-9. The missing API directly caused a bug.
-
-The #4 fix (observation polling helper) is the one both apps prove by example. When two independent codebases write the same 15-line helper, that helper belongs in the library.
+The repeated observation loop and tag-rebuilding helper remain the strongest
+cross-application evidence: both independent consumers still implement them.

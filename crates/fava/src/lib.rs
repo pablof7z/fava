@@ -56,7 +56,9 @@ pub use fava_write::{
 use fava_write_store::WriteStore;
 pub use fava_write_store::WriteStoreError;
 pub use nostr::types::RelayUrl;
-pub use publication::{PublishAs, PublishError, PublishTo, Write, all, at_least};
+pub use publication::{
+    PublishAs, PublishError, PublishTo, Write, all_acknowledged, all_terminal, at_least,
+};
 use tokio::sync::broadcast;
 
 /// Built engine instance for the selected local-source assembly.

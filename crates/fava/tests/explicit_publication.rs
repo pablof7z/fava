@@ -7,7 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, EventValue, Fava, Query, ReceiptOutcome, RelayDeliveryOutcome, all};
+use fava::{
+    EventBuilder, EventValue, Fava, Query, ReceiptOutcome, RelayDeliveryOutcome, all_terminal,
+};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -111,7 +113,10 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
         .expect("outcome transition delivered")
         .1
         .expect("outcome is not removal");
-    let receipt = write.settled(all()).await.expect("receipt settles");
+    let receipt = write
+        .settled(all_terminal())
+        .await
+        .expect("receipt settles");
     assert_eq!(committed, receipt);
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert_eq!(
@@ -141,7 +146,10 @@ async fn mixed_relay_results_remain_exact_under_one_terminal_receipt() {
         .publish(event)
         .expect("acceptance commits");
 
-    let receipt = write.settled(all()).await.expect("mixed receipt settles");
+    let receipt = write
+        .settled(all_terminal())
+        .await
+        .expect("mixed receipt settles");
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert!(receipt.destinations().values().any(|outcome| matches!(
         outcome,

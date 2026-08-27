@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, EventValue, Fava, FavaBuilder, Kind, ReceiptOutcome, all};
+use fava::{EventBuilder, EventValue, Fava, FavaBuilder, Kind, ReceiptOutcome, all_terminal};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
@@ -57,7 +57,7 @@ async fn signer_added_after_acceptance_wakes_same_write() {
     fava.add_signer(Arc::new(LocalSigner::new(alice)))
         .expect("Alice attaches to the running Fava");
 
-    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all_terminal()))
         .await
         .expect("runtime signer wakes the parked write")
         .expect("publication settles");
@@ -152,7 +152,10 @@ async fn removed_signer_stale_valid_completion_is_inert_and_readd_wakes() {
 
     fava.add_signer(Arc::new(LocalSigner::new(alice)))
         .expect("Alice signer reattaches");
-    let settled = write.settled(all()).await.expect("same write settles");
+    let settled = write
+        .settled(all_terminal())
+        .await
+        .expect("same write settles");
     assert_eq!(settled.write_id, write_id);
     assert_eq!(settled.receipt_id, receipt_id);
     assert_eq!(publisher.attempts().len(), 1);
@@ -194,7 +197,7 @@ async fn replaced_signer_stale_valid_completion_cannot_install_or_deliver() {
     assert!(publisher.attempts().is_empty());
 
     new_signer.release();
-    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all_terminal()))
         .await
         .unwrap_or_else(|_| panic!("replacement signer stalled: {:?}", write.receipt()))
         .expect("replacement signer settles the write");
@@ -254,7 +257,7 @@ where
         )
         .unwrap();
 
-    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+    let settled = tokio::time::timeout(Duration::from_secs(1), write.settled(all_terminal()))
         .await
         .expect("replacement signer settles")
         .expect("write remains admitted");

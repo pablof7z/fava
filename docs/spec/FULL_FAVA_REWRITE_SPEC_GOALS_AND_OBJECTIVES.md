@@ -734,9 +734,11 @@ fava.by(author).to(relays)?.publish(edit)
 `by(...)` and `to(...)` are inert scopes until `publish(...)` is called.
 Successful `publish(...)` returns only after synchronous durable acceptance and
 returns a `Write`. `Write` exposes stable write and receipt identity, current
-receipt inspection, and asynchronous settlement through `settled(all())` or
-`settled(at_least(n))`. Applications do not construct `WriteIntent`, receive
-`AcceptedWrite`, or call a separate facade wait function.
+receipt inspection, and asynchronous settlement through
+`settled(all_terminal())`, `settled(all_acknowledged())`, or
+`settled(at_least(n))`. Terminal settlement reports complete destination
+evidence and does not imply acknowledgement. Applications do not construct
+`WriteIntent`, receive `AcceptedWrite`, or call a separate facade wait function.
 
 ## WRITE-003 — Authorship is carried by the event or replaceable-event edit
 

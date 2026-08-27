@@ -139,7 +139,7 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
         .expect("route validates")
         .publish(edit)
         .expect("addressable edit accepts");
-    let receipt = write.settled(all()).await.unwrap();
+    let receipt = write.settled(all_terminal()).await.unwrap();
 
     assert_eq!(receipt.current.event.author(), keys.public_key());
     assert_eq!(materializer.calls().len(), 1);

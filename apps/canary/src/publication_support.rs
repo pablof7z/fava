@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use fava::{Fava, Observation, Receipt, ReceiptId, Write, all};
+use fava::{Fava, Observation, Receipt, ReceiptId, Write, all_terminal};
 use serde_json::{Value, json};
 use tokio::process::{Child, Command};
 use tokio::sync::broadcast;
@@ -15,7 +15,7 @@ use crate::relay::ProcessFact;
 use crate::{CanaryError, CanaryResult, SmokeOptions, command_output, repository_root};
 
 pub(crate) async fn wait_terminal(write: &Write) -> CanaryResult<Receipt> {
-    tokio::time::timeout(Duration::from_secs(10), write.settled(all()))
+    tokio::time::timeout(Duration::from_secs(10), write.settled(all_terminal()))
         .await
         .map_err(|_| CanaryError::new("terminal receipt deadline elapsed"))?
         .map_err(error)

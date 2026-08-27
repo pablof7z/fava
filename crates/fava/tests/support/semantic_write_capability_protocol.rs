@@ -5,7 +5,7 @@ use std::time::Duration;
 use fava::{
     Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError, PublishError,
     Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Write,
-    WriteIntentError, WriteStoreError, all,
+    WriteIntentError, WriteStoreError, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -440,7 +440,7 @@ async fn publish_terminal(
         .expect("route validates")
         .publish(edit)
         .unwrap();
-    let receipt = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all()))
+    let receipt = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all_terminal()))
         .await
         .expect("terminal receipt wait is bounded")
         .unwrap();

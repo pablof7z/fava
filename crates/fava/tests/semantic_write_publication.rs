@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use fava::{
     EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, all,
+    ReplaceableEventMaterializer, Tag, Timestamp, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -96,7 +96,7 @@ async fn first_value_edit_publishes_through_public_fava() {
         .expect("local materialization arrives")
         .expect("observation stays open");
     let receipt = write
-        .settled(all())
+        .settled(all_terminal())
         .await
         .expect("ordinary receipt settles");
 
@@ -424,7 +424,10 @@ async fn first_value_receives_exact_injected_timestamp() {
         .expect("route validates")
         .publish(edit(Kind::ContactList))
         .expect("source-backed edit accepts");
-    let receipt = write.settled(all()).await.expect("publication settles");
+    let receipt = write
+        .settled(all_terminal())
+        .await
+        .expect("publication settles");
     let calls = materializer.calls();
 
     assert_eq!(calls.len(), 1);

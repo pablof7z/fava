@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventBuilder, EventValue, Fava, Kind, Query, SingleLetterTag, Tag, Timestamp, WriteRouting, all,
+    EventBuilder, EventValue, Fava, Kind, Query, SingleLetterTag, Tag, Timestamp, WriteRouting,
+    all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -140,7 +141,7 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
         .expect("explicit route")
         .publish(edit)
         .expect("semantic custody accepts");
-    let receipt = write.settled(all()).await.expect("write settles");
+    let receipt = write.settled(all_terminal()).await.expect("write settles");
 
     assert!(matches!(receipt.current.event, EventValue::Signed(_)));
     let list =

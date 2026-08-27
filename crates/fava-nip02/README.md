@@ -11,30 +11,32 @@ kind-3 list is being edited with `by(...)`, then publishes through Fava's one
 durable publication door.
 
 ```rust
-use fava::all;
+use fava::all_acknowledged;
 use fava_nip02::{follow, unfollow};
 
 let write = fava.by(me).publish(follow(alice)?)?;
-let receipt = write.settled(all()).await?;
+let receipt = write.settled(all_acknowledged()).await?;
 
 let write = fava.by(me).publish(unfollow(alice)?)?;
-let receipt = write.settled(all()).await?;
+let receipt = write.settled(all_acknowledged()).await?;
 ```
 
 `publish` returns a `Write` after local acceptance. It does not wait for relay
-delivery. The accepted materialization is immediately visible through ordinary
-queries, including while offline.
+delivery. `all_acknowledged()` requires every currently desired destination to
+acknowledge; use `all_terminal()` when complete rejection, ambiguity, and
+exhaustion evidence is the intended result. The accepted materialization is
+immediately visible through ordinary queries, including while offline.
 
 Add an optional relay hint and exact petname with `follow_with`:
 
 ```rust
-use fava::{all, RelayUrl};
+use fava::{RelayUrl, all_acknowledged};
 use fava_nip02::follow_with;
 
 let relay = RelayUrl::parse("wss://relay.example")?;
 let edit = follow_with(alice, Some(relay.clone()), Some("alíce"))?;
 let write = fava.by(me).to([relay])?.publish(edit)?;
-let receipt = write.settled(all()).await?;
+let receipt = write.settled(all_acknowledged()).await?;
 ```
 
 `by(...)` and `to(...)` are inert scopes. Either order is valid:

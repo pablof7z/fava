@@ -16,7 +16,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use fava::{
-    EventBuilder, Fava, Kind, Observation, PublicKey, Query, RelaySessionState, RelayUrl, all,
+    EventBuilder, Fava, Kind, Observation, PublicKey, Query, RelaySessionState, RelayUrl,
+    all_acknowledged, all_terminal,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -1161,7 +1162,7 @@ pub async fn run_flow_close_child(arguments: Vec<String>) -> CanaryResult<()> {
         .build()
         .map_err(error)?;
     let write = engine.publish(note).map_err(error)?;
-    let _ = tokio::time::timeout(Duration::from_secs(5), write.settled(all())).await;
+    let _ = tokio::time::timeout(Duration::from_secs(5), write.settled(all_terminal())).await;
     observation.close();
     drop(engine);
     Ok(())
@@ -1185,9 +1186,9 @@ async fn publish_and_settle(engine: &Fava, note: fava::UnsignedEvent) -> CanaryR
 
 async fn settle(write: Result<fava::Write, fava::PublishError>) -> CanaryResult<String> {
     let write = write.map_err(error)?;
-    let receipt = tokio::time::timeout(Duration::from_secs(10), write.settled(all()))
+    let receipt = tokio::time::timeout(Duration::from_secs(10), write.settled(all_acknowledged()))
         .await
-        .map_err(|_| CanaryError::new("timed out awaiting a terminal receipt"))?
+        .map_err(|_| CanaryError::new("timed out awaiting relay acknowledgements"))?
         .map_err(error)?;
     Ok(receipt.current.id().to_hex())
 }

@@ -7,7 +7,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, EventValue, Fava, ReceiptId, ReceiptOutcome, all};
+use fava::{EventBuilder, EventValue, Fava, ReceiptId, ReceiptOutcome, all_terminal};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
@@ -111,7 +111,7 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         ],
         [],
     ));
-    let terminal = tokio::time::timeout(Duration::from_secs(1), write.settled(all()))
+    let terminal = tokio::time::timeout(Duration::from_secs(1), write.settled(all_terminal()))
         .await
         .expect("terminal deadline elapsed")
         .expect("receipt settles");

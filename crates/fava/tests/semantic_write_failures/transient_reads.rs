@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use fava::{
     EventValue, Kind, MaterializationId, Receipt, ReceiptOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, WriteRouting, all,
+    ReplaceableEventMaterializer, Timestamp, WriteRouting, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -217,7 +217,10 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
     })
     .await
     .expect("delivery lane resumes after transient reads");
-    let terminal = accepted.settled(all()).await.expect("same receipt settles");
+    let terminal = accepted
+        .settled(all_terminal())
+        .await
+        .expect("same receipt settles");
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.receipt_id, accepted.receipt_id());
     assert_eq!(signer.calls(), 1);

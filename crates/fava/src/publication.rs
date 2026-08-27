@@ -200,7 +200,10 @@ pub enum PublishError {
 
 /// Match a receipt only after routing has settled and every currently desired
 /// destination has an exact terminal fact.
-pub fn all() -> impl Fn(&Receipt) -> bool + Copy {
+///
+/// Terminal facts include acknowledgement, rejection, exhausted delivery, and
+/// ambiguous handoff. This predicate proves completion, not delivery success.
+pub fn all_terminal() -> impl Fn(&Receipt) -> bool + Copy {
     |receipt| {
         receipt.route_settled
             && receipt.desired_destinations.iter().all(|session| {
@@ -208,6 +211,25 @@ pub fn all() -> impl Fn(&Receipt) -> bool + Copy {
                     .destinations()
                     .get(session)
                     .is_some_and(RelayDeliveryOutcome::is_terminal)
+            })
+    }
+}
+
+/// Match a receipt only after routing has settled and every currently desired
+/// destination has exact relay acknowledgement evidence.
+///
+/// A settled route with no destination is not acknowledged. Historical facts
+/// for destinations withdrawn from the current route do not satisfy this
+/// predicate.
+pub fn all_acknowledged() -> impl Fn(&Receipt) -> bool + Copy {
+    |receipt| {
+        receipt.route_settled
+            && !receipt.desired_destinations.is_empty()
+            && receipt.desired_destinations.iter().all(|session| {
+                matches!(
+                    receipt.destinations().get(session),
+                    Some(RelayDeliveryOutcome::Acknowledged { .. })
+                )
             })
     }
 }

@@ -101,7 +101,7 @@ let write = fava.publish(unsigned_for_alice)?;
 assert!(write.receipt()?.is_awaiting_signer());
 
 fava.add_signer(alice_signer)?;
-let receipt = write.settled(fava::all()).await?;
+let receipt = write.settled(fava::all_terminal()).await?;
 ```
 
 Adding a second signer for the same pubkey refuses without mutation. Replacement

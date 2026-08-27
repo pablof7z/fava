@@ -1977,7 +1977,7 @@ let edit = fava_nip02::follow_with(
     Some("bob"),
 )?;
 let write = fava.by(alice).to([relay])?.publish(edit)?;
-let receipt = write.settled(fava::all()).await?;
+let receipt = write.settled(fava::all_acknowledged()).await?;
 ```
 
 The crate constructs `ReplaceableEventEdit` values. It does not accept writes,
@@ -2474,8 +2474,8 @@ Required ordering includes:
   edits, or pre-signed events;
 - inert `by(author)` and `to(relays)` scopes, independently composable in
   either order before `publish(payload)`;
-- `Write` inspection and asynchronous `settled(all())` or
-  `settled(at_least(n))` receipt settlement;
+- `Write` inspection and asynchronous `settled(all_terminal())`,
+  `settled(all_acknowledged())`, or `settled(at_least(n))` receipt settlement;
 - route preview;
 - receipt reattachment and write inspection;
 - session/account operations;
@@ -2892,7 +2892,7 @@ materialization appears through WriteStore QuerySource
         ↓
 normal signing, routing, and delivery continue
         ↓
-application may await write.settled(all())
+application may await write.settled(all_acknowledged())
 ```
 
 If a newer source kind-3 arrives before settlement:

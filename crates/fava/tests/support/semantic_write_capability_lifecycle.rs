@@ -4,7 +4,7 @@ use std::time::Duration;
 use fava::{
     Event, EventValue, Kind, MaterializationId, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
     RelayDeliveryOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
-    UnsignedEvent, Write, WriteId, WriteIntentError, all,
+    UnsignedEvent, Write, WriteId, WriteIntentError, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -196,7 +196,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         second_id,
         true,
     );
-    let terminal = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all()))
+    let terminal = tokio::time::timeout(Duration::from_secs(1), accepted.settled(all_terminal()))
         .await
         .expect("terminal receipt wait is bounded")
         .unwrap();

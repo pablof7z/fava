@@ -8,7 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{Fava, Kind, PublishError, Receipt, RelayDeliveryOutcome, Write, all, at_least};
+use fava::{
+    Fava, Kind, PublishError, Receipt, RelayDeliveryOutcome, Write, all_acknowledged, all_terminal,
+    at_least,
+};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
@@ -47,6 +50,88 @@ fn receipt_counts_preserve_complete_mixed_destination_evidence() {
             .values()
             .any(|outcome| matches!(outcome, RelayDeliveryOutcome::Pending))
     );
+}
+
+#[test]
+fn terminal_and_acknowledged_predicates_expose_distinct_receipt_facts() {
+    let mixed = mixed_receipt();
+    assert!(all_terminal()(&mixed));
+    assert!(!all_acknowledged()(&mixed));
+
+    let acknowledged = mixed
+        .desired_destinations
+        .iter()
+        .find(|session| {
+            matches!(
+                mixed.destinations().get(*session),
+                Some(RelayDeliveryOutcome::Acknowledged { .. })
+            )
+        })
+        .expect("fixture has one acknowledged destination")
+        .clone();
+    let mut all_acknowledged_receipt = mixed.clone();
+    all_acknowledged_receipt.desired_destinations = BTreeSet::from([acknowledged]);
+    assert!(all_acknowledged()(&all_acknowledged_receipt));
+
+    let mut no_destination = mixed.clone();
+    no_destination.outcome = ReceiptOutcome::NoDestination;
+    no_destination.desired_destinations.clear();
+    assert!(all_terminal()(&no_destination));
+    assert!(!all_acknowledged()(&no_destination));
+
+    let mut missing_fact = all_acknowledged_receipt.clone();
+    let missing = missing_fact
+        .desired_destinations
+        .iter()
+        .next()
+        .expect("fixture has one desired destination")
+        .clone();
+    missing_fact
+        .current
+        .publication
+        .destinations
+        .remove(&missing);
+    assert!(!all_terminal()(&missing_fact));
+    assert!(!all_acknowledged()(&missing_fact));
+
+    let mut unsettled = all_acknowledged_receipt;
+    unsettled.route_settled = false;
+    assert!(!all_terminal()(&unsettled));
+    assert!(!all_acknowledged()(&unsettled));
+}
+
+#[test]
+fn withdrawn_acknowledgement_cannot_mask_current_rejection() {
+    let mut receipt = mixed_receipt();
+    let rejected = receipt
+        .desired_destinations
+        .iter()
+        .find(|session| {
+            matches!(
+                receipt.destinations().get(*session),
+                Some(RelayDeliveryOutcome::Rejected { .. })
+            )
+        })
+        .expect("fixture has one rejected destination")
+        .clone();
+    let withdrawn = receipt
+        .destinations()
+        .iter()
+        .find_map(|(session, outcome)| {
+            matches!(outcome, RelayDeliveryOutcome::Pending).then(|| session.clone())
+        })
+        .expect("fixture has one withdrawn destination");
+    receipt.current.publication.destinations.insert(
+        withdrawn,
+        RelayDeliveryOutcome::Acknowledged {
+            message: "historical acknowledgement".to_owned(),
+        },
+    );
+    receipt.desired_destinations = BTreeSet::from([rejected]);
+
+    assert_eq!(receipt.acknowledged(), 2);
+    assert_eq!(receipt.desired(), 1);
+    assert!(!all_acknowledged()(&receipt));
 }
 
 #[test]
@@ -104,11 +189,50 @@ async fn exact_threshold_returns_first_complete_satisfying_revision() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn all_and_custom_predicates_receive_complete_mixed_revisions() {
+async fn all_acknowledged_waits_for_every_current_destination() {
     let publisher = Arc::new(ManualPublisher::default());
     let (fava, _) = assembly(Arc::clone(&publisher));
-    let relays = [relay("all-ack"), relay("all-reject"), relay("all-unknown")];
-    let all_write = publish(&fava, &relays, "all mixed");
+    let relays = [relay("all-acknowledged-a"), relay("all-acknowledged-b")];
+    let write = publish(&fava, &relays, "all acknowledged");
+    publisher.wait_started(2).await;
+    let settlement = tokio::spawn({
+        let write = write.clone();
+        async move { write.settled(all_acknowledged()).await }
+    });
+
+    publisher.release(
+        &relays[0],
+        PublishOutcome::Acknowledged {
+            message: "first".to_owned(),
+        },
+    );
+    tokio::task::yield_now().await;
+    assert!(!settlement.is_finished());
+    publisher.release(
+        &relays[1],
+        PublishOutcome::Acknowledged {
+            message: "second".to_owned(),
+        },
+    );
+
+    let receipt = deadline(settlement)
+        .await
+        .expect("settlement task joins")
+        .expect("every current destination acknowledged");
+    assert_eq!(receipt.acknowledged(), 2);
+    assert_eq!(receipt.desired(), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn all_terminal_and_custom_predicates_receive_complete_mixed_revisions() {
+    let publisher = Arc::new(ManualPublisher::default());
+    let (fava, _) = assembly(Arc::clone(&publisher));
+    let relays = [
+        relay("all_terminal-ack"),
+        relay("all_terminal-reject"),
+        relay("all_terminal-unknown"),
+    ];
+    let all_write = publish(&fava, &relays, "all_terminal mixed");
     let custom_write = publish(&fava, &relays, "custom mixed");
     publisher.wait_started(6).await;
     let evaluations = Arc::new(AtomicUsize::new(0));
@@ -129,7 +253,7 @@ async fn all_and_custom_predicates_receive_complete_mixed_revisions() {
                 .await
         }
     });
-    let all_settlement = tokio::spawn(async move { all_write.settled(all()).await });
+    let all_settlement = tokio::spawn(async move { all_write.settled(all_terminal()).await });
 
     for write_number in 0..2 {
         publisher.release_for_receipt(
@@ -157,8 +281,8 @@ async fn all_and_custom_predicates_receive_complete_mixed_revisions() {
 
     let all_receipt = deadline(all_settlement)
         .await
-        .expect("all task joins")
-        .expect("all terminal facts satisfy all");
+        .expect("all_terminal task joins")
+        .expect("all_terminal terminal facts satisfy all_terminal");
     let custom_receipt = deadline(custom)
         .await
         .expect("custom task joins")
@@ -173,7 +297,7 @@ async fn all_and_custom_predicates_receive_complete_mixed_revisions() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn terminal_not_reached_preserves_every_destination_fact() {
+async fn all_acknowledged_not_reached_preserves_every_destination_fact() {
     let publisher = Arc::new(ManualPublisher::default());
     let (fava, _) = assembly(Arc::clone(&publisher));
     let relays = [relay("not-reached-ack"), relay("not-reached-reject")];
@@ -181,11 +305,7 @@ async fn terminal_not_reached_preserves_every_destination_fact() {
     publisher.wait_started(2).await;
     let settlement = tokio::spawn({
         let write = write.clone();
-        async move {
-            write
-                .settled(at_least(2).expect("positive threshold"))
-                .await
-        }
+        async move { write.settled(all_acknowledged()).await }
     });
 
     publisher.release(

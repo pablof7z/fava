@@ -583,7 +583,8 @@ Build one complete durable publication path before automatic write routing: acce
 - Applications call synchronous `publish(payload)`, optionally after inert
   `by(author)` and/or `to(relays)` scopes, and receive `Write` only after the
   write-store acceptance transaction commits. Receipt settlement is
-  `write.settled(all())` or `write.settled(at_least(n))`.
+  `write.settled(all_terminal())`, `write.settled(all_acknowledged())`, or
+  `write.settled(at_least(n))`; terminal completion is not delivery success.
 - An unsigned event's `pubkey` selects the signer.
 - `Accepted` occurs only after write obligation, current materialization, and receipt are durably committed.
 - The write store supplies the unpublished event directly to matching queries.

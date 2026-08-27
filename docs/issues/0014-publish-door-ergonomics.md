@@ -18,7 +18,8 @@ let write = fava.to([r1, r2])?.publish(payload)?;
 let write = fava.by(alice).to([r1, r2])?.publish(edit)?;
 
 let receipt = write.receipt()?;
-let receipt = write.settled(fava::all()).await?;
+let receipt = write.settled(fava::all_terminal()).await?;
+let receipt = write.settled(fava::all_acknowledged()).await?;
 let receipt = write.settled(fava::at_least(2)?).await?;
 let receipt = write.settled(|r| r.acknowledged() >= 2).await?;
 ```

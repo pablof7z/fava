@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "943177d505c3a7dbe06e4c52396735d06d1f871200e87eaaedfc16b47e1a9f25",
+  "inputs_sha256": "99b2d0c69e738993028f560e1bc923025c02d042c736218c36911ccbc3331dc8",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -3348,10 +3348,10 @@
     {
       "interface": [
         {
-          "description": "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, and bounded neutral local publication routing. Lifecycle: An application or protocol crate composes generic fields, tags, and optional local route before either event-only construction or Fava publication; event-only construction refuses an attached explicit route, while Fava consumes event and route together into WriteIntent.",
+          "description": "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, and bounded neutral local publication routing. Lifecycle: An application or protocol crate composes fields, tags, and an optional local route; each route addition consumes a finite owned vector and increments a transient raw-input count before normalization; Fava consumes the event and normalized route into WriteIntent.",
           "kind": "Bound declaration",
           "path": "fava_write::builder::EventBuilder",
-          "signature": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n}"
+          "signature": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n    raw_routing_inputs: usize,\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3411,7 +3411,7 @@
           "description": "Accumulates a bounded, first-occurrence explicit relay route without serializing it into the event.",
           "kind": "Method",
           "path": "fava_write::EventBuilder::to_relays",
-          "signature": "pub fn fava_write::EventBuilder::to_relays(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>"
+          "signature": "pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3440,7 +3440,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n}",
+            "declaration": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n    raw_routing_inputs: usize,\n}",
             "kind": "struct",
             "path": "fava_write::builder::EventBuilder",
             "source": "crates/fava-write/src/builder.rs",
@@ -3494,7 +3494,7 @@
             "path": "fava_write::EventBuilder::tags"
           },
           {
-            "declaration": "pub fn fava_write::EventBuilder::to_relays(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>",
+            "declaration": "pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>",
             "implementation": "impl fava_write::EventBuilder",
             "path": "fava_write::EventBuilder::to_relays"
           },
@@ -4834,7 +4834,7 @@
           "description": "Compiler-visible method owned by `fava::Fava`.",
           "kind": "Method",
           "path": "fava::Fava::to",
-          "signature": "pub fn fava::Fava::to(&self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>"
+          "signature": "pub fn fava::Fava::to(&self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>"
         },
         {
           "description": "Compiler-visible method owned by `fava::FavaBuilder`.",
@@ -4855,8 +4855,8 @@
           "signature": "pub fn fava::FavaBuilder::event_cache<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_event_cache::EventCache + 'static"
         },
         {
-          "description": "Explicitly select an ephemeral (in-memory) event cache profile. The cache is empty on every open. Events are lost on process exit. Use this method to make the ephemeral choice explicit rather than implicit; it is equivalent to `event_cache(Arc::new(MemoryEventCache::default()))`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava::FavaBuilder`.",
+          "kind": "Method",
           "path": "fava::FavaBuilder::event_cache_ephemeral",
           "signature": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self"
         },
@@ -5602,7 +5602,7 @@
             "path": "fava::Fava::replace_signer"
           },
           {
-            "declaration": "pub fn fava::Fava::to(&self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>",
+            "declaration": "pub fn fava::Fava::to(&self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>",
             "implementation": "impl fava::Fava",
             "path": "fava::Fava::to"
           },
@@ -5958,8 +5958,8 @@
           "signature": "pub fn fava::FavaBuilder::event_cache<T>(self, alloc::sync::Arc<T>) -> Self where T: fava_event_cache::EventCache + 'static"
         },
         {
-          "description": "Explicitly select an ephemeral (in-memory) event cache profile. The cache is empty on every open. Events are lost on process exit. Use this method to make the ephemeral choice explicit rather than implicit; it is equivalent to `event_cache(Arc::new(MemoryEventCache::default()))`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava::FavaBuilder`.",
+          "kind": "Method",
           "path": "fava::FavaBuilder::event_cache_ephemeral",
           "signature": "pub fn fava::FavaBuilder::event_cache_ephemeral(self) -> Self"
         },
@@ -6942,6 +6942,55 @@
             "source": "query::IntoContactAuthors"
           }
         ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "A typed refusal for an EventValue that cannot be accepted as local event state, currently an UnsignedEvent missing its computed event id. Lifecycle: Constructed during pre-mutation validation of accept or materialization installation, returned through WriteStoreError::InvalidEvent, and leaves receipt allocation, source revision, and provider work unchanged.",
+          "kind": "Bound declaration",
+          "path": "fava_write::InvalidEventValue",
+          "signature": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}"
+        },
+        {
+          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "kind": "Enum",
+          "path": "fava_write::InvalidEventValue",
+          "signature": "pub enum fava_write::InvalidEventValue"
+        },
+        {
+          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "kind": "Enum variant",
+          "path": "fava_write::InvalidEventValue::MissingId",
+          "signature": "pub fava_write::InvalidEventValue::MissingId"
+        }
+      ],
+      "name": "InvalidEventValue",
+      "review_problems": [
+        "fava_write::InvalidEventValue: missing human interface description",
+        "fava_write::InvalidEventValue::MissingId: missing human interface description"
+      ],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}",
+            "kind": "enum",
+            "path": "fava_write::InvalidEventValue",
+            "source": "crates/fava-write/src/lib.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_write::InvalidEventValue",
+            "path": "fava_write::InvalidEventValue"
+          },
+          {
+            "declaration": "pub fava_write::InvalidEventValue::MissingId",
+            "path": "fava_write::InvalidEventValue::MissingId"
+          }
+        ],
+        "reexports": []
       }
     },
     {
@@ -10335,7 +10384,7 @@
           "description": "An inert, edit-only signer scope for one publication expression. Signer scope cannot publish an unsigned event because that event already carries its author: A pre-signed event has already used its signer and is likewise excluded:",
           "kind": "Function",
           "path": "fava::PublishAs",
-          "signature": "pub fn fava::PublishAs<'_>::to(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava::PublishError>"
+          "signature": "pub fn fava::PublishAs<'_>::to(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava::PublishError>"
         },
         {
           "description": "Compiler-visible struct `fava::PublishAs`.",
@@ -10368,7 +10417,7 @@
             "path": "fava::PublishAs"
           },
           {
-            "declaration": "pub fn fava::PublishAs<'_>::to(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava::PublishError>",
+            "declaration": "pub fn fava::PublishAs<'_>::to(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava::PublishError>",
             "path": "fava::PublishAs"
           },
           {
@@ -26786,7 +26835,7 @@
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
           "kind": "Method",
           "path": "fava_write::WriteRouting::explicit",
-          "signature": "pub fn fava_write::WriteRouting::explicit(impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>"
+          "signature": "pub fn fava_write::WriteRouting::explicit(impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -26905,7 +26954,7 @@
             "path": "fava_write::WriteIntent::presigned"
           },
           {
-            "declaration": "pub fn fava_write::WriteRouting::explicit(impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>",
+            "declaration": "pub fn fava_write::WriteRouting::explicit(impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>",
             "implementation": "impl fava_write::WriteRouting",
             "path": "fava_write::WriteRouting::explicit"
           },
@@ -26925,10 +26974,10 @@
     {
       "interface": [
         {
-          "description": "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving tag cardinality, serialized bytes, encoding, routing, verification, and expiry as distinct concerns. Lifecycle: Constructed during pre-custody intent validation or converted from EventBuildError during initial or post-custody materialization. Intent validation can return it directly; current fava-publication converts a materializer result to PublicationError::Routing(error.to_string()), so the typed value does not survive custody-side publication. Issue 0025 owns structured lifecycle attribution.",
+          "description": "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving raw route input, distinct destinations, tag cardinality, serialized bytes, encoding, verification, and expiry as distinct concerns. Lifecycle: Constructed during pre-custody intent validation or converted from EventBuildError during initial or post-custody materialization. Intent validation can return it directly; current fava-publication converts a materializer result to PublicationError::Routing(error.to_string()), so the typed value does not survive custody-side publication. Issue 0025 owns structured lifecycle attribution.",
           "kind": "Bound declaration",
           "path": "fava_write::WriteIntentError",
-          "signature": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}"
+          "signature": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Raw explicit relay input exceeds the pre-normalization work bound.\n    #[error(\"raw explicit relay input exceeds bound: {actual} > {maximum}\")]\n    TooManyRawExplicitRelays {\n        /// Raw input count before duplicate normalization.\n        actual: usize,\n        /// Declared raw-input maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -27021,6 +27070,24 @@
           "signature": "pub fava_write::WriteIntentError::TooManyExplicitRelays::maximum: usize"
         },
         {
+          "description": "Raw explicit relay input exceeds the pre-normalization work bound.",
+          "kind": "Compiler-visible item",
+          "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays",
+          "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays"
+        },
+        {
+          "description": "Raw input count before duplicate normalization.",
+          "kind": "Compiler-visible item",
+          "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::actual",
+          "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::actual: usize"
+        },
+        {
+          "description": "Declared raw-input maximum.",
+          "kind": "Compiler-visible item",
+          "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum",
+          "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum: usize"
+        },
+        {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::TooManyTags",
@@ -27068,7 +27135,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}",
+            "declaration": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Raw explicit relay input exceeds the pre-normalization work bound.\n    #[error(\"raw explicit relay input exceeds bound: {actual} > {maximum}\")]\n    TooManyRawExplicitRelays {\n        /// Raw input count before duplicate normalization.\n        actual: usize,\n        /// Declared raw-input maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}",
             "kind": "enum",
             "path": "fava_write::WriteIntentError",
             "source": "crates/fava-write/src/lib.rs",
@@ -27135,6 +27202,18 @@
           {
             "declaration": "pub fava_write::WriteIntentError::TooManyExplicitRelays::maximum: usize",
             "path": "fava_write::WriteIntentError::TooManyExplicitRelays::maximum"
+          },
+          {
+            "declaration": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays",
+            "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays"
+          },
+          {
+            "declaration": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::actual: usize",
+            "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::actual"
+          },
+          {
+            "declaration": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum: usize",
+            "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum"
           },
           {
             "declaration": "pub fava_write::WriteIntentError::TooManyTags",
@@ -27248,89 +27327,6 @@
           }
         ],
         "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
-          "description": "The exact routing strategy for one obligation: live configured automatic routers, or a normalized nonempty ordered relay sequence with automatic routing bypassed. Lifecycle: Chosen by inert facade scopes, validated and committed with acceptance, remains fixed for the write, and either owns one exact explicit plan or authorizes successive automatic route revisions until terminal work.",
-          "kind": "Bound declaration",
-          "path": "fava_write::routing::WriteRouting",
-          "signature": "pub enum WriteRouting {\n    /// Use the configured ordered router chain.\n    Automatic,\n    /// Use exactly this normalized relay sequence and open no automatic router.\n    Explicit(Vec<RelayUrl>),\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum",
-          "path": "fava_write::WriteRouting",
-          "signature": "pub enum fava_write::WriteRouting"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::WriteRouting::Automatic",
-          "signature": "pub fava_write::WriteRouting::Automatic"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::WriteRouting::Explicit",
-          "signature": "pub fava_write::WriteRouting::Explicit(alloc::vec::Vec<nostr::types::url::RelayUrl>)"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::WriteRouting::explicit",
-          "signature": "pub fn fava_write::WriteRouting::explicit(impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>"
-        },
-        {
-          "description": "Exports this term at `fava_write::WriteRouting` from `routing::WriteRouting`.",
-          "kind": "Public export",
-          "path": "fava_write::WriteRouting",
-          "signature": "pub use routing::WriteRouting as fava_write::WriteRouting"
-        }
-      ],
-      "name": "WriteRouting",
-      "review_problems": [
-        "fava_write::WriteRouting: missing human interface description",
-        "fava_write::WriteRouting::Automatic: missing human interface description",
-        "fava_write::WriteRouting::Explicit: missing human interface description",
-        "fava_write::WriteRouting::explicit: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum WriteRouting {\n    /// Use the configured ordered router chain.\n    Automatic,\n    /// Use exactly this normalized relay sequence and open no automatic router.\n    Explicit(Vec<RelayUrl>),\n}",
-            "kind": "enum",
-            "path": "fava_write::routing::WriteRouting",
-            "source": "crates/fava-write/src/routing.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_write::WriteRouting",
-            "path": "fava_write::WriteRouting"
-          },
-          {
-            "declaration": "pub fava_write::WriteRouting::Automatic",
-            "path": "fava_write::WriteRouting::Automatic"
-          },
-          {
-            "declaration": "pub fava_write::WriteRouting::Explicit(alloc::vec::Vec<nostr::types::url::RelayUrl>)",
-            "path": "fava_write::WriteRouting::Explicit"
-          },
-          {
-            "declaration": "pub fn fava_write::WriteRouting::explicit(impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>",
-            "implementation": "impl fava_write::WriteRouting",
-            "path": "fava_write::WriteRouting::explicit"
-          }
-        ],
-        "reexports": [
-          {
-            "path": "fava_write::WriteRouting",
-            "source": "routing::WriteRouting"
-          }
-        ]
       }
     },
     {
@@ -28634,6 +28630,72 @@
           }
         ],
         "reexports": []
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Compiler-visible function owned by `fava`.",
+          "kind": "Function",
+          "path": "fava::all_acknowledged",
+          "signature": "pub fn fava::all_acknowledged() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy"
+        },
+        {
+          "description": "Exports this term at `fava::all_acknowledged` from `publication::all_acknowledged`.",
+          "kind": "Public export",
+          "path": "fava::all_acknowledged",
+          "signature": "pub use publication::all_acknowledged as fava::all_acknowledged"
+        }
+      ],
+      "name": "all_acknowledged",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava::all_acknowledged() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy",
+            "path": "fava::all_acknowledged"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava::all_acknowledged",
+            "source": "publication::all_acknowledged"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "Compiler-visible function owned by `fava`.",
+          "kind": "Function",
+          "path": "fava::all_terminal",
+          "signature": "pub fn fava::all_terminal() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy"
+        },
+        {
+          "description": "Exports this term at `fava::all_terminal` from `publication::all_terminal`.",
+          "kind": "Public export",
+          "path": "fava::all_terminal",
+          "signature": "pub use publication::all_terminal as fava::all_terminal"
+        }
+      ],
+      "name": "all_terminal",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [],
+        "public_api": [
+          {
+            "declaration": "pub fn fava::all_terminal() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy",
+            "path": "fava::all_terminal"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava::all_terminal",
+            "source": "publication::all_terminal"
+          }
+        ]
       }
     },
     {
