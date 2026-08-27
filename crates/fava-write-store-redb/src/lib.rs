@@ -1,7 +1,7 @@
 //! Durable Redb authority for accepted publication obligations and receipts.
 
 use std::collections::BTreeMap;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -55,7 +55,7 @@ pub struct RedbWriteStore {
 #[derive(Clone, Debug)]
 struct StoreState {
     revision: u64,
-    next_identity: u64,
+    next_identity: NonZeroU64,
     next_reservation: u64,
     reservations: BTreeMap<u64, EventCoordinate>,
     receipts: BTreeMap<ReceiptId, Receipt>,
@@ -126,7 +126,7 @@ impl RedbWriteStore {
 
     fn commit_accept(
         &self,
-        next_identity: u64,
+        next_identity: NonZeroU64,
         receipt: &Receipt,
         semantic: Option<&SemanticCustody>,
         removals: &[ReceiptId],

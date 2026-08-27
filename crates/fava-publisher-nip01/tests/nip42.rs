@@ -14,12 +14,12 @@ use fava_publisher_nip01::Nip42Publisher;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
-use fava_transport::{
-    OpenRelaySession, Transport, TransportBounds, TransportDeadlines,
-};
+use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDeadlines};
 use fava_transport_testkit::FakeTransport;
 use fava_wire::{ClientMessage, RelayMessage};
-use fava_write::{Event, EventBuilder, Kind, MaterializationId, PublicKey, ReceiptId, UnsignedEvent, WriteId};
+use fava_write::{
+    Event, EventBuilder, Kind, MaterializationId, PublicKey, ReceiptId, UnsignedEvent, WriteId,
+};
 use nostr::event::FinalizeEvent;
 use nostr::key::{Keys, SecretKey};
 use nostr::types::RelayUrl;
@@ -98,9 +98,9 @@ fn signed_note() -> Event {
 
 fn attempt(event: Event) -> PublishAttempt {
     PublishAttempt {
-        write_id: WriteId::from_u64(1),
-        receipt_id: ReceiptId::from_u64(1),
-        materialization_id: MaterializationId::from_u64(1),
+        write_id: WriteId::try_from(1).expect("nonzero write identity"),
+        receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
+        materialization_id: MaterializationId::FIRST,
         number: 1,
         session: session_key(),
         event,
@@ -143,9 +143,8 @@ async fn nip42_auth_handshake_completes_and_event_is_acknowledged() {
 
     // Run publisher concurrently while we script the relay side.
     let transport_ref = Arc::clone(&transport);
-    let publish_fut = tokio::spawn(async move {
-        publisher.publish(attempt_val, &*transport_ref).await
-    });
+    let publish_fut =
+        tokio::spawn(async move { publisher.publish(attempt_val, &*transport_ref).await });
 
     // Give the publisher a moment to send the initial EVENT.
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -193,7 +192,10 @@ async fn nip42_auth_handshake_completes_and_event_is_acknowledged() {
         .iter()
         .filter(|m| matches!(m, ClientMessage::Event(_)))
         .count();
-    assert_eq!(events_sent, 2, "initial EVENT plus resent EVENT after AUTH; frames: {messages:?}");
+    assert_eq!(
+        events_sent, 2,
+        "initial EVENT plus resent EVENT after AUTH; frames: {messages:?}"
+    );
 
     drop(lease);
 }
@@ -211,18 +213,15 @@ async fn nip42_without_signer_returns_authentication_required() {
         .acquire_session(open_request())
         .await
         .expect("session established");
-    let peer = transport
-        .relay(&session_key())
-        .expect("peer registered");
+    let peer = transport.relay(&session_key()).expect("peer registered");
 
     let event = signed_note();
     let event_id = event.id;
     let attempt_val = attempt(event);
 
     let transport_ref = Arc::clone(&transport);
-    let publish_fut = tokio::spawn(async move {
-        publisher.publish(attempt_val, &*transport_ref).await
-    });
+    let publish_fut =
+        tokio::spawn(async move { publisher.publish(attempt_val, &*transport_ref).await });
 
     tokio::time::sleep(Duration::from_millis(20)).await;
 

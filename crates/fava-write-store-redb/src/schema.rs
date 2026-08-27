@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 
 use fava_state::EventCoordinate;
 use fava_write::{EventId, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, Timestamp};
@@ -91,7 +92,7 @@ pub(super) fn load(
     database: &Database,
 ) -> Result<
     (
-        u64,
+        NonZeroU64,
         BTreeMap<ReceiptId, Receipt>,
         BTreeMap<EventCoordinate, ReceiptId>,
         BTreeMap<ReceiptId, SemanticCustody>,
@@ -99,13 +100,16 @@ pub(super) fn load(
     WriteStoreError,
 > {
     let transaction = database.begin_read().map_err(refused)?;
-    let next_identity = transaction
-        .open_table(META)
-        .map_err(refused)?
-        .get(NEXT_ID)
-        .map_err(refused)?
-        .ok_or_else(|| WriteStoreError::Refused("write identity metadata missing".to_owned()))?
-        .value();
+    let next_identity = NonZeroU64::new(
+        transaction
+            .open_table(META)
+            .map_err(refused)?
+            .get(NEXT_ID)
+            .map_err(refused)?
+            .ok_or_else(|| WriteStoreError::Refused("write identity metadata missing".to_owned()))?
+            .value(),
+    )
+    .ok_or_else(|| WriteStoreError::Refused("durable next identity is zero".to_owned()))?;
     let table = transaction.open_table(RECEIPTS).map_err(refused)?;
     let mut receipts = BTreeMap::new();
     let mut coordinates = BTreeMap::new();
@@ -113,7 +117,8 @@ pub(super) fn load(
     for entry in table.iter().map_err(refused)? {
         let (key, value) = entry.map_err(refused)?;
         let row: PersistedReceipt = serde_json::from_slice(value.value()).map_err(refused)?;
-        let receipt_id = ReceiptId::from_u64(key.value());
+        let receipt_id = ReceiptId::try_from(key.value())
+            .map_err(|_| WriteStoreError::Refused("durable receipt identity is zero".to_owned()))?;
         if row.receipt.receipt_id != receipt_id || row.receipt.write_id.as_u64() != key.value() {
             return Err(WriteStoreError::Refused(
                 "durable receipt identity does not match its row".to_owned(),
@@ -169,7 +174,7 @@ pub(super) fn load(
 
 pub(super) fn commit_accept(
     database: &Database,
-    next_identity: u64,
+    next_identity: NonZeroU64,
     receipt: &Receipt,
     semantic: Option<&SemanticCustody>,
     removals: &[ReceiptId],
@@ -219,7 +224,7 @@ pub(super) fn persist_existing(
 
 fn commit(
     database: &Database,
-    next_identity: Option<u64>,
+    next_identity: Option<NonZeroU64>,
     receipt: Option<(&Receipt, Option<&SemanticCustody>)>,
     removals: &[ReceiptId],
 ) -> Result<(), WriteStoreError> {
@@ -240,7 +245,7 @@ fn commit(
         transaction
             .open_table(META)
             .map_err(refused)?
-            .insert(NEXT_ID, next_identity)
+            .insert(NEXT_ID, next_identity.get())
             .map_err(refused)?;
     }
     transaction.commit().map_err(refused)

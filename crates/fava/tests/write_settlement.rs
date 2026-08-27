@@ -413,14 +413,14 @@ fn mixed_receipt() -> Receipt {
         ),
         (withdrawn, RelayDeliveryOutcome::Pending),
     ]);
-    let write_id = WriteId::from_u64(41);
-    let receipt_id = ReceiptId::from_u64(41);
+    let write_id = WriteId::try_from(41).expect("nonzero write identity");
+    let receipt_id = ReceiptId::try_from(41).expect("nonzero receipt identity");
     let current = LocalWriteEvent::new(
         EventValue::Signed(event),
         PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: MaterializationId::from_u64(1),
+            materialization_id: MaterializationId::FIRST,
             materialization_source: None,
             materialization_failure: None,
             retired_materializations: Vec::new(),

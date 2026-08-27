@@ -1,10 +1,17 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{Event, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, WriteRouting};
 use fava_write_store::WriteStoreError;
 
 use crate::{RedbWriteStore, StoreState};
+
+pub(super) fn next_identity(current: NonZeroU64) -> Result<NonZeroU64, WriteStoreError> {
+    current
+        .checked_add(1)
+        .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))
+}
 
 impl RedbWriteStore {
     pub(super) fn lock(&self) -> Result<std::sync::MutexGuard<'_, StoreState>, WriteStoreError> {

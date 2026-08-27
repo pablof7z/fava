@@ -38,16 +38,13 @@ pub(super) fn composite_key(event_id: EventId, session: &RelaySessionKey) -> Str
 }
 
 fn to_bytes(event: &RelayEvent) -> Result<Vec<u8>, String> {
-    let event_json =
-        serde_json::to_value(event.event()).map_err(|e| e.to_string())?;
+    let event_json = serde_json::to_value(event.event()).map_err(|e| e.to_string())?;
     let persisted = PersistedEvent {
         event_json,
         relay_url: event.occurrence().session.relay.to_string(),
         relay_access: match &event.occurrence().session.access {
             RelayAccess::Public => PersistedAccess::Public,
-            RelayAccess::Authenticated(pk) => {
-                PersistedAccess::Authenticated(pk.to_hex())
-            }
+            RelayAccess::Authenticated(pk) => PersistedAccess::Authenticated(pk.to_hex()),
         },
         observed_at: event.occurrence().observed_at.as_secs(),
     };
@@ -55,17 +52,14 @@ fn to_bytes(event: &RelayEvent) -> Result<Vec<u8>, String> {
 }
 
 fn from_bytes(data: &[u8]) -> Result<RelayEvent, String> {
-    let persisted: PersistedEvent =
-        serde_json::from_slice(data).map_err(|e| e.to_string())?;
-    let event: Event =
-        serde_json::from_value(persisted.event_json).map_err(|e| e.to_string())?;
-    let relay_url =
-        RelayUrl::parse(&persisted.relay_url).map_err(|e| e.to_string())?;
+    let persisted: PersistedEvent = serde_json::from_slice(data).map_err(|e| e.to_string())?;
+    let event: Event = serde_json::from_value(persisted.event_json).map_err(|e| e.to_string())?;
+    let relay_url = RelayUrl::parse(&persisted.relay_url).map_err(|e| e.to_string())?;
     let relay_access = match persisted.relay_access {
         PersistedAccess::Public => RelayAccess::Public,
-        PersistedAccess::Authenticated(hex) => RelayAccess::Authenticated(
-            PublicKey::from_hex(&hex).map_err(|e| e.to_string())?,
-        ),
+        PersistedAccess::Authenticated(hex) => {
+            RelayAccess::Authenticated(PublicKey::from_hex(&hex).map_err(|e| e.to_string())?)
+        }
     };
     let session = RelaySessionKey {
         relay: relay_url,
@@ -119,7 +113,10 @@ pub(super) fn load(
     for entry in table.iter().map_err(|e| e.to_string())? {
         let (_, value) = entry.map_err(|e| e.to_string())?;
         let relay_event = from_bytes(value.value())?;
-        let key = (relay_event.event().id, relay_event.occurrence().session.clone());
+        let key = (
+            relay_event.event().id,
+            relay_event.occurrence().session.clone(),
+        );
         events.insert(key, relay_event);
     }
     Ok(events)
@@ -139,8 +136,7 @@ pub(super) fn apply_diff(
     {
         let mut table = txn.open_table(EVENTS).map_err(|e| e.to_string())?;
         for relay_event in inserted {
-            let key =
-                composite_key(relay_event.event().id, &relay_event.occurrence().session);
+            let key = composite_key(relay_event.event().id, &relay_event.occurrence().session);
             let value = to_bytes(relay_event)?;
             table
                 .insert(key.as_str(), value.as_slice())
@@ -148,9 +144,7 @@ pub(super) fn apply_diff(
         }
         for (event_id, session) in removed {
             let key = composite_key(*event_id, session);
-            table
-                .remove(key.as_str())
-                .map_err(|e| e.to_string())?;
+            table.remove(key.as_str()).map_err(|e| e.to_string())?;
         }
     }
     txn.commit().map_err(|e| e.to_string())

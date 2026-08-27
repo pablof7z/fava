@@ -132,7 +132,7 @@ fn every_m5_commit_and_effect_boundary_survives_sigkill_exactly() {
 
         let store = RedbWriteStore::open(&database).expect("store recovers after kill");
         let receipt = store
-            .receipt(fava_write::ReceiptId::from_u64(1))
+            .receipt(fava_write::ReceiptId::try_from(1).expect("nonzero receipt identity"))
             .expect("receipt read");
         assert_boundary(boundary, receipt.as_ref());
     }

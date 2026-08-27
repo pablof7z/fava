@@ -44,7 +44,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
             .authorize_signing(
                 first.write_id,
                 first.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 first.current.id(),
             )
             .unwrap();
@@ -68,7 +68,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
     let recovered = reopened.receipt(first.receipt_id).unwrap().unwrap();
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         recovered.current.publication.signature,
@@ -87,7 +87,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
             .authorize_signing(
                 first.write_id,
                 first.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 first.current.id(),
             )
             .is_err()
@@ -99,7 +99,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
         .authorize_signing(
             first.write_id,
             first.receipt_id,
-            MaterializationId::from_u64(2),
+            MaterializationId::try_from(2).expect("nonzero materialization identity"),
             recovered.current.id(),
         )
         .unwrap();
@@ -107,14 +107,14 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
         .install_signed(
             first.write_id,
             first.receipt_id,
-            MaterializationId::from_u64(2),
+            MaterializationId::try_from(2).expect("nonzero materialization identity"),
             recovered.current.id(),
             successor_event.finalize(&keys).unwrap(),
         )
         .unwrap();
     assert_eq!(
         signed.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(signed.current.publication.signature, SignatureState::Signed);
     let EventValue::Signed(current) = signed.current.event else {
@@ -141,7 +141,7 @@ fn redb_authorized_generation_without_successor_reopens_as_exact_retryable_work(
             .authorize_signing(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 accepted.current.id(),
             )
             .unwrap();
@@ -153,7 +153,7 @@ fn redb_authorized_generation_without_successor_reopens_as_exact_retryable_work(
     assert_eq!(recovered.current.id(), accepted.current.id());
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
         panic!("ambiguous authorization remains attributable retryable work")
@@ -182,7 +182,7 @@ fn redb_authorized_cancellation_without_successor_survives_reopen_exactly() {
             .authorize_signing(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 accepted.current.id(),
             )
             .unwrap();
@@ -190,7 +190,7 @@ fn redb_authorized_cancellation_without_successor_survives_reopen_exactly() {
             .record_signer_retryable(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 accepted.current.id(),
                 "authorized signer invocation cancelled before effect; retry is permitted"
                     .to_owned(),
@@ -206,7 +206,7 @@ fn redb_authorized_cancellation_without_successor_survives_reopen_exactly() {
     assert_eq!(recovered.current.id(), accepted.current.id());
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert!(matches!(
         recovered.current.publication.signature,

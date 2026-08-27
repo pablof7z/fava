@@ -90,7 +90,6 @@ fn replace_remove_and_missing_mutations_are_exact() {
     assert!(!changes.has_changed().unwrap());
 }
 
-
 #[test]
 fn invocation_is_exact_generation_and_returned_future_releases_replacement() {
     let key = Keys::generate().public_key();

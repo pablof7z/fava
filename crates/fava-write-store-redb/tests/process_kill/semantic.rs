@@ -38,6 +38,10 @@ const SEMANTIC_BOUNDARY: &str = "FAVA_REDB_SEMANTIC_BOUNDARY";
 const SEMANTIC_PATH: &str = "FAVA_REDB_SEMANTIC_PATH";
 const SEMANTIC_MARKER: &str = "FAVA_REDB_SEMANTIC_MARKER";
 
+fn receipt_id(value: u64) -> ReceiptId {
+    ReceiptId::try_from(value).expect("nonzero receipt identity")
+}
+
 #[test]
 #[allow(clippy::too_many_lines)]
 fn semantic_boundary_child() {
@@ -71,7 +75,7 @@ fn semantic_boundary_child() {
                 .install_materialization(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     Some(base.id),
                     std::slice::from_ref(&edit()),
                     materialization(created_at, "generation two"),
@@ -86,7 +90,7 @@ fn semantic_boundary_child() {
                 .record_materialization_failure(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     Some(base.id),
                     Some(&EventValue::Signed(failed.clone())),
                     "child materializer failure".to_owned(),
@@ -111,7 +115,7 @@ fn semantic_boundary_child() {
             assert_eq!(composed.receipt_id, accepted.receipt_id);
             assert_eq!(
                 composed.current.publication.materialization_id,
-                MaterializationId::from_u64(2)
+                MaterializationId::try_from(2).expect("nonzero materialization identity")
             );
         }
         "authorized-successor" => {
@@ -119,7 +123,7 @@ fn semantic_boundary_child() {
                 .authorize_signing(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     accepted.current.id(),
                 )
                 .expect("pre-kill signer authorization commits");
@@ -145,7 +149,7 @@ fn semantic_boundary_child() {
                 .authorize_signing(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     accepted.current.id(),
                 )
                 .expect("pre-kill signer authorization commits");
@@ -153,7 +157,7 @@ fn semantic_boundary_child() {
                 .record_signer_retryable(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     accepted.current.id(),
                     "authorized signer invocation cancelled before effect; retry is permitted"
                         .to_owned(),
@@ -202,7 +206,7 @@ fn semantic_first_generation_survives_sigkill() {
     assert_eq!(receipt.receipt_id.as_u64(), 1);
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
     assert_eq!(
@@ -222,7 +226,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
     let successor = receipt_one(&successor_store);
     assert_eq!(
         successor.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(successor.write_id.as_u64(), 1);
     assert_eq!(successor.receipt_id.as_u64(), 1);
@@ -243,12 +247,12 @@ async fn semantic_successor_and_failed_source_resume_once() {
     )
     .build()
     .expect("successor recovery assembles after materializer validation");
-    let resumed = wait_for_generation(&successor_fava, ReceiptId::from_u64(1), 3).await;
+    let resumed = wait_for_generation(&successor_fava, receipt_id(1), 3).await;
     assert_eq!(
         resumed.current.publication.materialization_source,
         Some(newer_source_id)
     );
-    wait_terminal(&successor_fava, ReceiptId::from_u64(1)).await;
+    wait_terminal(&successor_fava, receipt_id(1)).await;
     assert_eq!(successor_materializer.calls(), 1);
     let inert_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
     let _inert = publication_builder(
@@ -290,7 +294,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
     )
     .build()
     .expect("selected materializer assembles before recovery");
-    let recovered = wait_for_generation(&fava, ReceiptId::from_u64(1), 2).await;
+    let recovered = wait_for_generation(&fava, receipt_id(1), 2).await;
     assert!(
         recovered
             .current
@@ -298,7 +302,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
             .materialization_failure
             .is_none()
     );
-    wait_terminal(&fava, ReceiptId::from_u64(1)).await;
+    wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(materializer.calls(), 1);
 
     let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
@@ -322,7 +326,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     assert_eq!(recovered[0].0.receipt_id.as_u64(), 1);
     assert_eq!(
         recovered[0].0.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         recovered[0]
@@ -333,7 +337,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
         vec![&[1][..], &[2][..]]
     );
 
-    let before_incomplete = store.receipt(ReceiptId::from_u64(1)).unwrap();
+    let before_incomplete = store.receipt(receipt_id(1)).unwrap();
     let incomplete_source = signed_source(20, "incomplete replay source");
     assert!(
         store
@@ -350,10 +354,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
             .is_err(),
         "reopened custody accepted a successor that omitted the first durable edit"
     );
-    assert_eq!(
-        store.receipt(ReceiptId::from_u64(1)).unwrap(),
-        before_incomplete
-    );
+    assert_eq!(store.receipt(receipt_id(1)).unwrap(), before_incomplete);
 
     let newer_source = signed_source(30, "newer post-kill source");
     let newer_source_id = newer_source.id;
@@ -368,7 +369,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&materializer))
         .build()
         .expect("composed recovery assembles");
-    let replayed = wait_for_generation(&fava, ReceiptId::from_u64(1), 3).await;
+    let replayed = wait_for_generation(&fava, receipt_id(1), 3).await;
     assert_eq!(replayed.write_id.as_u64(), 1);
     assert_eq!(replayed.receipt_id.as_u64(), 1);
     assert_eq!(
@@ -393,7 +394,7 @@ async fn authorized_signer_window_and_successor_resume_after_sigkill() {
     let recovered = receipt_one(&store);
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         recovered.current.publication.signature,
@@ -409,7 +410,7 @@ async fn authorized_signer_window_and_successor_resume_after_sigkill() {
     )
     .build()
     .expect("post-kill authorization recovery assembles");
-    let successor = wait_terminal(&fava, ReceiptId::from_u64(1)).await;
+    let successor = wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(successor.write_id.as_u64(), 1);
     assert_eq!(successor.receipt_id.as_u64(), 1);
     assert_eq!(successor.current.id(), successor_id);
@@ -436,7 +437,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
             .authorize_signing(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 accepted.current.id(),
             )
             .unwrap();
@@ -462,7 +463,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     let recovered = receipt_one(&store);
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         recovered.current.publication.signature,
@@ -477,7 +478,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     )
     .build()
     .unwrap();
-    let successor = wait_terminal(&fava, ReceiptId::from_u64(1)).await;
+    let successor = wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(
         successor.current.publication.retired_materializations.len(),
         1
@@ -501,7 +502,7 @@ fn authorized_cancellation_without_successor_survives_sigkill_exactly() {
     assert_eq!(recovered.receipt_id.as_u64(), 1);
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
         panic!("cancelled authorization reopened without retry disposition")
@@ -590,7 +591,7 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
     );
     assert_eq!(
         after.current.publication.materialization_id,
-        MaterializationId::from_u64(1),
+        MaterializationId::FIRST,
         "failed rematerialization installed a successor generation"
     );
     drop(fava);
@@ -610,7 +611,7 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
             .install_materialization(
                 before.write_id,
                 before.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 before.current.publication.materialization_source,
                 std::slice::from_ref(&edit()),
                 materialization(31, "late retired completion"),
@@ -671,7 +672,7 @@ fn kill_at(boundary: &str) -> PathBuf {
 
 fn receipt_one(store: &RedbWriteStore) -> Receipt {
     store
-        .receipt(ReceiptId::from_u64(1))
+        .receipt(receipt_id(1))
         .expect("receipt read")
         .expect("receipt one survives")
 }
@@ -864,7 +865,8 @@ async fn wait_for_generation(fava: &Fava, receipt_id: ReceiptId, generation: u64
                 .expect("receipt read")
                 .expect("receipt retained");
             if receipt.current.publication.materialization_id
-                == MaterializationId::from_u64(generation)
+                == MaterializationId::try_from(generation)
+                    .expect("nonzero materialization identity")
             {
                 return receipt;
             }

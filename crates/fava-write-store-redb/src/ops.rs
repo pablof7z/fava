@@ -12,7 +12,7 @@ use fava_write_store::{
 use tokio::sync::broadcast;
 
 use crate::RedbWriteStore;
-use crate::lifecycle::{capacity_reached, destinations, next_revision, settle};
+use crate::lifecycle::{capacity_reached, destinations, next_identity, next_revision, settle};
 
 impl WriteStore for RedbWriteStore {
     fn active_capacity(&self) -> usize {
@@ -44,11 +44,9 @@ impl WriteStore for RedbWriteStore {
             )));
         }
         let identity = state.next_identity;
-        let next_identity = identity
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))?;
-        let write_id = WriteId::from_u64(identity);
-        let receipt_id = ReceiptId::from_u64(identity);
+        let next_identity = next_identity(identity)?;
+        let write_id = WriteId::from_nonzero(identity);
+        let receipt_id = ReceiptId::from_nonzero(identity);
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
@@ -67,7 +65,7 @@ impl WriteStore for RedbWriteStore {
             PublicationEvidence {
                 receipt_id,
                 write_id,
-                materialization_id: fava_write::MaterializationId::from_u64(1),
+                materialization_id: fava_write::MaterializationId::FIRST,
                 materialization_source: None,
                 materialization_failure: None,
                 retired_materializations: Vec::new(),

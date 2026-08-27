@@ -214,10 +214,7 @@ impl FetchCache for MemoryFetchCache {
 
     fn set_error(&self, key: &str, reason: String, fetched_at: Instant) {
         let mut inner = self.inner.lock().expect("fetch cache lock poisoned");
-        inner.insert(
-            key.to_owned(),
-            StoredOutcome::Error { reason, fetched_at },
-        );
+        inner.insert(key.to_owned(), StoredOutcome::Error { reason, fetched_at });
     }
 
     fn evict(&self, key: &str) {
@@ -258,7 +255,9 @@ mod tests {
         assert!(outcome.is_stale(), "should be stale");
         assert!(!outcome.is_fresh_ok(), "should not be fresh");
         assert!(
-            outcome.age().is_some_and(|a| a.age >= Duration::from_secs(99)),
+            outcome
+                .age()
+                .is_some_and(|a| a.age >= Duration::from_secs(99)),
             "age must be reflected"
         );
     }

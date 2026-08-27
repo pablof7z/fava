@@ -19,7 +19,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -34,7 +34,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -49,7 +49,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(2),
+                MaterializationId::try_from(2).expect("nonzero materialization identity"),
                 Some(base.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -72,7 +72,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(2),
+            MaterializationId::try_from(2).expect("nonzero materialization identity"),
             Some(successor_source.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -93,7 +93,7 @@ fn memory_exact_current_guard_precedes_idempotence() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(2),
+                MaterializationId::try_from(2).expect("nonzero materialization identity"),
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
                 successor_event,

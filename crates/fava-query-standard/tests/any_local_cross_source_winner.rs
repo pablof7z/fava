@@ -17,9 +17,9 @@ fn local(event: Event) -> Result<LocalWriteEvent, fava_write::InvalidEventValue>
     LocalWriteEvent::new(
         EventValue::Signed(event),
         PublicationEvidence {
-            receipt_id: ReceiptId::from_u64(1),
-            write_id: WriteId::from_u64(1),
-            materialization_id: MaterializationId::from_u64(1),
+            receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
+            write_id: WriteId::try_from(1).expect("nonzero write identity"),
+            materialization_id: MaterializationId::FIRST,
             materialization_source: None,
             materialization_failure: None,
             retired_materializations: Vec::new(),

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU64;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::event_is_newer;
@@ -14,16 +15,13 @@ use fava_write_store::{
 use crate::SemanticCustody;
 
 pub(super) fn reconstructed(
-    next_identity: u64,
+    next_identity: NonZeroU64,
     receipts: &BTreeMap<ReceiptId, Receipt>,
     semantics: &BTreeMap<ReceiptId, SemanticCustody>,
 ) -> Result<(), WriteStoreError> {
-    if next_identity == 0 {
-        return incoherent("durable next identity is zero");
-    }
     for (receipt_id, receipt) in receipts {
         validate_receipt(*receipt_id, receipt, semantics.get(receipt_id))?;
-        if receipt_id.as_u64() >= next_identity {
+        if receipt_id.as_u64() >= next_identity.get() {
             return incoherent("durable next identity does not exceed every receipt row");
         }
     }
@@ -196,7 +194,7 @@ fn validate_materializations(
         let expected = u64::try_from(index)
             .ok()
             .and_then(|value| value.checked_add(1))
-            .map(MaterializationId::from_u64);
+            .and_then(|value| MaterializationId::try_from(value).ok());
         if Some(*id) != expected || !event_ids.insert(*event_id) {
             return incoherent("durable retired materialization identity is incoherent");
         }

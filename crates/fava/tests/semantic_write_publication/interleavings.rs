@@ -61,7 +61,7 @@ fn retired_completion_is_attributable_and_inert() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
     let accepted = accepted(&store, &keys);
-    let generation_one = MaterializationId::from_u64(1);
+    let generation_one = MaterializationId::FIRST;
     let event_one = accepted.current.id();
     let source = materialization(&keys, 2, "qualified source")
         .finalize(&keys)
@@ -183,7 +183,7 @@ fn simultaneous_source_and_completion_converge_once() {
             store.install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 None,
                 std::slice::from_ref(&edit()),
                 materialization(&keys, 3, "generation two"),
@@ -200,7 +200,7 @@ fn simultaneous_source_and_completion_converge_once() {
             store.record_signer_refusal(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 accepted.current.id(),
                 "simultaneous refusal".to_owned(),
             )
@@ -213,7 +213,7 @@ fn simultaneous_source_and_completion_converge_once() {
     let current = store.receipt(accepted.receipt_id).unwrap().unwrap();
     assert_eq!(
         current.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         current.current.publication.retired_materializations.len(),
@@ -241,7 +241,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             .install_signed(
                 a.write_id,
                 a.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 a.current.id(),
                 signed_a,
             )
@@ -251,7 +251,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
         .authorize_signing(
             b.write_id,
             b.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             b.current.id(),
         )
         .expect("B signing authorizes independently");
@@ -260,7 +260,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             .install_signed(
                 b.write_id,
                 b.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 b.current.id(),
                 signed_b,
             )
@@ -364,7 +364,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(higher_id.id),
             std::slice::from_ref(&edit()),
             materialization(&keys, 12, "lower-id generation"),
@@ -381,7 +381,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(2),
+                MaterializationId::try_from(2).expect("nonzero materialization identity"),
                 Some(lower_id.id),
                 std::slice::from_ref(&edit()),
                 materialization(&keys, 13, "higher-id retry"),

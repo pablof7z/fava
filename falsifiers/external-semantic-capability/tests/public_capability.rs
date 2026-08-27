@@ -40,7 +40,7 @@ async fn external_capability_composes_through_public_fava() {
         .expect("external edit accepts");
     let first = harness.transport.published(0).await;
     let generation_one = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id == MaterializationId::from_u64(1)
+        receipt.current.publication.materialization_id == MaterializationId::FIRST
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
     .await;
@@ -75,7 +75,8 @@ async fn external_capability_composes_through_public_fava() {
     harness.transport.deliver(&subscription, &source);
 
     let generation_two = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id == MaterializationId::from_u64(2)
+        receipt.current.publication.materialization_id
+            == MaterializationId::try_from(2).expect("nonzero materialization identity")
     })
     .await;
     assert_eq!(generation_two.write_id, accepted.write_id());
@@ -86,7 +87,7 @@ async fn external_capability_composes_through_public_fava() {
     );
     assert_eq!(
         generation_two.current.publication.retired_materializations[0].0,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(
         generation_two.current.publication.retired_materializations[0].1,
@@ -138,7 +139,7 @@ async fn external_capability_composes_through_public_fava() {
             .current
             .publication
             .materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
 
     let retired = harness.transport.acknowledge(0);
@@ -146,12 +147,13 @@ async fn external_capability_composes_through_public_fava() {
     let after_retired = accepted.receipt().unwrap();
     assert_eq!(
         after_retired.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     let second = harness.transport.published(1).await;
     assert_ne!(second.id, retired);
     let before_successor_ack = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id == MaterializationId::from_u64(2)
+        receipt.current.publication.materialization_id
+            == MaterializationId::try_from(2).expect("nonzero materialization identity")
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
     .await;
@@ -212,7 +214,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
     .await;
     assert_eq!(
         failed.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(failed.current.publication.materialization_source, None);
     assert_eq!(failed.current.id(), first.id);

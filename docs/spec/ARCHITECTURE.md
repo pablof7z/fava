@@ -189,6 +189,15 @@ write and receipt identity. The write store allocates and persists it; signer,
 route, publisher, and delivery effects carry it back to the store, which accepts
 a completion only while that materialization remains current.
 
+`WriteId`, `ReceiptId`, and `MaterializationId` are nonzero opaque values.
+Public fallible reconstruction supports durable import, provider replacement,
+and receipt reattachment; constructing a value does not mint custody or grant
+mutation authority. The write store mints `WriteId` and `ReceiptId` only in the
+atomic acceptance commit. It creates the first `MaterializationId` internally
+and advances it only with checked arithmetic during an exact-current mutation.
+Numeric exhaustion is a typed store refusal and never wraps or partially
+commits. No caller supplies an initial materialization generation.
+
 `ReplaceableEventMaterializer` is the neutral protocol-provider contract. It
 owns no store, signer, route, delivery, or receipt lifecycle. Application
 assembly selects implementations before write recovery so accepted edit formats

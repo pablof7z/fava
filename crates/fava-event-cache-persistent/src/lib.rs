@@ -119,9 +119,10 @@ impl RedbEventCache {
         }
 
         for incoming in upserts {
-            incoming.event().verify().map_err(|e| {
-                EventCacheError::Refused(format!("invalid signed event: {e}"))
-            })?;
+            incoming
+                .event()
+                .verify()
+                .map_err(|e| EventCacheError::Refused(format!("invalid signed event: {e}")))?;
             let key = (incoming.event().id, incoming.occurrence().session.clone());
             if let Some(retained) = next.events.get(&key) {
                 if incoming.occurrence().observed_at < retained.occurrence().observed_at {
@@ -171,9 +172,10 @@ impl RedbEventCache {
     ) -> Result<(), EventCacheError> {
         schema::apply_diff(database, &inserted, &removed).map_err(refused)?;
         let mut next = next;
-        next.revision = next.revision.checked_add(1).ok_or_else(|| {
-            EventCacheError::Refused("source revision exhausted".to_owned())
-        })?;
+        next.revision = next
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| EventCacheError::Refused("source revision exhausted".to_owned()))?;
         let snap = Arc::new(cache_snapshot(&next));
         *guard = next;
         sender.send_replace(snap);
@@ -352,9 +354,8 @@ mod tests {
         let event_id = relay_event.event().id;
 
         {
-            let cache =
-                RedbEventCache::open_bounded(&path, NonZeroUsize::new(100).unwrap())
-                    .expect("open first");
+            let cache = RedbEventCache::open_bounded(&path, NonZeroUsize::new(100).unwrap())
+                .expect("open first");
             cache
                 .admit(relay_event.clone(), Timestamp::now())
                 .expect("admit");

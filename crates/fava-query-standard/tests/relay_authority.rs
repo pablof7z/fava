@@ -74,9 +74,10 @@ fn local(event: Event) -> SourceSnapshot {
     let local = LocalWriteEvent::new(
         EventValue::Signed(event),
         PublicationEvidence {
-            receipt_id: ReceiptId::from_u64(1),
-            write_id: WriteId::from_u64(2),
-            materialization_id: MaterializationId::from_u64(3),
+            receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
+            write_id: WriteId::try_from(2).expect("nonzero write identity"),
+            materialization_id: MaterializationId::try_from(3)
+                .expect("nonzero materialization identity"),
             materialization_source: None,
             materialization_failure: None,
             retired_materializations: Vec::new(),
@@ -98,9 +99,10 @@ fn local_unsigned(event: UnsignedEvent) -> SourceSnapshot {
     let local = LocalWriteEvent::new(
         EventValue::Unsigned(event),
         PublicationEvidence {
-            receipt_id: ReceiptId::from_u64(1),
-            write_id: WriteId::from_u64(2),
-            materialization_id: MaterializationId::from_u64(3),
+            receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
+            write_id: WriteId::try_from(2).expect("nonzero write identity"),
+            materialization_id: MaterializationId::try_from(3)
+                .expect("nonzero materialization identity"),
             materialization_source: None,
             materialization_failure: None,
             retired_materializations: Vec::new(),

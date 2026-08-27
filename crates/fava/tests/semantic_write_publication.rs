@@ -105,7 +105,7 @@ async fn first_value_edit_publishes_through_public_fava() {
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(visible.events.len(), 1);
     assert_eq!(visible.events[0].event().author(), keys.public_key());
@@ -185,7 +185,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     assert_eq!(
         generation_two.current.publication.retired_materializations[0],
         (
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             generation_one.current.id(),
             None,
             None,
@@ -196,7 +196,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
             .record_signer_refusal(
                 first.write_id(),
                 first.receipt_id(),
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 generation_one.current.id(),
                 "late generation-one refusal".to_owned(),
             )
@@ -538,7 +538,7 @@ async fn own_local_materialization_does_not_create_a_second_generation() {
     let receipt = write.receipt().expect("receipt exists");
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(materializer.calls().len(), 1);
     assert_eq!(signer.calls(), 1);

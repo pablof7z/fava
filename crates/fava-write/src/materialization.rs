@@ -2,22 +2,49 @@ use crate::{
     EventValue, Kind, PublicKey, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU64, TryFromIntError};
 
 /// Exact identity of one immutable event materialization generation.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct MaterializationId(u64);
+pub struct MaterializationId(NonZeroU64);
 
 impl MaterializationId {
-    /// Construct an id allocated by a write store.
+    /// First materialization generation of an accepted write.
+    pub const FIRST: Self = Self(NonZeroU64::MIN);
+
+    /// Reconstruct a nonzero generation value.
+    ///
+    /// Construction does not make the generation current. Only the owning
+    /// write store can commit a generation transition.
     #[must_use]
-    pub const fn from_u64(value: u64) -> Self {
+    pub const fn from_nonzero(value: NonZeroU64) -> Self {
         Self(value)
     }
 
     /// Return the provider-independent numeric representation.
     #[must_use]
     pub const fn as_u64(self) -> u64 {
-        self.0
+        self.0.get()
+    }
+
+    /// Return the next generation, or `None` at numeric exhaustion.
+    #[must_use]
+    pub const fn checked_next(self) -> Option<Self> {
+        match self.0.get().checked_add(1) {
+            Some(value) => match NonZeroU64::new(value) {
+                Some(value) => Some(Self(value)),
+                None => None,
+            },
+            None => None,
+        }
+    }
+}
+
+impl TryFrom<u64> for MaterializationId {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        NonZeroU64::try_from(value).map(Self)
     }
 }
 

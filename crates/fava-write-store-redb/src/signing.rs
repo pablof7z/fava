@@ -322,17 +322,14 @@ impl RedbWriteStore {
             receipt.current.publication.materialization_source,
             receipt.current.publication.materialization_failure.clone(),
         ));
-        let materialization_id = MaterializationId::from_u64(
-            receipt
-                .current
-                .publication
-                .materialization_id
-                .as_u64()
-                .checked_add(1)
-                .ok_or_else(|| {
-                    WriteStoreError::Refused("materialization identity exhausted".to_owned())
-                })?,
-        );
+        let materialization_id = receipt
+            .current
+            .publication
+            .materialization_id
+            .checked_next()
+            .ok_or_else(|| {
+                WriteStoreError::Refused("materialization identity exhausted".to_owned())
+            })?;
         let source_correction = edit.is_none();
         let successor_destinations = if source_correction {
             let mut sessions = receipt.desired_destinations.clone();

@@ -127,10 +127,10 @@ fn addressable_edit_accepts_an_explicit_author_before_custody() {
 #[test]
 fn materialization_identity_changes_but_receipt_identity_does_not() {
     let actor = Keys::generate().public_key();
-    let write_id = WriteId::from_u64(9);
-    let receipt_id = ReceiptId::from_u64(11);
-    let first = MaterializationId::from_u64(1);
-    let successor = MaterializationId::from_u64(2);
+    let write_id = WriteId::try_from(9).expect("nonzero write identity");
+    let receipt_id = ReceiptId::try_from(11).expect("nonzero receipt identity");
+    let first = MaterializationId::FIRST;
+    let successor = MaterializationId::try_from(2).expect("nonzero materialization identity");
     let first_event = EventBuilder::new(actor, Kind::ContactList)
         .created_at(Timestamp::from(1))
         .build()

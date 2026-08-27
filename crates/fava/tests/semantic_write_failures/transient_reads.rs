@@ -120,7 +120,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     let composed = compose_direct(&store, &materializer, keys.public_key(), &generation_one, 2);
     assert_eq!(
         composed.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     let third = compose_direct(
         &store,
@@ -131,7 +131,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     );
     assert_eq!(
         third.current.publication.materialization_id,
-        MaterializationId::from_u64(3)
+        MaterializationId::try_from(3).expect("nonzero materialization identity")
     );
     tokio::time::timeout(Duration::from_secs(1), async {
         while store.materialized_read_failures() == 0 {
@@ -167,7 +167,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
             .current
             .publication
             .materialization_id,
-        MaterializationId::from_u64(3),
+        MaterializationId::try_from(3).expect("nonzero materialization identity"),
         "stale replay installed while durable sequence refresh was unavailable"
     );
 

@@ -21,171 +21,319 @@ Descriptions are hand-written and preserved across updates. Re-exports appear
 at their exported path and are classified by the re-exported item's kind.
 
 <!-- BEGIN crate-readme-api inventory -->
-| Kind | Item | Description |
-| --- | --- | --- |
-| Module | `fava_write` |  |
-| Public field | `fava_write::Event` |  |
-| Enum | `fava_write::EventBuildError` |  |
-| Enum variant | `fava_write::EventBuildError::Encoding` |  |
-| Enum variant | `fava_write::EventBuildError::ExplicitRoutingAttached` | Refuses event-only construction when it would discard an attached local publication route. |
-| Public field | `fava_write::EventBuildError::Encoding::0` |  |
-| Enum variant | `fava_write::EventBuildError::TooLarge` |  |
-| Public field | `fava_write::EventBuildError::TooLarge::bytes` |  |
-| Public field | `fava_write::EventBuildError::TooLarge::maximum` |  |
-| Enum variant | `fava_write::EventBuildError::TooManyTags` |  |
-| Public field | `fava_write::EventBuildError::TooManyTags::actual` |  |
-| Public field | `fava_write::EventBuildError::TooManyTags::maximum` |  |
-| Struct | `fava_write::EventBuilder` |  |
-| Method | `fava_write::EventBuilder::build` |  |
-| Method | `fava_write::EventBuilder::content` |  |
-| Method | `fava_write::EventBuilder::created_at` |  |
-| Method | `fava_write::EventBuilder::event_tags` | Borrows exact event tags in insertion order so protocol extension traits can compose without owning generic construction. |
-| Method | `fava_write::EventBuilder::from_parts` |  |
-| Method | `fava_write::EventBuilder::into_event_and_routing` | Consumes the builder into one unsigned event plus its neutral local publication route. |
-| Method | `fava_write::EventBuilder::new` |  |
-| Method | `fava_write::EventBuilder::tag` |  |
-| Method | `fava_write::EventBuilder::tags` |  |
-| Method | `fava_write::EventBuilder::to_relays` | Accumulates a bounded, first-occurrence explicit relay route without serializing it into the event. |
-| Public field | `fava_write::EventId` |  |
-| Enum | `fava_write::EventValue` |  |
-| Enum variant | `fava_write::EventValue::Signed` |  |
-| Public field | `fava_write::EventValue::Signed::0` |  |
-| Enum variant | `fava_write::EventValue::Unsigned` |  |
-| Public field | `fava_write::EventValue::Unsigned::0` |  |
-| Method | `fava_write::EventValue::author` |  |
-| Method | `fava_write::EventValue::coordinate` |  |
-| Method | `fava_write::EventValue::created_at` |  |
-| Method | `fava_write::EventValue::id` |  |
-| Method | `fava_write::EventValue::kind` |  |
-| Method | `fava_write::EventValue::tags` |  |
-| Enum | `fava_write::InvalidEventValue` |  |
-| Enum variant | `fava_write::InvalidEventValue::MissingId` |  |
-| Public field | `fava_write::Kind` |  |
-| Struct | `fava_write::LocalWriteEvent` |  |
-| Public field | `fava_write::LocalWriteEvent::event` |  |
-| Method | `fava_write::LocalWriteEvent::id` |  |
-| Method | `fava_write::LocalWriteEvent::new` |  |
-| Public field | `fava_write::LocalWriteEvent::publication` |  |
-| Struct | `fava_write::MaterializationId` |  |
-| Method | `fava_write::MaterializationId::as_u64` |  |
-| Method | `fava_write::MaterializationId::from_u64` |  |
-| Public field | `fava_write::PublicKey` |  |
-| Struct | `fava_write::PublicationEvidence` |  |
-| Public field | `fava_write::PublicationEvidence::destinations` |  |
-| Public field | `fava_write::PublicationEvidence::materialization_failure` |  |
-| Public field | `fava_write::PublicationEvidence::materialization_id` |  |
-| Public field | `fava_write::PublicationEvidence::materialization_source` |  |
-| Public field | `fava_write::PublicationEvidence::receipt_id` |  |
-| Public field | `fava_write::PublicationEvidence::retired_materializations` |  |
-| Public field | `fava_write::PublicationEvidence::signature` |  |
-| Public field | `fava_write::PublicationEvidence::write_id` |  |
-| Struct | `fava_write::Receipt` |  |
-| Method | `fava_write::Receipt::acknowledged` |  |
-| Public field | `fava_write::Receipt::attempts` |  |
-| Public field | `fava_write::Receipt::current` |  |
-| Method | `fava_write::Receipt::desired` |  |
-| Public field | `fava_write::Receipt::desired_destinations` |  |
-| Method | `fava_write::Receipt::desires` |  |
-| Method | `fava_write::Receipt::destinations` |  |
-| Method | `fava_write::Receipt::is_terminal` |  |
-| Public field | `fava_write::Receipt::outcome` |  |
-| Public field | `fava_write::Receipt::receipt_id` |  |
-| Method | `fava_write::Receipt::rejected` |  |
-| Public field | `fava_write::Receipt::route_revision` |  |
-| Public field | `fava_write::Receipt::route_settled` |  |
-| Public field | `fava_write::Receipt::route_shortfalls` |  |
-| Public field | `fava_write::Receipt::routing` |  |
-| Public field | `fava_write::Receipt::write_id` |  |
-| Struct | `fava_write::ReceiptId` |  |
-| Method | `fava_write::ReceiptId::as_u64` |  |
-| Method | `fava_write::ReceiptId::from_u64` |  |
-| Enum | `fava_write::ReceiptOutcome` |  |
-| Enum variant | `fava_write::ReceiptOutcome::Cancelled` |  |
-| Enum variant | `fava_write::ReceiptOutcome::Complete` |  |
-| Enum variant | `fava_write::ReceiptOutcome::NoDestination` |  |
-| Enum variant | `fava_write::ReceiptOutcome::Open` |  |
-| Enum | `fava_write::RelayDeliveryOutcome` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Acknowledged` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::Acknowledged::message` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Attempting` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::AuthenticationDenied` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::GivenUp` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::GivenUp::reason` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Pending` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Rejected` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::Rejected::message` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Retryable` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::Retryable::reason` |  |
-| Enum variant | `fava_write::RelayDeliveryOutcome::Unknown` |  |
-| Public field | `fava_write::RelayDeliveryOutcome::Unknown::reason` |  |
-| Method | `fava_write::RelayDeliveryOutcome::is_terminal` |  |
-| Struct | `fava_write::ReplaceableEventEdit` |  |
-| Method | `fava_write::ReplaceableEventEdit::change` |  |
-| Method | `<fava_write::ReplaceableEventEdit as serde_core::de::Deserialize<'de>>::deserialize` |  |
-| Method | `fava_write::ReplaceableEventEdit::identifier` |  |
-| Method | `fava_write::ReplaceableEventEdit::kind` |  |
-| Method | `fava_write::ReplaceableEventEdit::new` |  |
-| Method | `<fava_write::ReplaceableEventEdit as serde_core::ser::Serialize>::serialize` |  |
-| Trait | `fava_write::ReplaceableEventMaterializer` |  |
-| Method | `fava_write::ReplaceableEventMaterializer::kind` |  |
-| Method | `fava_write::ReplaceableEventMaterializer::materialize` |  |
-| Method | `fava_write::ReplaceableEventMaterializer::supports` |  |
-| Enum | `fava_write::SignatureState` |  |
-| Enum variant | `fava_write::SignatureState::Authorized` |  |
-| Enum variant | `fava_write::SignatureState::Refused` |  |
-| Public field | `fava_write::SignatureState::Refused::0` |  |
-| Enum variant | `fava_write::SignatureState::Retryable` |  |
-| Public field | `fava_write::SignatureState::Retryable::0` |  |
-| Enum variant | `fava_write::SignatureState::Signed` |  |
-| Enum variant | `fava_write::SignatureState::Unsigned` |  |
-| Public field | `fava_write::Tag` |  |
-| Public field | `fava_write::Timestamp` |  |
-| Public field | `fava_write::UnsignedEvent` |  |
-| Struct | `fava_write::WriteId` |  |
-| Method | `fava_write::WriteId::as_u64` |  |
-| Method | `fava_write::WriteId::from_u64` |  |
-| Struct | `fava_write::WriteIntent` |  |
-| Method | `fava_write::WriteIntent::author` |  |
-| Method | `fava_write::WriteIntent::edit_as` |  |
-| Method | `fava_write::WriteIntent::event` |  |
-| Method | `fava_write::WriteIntent::into_parts` |  |
-| Method | `fava_write::WriteIntent::payload` |  |
-| Method | `fava_write::WriteIntent::presigned` |  |
-| Method | `fava_write::WriteIntent::routing` |  |
-| Enum | `fava_write::WriteIntentError` |  |
-| Enum variant | `fava_write::WriteIntentError::DuplicateExplicitRelay` |  |
-| Public field | `fava_write::WriteIntentError::DuplicateExplicitRelay::relay` |  |
-| Enum variant | `fava_write::WriteIntentError::ConflictingExplicitRoutes` | Refuses two independent explicit route authorities before signing or custody. |
-| Enum variant | `fava_write::WriteIntentError::EmptyExplicitRelays` |  |
-| Enum variant | `fava_write::WriteIntentError::Encoding` |  |
-| Enum variant | `fava_write::WriteIntentError::ExplicitRoutingAttached` | Preserves the builder refusal when event-only construction would discard routing. |
-| Public field | `fava_write::WriteIntentError::Encoding::0` |  |
-| Enum variant | `fava_write::WriteIntentError::Expired` |  |
-| Enum variant | `fava_write::WriteIntentError::InvalidEvent` |  |
-| Public field | `fava_write::WriteIntentError::InvalidEvent::0` |  |
-| Enum variant | `fava_write::WriteIntentError::TooLarge` |  |
-| Public field | `fava_write::WriteIntentError::TooLarge::bytes` |  |
-| Public field | `fava_write::WriteIntentError::TooLarge::maximum` |  |
-| Enum variant | `fava_write::WriteIntentError::TooManyExplicitRelays` |  |
-| Public field | `fava_write::WriteIntentError::TooManyExplicitRelays::actual` |  |
-| Public field | `fava_write::WriteIntentError::TooManyExplicitRelays::maximum` |  |
-| Enum variant | `fava_write::WriteIntentError::TooManyTags` |  |
-| Public field | `fava_write::WriteIntentError::TooManyTags::actual` |  |
-| Public field | `fava_write::WriteIntentError::TooManyTags::maximum` |  |
-| Method | `<fava_write::WriteIntentError as core::convert::From<fava_write::EventBuildError>>::from` |  |
-| Enum | `fava_write::WritePayload` |  |
-| Enum variant | `fava_write::WritePayload::Edit` |  |
-| Public field | `fava_write::WritePayload::Edit::author` |  |
-| Public field | `fava_write::WritePayload::Edit::edit` |  |
-| Enum variant | `fava_write::WritePayload::Event` |  |
-| Public field | `fava_write::WritePayload::Event::0` |  |
-| Enum variant | `fava_write::WritePayload::Presigned` |  |
-| Public field | `fava_write::WritePayload::Presigned::0` |  |
-| Enum | `fava_write::WriteRouting` |  |
-| Enum variant | `fava_write::WriteRouting::Automatic` |  |
-| Enum variant | `fava_write::WriteRouting::Explicit` |  |
-| Public field | `fava_write::WriteRouting::Explicit::0` |  |
-| Method | `fava_write::WriteRouting::explicit` |  |
+### `fava_write` (Module)
+
+Compiler-visible module `fava_write`.
+<!-- api-item {"kind":"Module","item":"fava_write","signature":"pub mod fava_write","evidence":"cargo-public-api@0.52.0: pub mod fava_write"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Event`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Event","signature":"pub use fava_write::Event","evidence":"cargo-public-api@0.52.0: pub use fava_write::Event"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`EventId`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventId","signature":"pub use fava_write::EventId","evidence":"cargo-public-api@0.52.0: pub use fava_write::EventId"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`Kind`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Kind","signature":"pub use fava_write::Kind","evidence":"cargo-public-api@0.52.0: pub use fava_write::Kind"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`PublicKey`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicKey","signature":"pub use fava_write::PublicKey","evidence":"cargo-public-api@0.52.0: pub use fava_write::PublicKey"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`Tag`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Tag","signature":"pub use fava_write::Tag","evidence":"cargo-public-api@0.52.0: pub use fava_write::Tag"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`Timestamp`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Timestamp","signature":"pub use fava_write::Timestamp","evidence":"cargo-public-api@0.52.0: pub use fava_write::Timestamp"} --> | Compiler-visible public field owned by `fava_write`. |
+| **`UnsignedEvent`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::UnsignedEvent","signature":"pub use fava_write::UnsignedEvent","evidence":"cargo-public-api@0.52.0: pub use fava_write::UnsignedEvent"} --> | Compiler-visible public field owned by `fava_write`. |
+
+### `EventBuildError` (Enum)
+
+Compiler-visible enum `fava_write::EventBuildError`.
+<!-- api-item {"kind":"Enum","item":"fava_write::EventBuildError","signature":"pub enum fava_write::EventBuildError","evidence":"cargo-public-api@0.52.0: pub enum fava_write::EventBuildError"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Encoding`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventBuildError::Encoding","signature":"pub fava_write::EventBuildError::Encoding(alloc::string::String)","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::Encoding(alloc::string::String)"} --> | Compiler-visible enum variant owned by `fava_write::EventBuildError`. |
+| **`Field `0` of `Encoding``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventBuildError::Encoding::0","signature":"alloc::string::String","evidence":"cargo-public-api@0.52.0: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::EventBuildError`. |
+| **`ExplicitRoutingAttached`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventBuildError::ExplicitRoutingAttached","signature":"pub fava_write::EventBuildError::ExplicitRoutingAttached","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::ExplicitRoutingAttached"} --> | Refuses event-only construction when it would discard an attached local publication route. |
+| **`TooLarge`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventBuildError::TooLarge","signature":"pub fava_write::EventBuildError::TooLarge","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooLarge"} --> | Compiler-visible enum variant owned by `fava_write::EventBuildError`. |
+| **`Field `bytes` of `TooLarge``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventBuildError::TooLarge::bytes","signature":"pub fava_write::EventBuildError::TooLarge::bytes: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooLarge::bytes: usize"} --> | Compiler-visible public field owned by `fava_write::EventBuildError`. |
+| **`Field `maximum` of `TooLarge``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventBuildError::TooLarge::maximum","signature":"pub fava_write::EventBuildError::TooLarge::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooLarge::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::EventBuildError`. |
+| **`TooManyTags`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventBuildError::TooManyTags","signature":"pub fava_write::EventBuildError::TooManyTags","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooManyTags"} --> | Compiler-visible enum variant owned by `fava_write::EventBuildError`. |
+| **`Field `actual` of `TooManyTags``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventBuildError::TooManyTags::actual","signature":"pub fava_write::EventBuildError::TooManyTags::actual: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooManyTags::actual: usize"} --> | Compiler-visible public field owned by `fava_write::EventBuildError`. |
+| **`Field `maximum` of `TooManyTags``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventBuildError::TooManyTags::maximum","signature":"pub fava_write::EventBuildError::TooManyTags::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::EventBuildError::TooManyTags::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::EventBuildError`. |
+
+### `EventBuilder` (Struct)
+
+Compiler-visible struct `fava_write::EventBuilder`.
+<!-- api-item {"kind":"Struct","item":"fava_write::EventBuilder","signature":"pub struct fava_write::EventBuilder","evidence":"cargo-public-api@0.52.0: pub struct fava_write::EventBuilder"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`build`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::build","signature":"pub fn fava_write::EventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`content`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::content","signature":"pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`created_at`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::created_at","signature":"pub const fn fava_write::EventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::EventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`event_tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::event_tags","signature":"pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]"} --> | Borrows exact event tags in insertion order so protocol extension traits can compose without owning generic construction. |
+| **`from_parts`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::from_parts","signature":"pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`into_event_and_routing`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::into_event_and_routing","signature":"pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>"} --> | Consumes the builder into one unsigned event plus its neutral local publication route. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::new","signature":"pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`tag`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::tag","signature":"pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::tags","signature":"pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`to_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::to_relays","signature":"pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Accumulates a bounded, first-occurrence explicit relay route without serializing it into the event. |
+
+### `EventValue` (Enum)
+
+Compiler-visible enum `fava_write::EventValue`.
+<!-- api-item {"kind":"Enum","item":"fava_write::EventValue","signature":"pub enum fava_write::EventValue","evidence":"cargo-public-api@0.52.0: pub enum fava_write::EventValue"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Signed`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventValue::Signed","signature":"pub fava_write::EventValue::Signed(nostr::event::Event)","evidence":"cargo-public-api@0.52.0: pub fava_write::EventValue::Signed(nostr::event::Event)"} --> | Compiler-visible enum variant owned by `fava_write::EventValue`. |
+| **`Field `0` of `Signed``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventValue::Signed::0","signature":"nostr::event::Event","evidence":"cargo-public-api@0.52.0: nostr::event::Event"} --> | Compiler-visible public field owned by `fava_write::EventValue`. |
+| **`Unsigned`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::EventValue::Unsigned","signature":"pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)","evidence":"cargo-public-api@0.52.0: pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)"} --> | Compiler-visible enum variant owned by `fava_write::EventValue`. |
+| **`Field `0` of `Unsigned``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::EventValue::Unsigned::0","signature":"nostr::event::unsigned::UnsignedEvent","evidence":"cargo-public-api@0.52.0: nostr::event::unsigned::UnsignedEvent"} --> | Compiler-visible public field owned by `fava_write::EventValue`. |
+| **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::author","signature":"pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+| **`coordinate`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::coordinate","signature":"pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+| **`created_at`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::created_at","signature":"pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+| **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::id","signature":"pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+| **`kind`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::kind","signature":"pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+| **`tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventValue::tags","signature":"pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]"} --> | Compiler-visible method owned by `fava_write::EventValue`. |
+
+### `InvalidEventValue` (Enum)
+
+Compiler-visible enum `fava_write::InvalidEventValue`.
+<!-- api-item {"kind":"Enum","item":"fava_write::InvalidEventValue","signature":"pub enum fava_write::InvalidEventValue","evidence":"cargo-public-api@0.52.0: pub enum fava_write::InvalidEventValue"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`MissingId`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::InvalidEventValue::MissingId","signature":"pub fava_write::InvalidEventValue::MissingId","evidence":"cargo-public-api@0.52.0: pub fava_write::InvalidEventValue::MissingId"} --> | Compiler-visible enum variant owned by `fava_write::InvalidEventValue`. |
+
+### `LocalWriteEvent` (Struct)
+
+Compiler-visible struct `fava_write::LocalWriteEvent`.
+<!-- api-item {"kind":"Struct","item":"fava_write::LocalWriteEvent","signature":"pub struct fava_write::LocalWriteEvent","evidence":"cargo-public-api@0.52.0: pub struct fava_write::LocalWriteEvent"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`event`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::LocalWriteEvent::event","signature":"pub fava_write::LocalWriteEvent::event: fava_write::EventValue","evidence":"cargo-public-api@0.52.0: pub fava_write::LocalWriteEvent::event: fava_write::EventValue"} --> | Compiler-visible public field owned by `fava_write::LocalWriteEvent`. |
+| **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::LocalWriteEvent::id","signature":"pub const fn fava_write::LocalWriteEvent::id(&self) -> nostr::event::id::EventId","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::LocalWriteEvent::id(&self) -> nostr::event::id::EventId"} --> | Compiler-visible method owned by `fava_write::LocalWriteEvent`. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::LocalWriteEvent::new","signature":"pub fn fava_write::LocalWriteEvent::new(fava_write::EventValue, fava_write::PublicationEvidence) -> core::result::Result<Self, fava_write::InvalidEventValue>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::LocalWriteEvent::new(fava_write::EventValue, fava_write::PublicationEvidence) -> core::result::Result<Self, fava_write::InvalidEventValue>"} --> | Compiler-visible method owned by `fava_write::LocalWriteEvent`. |
+| **`publication`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::LocalWriteEvent::publication","signature":"pub fava_write::LocalWriteEvent::publication: fava_write::PublicationEvidence","evidence":"cargo-public-api@0.52.0: pub fava_write::LocalWriteEvent::publication: fava_write::PublicationEvidence"} --> | Compiler-visible public field owned by `fava_write::LocalWriteEvent`. |
+
+### `MaterializationId` (Struct)
+
+Compiler-visible struct `fava_write::MaterializationId`.
+<!-- api-item {"kind":"Struct","item":"fava_write::MaterializationId","signature":"pub struct fava_write::MaterializationId(_)","evidence":"cargo-public-api@0.52.0: pub struct fava_write::MaterializationId(_)"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`core::convert::TryFrom<u64>::Error`**<br><sub>Type alias</sub><!-- api-item {"kind":"Type alias","item":"<fava_write::MaterializationId as core::convert::TryFrom<u64>>::Error","signature":"pub type fava_write::MaterializationId::Error = core::num::error::TryFromIntError","evidence":"cargo-public-api@0.52.0: pub type fava_write::MaterializationId::Error = core::num::error::TryFromIntError"} --> | Compiler-visible type alias owned by `fava_write::MaterializationId`. |
+| **`FIRST`**<br><sub>Constant</sub><!-- api-item {"kind":"Constant","item":"fava_write::MaterializationId::FIRST","signature":"pub const fava_write::MaterializationId::FIRST: Self","evidence":"cargo-public-api@0.52.0: pub const fava_write::MaterializationId::FIRST: Self"} --> | Compiler-visible constant owned by `fava_write::MaterializationId`. |
+| **`as_u64`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::MaterializationId::as_u64","signature":"pub const fn fava_write::MaterializationId::as_u64(self) -> u64","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::MaterializationId::as_u64(self) -> u64"} --> | Compiler-visible method owned by `fava_write::MaterializationId`. |
+| **`checked_next`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::MaterializationId::checked_next","signature":"pub const fn fava_write::MaterializationId::checked_next(self) -> core::option::Option<Self>","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::MaterializationId::checked_next(self) -> core::option::Option<Self>"} --> | Compiler-visible method owned by `fava_write::MaterializationId`. |
+| **`from_nonzero`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::MaterializationId::from_nonzero","signature":"pub const fn fava_write::MaterializationId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::MaterializationId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"} --> | Compiler-visible method owned by `fava_write::MaterializationId`. |
+| **`core::convert::TryFrom<u64>::try_from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::MaterializationId as core::convert::TryFrom<u64>>::try_from","signature":"pub fn fava_write::MaterializationId::try_from(u64) -> core::result::Result<Self, Self::Error>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::MaterializationId::try_from(u64) -> core::result::Result<Self, Self::Error>"} --> | Compiler-visible method owned by `fava_write::MaterializationId`. |
+
+### `PublicationEvidence` (Struct)
+
+Compiler-visible struct `fava_write::PublicationEvidence`.
+<!-- api-item {"kind":"Struct","item":"fava_write::PublicationEvidence","signature":"pub struct fava_write::PublicationEvidence","evidence":"cargo-public-api@0.52.0: pub struct fava_write::PublicationEvidence"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`destinations`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::destinations","signature":"pub fava_write::PublicationEvidence::destinations: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::destinations: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`materialization_failure`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::materialization_failure","signature":"pub fava_write::PublicationEvidence::materialization_failure: core::option::Option<alloc::string::String>","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::materialization_failure: core::option::Option<alloc::string::String>"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`materialization_id`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::materialization_id","signature":"pub fava_write::PublicationEvidence::materialization_id: fava_write::MaterializationId","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::materialization_id: fava_write::MaterializationId"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`materialization_source`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::materialization_source","signature":"pub fava_write::PublicationEvidence::materialization_source: core::option::Option<nostr::event::id::EventId>","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::materialization_source: core::option::Option<nostr::event::id::EventId>"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`receipt_id`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::receipt_id","signature":"pub fava_write::PublicationEvidence::receipt_id: fava_write::ReceiptId","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::receipt_id: fava_write::ReceiptId"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`retired_materializations`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::retired_materializations","signature":"pub fava_write::PublicationEvidence::retired_materializations: alloc::vec::Vec<(fava_write::MaterializationId, nostr::event::id::EventId, core::option::Option<nostr::event::id::EventId>, core::option::Option<alloc::string::String>)>","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::retired_materializations: alloc::vec::Vec<(fava_write::MaterializationId, nostr::event::id::EventId, core::option::Option<nostr::event::id::EventId>, core::option::Option<alloc::string::String>)>"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`signature`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::signature","signature":"pub fava_write::PublicationEvidence::signature: fava_write::SignatureState","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::signature: fava_write::SignatureState"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+| **`write_id`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::PublicationEvidence::write_id","signature":"pub fava_write::PublicationEvidence::write_id: fava_write::WriteId","evidence":"cargo-public-api@0.52.0: pub fava_write::PublicationEvidence::write_id: fava_write::WriteId"} --> | Compiler-visible public field owned by `fava_write::PublicationEvidence`. |
+
+### `Receipt` (Struct)
+
+Compiler-visible struct `fava_write::Receipt`.
+<!-- api-item {"kind":"Struct","item":"fava_write::Receipt","signature":"pub struct fava_write::Receipt","evidence":"cargo-public-api@0.52.0: pub struct fava_write::Receipt"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`acknowledged`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::acknowledged","signature":"pub fn fava_write::Receipt::acknowledged(&self) -> usize","evidence":"cargo-public-api@0.52.0: pub fn fava_write::Receipt::acknowledged(&self) -> usize"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`attempts`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::attempts","signature":"pub fava_write::Receipt::attempts: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, u32>","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::attempts: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, u32>"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`current`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::current","signature":"pub fava_write::Receipt::current: fava_write::LocalWriteEvent","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::current: fava_write::LocalWriteEvent"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`desired`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::desired","signature":"pub fn fava_write::Receipt::desired(&self) -> usize","evidence":"cargo-public-api@0.52.0: pub fn fava_write::Receipt::desired(&self) -> usize"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`desired_destinations`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::desired_destinations","signature":"pub fava_write::Receipt::desired_destinations: alloc::collections::btree::set::BTreeSet<fava_relay::RelaySessionKey>","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::desired_destinations: alloc::collections::btree::set::BTreeSet<fava_relay::RelaySessionKey>"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`desires`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::desires","signature":"pub fn fava_write::Receipt::desires(&self, &fava_relay::RelaySessionKey) -> bool","evidence":"cargo-public-api@0.52.0: pub fn fava_write::Receipt::desires(&self, &fava_relay::RelaySessionKey) -> bool"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`destinations`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::destinations","signature":"pub fn fava_write::Receipt::destinations(&self) -> &alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::Receipt::destinations(&self) -> &alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`is_terminal`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::is_terminal","signature":"pub const fn fava_write::Receipt::is_terminal(&self) -> bool","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::Receipt::is_terminal(&self) -> bool"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`outcome`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::outcome","signature":"pub fava_write::Receipt::outcome: fava_write::ReceiptOutcome","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::outcome: fava_write::ReceiptOutcome"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`receipt_id`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::receipt_id","signature":"pub fava_write::Receipt::receipt_id: fava_write::ReceiptId","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::receipt_id: fava_write::ReceiptId"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`rejected`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::Receipt::rejected","signature":"pub fn fava_write::Receipt::rejected(&self) -> usize","evidence":"cargo-public-api@0.52.0: pub fn fava_write::Receipt::rejected(&self) -> usize"} --> | Compiler-visible method owned by `fava_write::Receipt`. |
+| **`route_revision`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::route_revision","signature":"pub fava_write::Receipt::route_revision: u64","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::route_revision: u64"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`route_settled`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::route_settled","signature":"pub fava_write::Receipt::route_settled: bool","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::route_settled: bool"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`route_shortfalls`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::route_shortfalls","signature":"pub fava_write::Receipt::route_shortfalls: alloc::vec::Vec<alloc::string::String>","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::route_shortfalls: alloc::vec::Vec<alloc::string::String>"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`routing`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::routing","signature":"pub fava_write::Receipt::routing: fava_write::WriteRouting","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::routing: fava_write::WriteRouting"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+| **`write_id`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Receipt::write_id","signature":"pub fava_write::Receipt::write_id: fava_write::WriteId","evidence":"cargo-public-api@0.52.0: pub fava_write::Receipt::write_id: fava_write::WriteId"} --> | Compiler-visible public field owned by `fava_write::Receipt`. |
+
+### `ReceiptId` (Struct)
+
+Compiler-visible struct `fava_write::ReceiptId`.
+<!-- api-item {"kind":"Struct","item":"fava_write::ReceiptId","signature":"pub struct fava_write::ReceiptId(_)","evidence":"cargo-public-api@0.52.0: pub struct fava_write::ReceiptId(_)"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`core::convert::TryFrom<u64>::Error`**<br><sub>Type alias</sub><!-- api-item {"kind":"Type alias","item":"<fava_write::ReceiptId as core::convert::TryFrom<u64>>::Error","signature":"pub type fava_write::ReceiptId::Error = core::num::error::TryFromIntError","evidence":"cargo-public-api@0.52.0: pub type fava_write::ReceiptId::Error = core::num::error::TryFromIntError"} --> | Compiler-visible type alias owned by `fava_write::ReceiptId`. |
+| **`as_u64`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReceiptId::as_u64","signature":"pub const fn fava_write::ReceiptId::as_u64(self) -> u64","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::ReceiptId::as_u64(self) -> u64"} --> | Compiler-visible method owned by `fava_write::ReceiptId`. |
+| **`from_nonzero`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReceiptId::from_nonzero","signature":"pub const fn fava_write::ReceiptId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::ReceiptId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"} --> | Compiler-visible method owned by `fava_write::ReceiptId`. |
+| **`core::convert::TryFrom<u64>::try_from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::ReceiptId as core::convert::TryFrom<u64>>::try_from","signature":"pub fn fava_write::ReceiptId::try_from(u64) -> core::result::Result<Self, Self::Error>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReceiptId::try_from(u64) -> core::result::Result<Self, Self::Error>"} --> | Compiler-visible method owned by `fava_write::ReceiptId`. |
+
+### `ReceiptOutcome` (Enum)
+
+Compiler-visible enum `fava_write::ReceiptOutcome`.
+<!-- api-item {"kind":"Enum","item":"fava_write::ReceiptOutcome","signature":"pub enum fava_write::ReceiptOutcome","evidence":"cargo-public-api@0.52.0: pub enum fava_write::ReceiptOutcome"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Cancelled`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::ReceiptOutcome::Cancelled","signature":"pub fava_write::ReceiptOutcome::Cancelled","evidence":"cargo-public-api@0.52.0: pub fava_write::ReceiptOutcome::Cancelled"} --> | Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`. |
+| **`Complete`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::ReceiptOutcome::Complete","signature":"pub fava_write::ReceiptOutcome::Complete","evidence":"cargo-public-api@0.52.0: pub fava_write::ReceiptOutcome::Complete"} --> | Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`. |
+| **`NoDestination`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::ReceiptOutcome::NoDestination","signature":"pub fava_write::ReceiptOutcome::NoDestination","evidence":"cargo-public-api@0.52.0: pub fava_write::ReceiptOutcome::NoDestination"} --> | Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`. |
+| **`Open`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::ReceiptOutcome::Open","signature":"pub fava_write::ReceiptOutcome::Open","evidence":"cargo-public-api@0.52.0: pub fava_write::ReceiptOutcome::Open"} --> | Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`. |
+
+### `RelayDeliveryOutcome` (Enum)
+
+Compiler-visible enum `fava_write::RelayDeliveryOutcome`.
+<!-- api-item {"kind":"Enum","item":"fava_write::RelayDeliveryOutcome","signature":"pub enum fava_write::RelayDeliveryOutcome","evidence":"cargo-public-api@0.52.0: pub enum fava_write::RelayDeliveryOutcome"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Acknowledged`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Acknowledged","signature":"pub fava_write::RelayDeliveryOutcome::Acknowledged","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Acknowledged"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `message` of `Acknowledged``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::Acknowledged::message","signature":"pub fava_write::RelayDeliveryOutcome::Acknowledged::message: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Acknowledged::message: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Attempting`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Attempting","signature":"pub fava_write::RelayDeliveryOutcome::Attempting","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Attempting"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`AuthenticationDenied`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::AuthenticationDenied","signature":"pub fava_write::RelayDeliveryOutcome::AuthenticationDenied","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::AuthenticationDenied"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `reason` of `AuthenticationDenied``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason","signature":"pub fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`CancelledBeforeHandoff`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff","signature":"pub fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`GivenUp`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::GivenUp","signature":"pub fava_write::RelayDeliveryOutcome::GivenUp","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::GivenUp"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `reason` of `GivenUp``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::GivenUp::reason","signature":"pub fava_write::RelayDeliveryOutcome::GivenUp::reason: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::GivenUp::reason: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Pending`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Pending","signature":"pub fava_write::RelayDeliveryOutcome::Pending","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Pending"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Rejected`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Rejected","signature":"pub fava_write::RelayDeliveryOutcome::Rejected","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Rejected"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `message` of `Rejected``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::Rejected::message","signature":"pub fava_write::RelayDeliveryOutcome::Rejected::message: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Rejected::message: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Retryable`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Retryable","signature":"pub fava_write::RelayDeliveryOutcome::Retryable","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Retryable"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `reason` of `Retryable``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::Retryable::reason","signature":"pub fava_write::RelayDeliveryOutcome::Retryable::reason: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Retryable::reason: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Unknown`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::RelayDeliveryOutcome::Unknown","signature":"pub fava_write::RelayDeliveryOutcome::Unknown","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Unknown"} --> | Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`. |
+| **`Field `reason` of `Unknown``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::RelayDeliveryOutcome::Unknown::reason","signature":"pub fava_write::RelayDeliveryOutcome::Unknown::reason: alloc::string::String","evidence":"cargo-public-api@0.52.0: pub fava_write::RelayDeliveryOutcome::Unknown::reason: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`. |
+| **`is_terminal`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::RelayDeliveryOutcome::is_terminal","signature":"pub const fn fava_write::RelayDeliveryOutcome::is_terminal(&self) -> bool","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::RelayDeliveryOutcome::is_terminal(&self) -> bool"} --> | Compiler-visible method owned by `fava_write::RelayDeliveryOutcome`. |
+
+### `ReplaceableEventEdit` (Struct)
+
+Compiler-visible struct `fava_write::ReplaceableEventEdit`.
+<!-- api-item {"kind":"Struct","item":"fava_write::ReplaceableEventEdit","signature":"pub struct fava_write::ReplaceableEventEdit","evidence":"cargo-public-api@0.52.0: pub struct fava_write::ReplaceableEventEdit"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`change`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventEdit::change","signature":"pub fn fava_write::ReplaceableEventEdit::change(&self) -> &[u8]","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventEdit::change(&self) -> &[u8]"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+| **`serde_core::de::Deserialize<'de>::deserialize`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::ReplaceableEventEdit as serde_core::de::Deserialize<'de>>::deserialize","signature":"pub fn fava_write::ReplaceableEventEdit::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventEdit::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+| **`identifier`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventEdit::identifier","signature":"pub fn fava_write::ReplaceableEventEdit::identifier(&self) -> core::option::Option<&str>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventEdit::identifier(&self) -> core::option::Option<&str>"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+| **`kind`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventEdit::kind","signature":"pub const fn fava_write::ReplaceableEventEdit::kind(&self) -> nostr::event::kind::Kind","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::ReplaceableEventEdit::kind(&self) -> nostr::event::kind::Kind"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventEdit::new","signature":"pub fn fava_write::ReplaceableEventEdit::new(nostr::event::kind::Kind, core::option::Option<alloc::string::String>, alloc::vec::Vec<u8>) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventEdit::new(nostr::event::kind::Kind, core::option::Option<alloc::string::String>, alloc::vec::Vec<u8>) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+| **`serde_core::ser::Serialize::serialize`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::ReplaceableEventEdit as serde_core::ser::Serialize>::serialize","signature":"pub fn fava_write::ReplaceableEventEdit::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventEdit::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventEdit`. |
+
+### `ReplaceableEventMaterializer` (Trait)
+
+Compiler-visible trait `fava_write::ReplaceableEventMaterializer`.
+<!-- api-item {"kind":"Trait","item":"fava_write::ReplaceableEventMaterializer","signature":"pub trait fava_write::ReplaceableEventMaterializer: core::marker::Send + core::marker::Sync","evidence":"cargo-public-api@0.52.0: pub trait fava_write::ReplaceableEventMaterializer: core::marker::Send + core::marker::Sync"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`kind`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventMaterializer::kind","signature":"pub fn fava_write::ReplaceableEventMaterializer::kind(&self) -> nostr::event::kind::Kind","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventMaterializer::kind(&self) -> nostr::event::kind::Kind"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`. |
+| **`materialize`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventMaterializer::materialize","signature":"pub fn fava_write::ReplaceableEventMaterializer::materialize(&self, &fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, core::option::Option<&fava_write::EventValue>, nostr::types::time::Timestamp) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventMaterializer::materialize(&self, &fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, core::option::Option<&fava_write::EventValue>, nostr::types::time::Timestamp) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`. |
+| **`supports`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::ReplaceableEventMaterializer::supports","signature":"pub fn fava_write::ReplaceableEventMaterializer::supports(&self, &fava_write::ReplaceableEventEdit) -> bool","evidence":"cargo-public-api@0.52.0: pub fn fava_write::ReplaceableEventMaterializer::supports(&self, &fava_write::ReplaceableEventEdit) -> bool"} --> | Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`. |
+
+### `SignatureState` (Enum)
+
+Compiler-visible enum `fava_write::SignatureState`.
+<!-- api-item {"kind":"Enum","item":"fava_write::SignatureState","signature":"pub enum fava_write::SignatureState","evidence":"cargo-public-api@0.52.0: pub enum fava_write::SignatureState"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Authorized`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::SignatureState::Authorized","signature":"pub fava_write::SignatureState::Authorized","evidence":"cargo-public-api@0.52.0: pub fava_write::SignatureState::Authorized"} --> | Compiler-visible enum variant owned by `fava_write::SignatureState`. |
+| **`Refused`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::SignatureState::Refused","signature":"pub fava_write::SignatureState::Refused(alloc::string::String)","evidence":"cargo-public-api@0.52.0: pub fava_write::SignatureState::Refused(alloc::string::String)"} --> | Compiler-visible enum variant owned by `fava_write::SignatureState`. |
+| **`Field `0` of `Refused``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::SignatureState::Refused::0","signature":"alloc::string::String","evidence":"cargo-public-api@0.52.0: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::SignatureState`. |
+| **`Retryable`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::SignatureState::Retryable","signature":"pub fava_write::SignatureState::Retryable(alloc::string::String)","evidence":"cargo-public-api@0.52.0: pub fava_write::SignatureState::Retryable(alloc::string::String)"} --> | Compiler-visible enum variant owned by `fava_write::SignatureState`. |
+| **`Field `0` of `Retryable``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::SignatureState::Retryable::0","signature":"alloc::string::String","evidence":"cargo-public-api@0.52.0: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::SignatureState`. |
+| **`Signed`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::SignatureState::Signed","signature":"pub fava_write::SignatureState::Signed","evidence":"cargo-public-api@0.52.0: pub fava_write::SignatureState::Signed"} --> | Compiler-visible enum variant owned by `fava_write::SignatureState`. |
+| **`Unsigned`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::SignatureState::Unsigned","signature":"pub fava_write::SignatureState::Unsigned","evidence":"cargo-public-api@0.52.0: pub fava_write::SignatureState::Unsigned"} --> | Compiler-visible enum variant owned by `fava_write::SignatureState`. |
+
+### `WriteId` (Struct)
+
+Compiler-visible struct `fava_write::WriteId`.
+<!-- api-item {"kind":"Struct","item":"fava_write::WriteId","signature":"pub struct fava_write::WriteId(_)","evidence":"cargo-public-api@0.52.0: pub struct fava_write::WriteId(_)"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`core::convert::TryFrom<u64>::Error`**<br><sub>Type alias</sub><!-- api-item {"kind":"Type alias","item":"<fava_write::WriteId as core::convert::TryFrom<u64>>::Error","signature":"pub type fava_write::WriteId::Error = core::num::error::TryFromIntError","evidence":"cargo-public-api@0.52.0: pub type fava_write::WriteId::Error = core::num::error::TryFromIntError"} --> | Compiler-visible type alias owned by `fava_write::WriteId`. |
+| **`as_u64`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteId::as_u64","signature":"pub const fn fava_write::WriteId::as_u64(self) -> u64","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::WriteId::as_u64(self) -> u64"} --> | Compiler-visible method owned by `fava_write::WriteId`. |
+| **`from_nonzero`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteId::from_nonzero","signature":"pub const fn fava_write::WriteId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::WriteId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"} --> | Compiler-visible method owned by `fava_write::WriteId`. |
+| **`core::convert::TryFrom<u64>::try_from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::WriteId as core::convert::TryFrom<u64>>::try_from","signature":"pub fn fava_write::WriteId::try_from(u64) -> core::result::Result<Self, Self::Error>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteId::try_from(u64) -> core::result::Result<Self, Self::Error>"} --> | Compiler-visible method owned by `fava_write::WriteId`. |
+
+### `WriteIntent` (Struct)
+
+Compiler-visible struct `fava_write::WriteIntent`.
+<!-- api-item {"kind":"Struct","item":"fava_write::WriteIntent","signature":"pub struct fava_write::WriteIntent","evidence":"cargo-public-api@0.52.0: pub struct fava_write::WriteIntent"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`author`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::author","signature":"pub fn fava_write::WriteIntent::author(&self) -> nostr::key::public_key::PublicKey","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntent::author(&self) -> nostr::key::public_key::PublicKey"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`edit_as`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::edit_as","signature":"pub fn fava_write::WriteIntent::edit_as(fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntent::edit_as(fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::event","signature":"pub fn fava_write::WriteIntent::event(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntent::event(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`into_parts`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::into_parts","signature":"pub fn fava_write::WriteIntent::into_parts(self) -> (fava_write::WritePayload, fava_write::WriteRouting)","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntent::into_parts(self) -> (fava_write::WritePayload, fava_write::WriteRouting)"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`payload`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::payload","signature":"pub const fn fava_write::WriteIntent::payload(&self) -> &fava_write::WritePayload","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::WriteIntent::payload(&self) -> &fava_write::WritePayload"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`presigned`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::presigned","signature":"pub fn fava_write::WriteIntent::presigned(nostr::event::Event, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntent::presigned(nostr::event::Event, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+| **`routing`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteIntent::routing","signature":"pub const fn fava_write::WriteIntent::routing(&self) -> &fava_write::WriteRouting","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::WriteIntent::routing(&self) -> &fava_write::WriteRouting"} --> | Compiler-visible method owned by `fava_write::WriteIntent`. |
+
+### `WriteIntentError` (Enum)
+
+Compiler-visible enum `fava_write::WriteIntentError`.
+<!-- api-item {"kind":"Enum","item":"fava_write::WriteIntentError","signature":"pub enum fava_write::WriteIntentError","evidence":"cargo-public-api@0.52.0: pub enum fava_write::WriteIntentError"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`ConflictingExplicitRoutes`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::ConflictingExplicitRoutes","signature":"pub fava_write::WriteIntentError::ConflictingExplicitRoutes","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::ConflictingExplicitRoutes"} --> | Refuses two independent explicit route authorities before signing or custody. |
+| **`DuplicateExplicitRelay`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::DuplicateExplicitRelay","signature":"pub fava_write::WriteIntentError::DuplicateExplicitRelay","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::DuplicateExplicitRelay"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `relay` of `DuplicateExplicitRelay``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::DuplicateExplicitRelay::relay","signature":"pub fava_write::WriteIntentError::DuplicateExplicitRelay::relay: nostr::types::url::RelayUrl","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::DuplicateExplicitRelay::relay: nostr::types::url::RelayUrl"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`EmptyExplicitRelays`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::EmptyExplicitRelays","signature":"pub fava_write::WriteIntentError::EmptyExplicitRelays","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::EmptyExplicitRelays"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Encoding`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::Encoding","signature":"pub fava_write::WriteIntentError::Encoding(alloc::string::String)","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::Encoding(alloc::string::String)"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `0` of `Encoding``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::Encoding::0","signature":"alloc::string::String","evidence":"cargo-public-api@0.52.0: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`Expired`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::Expired","signature":"pub fava_write::WriteIntentError::Expired","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::Expired"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`ExplicitRoutingAttached`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::ExplicitRoutingAttached","signature":"pub fava_write::WriteIntentError::ExplicitRoutingAttached","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::ExplicitRoutingAttached"} --> | Preserves the builder refusal when event-only construction would discard routing. |
+| **`InvalidEvent`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::InvalidEvent","signature":"pub fava_write::WriteIntentError::InvalidEvent(alloc::string::String)","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::InvalidEvent(alloc::string::String)"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `0` of `InvalidEvent``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::InvalidEvent::0","signature":"alloc::string::String","evidence":"cargo-public-api@0.52.0: alloc::string::String"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`TooLarge`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::TooLarge","signature":"pub fava_write::WriteIntentError::TooLarge","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooLarge"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `bytes` of `TooLarge``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooLarge::bytes","signature":"pub fava_write::WriteIntentError::TooLarge::bytes: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooLarge::bytes: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`Field `maximum` of `TooLarge``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooLarge::maximum","signature":"pub fava_write::WriteIntentError::TooLarge::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooLarge::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`TooManyExplicitRelays`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::TooManyExplicitRelays","signature":"pub fava_write::WriteIntentError::TooManyExplicitRelays","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyExplicitRelays"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `actual` of `TooManyExplicitRelays``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyExplicitRelays::actual","signature":"pub fava_write::WriteIntentError::TooManyExplicitRelays::actual: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyExplicitRelays::actual: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`Field `maximum` of `TooManyExplicitRelays``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyExplicitRelays::maximum","signature":"pub fava_write::WriteIntentError::TooManyExplicitRelays::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyExplicitRelays::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`TooManyRawExplicitRelays`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::TooManyRawExplicitRelays","signature":"pub fava_write::WriteIntentError::TooManyRawExplicitRelays","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyRawExplicitRelays"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `actual` of `TooManyRawExplicitRelays``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyRawExplicitRelays::actual","signature":"pub fava_write::WriteIntentError::TooManyRawExplicitRelays::actual: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyRawExplicitRelays::actual: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`Field `maximum` of `TooManyRawExplicitRelays``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum","signature":"pub fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`TooManyTags`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteIntentError::TooManyTags","signature":"pub fava_write::WriteIntentError::TooManyTags","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyTags"} --> | Compiler-visible enum variant owned by `fava_write::WriteIntentError`. |
+| **`Field `actual` of `TooManyTags``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyTags::actual","signature":"pub fava_write::WriteIntentError::TooManyTags::actual: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyTags::actual: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`Field `maximum` of `TooManyTags``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteIntentError::TooManyTags::maximum","signature":"pub fava_write::WriteIntentError::TooManyTags::maximum: usize","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteIntentError::TooManyTags::maximum: usize"} --> | Compiler-visible public field owned by `fava_write::WriteIntentError`. |
+| **`core::convert::From<fava_write::EventBuildError>::from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::WriteIntentError as core::convert::From<fava_write::EventBuildError>>::from","signature":"pub fn fava_write::WriteIntentError::from(fava_write::EventBuildError) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteIntentError::from(fava_write::EventBuildError) -> Self"} --> | Compiler-visible method owned by `fava_write::WriteIntentError`. |
+
+### `WritePayload` (Enum)
+
+Compiler-visible enum `fava_write::WritePayload`.
+<!-- api-item {"kind":"Enum","item":"fava_write::WritePayload","signature":"pub enum fava_write::WritePayload","evidence":"cargo-public-api@0.52.0: pub enum fava_write::WritePayload"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Edit`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WritePayload::Edit","signature":"pub fava_write::WritePayload::Edit","evidence":"cargo-public-api@0.52.0: pub fava_write::WritePayload::Edit"} --> | Compiler-visible enum variant owned by `fava_write::WritePayload`. |
+| **`Field `author` of `Edit``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WritePayload::Edit::author","signature":"pub fava_write::WritePayload::Edit::author: nostr::key::public_key::PublicKey","evidence":"cargo-public-api@0.52.0: pub fava_write::WritePayload::Edit::author: nostr::key::public_key::PublicKey"} --> | Compiler-visible public field owned by `fava_write::WritePayload`. |
+| **`Field `edit` of `Edit``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WritePayload::Edit::edit","signature":"pub fava_write::WritePayload::Edit::edit: fava_write::ReplaceableEventEdit","evidence":"cargo-public-api@0.52.0: pub fava_write::WritePayload::Edit::edit: fava_write::ReplaceableEventEdit"} --> | Compiler-visible public field owned by `fava_write::WritePayload`. |
+| **`Event`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WritePayload::Event","signature":"pub fava_write::WritePayload::Event(nostr::event::unsigned::UnsignedEvent)","evidence":"cargo-public-api@0.52.0: pub fava_write::WritePayload::Event(nostr::event::unsigned::UnsignedEvent)"} --> | Compiler-visible enum variant owned by `fava_write::WritePayload`. |
+| **`Field `0` of `Event``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WritePayload::Event::0","signature":"nostr::event::unsigned::UnsignedEvent","evidence":"cargo-public-api@0.52.0: nostr::event::unsigned::UnsignedEvent"} --> | Compiler-visible public field owned by `fava_write::WritePayload`. |
+| **`Presigned`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WritePayload::Presigned","signature":"pub fava_write::WritePayload::Presigned(nostr::event::Event)","evidence":"cargo-public-api@0.52.0: pub fava_write::WritePayload::Presigned(nostr::event::Event)"} --> | Compiler-visible enum variant owned by `fava_write::WritePayload`. |
+| **`Field `0` of `Presigned``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WritePayload::Presigned::0","signature":"nostr::event::Event","evidence":"cargo-public-api@0.52.0: nostr::event::Event"} --> | Compiler-visible public field owned by `fava_write::WritePayload`. |
+
+### `WriteRouting` (Enum)
+
+Compiler-visible enum `fava_write::WriteRouting`.
+<!-- api-item {"kind":"Enum","item":"fava_write::WriteRouting","signature":"pub enum fava_write::WriteRouting","evidence":"cargo-public-api@0.52.0: pub enum fava_write::WriteRouting"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`Automatic`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteRouting::Automatic","signature":"pub fava_write::WriteRouting::Automatic","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteRouting::Automatic"} --> | Compiler-visible enum variant owned by `fava_write::WriteRouting`. |
+| **`Explicit`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_write::WriteRouting::Explicit","signature":"pub fava_write::WriteRouting::Explicit(alloc::vec::Vec<nostr::types::url::RelayUrl>)","evidence":"cargo-public-api@0.52.0: pub fava_write::WriteRouting::Explicit(alloc::vec::Vec<nostr::types::url::RelayUrl>)"} --> | Compiler-visible enum variant owned by `fava_write::WriteRouting`. |
+| **`Field `0` of `Explicit``**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::WriteRouting::Explicit::0","signature":"alloc::vec::Vec<nostr::types::url::RelayUrl>","evidence":"cargo-public-api@0.52.0: alloc::vec::Vec<nostr::types::url::RelayUrl>"} --> | Compiler-visible public field owned by `fava_write::WriteRouting`. |
+| **`explicit`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::WriteRouting::explicit","signature":"pub fn fava_write::WriteRouting::explicit(impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::WriteRouting::explicit(impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::WriteRouting`. |
 <!-- END crate-readme-api inventory -->

@@ -238,7 +238,7 @@ async fn materializer_panic_is_scoped_and_attributed() {
     let progressed = support::wait_for_materialization(&fava, unaffected.receipt_id(), 2).await;
     assert_eq!(
         progressed.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
 }
 
@@ -322,7 +322,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
             None,
         )
         .unwrap();
-    let mut expected = MaterializationId::from_u64(1);
+    let mut expected = MaterializationId::FIRST;
     let mut expected_source = None;
     for generation in 0..destination_evidence_capacity() {
         let source_time = 2 + generation as u64 * 2;
@@ -349,7 +349,9 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 None,
             )
             .unwrap();
-        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected = expected
+            .checked_next()
+            .expect("next materialization identity");
         expected_source = Some(source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -438,7 +440,7 @@ async fn recovery_retries_failed_source_once() {
             .current
             .publication
             .materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
 
     let calls_after_success = materializer.calls();

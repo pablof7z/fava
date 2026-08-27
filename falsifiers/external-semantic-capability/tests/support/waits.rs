@@ -2,8 +2,7 @@ use std::future::Future;
 use std::time::Duration;
 
 use fava::{
-    Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl, Write,
-    all_terminal,
+    Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl, Write, all_terminal,
 };
 use fava_external_semantic_capability_proof::external_query;
 
@@ -78,7 +77,9 @@ pub async fn wait_generation_record(
             let snapshot = observation.current();
             if let Some(record) = snapshot.events.iter().find(|record| {
                 record.publication().is_some_and(|evidence| {
-                    evidence.materialization_id == MaterializationId::from_u64(generation)
+                    evidence.materialization_id
+                        == MaterializationId::try_from(generation)
+                            .expect("nonzero materialization identity")
                 })
             }) {
                 return record.clone();

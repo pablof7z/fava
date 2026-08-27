@@ -94,7 +94,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
     let recovered = fava.receipt(first.receipt_id).unwrap().unwrap();
     assert_eq!(
         recovered.current.publication.materialization_id,
-        MaterializationId::from_u64(3)
+        MaterializationId::try_from(3).expect("nonzero materialization identity")
     );
     let EventValue::Unsigned(recovered) = recovered.current.event else {
         panic!("blocking signer keeps recovery unsigned");

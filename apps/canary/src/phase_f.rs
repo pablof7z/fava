@@ -24,9 +24,11 @@ use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher_nip01::{Nip01Publisher, Nip42Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_session::Session;
-use fava_simple_groups::{MetadataEdit, SimpleGroup, create_group, leave_group, put_user, remove_user};
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
+use fava_simple_groups::{
+    MetadataEdit, SimpleGroup, create_group, leave_group, put_user, remove_user,
+};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write::ReceiptOutcome;
@@ -58,8 +60,7 @@ pub struct PhaseFOptions {
 
 /// Deterministic relay private key (used in all Phase F runs for reproducibility).
 /// 32-byte big-endian, 64 lowercase hex chars.
-const RELAY_PRIVKEY: &str =
-    "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6";
+const RELAY_PRIVKEY: &str = "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6";
 
 // ── Gate 1 — relay29 NIP-29 lifecycle ────────────────────────────────────────
 
@@ -78,8 +79,7 @@ const RELAY_PRIVKEY: &str =
 /// findings, not errors.
 pub async fn run_relay29_lifecycle(options: &PhaseFOptions) -> CanaryResult<PathBuf> {
     let scenario = "phase-f-relay29-lifecycle";
-    let mut artifacts =
-        RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
+    let mut artifacts = RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
     artifacts.record(
         "scenario_started",
         json!({ "scenario": scenario, "seed": options.seed }),
@@ -204,8 +204,7 @@ async fn relay29_try_operations(
 
     // Use the author's pubkey hex as group ID (relay29's owner model requires groupId == owner pubkey).
     let group_id = author.public_key().to_hex();
-    let group =
-        SimpleGroup::new(&group_id, vec![relay.clone()]).map_err(error)?;
+    let group = SimpleGroup::new(&group_id, vec![relay.clone()]).map_err(error)?;
 
     // Build a Nip42Publisher-backed Fava for this run.
     let fava = assembly_nip42(
@@ -262,13 +261,8 @@ async fn relay29_try_operations(
     // ── Attempt invite (kind 9009) ────────────────────────────────────────────
     use fava_simple_groups::invite;
     let other_key = deterministic_keys(&format!("phase-f-relay29-other\0{}", options.seed))?;
-    let invite_ev = invite(
-        author.public_key(),
-        &group,
-        &other_key.public_key(),
-        &relay,
-    )
-    .map_err(error)?;
+    let invite_ev =
+        invite(author.public_key(), &group, &other_key.public_key(), &relay).map_err(error)?;
     let invite_write = fava
         .to([relay.clone()])
         .map_err(error)?
@@ -360,8 +354,7 @@ async fn relay29_try_operations(
 /// Returns an error when any lifecycle step fails or evidence cannot be written.
 pub async fn run_communities_lifecycle(options: &PhaseFOptions) -> CanaryResult<PathBuf> {
     let scenario = "phase-f-communities-lifecycle";
-    let mut artifacts =
-        RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
+    let mut artifacts = RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
     artifacts.record(
         "scenario_started",
         json!({ "scenario": scenario, "seed": options.seed }),
@@ -512,8 +505,8 @@ async fn communities_run_lifecycle(
     // already processed the original). Treat "group already exists" as success — the wire
     // transcript shows OK true for the original EVENT.
     let create_rejection = reject_message(&create_receipt);
-    let create_ok = create_receipt.acknowledged() > 0
-        || create_rejection.contains("group already exists");
+    let create_ok =
+        create_receipt.acknowledged() > 0 || create_rejection.contains("group already exists");
     if !create_ok {
         return Err(CanaryError::new(format!(
             "create_group was rejected by communities-relay: {create_rejection}"
@@ -592,19 +585,18 @@ async fn communities_run_lifecycle(
     // Skip kind-39001 subscription-based observation to avoid keeping a
     // persistent WebSocket open (which would block subsequent publish connections).
     // The relay's NIP-29 state management is verified via acknowledged events above.
-    let relay_alive = tokio::net::TcpStream::connect(
-        crate::relay_socket_address(relay_url).map_err(error)?
-    )
-    .await
-    .is_ok();
+    let relay_alive =
+        tokio::net::TcpStream::connect(crate::relay_socket_address(relay_url).map_err(error)?)
+            .await
+            .is_ok();
     artifacts.record(
         "communities_relay_alive_after_put_user",
         json!({ "relay_alive": relay_alive }),
     )?;
 
     // ── Step 5: remove_user ───────────────────────────────────────────────────
-    let remove_ev = remove_user(author.public_key(), &group, &member_keys.public_key())
-        .map_err(error)?;
+    let remove_ev =
+        remove_user(author.public_key(), &group, &member_keys.public_key()).map_err(error)?;
     let remove_write = fava
         .to([relay.clone()])
         .map_err(error)?
@@ -662,8 +654,7 @@ async fn communities_run_lifecycle(
 /// Returns an error when the relay, child process, or recovery step fails.
 pub async fn run_crash_recovery(options: &PhaseFOptions) -> CanaryResult<PathBuf> {
     let scenario = "phase-f-crash-recovery";
-    let mut artifacts =
-        RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
+    let mut artifacts = RunArtifacts::create(&options.runs_directory, scenario, &options.seed)?;
     artifacts.record(
         "scenario_started",
         json!({ "scenario": scenario, "seed": options.seed }),
@@ -741,7 +732,13 @@ async fn crash_recovery_inner(
     fs::create_dir_all(artifacts.root().join("children"))?;
 
     // ── Spawn crash-child ─────────────────────────────────────────────────────
-    let mut child = spawn_crash_child(&database, &marker, &proxy_url, &options.seed, artifacts.root())?;
+    let mut child = spawn_crash_child(
+        &database,
+        &marker,
+        &proxy_url,
+        &options.seed,
+        artifacts.root(),
+    )?;
     wait_child_marker(&marker, &mut child).await?;
 
     // Marker written → kill child (simulates SIGKILL of fava).
@@ -776,7 +773,8 @@ async fn crash_recovery_inner(
         .build()
         .map_err(error)?;
 
-    let recovered_receipt_id = fava_write::ReceiptId::from_u64(receipt_id_u64);
+    let recovered_receipt_id =
+        fava_write::ReceiptId::try_from(receipt_id_u64).expect("nonzero receipt identity");
     let recovered = recovery_fava
         .receipt(recovered_receipt_id)
         .map_err(error)?
@@ -803,11 +801,13 @@ async fn crash_recovery_inner(
     // ── Verify relay still has the event ──────────────────────────────────────
     // relay29 contentQueryHandler returns events without "f" tags (public events).
     // We query directly against the relay (not through the proxy) to get a clean witness.
-    let event_id =
-        fava_write::EventId::from_hex(&event_id_hex).map_err(|e| CanaryError::new(e.to_string()))?;
-    let query_result =
-        tokio::time::timeout(Duration::from_secs(5), wire::query_exact(&relay_url, event_id, "phase-f-crash-recovery"))
-            .await;
+    let event_id = fava_write::EventId::from_hex(&event_id_hex)
+        .map_err(|e| CanaryError::new(e.to_string()))?;
+    let query_result = tokio::time::timeout(
+        Duration::from_secs(5),
+        wire::query_exact(&relay_url, event_id, "phase-f-crash-recovery"),
+    )
+    .await;
 
     let relay_has_event = match query_result {
         Ok(Ok(witness)) => witness.found_event && witness.saw_eose,

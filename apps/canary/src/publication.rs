@@ -366,7 +366,7 @@ async fn crash(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canary
         Some(Arc::new(GatedSigner::new_released(keys))),
     )?;
     let recovered = fava
-        .receipt(ReceiptId::from_u64(marker.receipt_id))
+        .receipt(ReceiptId::try_from(marker.receipt_id).expect("nonzero receipt identity"))
         .map_err(error)?
         .ok_or_else(|| CanaryError::new("accepted receipt missing after SIGKILL"))?;
     if recovered.current.id().to_hex() != marker.event_id {
@@ -386,7 +386,11 @@ async fn crash(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canary
             "recovered write was not query-visible without resubmission",
         ));
     }
-    let receipt = wait_recovered_terminal(&fava, ReceiptId::from_u64(marker.receipt_id)).await?;
+    let receipt = wait_recovered_terminal(
+        &fava,
+        ReceiptId::try_from(marker.receipt_id).expect("nonzero receipt identity"),
+    )
+    .await?;
     let witness =
         wire::query_exact(&relay.url, recovered.current.id(), "m5-crash-recovery").await?;
     if !witness.found_event || !witness.saw_eose {

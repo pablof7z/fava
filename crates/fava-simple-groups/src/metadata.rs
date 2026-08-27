@@ -85,8 +85,7 @@ impl SimpleGroupMetadata {
                 Some("closed") => value.closed = true,
                 Some("livekit") => value.livekit = true,
                 Some("supported_kinds") if value.supported_kinds.is_none() => {
-                    value.supported_kinds =
-                        Some(values[1..].iter().map(String::clone).collect());
+                    value.supported_kinds = Some(values[1..].iter().map(String::clone).collect());
                 }
                 Some("parent") => set_first(&mut value.parent, values.get(1)),
                 Some("child") => value

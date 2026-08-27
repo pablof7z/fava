@@ -78,7 +78,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     let reconciled = fava.receipt(first.receipt_id).unwrap().unwrap();
     assert_eq!(
         reconciled.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(content(&reconciled.current.event), "restart source|edit");
 
@@ -96,7 +96,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     assert_eq!(second.receipt_id(), first.receipt_id);
     assert_eq!(
         composed.current.publication.materialization_id,
-        MaterializationId::from_u64(3)
+        MaterializationId::try_from(3).expect("nonzero materialization identity")
     );
     assert_eq!(content(&composed.current.event), "restart source|edit|edit");
 
@@ -149,7 +149,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
     let receipt = wait_for_route(&fava, first.receipt_id).await;
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert!(
         receipt

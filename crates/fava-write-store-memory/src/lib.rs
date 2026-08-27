@@ -26,10 +26,12 @@ mod semantic_acceptance;
 mod semantic_composition;
 mod semantic_reservation;
 mod state;
+#[cfg(test)]
+mod tests;
 
 use model::destinations;
 use semantic::WriteState;
-use state::{capacity_reached, next_revision, release_semantic};
+use state::{capacity_reached, next_identity, next_revision, release_semantic};
 
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
@@ -110,11 +112,9 @@ impl WriteStore for MemoryWriteStore {
         }
 
         let identity = guard.next_identity;
-        let next_identity = identity
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))?;
-        let write_id = WriteId::from_u64(identity);
-        let receipt_id = ReceiptId::from_u64(identity);
+        let next_identity = next_identity(identity)?;
+        let write_id = WriteId::from_nonzero(identity);
+        let receipt_id = ReceiptId::from_nonzero(identity);
         let (payload, routing) = intent.into_parts();
         let (event, signature) = match payload {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
@@ -131,7 +131,7 @@ impl WriteStore for MemoryWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: fava_write::MaterializationId::from_u64(1),
+            materialization_id: fava_write::MaterializationId::FIRST,
             materialization_source: None,
             materialization_failure: None,
             retired_materializations: Vec::new(),

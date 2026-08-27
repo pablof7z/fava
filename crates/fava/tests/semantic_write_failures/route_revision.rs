@@ -76,7 +76,8 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         .unwrap();
     signer.release_one();
     wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id == fava::MaterializationId::from_u64(2)
+        receipt.current.publication.materialization_id
+            == fava::MaterializationId::try_from(2).expect("nonzero materialization identity")
     })
     .await;
     release.join().unwrap();

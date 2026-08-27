@@ -40,7 +40,7 @@ fn memory_reservation_wins_before_signing_authorization() {
         .authorize_signing(
             first.write_id,
             first.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             first.current.id(),
         )
         .unwrap();
@@ -62,14 +62,14 @@ fn memory_reservation_wins_before_signing_authorization() {
     assert_eq!(composed.receipt_id, first.receipt_id);
     assert_eq!(
         composed.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert!(
         store
             .authorize_signing(
                 first.write_id,
                 first.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 first.current.id()
             )
             .is_err()
@@ -88,7 +88,7 @@ fn memory_authorization_wins_and_holds_one_bounded_successor() {
         .authorize_signing(
             first.write_id,
             first.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             first.current.id(),
         )
         .unwrap();
@@ -119,14 +119,14 @@ fn memory_authorization_wins_and_holds_one_bounded_successor() {
         .install_signed(
             first.write_id,
             first.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             first.current.id(),
             signed,
         )
         .unwrap();
     assert_eq!(
         successor.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         successor.current.publication.signature,
@@ -153,7 +153,7 @@ fn memory_authorized_cancellation_without_successor_is_exact_retryable_work() {
         .authorize_signing(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             accepted.current.id(),
         )
         .unwrap();
@@ -162,7 +162,7 @@ fn memory_authorized_cancellation_without_successor_is_exact_retryable_work() {
         .record_signer_retryable(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             accepted.current.id(),
             "authorized signer invocation cancelled before effect; retry is permitted".to_owned(),
         )
@@ -173,7 +173,7 @@ fn memory_authorized_cancellation_without_successor_is_exact_retryable_work() {
     assert_eq!(cancelled.current.id(), accepted.current.id());
     assert_eq!(
         cancelled.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert!(matches!(
         cancelled.current.publication.signature,

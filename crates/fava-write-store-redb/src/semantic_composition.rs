@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, ReplaceableEventEdit, SignatureState, UnsignedEvent, WriteRouting,
+    EventValue, LocalWriteEvent, PublicKey, PublicationEvidence, Receipt, ReceiptId,
+    ReceiptOutcome, ReplaceableEventEdit, SignatureState, UnsignedEvent, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
@@ -113,9 +113,7 @@ impl RedbWriteStore {
             .current
             .publication
             .materialization_id
-            .as_u64()
-            .checked_add(1)
-            .map(MaterializationId::from_u64)
+            .checked_next()
             .ok_or_else(|| {
                 WriteStoreError::Refused("materialization identity exhausted".to_owned())
             })?;

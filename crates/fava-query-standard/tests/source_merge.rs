@@ -95,9 +95,9 @@ fn relay_source(event: Event, url: &str, observed_at: u64) -> SourceEvent {
 
 fn publication() -> PublicationEvidence {
     PublicationEvidence {
-        receipt_id: ReceiptId::from_u64(7),
-        write_id: WriteId::from_u64(11),
-        materialization_id: fava_write::MaterializationId::from_u64(1),
+        receipt_id: ReceiptId::try_from(7).expect("nonzero receipt identity"),
+        write_id: WriteId::try_from(11).expect("nonzero write identity"),
+        materialization_id: fava_write::MaterializationId::FIRST,
         materialization_source: None,
         materialization_failure: None,
         retired_materializations: Vec::new(),

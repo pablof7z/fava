@@ -3,6 +3,7 @@ use fava_write::{
     EventId, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit, Timestamp,
 };
 use fava_write_store::WriteStoreError;
+use std::num::NonZeroU64;
 
 use crate::semantic::WriteState;
 
@@ -38,6 +39,12 @@ pub(super) fn next_revision(state: &WriteState) -> Result<u64, WriteStoreError> 
         .revision
         .checked_add(1)
         .ok_or_else(|| WriteStoreError::Refused("source revision exhausted".to_owned()))
+}
+
+pub(super) fn next_identity(current: NonZeroU64) -> Result<NonZeroU64, WriteStoreError> {
+    current
+        .checked_add(1)
+        .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))
 }
 
 pub(super) fn active_count(state: &WriteState) -> usize {

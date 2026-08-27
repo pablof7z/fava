@@ -11,7 +11,9 @@ use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
 };
 
-use crate::lifecycle::{capacity_reached, destinations, next_revision, terminal_evictions};
+use crate::lifecycle::{
+    capacity_reached, destinations, next_identity, next_revision, terminal_evictions,
+};
 use crate::semantic_acceptance::{
     attributed_failure, require_current, require_failure_source, require_qualified_source,
     validate_materialization, validate_source,
@@ -119,15 +121,13 @@ impl RedbWriteStore {
             )));
         }
         let identity = state.next_identity;
-        let next_identity = identity
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))?;
-        let write_id = WriteId::from_u64(identity);
-        let receipt_id = ReceiptId::from_u64(identity);
+        let next_identity = next_identity(identity)?;
+        let write_id = WriteId::from_nonzero(identity);
+        let receipt_id = ReceiptId::from_nonzero(identity);
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: MaterializationId::from_u64(1),
+            materialization_id: MaterializationId::FIRST,
             materialization_source: selected_source.map(|(id, _)| id),
             materialization_failure: None,
             retired_materializations: Vec::new(),
@@ -350,13 +350,9 @@ impl RedbWriteStore {
             .cloned()
             .map(|session| (session, RelayDeliveryOutcome::Pending))
             .collect();
-        let materialization_id = expected
-            .as_u64()
-            .checked_add(1)
-            .map(MaterializationId::from_u64)
-            .ok_or_else(|| {
-                WriteStoreError::Refused("materialization identity exhausted".to_owned())
-            })?;
+        let materialization_id = expected.checked_next().ok_or_else(|| {
+            WriteStoreError::Refused("materialization identity exhausted".to_owned())
+        })?;
         let current = LocalWriteEvent::new(
             EventValue::Unsigned(event),
             PublicationEvidence {

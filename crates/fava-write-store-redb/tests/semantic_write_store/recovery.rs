@@ -5,14 +5,14 @@ use fava_query::{Query, QuerySource, SourceEvent};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventValue, MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, SignatureState,
-    WriteIntent, WriteRouting,
+    EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    SignatureState, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
-use redb::{Database, Durability, ReadableTable};
+use redb::{Database, Durability, ReadableDatabase, ReadableTable};
 use serde_json::{Value, json};
 
 use super::{META, RECEIPTS, accept, edit, materialization, source, unique_path};
@@ -33,11 +33,12 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
             None,
         )
         .expect("semantic write accepts");
+    let receipt_id = accepted.receipt_id.as_u64();
     drop(store);
 
     let reopened = RedbWriteStore::open(path).expect("ordered route reopens");
     let receipt = reopened
-        .receipt(accepted.receipt_id)
+        .receipt(ReceiptId::try_from(receipt_id).expect("persisted receipt identity reattaches"))
         .unwrap()
         .expect("receipt persists");
     assert_eq!(receipt.routing, WriteRouting::Explicit(vec![first, second]));
@@ -163,7 +164,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -178,7 +179,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 Some(base.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -195,7 +196,7 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(2),
+            MaterializationId::try_from(2).expect("nonzero materialization identity"),
             Some(successor_source.id),
             std::slice::from_ref(&edit()),
             successor_event,
@@ -420,7 +421,7 @@ fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
         .record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(failed.clone())),
             "failed".to_owned(),
@@ -441,6 +442,52 @@ fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
         set(row, "/semantic/current_source/1", json!(12));
     });
     assert!(RedbWriteStore::open(timestamp_path).is_err());
+}
+
+#[test]
+fn zero_write_and_receipt_identity_cannot_reenter_through_recovery() {
+    let path = valid_path("zero-durable-identity");
+    move_row_to_zero(&path);
+
+    let error = RedbWriteStore::open(path)
+        .err()
+        .expect("zero durable identity refuses");
+    assert!(
+        error.to_string().contains("nonzero") || error.to_string().contains("identity is zero"),
+        "unexpected zero-identity refusal: {error}"
+    );
+}
+
+#[test]
+fn exhausted_durable_identity_refuses_acceptance_atomically() {
+    let path = valid_path("exhausted-durable-identity");
+    set_next_id(&path, u64::MAX);
+    let store = RedbWriteStore::open(&path).expect("maximum next identity recovers");
+    let mut changes = store.receipt_changes();
+    let keys = Keys::generate();
+    let error = store
+        .accept_materialized_edit(
+            WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
+            materialization(keys.public_key(), 20, "exhausted"),
+            None,
+        )
+        .expect_err("exhausted identity refuses");
+    assert_eq!(
+        error.to_string(),
+        "write store refused operation: write identity exhausted"
+    );
+    assert_eq!(store.len().unwrap(), 1);
+    assert!(changes.try_recv().is_err());
+    assert!(
+        store
+            .receipt(ReceiptId::try_from(u64::MAX).expect("maximum is nonzero"))
+            .unwrap()
+            .is_none()
+    );
+    drop(store);
+
+    assert_eq!(read_next_id(&path), u64::MAX);
+    assert_eq!(RedbWriteStore::open(path).unwrap().len().unwrap(), 1);
 }
 
 #[test]
@@ -492,7 +539,7 @@ fn schema_v4_accepts_attributed_empty_source_failure() {
         .record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             None,
             "empty source failed".to_owned(),
@@ -643,7 +690,7 @@ fn assert_row_mutation_refused(label: &str, mutate: impl FnOnce(&mut Value)) {
 fn read_receipt(path: &std::path::Path) -> Receipt {
     RedbWriteStore::open(path)
         .unwrap()
-        .receipt(fava_write::ReceiptId::from_u64(1))
+        .receipt(fava_write::ReceiptId::try_from(1).expect("nonzero receipt identity"))
         .unwrap()
         .unwrap()
 }
@@ -663,6 +710,28 @@ fn mutate_row(path: &std::path::Path, mutate: impl FnOnce(&mut Value)) {
     transaction.commit().unwrap();
 }
 
+fn move_row_to_zero(path: &std::path::Path) {
+    let database = Database::create(path).unwrap();
+    let mut transaction = database.begin_write().unwrap();
+    transaction.set_durability(Durability::Immediate).unwrap();
+    {
+        let mut table = transaction.open_table(RECEIPTS).unwrap();
+        let bytes = table.remove(1).unwrap().unwrap().value().to_vec();
+        let mut row: Value = serde_json::from_slice(&bytes).unwrap();
+        for pointer in [
+            "/receipt/receipt_id",
+            "/receipt/write_id",
+            "/receipt/current/publication/receipt_id",
+            "/receipt/current/publication/write_id",
+        ] {
+            set(&mut row, pointer, json!(0));
+        }
+        let encoded = serde_json::to_vec(&row).unwrap();
+        table.insert(0, encoded.as_slice()).unwrap();
+    }
+    transaction.commit().unwrap();
+}
+
 fn set_next_id(path: &std::path::Path, next_id: u64) {
     let database = Database::create(path).unwrap();
     let mut transaction = database.begin_write().unwrap();
@@ -673,6 +742,19 @@ fn set_next_id(path: &std::path::Path, next_id: u64) {
         .insert("next_id", next_id)
         .unwrap();
     transaction.commit().unwrap();
+}
+
+fn read_next_id(path: &std::path::Path) -> u64 {
+    let database = Database::create(path).unwrap();
+    database
+        .begin_read()
+        .unwrap()
+        .open_table(META)
+        .unwrap()
+        .get("next_id")
+        .unwrap()
+        .unwrap()
+        .value()
 }
 
 fn set(row: &mut Value, pointer: &str, value: Value) {

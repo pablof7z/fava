@@ -69,7 +69,7 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     let receipt = write.receipt().unwrap();
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(materializer.calls().len(), 2);
 }

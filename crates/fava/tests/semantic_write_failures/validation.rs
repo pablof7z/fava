@@ -49,7 +49,7 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     assert_eq!(failed.current.id(), accepted_event_id);
     assert_eq!(
         failed.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert!(
         failed

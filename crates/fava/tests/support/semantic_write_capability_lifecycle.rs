@@ -160,7 +160,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     let authorized = accepted.receipt().unwrap();
     assert_eq!(
         authorized.current.publication.materialization_id,
-        MaterializationId::from_u64(1),
+        MaterializationId::FIRST,
         "source-driven successor superseded an authorized generation"
     );
     let first = first.finalize(&keys).unwrap();
@@ -169,7 +169,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     assert_completion(
         &completions.recv().await.unwrap(),
         &accepted,
-        MaterializationId::from_u64(1),
+        MaterializationId::FIRST,
         first_id,
         true,
     );
@@ -192,7 +192,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     assert_completion(
         &completions.recv().await.unwrap(),
         &accepted,
-        MaterializationId::from_u64(2),
+        MaterializationId::try_from(2).expect("nonzero materialization identity"),
         second_id,
         true,
     );
@@ -208,7 +208,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     assert_eq!(attempts.len(), 1);
     assert_eq!(
         attempts[0].materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(attempts[0].event.id, second_id);
     assert!(terminal.destinations().values().all(|outcome| {

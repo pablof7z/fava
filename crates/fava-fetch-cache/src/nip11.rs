@@ -78,9 +78,7 @@ pub async fn fetch(
         FetchOutcome::Error { age, .. } if age.is_fresh => {
             return Nip11Result::Error("NIP-11 fetch previously failed (cached)".to_owned());
         }
-        FetchOutcome::Absent
-        | FetchOutcome::NotFound { .. }
-        | FetchOutcome::Error { .. } => {}
+        FetchOutcome::Absent | FetchOutcome::NotFound { .. } | FetchOutcome::Error { .. } => {}
     }
 
     let fetched_at = Instant::now();
@@ -91,7 +89,9 @@ pub async fn fetch(
         }
         Ok(resp) if resp.status == 200 => {
             cache.set_ok(cache_key, resp.body.clone(), fetched_at);
-            Nip11Result::Fresh { info_json: resp.body }
+            Nip11Result::Fresh {
+                info_json: resp.body,
+            }
         }
         Ok(resp) => {
             let reason = format!("NIP-11 HTTP {}", resp.status);

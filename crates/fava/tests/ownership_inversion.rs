@@ -128,7 +128,9 @@ fn observe_contains_no_await() {
         .find('{')
         .expect("observe() body opening brace not found");
     let body = &after_observe_sig[body_start..];
-    let body_end = body.find('}').expect("observe() body closing brace not found");
+    let body_end = body
+        .find('}')
+        .expect("observe() body closing brace not found");
     let observe_body = &body[..body_end];
 
     assert!(
@@ -162,7 +164,9 @@ fn observe_delegates_to_observer_open() {
         .find('{')
         .expect("observe() body opening brace not found");
     let body = &after_sig[body_start..];
-    let body_end = body.find('}').expect("observe() body closing brace not found");
+    let body_end = body
+        .find('}')
+        .expect("observe() body closing brace not found");
     let observe_body = &body[1..body_end]; // strip the opening `{`
 
     assert!(

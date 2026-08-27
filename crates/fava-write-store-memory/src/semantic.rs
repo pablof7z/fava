@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use fava_query::{SourceEvent, SourceKind, SourceRevision, SourceSnapshot, SourceStatus};
@@ -17,14 +18,14 @@ use super::MemoryWriteStore;
 use super::model::destinations;
 use super::semantic_acceptance::{require_current, validate_materialization, validate_source};
 use super::state::{
-    attributed_failure, capacity_reached, edit_coordinate, next_revision, require_failure_source,
-    require_qualified_source,
+    attributed_failure, capacity_reached, edit_coordinate, next_identity, next_revision,
+    require_failure_source, require_qualified_source,
 };
 
 #[derive(Clone, Debug)]
 pub(super) struct WriteState {
     pub(super) revision: u64,
-    pub(super) next_identity: u64,
+    pub(super) next_identity: NonZeroU64,
     pub(super) next_reservation: u64,
     pub(super) reservations: BTreeMap<u64, EventCoordinate>,
     pub(super) writes: BTreeMap<ReceiptId, Receipt>,
@@ -55,7 +56,7 @@ impl Default for WriteState {
     fn default() -> Self {
         Self {
             revision: 0,
-            next_identity: 1,
+            next_identity: NonZeroU64::MIN,
             next_reservation: 1,
             reservations: BTreeMap::new(),
             writes: BTreeMap::new(),
@@ -191,15 +192,13 @@ impl MemoryWriteStore {
             )));
         }
         let identity = state.next_identity;
-        let next_identity = identity
-            .checked_add(1)
-            .ok_or_else(|| WriteStoreError::Refused("write identity exhausted".to_owned()))?;
-        let write_id = WriteId::from_u64(identity);
-        let receipt_id = ReceiptId::from_u64(identity);
+        let next_identity = next_identity(identity)?;
+        let write_id = WriteId::from_nonzero(identity);
+        let receipt_id = ReceiptId::from_nonzero(identity);
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: MaterializationId::from_u64(1),
+            materialization_id: MaterializationId::FIRST,
             materialization_source: selected_source.map(|(id, _)| id),
             materialization_failure: None,
             retired_materializations: Vec::new(),
@@ -351,9 +350,7 @@ impl MemoryWriteStore {
             .current
             .publication
             .materialization_id
-            .as_u64()
-            .checked_add(1)
-            .map(MaterializationId::from_u64)
+            .checked_next()
             .ok_or_else(|| {
                 WriteStoreError::Refused("materialization identity exhausted".to_owned())
             })?;

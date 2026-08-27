@@ -74,7 +74,6 @@ impl ReplaceableEventEdit {
     pub fn change(&self) -> &[u8] {
         &self.change
     }
-
 }
 
 impl WriteIntent {

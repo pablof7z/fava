@@ -106,7 +106,9 @@ fn merge_qualifying_contribution(
                 relay: Vec::new(),
                 publication: None,
             });
-            candidate.publication.get_or_insert_with(|| local.publication.clone());
+            candidate
+                .publication
+                .get_or_insert_with(|| local.publication.clone());
             if matches!(local.event, EventValue::Signed(_)) {
                 candidate.event = local.event.clone();
             }

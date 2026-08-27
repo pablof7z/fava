@@ -71,7 +71,7 @@ async fn cache_source_closure_keeps_write_store_source_live() {
     );
     assert_eq!(
         rematerialized.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert!(
         rematerialized.current.publication.retired_materializations[0]

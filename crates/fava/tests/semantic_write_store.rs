@@ -72,7 +72,7 @@ fn memory_first_edit_has_no_prior() {
         .expect("receipt retained");
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert_eq!(receipt.current.publication.materialization_source, None);
     assert!(
@@ -289,7 +289,7 @@ fn memory_generation_swap_is_compare_and_set() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
@@ -302,7 +302,7 @@ fn memory_generation_swap_is_compare_and_set() {
     assert_eq!(successor.receipt_id, accepted.receipt_id);
     assert_eq!(
         successor.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         successor.current.publication.materialization_source,
@@ -311,7 +311,7 @@ fn memory_generation_swap_is_compare_and_set() {
     assert_eq!(
         successor.current.publication.retired_materializations,
         vec![(
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             accepted.current.id(),
             Some(base.id),
             None,
@@ -325,7 +325,7 @@ fn memory_generation_swap_is_compare_and_set() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 31, "stale swap"),
@@ -360,7 +360,7 @@ fn memory_unqualified_source_is_inert() {
                 .install_materialization(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::from_u64(1),
+                    MaterializationId::FIRST,
                     Some(selected.id),
                     std::slice::from_ref(&edit()),
                     materialization(keys.public_key(), 22, "inert"),
@@ -375,7 +375,7 @@ fn memory_unqualified_source_is_inert() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 Some(selected.id),
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 22, "missing source"),
@@ -394,7 +394,7 @@ fn memory_unqualified_source_is_inert() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(2),
+                MaterializationId::try_from(2).expect("nonzero materialization identity"),
                 None,
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 23, "already empty"),
@@ -432,7 +432,7 @@ fn memory_failure_preserves_current_and_is_attributed() {
         store.record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(failed_source.clone())),
             "x".repeat(5_000),
@@ -478,7 +478,7 @@ fn memory_successful_retry_clears_failure_atomically() {
         .record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(retry_source.clone())),
             "first attempt failed".to_owned(),
@@ -490,7 +490,7 @@ fn memory_successful_retry_clears_failure_atomically() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -501,7 +501,7 @@ fn memory_successful_retry_clears_failure_atomically() {
 
     assert_eq!(
         successor.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         successor.current.publication.materialization_source,
@@ -521,7 +521,7 @@ fn memory_successful_retry_clears_failure_atomically() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(2),
+            MaterializationId::try_from(2).expect("nonzero materialization identity"),
             Some(retry_source.id),
             std::slice::from_ref(&edit()),
             successor_event,
@@ -560,7 +560,7 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
             .record_materialization_failure(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 None,
                 None,
                 "late completion".to_owned(),
@@ -629,7 +629,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
         materialization(keys.public_key(), 1, "generation zero"),
         None,
     );
-    let mut expected = MaterializationId::from_u64(1);
+    let mut expected = MaterializationId::FIRST;
     let mut expected_source = None;
     for generation in 0..destination_evidence_capacity() {
         let source_time = 2 + (generation as u64 * 2);
@@ -650,7 +650,9 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                 None,
             )
             .unwrap();
-        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected = expected
+            .checked_next()
+            .expect("next materialization identity");
         expected_source = Some(next_source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -720,7 +722,10 @@ fn memory_reservation_is_coordinate_bound_and_repeated_coordinate_bounded() {
     );
     store.release_active(composition).unwrap();
     assert_eq!(store.len().unwrap(), 1);
-    assert_eq!(accepted.receipt_id, ReceiptId::from_u64(1));
+    assert_eq!(
+        accepted.receipt_id,
+        ReceiptId::try_from(1).expect("nonzero receipt identity")
+    );
 }
 
 #[test]

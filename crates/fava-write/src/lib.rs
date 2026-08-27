@@ -6,6 +6,7 @@ pub use nostr::key::PublicKey;
 use nostr::types::RelayUrl;
 pub use nostr::types::Timestamp;
 use serde::{Deserialize, Serialize};
+use std::num::{NonZeroU64, TryFromIntError};
 use thiserror::Error;
 
 mod attempt_map;
@@ -31,25 +32,36 @@ pub(crate) const MAX_EVENT_BYTES: usize = 131_072;
 
 /// Stable identity of one accepted write.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct WriteId(u64);
+pub struct WriteId(NonZeroU64);
 
 impl WriteId {
-    /// Construct an id allocated by a write store.
+    /// Reconstruct a nonzero identity value.
+    ///
+    /// Construction does not allocate durable write custody. A write store
+    /// mints the identity only when it commits the accepted write.
     #[must_use]
-    pub const fn from_u64(value: u64) -> Self {
+    pub const fn from_nonzero(value: NonZeroU64) -> Self {
         Self(value)
     }
 
     /// Return the provider-independent numeric representation.
     #[must_use]
     pub const fn as_u64(self) -> u64 {
-        self.0
+        self.0.get()
+    }
+}
+
+impl TryFrom<u64> for WriteId {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        NonZeroU64::try_from(value).map(Self)
     }
 }
 
 /// Stable, reattachable identity of one write receipt.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct ReceiptId(u64);
+pub struct ReceiptId(NonZeroU64);
 
 /// Event form accepted by the publication lifecycle in the current milestone.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -261,16 +273,27 @@ fn validate_event_size(event: &impl Serialize) -> Result<(), WriteIntentError> {
 }
 
 impl ReceiptId {
-    /// Construct an id allocated by a write store.
+    /// Reconstruct a nonzero reattachable receipt identity.
+    ///
+    /// Construction permits durable import and lookup. It does not allocate a
+    /// receipt or authorize a write-store mutation.
     #[must_use]
-    pub const fn from_u64(value: u64) -> Self {
+    pub const fn from_nonzero(value: NonZeroU64) -> Self {
         Self(value)
     }
 
     /// Return the provider-independent numeric representation.
     #[must_use]
     pub const fn as_u64(self) -> u64 {
-        self.0
+        self.0.get()
+    }
+}
+
+impl TryFrom<u64> for ReceiptId {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        NonZeroU64::try_from(value).map(Self)
     }
 }
 

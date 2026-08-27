@@ -35,15 +35,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// Milliseconds: long enough for local HTTP round-trip, short enough for tests.
 const ADMISSION_WINDOW_MS: u64 = 200;
 
-fn build_observer(
-    _relay_url: &RelayUrl,
-    transport: Arc<FakeTransport>,
-) -> Observer {
+fn build_observer(_relay_url: &RelayUrl, transport: Arc<FakeTransport>) -> Observer {
     let cache = Arc::new(MemoryEventCache::default());
     let writes = Arc::new(MemoryWriteStore::default());
     let evaluator: Arc<dyn QueryEvaluator> = Arc::new(StandardQueryEvaluator);
-    let planner: Arc<dyn SubscriptionPlanner> =
-        Arc::new(StandardSubscriptionPlanner::new());
+    let planner: Arc<dyn SubscriptionPlanner> = Arc::new(StandardSubscriptionPlanner::new());
 
     Observer::new(
         cache.clone() as Arc<dyn QuerySource>,
@@ -76,7 +72,10 @@ fn requests_for(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<Subscri
         .into_iter()
         .filter_map(|f| {
             let msg = serde_json::from_slice::<ClientMessage<'static>>(&f).ok()?;
-            if let ClientMessage::Req { subscription_id, .. } = msg {
+            if let ClientMessage::Req {
+                subscription_id, ..
+            } = msg
+            {
                 Some(subscription_id.into_owned())
             } else {
                 None
@@ -86,10 +85,7 @@ fn requests_for(transport: &FakeTransport, key: &RelaySessionKey) -> Vec<Subscri
 }
 
 /// Serve a NIP-11 document on one TCP connection and close.
-async fn handle_nip11(
-    mut stream: tokio::net::TcpStream,
-    body: &'static str,
-) {
+async fn handle_nip11(mut stream: tokio::net::TcpStream, body: &'static str) {
     let mut buf = vec![0u8; 4096];
     // Consume the HTTP request (just drain what arrives).
     let _ = stream.read(&mut buf).await;
@@ -124,8 +120,7 @@ async fn relay_max_subscriptions_limits_active_requests() {
     });
 
     // Use a ws:// URL so the NIP-11 fetcher can reach the server.
-    let relay_url = RelayUrl::parse(&format!("ws://127.0.0.1:{port}"))
-        .expect("relay URL");
+    let relay_url = RelayUrl::parse(&format!("ws://127.0.0.1:{port}")).expect("relay URL");
     let relay_key = RelaySessionKey {
         relay: relay_url.clone(),
         access: RelayAccess::Public,
@@ -140,9 +135,15 @@ async fn relay_max_subscriptions_limits_active_requests() {
     let k2 = Keys::generate().public_key();
     let k3 = Keys::generate().public_key();
 
-    let obs1 = observer.open(query_for(&relay_url, k1, Kind::TextNote)).expect("obs1 opens");
-    let obs2 = observer.open(query_for(&relay_url, k2, Kind::from(3))).expect("obs2 opens");
-    let obs3 = observer.open(query_for(&relay_url, k3, Kind::from(6))).expect("obs3 opens");
+    let obs1 = observer
+        .open(query_for(&relay_url, k1, Kind::TextNote))
+        .expect("obs1 opens");
+    let obs2 = observer
+        .open(query_for(&relay_url, k2, Kind::from(3)))
+        .expect("obs2 opens");
+    let obs3 = observer
+        .open(query_for(&relay_url, k3, Kind::from(6)))
+        .expect("obs3 opens");
 
     // Wait long enough for NIP-11 fetch + admission window + plan execution.
     tokio::time::sleep(Duration::from_millis(ADMISSION_WINDOW_MS * 3)).await;
@@ -157,13 +158,11 @@ async fn relay_max_subscriptions_limits_active_requests() {
     );
 
     // The third observation must carry a relay shortfall.
-    let shortfall = [&obs1, &obs2, &obs3]
-        .iter()
-        .find_map(|obs| {
-            let ev = obs.current();
-            let relay_ev = ev.evidence.relay(&relay_key)?;
-            relay_ev.shortfall.clone()
-        });
+    let shortfall = [&obs1, &obs2, &obs3].iter().find_map(|obs| {
+        let ev = obs.current();
+        let relay_ev = ev.evidence.relay(&relay_key)?;
+        relay_ev.shortfall.clone()
+    });
     assert!(
         shortfall.is_some(),
         "one of the three observations must report a relay shortfall when max_subscriptions=2"

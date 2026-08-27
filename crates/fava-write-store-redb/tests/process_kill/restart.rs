@@ -66,10 +66,13 @@ async fn assert_restart_then_immediate_edit(
     .build()
     .expect("recovery reconciles before exposing the redb facade");
 
-    let reconciled = fava.receipt(ReceiptId::from_u64(1)).unwrap().unwrap();
+    let reconciled = fava
+        .receipt(ReceiptId::try_from(1).expect("nonzero receipt identity"))
+        .unwrap()
+        .unwrap();
     assert_eq!(
         reconciled.current.publication.materialization_id,
-        MaterializationId::from_u64(persisted_edits + 1)
+        MaterializationId::try_from(persisted_edits + 1).expect("nonzero materialization identity")
     );
     let expected_reconciled = (1..=persisted_edits)
         .fold("restart source".to_owned(), |body, change| {
@@ -90,7 +93,7 @@ async fn assert_restart_then_immediate_edit(
             .current
             .publication
             .materialization_id,
-        MaterializationId::from_u64(persisted_edits + 2)
+        MaterializationId::try_from(persisted_edits + 2).expect("nonzero materialization identity")
     );
 
     cache
@@ -99,7 +102,12 @@ async fn assert_restart_then_immediate_edit(
             session(),
         ))])
         .unwrap();
-    let replayed = wait_for_generation(&fava, ReceiptId::from_u64(1), persisted_edits + 3).await;
+    let replayed = wait_for_generation(
+        &fava,
+        ReceiptId::try_from(1).expect("nonzero receipt identity"),
+        persisted_edits + 3,
+    )
+    .await;
     let expected_late = (1..=persisted_edits)
         .chain(std::iter::once(u64::from(immediate_change)))
         .fold("late source".to_owned(), |body, change| {
@@ -249,7 +257,10 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
 
     let receipt = tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            let receipt = fava.receipt(ReceiptId::from_u64(1)).unwrap().unwrap();
+            let receipt = fava
+                .receipt(ReceiptId::try_from(1).expect("nonzero receipt identity"))
+                .unwrap()
+                .unwrap();
             if receipt.route_revision > 0 {
                 return receipt;
             }
@@ -260,7 +271,7 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
     .expect("generation-bound route commits");
     assert_eq!(
         receipt.current.publication.materialization_id,
-        MaterializationId::from_u64(generation + 1)
+        MaterializationId::try_from(generation + 1).expect("nonzero materialization identity")
     );
     assert!(receipt.destinations().contains_key(&RelaySessionKey {
         relay: router.current.clone(),

@@ -187,16 +187,11 @@ fn redb_same_coordinate_edit_sequence_survives_reopen_with_exact_identity() {
     assert_eq!(second.receipt_id, first.receipt_id);
     assert_eq!(
         second.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(
         second.current.publication.retired_materializations,
-        vec![(
-            MaterializationId::from_u64(1),
-            first.current.id(),
-            None,
-            None,
-        )]
+        vec![(MaterializationId::FIRST, first.current.id(), None, None,)]
     );
     assert_eq!(store.len().unwrap(), 1);
     drop(store);
@@ -213,7 +208,7 @@ fn redb_same_coordinate_edit_sequence_survives_reopen_with_exact_identity() {
     assert_eq!(recovered[0].0.receipt_id, first.receipt_id);
     assert_eq!(
         recovered[0].0.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(recovered[0].1, vec![first_edit, second_edit]);
     assert_eq!(recovered[0].2, actor);
@@ -299,7 +294,7 @@ fn redb_generation_and_failure_state_match_memory() {
         .record_materialization_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(failed_source.clone())),
             "x".repeat(5_000),
@@ -318,7 +313,7 @@ fn redb_generation_and_failure_state_match_memory() {
         .install_materialization(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::from_u64(1),
+            MaterializationId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             materialization(keys.public_key(), 21, "generation two"),
@@ -330,12 +325,12 @@ fn redb_generation_and_failure_state_match_memory() {
     assert_eq!(successor.receipt_id, accepted.receipt_id);
     assert_eq!(
         successor.current.publication.materialization_id,
-        MaterializationId::from_u64(2)
+        MaterializationId::try_from(2).expect("nonzero materialization identity")
     );
     assert_eq!(successor.current.publication.materialization_failure, None);
     assert_eq!(
         successor.current.publication.retired_materializations[0].0,
-        MaterializationId::from_u64(1)
+        MaterializationId::FIRST
     );
     assert!(
         successor.current.publication.retired_materializations[0]
@@ -384,7 +379,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
             .install_materialization(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::from_u64(9),
+                MaterializationId::try_from(9).expect("nonzero materialization identity"),
                 None,
                 std::slice::from_ref(&edit()),
                 materialization(keys.public_key(), 3, "stale"),
@@ -399,7 +394,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
     );
     assert!(changes.try_recv().is_err(), "refusal notified");
 
-    let mut expected = MaterializationId::from_u64(1);
+    let mut expected = MaterializationId::FIRST;
     let mut expected_source = None;
     for generation in 0..destination_evidence_capacity() {
         let source_time = 4 + generation as u64 * 2;
@@ -420,7 +415,9 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 None,
             )
             .unwrap();
-        expected = MaterializationId::from_u64(expected.as_u64() + 1);
+        expected = expected
+            .checked_next()
+            .expect("next materialization identity");
         expected_source = Some(next_source.id);
     }
     let before_overflow = store.receipt(accepted.receipt_id).unwrap();
@@ -475,7 +472,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
             .record_materialization_failure(
                 replacement.write_id,
                 replacement.receipt_id,
-                MaterializationId::from_u64(1),
+                MaterializationId::FIRST,
                 None,
                 Some(&EventValue::Signed(stale_source.clone())),
                 "late".to_owned(),

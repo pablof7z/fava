@@ -575,7 +575,8 @@ pub async fn wait_for_materialization(
                 .expect("receipt read")
                 .expect("receipt exists");
             if receipt.current.publication.materialization_id
-                == MaterializationId::from_u64(generation)
+                == MaterializationId::try_from(generation)
+                    .expect("nonzero materialization identity")
             {
                 return receipt;
             }
