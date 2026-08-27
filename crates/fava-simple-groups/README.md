@@ -106,6 +106,69 @@ entries, unused trailing values, and unrelated order. The materializer is privat
 edit-codec plumbing for Fava’s generic semantic-write lifecycle; it does not own
 author selection, routing, storage, signing, or delivery.
 
+## Group lifecycle management
+
+Management events signal group state transitions; the relay accepts or rejects each. All typed
+constructors live in `fava-nip29-management`, which uses `SimpleGroup` as its group argument — no
+management kind number is visible outside that crate.
+
+```rust,ignore
+use fava_nip29_management::{
+    GroupAccess, GroupVisibility, MetadataEdit,
+    create_group, delete_group, edit_metadata, invite, join_request, leave_group,
+    put_user, remove_user,
+};
+use fava_simple_groups::SimpleGroup;
+use nostr::key::Keys;
+use nostr::types::RelayUrl;
+
+let relay = RelayUrl::parse("wss://relay.example")?;
+let group = SimpleGroup::from_relays("cats", vec![relay.clone()])?;
+let admin = Keys::generate();
+let user = Keys::generate();
+
+// Create — the relay creates the group when it accepts this event.
+let event = create_group(admin.public_key(), &group)?;
+let _write = fava.to(group.relays())?.publish(event)?;
+
+// Rename and make the group private and closed.
+let event = edit_metadata(
+    admin.public_key(),
+    &group,
+    &MetadataEdit {
+        name: Some("Cats".to_owned()),
+        visibility: Some(GroupVisibility::Private),
+        access: Some(GroupAccess::Closed),
+        ..Default::default()
+    },
+)?;
+
+// Add a member with the "member" role; roles are appended as extra p-tag values.
+let event = put_user(admin.public_key(), &group, &user.public_key(), &["member"])?;
+
+// Promote the same user to admin.
+let event = put_user(admin.public_key(), &group, &user.public_key(), &["admin"])?;
+
+// Remove a user.
+let event = remove_user(admin.public_key(), &group, &user.public_key())?;
+
+// Invite someone to a closed group — emits h, p (invitee), and relay tags.
+let invitee = Keys::generate();
+let event = invite(admin.public_key(), &group, &invitee.public_key(), &relay)?;
+
+// A user requests to join; the relay routes this to admins for approval.
+let event = join_request(user.public_key(), &group)?;
+
+// A user leaves voluntarily.
+let event = leave_group(user.public_key(), &group)?;
+
+// Delete — the relay removes the group when it accepts this event.
+let event = delete_group(admin.public_key(), &group)?;
+```
+
+Each constructor returns an `UnsignedEvent`. Signing and publication remain with the application's
+Fava instance: `fava.to(group.relays())?.publish(event)?`.
+
 ## Ownership boundary
 
 Normal dependencies are exactly `fava-query`, `fava-state`, `fava-write`, and
