@@ -183,6 +183,7 @@ impl SimpleGroupMetadata {
     }
 }
 
+/// Sets `target` from `candidate` only if `target` is still unset — first occurrence wins.
 fn set_first(target: &mut Option<String>, candidate: Option<&String>) {
     if target.is_none() {
         *target = candidate.cloned();

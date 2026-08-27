@@ -60,6 +60,7 @@ impl fmt::Display for SimpleGroupDecodeError {
 
 impl std::error::Error for SimpleGroupDecodeError {}
 
+/// Validates `event`'s kind and extracts its `d` identifier, author, and tags.
 pub(crate) fn state_event(
     event: &EventValue,
     expected: u16,
@@ -86,6 +87,7 @@ pub(crate) fn state_event(
     Ok((id, event.author(), tags))
 }
 
+/// Returns `values[value_index]`, or a `MissingTagValue` error positioned at `tag_index`.
 pub(crate) fn required_value(
     values: &[String],
     tag_index: usize,

@@ -151,6 +151,7 @@ impl fmt::Display for SavedGroupListDecodeError {
 
 impl std::error::Error for SavedGroupListDecodeError {}
 
+/// Parses a `group` tag into id, relay, and optional display name.
 fn parse_group(
     values: &[String],
     tag_index: usize,
@@ -164,10 +165,12 @@ fn parse_group(
     })
 }
 
+/// Requires and returns an `r` tag's first value.
 fn parse_relay(values: &[String], tag_index: usize) -> Result<String, SavedGroupListDecodeError> {
     required(values, tag_index, 1).map(str::to_owned)
 }
 
+/// Returns `values[value_index]`, or a `MissingTagValue` error positioned at `tag_index`.
 fn required(
     values: &[String],
     tag_index: usize,

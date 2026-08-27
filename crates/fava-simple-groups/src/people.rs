@@ -174,6 +174,31 @@ impl SimpleGroupMembers {
 impl SimpleGroupRoles {
     /// Decode one kind-39003 event, retaining `role`-tag-local failures.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroupRoles;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(39_003), "")
+    ///     .tags([
+    ///         Tag::parse(["d", "photos"])?,
+    ///         Tag::parse(["role", "admin", "Group administrator"])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let roles = SimpleGroupRoles::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(roles.id(), "photos");
+    /// let (name, description) = roles.roles()[0].as_ref().expect("valid role");
+    /// assert_eq!(name, "admin");
+    /// assert_eq!(description.as_deref(), Some("Group administrator"));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
@@ -205,6 +230,30 @@ impl SimpleGroupRoles {
 impl SimpleGroupLivekitParticipants {
     /// Decode one kind-39004 event, retaining `participant`-tag-local failures.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fava_simple_groups::SimpleGroupLivekitParticipants;
+    /// use fava_write::{EventValue, Kind, Tag, Timestamp};
+    /// use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
+    /// use nostr::key::Keys;
+    ///
+    /// let keys = Keys::generate();
+    /// let participant = Keys::generate().public_key();
+    /// let event = NostrEventBuilder::new(Kind::from_u16(39_004), "")
+    ///     .tags([
+    ///         Tag::parse(["d", "photos"])?,
+    ///         Tag::parse(["participant", &participant.to_hex()])?,
+    ///     ])
+    ///     .custom_created_at(Timestamp::from(1))
+    ///     .finalize(&keys)?;
+    ///
+    /// let participants = SimpleGroupLivekitParticipants::from_event(&EventValue::Signed(event))?;
+    /// assert_eq!(participants.id(), "photos");
+    /// assert_eq!(participants.participants()[0], Ok(participant));
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns [`SimpleGroupDecodeError`] for the wrong kind or a missing first `d` value.
@@ -229,6 +278,7 @@ impl SimpleGroupLivekitParticipants {
     }
 }
 
+/// Parses a `p` tag into (pubkey, roles), requiring at least one role.
 fn parse_admin(
     values: &[String],
     tag_index: usize,
@@ -238,6 +288,7 @@ fn parse_admin(
     Ok((key, values[2..].to_vec()))
 }
 
+/// Parses a `participant` tag's key, rejecting anything but exact lowercase hex.
 fn parse_livekit_key(
     values: &[String],
     tag_index: usize,

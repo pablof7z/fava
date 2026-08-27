@@ -432,6 +432,7 @@ fn build(
         .build()
 }
 
+/// Parses a tag, converting the error to [`EventBuildError`].
 fn parse_tag<'a>(values: impl IntoIterator<Item = &'a str>) -> Result<Tag, EventBuildError> {
     Tag::parse(values).map_err(|e| EventBuildError::Encoding(e.to_string()))
 }

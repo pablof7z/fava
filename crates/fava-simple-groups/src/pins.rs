@@ -84,6 +84,7 @@ impl SimpleGroupPins {
     }
 }
 
+/// Validates the tag has a first value, then clones it unchanged.
 fn parse_pin(tag: &Tag, tag_index: usize) -> Result<Tag, SimpleGroupDecodeError> {
     required_value(tag.as_slice(), tag_index, 1)?;
     Ok(tag.clone())

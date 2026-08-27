@@ -179,6 +179,7 @@ pub fn saved_group_list_materializer() -> Arc<dyn ReplaceableEventMaterializer> 
     Arc::new(SavedGroupListMaterializer)
 }
 
+/// Wraps one encoded changeset as a non-addressable kind-10009 edit.
 fn edit(
     operation: u8,
     id: &str,
@@ -192,6 +193,7 @@ fn edit(
     )
 }
 
+/// Serializes one changeset operation to the private byte format `decode_edit` reads back.
 fn encode(
     operation: u8,
     id: &str,
@@ -229,6 +231,7 @@ fn encode(
     Ok(bytes)
 }
 
+/// Appends the id, relay count, and each relay in the changeset byte format.
 fn encode_simple_group(
     bytes: &mut Vec<u8>,
     id: &str,
@@ -244,6 +247,7 @@ fn encode_simple_group(
     Ok(())
 }
 
+/// Appends a presence byte, then the value's encoded text if present.
 fn encode_optional(bytes: &mut Vec<u8>, value: Option<&str>) -> Result<(), WriteIntentError> {
     if let Some(value) = value {
         bytes.push(1);
@@ -254,6 +258,7 @@ fn encode_optional(bytes: &mut Vec<u8>, value: Option<&str>) -> Result<(), Write
     }
 }
 
+/// Appends a `u32`-length-prefixed UTF-8 string, erroring past `u32::MAX` bytes.
 fn encode_text(bytes: &mut Vec<u8>, value: &str) -> Result<(), WriteIntentError> {
     let length = u32::try_from(value.len()).map_err(|_| codec_refusal("edit text is too long"))?;
     bytes.extend_from_slice(&length.to_be_bytes());
@@ -261,6 +266,7 @@ fn encode_text(bytes: &mut Vec<u8>, value: &str) -> Result<(), WriteIntentError>
     Ok(())
 }
 
+/// Reverses `encode`, requiring an exact non-addressable kind-10009 coordinate and no trailing bytes.
 fn decode_edit(
     edit: &ReplaceableEventEdit,
 ) -> Result<(u8, String, Vec<RelayUrl>, Option<String>), WriteIntentError> {
@@ -296,6 +302,7 @@ fn decode_edit(
     }
 }
 
+/// Pops the first byte, or errors on empty input.
 fn take_byte(input: &mut &[u8]) -> Result<u8, WriteIntentError> {
     let Some((&value, remaining)) = input.split_first() else {
         return Err(codec_refusal("truncated saved-list edit"));
@@ -304,6 +311,7 @@ fn take_byte(input: &mut &[u8]) -> Result<u8, WriteIntentError> {
     Ok(value)
 }
 
+/// Reads a length-prefixed UTF-8 string written by `encode_text`.
 fn take_text(input: &mut &[u8]) -> Result<String, WriteIntentError> {
     let length_bytes: [u8; 4] = input
         .get(..4)
@@ -324,6 +332,7 @@ fn take_text(input: &mut &[u8]) -> Result<String, WriteIntentError> {
         .map_err(|_| codec_refusal("saved-list text is not UTF-8"))
 }
 
+/// Reads the presence byte and value written by `encode_optional`.
 fn take_optional_text(input: &mut &[u8]) -> Result<Option<String>, WriteIntentError> {
     match take_byte(input)? {
         0 => Ok(None),
@@ -332,10 +341,12 @@ fn take_optional_text(input: &mut &[u8]) -> Result<Option<String>, WriteIntentEr
     }
 }
 
+/// Reads text and parses it as a relay URL.
 fn take_relay(input: &mut &[u8]) -> Result<RelayUrl, WriteIntentError> {
     RelayUrl::parse(&take_text(input)?).map_err(|_| codec_refusal("invalid saved-list relay"))
 }
 
+/// Reads an id and its relay set, rejecting a zero count and duplicate relays.
 fn take_simple_group(input: &mut &[u8]) -> Result<(String, Vec<RelayUrl>), WriteIntentError> {
     let id = take_text(input)?;
     let count_bytes: [u8; 2] = input
@@ -403,6 +414,10 @@ impl ReplaceableEventMaterializer for SavedGroupListMaterializer {
     }
 }
 
+/// Verifies and unpacks the event this materialization supersedes.
+///
+/// Requires the same author and kind as `source`, and a strictly later
+/// `created_at`; returns empty content and tags when there is no prior event.
 fn qualified_source(
     author: PublicKey,
     source: Option<&EventValue>,
@@ -436,6 +451,7 @@ fn qualified_source(
     Ok((content, source.tags()))
 }
 
+/// Dispatches one changeset operation to `apply_simple_group` or `apply_relay`.
 fn apply(
     source: &[Tag],
     operation: u8,
@@ -465,6 +481,7 @@ fn apply(
     }
 }
 
+/// Replays a save/remove/rename against the prior tag set, keeping at most one `group` entry per relay.
 fn apply_simple_group(
     source: &[Tag],
     id: &str,
@@ -520,6 +537,7 @@ fn apply_simple_group(
     Ok(tags)
 }
 
+/// Replays a save/remove against the prior `r` tags for one relay.
 fn apply_relay(source: &[Tag], relay: &RelayUrl, save: bool) -> Result<Vec<Tag>, WriteIntentError> {
     let mut found = false;
     let mut tags = Vec::with_capacity(source.len().saturating_add(usize::from(save)));
@@ -541,6 +559,7 @@ fn apply_relay(source: &[Tag], relay: &RelayUrl, save: bool) -> Result<Vec<Tag>,
     Ok(tags)
 }
 
+/// Extracts the relay from a `group` tag matching `id`, if well-formed.
 fn simple_group_target(tag: &Tag, id: &str) -> Option<RelayUrl> {
     let values = tag.as_slice();
     (values.len() >= 3
@@ -550,6 +569,7 @@ fn simple_group_target(tag: &Tag, id: &str) -> Option<RelayUrl> {
     .flatten()
 }
 
+/// Extracts the relay from an `r` tag, if well-formed.
 fn relay_target(tag: &Tag) -> Option<RelayUrl> {
     let values = tag.as_slice();
     (values.len() >= 2 && values.first().map(String::as_str) == Some("r"))
@@ -557,6 +577,7 @@ fn relay_target(tag: &Tag) -> Option<RelayUrl> {
         .flatten()
 }
 
+/// Returns `tag` with its display-name value (index 3) set to `name`.
 fn renamed_tag(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     let mut values = tag.as_slice().to_vec();
     if values.len() == 3 {
@@ -567,6 +588,7 @@ fn renamed_tag(tag: &Tag, name: &str) -> Result<Tag, WriteIntentError> {
     Tag::parse(values).map_err(|error| codec_refusal(&error.to_string()))
 }
 
+/// Builds a `group` tag for `id` and `host`, with an optional display name.
 fn simple_group_tag(
     id: &str,
     host: &RelayUrl,

@@ -1,4 +1,4 @@
-//! [`SimpleGroup`]: the group id/relays value that queries and event builders compose against.
+//! The group id/relays value that queries and event builders compose against.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -270,6 +270,7 @@ fn identifier_tag() -> SingleLetterTag {
     SingleLetterTag::from_char('d').expect("d is a valid single-letter tag")
 }
 
+/// True when `tag` is exactly `["h", id]` with no extra values.
 fn exact_group_tag(tag: &Tag, id: &str) -> bool {
     let values = tag.as_slice();
     values.len() == 2
