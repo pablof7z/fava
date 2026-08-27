@@ -778,11 +778,50 @@ symbols = [
     "fava_observe::ObserveError",
     "fava_observe::ObservationClosed",
     "fava_query::ObservationId",
-    "fava_query::OperationGeneration",
-    "fava_query::OperationGenerationExhausted",
-    "fava_query::OperationGenerations",
 ]
 crates = ["fava-observe"]
+
+[[term]]
+name = "OperationGeneration"
+source = "fava"
+meaning = "The opaque exact identity of one observation-owner-authorized provider operation."
+owner = "fava-observe"
+nearest_nostr = "subscription request lifecycle"
+distinction = "Nostr identifies wire subscriptions; OperationGeneration prevents a late provider completion from mutating a successor logical operation."
+counterexample = "A relay session generation identifies a physical connection, not the observation-owned provider operation performed through it."
+lifecycle = "The observation engine mints it from its non-cloneable issuer and providers only echo it in completions."
+forcing_requirement = "QUERY-010 requires reopened work to use a fresh identity so late EOSE, events, and failures stay inert."
+falsifier = "access_work_isolation fails if an event under the superseded operation identity settles its successor."
+symbols = ["fava_query::OperationGeneration"]
+crates = []
+
+[[term]]
+name = "OperationGenerationIssuer"
+source = "fava"
+meaning = "The non-cloneable observation-owner capability that issues checked OperationGeneration identities."
+owner = "fava-observe"
+nearest_nostr = "subscription request sequence"
+distinction = "Nostr has no owner-side authority namespace or exhaustion refusal for provider operations."
+counterexample = "A public numeric constructor carries a value but does not enforce sole issuance or prevent reuse."
+lifecycle = "One observation engine owns the issuer for its lifetime; exhaustion refuses new provider work before it opens."
+forcing_requirement = "Independent engines and successive operations must never mint equal exact identities."
+falsifier = "operation_generation_tests fail if independent issuers collide or the maximum sequence is returned twice."
+symbols = ["fava_query::OperationGenerationIssuer"]
+crates = []
+
+[[term]]
+name = "OperationGenerationExhausted"
+source = "fava"
+meaning = "The typed refusal to issue a fresh operation authority or sequence."
+owner = "fava-query"
+nearest_nostr = "none"
+distinction = "It attributes identity-space exhaustion before provider work instead of wrapping or reusing stale authority."
+counterexample = "A relay timeout occurs after work opens and is not identity issuance exhaustion."
+lifecycle = "Returned synchronously by OperationGenerationIssuer and retained only as bounded refusal evidence."
+forcing_requirement = "Identity exhaustion must be typed and must open no provider work."
+falsifier = "final_sequence_is_issued_once_then_refused fails if exhaustion wraps or saturates."
+symbols = ["fava_query::OperationGenerationExhausted"]
+crates = []
 
 [[term]]
 name = "RelayAccess"
@@ -924,7 +963,7 @@ counterexample = "A settled receipt whose desired destinations are all rejected 
 lifecycle = "The stateless predicate reads one current Receipt revision and retains no work or evidence."
 forcing_requirement = "Applications must be able to await complete attributable destination evidence without misrepresenting rejection or ambiguity as acknowledgement."
 falsifier = "write_settlement::all_terminal_and_custom_predicates_receive_complete_mixed_revisions fails if a mixed acknowledged, rejected, and ambiguous receipt does not satisfy all_terminal."
-symbols = ["fava::all_terminal"]
+symbols = []
 crates = []
 
 [[term]]
@@ -938,7 +977,7 @@ counterexample = "An acknowledgement retained for a withdrawn destination cannot
 lifecycle = "The stateless predicate reads one current Receipt revision and retains no work or evidence."
 forcing_requirement = "A caller claiming complete publication success must distinguish every-current-destination acknowledgement from a terminal, empty, or historically acknowledged receipt."
 falsifier = "write_settlement::withdrawn_acknowledgement_cannot_mask_current_rejection fails if aggregate acknowledgement counts satisfy a rejected current destination."
-symbols = ["fava::all_acknowledged"]
+symbols = []
 crates = []
 
 [[term]]
@@ -1192,9 +1231,6 @@ symbols = [
     "fava_subscriptions::InstalledSubscription",
     "fava_subscriptions::InstalledSubscriptions",
     "fava_subscriptions::PlanConformanceError",
-    "fava_subscriptions::PlanRevision",
-    "fava_subscriptions::PlanRevisionExhausted",
-    "fava_subscriptions::PlanRevisions",
     "fava_subscriptions::PlannedSubscription",
     "fava_subscriptions::RelayDemand",
     "fava_subscriptions::RelayReadConstraints",
@@ -1225,6 +1261,48 @@ spec_crates = [
 ]
 
 [[term]]
+name = "PlanRevision"
+source = "fava"
+meaning = "The opaque exact identity of one observation-owner-authorized desired subscription plan."
+owner = "fava-observe"
+nearest_nostr = "REQ and CLOSE sequence"
+distinction = "Nostr wire messages have subscription ids but no owner revision binding a planner answer to the exact desired-plan invocation."
+counterexample = "A route revision identifies routing input, not the subscription plan derived for one relay session."
+lifecycle = "The observation engine mints a revision immediately before planning; planners copy it into the returned plan and derived wire ids."
+forcing_requirement = "A stale planner answer or wire completion must not authorize a successor plan."
+falsifier = "subscription conformance and stale-wire tests fail if revision identity is omitted or reusable."
+symbols = ["fava_subscriptions::PlanRevision"]
+crates = []
+
+[[term]]
+name = "PlanRevisionIssuer"
+source = "fava"
+meaning = "The non-cloneable observation-owner capability that issues checked PlanRevision identities."
+owner = "fava-observe"
+nearest_nostr = "REQ sequence"
+distinction = "Nostr does not define an owner authority namespace spanning replans and engine lifetimes."
+counterexample = "A planner-provided revision lets the replaceable algorithm authorize its own stale answer."
+lifecycle = "One observation engine owns the issuer for its lifetime and planners never receive it."
+forcing_requirement = "Independent engines and successive plans must never mint equal exact revisions."
+falsifier = "plan_revision_tests fail if independent issuers collide or the maximum sequence is returned twice."
+symbols = ["fava_subscriptions::PlanRevisionIssuer"]
+crates = []
+
+[[term]]
+name = "PlanRevisionExhausted"
+source = "fava"
+meaning = "The typed refusal to issue a fresh desired-plan authority or sequence."
+owner = "fava-subscriptions"
+nearest_nostr = "none"
+distinction = "It prevents planning or wire work after revision identity space is exhausted."
+counterexample = "A relay subscription limit is a declared capacity shortfall, not revision issuance exhaustion."
+lifecycle = "Returned synchronously by PlanRevisionIssuer and exposed as owner refusal evidence without invoking the planner."
+forcing_requirement = "Revision exhaustion must retain the installed baseline and open no planner or wire work."
+falsifier = "final_sequence_is_issued_once_then_refused fails if exhaustion wraps or saturates."
+symbols = ["fava_subscriptions::PlanRevisionExhausted"]
+crates = []
+
+[[term]]
 name = "RelaySessionGeneration"
 source = "fava"
 meaning = "The transport-minted identity of one physical relay connection generation."
@@ -1232,7 +1310,7 @@ owner = "fava-transport"
 nearest_nostr = "client-relay connection"
 distinction = "NIP-01 identifies relay endpoints and messages but does not identify successive physical connections or prevent stale completions from crossing reconnect and reacquisition boundaries."
 symbols = ["fava_transport::RelaySessionGeneration"]
-crates = ["fava-transport"]
+crates = []
 
 [[term]]
 name = "Transport"

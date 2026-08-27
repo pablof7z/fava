@@ -60,12 +60,12 @@ static NEXT_PLAN_AUTHORITY: AtomicU64 = AtomicU64::new(0);
 /// This capability is intentionally not cloneable. Planners receive an opaque
 /// revision to copy into their answer; they never receive this issuer.
 #[derive(Debug)]
-pub struct PlanRevisions {
+pub struct PlanRevisionIssuer {
     authority: NonZeroU64,
     next: Option<NonZeroU64>,
 }
 
-impl PlanRevisions {
+impl PlanRevisionIssuer {
     /// Create one independent revision authority.
     ///
     /// # Errors
@@ -119,14 +119,14 @@ mod plan_revision_tests {
 
     #[test]
     fn separate_authorities_never_mint_the_same_revision() {
-        let mut first = PlanRevisions::new().expect("first authority");
-        let mut second = PlanRevisions::new().expect("second authority");
+        let mut first = PlanRevisionIssuer::new().expect("first authority");
+        let mut second = PlanRevisionIssuer::new().expect("second authority");
         assert_ne!(first.allocate().unwrap(), second.allocate().unwrap());
     }
 
     #[test]
     fn final_sequence_is_issued_once_then_refused() {
-        let mut revisions = PlanRevisions::new().expect("authority");
+        let mut revisions = PlanRevisionIssuer::new().expect("authority");
         revisions.next = NonZeroU64::new(u64::MAX);
         let last = revisions.allocate().expect("maximum issues once");
         assert_eq!(last.sequence().get(), u64::MAX);

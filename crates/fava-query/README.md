@@ -162,15 +162,15 @@ Compiler-visible enum `fava_query::OperationGenerationExhausted`.
 | **`Authorities`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_query::OperationGenerationExhausted::Authorities","signature":"pub fava_query::OperationGenerationExhausted::Authorities","evidence":"cargo-public-api@0.52.0: pub fava_query::OperationGenerationExhausted::Authorities"} --> | Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`. |
 | **`Sequence`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_query::OperationGenerationExhausted::Sequence","signature":"pub fava_query::OperationGenerationExhausted::Sequence","evidence":"cargo-public-api@0.52.0: pub fava_query::OperationGenerationExhausted::Sequence"} --> | Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`. |
 
-### `OperationGenerations` (Struct)
+### `OperationGenerationIssuer` (Struct)
 
-Compiler-visible struct `fava_query::OperationGenerations`.
-<!-- api-item {"kind":"Struct","item":"fava_query::OperationGenerations","signature":"pub struct fava_query::OperationGenerations","evidence":"cargo-public-api@0.52.0: pub struct fava_query::OperationGenerations"} -->
+Compiler-visible struct `fava_query::OperationGenerationIssuer`.
+<!-- api-item {"kind":"Struct","item":"fava_query::OperationGenerationIssuer","signature":"pub struct fava_query::OperationGenerationIssuer","evidence":"cargo-public-api@0.52.0: pub struct fava_query::OperationGenerationIssuer"} -->
 
 | Item | Purpose |
 | --- | --- |
-| **`allocate`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_query::OperationGenerations::allocate","signature":"pub fn fava_query::OperationGenerations::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_query::OperationGenerations::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>"} --> | Compiler-visible method owned by `fava_query::OperationGenerations`. |
-| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_query::OperationGenerations::new","signature":"pub fn fava_query::OperationGenerations::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_query::OperationGenerations::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>"} --> | Compiler-visible method owned by `fava_query::OperationGenerations`. |
+| **`allocate`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_query::OperationGenerationIssuer::allocate","signature":"pub fn fava_query::OperationGenerationIssuer::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_query::OperationGenerationIssuer::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>"} --> | Compiler-visible method owned by `fava_query::OperationGenerationIssuer`. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_query::OperationGenerationIssuer::new","signature":"pub fn fava_query::OperationGenerationIssuer::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_query::OperationGenerationIssuer::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>"} --> | Compiler-visible method owned by `fava_query::OperationGenerationIssuer`. |
 
 ### `Query` (Struct)
 

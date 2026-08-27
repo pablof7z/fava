@@ -294,7 +294,8 @@ impl Transport for ScriptedTransport {
             let session: Arc<dyn RelaySession> = Arc::new(ScriptedSession {
                 identity: RelaySessionIdentity {
                     key: request.key,
-                    generation: fava_query::OperationGeneration(generation),
+                    generation: fava_transport::RelaySessionGeneration::new(generation)
+                        .expect("scripted session generation is non-zero"),
                 },
                 owner,
                 inbox,

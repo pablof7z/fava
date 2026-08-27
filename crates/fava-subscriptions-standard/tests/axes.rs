@@ -270,18 +270,13 @@ fn grouping_is_invariant_under_demand_permutation() {
         ),
         demand(4, Filter::new().search("unmergeable")),
     ];
-    let baseline = assert_conformant(
-        &planner(),
-        &PlannerScenario::fresh("canonical", relay(), asked.clone()),
-    );
+    let scenario = PlannerScenario::fresh("canonical", relay(), asked.clone());
+    let baseline = assert_conformant(&planner(), &scenario);
 
     for rotation in 1..asked.len() {
         let mut permuted = asked.clone();
         permuted.rotate_left(rotation);
-        let plan = assert_conformant(
-            &planner(),
-            &PlannerScenario::fresh("permuted", relay(), permuted),
-        );
+        let plan = assert_conformant(&planner(), &scenario.clone().demanding(permuted));
         assert_eq!(plan, baseline, "rotation {rotation} changed the plan");
     }
 }

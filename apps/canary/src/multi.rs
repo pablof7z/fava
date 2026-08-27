@@ -276,13 +276,14 @@ async fn wait_subscription(
 ) -> CanaryResult<(fava::OperationGeneration, SubscriptionId)> {
     wait(Duration::from_secs(10), || {
         fava.diagnostics().relays.iter().find_map(|relay| {
-            if after.is_some_and(|seen| relay.generation <= seen) {
+            let generation = relay.generation?;
+            if after.is_some_and(|seen| generation <= seen) {
                 return None;
             }
             relay
                 .subscriptions
                 .first()
-                .map(|wire| (relay.generation, wire.id.clone()))
+                .map(|wire| (generation, wire.id.clone()))
         })
     })
     .await

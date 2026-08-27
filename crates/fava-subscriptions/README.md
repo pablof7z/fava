@@ -153,15 +153,15 @@ Compiler-visible enum `fava_subscriptions::PlanRevisionExhausted`.
 | **`Authorities`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_subscriptions::PlanRevisionExhausted::Authorities","signature":"pub fava_subscriptions::PlanRevisionExhausted::Authorities","evidence":"cargo-public-api@0.52.0: pub fava_subscriptions::PlanRevisionExhausted::Authorities"} --> | Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`. |
 | **`Sequence`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_subscriptions::PlanRevisionExhausted::Sequence","signature":"pub fava_subscriptions::PlanRevisionExhausted::Sequence","evidence":"cargo-public-api@0.52.0: pub fava_subscriptions::PlanRevisionExhausted::Sequence"} --> | Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`. |
 
-### `PlanRevisions` (Struct)
+### `PlanRevisionIssuer` (Struct)
 
-Compiler-visible struct `fava_subscriptions::PlanRevisions`.
-<!-- api-item {"kind":"Struct","item":"fava_subscriptions::PlanRevisions","signature":"pub struct fava_subscriptions::PlanRevisions","evidence":"cargo-public-api@0.52.0: pub struct fava_subscriptions::PlanRevisions"} -->
+Compiler-visible struct `fava_subscriptions::PlanRevisionIssuer`.
+<!-- api-item {"kind":"Struct","item":"fava_subscriptions::PlanRevisionIssuer","signature":"pub struct fava_subscriptions::PlanRevisionIssuer","evidence":"cargo-public-api@0.52.0: pub struct fava_subscriptions::PlanRevisionIssuer"} -->
 
 | Item | Purpose |
 | --- | --- |
-| **`allocate`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_subscriptions::PlanRevisions::allocate","signature":"pub fn fava_subscriptions::PlanRevisions::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_subscriptions::PlanRevisions::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>"} --> | Compiler-visible method owned by `fava_subscriptions::PlanRevisions`. |
-| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_subscriptions::PlanRevisions::new","signature":"pub fn fava_subscriptions::PlanRevisions::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_subscriptions::PlanRevisions::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>"} --> | Compiler-visible method owned by `fava_subscriptions::PlanRevisions`. |
+| **`allocate`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_subscriptions::PlanRevisionIssuer::allocate","signature":"pub fn fava_subscriptions::PlanRevisionIssuer::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_subscriptions::PlanRevisionIssuer::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>"} --> | Compiler-visible method owned by `fava_subscriptions::PlanRevisionIssuer`. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_subscriptions::PlanRevisionIssuer::new","signature":"pub fn fava_subscriptions::PlanRevisionIssuer::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>","evidence":"cargo-public-api@0.52.0: pub fn fava_subscriptions::PlanRevisionIssuer::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>"} --> | Compiler-visible method owned by `fava_subscriptions::PlanRevisionIssuer`. |
 
 ### `PlannedSubscription` (Struct)
 

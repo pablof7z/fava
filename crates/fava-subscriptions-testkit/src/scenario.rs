@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 
 use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
-    DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisions,
+    DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer,
     RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
 
 fn fresh_revision() -> PlanRevision {
-    PlanRevisions::new()
+    PlanRevisionIssuer::new()
         .expect("test revision authority")
         .allocate()
         .expect("test revision")

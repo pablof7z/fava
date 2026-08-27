@@ -942,7 +942,12 @@ async fn flow_08_mixed_relay_health(live: &RelayUrl, down: &RelayUrl) -> FlowRec
         .relays
         .iter()
         .filter(|relay| matches!(relay.state, RelaySessionState::Open))
-        .map(|relay| format!("{} gen {}", relay.session.relay, relay.generation.0))
+        .map(|relay| {
+            let generation = relay
+                .generation
+                .map_or_else(|| "unassigned".to_owned(), |value| value.to_string());
+            format!("{} gen {generation}", relay.session.relay)
+        })
         .collect();
     let shortfalls: Vec<String> = diagnostics
         .queries

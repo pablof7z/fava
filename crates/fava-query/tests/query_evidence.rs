@@ -6,9 +6,9 @@
 use std::num::NonZeroU64;
 
 use fava_query::{
-    AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId, OperationGenerations,
-    QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence,
-    RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
+    AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId,
+    OperationGenerationIssuer, QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline,
+    RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
 use nostr::key::Keys;
@@ -26,7 +26,7 @@ fn observation(value: u64) -> ObservationId {
 }
 
 fn relay(session: RelaySessionKey, state: RelaySourceState) -> RelayQueryEvidence {
-    let generation = OperationGenerations::new()
+    let generation = OperationGenerationIssuer::new()
         .expect("generation authority")
         .allocate()
         .expect("generation");
@@ -372,7 +372,7 @@ fn relay_supplied_text_is_bounded() {
 /// is comparable, so an owner can reject it.
 #[test]
 fn stale_completions_are_comparable_against_current_identity() {
-    let mut generations = OperationGenerations::new().expect("generation authority");
+    let mut generations = OperationGenerationIssuer::new().expect("generation authority");
     let previous = generations.allocate().expect("previous generation");
     let current = generations.allocate().expect("current generation");
     assert!(previous < current);

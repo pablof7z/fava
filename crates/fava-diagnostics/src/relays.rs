@@ -9,7 +9,7 @@ use fava_wire::SubscriptionId;
 pub struct RelayDiagnostic {
     /// Relay and access authority.
     pub session: RelaySessionKey,
-    /// Current transport connection generation.
+    /// Current observation-owned provider-operation generation, when assigned.
     pub generation: Option<OperationGeneration>,
     /// Current session state.
     pub state: RelaySessionState,

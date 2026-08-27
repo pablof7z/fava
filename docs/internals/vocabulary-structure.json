@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "472e6dffc1d661fe1bc81642fc91e2f0b81c1c038b996938e93280893b9888cf",
+  "inputs_sha256": "8dd051f7f643ad6232ed3b14c7288f3f2a314144a5508f0652148307c36723b9",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -1911,7 +1911,7 @@
           "signature": "pub fava_diagnostics::QueryDiagnostic::wire: alloc::vec::Vec<fava_diagnostics::ObservationWireBinding>"
         },
         {
-          "description": "Current transport connection generation.",
+          "description": "Current observation-owned provider-operation generation, when assigned.",
           "kind": "Compiler-visible item",
           "path": "fava_diagnostics::RelayDiagnostic::generation",
           "signature": "pub fava_diagnostics::RelayDiagnostic::generation: core::option::Option<fava_query::identity::OperationGeneration>"
@@ -3310,16 +3310,10 @@
           "signature": "pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self"
         },
         {
-          "description": "Append the tag(s) determined by the target type. Accepts any type that implements [`Taggable`]: - [`Tag`] — appends the tag directly (existing behaviour) - [`PublicKey`] — appends `[\"p\", pubkey_hex]` - `&`[`Event`] — NIP-22: appends `[\"e\", id, \"\", pubkey]` + `[\"p\", pubkey]` + `[\"k\", kind]` - `[S; N] where S: Into<String>` — parses as one raw tag",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
+          "kind": "Method",
           "path": "fava_write::EventBuilder::tag",
-          "signature": "pub fn fava_write::EventBuilder::tag(self, impl fava_write::Taggable) -> Self"
-        },
-        {
-          "description": "Append a NIP-10 style marked event reference. Produces `[\"e\", id, \"\", marker]` + `[\"p\", author_pubkey]`. Use when the event being built needs a threaded reply marker (`\"reply\"`, `\"root\"`, `\"mention\"`) in the NIP-10 deprecated style. Unlike `.tag(&event)`, this does **not** add a `k` tag and places the marker at position 3 of the `e` tag rather than the author pubkey. NIP-10 markers and NIP-22 pubkey hints occupy the same `e`-tag position and must not be combined for the same referenced event.",
-          "kind": "Function",
-          "path": "fava_write::EventBuilder::tag_event_marked",
-          "signature": "pub fn fava_write::EventBuilder::tag_event_marked(self, &nostr::event::Event, &str) -> Self"
+          "signature": "pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self"
         },
         {
           "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
@@ -3395,14 +3389,9 @@
             "path": "fava_write::EventBuilder::new"
           },
           {
-            "declaration": "pub fn fava_write::EventBuilder::tag(self, impl fava_write::Taggable) -> Self",
+            "declaration": "pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self",
             "implementation": "impl fava_write::EventBuilder",
             "path": "fava_write::EventBuilder::tag"
-          },
-          {
-            "declaration": "pub fn fava_write::EventBuilder::tag_event_marked(self, &nostr::event::Event, &str) -> Self",
-            "implementation": "impl fava_write::EventBuilder",
-            "path": "fava_write::EventBuilder::tag_event_marked"
           },
           {
             "declaration": "pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self",
@@ -7396,28 +7385,10 @@
           "signature": "pub const fn fava_query::ObservationId::new(core::num::nonzero::NonZeroU64) -> Self"
         },
         {
-          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
-          "kind": "Method",
-          "path": "fava_query::OperationGeneration::authority",
-          "signature": "pub const fn fava_query::OperationGeneration::authority(self) -> core::num::nonzero::NonZeroU64"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
-          "kind": "Method",
-          "path": "fava_query::OperationGeneration::sequence",
-          "signature": "pub const fn fava_query::OperationGeneration::sequence(self) -> core::num::nonzero::NonZeroU64"
-        },
-        {
           "description": "Compiler-visible enum `fava_observe::ObserveError`.",
           "kind": "Enum",
           "path": "fava_observe::ObserveError",
           "signature": "pub enum fava_observe::ObserveError"
-        },
-        {
-          "description": "Compiler-visible enum `fava_query::OperationGenerationExhausted`.",
-          "kind": "Enum",
-          "path": "fava_query::OperationGenerationExhausted",
-          "signature": "pub enum fava_query::OperationGenerationExhausted"
         },
         {
           "description": "Compiler-visible enum variant owned by `fava_observe::ObserveError`.",
@@ -7466,18 +7437,6 @@
           "kind": "Public field",
           "path": "fava_observe::ObserveError::SourceOpen::role",
           "signature": "pub fava_observe::ObserveError::SourceOpen::role: fava_query::evidence::SourceKind"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`.",
-          "kind": "Enum variant",
-          "path": "fava_query::OperationGenerationExhausted::Authorities",
-          "signature": "pub fava_query::OperationGenerationExhausted::Authorities"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`.",
-          "kind": "Enum variant",
-          "path": "fava_query::OperationGenerationExhausted::Sequence",
-          "signature": "pub fava_query::OperationGenerationExhausted::Sequence"
         },
         {
           "description": "Compiler-visible method owned by `fava_observe::Observation`.",
@@ -7552,24 +7511,6 @@
           "signature": "pub fn fava_observe::Observer::with_transport(self, alloc::sync::Arc<dyn fava_transport::Transport>) -> Self"
         },
         {
-          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
-          "kind": "Method",
-          "path": "<fava_query::OperationGeneration as core::fmt::Display>::fmt",
-          "signature": "pub fn fava_query::OperationGeneration::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::OperationGenerations`.",
-          "kind": "Method",
-          "path": "fava_query::OperationGenerations::allocate",
-          "signature": "pub fn fava_query::OperationGenerations::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_query::OperationGenerations`.",
-          "kind": "Constructor",
-          "path": "fava_query::OperationGenerations::new",
-          "signature": "pub fn fava_query::OperationGenerations::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>"
-        },
-        {
           "description": "Compiler-visible struct `fava_observe::Observation`.",
           "kind": "Struct",
           "path": "fava_observe::Observation",
@@ -7592,18 +7533,6 @@
           "kind": "Struct",
           "path": "fava_query::ObservationId",
           "signature": "pub struct fava_query::ObservationId(_)"
-        },
-        {
-          "description": "Compiler-visible struct `fava_query::OperationGeneration`.",
-          "kind": "Struct",
-          "path": "fava_query::OperationGeneration",
-          "signature": "pub struct fava_query::OperationGeneration"
-        },
-        {
-          "description": "Compiler-visible struct `fava_query::OperationGenerations`.",
-          "kind": "Struct",
-          "path": "fava_query::OperationGenerations",
-          "signature": "pub struct fava_query::OperationGenerations"
         },
         {
           "description": "Exports this term at `fava_observe::Observation` from `observation::Observation`.",
@@ -7634,24 +7563,6 @@
           "kind": "Public export",
           "path": "fava_query::ObservationId",
           "signature": "pub use identity::ObservationId as fava_query::ObservationId"
-        },
-        {
-          "description": "Exports this term at `fava_query::OperationGeneration` from `identity::OperationGeneration`.",
-          "kind": "Public export",
-          "path": "fava_query::OperationGeneration",
-          "signature": "pub use identity::OperationGeneration as fava_query::OperationGeneration"
-        },
-        {
-          "description": "Exports this term at `fava_query::OperationGenerationExhausted` from `identity::OperationGenerationExhausted`.",
-          "kind": "Public export",
-          "path": "fava_query::OperationGenerationExhausted",
-          "signature": "pub use identity::OperationGenerationExhausted as fava_query::OperationGenerationExhausted"
-        },
-        {
-          "description": "Exports this term at `fava_query::OperationGenerations` from `identity::OperationGenerations`.",
-          "kind": "Public export",
-          "path": "fava_query::OperationGenerations",
-          "signature": "pub use identity::OperationGenerations as fava_query::OperationGenerations"
         }
       ],
       "name": "Observation",
@@ -7703,22 +7614,8 @@
             "path": "fava_query::ObservationId::new"
           },
           {
-            "declaration": "pub const fn fava_query::OperationGeneration::authority(self) -> core::num::nonzero::NonZeroU64",
-            "implementation": "impl fava_query::OperationGeneration",
-            "path": "fava_query::OperationGeneration::authority"
-          },
-          {
-            "declaration": "pub const fn fava_query::OperationGeneration::sequence(self) -> core::num::nonzero::NonZeroU64",
-            "implementation": "impl fava_query::OperationGeneration",
-            "path": "fava_query::OperationGeneration::sequence"
-          },
-          {
             "declaration": "pub enum fava_observe::ObserveError",
             "path": "fava_observe::ObserveError"
-          },
-          {
-            "declaration": "pub enum fava_query::OperationGenerationExhausted",
-            "path": "fava_query::OperationGenerationExhausted"
           },
           {
             "declaration": "pub fava_observe::ObserveError::EngineClosed",
@@ -7751,14 +7648,6 @@
           {
             "declaration": "pub fava_observe::ObserveError::SourceOpen::role: fava_query::evidence::SourceKind",
             "path": "fava_observe::ObserveError::SourceOpen::role"
-          },
-          {
-            "declaration": "pub fava_query::OperationGenerationExhausted::Authorities",
-            "path": "fava_query::OperationGenerationExhausted::Authorities"
-          },
-          {
-            "declaration": "pub fava_query::OperationGenerationExhausted::Sequence",
-            "path": "fava_query::OperationGenerationExhausted::Sequence"
           },
           {
             "declaration": "pub fn fava_observe::Observation::close(&self)",
@@ -7821,21 +7710,6 @@
             "path": "fava_observe::Observer::with_transport"
           },
           {
-            "declaration": "pub fn fava_query::OperationGeneration::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
-            "implementation": "impl core::fmt::Display for fava_query::OperationGeneration",
-            "path": "<fava_query::OperationGeneration as core::fmt::Display>::fmt"
-          },
-          {
-            "declaration": "pub fn fava_query::OperationGenerations::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>",
-            "implementation": "impl fava_query::OperationGenerations",
-            "path": "fava_query::OperationGenerations::allocate"
-          },
-          {
-            "declaration": "pub fn fava_query::OperationGenerations::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>",
-            "implementation": "impl fava_query::OperationGenerations",
-            "path": "fava_query::OperationGenerations::new"
-          },
-          {
             "declaration": "pub struct fava_observe::Observation",
             "path": "fava_observe::Observation"
           },
@@ -7850,14 +7724,6 @@
           {
             "declaration": "pub struct fava_query::ObservationId(_)",
             "path": "fava_query::ObservationId"
-          },
-          {
-            "declaration": "pub struct fava_query::OperationGeneration",
-            "path": "fava_query::OperationGeneration"
-          },
-          {
-            "declaration": "pub struct fava_query::OperationGenerations",
-            "path": "fava_query::OperationGenerations"
           }
         ],
         "reexports": [
@@ -7880,18 +7746,6 @@
           {
             "path": "fava_query::ObservationId",
             "source": "identity::ObservationId"
-          },
-          {
-            "path": "fava_query::OperationGeneration",
-            "source": "identity::OperationGeneration"
-          },
-          {
-            "path": "fava_query::OperationGenerationExhausted",
-            "source": "identity::OperationGenerationExhausted"
-          },
-          {
-            "path": "fava_query::OperationGenerations",
-            "source": "identity::OperationGenerations"
           }
         ]
       }
@@ -8242,6 +8096,222 @@
     {
       "interface": [
         {
+          "description": "The opaque exact identity of one observation-owner-authorized provider operation. Lifecycle: The observation engine mints it from its non-cloneable issuer and providers only echo it in completions.",
+          "kind": "Bound declaration",
+          "path": "fava_query::identity::OperationGeneration",
+          "signature": "pub struct OperationGeneration {\n    authority: NonZeroU64,\n    sequence: NonZeroU64,\n}"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
+          "kind": "Method",
+          "path": "fava_query::OperationGeneration::authority",
+          "signature": "pub const fn fava_query::OperationGeneration::authority(self) -> core::num::nonzero::NonZeroU64"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
+          "kind": "Method",
+          "path": "fava_query::OperationGeneration::sequence",
+          "signature": "pub const fn fava_query::OperationGeneration::sequence(self) -> core::num::nonzero::NonZeroU64"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_query::OperationGeneration`.",
+          "kind": "Method",
+          "path": "<fava_query::OperationGeneration as core::fmt::Display>::fmt",
+          "signature": "pub fn fava_query::OperationGeneration::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result"
+        },
+        {
+          "description": "Compiler-visible struct `fava_query::OperationGeneration`.",
+          "kind": "Struct",
+          "path": "fava_query::OperationGeneration",
+          "signature": "pub struct fava_query::OperationGeneration"
+        },
+        {
+          "description": "Exports this term at `fava_query::OperationGeneration` from `identity::OperationGeneration`.",
+          "kind": "Public export",
+          "path": "fava_query::OperationGeneration",
+          "signature": "pub use identity::OperationGeneration as fava_query::OperationGeneration"
+        }
+      ],
+      "name": "OperationGeneration",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct OperationGeneration {\n    authority: NonZeroU64,\n    sequence: NonZeroU64,\n}",
+            "kind": "struct",
+            "path": "fava_query::identity::OperationGeneration",
+            "source": "crates/fava-query/src/identity.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_query::OperationGeneration::authority(self) -> core::num::nonzero::NonZeroU64",
+            "implementation": "impl fava_query::OperationGeneration",
+            "path": "fava_query::OperationGeneration::authority"
+          },
+          {
+            "declaration": "pub const fn fava_query::OperationGeneration::sequence(self) -> core::num::nonzero::NonZeroU64",
+            "implementation": "impl fava_query::OperationGeneration",
+            "path": "fava_query::OperationGeneration::sequence"
+          },
+          {
+            "declaration": "pub fn fava_query::OperationGeneration::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
+            "implementation": "impl core::fmt::Display for fava_query::OperationGeneration",
+            "path": "<fava_query::OperationGeneration as core::fmt::Display>::fmt"
+          },
+          {
+            "declaration": "pub struct fava_query::OperationGeneration",
+            "path": "fava_query::OperationGeneration"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_query::OperationGeneration",
+            "source": "identity::OperationGeneration"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The typed refusal to issue a fresh operation authority or sequence. Lifecycle: Returned synchronously by OperationGenerationIssuer and retained only as bounded refusal evidence.",
+          "kind": "Bound declaration",
+          "path": "fava_query::identity::OperationGenerationExhausted",
+          "signature": "pub enum OperationGenerationExhausted {\n    /// No fresh authority namespace remains in this process.\n    #[error(\"operation-generation authority space is exhausted\")]\n    Authorities,\n    /// This authority issued its final sequence and cannot issue another.\n    #[error(\"operation-generation sequence is exhausted\")]\n    Sequence,\n}"
+        },
+        {
+          "description": "Compiler-visible enum `fava_query::OperationGenerationExhausted`.",
+          "kind": "Enum",
+          "path": "fava_query::OperationGenerationExhausted",
+          "signature": "pub enum fava_query::OperationGenerationExhausted"
+        },
+        {
+          "description": "Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`.",
+          "kind": "Enum variant",
+          "path": "fava_query::OperationGenerationExhausted::Authorities",
+          "signature": "pub fava_query::OperationGenerationExhausted::Authorities"
+        },
+        {
+          "description": "Compiler-visible enum variant owned by `fava_query::OperationGenerationExhausted`.",
+          "kind": "Enum variant",
+          "path": "fava_query::OperationGenerationExhausted::Sequence",
+          "signature": "pub fava_query::OperationGenerationExhausted::Sequence"
+        },
+        {
+          "description": "Exports this term at `fava_query::OperationGenerationExhausted` from `identity::OperationGenerationExhausted`.",
+          "kind": "Public export",
+          "path": "fava_query::OperationGenerationExhausted",
+          "signature": "pub use identity::OperationGenerationExhausted as fava_query::OperationGenerationExhausted"
+        }
+      ],
+      "name": "OperationGenerationExhausted",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum OperationGenerationExhausted {\n    /// No fresh authority namespace remains in this process.\n    #[error(\"operation-generation authority space is exhausted\")]\n    Authorities,\n    /// This authority issued its final sequence and cannot issue another.\n    #[error(\"operation-generation sequence is exhausted\")]\n    Sequence,\n}",
+            "kind": "enum",
+            "path": "fava_query::identity::OperationGenerationExhausted",
+            "source": "crates/fava-query/src/identity.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_query::OperationGenerationExhausted",
+            "path": "fava_query::OperationGenerationExhausted"
+          },
+          {
+            "declaration": "pub fava_query::OperationGenerationExhausted::Authorities",
+            "path": "fava_query::OperationGenerationExhausted::Authorities"
+          },
+          {
+            "declaration": "pub fava_query::OperationGenerationExhausted::Sequence",
+            "path": "fava_query::OperationGenerationExhausted::Sequence"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_query::OperationGenerationExhausted",
+            "source": "identity::OperationGenerationExhausted"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The non-cloneable observation-owner capability that issues checked OperationGeneration identities. Lifecycle: One observation engine owns the issuer for its lifetime; exhaustion refuses new provider work before it opens.",
+          "kind": "Bound declaration",
+          "path": "fava_query::identity::OperationGenerationIssuer",
+          "signature": "pub struct OperationGenerationIssuer {\n    authority: NonZeroU64,\n    next: Option<NonZeroU64>,\n}"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_query::OperationGenerationIssuer`.",
+          "kind": "Method",
+          "path": "fava_query::OperationGenerationIssuer::allocate",
+          "signature": "pub fn fava_query::OperationGenerationIssuer::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_query::OperationGenerationIssuer`.",
+          "kind": "Constructor",
+          "path": "fava_query::OperationGenerationIssuer::new",
+          "signature": "pub fn fava_query::OperationGenerationIssuer::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>"
+        },
+        {
+          "description": "Compiler-visible struct `fava_query::OperationGenerationIssuer`.",
+          "kind": "Struct",
+          "path": "fava_query::OperationGenerationIssuer",
+          "signature": "pub struct fava_query::OperationGenerationIssuer"
+        },
+        {
+          "description": "Exports this term at `fava_query::OperationGenerationIssuer` from `identity::OperationGenerationIssuer`.",
+          "kind": "Public export",
+          "path": "fava_query::OperationGenerationIssuer",
+          "signature": "pub use identity::OperationGenerationIssuer as fava_query::OperationGenerationIssuer"
+        }
+      ],
+      "name": "OperationGenerationIssuer",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct OperationGenerationIssuer {\n    authority: NonZeroU64,\n    next: Option<NonZeroU64>,\n}",
+            "kind": "struct",
+            "path": "fava_query::identity::OperationGenerationIssuer",
+            "source": "crates/fava-query/src/identity.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_query::OperationGenerationIssuer::allocate(&mut self) -> core::result::Result<fava_query::OperationGeneration, fava_query::OperationGenerationExhausted>",
+            "implementation": "impl fava_query::OperationGenerationIssuer",
+            "path": "fava_query::OperationGenerationIssuer::allocate"
+          },
+          {
+            "declaration": "pub fn fava_query::OperationGenerationIssuer::new() -> core::result::Result<Self, fava_query::OperationGenerationExhausted>",
+            "implementation": "impl fava_query::OperationGenerationIssuer",
+            "path": "fava_query::OperationGenerationIssuer::new"
+          },
+          {
+            "declaration": "pub struct fava_query::OperationGenerationIssuer",
+            "path": "fava_query::OperationGenerationIssuer"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_query::OperationGenerationIssuer",
+            "source": "identity::OperationGenerationIssuer"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
           "description": "The stable static identity of one logical provider-operation slot, independent of which generation currently occupies it. Lifecycle: Declared by the owner for a reusable operation slot, attached to every invocation/completion of that slot, and typically lives for the product code lifetime while generations advance.",
           "kind": "Bound declaration",
           "path": "fava_runtime::name::OperationName",
@@ -8305,6 +8375,222 @@
         "private_architectural_state": [],
         "public_api": [],
         "reexports": []
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The opaque exact identity of one observation-owner-authorized desired subscription plan. Lifecycle: The observation engine mints a revision immediately before planning; planners copy it into the returned plan and derived wire ids.",
+          "kind": "Bound declaration",
+          "path": "fava_subscriptions::plan::PlanRevision",
+          "signature": "pub struct PlanRevision {\n    authority: NonZeroU64,\n    sequence: NonZeroU64,\n}"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
+          "kind": "Method",
+          "path": "fava_subscriptions::PlanRevision::authority",
+          "signature": "pub const fn fava_subscriptions::PlanRevision::authority(self) -> core::num::nonzero::NonZeroU64"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
+          "kind": "Method",
+          "path": "fava_subscriptions::PlanRevision::sequence",
+          "signature": "pub const fn fava_subscriptions::PlanRevision::sequence(self) -> core::num::nonzero::NonZeroU64"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
+          "kind": "Method",
+          "path": "<fava_subscriptions::PlanRevision as core::fmt::Display>::fmt",
+          "signature": "pub fn fava_subscriptions::PlanRevision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result"
+        },
+        {
+          "description": "Compiler-visible struct `fava_subscriptions::PlanRevision`.",
+          "kind": "Struct",
+          "path": "fava_subscriptions::PlanRevision",
+          "signature": "pub struct fava_subscriptions::PlanRevision"
+        },
+        {
+          "description": "Exports this term at `fava_subscriptions::PlanRevision` from `plan::PlanRevision`.",
+          "kind": "Public export",
+          "path": "fava_subscriptions::PlanRevision",
+          "signature": "pub use plan::PlanRevision as fava_subscriptions::PlanRevision"
+        }
+      ],
+      "name": "PlanRevision",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct PlanRevision {\n    authority: NonZeroU64,\n    sequence: NonZeroU64,\n}",
+            "kind": "struct",
+            "path": "fava_subscriptions::plan::PlanRevision",
+            "source": "crates/fava-subscriptions/src/plan.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub const fn fava_subscriptions::PlanRevision::authority(self) -> core::num::nonzero::NonZeroU64",
+            "implementation": "impl fava_subscriptions::PlanRevision",
+            "path": "fava_subscriptions::PlanRevision::authority"
+          },
+          {
+            "declaration": "pub const fn fava_subscriptions::PlanRevision::sequence(self) -> core::num::nonzero::NonZeroU64",
+            "implementation": "impl fava_subscriptions::PlanRevision",
+            "path": "fava_subscriptions::PlanRevision::sequence"
+          },
+          {
+            "declaration": "pub fn fava_subscriptions::PlanRevision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
+            "implementation": "impl core::fmt::Display for fava_subscriptions::PlanRevision",
+            "path": "<fava_subscriptions::PlanRevision as core::fmt::Display>::fmt"
+          },
+          {
+            "declaration": "pub struct fava_subscriptions::PlanRevision",
+            "path": "fava_subscriptions::PlanRevision"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_subscriptions::PlanRevision",
+            "source": "plan::PlanRevision"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The typed refusal to issue a fresh desired-plan authority or sequence. Lifecycle: Returned synchronously by PlanRevisionIssuer and exposed as owner refusal evidence without invoking the planner.",
+          "kind": "Bound declaration",
+          "path": "fava_subscriptions::plan::PlanRevisionExhausted",
+          "signature": "pub enum PlanRevisionExhausted {\n    /// No fresh authority namespace remains in this process.\n    #[error(\"plan-revision authority space is exhausted\")]\n    Authorities,\n    /// This authority issued its final sequence and cannot issue another.\n    #[error(\"plan-revision sequence is exhausted\")]\n    Sequence,\n}"
+        },
+        {
+          "description": "Compiler-visible enum `fava_subscriptions::PlanRevisionExhausted`.",
+          "kind": "Enum",
+          "path": "fava_subscriptions::PlanRevisionExhausted",
+          "signature": "pub enum fava_subscriptions::PlanRevisionExhausted"
+        },
+        {
+          "description": "Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`.",
+          "kind": "Enum variant",
+          "path": "fava_subscriptions::PlanRevisionExhausted::Authorities",
+          "signature": "pub fava_subscriptions::PlanRevisionExhausted::Authorities"
+        },
+        {
+          "description": "Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`.",
+          "kind": "Enum variant",
+          "path": "fava_subscriptions::PlanRevisionExhausted::Sequence",
+          "signature": "pub fava_subscriptions::PlanRevisionExhausted::Sequence"
+        },
+        {
+          "description": "Exports this term at `fava_subscriptions::PlanRevisionExhausted` from `plan::PlanRevisionExhausted`.",
+          "kind": "Public export",
+          "path": "fava_subscriptions::PlanRevisionExhausted",
+          "signature": "pub use plan::PlanRevisionExhausted as fava_subscriptions::PlanRevisionExhausted"
+        }
+      ],
+      "name": "PlanRevisionExhausted",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub enum PlanRevisionExhausted {\n    /// No fresh authority namespace remains in this process.\n    #[error(\"plan-revision authority space is exhausted\")]\n    Authorities,\n    /// This authority issued its final sequence and cannot issue another.\n    #[error(\"plan-revision sequence is exhausted\")]\n    Sequence,\n}",
+            "kind": "enum",
+            "path": "fava_subscriptions::plan::PlanRevisionExhausted",
+            "source": "crates/fava-subscriptions/src/plan.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub enum fava_subscriptions::PlanRevisionExhausted",
+            "path": "fava_subscriptions::PlanRevisionExhausted"
+          },
+          {
+            "declaration": "pub fava_subscriptions::PlanRevisionExhausted::Authorities",
+            "path": "fava_subscriptions::PlanRevisionExhausted::Authorities"
+          },
+          {
+            "declaration": "pub fava_subscriptions::PlanRevisionExhausted::Sequence",
+            "path": "fava_subscriptions::PlanRevisionExhausted::Sequence"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_subscriptions::PlanRevisionExhausted",
+            "source": "plan::PlanRevisionExhausted"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The non-cloneable observation-owner capability that issues checked PlanRevision identities. Lifecycle: One observation engine owns the issuer for its lifetime and planners never receive it.",
+          "kind": "Bound declaration",
+          "path": "fava_subscriptions::plan::PlanRevisionIssuer",
+          "signature": "pub struct PlanRevisionIssuer {\n    authority: NonZeroU64,\n    next: Option<NonZeroU64>,\n}"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevisionIssuer`.",
+          "kind": "Method",
+          "path": "fava_subscriptions::PlanRevisionIssuer::allocate",
+          "signature": "pub fn fava_subscriptions::PlanRevisionIssuer::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevisionIssuer`.",
+          "kind": "Constructor",
+          "path": "fava_subscriptions::PlanRevisionIssuer::new",
+          "signature": "pub fn fava_subscriptions::PlanRevisionIssuer::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>"
+        },
+        {
+          "description": "Compiler-visible struct `fava_subscriptions::PlanRevisionIssuer`.",
+          "kind": "Struct",
+          "path": "fava_subscriptions::PlanRevisionIssuer",
+          "signature": "pub struct fava_subscriptions::PlanRevisionIssuer"
+        },
+        {
+          "description": "Exports this term at `fava_subscriptions::PlanRevisionIssuer` from `plan::PlanRevisionIssuer`.",
+          "kind": "Public export",
+          "path": "fava_subscriptions::PlanRevisionIssuer",
+          "signature": "pub use plan::PlanRevisionIssuer as fava_subscriptions::PlanRevisionIssuer"
+        }
+      ],
+      "name": "PlanRevisionIssuer",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub struct PlanRevisionIssuer {\n    authority: NonZeroU64,\n    next: Option<NonZeroU64>,\n}",
+            "kind": "struct",
+            "path": "fava_subscriptions::plan::PlanRevisionIssuer",
+            "source": "crates/fava-subscriptions/src/plan.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "declaration": "pub fn fava_subscriptions::PlanRevisionIssuer::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>",
+            "implementation": "impl fava_subscriptions::PlanRevisionIssuer",
+            "path": "fava_subscriptions::PlanRevisionIssuer::allocate"
+          },
+          {
+            "declaration": "pub fn fava_subscriptions::PlanRevisionIssuer::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>",
+            "implementation": "impl fava_subscriptions::PlanRevisionIssuer",
+            "path": "fava_subscriptions::PlanRevisionIssuer::new"
+          },
+          {
+            "declaration": "pub struct fava_subscriptions::PlanRevisionIssuer",
+            "path": "fava_subscriptions::PlanRevisionIssuer"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_subscriptions::PlanRevisionIssuer",
+            "source": "plan::PlanRevisionIssuer"
+          }
+        ]
       }
     },
     {
@@ -13729,10 +14015,10 @@
           "description": "Current bounded facts for one relay-access session: generation, connection state, lease holders, installed wire subscriptions, and reconnect attempts. Lifecycle: Published when a session is acquired, replaced across connect/reconnect/subscription/holder changes for the same key, and forgotten when transport no longer holds the session.",
           "kind": "Bound declaration",
           "path": "fava_diagnostics::relays::RelayDiagnostic",
-          "signature": "pub struct RelayDiagnostic {\n    /// Relay and access authority.\n    pub session: RelaySessionKey,\n    /// Current transport connection generation.\n    pub generation: Option<OperationGeneration>,\n    /// Current session state.\n    pub state: RelaySessionState,\n    /// Lease holders on this session — the shared-work refcount.\n    pub holders: usize,\n    /// Wire subscriptions currently installed on this session.\n    pub subscriptions: Vec<WireSubscriptionDiagnostic>,\n    /// Reconnect attempts made on this key since the last success.\n    pub reconnect_attempts: usize,\n}"
+          "signature": "pub struct RelayDiagnostic {\n    /// Relay and access authority.\n    pub session: RelaySessionKey,\n    /// Current observation-owned provider-operation generation, when assigned.\n    pub generation: Option<OperationGeneration>,\n    /// Current session state.\n    pub state: RelaySessionState,\n    /// Lease holders on this session — the shared-work refcount.\n    pub holders: usize,\n    /// Wire subscriptions currently installed on this session.\n    pub subscriptions: Vec<WireSubscriptionDiagnostic>,\n    /// Reconnect attempts made on this key since the last success.\n    pub reconnect_attempts: usize,\n}"
         },
         {
-          "description": "Current transport connection generation.",
+          "description": "Current observation-owned provider-operation generation, when assigned.",
           "kind": "Compiler-visible item",
           "path": "fava_diagnostics::RelayDiagnostic::generation",
           "signature": "pub fava_diagnostics::RelayDiagnostic::generation: core::option::Option<fava_query::identity::OperationGeneration>"
@@ -13785,7 +14071,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct RelayDiagnostic {\n    /// Relay and access authority.\n    pub session: RelaySessionKey,\n    /// Current transport connection generation.\n    pub generation: Option<OperationGeneration>,\n    /// Current session state.\n    pub state: RelaySessionState,\n    /// Lease holders on this session — the shared-work refcount.\n    pub holders: usize,\n    /// Wire subscriptions currently installed on this session.\n    pub subscriptions: Vec<WireSubscriptionDiagnostic>,\n    /// Reconnect attempts made on this key since the last success.\n    pub reconnect_attempts: usize,\n}",
+            "declaration": "pub struct RelayDiagnostic {\n    /// Relay and access authority.\n    pub session: RelaySessionKey,\n    /// Current observation-owned provider-operation generation, when assigned.\n    pub generation: Option<OperationGeneration>,\n    /// Current session state.\n    pub state: RelaySessionState,\n    /// Lease holders on this session — the shared-work refcount.\n    pub holders: usize,\n    /// Wire subscriptions currently installed on this session.\n    pub subscriptions: Vec<WireSubscriptionDiagnostic>,\n    /// Reconnect attempts made on this key since the last success.\n    pub reconnect_attempts: usize,\n}",
             "kind": "struct",
             "path": "fava_diagnostics::relays::RelayDiagnostic",
             "source": "crates/fava-diagnostics/src/relays.rs",
@@ -19409,18 +19695,6 @@
           "signature": "pub const fn fava_subscriptions::DeclaredLimit::get(self) -> core::option::Option<core::num::nonzero::NonZeroUsize>"
         },
         {
-          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
-          "kind": "Method",
-          "path": "fava_subscriptions::PlanRevision::authority",
-          "signature": "pub const fn fava_subscriptions::PlanRevision::authority(self) -> core::num::nonzero::NonZeroU64"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
-          "kind": "Method",
-          "path": "fava_subscriptions::PlanRevision::sequence",
-          "signature": "pub const fn fava_subscriptions::PlanRevision::sequence(self) -> core::num::nonzero::NonZeroU64"
-        },
-        {
           "description": "Compiler-visible method owned by `fava_subscriptions::RelayDemand`.",
           "kind": "Method",
           "path": "fava_subscriptions::RelayDemand::id",
@@ -19461,12 +19735,6 @@
           "kind": "Enum",
           "path": "fava_subscriptions::PlanConformanceError",
           "signature": "pub enum fava_subscriptions::PlanConformanceError"
-        },
-        {
-          "description": "Compiler-visible enum `fava_subscriptions::PlanRevisionExhausted`.",
-          "kind": "Enum",
-          "path": "fava_subscriptions::PlanRevisionExhausted",
-          "signature": "pub enum fava_subscriptions::PlanRevisionExhausted"
         },
         {
           "description": "Compiler-visible enum `fava_subscriptions::ShortfallReason`.",
@@ -19707,18 +19975,6 @@
           "kind": "Enum variant",
           "path": "fava_subscriptions::PlanConformanceError::WrongRelay",
           "signature": "pub fava_subscriptions::PlanConformanceError::WrongRelay"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`.",
-          "kind": "Enum variant",
-          "path": "fava_subscriptions::PlanRevisionExhausted::Authorities",
-          "signature": "pub fava_subscriptions::PlanRevisionExhausted::Authorities"
-        },
-        {
-          "description": "Compiler-visible enum variant owned by `fava_subscriptions::PlanRevisionExhausted`.",
-          "kind": "Enum variant",
-          "path": "fava_subscriptions::PlanRevisionExhausted::Sequence",
-          "signature": "pub fava_subscriptions::PlanRevisionExhausted::Sequence"
         },
         {
           "description": "Compiler-visible public field owned by `fava_subscriptions::PlannedSubscription`.",
@@ -20075,24 +20331,6 @@
           "signature": "pub fn fava_subscriptions::InstalledSubscriptions::len(&self) -> usize"
         },
         {
-          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevision`.",
-          "kind": "Method",
-          "path": "<fava_subscriptions::PlanRevision as core::fmt::Display>::fmt",
-          "signature": "pub fn fava_subscriptions::PlanRevision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevisions`.",
-          "kind": "Method",
-          "path": "fava_subscriptions::PlanRevisions::allocate",
-          "signature": "pub fn fava_subscriptions::PlanRevisions::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>"
-        },
-        {
-          "description": "Compiler-visible method owned by `fava_subscriptions::PlanRevisions`.",
-          "kind": "Constructor",
-          "path": "fava_subscriptions::PlanRevisions::new",
-          "signature": "pub fn fava_subscriptions::PlanRevisions::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>"
-        },
-        {
           "description": "Compiler-visible method owned by `fava_subscriptions::SubscriptionAttribution`.",
           "kind": "Constructor",
           "path": "fava_subscriptions::SubscriptionAttribution::from_entries",
@@ -20199,18 +20437,6 @@
           "kind": "Struct",
           "path": "fava_subscriptions::InstalledSubscriptions",
           "signature": "pub struct fava_subscriptions::InstalledSubscriptions"
-        },
-        {
-          "description": "Compiler-visible struct `fava_subscriptions::PlanRevision`.",
-          "kind": "Struct",
-          "path": "fava_subscriptions::PlanRevision",
-          "signature": "pub struct fava_subscriptions::PlanRevision"
-        },
-        {
-          "description": "Compiler-visible struct `fava_subscriptions::PlanRevisions`.",
-          "kind": "Struct",
-          "path": "fava_subscriptions::PlanRevisions",
-          "signature": "pub struct fava_subscriptions::PlanRevisions"
         },
         {
           "description": "Compiler-visible struct `fava_subscriptions::PlannedSubscription`.",
@@ -20321,24 +20547,6 @@
           "signature": "pub use conformance::PlanConformanceError as fava_subscriptions::PlanConformanceError"
         },
         {
-          "description": "Exports this term at `fava_subscriptions::PlanRevision` from `plan::PlanRevision`.",
-          "kind": "Public export",
-          "path": "fava_subscriptions::PlanRevision",
-          "signature": "pub use plan::PlanRevision as fava_subscriptions::PlanRevision"
-        },
-        {
-          "description": "Exports this term at `fava_subscriptions::PlanRevisionExhausted` from `plan::PlanRevisionExhausted`.",
-          "kind": "Public export",
-          "path": "fava_subscriptions::PlanRevisionExhausted",
-          "signature": "pub use plan::PlanRevisionExhausted as fava_subscriptions::PlanRevisionExhausted"
-        },
-        {
-          "description": "Exports this term at `fava_subscriptions::PlanRevisions` from `plan::PlanRevisions`.",
-          "kind": "Public export",
-          "path": "fava_subscriptions::PlanRevisions",
-          "signature": "pub use plan::PlanRevisions as fava_subscriptions::PlanRevisions"
-        },
-        {
           "description": "Exports this term at `fava_subscriptions::PlannedSubscription` from `plan::PlannedSubscription`.",
           "kind": "Public export",
           "path": "fava_subscriptions::PlannedSubscription",
@@ -20436,16 +20644,6 @@
             "path": "fava_subscriptions::DeclaredLimit::get"
           },
           {
-            "declaration": "pub const fn fava_subscriptions::PlanRevision::authority(self) -> core::num::nonzero::NonZeroU64",
-            "implementation": "impl fava_subscriptions::PlanRevision",
-            "path": "fava_subscriptions::PlanRevision::authority"
-          },
-          {
-            "declaration": "pub const fn fava_subscriptions::PlanRevision::sequence(self) -> core::num::nonzero::NonZeroU64",
-            "implementation": "impl fava_subscriptions::PlanRevision",
-            "path": "fava_subscriptions::PlanRevision::sequence"
-          },
-          {
             "declaration": "pub const fn fava_subscriptions::RelayDemand::id(&self) -> fava_subscriptions::DemandId",
             "implementation": "impl fava_subscriptions::RelayDemand",
             "path": "fava_subscriptions::RelayDemand::id"
@@ -20476,10 +20674,6 @@
           {
             "declaration": "pub enum fava_subscriptions::PlanConformanceError",
             "path": "fava_subscriptions::PlanConformanceError"
-          },
-          {
-            "declaration": "pub enum fava_subscriptions::PlanRevisionExhausted",
-            "path": "fava_subscriptions::PlanRevisionExhausted"
           },
           {
             "declaration": "pub enum fava_subscriptions::ShortfallReason",
@@ -20640,14 +20834,6 @@
           {
             "declaration": "pub fava_subscriptions::PlanConformanceError::WrongRelay",
             "path": "fava_subscriptions::PlanConformanceError::WrongRelay"
-          },
-          {
-            "declaration": "pub fava_subscriptions::PlanRevisionExhausted::Authorities",
-            "path": "fava_subscriptions::PlanRevisionExhausted::Authorities"
-          },
-          {
-            "declaration": "pub fava_subscriptions::PlanRevisionExhausted::Sequence",
-            "path": "fava_subscriptions::PlanRevisionExhausted::Sequence"
           },
           {
             "declaration": "pub fava_subscriptions::PlannedSubscription::filters: alloc::vec::Vec<nostr::filter::Filter>",
@@ -20892,21 +21078,6 @@
             "path": "fava_subscriptions::InstalledSubscriptions::len"
           },
           {
-            "declaration": "pub fn fava_subscriptions::PlanRevision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result",
-            "implementation": "impl core::fmt::Display for fava_subscriptions::PlanRevision",
-            "path": "<fava_subscriptions::PlanRevision as core::fmt::Display>::fmt"
-          },
-          {
-            "declaration": "pub fn fava_subscriptions::PlanRevisions::allocate(&mut self) -> core::result::Result<fava_subscriptions::PlanRevision, fava_subscriptions::PlanRevisionExhausted>",
-            "implementation": "impl fava_subscriptions::PlanRevisions",
-            "path": "fava_subscriptions::PlanRevisions::allocate"
-          },
-          {
-            "declaration": "pub fn fava_subscriptions::PlanRevisions::new() -> core::result::Result<Self, fava_subscriptions::PlanRevisionExhausted>",
-            "implementation": "impl fava_subscriptions::PlanRevisions",
-            "path": "fava_subscriptions::PlanRevisions::new"
-          },
-          {
             "declaration": "pub fn fava_subscriptions::SubscriptionAttribution::from_entries(impl core::iter::traits::collect::IntoIterator<Item = (nostr::message::SubscriptionId, fava_subscriptions::AttributedSubscription)>) -> Self",
             "implementation": "impl fava_subscriptions::SubscriptionAttribution",
             "path": "fava_subscriptions::SubscriptionAttribution::from_entries"
@@ -20992,14 +21163,6 @@
             "path": "fava_subscriptions::InstalledSubscriptions"
           },
           {
-            "declaration": "pub struct fava_subscriptions::PlanRevision",
-            "path": "fava_subscriptions::PlanRevision"
-          },
-          {
-            "declaration": "pub struct fava_subscriptions::PlanRevisions",
-            "path": "fava_subscriptions::PlanRevisions"
-          },
-          {
             "declaration": "pub struct fava_subscriptions::PlannedSubscription",
             "path": "fava_subscriptions::PlannedSubscription"
           },
@@ -21072,18 +21235,6 @@
           {
             "path": "fava_subscriptions::PlanConformanceError",
             "source": "conformance::PlanConformanceError"
-          },
-          {
-            "path": "fava_subscriptions::PlanRevision",
-            "source": "plan::PlanRevision"
-          },
-          {
-            "path": "fava_subscriptions::PlanRevisionExhausted",
-            "source": "plan::PlanRevisionExhausted"
-          },
-          {
-            "path": "fava_subscriptions::PlanRevisions",
-            "source": "plan::PlanRevisions"
           },
           {
             "path": "fava_subscriptions::PlannedSubscription",
@@ -26959,69 +27110,23 @@
       }
     },
     {
-      "interface": [
-        {
-          "description": "Compiler-visible function owned by `fava`.",
-          "kind": "Function",
-          "path": "fava::all_acknowledged",
-          "signature": "pub fn fava::all_acknowledged() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy"
-        },
-        {
-          "description": "Exports this term at `fava::all_acknowledged` from `publication::all_acknowledged`.",
-          "kind": "Public export",
-          "path": "fava::all_acknowledged",
-          "signature": "pub use publication::all_acknowledged as fava::all_acknowledged"
-        }
-      ],
+      "interface": [],
       "name": "all_acknowledged",
       "review_problems": [],
       "structure": {
         "private_architectural_state": [],
-        "public_api": [
-          {
-            "declaration": "pub fn fava::all_acknowledged() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy",
-            "path": "fava::all_acknowledged"
-          }
-        ],
-        "reexports": [
-          {
-            "path": "fava::all_acknowledged",
-            "source": "publication::all_acknowledged"
-          }
-        ]
+        "public_api": [],
+        "reexports": []
       }
     },
     {
-      "interface": [
-        {
-          "description": "Compiler-visible function owned by `fava`.",
-          "kind": "Function",
-          "path": "fava::all_terminal",
-          "signature": "pub fn fava::all_terminal() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy"
-        },
-        {
-          "description": "Exports this term at `fava::all_terminal` from `publication::all_terminal`.",
-          "kind": "Public export",
-          "path": "fava::all_terminal",
-          "signature": "pub use publication::all_terminal as fava::all_terminal"
-        }
-      ],
+      "interface": [],
       "name": "all_terminal",
       "review_problems": [],
       "structure": {
         "private_architectural_state": [],
-        "public_api": [
-          {
-            "declaration": "pub fn fava::all_terminal() -> impl core::ops::function::Fn(&fava_write::receipt::Receipt) -> bool + core::marker::Copy",
-            "path": "fava::all_terminal"
-          }
-        ],
-        "reexports": [
-          {
-            "path": "fava::all_terminal",
-            "source": "publication::all_terminal"
-          }
-        ]
+        "public_api": [],
+        "reexports": []
       }
     },
     {

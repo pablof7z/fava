@@ -63,7 +63,7 @@ mod tests {
     use fava_query::{ObservationId, QueryBounds, QueryBranchId};
     use fava_relay::{RelayAccess, RelaySessionKey};
     use fava_subscriptions::{
-        PlanRevision, PlanRevisions, RelayDemand, RelayReadConstraints, SubscriptionPlanner,
+        PlanRevision, PlanRevisionIssuer, RelayDemand, RelayReadConstraints, SubscriptionPlanner,
     };
     use fava_subscriptions_standard::StandardSubscriptionPlanner;
     use fava_subscriptions_testkit::apply_plan;
@@ -82,7 +82,7 @@ mod tests {
     }
 
     fn revision(sequence: u64) -> PlanRevision {
-        let mut revisions = PlanRevisions::new().expect("revision authority");
+        let mut revisions = PlanRevisionIssuer::new().expect("revision authority");
         let mut current = revisions.allocate().expect("first revision");
         for _ in 1..sequence {
             current = revisions.allocate().expect("requested revision");

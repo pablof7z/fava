@@ -9,7 +9,7 @@ use fava_diagnostics::{
     ObservationId, ObservationWireBinding, OperationGeneration, QueryBranchId, QueryDiagnostic,
     RelayDiagnostic, RelaySessionState, RelaySourceState, WireSubscriptionDiagnostic,
 };
-use fava_query::OperationGenerations;
+use fava_query::OperationGenerationIssuer;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_wire::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
@@ -34,7 +34,7 @@ fn shared(value: usize) -> NonZeroUsize {
 }
 
 fn generation(sequence: u64) -> OperationGeneration {
-    let mut generations = OperationGenerations::new().expect("generation authority");
+    let mut generations = OperationGenerationIssuer::new().expect("generation authority");
     let mut current = generations.allocate().expect("first generation");
     for _ in 1..sequence.max(1) {
         current = generations.allocate().expect("requested generation");

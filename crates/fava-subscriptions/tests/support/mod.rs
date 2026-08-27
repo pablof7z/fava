@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
-    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlanRevisions,
+    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer,
     PlannedSubscription, RelayDemand, SubscriptionAttribution, SubscriptionPlan,
 };
 use fava_wire::SubscriptionId;
@@ -31,7 +31,7 @@ pub fn observation(value: u64) -> ObservationId {
 /// One independently minted plan revision at the requested small sequence.
 #[must_use]
 pub fn revision(sequence: u64) -> PlanRevision {
-    let mut revisions = PlanRevisions::new().expect("revision authority");
+    let mut revisions = PlanRevisionIssuer::new().expect("revision authority");
     let mut current = revisions.allocate().expect("first revision");
     for _ in 1..sequence {
         current = revisions.allocate().expect("requested revision");

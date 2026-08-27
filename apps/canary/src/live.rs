@@ -179,7 +179,7 @@ async fn execute(id: &str, seed: &str, proxy_url: &str) -> CanaryResult<Scenario
     if diagnostics
         .relays
         .iter()
-        .any(|entry| entry.session == session && entry.generation == generation)
+        .any(|entry| entry.session == session && entry.generation == Some(generation))
     {
         return Err(CanaryError::new(
             "the owner still holds a relay session no observation demands",
@@ -202,10 +202,11 @@ async fn wait_subscription(
 )> {
     wait(Duration::from_secs(5), || {
         fava.diagnostics().relays.iter().find_map(|relay| {
+            let generation = relay.generation?;
             relay
                 .subscriptions
                 .first()
-                .map(|wire| (relay.session.clone(), relay.generation, wire.id.clone()))
+                .map(|wire| (relay.session.clone(), generation, wire.id.clone()))
         })
     })
     .await

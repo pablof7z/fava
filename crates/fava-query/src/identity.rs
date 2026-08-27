@@ -160,12 +160,12 @@ static NEXT_OPERATION_AUTHORITY: AtomicU64 = AtomicU64::new(0);
 /// independent authority, but it cannot forge or advance a generation issued
 /// by another authority.
 #[derive(Debug)]
-pub struct OperationGenerations {
+pub struct OperationGenerationIssuer {
     authority: NonZeroU64,
     next: Option<NonZeroU64>,
 }
 
-impl OperationGenerations {
+impl OperationGenerationIssuer {
     /// Create one independent generation authority.
     ///
     /// # Errors
@@ -219,14 +219,14 @@ mod operation_generation_tests {
 
     #[test]
     fn separate_authorities_never_mint_the_same_generation() {
-        let mut first = OperationGenerations::new().expect("first authority");
-        let mut second = OperationGenerations::new().expect("second authority");
+        let mut first = OperationGenerationIssuer::new().expect("first authority");
+        let mut second = OperationGenerationIssuer::new().expect("second authority");
         assert_ne!(first.allocate().unwrap(), second.allocate().unwrap());
     }
 
     #[test]
     fn final_sequence_is_issued_once_then_refused() {
-        let mut generations = OperationGenerations::new().expect("authority");
+        let mut generations = OperationGenerationIssuer::new().expect("authority");
         generations.next = NonZeroU64::new(u64::MAX);
         let last = generations.allocate().expect("maximum issues once");
         assert_eq!(last.sequence().get(), u64::MAX);

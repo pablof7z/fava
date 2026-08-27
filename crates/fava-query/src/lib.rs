@@ -26,7 +26,7 @@ pub use evidence::{
 };
 pub use identity::{
     ObservationId, ObservationIds, OperationGeneration, OperationGenerationExhausted,
-    OperationGenerations, QueryBounds, QueryBranchId,
+    OperationGenerationIssuer, QueryBounds, QueryBranchId,
 };
 use thiserror::Error;
 

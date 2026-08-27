@@ -27,14 +27,14 @@ use std::time::Duration;
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_query::{
-    BoundedText, OperationGeneration, OperationGenerationExhausted, OperationGenerations,
+    BoundedText, OperationGeneration, OperationGenerationExhausted, OperationGenerationIssuer,
     RelaySourceState,
 };
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, Runtime, TaskName};
 use fava_subscriptions::{
     InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionExhausted,
-    PlanRevisions, RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner,
+    PlanRevisionIssuer, RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner,
     filter_covers, validate_plan,
 };
 use fava_transport::{
@@ -122,7 +122,7 @@ pub(crate) struct Engine {
     pub(crate) inbox: tokio::sync::mpsc::Receiver<Report>,
     pub(crate) slots: BTreeMap<RelaySessionKey, Slot>,
     /// Source of every operation generation this owner issues.
-    pub(crate) operation_generations: OperationGenerations,
+    pub(crate) operation_generations: OperationGenerationIssuer,
     /// Source of every plan revision this owner issues, for every relay.
     ///
     /// Wire identity is minted from a revision, so a revision reused inside
@@ -134,7 +134,7 @@ pub(crate) struct Engine {
     /// assembly gives publication a lease on the very same session key.
     /// Engine-wide monotonicity is stronger than the promise needs and costs
     /// one `u64` for the life of the engine.
-    pub(crate) plan_revisions: PlanRevisions,
+    pub(crate) plan_revisions: PlanRevisionIssuer,
 }
 
 impl Engine {
@@ -154,8 +154,8 @@ impl Engine {
             reports: Reports { sender },
             inbox,
             slots: BTreeMap::new(),
-            operation_generations: OperationGenerations::new()?,
-            plan_revisions: PlanRevisions::new()?,
+            operation_generations: OperationGenerationIssuer::new()?,
+            plan_revisions: PlanRevisionIssuer::new()?,
         };
         runtime
             .spawn_cancellable(TaskName("observe.engine"), root, engine.run())

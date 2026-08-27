@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use fava_query::OperationGenerations;
+use fava_query::OperationGenerationIssuer;
 use fava_runtime::{
     OperationGeneration, OperationName, ProviderCompletion, Runtime, RuntimeError, TaskName,
 };
@@ -22,13 +22,13 @@ use support::{config, runtime};
 const SIGN: OperationName = OperationName("sign_event");
 
 fn generation(value: u64) -> OperationGeneration {
-    static GENERATIONS: OnceLock<Mutex<(OperationGenerations, Vec<OperationGeneration>)>> =
+    static GENERATIONS: OnceLock<Mutex<(OperationGenerationIssuer, Vec<OperationGeneration>)>> =
         OnceLock::new();
     let index = usize::try_from(value).expect("test generation fits usize");
     let mut state = GENERATIONS
         .get_or_init(|| {
             Mutex::new((
-                OperationGenerations::new().expect("test generation authority"),
+                OperationGenerationIssuer::new().expect("test generation authority"),
                 Vec::new(),
             ))
         })
@@ -351,7 +351,7 @@ async fn every_completion_variant_carries_its_authorising_identity() {
 #[tokio::test]
 async fn owner_issued_generations_are_monotonic_and_authority_scoped() {
     assert!(generation(2) > generation(1));
-    let mut independent = OperationGenerations::new().expect("independent authority");
+    let mut independent = OperationGenerationIssuer::new().expect("independent authority");
     assert_ne!(
         generation(1),
         independent.allocate().expect("independent generation")
