@@ -39,7 +39,8 @@ pub enum QueryAcquisition {
     Explicit(BTreeSet<RelayUrl>),
 }
 
-/// Which sources must have actually served an event before it may appear.
+/// Whether an event may appear from any local source, or only when one of an
+/// exact relay set actually served it.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResultAuthority {
     /// Matching events from any configured local source may appear.
@@ -142,7 +143,7 @@ pub struct Query {
     freshness: Freshness,
     /// Deterministic result order.
     ordering: QueryOrdering,
-    /// Whole-query result bound.
+    /// Maximum events the whole query may return.
     limit: Option<NonZeroUsize>,
 }
 

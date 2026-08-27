@@ -114,8 +114,8 @@ impl SourceRetraction {
     }
 }
 
-/// How far one source has advanced, whether it is still open, and which retained
-/// events it dropped on the way.
+/// Which source this is, how far it has advanced, whether it is still open, and
+/// which retained events it dropped on the way.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceEvidence {
     /// Query-source role.
@@ -142,8 +142,8 @@ impl SourceEvidence {
 
 // ------------------------------------------------------------ relay evidence
 
-/// One relay session's progress on one query, the branches it carries, and how it
-/// entered the query.
+/// How far one relay session has got with one query, what demand it carries and
+/// shares, what the plan leaves uncovered, and how it entered.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayQueryEvidence {
     /// Relay and access authority.
