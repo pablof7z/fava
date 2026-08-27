@@ -1,6 +1,6 @@
 //! Typed NIP-29 management event constructors.
 //!
-//! This crate owns the group lifecycle write surface. Every NIP-29 management
+//! This module owns the group lifecycle write surface. Every NIP-29 management
 //! kind number lives here and nowhere else; callers see typed functions that
 //! return [`UnsignedEvent`] values, not raw kind integers.
 //!
@@ -14,12 +14,13 @@
 //!
 //! # Encapsulation guarantee
 //!
-//! Kind numbers 9000–9009 and 9021–9022 are private constants in this crate.
-//! No caller, test, or example in this crate writes `Kind::from_u16(9NNN)`.
+//! Kind numbers 9000–9009 and 9021–9022 are private constants in this module.
+//! No caller, test, or example writes `Kind::from_u16(9NNN)`.
 
-use fava_simple_groups::SimpleGroup;
 use fava_write::{EventBuildError, EventBuilder, EventId, PublicKey, Tag, UnsignedEvent};
 use nostr::types::RelayUrl;
+
+use crate::SimpleGroup;
 
 // ── Private kind constants ────────────────────────────────────────────────────
 // These are the ONLY occurrences of the magic numbers in the workspace.
@@ -45,7 +46,7 @@ const KIND_LEAVE_GROUP: u16 = 9022;
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::{MetadataEdit, GroupVisibility, GroupAccess};
+/// use fava_simple_groups::{MetadataEdit, GroupVisibility, GroupAccess};
 ///
 /// let edit = MetadataEdit {
 ///     name: Some("Cats".to_owned()),
@@ -99,8 +100,7 @@ pub enum GroupAccess {
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::create_group;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, create_group};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -136,8 +136,7 @@ pub fn create_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::{GroupVisibility, MetadataEdit, edit_metadata};
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{GroupVisibility, MetadataEdit, SimpleGroup, edit_metadata};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -191,8 +190,7 @@ pub fn edit_metadata(
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::invite;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, invite};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -229,8 +227,7 @@ pub fn invite(
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::join_request;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, join_request};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -257,8 +254,7 @@ pub fn join_request(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::put_user;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, put_user};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -294,8 +290,7 @@ pub fn put_user(
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::remove_user;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, remove_user};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -327,8 +322,7 @@ pub fn remove_user(
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::delete_event;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, delete_event};
 /// use fava_write::EventId;
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
@@ -362,8 +356,7 @@ pub fn delete_event(
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::delete_group;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, delete_group};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -390,8 +383,7 @@ pub fn delete_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// # Examples
 ///
 /// ```
-/// use fava_nip29_management::leave_group;
-/// use fava_simple_groups::SimpleGroup;
+/// use fava_simple_groups::{SimpleGroup, leave_group};
 /// use nostr::key::Keys;
 /// use nostr::types::RelayUrl;
 ///
@@ -413,9 +405,6 @@ pub fn leave_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEve
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /// Build one management event: `h` tag first, then `extra` tags.
-///
-/// The `h` tag is sourced from [`SimpleGroup::id`]; the kind comes from the
-/// private constant table above. Callers never see a kind number.
 fn build(
     author: PublicKey,
     kind_u16: u16,
@@ -479,10 +468,6 @@ mod tests {
             }
         })
     }
-
-    // ── Kind assertions ───────────────────────────────────────────────────────
-    // Each test asserts kind via its numeric value without calling from_u16
-    // in consumer code — the kind is compared using the Kind type's PartialEq.
 
     #[test]
     fn create_group_kind_and_h() {
@@ -587,7 +572,6 @@ mod tests {
         let user = Keys::generate().public_key();
         let event = put_user(author(), &group, &user, &[]).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
-        // p tag has exactly [p, pubkey]
         let p = event
             .tags
             .iter()

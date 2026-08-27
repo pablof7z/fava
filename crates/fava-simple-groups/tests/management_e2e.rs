@@ -1,10 +1,10 @@
 //! Phase B exit-gate e2e evidence — real relay, real events.
 //!
-//! Each test is `#[ignore = "requires nostr-rs-relay binary; run with -- --ignored"]` so `cargo test -p fava-nip29-management` stays green in CI.
+//! Each test is `#[ignore = "requires nostr-rs-relay binary; run with -- --ignored"]` so `cargo test -p fava-simple-groups` stays green in CI.
 //! Run the full suite with:
 //!
 //! ```sh
-//! cargo test -p fava-nip29-management --test e2e -- --ignored --nocapture
+//! cargo test -p fava-simple-groups --test management_e2e -- --ignored --nocapture
 //! ```
 //!
 //! Requires `nostr-rs-relay` on PATH or at `~/.cargo/bin/nostr-rs-relay`.
@@ -26,11 +26,11 @@ use tokio::time::{Instant, timeout};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use tokio_tungstenite::tungstenite::Message;
 
-use fava_nip29_management::{
-    GroupAccess, GroupVisibility, MetadataEdit, create_group, delete_event, delete_group,
-    edit_metadata, invite, join_request, leave_group, put_user, remove_user,
+use fava_simple_groups::{
+    GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupAdmins, create_group,
+    delete_event, delete_group, edit_metadata, invite, join_request, leave_group, put_user,
+    remove_user,
 };
-use fava_simple_groups::{SimpleGroup, SimpleGroupAdmins};
 use fava_write::{EventBuilder, EventId, Tag, UnsignedEvent};
 
 // ── Relay harness ─────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ fn relay_config(port: u16, whitelist_pubkey: Option<&str>) -> String {
     format!(
         r#"[info]
 relay_url = "ws://127.0.0.1:{port}/"
-name = "fava-nip29-management e2e relay"
+name = "fava-simple-groups management e2e relay"
 
 [database]
 engine = "sqlite"
@@ -209,7 +209,7 @@ fn tempdir() -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .subsec_nanos();
-    let dir = std::env::temp_dir().join(format!("fava-nip29-e2e-{ns}"));
+    let dir = std::env::temp_dir().join(format!("fava-simple-groups-e2e-{ns}"));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -322,13 +322,6 @@ async fn gate2_put_user_and_39001_observation() {
 // ── Gate 3: wrong-authority event → relay rejects ────────────────────────────
 
 /// Phase B exit gate 3: deliberate wrong-authority break → relay returns OK=false.
-///
-/// nostr-rs-relay is configured with a pubkey whitelist containing only the admin
-/// key. A `put_user` event signed by an unauthorized key is submitted. The relay
-/// rejects it (OK=false), exercising the same Fava receipt path that a NIP-29
-/// relay would trigger for a `put_user` with a wrong `h` from an unauthorized
-/// sender: `RelayDeliveryOutcome::Rejected`, `all_terminal()` = true,
-/// `all_acknowledged()` = false.
 #[tokio::test]
 #[ignore = "requires nostr-rs-relay binary; run with -- --ignored"]
 async fn gate3_wrong_authority_relay_rejects() {
@@ -342,8 +335,6 @@ async fn gate3_wrong_authority_relay_rejects() {
     let r = RelayUrl::parse(&relay.url).unwrap();
     let group = SimpleGroup::from_relays("phase-b-gate3", vec![r]).unwrap();
 
-    // Rogue key tries to add a user to the group; relay rejects (pubkey not whitelisted).
-    // A NIP-29 relay would produce the same rejection for a put_user with wrong `h`.
     let tampered = put_user(
         rogue_keys.public_key(),
         &group,
@@ -357,10 +348,6 @@ async fn gate3_wrong_authority_relay_rejects() {
     assert!(!ok, "relay should have rejected unauthorized put_user");
     assert!(!msg.is_empty(), "relay should include rejection reason");
 
-    // Evidence mapping:
-    // Relay OK=false → Fava RelayDeliveryOutcome::Rejected
-    // all_terminal(receipt) == true   (Rejected is a terminal outcome)
-    // all_acknowledged(receipt) == false (Rejected ≠ Acknowledged)
     eprintln!("[gate3] relay rejection confirmed → Fava receipt: Rejected, all_terminal=true, all_acknowledged=false");
 
     relay.child.kill().await.ok();

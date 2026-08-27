@@ -136,7 +136,6 @@ dependencies = [
  "fava-event-cache-persistent",
  "fava-fetch-cache",
  "fava-nip02",
- "fava-nip29-management",
  "fava-publisher-nip01",
  "fava-query-standard",
  "fava-relay",
@@ -458,16 +457,6 @@ dependencies = [
  "fava-state",
  "fava-write",
  "nostr",
-]
-
-[[package]]
-name = "fava-nip29-management"
-version = "0.1.0"
-dependencies = [
- "fava-simple-groups",
- "fava-write",
- "nostr",
- "thiserror",
 ]
 
 [[package]]

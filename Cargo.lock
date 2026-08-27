@@ -437,20 +437,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fava-nip29-management"
-version = "0.1.0"
-dependencies = [
- "fava-simple-groups",
- "fava-write",
- "futures-util",
- "nostr",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
-]
-
-[[package]]
 name = "fava-nip65"
 version = "0.1.0"
 dependencies = [
@@ -689,7 +675,6 @@ version = "0.1.0"
 dependencies = [
  "fava",
  "fava-delivery-standard",
- "fava-nip29-management",
  "fava-publisher-nip01",
  "fava-query",
  "fava-query-standard",
@@ -699,8 +684,11 @@ dependencies = [
  "fava-transport-websocket",
  "fava-write",
  "fava-write-store-memory",
+ "futures-util",
  "nostr",
+ "serde_json",
  "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

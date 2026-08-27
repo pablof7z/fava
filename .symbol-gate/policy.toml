@@ -13,7 +13,6 @@ roots = [
     "crates/fava-fetch-cache",
     "crates/fava-ingest",
     "crates/fava-nip02",
-    "crates/fava-nip29-management",
     "crates/fava-nip65",
     "crates/fava-observe",
     "crates/fava-publication",

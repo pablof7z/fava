@@ -10,10 +10,11 @@ const CONSTRUCTOR_DECISION: &str =
     include_str!("../../../docs/issues/0027-simple-group-relay-input-boundary.md");
 const VOCABULARY: &str = include_str!("../../../docs/internals/vocabulary.toml");
 
-fn sources() -> [(&'static str, &'static str); 9] {
+fn sources() -> [(&'static str, &'static str); 10] {
     [
         ("edit.rs", include_str!("../src/edit.rs")),
         ("lib.rs", include_str!("../src/lib.rs")),
+        ("management.rs", include_str!("../src/management.rs")),
         ("metadata.rs", include_str!("../src/metadata.rs")),
         ("people.rs", include_str!("../src/people.rs")),
         ("pins.rs", include_str!("../src/pins.rs")),
@@ -139,7 +140,6 @@ fn production_has_no_duplicate_generic_owner_or_obsolete_policy_path() {
         "MAX_SIMPLE_GROUP_",
         "RelaySequence",
         "RelaySequenceError",
-        "edit_metadata",
         "set_pins",
         "simple_groups_where_",
         "simple_groups_saved_by",

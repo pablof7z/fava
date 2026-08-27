@@ -21,11 +21,10 @@ use std::time::Duration;
 use fava::{Fava, RelayUrl};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_nip29_management::{MetadataEdit, create_group, leave_group, put_user, remove_user};
 use fava_publisher_nip01::{Nip01Publisher, Nip42Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_session::Session;
-use fava_simple_groups::SimpleGroup;
+use fava_simple_groups::{MetadataEdit, SimpleGroup, create_group, leave_group, put_user, remove_user};
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
 use fava_subscriptions_no_grouping::planner;
@@ -241,7 +240,7 @@ async fn relay29_try_operations(
 
     // ── Attempt join_request (kind 9021) ─────────────────────────────────────
     // kind 9021 is outside the 9000-9020 moderation range → may be accepted.
-    use fava_nip29_management::join_request;
+    use fava_simple_groups::join_request;
     let join_ev = join_request(author.public_key(), &group).map_err(error)?;
     let join_write = fava
         .to([relay.clone()])
@@ -261,7 +260,7 @@ async fn relay29_try_operations(
     )?;
 
     // ── Attempt invite (kind 9009) ────────────────────────────────────────────
-    use fava_nip29_management::invite;
+    use fava_simple_groups::invite;
     let other_key = deterministic_keys(&format!("phase-f-relay29-other\0{}", options.seed))?;
     let invite_ev = invite(
         author.public_key(),
@@ -293,7 +292,7 @@ async fn relay29_try_operations(
     )?;
 
     // ── Attempt delete_group (kind 9008) ──────────────────────────────────────
-    use fava_nip29_management::delete_group;
+    use fava_simple_groups::delete_group;
     let delete_ev = delete_group(author.public_key(), &group).map_err(error)?;
     let delete_write = fava
         .to([relay.clone()])
@@ -535,7 +534,7 @@ async fn communities_run_lifecycle(
     )?;
 
     // ── Step 2: edit_metadata ─────────────────────────────────────────────────
-    use fava_nip29_management::edit_metadata;
+    use fava_simple_groups::edit_metadata;
     let meta_ev = edit_metadata(
         author.public_key(),
         &group,

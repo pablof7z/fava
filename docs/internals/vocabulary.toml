@@ -1319,17 +1319,17 @@ name = "GroupAccess"
 source = "nostr"
 protocol = "NIP-29"
 meaning = "The open/closed access policy of a NIP-29 simple group."
-owner = "fava-nip29-management"
-symbols = ["fava_nip29_management::GroupAccess"]
-crates = ["fava-nip29-management"]
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::GroupAccess"]
+crates = ["fava-simple-groups"]
 
 [[term]]
 name = "GroupVisibility"
 source = "nostr"
 protocol = "NIP-29"
 meaning = "The public/private visibility policy of a NIP-29 simple group."
-owner = "fava-nip29-management"
-symbols = ["fava_nip29_management::GroupVisibility"]
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::GroupVisibility"]
 crates = []
 
 [[term]]
@@ -1337,6 +1337,6 @@ name = "MetadataEdit"
 source = "nostr"
 protocol = "NIP-29"
 meaning = "A partial metadata update for a NIP-29 simple group, expressed as a kind-9002 management event body."
-owner = "fava-nip29-management"
-symbols = ["fava_nip29_management::MetadataEdit"]
+owner = "fava-simple-groups"
+symbols = ["fava_simple_groups::MetadataEdit"]
 crates = []

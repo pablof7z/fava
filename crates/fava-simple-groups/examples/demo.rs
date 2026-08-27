@@ -24,13 +24,11 @@ use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fava::{EventBuilder, Kind, Query, Tag};
-use fava_nip29_management::{
-    GroupAccess, GroupVisibility, MetadataEdit, create_group, delete_event, delete_group,
-    edit_metadata, invite, join_request, leave_group, put_user, remove_user,
-};
 use fava_simple_groups::{
-    SimpleGroup, SimpleGroupStateEventKind, remove_saved_relay, remove_saved_simple_group,
-    rename_saved_simple_group, save_relay, save_simple_group, saved_group_lists,
+    GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupStateEventKind,
+    create_group, delete_event, delete_group, edit_metadata, invite, join_request, leave_group,
+    put_user, remove_saved_relay, remove_saved_simple_group, remove_user, rename_saved_simple_group,
+    save_relay, save_simple_group, saved_group_lists,
 };
 use nostr::key::Keys;
 
