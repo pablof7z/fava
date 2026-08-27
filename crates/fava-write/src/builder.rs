@@ -1,4 +1,4 @@
-use nostr::event::{Kind, Tag, UnsignedEvent};
+use nostr::event::{Event, Kind, Tag, UnsignedEvent};
 use nostr::key::PublicKey;
 use nostr::types::{RelayUrl, Timestamp};
 use thiserror::Error;
@@ -7,6 +7,73 @@ use crate::routing::refuse_raw_input;
 use crate::{MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
 
 const MAX_TAGS: usize = 2_000;
+
+// ── Taggable sealed trait ────────────────────────────────────────────────────
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// Converts a value into the one or more [`Tag`]s it contributes to an event.
+///
+/// This trait is sealed: only the implementations within `fava-write` are
+/// valid. External callers do not need to import it — the compiler resolves
+/// the impl automatically when calling [`EventBuilder::tag`].
+///
+/// | Type | Tags added |
+/// |------|-----------|
+/// | [`Tag`] | the tag itself |
+/// | [`PublicKey`] | `["p", pubkey_hex]` |
+/// | `&`[`Event`] | NIP-22: `["e", id, "", pubkey]` + `["p", pubkey]` + `["k", kind]` |
+/// | `[S; N]` where `S: Into<String>` | one raw tag via `Tag::parse` |
+pub trait Taggable: sealed::Sealed {
+    /// Convert this value into the tag(s) it contributes to an event.
+    fn into_tags(self) -> Vec<Tag>;
+}
+
+// Tag → single raw tag (existing behaviour, backwards-compatible)
+impl sealed::Sealed for Tag {}
+impl Taggable for Tag {
+    fn into_tags(self) -> Vec<Tag> {
+        vec![self]
+    }
+}
+
+// PublicKey → ["p", pubkey_hex]
+impl sealed::Sealed for PublicKey {}
+impl Taggable for PublicKey {
+    fn into_tags(self) -> Vec<Tag> {
+        vec![Tag::parse(["p", &self.to_hex()]).expect("p tag from public key")]
+    }
+}
+
+// &Event → NIP-22: ["e", id, "", pubkey] + ["p", pubkey] + ["k", kind]
+impl sealed::Sealed for &Event {}
+impl Taggable for &Event {
+    fn into_tags(self) -> Vec<Tag> {
+        let pubkey_hex = self.pubkey.to_hex();
+        let e_tag = Tag::parse(["e", &self.id.to_hex(), "", &pubkey_hex])
+            .expect("e tag from event");
+        let p_tag =
+            Tag::parse(["p", &pubkey_hex]).expect("p tag from event author");
+        let k_tag = Tag::parse(["k", &self.kind.to_string()])
+            .expect("k tag from event kind");
+        vec![e_tag, p_tag, k_tag]
+    }
+}
+
+// [S; N] where S: Into<String> → Tag::parse(arr)
+impl<S: Into<String>, const N: usize> sealed::Sealed for [S; N] {}
+impl<S: Into<String>, const N: usize> Taggable for [S; N] {
+    fn into_tags(self) -> Vec<Tag> {
+        if N == 0 {
+            return vec![];
+        }
+        vec![Tag::parse(self).expect("raw tag array must not be empty")]
+    }
+}
+
+// ── EventBuilder ─────────────────────────────────────────────────────────────
 
 /// Incrementally assembles one complete unsigned Nostr event.
 ///
@@ -106,10 +173,39 @@ impl EventBuilder {
         self
     }
 
-    /// Append one already-validated Nostr tag.
+    /// Append the tag(s) determined by the target type.
+    ///
+    /// Accepts any type that implements [`Taggable`]:
+    ///
+    /// - [`Tag`] — appends the tag directly (existing behaviour)
+    /// - [`PublicKey`] — appends `["p", pubkey_hex]`
+    /// - `&`[`Event`] — NIP-22: appends `["e", id, "", pubkey]` +
+    ///   `["p", pubkey]` + `["k", kind]`
+    /// - `[S; N] where S: Into<String>` — parses as one raw tag
     #[must_use]
-    pub fn tag(self, tag: Tag) -> Self {
-        self.tags([tag])
+    pub fn tag(self, target: impl Taggable) -> Self {
+        self.tags(target.into_tags())
+    }
+
+    /// Append a NIP-10 style marked event reference.
+    ///
+    /// Produces `["e", id, "", marker]` + `["p", author_pubkey]`.
+    ///
+    /// Use when the event being built needs a threaded reply marker (`"reply"`,
+    /// `"root"`, `"mention"`) in the NIP-10 deprecated style. Unlike
+    /// `.tag(&event)`, this does **not** add a `k` tag and places the marker
+    /// at position 3 of the `e` tag rather than the author pubkey.
+    ///
+    /// NIP-10 markers and NIP-22 pubkey hints occupy the same `e`-tag position
+    /// and must not be combined for the same referenced event.
+    #[must_use]
+    pub fn tag_event_marked(self, event: &Event, marker: &str) -> Self {
+        let pubkey_hex = event.pubkey.to_hex();
+        let e_tag = Tag::parse(["e", &event.id.to_hex(), "", marker])
+            .expect("e tag with marker from event");
+        let p_tag =
+            Tag::parse(["p", &pubkey_hex]).expect("p tag from marked event author");
+        self.tags([e_tag, p_tag])
     }
 
     /// Borrow every exact event tag in insertion order.
