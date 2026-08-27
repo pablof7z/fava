@@ -7,7 +7,8 @@ use std::sync::Arc;
 use fava_query::{ObservationId, OperationGeneration};
 use fava_runtime::CancellationToken;
 use fava_subscriptions::{
-    DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand, filter_covers,
+    DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayDemand,
+    RelayReadConstraints, filter_covers,
 };
 use fava_transport::{RelaySession, RelaySessionLease};
 use fava_wire::SubscriptionId;
@@ -19,6 +20,8 @@ pub(crate) struct Slot {
     pub(crate) cancel: CancellationToken,
     pub(crate) lease: Option<Box<RelaySessionLease>>,
     pub(crate) session: Option<Arc<dyn RelaySession>>,
+    /// Relay-declared read limits, updated once per session from NIP-11.
+    pub(crate) constraints: RelayReadConstraints,
     /// Exactly what the transport accepted on the current generation.
     pub(crate) installed: InstalledSubscriptions,
     /// What an EOSE on each installed wire subscription actually proves.
@@ -43,6 +46,7 @@ impl Slot {
             cancel,
             lease: None,
             session: None,
+            constraints: RelayReadConstraints::unknown(),
             installed: InstalledSubscriptions::empty(),
             completeness: BTreeMap::new(),
             settled: BTreeMap::new(),

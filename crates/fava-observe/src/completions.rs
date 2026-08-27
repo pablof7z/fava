@@ -46,6 +46,20 @@ impl Engine {
                 generation,
                 item,
             } => self.inbound(&relay, generation, *item),
+            Report::Constraints { relay, constraints } => {
+                self.constraints_received(&relay, constraints);
+                false
+            }
+        }
+    }
+
+    fn constraints_received(
+        &mut self,
+        relay: &RelaySessionKey,
+        constraints: fava_subscriptions::RelayReadConstraints,
+    ) {
+        if let Some(slot) = self.slots.get_mut(relay) {
+            slot.constraints = constraints;
         }
     }
 
@@ -80,6 +94,13 @@ impl Engine {
                 relay.clone(),
                 generation,
                 &session,
+                slot.cancel.clone(),
+            );
+            operations::fetch_constraints(
+                &self.runtime,
+                &self.reports,
+                relay.clone(),
+                self.providers.deadlines.establish,
                 slot.cancel.clone(),
             );
         }

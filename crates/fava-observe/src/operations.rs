@@ -13,7 +13,7 @@ use std::time::Duration;
 use fava_query::{BoundedText, OperationGeneration};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
-use fava_subscriptions::{PlanRevision, SubscriptionPlan, WithdrawalReason};
+use fava_subscriptions::{DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan, WithdrawalReason};
 use fava_transport::{
     HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
     Transport,
@@ -293,6 +293,118 @@ async fn hand_off(
             ..
         } => Err(BoundedText::new(format!("{reason:?}"))),
         other => Err(BoundedText::new(describe(&other))),
+    }
+}
+
+const NIP11_TASK: TaskName = TaskName("observe.nip11");
+
+/// Fetch NIP-11 relay information for one relay and report the constraints back.
+///
+/// Only plain-HTTP (ws://) relay URLs are attempted; wss:// relays return
+/// `RelayReadConstraints::unknown()` without network I/O. Failure at any step
+/// falls back to `unknown()` rather than failing loudly, consistent with
+/// GOALS:1068 (RELAY-004): missing or unparseable claims stay unknown.
+pub(crate) fn fetch_constraints(
+    runtime: &Runtime,
+    reports: &Reports,
+    relay: RelaySessionKey,
+    timeout: std::time::Duration,
+    cancel: CancellationToken,
+) {
+    let reports = reports.clone();
+    let _ = runtime.spawn_cancellable(NIP11_TASK, cancel, async move {
+        let constraints = nip11_fetch(&relay.relay, timeout).await;
+        reports
+            .send(crate::engine::Report::Constraints { relay, constraints })
+            .await;
+    });
+}
+
+async fn nip11_fetch(
+    relay_url: &nostr::types::RelayUrl,
+    timeout: std::time::Duration,
+) -> RelayReadConstraints {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let url_str = relay_url.as_str();
+    // Only plain-HTTP relays are supported; return unknown for TLS relays.
+    let rest = if let Some(r) = url_str.strip_prefix("ws://") {
+        r
+    } else {
+        return RelayReadConstraints::unknown();
+    };
+
+    let (host_port, path) = rest
+        .split_once('/')
+        .map(|(h, p)| (h, format!("/{p}")))
+        .unwrap_or((rest.trim_end_matches('/'), "/".to_owned()));
+
+    let (host, port): (String, u16) = if let Some(colon) = host_port.rfind(':') {
+        let port_str = &host_port[colon + 1..];
+        if let Ok(p) = port_str.parse::<u16>() {
+            (host_port[..colon].to_owned(), p)
+        } else {
+            (host_port.to_owned(), 80)
+        }
+    } else {
+        (host_port.to_owned(), 80)
+    };
+
+    let addr = format!("{host}:{port}");
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\nAccept: application/nostr+json\r\nConnection: close\r\n\r\n"
+    );
+
+    let result = tokio::time::timeout(timeout, async move {
+        let mut stream = tokio::net::TcpStream::connect(&addr).await?;
+        stream.write_all(request.as_bytes()).await?;
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await?;
+        std::io::Result::Ok(response)
+    })
+    .await;
+
+    let body = match result {
+        Ok(Ok(response)) => {
+            if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+                response[pos + 4..].to_vec()
+            } else {
+                return RelayReadConstraints::unknown();
+            }
+        }
+        _ => return RelayReadConstraints::unknown(),
+    };
+
+    parse_nip11(&body)
+}
+
+fn parse_nip11(body: &[u8]) -> RelayReadConstraints {
+    use std::num::NonZeroUsize;
+
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return RelayReadConstraints::unknown();
+    };
+
+    let Some(serde_json::Value::Object(limitation)) = value.get("limitation") else {
+        return RelayReadConstraints::unknown();
+    };
+
+    let declared = |key: &str| -> DeclaredLimit {
+        limitation
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .and_then(|n| usize::try_from(n).ok())
+            .and_then(NonZeroUsize::new)
+            .map(DeclaredLimit::Declared)
+            .unwrap_or(DeclaredLimit::Unknown)
+    };
+
+    RelayReadConstraints {
+        max_subscriptions: declared("max_subscriptions"),
+        max_message_bytes: declared("max_message_length"),
+        max_subscription_id_chars: declared("max_subscription_id_length"),
+        max_filter_limit: declared("max_limit"),
+        default_filter_limit: DeclaredLimit::Unknown,
     }
 }
 

@@ -504,9 +504,15 @@ version = "0.1.0"
 dependencies = [
  "fava-publisher",
  "fava-relay",
+ "fava-session",
+ "fava-signer",
  "fava-state",
  "fava-transport",
+ "fava-transport-testkit",
  "fava-wire",
+ "fava-write",
+ "nostr",
+ "serde_json",
  "tokio",
 ]
 

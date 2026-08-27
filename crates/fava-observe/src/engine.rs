@@ -101,6 +101,11 @@ pub(crate) enum Report {
         generation: OperationGeneration,
         item: Box<RelayInbound>,
     },
+    /// NIP-11 relay-information document fetched for one relay.
+    Constraints {
+        relay: RelaySessionKey,
+        constraints: RelayReadConstraints,
+    },
 }
 
 /// Single reconciliation owner for one engine instance.
@@ -365,12 +370,16 @@ impl Engine {
             installed = slot.installed.clone();
         }
         let revision = self.next_revision();
-        if let Some(slot) = self.slots.get_mut(relay) {
-            // The last revision this slot issued, so a completion for an
-            // earlier one is refused rather than installed.
-            slot.revision = revision;
-        }
-        let constraints = RelayReadConstraints::unknown();
+        let constraints = self
+            .slots
+            .get_mut(relay)
+            .map(|slot| {
+                // The last revision this slot issued, so a completion for an
+                // earlier one is refused rather than installed.
+                slot.revision = revision;
+                slot.constraints
+            })
+            .unwrap_or_else(RelayReadConstraints::unknown);
         let planned = self
             .providers
             .planner
