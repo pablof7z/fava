@@ -1,5 +1,6 @@
 [package]
 name = "fava-subscriptions-standard"
+description = "Standard exact grouping of compatible logical relay demand."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
