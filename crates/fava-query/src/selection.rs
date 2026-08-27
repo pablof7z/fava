@@ -19,7 +19,7 @@ pub struct FilterSelection {
     pub authors: Option<BTreeSet<PublicKey>>,
     /// Kinds, or all kinds when absent. A present empty set matches nothing.
     pub kinds: Option<BTreeSet<Kind>>,
-    /// Exact tag values by case-sensitive one-letter key.
+    /// Exact strings accepted for each case-sensitive one-letter tag key.
     ///
     /// An absent key is unconstrained. A present empty set matches nothing.
     pub tag_values: BTreeMap<SingleLetterTag, BTreeSet<String>>,
@@ -65,7 +65,7 @@ impl Query {
         Ok(self)
     }
 
-    /// Match exact values for one case-sensitive Nostr tag key.
+    /// Match one case-sensitive Nostr tag axis against the exact strings supplied.
     ///
     /// Repeated calls for the same key union values. An empty iterator retains
     /// a present tag axis that intentionally matches nothing.
@@ -109,7 +109,7 @@ impl Query {
         Ok(self)
     }
 
-    /// Narrow one case-sensitive Nostr tag axis to exact supplied values.
+    /// Narrow one case-sensitive Nostr tag axis to the exact strings supplied.
     ///
     /// An absent axis becomes the supplied set. A present axis becomes its
     /// intersection with the supplied set. A disjoint intersection remains a

@@ -39,12 +39,12 @@ pub enum QueryAcquisition {
     Explicit(BTreeSet<RelayUrl>),
 }
 
-/// Evidence authority required for a record to enter the result.
+/// Which sources must have actually served an event before it may appear.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResultAuthority {
     /// Matching events from any configured local source may appear.
     AnyLocal,
-    /// A record requires actual relay evidence from this exact set.
+    /// An event must have been served by one of these exact relays.
     OnlyRelays(BTreeSet<RelayUrl>),
 }
 
@@ -249,7 +249,7 @@ impl Query {
         self.ordering
     }
 
-    /// Whole-query result bound.
+    /// Maximum events the whole query may return.
     #[must_use]
     pub const fn result_limit(&self) -> Option<NonZeroUsize> {
         self.limit
@@ -473,7 +473,8 @@ impl QuerySourceClosed {
     }
 }
 
-/// Application-facing event plus exact currently known evidence.
+/// One event, the relay sessions that served it, and - when Fava wrote it - how
+/// far that local publication has got.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EventRecord {
     id: EventId,
@@ -551,7 +552,7 @@ pub struct QuerySnapshot {
     pub revision: QueryRevision,
     /// Deduplicated, ordered event records.
     pub events: Arc<[EventRecord]>,
-    /// Exact source revisions used for this result.
+    /// Which sources and relays produced these events, and what was lost.
     pub evidence: QueryEvidence,
 }
 

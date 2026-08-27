@@ -1,4 +1,4 @@
-//! Scoped evidence attached to one query result.
+//! Where one query's results came from and how far each relay and local source got.
 //!
 //! `fava-query` owns the *vocabulary* of evidence, not the facts. It owns the
 //! guarantee that an application can tell "this relay told us it has nothing"
@@ -114,7 +114,8 @@ impl SourceRetraction {
     }
 }
 
-/// Revision and lifecycle fact for one independent local source.
+/// How far one source has advanced, whether it is still open, and which retained
+/// events it dropped on the way.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceEvidence {
     /// Query-source role.
@@ -141,7 +142,8 @@ impl SourceEvidence {
 
 // ------------------------------------------------------------ relay evidence
 
-/// What Fava currently knows about one relay session serving one query.
+/// One relay session's progress on one query, the branches it carries, and how it
+/// entered the query.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelayQueryEvidence {
     /// Relay and access authority.
@@ -153,7 +155,7 @@ pub struct RelayQueryEvidence {
     pub plan_revision: u64,
     /// Query branches whose demand this relay currently carries.
     pub branches: Vec<QueryBranchId>,
-    /// Current state of this relay's contribution.
+    /// How far this relay has got with the current request.
     pub state: RelaySourceState,
     /// Observations sharing the wire work behind this relay's demand,
     /// including this one (`ARCH:2072`, `GOALS:294-298`).
@@ -185,7 +187,7 @@ impl RelayQueryEvidence {
     }
 }
 
-/// Exact state of one relay's contribution to one query.
+/// Exactly how far one relay has got with one query, and why it stopped if it did.
 ///
 /// Every variant is distinct at the type level. No two of them may be produced
 /// by the same underlying fact (`GOALS:422`).
@@ -214,7 +216,7 @@ pub enum RelaySourceState {
     },
     /// The relay demands NIP-42 authentication for this request.
     AuthenticationRequired {
-        /// Current authentication state for this session.
+        /// How far NIP-42 authentication has got on this session.
         state: AuthenticationState,
         /// When the requirement was learned.
         at: Timestamp,
@@ -263,7 +265,7 @@ pub enum RelayDeadline {
     Close,
 }
 
-/// NIP-42 state for one relay session, as seen by a query.
+/// How far NIP-42 authentication has got on one relay session, as seen by a query.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthenticationState {
     /// A challenge arrived; no policy decision yet.
@@ -315,7 +317,8 @@ pub struct RelayShortfall {
 
 // ------------------------------------------------------------- plan evidence
 
-/// The desired subscription plan currently backing this query's relay demand.
+/// Revision, relay coverage, and installed-subscription count of the plan behind
+/// this query's relay demand.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesiredPlanEvidence {
     /// Monotonic desired-plan revision (`fava_subscriptions::PlanRevision`).
@@ -337,7 +340,7 @@ pub enum QueryShortfall {
         /// Revisions dropped since the last delivered snapshot.
         dropped: u64,
     },
-    /// A whole-query result bound truncated the result.
+    /// A whole-query event bound discarded matching events before delivery.
     ResultLimitApplied {
         /// The bound applied.
         limit: NonZeroUsize,
@@ -363,7 +366,8 @@ pub enum QueryShortfall {
 
 // ------------------------------------------------------------ query evidence
 
-/// Complete scoped evidence for one query result.
+/// Which sources and relay sessions produced one result, how far each got, and
+/// what was lost reaching it.
 ///
 /// Authority: `ARCH:700-716` (`QuerySnapshot.evidence`), `GOALS:393-401`
 /// (QUERY-008), `GOALS:403-418` (QUERY-009), `GOALS:420-428` (QUERY-010).
