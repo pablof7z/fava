@@ -1,5 +1,6 @@
 [package]
 name = "fava-state"
+description = "Universal Nostr rules for replacement, deletion, expiration, and relay-occurrence aggregation."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
