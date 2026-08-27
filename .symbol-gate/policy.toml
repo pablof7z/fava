@@ -9,8 +9,11 @@ roots = [
     "crates/fava-diagnostics",
     "crates/fava-event-cache",
     "crates/fava-event-cache-memory",
+    "crates/fava-event-cache-persistent",
+    "crates/fava-fetch-cache",
     "crates/fava-ingest",
     "crates/fava-nip02",
+    "crates/fava-nip29-management",
     "crates/fava-nip65",
     "crates/fava-observe",
     "crates/fava-publication",
@@ -18,6 +21,7 @@ roots = [
     "crates/fava-publisher-nip01",
     "crates/fava-query",
     "crates/fava-query-standard",
+    "crates/fava-relay",
     "crates/fava-router-app-relays",
     "crates/fava-router-fallback-relays",
     "crates/fava-router-hints",
@@ -46,9 +50,14 @@ roots = [
 exclude = [
     "**/.git/**",
     "**/.symbol-gate/**",
+    "**/__mocks__/**",
+    "**/__tests__/**",
+    "**/benches/**",
     "**/dist/**",
+    "**/examples/**",
     "**/node_modules/**",
     "**/target/**",
+    "**/tests/**",
     "**/vendor/**",
 ]
 source_globs = [
@@ -74,6 +83,7 @@ source_globs = [
     "**/*.tsx",
 ]
 generated_code = "exclude"
+include_test_code = false
 labels = []
 
 [[extractors]]
