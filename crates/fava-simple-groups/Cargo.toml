@@ -1,5 +1,6 @@
 [package]
 name = "fava-simple-groups"
+description = "Implements NIP-29 simple-group semantics and the kind-10009 Simple Group List."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
