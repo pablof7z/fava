@@ -259,7 +259,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Tag::parse(["group", "photos", "not a relay URL/ß", "A"])?,
             Tag::parse(["r", "wss://a.example", "ignored"])?,
             Tag::parse(["r"])?,
-            Tag::parse(["r", "wss://a.example"])?,
+            Tag::parse(["r", "not a relay URL/ß"])?,
         ])
         .build()?;
     let decoded = SavedGroupList::from_event(&EventValue::Unsigned(event))?;
@@ -797,7 +797,7 @@ Example coverage: [META-1](#meta-1).
 | **`name`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::name","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::name(&self) -> core::option::Option<&str>","evidence":"NIP-29 kind 39000 name tag","example":"META-1"} --> | Returns the first usable exact display name; absent and present-empty remain distinct.<br><br>Example: [META-1](#meta-1). |
 | **`parent`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::parent","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::parent(&self) -> core::option::Option<&str>","evidence":"NIP-29 Subgroups parent tag","example":"META-1"} --> | Returns the first usable exact parent id; absence makes this event describe a root.<br><br>Example: [META-1](#meta-1). |
 | **`picture`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::picture","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::picture(&self) -> core::option::Option<&str>","evidence":"NIP-29 kind 39000 picture tag","example":"META-1"} --> | Returns the first usable picture URL text without fetching or validating it as a relay.<br><br>Example: [META-1](#meta-1). |
-| **`supported_kinds`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::supported_kinds","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; NIP-29 supported_kinds","example":"META-1"} --> | Returns each value from the first `supported_kinds` tag in source order as a parsed kind or local error. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.<br><br>Example: [META-1](#meta-1). |
+| **`supported_kinds`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupMetadata::supported_kinds","signature":"pub fn fava_simple_groups::SimpleGroupMetadata::supported_kinds(&self) -> core::option::Option<&[core::result::Result<nostr::event::kind::Kind, fava_simple_groups::SimpleGroupDecodeError>]>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#NIP-29 decoding; NIP-29 supported_kinds","example":"META-1"} --> | Raw string values from the first `supported_kinds` tag in source order. `None` means unspecified; `Some([])` means explicitly none; repetitions survive.<br><br>Example: [META-1](#meta-1). |
 
 <a id="meta-1"></a>
 #### META-1 — concrete coverage
