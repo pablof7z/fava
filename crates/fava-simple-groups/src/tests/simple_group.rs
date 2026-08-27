@@ -161,10 +161,12 @@ fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts
     let first = RelayUrl::parse("wss://first.example").expect("relay");
     let shared = RelayUrl::parse("wss://shared.example").expect("relay");
     let second = RelayUrl::parse("wss://second.example").expect("relay");
-    let photos = SimpleGroup::new("photos", vec![first.clone(), shared.clone()])
-        .expect("non-empty group");
-    let notes = SimpleGroup::new("notes", vec![shared.clone(), second.clone()])
-        .expect("non-empty group");
+    let later = RelayUrl::parse("wss://later.example").expect("relay");
+    let photos =
+        SimpleGroup::new("photos", vec![first.clone(), shared.clone()]).expect("non-empty group");
+    let notes =
+        SimpleGroup::new("notes", vec![shared.clone(), second.clone()]).expect("non-empty group");
+    let photos_later = SimpleGroup::new("photos", vec![later.clone()]).expect("same id, new host");
     let builder = EventBuilder::new(public_key(), Kind::from_u16(42))
         .created_at(Timestamp::from(2))
         .tags([
@@ -178,8 +180,8 @@ fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts
         .expect("first group composes")
         .simple_group(&notes)
         .expect("second group composes")
-        .simple_group(&photos)
-        .expect("same id remains idempotent")
+        .simple_group(&photos_later)
+        .expect("same id adds hosts without duplicating its tag")
         .into_event_and_routing()
         .expect("routed event builds");
 
@@ -189,5 +191,8 @@ fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts
     assert_eq!(event.tags[2], tag(&["x", "kept"]));
     assert_eq!(event.tags[3], tag(&["h", "photos"]));
     assert_eq!(event.tags[4], tag(&["h", "notes"]));
-    assert_eq!(routing, WriteRouting::Explicit(vec![first, shared, second]));
+    assert_eq!(
+        routing,
+        WriteRouting::Explicit(vec![first, shared, second, later])
+    );
 }

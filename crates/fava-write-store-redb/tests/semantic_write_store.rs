@@ -15,6 +15,7 @@ use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
 use nostr::event::FinalizeEvent;
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 use redb::{Database, Durability, TableDefinition};
 
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
@@ -46,6 +47,37 @@ fn redb_semantic_owners_stay_below_the_code_soft_limit() {
             "{owner} owner has {lines} lines; split the next cohesive responsibility"
         );
     }
+}
+
+#[test]
+fn explicit_builder_route_survives_durable_acceptance_and_reopen() {
+    let path = unique_path("explicit-builder-route-restart");
+    let keys = Keys::generate();
+    let expected_route = vec![
+        RelayUrl::parse("wss://group-a.example").expect("first relay parses"),
+        RelayUrl::parse("wss://group-b.example").expect("second relay parses"),
+    ];
+    let (event, routing) = EventBuilder::new(keys.public_key(), Kind::TextNote)
+        .content("one event for two groups")
+        .to_relays(expected_route.clone())
+        .expect("builder route validates")
+        .into_event_and_routing()
+        .expect("event and route build together");
+    let event_id = event.id.expect("built event has deterministic id");
+
+    let store = RedbWriteStore::open(&path).expect("redb opens");
+    let accepted = store
+        .accept(WriteIntent::event(event, routing).expect("intent validates"))
+        .expect("routed event enters durable custody");
+    drop(store);
+
+    let reopened = RedbWriteStore::open(&path).expect("redb reopens");
+    let receipt = reopened
+        .receipt(accepted.receipt_id)
+        .expect("receipt read succeeds")
+        .expect("receipt survives reopen");
+    assert_eq!(receipt.current.id(), event_id);
+    assert_eq!(receipt.routing, WriteRouting::Explicit(expected_route));
 }
 
 fn edit() -> ReplaceableEventEdit {

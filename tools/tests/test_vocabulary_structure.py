@@ -564,6 +564,36 @@ class HumanReviewInventoryTest(unittest.TestCase):
             ["probe::undocumented: missing human interface description"],
         )
 
+    def test_trait_method_description_covers_its_qualified_implementation(self) -> None:
+        compiled = {
+            "private_architectural_state": [],
+            "public_api": [
+                {
+                    "binding_roots": ["probe::Compose"],
+                    "declaration": "pub fn probe::Builder::compose(self) -> probe::Builder",
+                    "path": "<probe::Builder as probe::Compose>::compose",
+                }
+            ],
+            "reexports": [],
+        }
+        catalog = {
+            "probe::Compose::compose": {
+                "kind": "Method",
+                "purpose": "Adds one selected context and returns the same builder.",
+                "signature": "pub fn probe::Compose::compose(self) -> probe::Builder",
+            }
+        }
+
+        review, problems = structure.human_review_inventory(
+            {"name": "Compose", "meaning": "Builder composition."}, compiled, catalog
+        )
+
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            review[0]["description"],
+            "Adds one selected context and returns the same builder.",
+        )
+
     def test_tautological_description_is_visible_and_blocks_review(self) -> None:
         compiled = {
             "private_architectural_state": [],
@@ -623,7 +653,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
             readme.write_text("changed description", encoding="utf-8")
             self.assertNotEqual(first, structure.input_fingerprint(root))
 
-    def test_all_thirty_four_simple_group_terms_have_complete_human_reviews(self) -> None:
+    def test_all_thirty_five_simple_group_terms_have_complete_human_reviews(self) -> None:
         root = Path(__file__).parents[2]
         terms = tomllib.loads(
             (root / "docs/internals/vocabulary.toml").read_text(encoding="utf-8")
@@ -631,7 +661,7 @@ class HumanReviewInventoryTest(unittest.TestCase):
         simple_group_terms = [
             term for term in terms if term.get("owner") == "fava-simple-groups"
         ]
-        self.assertEqual(len(simple_group_terms), 34)
+        self.assertEqual(len(simple_group_terms), 35)
 
         snapshot, snapshot_problems = structure.read_snapshot(
             root / "docs/internals/vocabulary-structure.json"
@@ -674,8 +704,8 @@ class HumanReviewInventoryTest(unittest.TestCase):
         self.assertEqual(coverage["unbound"], [])
         self.assertEqual(coverage["multiply_bound"], [])
         self.assertEqual(coverage["collisions"], [])
-        self.assertEqual(coverage["public_items"], 119)
-        self.assertEqual(coverage["bound_items"], 119)
+        self.assertEqual(coverage["public_items"], 121)
+        self.assertEqual(coverage["bound_items"], 121)
 
     def test_simple_groups_free_functions_and_module_have_own_terms(self) -> None:
         root = Path(__file__).parents[2]

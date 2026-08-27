@@ -1,8 +1,8 @@
-# 0031 — Multi-group event publication belongs in one `EventBuilder`
+# 0033 — Multi-group event publication belongs in one `EventBuilder`
 
-**Status:** architecture approved by Pablo, 2026-08-26; core implementation present; fresh vocabulary signatures and controlled two-group relay run pending
+**Status:** architecture approved by Pablo, 2026-08-26; implementation and focused gates complete; controlled two-group relay run pending
 **Owner:** `fava-write` for neutral event-plus-route construction; `fava-simple-groups` for NIP-29 `h` composition; `fava` for universal publication admission
-**Related:** `docs/issues/0019-simple-groups.md`; OpenSpec `support-multi-group-event-publication`
+**Related:** `docs/issues/0019-simple-groups.md`
 
 This issue records the approved architecture decision. It is not a vocabulary
 signature or merge-readiness claim.
@@ -26,12 +26,12 @@ receipt, router, or provider.
 
 ## Closest existing concepts and insufficiency
 
-`EventBuilder` currently carries only event fields and `build()` returns only
-`UnsignedEvent`; it cannot retain selected hosts. `WriteRouting` already owns
-automatic versus exact explicit routing but is currently supplied only through
-the facade. `SimpleGroup` already owns one opaque id and selected host set but
-its `prepare` path only establishes a single matching context and requires the
-application to restate hosts at publication.
+`EventBuilder` carries event fields plus neutral local routing. `build()` is the
+event-only terminal and refuses to discard an attached route;
+`into_event_and_routing()` is the consuming boundary used by Fava publication.
+`WriteRouting` owns automatic versus exact explicit routing. `SimpleGroup` owns
+one opaque id and selected relay set; its extension trait adds that exact
+context and route contribution to the same concrete builder.
 
 Neither a wrapper, a global group registry, relay hints in signed tags, nor a
 type-erased metadata bag meets the decision. A wrapper changes the fluent type;
@@ -60,8 +60,8 @@ owners. The forcing requirement is one signed kind-blind event that can be
 selected by several group contexts and published to their complete routes
 without coupling generic event construction to NIP-29.
 
-Pre-signed events remain immutable. Their selected contexts are validated
-without rewriting tags and their host union stays an explicit facade route.
+Pre-signed events remain outside builder composition and use the ordinary
+explicit facade route without a simple-groups validation or mutation path.
 
 ## Relay limitation
 
@@ -91,13 +91,22 @@ make the corresponding focused evidence fail.
   passes: fluent composition retains `EventBuilder`, exact group tags, and the
   normalized route union.
 - `cargo test -p fava --test simple_groups --test publication_scopes` passes:
-  direct builder publication retains its route and a second explicit facade
-  route refuses before signer, custody, or relay work.
-- `cargo check --manifest-path apps/canary/Cargo.toml` passes after replacing
-  the removed unsigned `prepare` calls with builder composition or explicit
-  low-level fixture tags.
-
-The real Croissant two-group run has not been executed: it requires its pinned
-relay binary and source-attested launch inputs. The global vocabulary checker
-remains red on its inherited repository backlog; the new builder/group symbols
-are registered and do not appear in its reported findings.
+  a plain builder retains automatic routing, direct routed-builder publication
+  retains its explicit route, and a second explicit facade route refuses before
+  signer, custody, or relay work.
+- `cargo test -p fava-write-store-redb --test semantic_write_store` passes:
+  the exact event id and builder-carried explicit route survive durable custody
+  and store reopen.
+- `FAVA_CROISSANT_SOURCE=/private/tmp/fava-croissant-live cargo test
+  --manifest-path apps/canary/Cargo.toml
+  croissant_two_relay_multi_group_public_flow -- --nocapture` passes against
+  Croissant `9c4c93e84852bd9aa6824060b74c56ab2ce812c2`. Through only public Fava
+  APIs it creates both groups on both relays, publishes one signed event to
+  group A through relay A and group B through relay B, then recovers that exact
+  event id and signature through each exact group query. The owned relay
+  processes, ports, and temporary executables are gone when the test returns.
+- The older broad Croissant public-flow fixture still times out before this
+  feature's multi-group step while observing its baseline metadata/content
+  exchange. That pre-existing flow is not evidence for or against this slice.
+- The global vocabulary checker remains red on its inherited repository
+  backlog; the new builder/group symbols are registered and add no finding.

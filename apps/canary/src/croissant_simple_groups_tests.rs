@@ -209,7 +209,28 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         signed_fixture_event(author, 9, &simple_group_id, &format!("unique-a-{index}")),
         signed_fixture_event(author, 9, &simple_group_id, &format!("unique-b-{index}")),
     ];
-    let custom = signed_fixture_event(author, 50_029, &simple_group_id, "custom");
+    let multi_group_ids = [
+        format!("{simple_group_id}-custom-a"),
+        format!("{simple_group_id}-custom-b"),
+    ];
+    let custom = EventBuilder::new(
+        Kind::from(50_029),
+        "one arbitrary event across two exact groups",
+    )
+    .tags([
+        Tag::parse(["h", &multi_group_ids[0]]).expect("first multi-group tag"),
+        Tag::parse(["h", &multi_group_ids[1]]).expect("second multi-group tag"),
+    ])
+    .custom_created_at(Timestamp::from(50_029))
+    .finalize(author)
+    .expect("multi-group fixture event");
+    let multi_group_creates = multi_group_ids.each_ref().map(|group| {
+        EventBuilder::new(Kind::from(9_007), "controlled multi-group bootstrap")
+            .tag(Tag::parse(["h", group]).expect("multi-group bootstrap tag"))
+            .custom_created_at(Timestamp::from(9_007))
+            .finalize(author)
+            .expect("multi-group bootstrap event")
+    });
     let metadata_names = [format!("metadata-a-{index}"), format!("metadata-b-{index}")];
     let admin_targets = [
         Keys::generate().public_key().to_hex(),
@@ -252,7 +273,10 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "relay_urls": relay_urls,
         "shared_event_id": shared.id.to_hex(),
         "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
+        "multi_group_ids": multi_group_ids,
+        "multi_group_create_event_ids": [multi_group_creates[0].id.to_hex(), multi_group_creates[1].id.to_hex()],
         "custom_event_id": custom.id.to_hex(),
+        "custom_event_signature": custom.sig.to_string(),
         "shared_evidence": relay_urls,
         "metadata_names": metadata_names,
         "metadata_authors": [relay_signer.clone(), relay_signer.clone()],
@@ -353,6 +377,8 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
             author,
             relay_keys,
             &simple_group_id,
+            &multi_group_ids[label],
+            &multi_group_creates,
             &shared,
             &unique_events[label],
             &custom,
@@ -379,7 +405,10 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "relay_urls": relay_urls,
         "shared_event_id": shared.id.to_hex(),
         "unique_event_ids": [unique_events[0].id.to_hex(), unique_events[1].id.to_hex()],
+        "multi_group_ids": multi_group_ids,
+        "multi_group_create_event_ids": [multi_group_creates[0].id.to_hex(), multi_group_creates[1].id.to_hex()],
         "custom_event_id": custom.id.to_hex(),
+        "custom_event_signature": custom.sig.to_string(),
         "shared_evidence": relay_urls,
         "metadata_names": metadata_names,
         "metadata_authors": [relay_signer.clone(), relay_signer.clone()],
@@ -446,6 +475,8 @@ fn write_wire_fixture(
     author: &Keys,
     relay: &Keys,
     simple_group: &str,
+    queried_multi_group: &str,
+    multi_group_creates: &[Event; 2],
     shared: &Event,
     unique: &Event,
     custom: &Event,
@@ -497,6 +528,7 @@ fn write_wire_fixture(
     let content_subscription = format!("content-{index}");
     let records_subscription = format!("records-{index}");
     let bootstrap_subscription = format!("bootstrap-{index}");
+    let multi_group_subscription = format!("custom-query-{}", if index == 0 { "a" } else { "b" });
     let exchanges = [
         (1, "client_to_relay", json!(["EVENT", bootstrap])),
         (
@@ -548,6 +580,26 @@ fn write_wire_fixture(
             "relay_to_client",
             json!(["OK", unique.id.to_hex(), true, ""]),
         ),
+        (
+            11,
+            "client_to_relay",
+            json!(["EVENT", multi_group_creates[0]]),
+        ),
+        (
+            11,
+            "relay_to_client",
+            json!(["OK", multi_group_creates[0].id.to_hex(), true, ""]),
+        ),
+        (
+            12,
+            "client_to_relay",
+            json!(["EVENT", multi_group_creates[1]]),
+        ),
+        (
+            12,
+            "relay_to_client",
+            json!(["OK", multi_group_creates[1].id.to_hex(), true, ""]),
+        ),
         (9, "client_to_relay", json!(["EVENT", custom])),
         (
             9,
@@ -588,6 +640,26 @@ fn write_wire_fixture(
         ),
         (8, "relay_to_client", json!(["EOSE", records_subscription])),
         (8, "client_to_relay", json!(["CLOSE", records_subscription])),
+        (
+            10,
+            "client_to_relay",
+            json!(["REQ", multi_group_subscription, {"kinds": [50029], "limit": 1, "#h": [queried_multi_group]}]),
+        ),
+        (
+            10,
+            "relay_to_client",
+            json!(["EVENT", multi_group_subscription, custom]),
+        ),
+        (
+            10,
+            "relay_to_client",
+            json!(["EOSE", multi_group_subscription]),
+        ),
+        (
+            10,
+            "client_to_relay",
+            json!(["CLOSE", multi_group_subscription]),
+        ),
     ];
     let lines = exchanges
         .into_iter()

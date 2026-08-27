@@ -212,7 +212,7 @@ pub trait SimpleGroupEventBuilder {
     /// # Examples
     ///
     /// ```
-    /// use fava_simple_groups::SimpleGroup;
+    /// use fava_simple_groups::{SimpleGroup, SimpleGroupEventBuilder};
     /// use fava_write::{EventBuilder, Kind, Timestamp};
     /// use nostr::key::Keys;
     /// use nostr::types::RelayUrl;

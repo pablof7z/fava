@@ -2061,10 +2061,10 @@ generic `WriteIntentError` from bounded route accumulation.
 `fava.publish(builder)` consumes the built event and its route through the
 ordinary publication lifecycle. That route is local intent, not serialized or
 signed event data. A facade explicit route and a builder explicit route are
-mutually exclusive and refuse before signing or custody. Pre-signed validation
-requires the selected exact tag, tolerates sibling contexts, and returns the
-byte-exact event; its route remains an explicit facade input. No simple-groups
-publisher, signer, receipt, or management-event wrapper exists.
+mutually exclusive and refuse before signing or custody. Pre-signed events keep
+using the ordinary explicit facade route without a simple-groups validation or
+mutation path. No simple-groups publisher, signer, receipt, or management-event
+wrapper exists.
 
 `saved_group_lists(authors)` constructs the ordinary kind-10009 query through
 the neutral query owner's bounded author-input constructor and preserves its

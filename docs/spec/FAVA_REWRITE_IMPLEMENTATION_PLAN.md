@@ -837,10 +837,9 @@ kind-10009 list without creating a second query/publication lifecycle.
   lifecycle and bypasses automatic routers only when the builder carries an
   explicit route. The route is local, not serialized or signed. Supplying both
   a builder route and `fava.to(...)` refuses before signing or custody.
-- Event-only construction refuses an attached explicit route. Pre-signed
-  validation requires the selected exact group context, tolerates sibling
-  contexts, returns the byte-exact event, and receives its route through the
-  ordinary explicit facade scope. Management wrappers are absent.
+- Event-only construction refuses an attached explicit route. Pre-signed events
+  remain byte-exact and use the ordinary explicit facade scope; this capability
+  adds no pre-signed group validator or management wrapper.
 - Kind-10009 queries are ordinary exact-author queries. One event decodes to one
   `SavedGroupList` whose group and relay entries retain order, repetitions, and
   entry-local failures.

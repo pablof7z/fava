@@ -25,10 +25,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use fava::{EventBuilder, Kind, Query, Tag};
 use fava_simple_groups::{
-    GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupStateEventKind,
-    create_group, delete_event, delete_group, edit_metadata, invite, join_request, leave_group,
-    put_user, remove_saved_relay, remove_saved_simple_group, remove_user,
-    rename_saved_simple_group, save_relay, save_simple_group, saved_group_lists,
+    GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupEventBuilder,
+    SimpleGroupStateEventKind, create_group, delete_event, delete_group, edit_metadata, invite,
+    join_request, leave_group, put_user, remove_saved_relay, remove_saved_simple_group,
+    remove_user, rename_saved_simple_group, save_relay, save_simple_group, saved_group_lists,
 };
 use nostr::key::Keys;
 
@@ -167,23 +167,17 @@ async fn main() -> DemoResult<()> {
     )
     .await?;
 
-    println!("\n6. SimpleGroup::prepare() — publish ordinary content through the group");
+    println!("\n6. EventBuilder::simple_group() — publish ordinary content through the group");
     let content = EventBuilder::new(alice.public_key(), Kind::TextNote)
         .content("Hello from the runnable Fava simple-groups demo")
-        .build()?;
-    let prepared = group.prepare(content)?;
-    let prepared_again = group.prepare(prepared.clone())?;
-    if prepared.tags != prepared_again.tags {
-        return Err("SimpleGroup::prepare() was not idempotent".into());
-    }
-    let content_id = prepared.compute_id();
-    support::publish_event(
+        .simple_group(&group)?;
+    let receipt = support::publish_builder(
         &fava,
-        &relay,
-        "Fava::publish(group.prepare(text_note))",
-        prepared,
+        "Fava::publish(text_note.simple_group(group))",
+        content,
     )
     .await?;
+    let content_id = receipt.current.id();
     let observed = support::wait_for(&mut group_events, |snapshot| {
         snapshot
             .events

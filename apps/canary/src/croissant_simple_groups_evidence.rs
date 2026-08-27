@@ -179,6 +179,7 @@ fn validate_manifest(
         "simple_group_id",
         "shared_event_id",
         "custom_event_id",
+        "custom_event_signature",
         "write_id",
         "receipt_id",
         "fava_revision",
@@ -263,7 +264,10 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
     let admin_targets = exact_strings(manifest, "admin_targets", 2)?;
     let admin_authors = exact_strings(manifest, "admin_authors", 2)?;
     let unique = exact_strings(manifest, "unique_event_ids", 2)?;
+    let multi_groups = exact_strings(manifest, "multi_group_ids", 2)?;
+    let multi_group_creates = exact_strings(manifest, "multi_group_create_event_ids", 2)?;
     let relay_signer = required_string(manifest, "relay_signer_public_key")?;
+    let simple_group = required_string(manifest, "simple_group_id")?;
     let shared = required_string(manifest, "shared_event_id")?;
     let custom = required_string(manifest, "custom_event_id")?;
     let parsed_relays = relay_urls
@@ -278,6 +282,9 @@ fn verify_flow_claims(manifest: &Value) -> CanaryResult<()> {
         || admin_targets[0] == admin_targets[1]
         || admin_authors != [relay_signer, relay_signer]
         || unique[0] == unique[1]
+        || multi_groups[0] == multi_groups[1]
+        || multi_group_creates[0] == multi_group_creates[1]
+        || multi_groups.iter().any(|group| group == simple_group)
         || unique.iter().any(|id| id == shared)
         || custom == shared
         || unique.iter().any(|id| id == custom)
@@ -510,14 +517,21 @@ fn reject_cross_run_data(
     let second_run = required_string(&second.1, "run_id")?.to_owned();
     let first_identities = event_identities(&first.1)?;
     let second_identities = event_identities(&second.1)?;
-    if tree_contains(&first.0, second_group.as_bytes(), true)?
-        || tree_contains(&second.0, first_group.as_bytes(), true)?
-        || tree_contains(&first.0, second_run.as_bytes(), true)?
-        || tree_contains(&second.0, first_run.as_bytes(), true)?
-    {
-        return Err(CanaryError::new(
-            "simple-groups run retained the other run's group_id",
-        ));
+    for (snapshot, foreign, label) in [
+        (&first.0, second_group.as_str(), "group_id"),
+        (&second.0, first_group.as_str(), "group_id"),
+        (&first.0, second_run.as_str(), "run_id"),
+        (&second.0, first_run.as_str(), "run_id"),
+    ] {
+        for path in snapshot.files() {
+            if path == Path::new("manifest.json") || !snapshot.contains(path, foreign.as_bytes())? {
+                continue;
+            }
+            return Err(CanaryError::new(format!(
+                "simple-groups run retained the other run's {label} in {}",
+                path.display()
+            )));
+        }
     }
     for identity in &second_identities {
         if tree_contains(&first.0, identity.as_bytes(), true)? {

@@ -247,12 +247,8 @@ fn verify_build_attestation(
         || required_string(&build, "compiler_source_mount")? != "read-only"
         || required_string(&build, "compiler_user")? != "65532:65532"
         || required_string(&build, "target_storage")? != "engine-content-addressed-image"
-        || build
-            .get("target_maximum_bytes")
-            .and_then(Value::as_u64)
-            != Some(4_294_967_296)
-        || build.get("target_maximum_bytes")
-            != manifest.get("fava_build_target_maximum_bytes")
+        || build.get("target_maximum_bytes").and_then(Value::as_u64) != Some(4_294_967_296)
+        || build.get("target_maximum_bytes") != manifest.get("fava_build_target_maximum_bytes")
         || required_string(&build, "subject_digest_origin")? != "engine-image"
         || required_string(&build, "source_transport")? != "owned-loopback-registry"
         || required_string(&build, "source_transport_image_sha256")?
@@ -275,9 +271,7 @@ fn verify_build_attestation(
         "Fava build source manifest",
     )?;
     let source_manifest_sha256 = hex::encode(Sha256::digest(source_manifest));
-    if source_manifest_sha256
-        != required_string(&build, "fava_build_source_manifest_sha256")?
-    {
+    if source_manifest_sha256 != required_string(&build, "fava_build_source_manifest_sha256")? {
         return Err(CanaryError::new(
             "simple-groups retained compiler-input manifest digest disagreed",
         ));
@@ -372,7 +366,10 @@ fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
     for identity in exact_strings(manifest, "unique_event_ids", 2)? {
         identities.insert(identity);
     }
-    if identities.len() != 4 {
+    for identity in exact_strings(manifest, "multi_group_create_event_ids", 2)? {
+        identities.insert(identity);
+    }
+    if identities.len() != 6 {
         return Err(CanaryError::new(
             "simple-groups run reused an event identity",
         ));

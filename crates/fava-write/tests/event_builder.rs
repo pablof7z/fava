@@ -1,10 +1,10 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
-use fava_state::RelayUrl;
 use fava_write::{
     EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError, WriteRouting,
 };
 use nostr::key::Keys;
+use nostr::types::RelayUrl;
 
 fn keys() -> Keys {
     Keys::parse("0000000000000000000000000000000000000000000000000000000000000001")

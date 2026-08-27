@@ -626,10 +626,9 @@ first-occurrence-deduplicated explicit route. The route is local publication
 intent, not serialized or signed. `fava.publish(builder)` uses that embedded
 route; `fava.to(...).publish(builder)` refuses because it supplies a second
 explicit route. Repeated ids add no duplicate exact tag, while malformed or
-foreign sibling tags remain untouched. Pre-signed validation returns the exact
-event after requiring the selected exact context and leaves its route to the
-ordinary explicit facade scope. This creates no protocol-specific publisher or
-receipt lifecycle.
+foreign sibling tags remain untouched. Pre-signed events remain outside this
+composition helper and use the ordinary explicit facade scope. This creates no
+protocol-specific publisher or receipt lifecycle.
 
 ---
 

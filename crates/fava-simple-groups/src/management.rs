@@ -124,7 +124,10 @@ pub enum GroupAccess {
 /// # Errors
 ///
 /// Returns [`EventBuildError`] when the event exceeds declared bounds.
-pub fn create_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEvent, EventBuildError> {
+pub fn create_group(
+    author: PublicKey,
+    group: &SimpleGroup,
+) -> Result<UnsignedEvent, EventBuildError> {
     build(author, KIND_CREATE_GROUP, group, [])
 }
 
@@ -221,8 +224,9 @@ pub fn invite(
 
 /// Build a kind-9021 join-request event for `group`.
 ///
-/// Emits only the `h` tag; callers may add optional `p`/relay tags by
-/// calling `group.prepare()` on the returned event before publishing.
+/// Emits only the required `h` tag. Callers that need the optional `p` or
+/// `relay` fields construct that exact variant through the generic
+/// [`EventBuilder`](fava_write::EventBuilder) before publication.
 ///
 /// # Examples
 ///
@@ -242,7 +246,10 @@ pub fn invite(
 /// # Errors
 ///
 /// Returns [`EventBuildError`] when the event exceeds declared bounds.
-pub fn join_request(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEvent, EventBuildError> {
+pub fn join_request(
+    author: PublicKey,
+    group: &SimpleGroup,
+) -> Result<UnsignedEvent, EventBuildError> {
     build(author, KIND_JOIN_REQUEST, group, [])
 }
 
@@ -389,7 +396,10 @@ pub fn create_subgroup(
 /// # Errors
 ///
 /// Returns [`EventBuildError`] when the event exceeds declared bounds.
-pub fn delete_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEvent, EventBuildError> {
+pub fn delete_group(
+    author: PublicKey,
+    group: &SimpleGroup,
+) -> Result<UnsignedEvent, EventBuildError> {
     build(author, KIND_DELETE_GROUP, group, [])
 }
 
@@ -416,7 +426,10 @@ pub fn delete_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEv
 /// # Errors
 ///
 /// Returns [`EventBuildError`] when the event exceeds declared bounds.
-pub fn leave_group(author: PublicKey, group: &SimpleGroup) -> Result<UnsignedEvent, EventBuildError> {
+pub fn leave_group(
+    author: PublicKey,
+    group: &SimpleGroup,
+) -> Result<UnsignedEvent, EventBuildError> {
     build(author, KIND_LEAVE_GROUP, group, [])
 }
 
@@ -464,8 +477,7 @@ mod tests {
     fn h_tag(event: &UnsignedEvent, id: &str) -> bool {
         event.tags.iter().any(|t| {
             let s = t.as_slice();
-            s.first().map(String::as_str) == Some("h")
-                && s.get(1).map(String::as_str) == Some(id)
+            s.first().map(String::as_str) == Some("h") && s.get(1).map(String::as_str) == Some(id)
         })
     }
 
@@ -579,7 +591,10 @@ mod tests {
             .find(|t| t.as_slice().first().map(String::as_str) == Some("p"))
             .unwrap();
         let values = p.as_slice();
-        assert_eq!(values.get(1).map(String::as_str), Some(user.to_hex().as_str()));
+        assert_eq!(
+            values.get(1).map(String::as_str),
+            Some(user.to_hex().as_str())
+        );
         assert_eq!(values.get(2).map(String::as_str), Some("admin"));
         assert_eq!(values.get(3).map(String::as_str), Some("moderator"));
     }
@@ -664,7 +679,11 @@ mod tests {
         ];
 
         for event in &events {
-            assert!(h_tag(event, "cats"), "missing h tag in kind {}", event.kind.as_u16());
+            assert!(
+                h_tag(event, "cats"),
+                "missing h tag in kind {}",
+                event.kind.as_u16()
+            );
         }
     }
 }

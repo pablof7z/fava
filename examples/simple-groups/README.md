@@ -3,14 +3,14 @@
 This is a runnable application, not part of the `fava-simple-groups` protocol
 crate. It assembles a concrete Fava engine, chooses relays and identities,
 opens live views, publishes events, and decides how to present NIP-29 data.
-`fava-simple-groups` only turns a `SimpleGroup` into ordinary Fava queries and
-an unsigned event with the exact group `h` tag.
+`fava-simple-groups` turns a `SimpleGroup` into ordinary Fava queries and
+extends the generic `EventBuilder` with the exact group `h` tag and local route.
 
 The example deliberately makes the ownership boundary visible:
 
 | The application owns | Fava owns | `fava-simple-groups` owns |
 | --- | --- | --- |
-| group ids, selected relay URLs, identities, provider selection, UI policy, and which relay-local state to show | observations, sockets, cache/store, signing, exact-route delivery, receipts, cancellation, and event provenance | NIP-29 `h`/`d` query lowering, pure content preparation, event-local state decoding, and kind-10009 edits |
+| group ids, selected relay URLs, identities, provider selection, UI policy, and which relay-local state to show | observations, sockets, cache/store, signing, exact-route delivery, receipts, cancellation, and event provenance | NIP-29 `h`/`d` query lowering, fluent group context composition, event-local state decoding, and kind-10009 edits |
 
 ## The shape of an app
 
@@ -47,14 +47,15 @@ for record in &state.current().events {
 }
 ```
 
-To send content, the app builds an unsigned event, asks the group to add its
-`h` tag, and explicitly routes it to exactly that group's relays. Fava signs
-with the application-selected account and tracks the resulting write receipt.
+To send content, the app composes the selected group into the concrete builder.
+That adds its exact `h` tag and local route; Fava signs with the
+application-selected account and tracks the resulting write receipt.
 
 ```rust
-let draft = EventBuilder::new(me, Kind::TextNote).content("hello").build()?;
-let prepared = group.prepare(draft)?;
-let write = fava.to(group.relays())?.publish(prepared)?;
+let builder = EventBuilder::new(me, Kind::TextNote)
+    .content("hello")
+    .simple_group(&group)?;
+let write = fava.publish(builder)?;
 let receipt = write.settled(at_least(1)?).await?;
 ```
 

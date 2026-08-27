@@ -158,7 +158,7 @@ async fn relay_scope_publishes_unsigned_and_presigned_payloads() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn builder_routing_is_used_directly_and_conflicts_with_a_facade_route() {
+async fn builder_automatic_and_explicit_routing_are_exact_and_conflicts_have_no_effects() {
     let author = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
@@ -179,6 +179,17 @@ async fn builder_routing_is_used_directly_and_conflicts_with_a_facade_route() {
         ))
     ));
     assert_no_effects(&store, &signer, &publisher);
+
+    let automatic = fava
+        .publish(
+            EventBuilder::new(author.public_key(), Kind::TextNote)
+                .content("automatic builder route"),
+        )
+        .expect("plain builder uses automatic routing");
+    assert_eq!(
+        automatic.receipt().expect("automatic receipt").routing,
+        WriteRouting::Automatic
+    );
 
     let write = fava
         .publish(

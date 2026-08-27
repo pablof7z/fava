@@ -186,15 +186,30 @@ struct WireEntry<'a> {
 }
 
 async fn handle_connection(
-    downstream: TcpStream,
+    mut downstream: TcpStream,
     upstream: SocketAddr,
     connection: u64,
     log: Arc<WireLog>,
     inject: broadcast::Receiver<String>,
 ) -> CanaryResult<()> {
+    let mut prefix = [0_u8; 8_192];
+    let observed = tokio::time::timeout(Duration::from_secs(1), downstream.peek(&mut prefix))
+        .await
+        .map_err(|_| CanaryError::new("proxy request preface deadline elapsed"))??;
+    if is_nip11_http(&prefix[..observed]) {
+        let mut upstream = TcpStream::connect(upstream).await?;
+        tokio::io::copy_bidirectional(&mut downstream, &mut upstream).await?;
+        return Ok(());
+    }
     let downstream = accept_async(downstream).await?;
     let (upstream, _) = connect_async(format!("ws://{upstream}")).await?;
     bridge(downstream, upstream, connection, log, inject).await
+}
+
+fn is_nip11_http(prefix: &[u8]) -> bool {
+    prefix
+        .windows(b"Accept: application/nostr+json".len())
+        .any(|window| window.eq_ignore_ascii_case(b"Accept: application/nostr+json"))
 }
 
 async fn bridge(
@@ -261,7 +276,17 @@ mod tests {
 
     use tokio::task::JoinSet;
 
-    use super::drain_connections;
+    use super::{drain_connections, is_nip11_http};
+
+    #[test]
+    fn nip11_http_is_forwarded_without_becoming_a_websocket_failure() {
+        assert!(is_nip11_http(
+            b"GET / HTTP/1.1\r\nHost: relay\r\nAccept: application/nostr+json\r\nConnection: close\r\n\r\n"
+        ));
+        assert!(!is_nip11_http(
+            b"GET / HTTP/1.1\r\nHost: relay\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"
+        ));
+    }
 
     #[tokio::test]
     async fn drain_finishes_completed_bridges_and_reaps_timed_out_bridges() {

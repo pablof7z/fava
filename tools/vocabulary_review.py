@@ -361,6 +361,12 @@ def human_review_inventory(
                 and (not fallback["signature"] or fallback["signature"] == signature)
                 else None
             )
+        if described is None and record.get("binding_roots"):
+            member = path.rsplit("::", maxsplit=1)[-1]
+            for root in record["binding_roots"]:
+                described = catalog.get(f"{root}::{member}")
+                if described is not None:
+                    break
         if described is None and documentation is not None:
             kind = _fallback_kind(signature)
             description = documentation.get(path) or _generated_description(kind, path)

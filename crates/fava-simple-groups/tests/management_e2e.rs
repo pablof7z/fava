@@ -23,8 +23,8 @@ use serde_json::{Value, json};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
 use tokio::time::{Instant, timeout};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 use fava_simple_groups::{
     GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupAdmins, create_group,
@@ -298,13 +298,20 @@ async fn gate2_put_user_and_39001_observation() {
         json!({ "kinds": [39001], "#d": ["phase-b-gate2"] }),
     )
     .await;
-    assert!(!events.is_empty(), "no kind-39001 event returned from relay");
+    assert!(
+        !events.is_empty(),
+        "no kind-39001 event returned from relay"
+    );
 
     let signed: nostr::event::Event =
         serde_json::from_value(events[0].clone()).expect("decode event");
     let ev_value = fava_write::EventValue::Signed(signed);
     let admins = SimpleGroupAdmins::from_event(&ev_value).expect("decode SimpleGroupAdmins");
-    let admin_list: Vec<_> = admins.admins().iter().filter_map(|r| r.as_ref().ok()).collect();
+    let admin_list: Vec<_> = admins
+        .admins()
+        .iter()
+        .filter_map(|r| r.as_ref().ok())
+        .collect();
     let member_pubkey_hex = member_keys.public_key().to_hex();
     let found = admin_list
         .iter()
@@ -348,7 +355,9 @@ async fn gate3_wrong_authority_relay_rejects() {
     assert!(!ok, "relay should have rejected unauthorized put_user");
     assert!(!msg.is_empty(), "relay should include rejection reason");
 
-    eprintln!("[gate3] relay rejection confirmed → Fava receipt: Rejected, all_terminal=true, all_acknowledged=false");
+    eprintln!(
+        "[gate3] relay rejection confirmed → Fava receipt: Rejected, all_terminal=true, all_acknowledged=false"
+    );
 
     relay.child.kill().await.ok();
 }
@@ -370,20 +379,67 @@ async fn gate4_all_constructors_accepted() {
     let target_id = EventId::from_byte_array([0u8; 32]);
 
     let cases: Vec<(&str, UnsignedEvent, &Keys)> = vec![
-        ("create_group",   create_group(admin_keys.public_key(), &group).unwrap(), &admin_keys),
-        ("edit_metadata",  edit_metadata(admin_keys.public_key(), &group, &MetadataEdit {
-            name: Some("Gate4 Cats".to_owned()),
-            visibility: Some(GroupVisibility::Private),
-            access: Some(GroupAccess::Closed),
-            ..Default::default()
-        }).unwrap(), &admin_keys),
-        ("invite",         invite(admin_keys.public_key(), &group, &user_keys.public_key(), &r).unwrap(), &admin_keys),
-        ("join_request",   join_request(user_keys.public_key(), &group).unwrap(), &user_keys),
-        ("put_user",       put_user(admin_keys.public_key(), &group, &user_keys.public_key(), &["member"]).unwrap(), &admin_keys),
-        ("remove_user",    remove_user(admin_keys.public_key(), &group, &user_keys.public_key()).unwrap(), &admin_keys),
-        ("delete_event",   delete_event(admin_keys.public_key(), &group, &target_id).unwrap(), &admin_keys),
-        ("delete_group",   delete_group(admin_keys.public_key(), &group).unwrap(), &admin_keys),
-        ("leave_group",    leave_group(user_keys.public_key(), &group).unwrap(), &user_keys),
+        (
+            "create_group",
+            create_group(admin_keys.public_key(), &group).unwrap(),
+            &admin_keys,
+        ),
+        (
+            "edit_metadata",
+            edit_metadata(
+                admin_keys.public_key(),
+                &group,
+                &MetadataEdit {
+                    name: Some("Gate4 Cats".to_owned()),
+                    visibility: Some(GroupVisibility::Private),
+                    access: Some(GroupAccess::Closed),
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+            &admin_keys,
+        ),
+        (
+            "invite",
+            invite(admin_keys.public_key(), &group, &user_keys.public_key(), &r).unwrap(),
+            &admin_keys,
+        ),
+        (
+            "join_request",
+            join_request(user_keys.public_key(), &group).unwrap(),
+            &user_keys,
+        ),
+        (
+            "put_user",
+            put_user(
+                admin_keys.public_key(),
+                &group,
+                &user_keys.public_key(),
+                &["member"],
+            )
+            .unwrap(),
+            &admin_keys,
+        ),
+        (
+            "remove_user",
+            remove_user(admin_keys.public_key(), &group, &user_keys.public_key()).unwrap(),
+            &admin_keys,
+        ),
+        (
+            "delete_event",
+            delete_event(admin_keys.public_key(), &group, &target_id).unwrap(),
+            &admin_keys,
+        ),
+        (
+            "delete_group",
+            delete_group(admin_keys.public_key(), &group).unwrap(),
+            &admin_keys,
+        ),
+        (
+            "leave_group",
+            leave_group(user_keys.public_key(), &group).unwrap(),
+            &user_keys,
+        ),
     ];
 
     for (name, event, signer) in &cases {

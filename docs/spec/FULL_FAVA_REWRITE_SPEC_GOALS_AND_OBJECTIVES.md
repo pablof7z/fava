@@ -1424,10 +1424,9 @@ builder carrying an explicit route and `fava.to(...).publish(builder)` are two
 route authorities and MUST refuse before signing or custody. Event-only
 construction MUST refuse rather than silently discard an attached route.
 
-Pre-signed events remain immutable. Selected simple-group validation requires
-the selected exact two-cell `h` tag, tolerates unrelated sibling tags, returns
-the byte-exact event, and leaves relay selection to the ordinary explicit
-facade scope. The capability provides no management-event wrapper.
+Pre-signed events remain immutable and use the ordinary explicit facade scope.
+The simple-groups capability adds no pre-signed validation, mutation, or
+management-event wrapper.
 
 The capability MUST build the ordinary kind-10009 query for exact authors,
 decode one `SavedGroupList` per event, and provide pure saved-group and relay

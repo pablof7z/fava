@@ -21,7 +21,7 @@ validate query state, or translate the owning `QueryError`.
 
 ```rust,ignore
 use fava::{EventBuilder, Kind, Query, RelayUrl, Timestamp, Write};
-use fava_simple_groups::SimpleGroup;
+use fava_simple_groups::{SimpleGroup, SimpleGroupEventBuilder};
 
 let bob = RelayUrl::parse("wss://bob.groups.example")?;
 let alice = RelayUrl::parse("wss://alice.groups.example")?;
@@ -29,18 +29,19 @@ let photos = SimpleGroup::new("photos", vec![bob, alice])?;
 let query = photos.events(Query::events().kinds([Kind::from_u16(9)])?)?;
 let observation = fava.observe(query).await?;
 
-let draft = EventBuilder::new(me, Kind::from_u16(9))
+let builder = EventBuilder::new(me, Kind::from_u16(9))
     .created_at(Timestamp::from(42))
     .content("hello from both relays")
-    .build()?;
-let prepared = photos.prepare(draft)?;
-let write: Write = fava.to(photos.relays())?.publish(prepared)?;
+    .simple_group(&photos)?;
+let write: Write = fava.publish(builder)?;
 ```
 
-`prepare` is pure and kind-blind. It leaves all tags unchanged when any `h`
-tag’s first value matches the group id; otherwise it appends one matching tag.
-Malformed, repeated, extended, and unrelated tags survive. Only unsigned events
-are accepted because signing belongs to Fava.
+`simple_group` is pure and kind-blind. It appends one exact two-cell `h` tag
+when that exact context is absent and accumulates the group's relays as local
+publication intent. Malformed, repeated, extended, and unrelated tags survive.
+Calling it for several groups returns the same concrete `EventBuilder`, with
+all distinct group contexts and the first-occurrence relay union. Signing still
+belongs to Fava.
 
 ## Relay-generated state
 
@@ -474,7 +475,6 @@ Example coverage: [SG-1](#sg-1).
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::id","signature":"pub fn fava_simple_groups::SimpleGroup::id(&self) -> &str","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Borrows the exact supplied non-empty opaque id; no trimming or normalization is performed.<br><br>Example: [SG-1](#sg-1). |
 | **`meta_events`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::meta_events","signature":"pub fn fava_simple_groups::SimpleGroup::meta_events<I>(&self, I) -> core::result::Result<fava_query::Query, fava_query::QueryError> where I: core::iter::traits::collect::IntoIterator<Item = fava_simple_groups::SimpleGroupStateEventKind>","evidence":"crates/fava-simple-groups/src/simple_group.rs; crates/fava-query/src/selection.rs; NIP-29 Relay-generated events","example":"SG-1"} --> | Delegates kinds to `Query::kinds`, adds exact `d = id`, and delegates relay authority to `Query::only_from_relays`. Adds no private bound or validation and returns exact `QueryError` refusals.<br><br>Example: [SG-1](#sg-1). |
 | **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::new","signature":"pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>","evidence":"docs/issues/0027-simple-group-relay-input-boundary.md; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Accepts the complete finite parsed relay vector and returns an exact typed refusal for an empty id or empty vector. Preserves every other id exactly and collapses later relay duplicates in first-occurrence order without a numeric domain limit.<br><br>Example: [SG-1](#sg-1). |
-| **`prepare`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::prepare","signature":"pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Unsigned preparation; NIP-29 The h tag; current implementation crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.<br><br>Example: [SG-1](#sg-1). |
 | **`relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroup::relays","signature":"pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/simple_group.rs","example":"SG-1"} --> | Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.<br><br>Example: [SG-1](#sg-1). |
 
 <a id="sg-1"></a>
@@ -485,8 +485,10 @@ use std::error::Error;
 use fava_query::{
     Kind, Query, QueryAcquisition, RelayUrl, ResultAuthority, SingleLetterTag,
 };
-use fava_simple_groups::{SimpleGroup, SimpleGroupStateEventKind};
-use fava_write::{EventBuilder, PublicKey, Timestamp};
+use fava_simple_groups::{
+    SimpleGroup, SimpleGroupEventBuilder, SimpleGroupStateEventKind,
+};
+use fava_write::{EventBuilder, PublicKey, Timestamp, WriteRouting};
 fn exercise_simple_group() -> Result<(), Box<dyn Error>> {
     let first = RelayUrl::parse("wss://a.example")?;
     let second = RelayUrl::parse("wss://b.example")?;
@@ -531,15 +533,16 @@ fn exercise_simple_group() -> Result<(), Box<dyn Error>> {
     ));
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")?;
-    let draft = EventBuilder::new(author, Kind::from_u16(1))
+    let builder = EventBuilder::new(author, Kind::from_u16(1))
         .created_at(Timestamp::from(7))
         .content("hello")
-        .build()?;
-    let prepared = group.prepare(draft)?;
-    assert!(prepared.tags.iter().any(|tag| {
+        .simple_group(&group)?;
+    let (event, routing) = builder.into_event_and_routing()?;
+    assert!(event.tags.iter().any(|tag| {
         tag.as_slice().get(0).map(String::as_str) == Some("h")
             && tag.as_slice().get(1).map(String::as_str) == Some(" photos ")
     }));
+    assert!(matches!(routing, WriteRouting::Explicit(relays) if relays.len() == 2));
     Ok(())
 }
 fn main() -> Result<(), Box<dyn Error>> {
@@ -740,6 +743,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         vec![Tag::parse(["d", "g"])?, Tag::parse(["a", "bad"])?],
     )?)?;
     assert!(with_bad_a.pins()[0].is_ok());
+    Ok(())
+}
+```
+
+### `SimpleGroupEventBuilder` (Trait)
+
+Fluent NIP-29 context composition for the concrete generic `EventBuilder`.
+<!-- api-item {"kind":"Trait","item":"fava_simple_groups::SimpleGroupEventBuilder","signature":"pub trait fava_simple_groups::SimpleGroupEventBuilder","evidence":"cargo-public-api@0.52.0: pub trait fava_simple_groups::SimpleGroupEventBuilder"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`simple_group`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_simple_groups::SimpleGroupEventBuilder::simple_group","signature":"pub fn fava_simple_groups::SimpleGroupEventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_simple_groups::SimpleGroupEventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"} --> | Returns the same concrete builder after adding one exact `h` context and accumulating the group's relays as bounded local publication intent; repeated exact contexts do not add duplicate tags, while distinct contexts compose. |
+
+```rust,no_run
+use std::error::Error;
+use fava_simple_groups::{SimpleGroup, SimpleGroupEventBuilder};
+use fava_write::{EventBuilder, Kind, PublicKey};
+use nostr::types::RelayUrl;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let author = PublicKey::from_hex(
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    )?;
+    let group = SimpleGroup::new(
+        "photos",
+        vec![RelayUrl::parse("wss://groups.example")?],
+    )?;
+    let _builder = EventBuilder::new(author, Kind::from_u16(9)).simple_group(&group)?;
     Ok(())
 }
 ```

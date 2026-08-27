@@ -4,7 +4,7 @@ use super::croissant::{CroissantLimits, process_is_alive};
 use super::croissant_simple_groups::{
     CroissantSimpleGroupsOptions, prepare_owned_supervisors, supervise_owned_pair,
 };
-use super::croissant_simple_groups_flow::execute_public_flow;
+use super::croissant_simple_groups_flow::{execute_multi_group_live_flow, execute_public_flow};
 
 const FIXTURE_FAVA_REVISION: &str = "1111111111111111111111111111111111111111";
 const FIXTURE_FAVA_TREE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -29,7 +29,8 @@ const FIXTURE_CROISSANT_EXECUTABLE: &str =
 async fn croissant_simple_groups_public_flow() {
     let _fixture_guard = crate::environment::croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("public-flow fixture root");
-    let source = PathBuf::from("/Users/pablo/Work/croissant");
+    let source = crate::environment::croissant_fixture_source()
+        .expect("Croissant source checkout, override with FAVA_CROISSANT_SOURCE");
     let binary = build_croissant(&source, temporary.path());
     let seed = "controlled-simple-groups-public-flow";
     let options = CroissantSimpleGroupsOptions {
@@ -60,7 +61,14 @@ async fn croissant_simple_groups_public_flow() {
         Box::pin(async move { Box::pin(execute_public_flow(&flow_root, &flow_seed, ready)).await })
     }))
     .await
-    .expect("controlled public flow completes");
+    .unwrap_or_else(|failure| {
+        let logs = failure
+            .ready
+            .iter()
+            .map(|ready| fs::read_to_string(&ready.stdout_path).unwrap_or_default())
+            .collect::<Vec<_>>();
+        panic!("controlled public flow failed: {failure}; relay logs: {logs:#?}");
+    });
     let facts = completion.flow;
 
     assert_eq!(facts.shared_evidence, facts.relay_urls);
@@ -74,7 +82,15 @@ async fn croissant_simple_groups_public_flow() {
     assert_eq!(facts.admin_authors[0], relay_keys.public_key().to_hex());
     assert_eq!(facts.admin_authors[0], facts.admin_authors[1]);
     assert!(!facts.simple_group_id.is_empty());
+    assert_ne!(facts.multi_group_ids[0], facts.multi_group_ids[1]);
+    assert!(
+        facts
+            .multi_group_ids
+            .iter()
+            .all(|group| group != &facts.simple_group_id)
+    );
     assert!(!facts.custom_event_id.is_empty());
+    assert!(!facts.custom_event_signature.is_empty());
     assert_ne!(facts.write_id, 0);
     assert_ne!(facts.receipt_id, 0);
     assert_eq!(facts.custom_destinations, 2);
@@ -82,6 +98,59 @@ async fn croissant_simple_groups_public_flow() {
     assert_eq!(facts.handoffs, [1, 1]);
     assert_eq!(facts.prepared_contexts, 3);
     assert!(facts.observation_closed);
+    assert_pair_cleanup(&completion.ready, &completion.teardown);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn croissant_two_relay_multi_group_public_flow() {
+    let _fixture_guard = crate::environment::croissant_fixture_guard().await;
+    let temporary = TempDir::new().expect("multi-group live fixture root");
+    let source = crate::environment::croissant_fixture_source()
+        .expect("Croissant source checkout, override with FAVA_CROISSANT_SOURCE");
+    let binary = build_croissant(&source, temporary.path());
+    let seed = "controlled-two-relay-multi-group-live";
+    let options = CroissantSimpleGroupsOptions {
+        relay_binary: binary,
+        source_checkout: source,
+        fava_build_attestation: temporary.path().join("unused-build-attestation.json"),
+        fava_build_source_manifest: temporary.path().join("unused-build-source.manifest"),
+        scenario_seed: seed.to_owned(),
+        runs_directory: temporary.path().join("unused-retained-root"),
+    };
+    let relay_keys = Keys::generate();
+    let owners = [
+        Keys::generate().public_key().to_hex(),
+        Keys::generate().public_key().to_hex(),
+    ];
+    let run_root = temporary.path().join("multi-group-run");
+    fs::create_dir(&run_root).expect("multi-group run root");
+    let supervisors = prepare_owned_supervisors(
+        &options,
+        &run_root,
+        &relay_keys,
+        [&owners[0], &owners[1]],
+        CroissantLimits::default(),
+    )
+    .expect("two exact Croissant supervisors");
+    let flow_root = run_root.clone();
+    let completion = Box::pin(supervise_owned_pair(supervisors, move |ready| {
+        Box::pin(
+            async move { Box::pin(execute_multi_group_live_flow(&flow_root, seed, ready)).await },
+        )
+    }))
+    .await
+    .expect("focused multi-group public flow completes");
+
+    assert_ne!(completion.flow.group_ids[0], completion.flow.group_ids[1]);
+    assert!(!completion.flow.event_id.is_empty());
+    assert!(!completion.flow.event_signature.is_empty());
+    assert_eq!(
+        completion.flow.observed_relays,
+        [
+            format!("ws://{}", completion.ready[0].endpoint),
+            format!("ws://{}", completion.ready[1].endpoint),
+        ]
+    );
     assert_pair_cleanup(&completion.ready, &completion.teardown);
 }
 

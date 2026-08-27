@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fava::{
-    Fava, Observation, PublicKey, QuerySnapshot, Receipt, RelayUrl, ReplaceableEventEdit,
-    UnsignedEvent, at_least,
+    EventBuilder, Fava, Observation, PublicKey, QuerySnapshot, Receipt, RelayUrl,
+    ReplaceableEventEdit, UnsignedEvent, at_least,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_publisher_nip01::Nip01Publisher;
@@ -216,6 +216,23 @@ pub(super) async fn publish_event(
     let receipt = tokio::time::timeout(OPERATION_TIMEOUT, write.settled(at_least(1)?)).await??;
     println!(
         "      kind={kind}, event={event_id}, acknowledged={}, rejected={}",
+        receipt.acknowledged(),
+        receipt.rejected()
+    );
+    Ok(receipt)
+}
+
+pub(super) async fn publish_builder(
+    fava: &Fava,
+    label: &str,
+    builder: EventBuilder,
+) -> DemoResult<Receipt> {
+    println!("   {label}");
+    let write = fava.publish(builder)?;
+    let receipt = tokio::time::timeout(OPERATION_TIMEOUT, write.settled(at_least(1)?)).await??;
+    println!(
+        "      event={}, acknowledged={}, rejected={}",
+        receipt.current.id(),
         receipt.acknowledged(),
         receipt.rejected()
     );

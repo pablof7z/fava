@@ -1,10 +1,9 @@
-use fava_state::RelayUrl;
 use nostr::event::{Kind, Tag, UnsignedEvent};
 use nostr::key::PublicKey;
-use nostr::types::Timestamp;
+use nostr::types::{RelayUrl, Timestamp};
 use thiserror::Error;
 
-use crate::{EventBuildError, MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
+use crate::{MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
 
 const MAX_TAGS: usize = 2_000;
 
@@ -114,12 +113,6 @@ impl EventBuilder {
     #[must_use]
     pub fn event_tags(&self) -> &[Tag] {
         &self.tags
-    }
-
-    /// Borrow the local publication route without serializing it.
-    #[must_use]
-    pub const fn routing(&self) -> &WriteRouting {
-        &self.routing
     }
 
     /// Add relays to the builder's local explicit publication route.

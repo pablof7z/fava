@@ -1,6 +1,8 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum PublicationRole {
     Bootstrap,
+    MultiGroupBootstrapA,
+    MultiGroupBootstrapB,
     Metadata,
     Admin,
     Shared,
@@ -13,6 +15,7 @@ enum QueryKind {
     Content,
     Records,
     Bootstrap,
+    MultiGroup,
 }
 
 struct PublicationExchange {
@@ -31,6 +34,10 @@ struct WireClaims<'a> {
     shared: &'a str,
     unique: String,
     custom: &'a str,
+    multi_group_creates: [String; 2],
+    custom_signature: &'a str,
+    multi_groups: [String; 2],
+    queried_multi_group: String,
     metadata_name: String,
     metadata_about: &'static str,
     admin_target: String,
@@ -49,11 +56,20 @@ fn verify_one_wire(
     label: &str,
 ) -> CanaryResult<u64> {
     let (frames, wire_bytes) = wire_frames(snapshot, label)?;
+    let multi_groups: [String; 2] = strings(manifest, "multi_group_ids", 2)?
+        .try_into()
+        .map_err(|_| CanaryError::new("simple-groups manifest omitted two multi-group ids"))?;
     let claims = WireClaims {
         simple_group: string(manifest, "simple_group_id")?,
         shared: string(manifest, "shared_event_id")?,
         unique: strings(manifest, "unique_event_ids", 2)?[index].clone(),
         custom: string(manifest, "custom_event_id")?,
+        multi_group_creates: strings(manifest, "multi_group_create_event_ids", 2)?
+            .try_into()
+            .map_err(|_| CanaryError::new("simple-groups manifest omitted two group creates"))?,
+        custom_signature: string(manifest, "custom_event_signature")?,
+        queried_multi_group: multi_groups[index].clone(),
+        multi_groups,
         metadata_name: strings(manifest, "metadata_names", 2)?[index].clone(),
         metadata_about: if index == 0 {
             "A-only metadata"
@@ -72,8 +88,10 @@ fn verify_one_wire(
     let mut content_subscription = None;
     let mut records_subscription = None;
     let mut bootstrap_subscription = None;
+    let mut multi_group_subscription = None;
     let mut content_events = BTreeSet::new();
     let mut bootstrap_result = None;
+    let mut custom_result = None;
     let mut metadata_winner: Option<Event> = None;
     let mut admin_winner: Option<Event> = None;
 
@@ -110,19 +128,29 @@ fn verify_one_wire(
                 &mut content_subscription,
                 &mut records_subscription,
                 &mut bootstrap_subscription,
+                &mut multi_group_subscription,
                 bootstrap_id.as_deref(),
             )?,
             ("client_to_relay", "EVENT") => {
                 let event = event_at(payload, 1)?;
                 event.verify().map_err(error)?;
-                if event.pubkey.to_hex() != claims.author
-                    || !has_exact_tag(&event, "h", claims.simple_group)
-                {
+                if event.pubkey.to_hex() != claims.author {
                     return Err(CanaryError::new(
-                        "simple-groups client EVENT escaped its author or h authority",
+                        "simple-groups client EVENT escaped its author authority",
                     ));
                 }
                 let role = publication_role(&event, &claims)?;
+                if !matches!(
+                    role,
+                    PublicationRole::Custom
+                        | PublicationRole::MultiGroupBootstrapA
+                        | PublicationRole::MultiGroupBootstrapB
+                ) && !has_exact_tag(&event, "h", claims.simple_group)
+                {
+                    return Err(CanaryError::new(
+                        "simple-groups client EVENT escaped its h authority",
+                    ));
+                }
                 if !publication_roles.insert(role) {
                     return Err(CanaryError::new(
                         "simple-groups wire repeated a claimed publication role",
@@ -173,6 +201,7 @@ fn verify_one_wire(
                 bootstrap_id.as_deref(),
                 &mut content_events,
                 &mut bootstrap_result,
+                &mut custom_result,
                 &mut metadata_winner,
                 &mut admin_winner,
             )?,
@@ -192,6 +221,7 @@ fn verify_one_wire(
         &publication_roles,
         bootstrap_id.as_deref(),
         bootstrap_result.as_deref(),
+        custom_result.as_deref(),
         &content_events,
         metadata_winner.as_ref(),
         admin_winner.as_ref(),
@@ -199,6 +229,7 @@ fn verify_one_wire(
             content_subscription,
             records_subscription,
             bootstrap_subscription,
+            multi_group_subscription,
         ],
     )?;
     Ok(wire_bytes)
@@ -214,6 +245,7 @@ fn verify_req(
     content_subscription: &mut Option<String>,
     records_subscription: &mut Option<String>,
     bootstrap_subscription: &mut Option<String>,
+    multi_group_subscription: &mut Option<String>,
     bootstrap_id: Option<&str>,
 ) -> CanaryResult<()> {
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
@@ -250,6 +282,25 @@ fn verify_req(
         require_acked(publications, [PublicationRole::Bootstrap])?;
         assign_once(bootstrap_subscription, subscription, "bootstrap REQ")?;
         QueryKind::Bootstrap
+    } else if filter.is_some_and(|filter| {
+        exact_filter(
+            filter,
+            "#h",
+            &claims.queried_multi_group,
+            &[50_029],
+            Some(1),
+        )
+    }) {
+        require_acked(
+            publications,
+            [
+                PublicationRole::MultiGroupBootstrapA,
+                PublicationRole::MultiGroupBootstrapB,
+                PublicationRole::Custom,
+            ],
+        )?;
+        assign_once(multi_group_subscription, subscription, "multi-group REQ")?;
+        QueryKind::MultiGroup
     } else {
         return Err(CanaryError::new(
             "simple-groups wire contained an unclaimed auxiliary REQ",
@@ -283,7 +334,24 @@ fn publication_role(event: &Event, claims: &WireClaims<'_>) -> CanaryResult<Publ
         PublicationRole::Shared
     } else if id == claims.unique && kind == 9 {
         PublicationRole::Unique
-    } else if id == claims.custom && kind == 50_029 {
+    } else if id == claims.multi_group_creates[0]
+        && kind == 9007
+        && event.content == "controlled multi-group bootstrap"
+        && has_exact_tag(event, "h", &claims.multi_groups[0])
+    {
+        PublicationRole::MultiGroupBootstrapA
+    } else if id == claims.multi_group_creates[1]
+        && kind == 9007
+        && event.content == "controlled multi-group bootstrap"
+        && has_exact_tag(event, "h", &claims.multi_groups[1])
+    {
+        PublicationRole::MultiGroupBootstrapB
+    } else if id == claims.custom
+        && kind == 50_029
+        && event.sig.to_string() == claims.custom_signature
+        && event.content == "one arbitrary event across two exact groups"
+        && has_exact_multi_group_tags(event, &claims.multi_groups)
+    {
         PublicationRole::Custom
     } else if kind == 9007 && event.content == "controlled group bootstrap" {
         PublicationRole::Bootstrap
@@ -327,6 +395,7 @@ fn verify_response(
     bootstrap_id: Option<&str>,
     content_events: &mut BTreeSet<String>,
     bootstrap_result: &mut Option<String>,
+    custom_result: &mut Option<String>,
     metadata_winner: &mut Option<Event>,
     admin_winner: &mut Option<Event>,
 ) -> CanaryResult<()> {
@@ -384,6 +453,21 @@ fn verify_response(
                     39001 => select_current(admin_winner, event),
                     _ => {}
                 }
+            }
+        }
+        QueryKind::MultiGroup => {
+            if event.id.to_hex() != claims.custom
+                || event.sig.to_string() != claims.custom_signature
+                || event.pubkey.to_hex() != claims.author
+                || event.kind.as_u16() != 50_029
+                || event.content != "one arbitrary event across two exact groups"
+                || !has_exact_multi_group_tags(&event, &claims.multi_groups)
+                || !has_multi_group_tag(&event, &claims.queried_multi_group)
+                || custom_result.replace(event.id.to_hex()).is_some()
+            {
+                return Err(CanaryError::new(
+                    "simple-groups multi-group query did not return the exact shared publication",
+                ));
             }
         }
     }
@@ -453,13 +537,16 @@ fn verify_complete_wire(
     publication_roles: &BTreeSet<PublicationRole>,
     bootstrap_id: Option<&str>,
     bootstrap_result: Option<&str>,
+    custom_result: Option<&str>,
     content_events: &BTreeSet<String>,
     metadata_winner: Option<&Event>,
     admin_winner: Option<&Event>,
-    subscriptions: &[Option<String>; 3],
+    subscriptions: &[Option<String>; 4],
 ) -> CanaryResult<()> {
     let roles = BTreeSet::from([
         PublicationRole::Bootstrap,
+        PublicationRole::MultiGroupBootstrapA,
+        PublicationRole::MultiGroupBootstrapB,
         PublicationRole::Metadata,
         PublicationRole::Admin,
         PublicationRole::Shared,
@@ -478,13 +565,14 @@ fn verify_complete_wire(
     if publication_roles != &roles
         || bootstrap_id.is_none()
         || bootstrap_result != bootstrap_id
+        || custom_result != Some(claims.custom)
         || content_events != &content
         || !metadata_ok
         || !admin_ok
         || subscriptions.iter().any(Option::is_none)
-        || publications.len() != 6
+        || publications.len() != 8
         || publications.values().any(|state| !state.acknowledged)
-        || queries.len() != 3
+        || queries.len() != 4
         || queries.values().any(|state| !state.eose || !state.closed)
     {
         return Err(CanaryError::new(
@@ -492,4 +580,27 @@ fn verify_complete_wire(
         ));
     }
     Ok(())
+}
+
+fn has_multi_group_tag(event: &Event, group: &str) -> bool {
+    event.tags.iter().any(|tag| tag.as_slice() == ["h", group])
+}
+
+fn has_exact_multi_group_tags(event: &Event, groups: &[String; 2]) -> bool {
+    let actual = event
+        .tags
+        .iter()
+        .filter_map(|tag| {
+            let values = tag.as_slice();
+            (values.len() == 2 && values.first().map(String::as_str) == Some("h"))
+                .then(|| values[1].clone())
+        })
+        .collect::<BTreeSet<_>>();
+    actual == groups.iter().cloned().collect()
+        && event
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("h"))
+            .count()
+            == 2
 }

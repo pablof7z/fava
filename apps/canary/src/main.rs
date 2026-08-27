@@ -17,10 +17,6 @@ use canary::{
     run_relay29_lifecycle, run_routing_scenario, scenario_registry, verify_croissant_run_pair,
     verify_croissant_simple_groups_pair,
 };
->>>>>>> worktree-phase-f
-    run_routing_scenario, scenario_registry, verify_croissant_run_pair,
-    verify_croissant_simple_groups_pair,
-};
 
 struct CroissantSimpleGroupsCliOptions {
     relay_binary: PathBuf,
@@ -152,8 +148,7 @@ async fn run() -> canary::CanaryResult<()> {
         "crash-child" => canary::run_crash_child(arguments.collect()).await,
         "flow-close-child" => canary::run_flow_close_child(arguments.collect()).await,
         "phase-e-gates" => {
-            let mut runs_directory =
-                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+            let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
             while let Some(flag) = arguments.next() {
                 let value = arguments.next().ok_or_else(usage)?;
                 match flag.as_str() {

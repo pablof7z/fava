@@ -67,14 +67,14 @@ class CanonicalPackageTest(unittest.TestCase):
     def test_reviewed_repository_package_has_the_accepted_bytes(self) -> None:
         root = Path(__file__).parents[2]
         manifest = package.expected_manifest(root)
-        self.assertEqual(manifest["term_count"], 34)
-        self.assertEqual(manifest["package_byte_length"], 118797)
+        self.assertEqual(manifest["term_count"], 35)
+        self.assertEqual(manifest["package_byte_length"], 126748)
         self.assertEqual(
             manifest["package_sha256"],
-            "28396fb18017fd3ceb294210d79194570e96e402fb648146a811d599bb2deea6",
+            "287df1fa9ddd264d2ce7371123ba477d72b699f7f6b870509641396ca1407cbc",
         )
         self.assertEqual(
-            [term["index"] for term in manifest["terms"]], list(range(34))
+            [term["index"] for term in manifest["terms"]], list(range(35))
         )
         self.assertTrue(
             all(

@@ -7,9 +7,9 @@
   },
   "ordering": "ascending lexicographic order of exact UTF-8 term-name bytes",
   "owner": "fava-simple-groups",
-  "package_byte_length": 118797,
-  "package_sha256": "28396fb18017fd3ceb294210d79194570e96e402fb648146a811d599bb2deea6",
-  "term_count": 34,
+  "package_byte_length": 126748,
+  "package_sha256": "287df1fa9ddd264d2ce7371123ba477d72b699f7f6b870509641396ca1407cbc",
+  "term_count": 35,
   "terms": [
     {
       "frame_byte_length": 2278,
@@ -68,10 +68,10 @@
       "name_utf8_byte_length": 16
     },
     {
-      "frame_byte_length": 7182,
+      "frame_byte_length": 6304,
       "index": 7,
-      "markdown_sha256": "32f636df0993b68b181ca2dcd2dde2e3f3d827c76af4e40b88b48c0db16951d8",
-      "markdown_utf8_byte_length": 7155,
+      "markdown_sha256": "e40ef85abb81cb3e63d217bc33918ccfe6d0cc7e2dbc4ced6119cef8baf49256",
+      "markdown_utf8_byte_length": 6277,
       "name": "SimpleGroup",
       "name_utf8_byte_length": 11
     },
@@ -100,8 +100,16 @@
       "name_utf8_byte_length": 22
     },
     {
-      "frame_byte_length": 5225,
+      "frame_byte_length": 8829,
       "index": 11,
+      "markdown_sha256": "db961218972849e42bfb24498adf983ca3fc41f2c9ce958cd1eceff0675552df",
+      "markdown_utf8_byte_length": 8790,
+      "name": "SimpleGroupEventBuilder",
+      "name_utf8_byte_length": 23
+    },
+    {
+      "frame_byte_length": 5225,
+      "index": 12,
       "markdown_sha256": "2c2bf2a7f3a223845b0172a4b49293183c6005f5c54cd13d08395c3f26394bf0",
       "markdown_utf8_byte_length": 5179,
       "name": "SimpleGroupLivekitParticipants",
@@ -109,7 +117,7 @@
     },
     {
       "frame_byte_length": 4569,
-      "index": 12,
+      "index": 13,
       "markdown_sha256": "f6a5d8de78e25b6a73eec44c477087a073a38e7a61cf3c53f309440d668abc98",
       "markdown_utf8_byte_length": 4535,
       "name": "SimpleGroupMembers",
@@ -117,7 +125,7 @@
     },
     {
       "frame_byte_length": 10764,
-      "index": 13,
+      "index": 14,
       "markdown_sha256": "512e7d7043e83277b165ac5cbef2951ce8ce3753cc8069b0fb13270c717043c4",
       "markdown_utf8_byte_length": 10729,
       "name": "SimpleGroupMetadata",
@@ -125,7 +133,7 @@
     },
     {
       "frame_byte_length": 4670,
-      "index": 14,
+      "index": 15,
       "markdown_sha256": "8c6847620b9cf74d0727d7c9798c0a19049f4f7d84402135c34c47664ee9b94f",
       "markdown_utf8_byte_length": 4639,
       "name": "SimpleGroupPins",
@@ -133,7 +141,7 @@
     },
     {
       "frame_byte_length": 4704,
-      "index": 15,
+      "index": 16,
       "markdown_sha256": "e56d7547142b7d2eaa9017b68935552a3221484b415a7d6416adf755ccbe011b",
       "markdown_utf8_byte_length": 4672,
       "name": "SimpleGroupRoles",
@@ -141,7 +149,7 @@
     },
     {
       "frame_byte_length": 6548,
-      "index": 16,
+      "index": 17,
       "markdown_sha256": "c7948fbc6ae40b3ba83f7b30d31ae00cce8aff4ce2088448d700a47ca28c3a79",
       "markdown_utf8_byte_length": 6507,
       "name": "SimpleGroupStateEventKind",
@@ -149,7 +157,7 @@
     },
     {
       "frame_byte_length": 1444,
-      "index": 17,
+      "index": 18,
       "markdown_sha256": "9e0fdb869ccf28ceb8e76b10ddd9ebcd248eb98413eff83b89f8c3bdd8f13c27",
       "markdown_utf8_byte_length": 1416,
       "name": "create_group",
@@ -157,7 +165,7 @@
     },
     {
       "frame_byte_length": 1500,
-      "index": 18,
+      "index": 19,
       "markdown_sha256": "6d6fe012dcd5aecc32e5391bf12510ad0e938622430a604eb218fcbcbc88d675",
       "markdown_utf8_byte_length": 1472,
       "name": "delete_event",
@@ -165,7 +173,7 @@
     },
     {
       "frame_byte_length": 1401,
-      "index": 19,
+      "index": 20,
       "markdown_sha256": "eb58fa85490648bce9fe60be29b061ccc92901c70666e0d90806a70443b8ef6e",
       "markdown_utf8_byte_length": 1373,
       "name": "delete_group",
@@ -173,7 +181,7 @@
     },
     {
       "frame_byte_length": 1563,
-      "index": 20,
+      "index": 21,
       "markdown_sha256": "99b672e0420f408ce9868c068812ff9ad19198e86c36d52a6b242c1b9c518b44",
       "markdown_utf8_byte_length": 1534,
       "name": "edit_metadata",
@@ -181,7 +189,7 @@
     },
     {
       "frame_byte_length": 1685,
-      "index": 21,
+      "index": 22,
       "markdown_sha256": "b1f1bef12ce60f2fd3e11252840104fe9c09d71cb86209f6114d2fc17b2fb9db",
       "markdown_utf8_byte_length": 1651,
       "name": "fava_simple_groups",
@@ -189,7 +197,7 @@
     },
     {
       "frame_byte_length": 1478,
-      "index": 22,
+      "index": 23,
       "markdown_sha256": "570d884d68fa330c8763b6744cf60332ca91272446fa16eb01b61dea07f8ee37",
       "markdown_utf8_byte_length": 1456,
       "name": "invite",
@@ -197,7 +205,7 @@
     },
     {
       "frame_byte_length": 1425,
-      "index": 23,
+      "index": 24,
       "markdown_sha256": "df2a278fca81b0a99df003015e77b1f255c3928c16633a445f66f30046ffa151",
       "markdown_utf8_byte_length": 1397,
       "name": "join_request",
@@ -205,7 +213,7 @@
     },
     {
       "frame_byte_length": 1419,
-      "index": 24,
+      "index": 25,
       "markdown_sha256": "4d563711333262eb60daa9e36becc44d2555ef15dfaa94549944e5ae6bf9f4a7",
       "markdown_utf8_byte_length": 1392,
       "name": "leave_group",
@@ -213,7 +221,7 @@
     },
     {
       "frame_byte_length": 1463,
-      "index": 25,
+      "index": 26,
       "markdown_sha256": "a4160a543f3138ec449c875cbe172a91901d8a92380e5992f7af8ca2c90f1798",
       "markdown_utf8_byte_length": 1439,
       "name": "put_user",
@@ -221,7 +229,7 @@
     },
     {
       "frame_byte_length": 2058,
-      "index": 26,
+      "index": 27,
       "markdown_sha256": "34c247a7e04819a49acd351631a46ec0b35c0b22a6efafbcb1709183856ad66b",
       "markdown_utf8_byte_length": 2024,
       "name": "remove_saved_relay",
@@ -229,7 +237,7 @@
     },
     {
       "frame_byte_length": 2273,
-      "index": 27,
+      "index": 28,
       "markdown_sha256": "94580e86676c748bf5be832e7db294fb5ae45bebbe437bbcbabc740658464500",
       "markdown_utf8_byte_length": 2232,
       "name": "remove_saved_simple_group",
@@ -237,7 +245,7 @@
     },
     {
       "frame_byte_length": 1484,
-      "index": 28,
+      "index": 29,
       "markdown_sha256": "8df4f7d73589bf43eae5e4495d56e7a3df6fa0b0b664eb33c88ee7074dd36717",
       "markdown_utf8_byte_length": 1457,
       "name": "remove_user",
@@ -245,7 +253,7 @@
     },
     {
       "frame_byte_length": 2409,
-      "index": 29,
+      "index": 30,
       "markdown_sha256": "1efb26bf9c288209cdff276613f98309abd9134e9cd5331f6e62a5232408ea99",
       "markdown_utf8_byte_length": 2368,
       "name": "rename_saved_simple_group",
@@ -253,7 +261,7 @@
     },
     {
       "frame_byte_length": 1998,
-      "index": 30,
+      "index": 31,
       "markdown_sha256": "55fb20cdc2d2655fb402c3ac1348102d9e3947d679a29dd1621390358554652e",
       "markdown_utf8_byte_length": 1972,
       "name": "save_relay",
@@ -261,7 +269,7 @@
     },
     {
       "frame_byte_length": 2308,
-      "index": 31,
+      "index": 32,
       "markdown_sha256": "79be505184fc3b9e125fa0697a4c129819faaeac430536adcfa6ff8e0d66ce49",
       "markdown_utf8_byte_length": 2275,
       "name": "save_simple_group",
@@ -269,7 +277,7 @@
     },
     {
       "frame_byte_length": 2754,
-      "index": 32,
+      "index": 33,
       "markdown_sha256": "bfa0d82a6ba8e8634799d3e0ae7a8299f8940bf7355066f136a76e90e9b781c2",
       "markdown_utf8_byte_length": 2709,
       "name": "saved_group_list_materializer",
@@ -277,7 +285,7 @@
     },
     {
       "frame_byte_length": 2329,
-      "index": 33,
+      "index": 34,
       "markdown_sha256": "5cf33ed8ce2407b50c389f0db4a8625c5cc05086123b9b84e60c148331cdc61b",
       "markdown_utf8_byte_length": 2296,
       "name": "saved_group_lists",

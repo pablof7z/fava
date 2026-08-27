@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "c277d4f78f85d1820621d87c2a72b739c330523329a86f936026e42c4c64b437",
+  "inputs_sha256": "943177d505c3a7dbe06e4c52396735d06d1f871200e87eaaedfc16b47e1a9f25",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -3215,7 +3215,7 @@
           "description": "The generic checked-event construction refusal that distinguishes tag cardinality, serialized event bytes, and exact encoding failure. Lifecycle: Created by EventBuilder after fields and tag order are fixed, either before custody or inside initial or post-custody materialization, then returned directly or converted immediately to WriteIntentError. Current fava-publication subsequently erases a materializer result to PublicationError::Routing(error.to_string()); neither typed error enters WriteStore.",
           "kind": "Bound declaration",
           "path": "fava_write::builder::EventBuildError",
-          "signature": "pub enum EventBuildError {\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Serialized event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact event serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n}"
+          "signature": "pub enum EventBuildError {\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Serialized event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact event serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3228,6 +3228,12 @@
           "kind": "Enum variant",
           "path": "fava_write::EventBuildError::Encoding",
           "signature": "pub fava_write::EventBuildError::Encoding(alloc::string::String)"
+        },
+        {
+          "description": "Refuses event-only construction when it would discard an attached local publication route.",
+          "kind": "Enum variant",
+          "path": "fava_write::EventBuildError::ExplicitRoutingAttached",
+          "signature": "pub fava_write::EventBuildError::ExplicitRoutingAttached"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3286,7 +3292,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub enum EventBuildError {\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Serialized event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact event serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n}",
+            "declaration": "pub enum EventBuildError {\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Serialized event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact event serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n}",
             "kind": "enum",
             "path": "fava_write::builder::EventBuildError",
             "source": "crates/fava-write/src/builder.rs",
@@ -3301,6 +3307,10 @@
           {
             "declaration": "pub fava_write::EventBuildError::Encoding(alloc::string::String)",
             "path": "fava_write::EventBuildError::Encoding"
+          },
+          {
+            "declaration": "pub fava_write::EventBuildError::ExplicitRoutingAttached",
+            "path": "fava_write::EventBuildError::ExplicitRoutingAttached"
           },
           {
             "declaration": "pub fava_write::EventBuildError::TooLarge",
@@ -3338,10 +3348,10 @@
     {
       "interface": [
         {
-          "description": "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, and validated Tags.",
+          "description": "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, and bounded neutral local publication routing. Lifecycle: An application or protocol crate composes generic fields, tags, and optional local route before either event-only construction or Fava publication; event-only construction refuses an attached explicit route, while Fava consumes event and route together into WriteIntent.",
           "kind": "Bound declaration",
           "path": "fava_write::builder::EventBuilder",
-          "signature": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n}"
+          "signature": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3362,10 +3372,22 @@
           "signature": "pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self"
         },
         {
+          "description": "Borrows exact event tags in insertion order so protocol extension traits can compose without owning generic construction.",
+          "kind": "Method",
+          "path": "fava_write::EventBuilder::event_tags",
+          "signature": "pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]"
+        },
+        {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
           "kind": "Constructor",
           "path": "fava_write::EventBuilder::from_parts",
           "signature": "pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self"
+        },
+        {
+          "description": "Consumes the builder into one unsigned event plus its neutral local publication route.",
+          "kind": "Method",
+          "path": "fava_write::EventBuilder::into_event_and_routing",
+          "signature": "pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3384,6 +3406,12 @@
           "kind": "Method",
           "path": "fava_write::EventBuilder::tags",
           "signature": "pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self"
+        },
+        {
+          "description": "Accumulates a bounded, first-occurrence explicit relay route without serializing it into the event.",
+          "kind": "Method",
+          "path": "fava_write::EventBuilder::to_relays",
+          "signature": "pub fn fava_write::EventBuilder::to_relays(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -3412,7 +3440,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n}",
+            "declaration": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n}",
             "kind": "struct",
             "path": "fava_write::builder::EventBuilder",
             "source": "crates/fava-write/src/builder.rs",
@@ -3436,9 +3464,19 @@
             "path": "fava_write::EventBuilder::content"
           },
           {
+            "declaration": "pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]",
+            "implementation": "impl fava_write::EventBuilder",
+            "path": "fava_write::EventBuilder::event_tags"
+          },
+          {
             "declaration": "pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self",
             "implementation": "impl fava_write::EventBuilder",
             "path": "fava_write::EventBuilder::from_parts"
+          },
+          {
+            "declaration": "pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>",
+            "implementation": "impl fava_write::EventBuilder",
+            "path": "fava_write::EventBuilder::into_event_and_routing"
           },
           {
             "declaration": "pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self",
@@ -3454,6 +3492,11 @@
             "declaration": "pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self",
             "implementation": "impl fava_write::EventBuilder",
             "path": "fava_write::EventBuilder::tags"
+          },
+          {
+            "declaration": "pub fn fava_write::EventBuilder::to_relays(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_write::WriteIntentError>",
+            "implementation": "impl fava_write::EventBuilder",
+            "path": "fava_write::EventBuilder::to_relays"
           },
           {
             "declaration": "pub struct fava_write::EventBuilder",
@@ -4026,138 +4069,6 @@
           {
             "declaration": "pub fava_state::EventStateMutation::Upsert(fava_state::RelayEvent)",
             "path": "fava_state::EventStateMutation::Upsert"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
-          "description": "The current materialized event body in exactly one of two states: deterministic-id UnsignedEvent or complete signed nostr::Event. Lifecycle: Installed with acceptance or rematerialization as Unsigned, atomically promoted to Signed after exact completion validation, and replaced only by a new materialization generation; prior values survive only as bounded retired evidence.",
-          "kind": "Bound declaration",
-          "path": "fava_write::EventValue",
-          "signature": "pub enum EventValue {\n    /// Materialized event awaiting a valid signature.\n    Unsigned(UnsignedEvent),\n    /// Exact signed event.\n    Signed(Event),\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum",
-          "path": "fava_write::EventValue",
-          "signature": "pub enum fava_write::EventValue"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::EventValue::Signed",
-          "signature": "pub fava_write::EventValue::Signed(nostr::event::Event)"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::EventValue::Unsigned",
-          "signature": "pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::author",
-          "signature": "pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::coordinate",
-          "signature": "pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::created_at",
-          "signature": "pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::id",
-          "signature": "pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::kind",
-          "signature": "pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::EventValue::tags",
-          "signature": "pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]"
-        }
-      ],
-      "name": "EventValue",
-      "review_problems": [
-        "fava_write::EventValue: missing human interface description",
-        "fava_write::EventValue::Signed: missing human interface description",
-        "fava_write::EventValue::Unsigned: missing human interface description",
-        "fava_write::EventValue::author: missing human interface description",
-        "fava_write::EventValue::coordinate: missing human interface description",
-        "fava_write::EventValue::created_at: missing human interface description",
-        "fava_write::EventValue::id: missing human interface description",
-        "fava_write::EventValue::kind: missing human interface description",
-        "fava_write::EventValue::tags: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum EventValue {\n    /// Materialized event awaiting a valid signature.\n    Unsigned(UnsignedEvent),\n    /// Exact signed event.\n    Signed(Event),\n}",
-            "kind": "enum",
-            "path": "fava_write::EventValue",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_write::EventValue",
-            "path": "fava_write::EventValue"
-          },
-          {
-            "declaration": "pub fava_write::EventValue::Signed(nostr::event::Event)",
-            "path": "fava_write::EventValue::Signed"
-          },
-          {
-            "declaration": "pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)",
-            "path": "fava_write::EventValue::Unsigned"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::author"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::coordinate"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::created_at"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::id"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::kind"
-          },
-          {
-            "declaration": "pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]",
-            "implementation": "impl fava_write::EventValue",
-            "path": "fava_write::EventValue::tags"
           }
         ],
         "reexports": []
@@ -6779,85 +6690,85 @@
           "signature": "pub trait IntoContactAuthors: sealed::Sealed {\n    /// Concrete public-key iterator consumed by the ordinary query builder.\n    #[doc(hidden)]\n    type IntoIter: Iterator<Item = PublicKey>;\n\n    /// Convert the supported input without creating query or observation work.\n    #[doc(hidden)]\n    fn into_contact_authors(self) -> Self::IntoIter;\n}"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `&'a [nostr::key::public_key::PublicKey; N]`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<&'a [nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn &'a [nostr::key::public_key::PublicKey; N]::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `&'a [nostr::key::public_key::PublicKey]`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<&'a [nostr::key::public_key::PublicKey] as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn &'a [nostr::key::public_key::PublicKey]::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `&'a alloc::vec::Vec<nostr::key::public_key::PublicKey>`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<&'a alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `&nostr::key::public_key::PublicKey`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<&nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn &nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `[nostr::key::public_key::PublicKey; N]`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<[nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn [nostr::key::public_key::PublicKey; N]::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `alloc::vec::Vec<nostr::key::public_key::PublicKey>`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn alloc::vec::Vec<nostr::key::public_key::PublicKey>::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::into_contact_authors` for `nostr::key::public_key::PublicKey`.",
-          "kind": "Function",
+          "description": "Compiler-visible method owned by `fava_nip02::IntoContactAuthors`.",
+          "kind": "Method",
           "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::into_contact_authors",
           "signature": "pub fn nostr::key::public_key::PublicKey::into_contact_authors(self) -> Self::IntoIter"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `&'a [nostr::key::public_key::PublicKey; N]`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<&'a [nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type &'a [nostr::key::public_key::PublicKey; N]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `&'a [nostr::key::public_key::PublicKey]`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<&'a [nostr::key::public_key::PublicKey] as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type &'a [nostr::key::public_key::PublicKey]::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `&'a alloc::vec::Vec<nostr::key::public_key::PublicKey>`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<&'a alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type &'a alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = core::iter::adapters::copied::Copied<core::slice::iter::Iter<'a, nostr::key::public_key::PublicKey>>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `&nostr::key::public_key::PublicKey`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<&nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type &nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `[nostr::key::public_key::PublicKey; N]`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<[nostr::key::public_key::PublicKey; N] as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type [nostr::key::public_key::PublicKey; N]::IntoIter = core::array::iter::IntoIter<nostr::key::public_key::PublicKey, N>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `alloc::vec::Vec<nostr::key::public_key::PublicKey>`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<alloc::vec::Vec<nostr::key::public_key::PublicKey> as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type alloc::vec::Vec<nostr::key::public_key::PublicKey>::IntoIter = alloc::vec::into_iter::IntoIter<nostr::key::public_key::PublicKey>"
         },
         {
-          "description": "Implements `fava_nip02::IntoContactAuthors::IntoIter` for `nostr::key::public_key::PublicKey`.",
+          "description": "Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`.",
           "kind": "Type alias",
           "path": "<nostr::key::public_key::PublicKey as fava_nip02::IntoContactAuthors>::IntoIter",
           "signature": "pub type nostr::key::public_key::PublicKey::IntoIter = core::iter::sources::once::Once<nostr::key::public_key::PublicKey>"
@@ -7031,55 +6942,6 @@
             "source": "query::IntoContactAuthors"
           }
         ]
-      }
-    },
-    {
-      "interface": [
-        {
-          "description": "A typed refusal for an EventValue that cannot be accepted as local event state, currently an UnsignedEvent missing its computed event id. Lifecycle: Constructed during pre-mutation validation of accept or materialization installation, returned through WriteStoreError::InvalidEvent, and leaves receipt allocation, source revision, and provider work unchanged.",
-          "kind": "Bound declaration",
-          "path": "fava_write::InvalidEventValue",
-          "signature": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum",
-          "path": "fava_write::InvalidEventValue",
-          "signature": "pub enum fava_write::InvalidEventValue"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::InvalidEventValue::MissingId",
-          "signature": "pub fava_write::InvalidEventValue::MissingId"
-        }
-      ],
-      "name": "InvalidEventValue",
-      "review_problems": [
-        "fava_write::InvalidEventValue: missing human interface description",
-        "fava_write::InvalidEventValue::MissingId: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}",
-            "kind": "enum",
-            "path": "fava_write::InvalidEventValue",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_write::InvalidEventValue",
-            "path": "fava_write::InvalidEventValue"
-          },
-          {
-            "declaration": "pub fava_write::InvalidEventValue::MissingId",
-            "path": "fava_write::InvalidEventValue::MissingId"
-          }
-        ],
-        "reexports": []
       }
     },
     {
@@ -19637,12 +19499,6 @@
           "signature": "pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>"
         },
         {
-          "description": "Returns the unsigned event unchanged when any `h` tag’s first value matches this id; otherwise appends one matching `h` tag and rebuilds through the generic event builder. Preserves all existing tags, including other, malformed, repeated, or extended `h` tags. Has no signed-event overload.",
-          "kind": "Method",
-          "path": "fava_simple_groups::SimpleGroup::prepare",
-          "signature": "pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
-        },
-        {
           "description": "Yields cloned normalized relays in first-occurrence order for query composition and the application’s explicit route.",
           "kind": "Method",
           "path": "fava_simple_groups::SimpleGroup::relays",
@@ -19693,11 +19549,6 @@
             "declaration": "pub fn fava_simple_groups::SimpleGroup::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<nostr::types::url::RelayUrl>) -> core::result::Result<Self, fava_simple_groups::SimpleGroupConstructionError>",
             "implementation": "impl fava_simple_groups::SimpleGroup",
             "path": "fava_simple_groups::SimpleGroup::new"
-          },
-          {
-            "declaration": "pub fn fava_simple_groups::SimpleGroup::prepare(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
-            "implementation": "impl fava_simple_groups::SimpleGroup",
-            "path": "fava_simple_groups::SimpleGroup::prepare"
           },
           {
             "declaration": "pub fn fava_simple_groups::SimpleGroup::relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = nostr::types::url::RelayUrl> + '_",
@@ -20040,6 +19891,77 @@
           {
             "path": "fava_simple_groups::SimpleGroupDecodeError",
             "source": "records::SimpleGroupDecodeError"
+          }
+        ]
+      }
+    },
+    {
+      "interface": [
+        {
+          "description": "The fava-simple-groups extension trait that adds one selected SimpleGroup's exact h context and relays to a concrete EventBuilder. Lifecycle: An application imports the trait and calls simple_group on an EventBuilder before publication; each call returns the same concrete builder or the existing WriteIntentError from generic route accumulation, and the trait retains no state.",
+          "kind": "Bound declaration",
+          "path": "fava_simple_groups::simple_group::SimpleGroupEventBuilder",
+          "signature": "pub trait SimpleGroupEventBuilder {\n    /// Add this group's exact `h` context and local relay contribution.\n    ///\n    /// The returned value remains [`EventBuilder`]. Relays are local\n    /// publication intent, not Nostr event data. The generic route owner\n    /// handles normalization and boundedness.\n    ///\n    /// Existing tags are preserved unchanged. If an exact `h = <id>` tag is\n    /// already present no duplicate tag is added. Malformed, repeated,\n    /// extended, and unrelated tags are not affected. Calling this method for\n    /// several groups accumulates their distinct exact `h` tags and the union\n    /// of their relays in first-occurrence order.\n    ///\n    /// # Examples\n    ///\n    /// ```\n    /// use fava_simple_groups::{SimpleGroup, SimpleGroupEventBuilder};\n    /// use fava_write::{EventBuilder, Kind, Timestamp};\n    /// use nostr::key::Keys;\n    /// use nostr::types::RelayUrl;\n    ///\n    /// let relay = RelayUrl::parse(\"wss://relay.example\")?;\n    /// let group = SimpleGroup::new(\"photos\", vec![relay])?;\n    /// let keys = Keys::generate();\n    ///\n    /// let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9))\n    ///     .created_at(Timestamp::from(1))\n    ///     .content(\"hello\")\n    ///     .simple_group(&group)?;\n    ///\n    /// let (event, routing) = builder.into_event_and_routing()?;\n    /// let has_h = event.tags.iter().any(|t| {\n    ///     let s = t.as_slice();\n    ///     s.first().map(String::as_str) == Some(\"h\")\n    ///         && s.get(1).map(String::as_str) == Some(\"photos\")\n    /// });\n    /// assert!(has_h);\n    /// assert!(matches!(routing, fava_write::WriteRouting::Explicit(_)));\n    /// # Ok::<(), Box<dyn std::error::Error>>(())\n    /// ```\n    ///\n    /// # Errors\n    ///\n    /// Returns [`WriteIntentError`] directly when generic route accumulation\n    /// is refused.\n    fn simple_group(self, group: &SimpleGroup) -> Result<EventBuilder, WriteIntentError>;\n}"
+        },
+        {
+          "description": "Returns the same concrete builder after adding one exact `h` context and accumulating the group's relays as bounded local publication intent; repeated exact contexts do not add duplicate tags, while distinct contexts compose.",
+          "kind": "Method",
+          "path": "<fava_write::builder::EventBuilder as fava_simple_groups::SimpleGroupEventBuilder>::simple_group",
+          "signature": "pub fn fava_write::builder::EventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Returns the same concrete builder after adding one exact `h` context and accumulating the group's relays as bounded local publication intent; repeated exact contexts do not add duplicate tags, while distinct contexts compose.",
+          "kind": "Method",
+          "path": "fava_simple_groups::SimpleGroupEventBuilder::simple_group",
+          "signature": "pub fn fava_simple_groups::SimpleGroupEventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
+        },
+        {
+          "description": "Fluent NIP-29 context composition for the concrete generic `EventBuilder`.",
+          "kind": "Trait",
+          "path": "fava_simple_groups::SimpleGroupEventBuilder",
+          "signature": "pub trait fava_simple_groups::SimpleGroupEventBuilder"
+        },
+        {
+          "description": "Exports this term at `fava_simple_groups::SimpleGroupEventBuilder` from `simple_group::SimpleGroupEventBuilder`.",
+          "kind": "Public export",
+          "path": "fava_simple_groups::SimpleGroupEventBuilder",
+          "signature": "pub use simple_group::SimpleGroupEventBuilder as fava_simple_groups::SimpleGroupEventBuilder"
+        }
+      ],
+      "name": "SimpleGroupEventBuilder",
+      "review_problems": [],
+      "structure": {
+        "private_architectural_state": [
+          {
+            "declaration": "pub trait SimpleGroupEventBuilder {\n    /// Add this group's exact `h` context and local relay contribution.\n    ///\n    /// The returned value remains [`EventBuilder`]. Relays are local\n    /// publication intent, not Nostr event data. The generic route owner\n    /// handles normalization and boundedness.\n    ///\n    /// Existing tags are preserved unchanged. If an exact `h = <id>` tag is\n    /// already present no duplicate tag is added. Malformed, repeated,\n    /// extended, and unrelated tags are not affected. Calling this method for\n    /// several groups accumulates their distinct exact `h` tags and the union\n    /// of their relays in first-occurrence order.\n    ///\n    /// # Examples\n    ///\n    /// ```\n    /// use fava_simple_groups::{SimpleGroup, SimpleGroupEventBuilder};\n    /// use fava_write::{EventBuilder, Kind, Timestamp};\n    /// use nostr::key::Keys;\n    /// use nostr::types::RelayUrl;\n    ///\n    /// let relay = RelayUrl::parse(\"wss://relay.example\")?;\n    /// let group = SimpleGroup::new(\"photos\", vec![relay])?;\n    /// let keys = Keys::generate();\n    ///\n    /// let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9))\n    ///     .created_at(Timestamp::from(1))\n    ///     .content(\"hello\")\n    ///     .simple_group(&group)?;\n    ///\n    /// let (event, routing) = builder.into_event_and_routing()?;\n    /// let has_h = event.tags.iter().any(|t| {\n    ///     let s = t.as_slice();\n    ///     s.first().map(String::as_str) == Some(\"h\")\n    ///         && s.get(1).map(String::as_str) == Some(\"photos\")\n    /// });\n    /// assert!(has_h);\n    /// assert!(matches!(routing, fava_write::WriteRouting::Explicit(_)));\n    /// # Ok::<(), Box<dyn std::error::Error>>(())\n    /// ```\n    ///\n    /// # Errors\n    ///\n    /// Returns [`WriteIntentError`] directly when generic route accumulation\n    /// is refused.\n    fn simple_group(self, group: &SimpleGroup) -> Result<EventBuilder, WriteIntentError>;\n}",
+            "kind": "trait",
+            "path": "fava_simple_groups::simple_group::SimpleGroupEventBuilder",
+            "source": "crates/fava-simple-groups/src/simple_group.rs",
+            "visibility": "public"
+          }
+        ],
+        "public_api": [
+          {
+            "binding_roots": [
+              "fava_simple_groups::SimpleGroupEventBuilder"
+            ],
+            "declaration": "pub fn fava_write::builder::EventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
+            "implementation": "impl fava_simple_groups::SimpleGroupEventBuilder for fava_write::builder::EventBuilder",
+            "path": "<fava_write::builder::EventBuilder as fava_simple_groups::SimpleGroupEventBuilder>::simple_group"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupEventBuilder::simple_group(self, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
+            "path": "fava_simple_groups::SimpleGroupEventBuilder::simple_group"
+          },
+          {
+            "declaration": "pub trait fava_simple_groups::SimpleGroupEventBuilder",
+            "path": "fava_simple_groups::SimpleGroupEventBuilder"
+          }
+        ],
+        "reexports": [
+          {
+            "path": "fava_simple_groups::SimpleGroupEventBuilder",
+            "source": "simple_group::SimpleGroupEventBuilder"
           }
         ]
       }
@@ -26759,7 +26681,7 @@
     {
       "interface": [
         {
-          "description": "A neutral checked request carrying a publication payload and durable routing fact between publication and write-store contracts. Lifecycle: The fava facade constructs WriteIntent privately after validating publication scopes; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends.",
+          "description": "A neutral checked request carrying a publication payload and durable routing fact between publication and write-store contracts. Lifecycle: The fava facade constructs WriteIntent privately after resolving its publication scope and any EventBuilder-carried route; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends.",
           "kind": "Bound declaration",
           "path": "fava_write::WriteIntent",
           "signature": "pub struct WriteIntent {\n    payload: WritePayload,\n    routing: WriteRouting,\n}"
@@ -27006,13 +26928,19 @@
           "description": "The neutral refusal algebra returned while constructing a write intent or materializing its unsigned event body, preserving tag cardinality, serialized bytes, encoding, routing, verification, and expiry as distinct concerns. Lifecycle: Constructed during pre-custody intent validation or converted from EventBuildError during initial or post-custody materialization. Intent validation can return it directly; current fava-publication converts a materializer result to PublicationError::Routing(error.to_string()), so the typed value does not survive custody-side publication. Issue 0025 owns structured lifecycle attribution.",
           "kind": "Bound declaration",
           "path": "fava_write::WriteIntentError",
-          "signature": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n}"
+          "signature": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
           "kind": "Enum",
           "path": "fava_write::WriteIntentError",
           "signature": "pub enum fava_write::WriteIntentError"
+        },
+        {
+          "description": "Refuses two independent explicit route authorities before signing or custody.",
+          "kind": "Enum variant",
+          "path": "fava_write::WriteIntentError::ConflictingExplicitRoutes",
+          "signature": "pub fava_write::WriteIntentError::ConflictingExplicitRoutes"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -27043,6 +26971,12 @@
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::Expired",
           "signature": "pub fava_write::WriteIntentError::Expired"
+        },
+        {
+          "description": "Preserves the builder refusal when event-only construction would discard routing.",
+          "kind": "Enum variant",
+          "path": "fava_write::WriteIntentError::ExplicitRoutingAttached",
+          "signature": "pub fava_write::WriteIntentError::ExplicitRoutingAttached"
         },
         {
           "description": "Review blocked: no human description is bound for this compiler-visible item.",
@@ -27134,7 +27068,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n}",
+            "declaration": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}",
             "kind": "enum",
             "path": "fava_write::WriteIntentError",
             "source": "crates/fava-write/src/lib.rs",
@@ -27145,6 +27079,10 @@
           {
             "declaration": "pub enum fava_write::WriteIntentError",
             "path": "fava_write::WriteIntentError"
+          },
+          {
+            "declaration": "pub fava_write::WriteIntentError::ConflictingExplicitRoutes",
+            "path": "fava_write::WriteIntentError::ConflictingExplicitRoutes"
           },
           {
             "declaration": "pub fava_write::WriteIntentError::DuplicateExplicitRelay",
@@ -27165,6 +27103,10 @@
           {
             "declaration": "pub fava_write::WriteIntentError::Expired",
             "path": "fava_write::WriteIntentError::Expired"
+          },
+          {
+            "declaration": "pub fava_write::WriteIntentError::ExplicitRoutingAttached",
+            "path": "fava_write::WriteIntentError::ExplicitRoutingAttached"
           },
           {
             "declaration": "pub fava_write::WriteIntentError::InvalidEvent(alloc::string::String)",

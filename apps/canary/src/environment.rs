@@ -17,8 +17,8 @@ use std::os::unix::fs::PermissionsExt;
 use crate::{CanaryError, CanaryResult};
 
 #[cfg(test)]
-const CROISSANT_BINARY: &str = "/Users/pablo/.local/bin/croissant";
-const CROISSANT_SOURCE: &str = "/Users/pablo/Work/croissant";
+const CROISSANT_BINARY: &str = "/Users/pablofernandez/Work/croissant/croissant";
+const CROISSANT_SOURCE: &str = "/Users/pablofernandez/Work/croissant";
 
 #[cfg(test)]
 static LIVE_CROISSANT_FIXTURE: OnceLock<Mutex<()>> = OnceLock::new();
@@ -37,7 +37,9 @@ pub(crate) async fn croissant_fixture_guard() -> MutexGuard<'static, ()> {
 }
 
 pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
-    let source = PathBuf::from(CROISSANT_SOURCE);
+    let source = std::env::var_os("FAVA_CROISSANT_SOURCE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(CROISSANT_SOURCE));
     if source.is_dir() && source.join(".git").exists() {
         return Ok(source);
     }
@@ -72,11 +74,11 @@ mod tests {
     fn current_croissant_fixture_is_resolved_explicitly() {
         assert_eq!(
             croissant_fixture_binary().expect("Croissant fixture binary"),
-            Path::new("/Users/pablo/.local/bin/croissant")
+            Path::new("/Users/pablofernandez/Work/croissant/croissant")
         );
         assert_eq!(
             croissant_fixture_source().expect("Croissant source checkout"),
-            Path::new("/Users/pablo/Work/croissant")
+            Path::new("/Users/pablofernandez/Work/croissant")
         );
     }
 

@@ -248,14 +248,14 @@ impl PublishPayload for EventBuilder {
         _author: Option<PublicKey>,
         facade_routing: WriteRouting,
     ) -> Result<WriteIntent, PublishError> {
-        if matches!(self.routing(), WriteRouting::Explicit(_))
-            && matches!(facade_routing, WriteRouting::Explicit(_))
-        {
-            return Err(WriteIntentError::ConflictingExplicitRoutes.into());
-        }
         let (event, builder_routing) = self
             .into_event_and_routing()
             .map_err(WriteIntentError::from)?;
+        if matches!(&builder_routing, WriteRouting::Explicit(_))
+            && matches!(&facade_routing, WriteRouting::Explicit(_))
+        {
+            return Err(WriteIntentError::ConflictingExplicitRoutes.into());
+        }
         let routing = match builder_routing {
             WriteRouting::Automatic => facade_routing,
             explicit @ WriteRouting::Explicit(_) => explicit,

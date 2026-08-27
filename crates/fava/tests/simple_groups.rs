@@ -3,7 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{EventBuilder, EventValue, Fava, Kind, Query, SingleLetterTag, Tag, Timestamp, all};
+use fava::{
+    EventBuilder, EventValue, Fava, Kind, Query, SingleLetterTag, Tag, Timestamp, WriteRouting, all,
+};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_relay::{RelayAccess, RelaySessionKey};
@@ -62,13 +64,13 @@ async fn grouped_builder_uses_the_ordinary_observation_and_write_doors() {
         .content("local group content")
         .simple_group(&group)
         .expect("group composes");
-    let (event, route) = builder
-        .clone()
-        .into_event_and_routing()
-        .expect("event builds");
-    let id = event.id.expect("grouped event id");
     let write = fava.publish(builder).expect("ordinary custody accepts");
-    assert_eq!(write.receipt().expect("receipt").routing, route);
+    let receipt = write.receipt().expect("receipt");
+    let id = receipt.current.id();
+    assert_eq!(
+        receipt.routing,
+        WriteRouting::Explicit(group.relays().collect())
+    );
 
     let current = wait_for(&mut observation, |snapshot| {
         snapshot.events.iter().any(|record| record.id() == id)

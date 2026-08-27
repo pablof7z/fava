@@ -48,6 +48,61 @@ fn pair_verifier_rejects_noncausal_wire_mutations() {
 }
 
 #[test]
+fn pair_verifier_binds_two_group_query_and_exact_signed_event() {
+    let wrong_query = PairEvidenceFixture::new();
+    let sibling = read_manifest(&wrong_query.roots[0])["multi_group_ids"][1].clone();
+    wrong_query.rewrite_wire_values(0, "a", |frames| {
+        let request = frames
+            .iter_mut()
+            .find(|frame| decoded_subscription(frame) == Some("custom-query-a"))
+            .expect("multi-group request");
+        request["decoded"][2]["#h"] = json!([sibling]);
+        request["payload"] =
+            json!(serde_json::to_string(&request["decoded"]).expect("request payload"));
+    });
+    assert!(
+        verify_fixture_pair(wrong_query.root()).is_err(),
+        "each relay query must name its exact assigned group"
+    );
+
+    let wrong_groups = PairEvidenceFixture::new();
+    let flow_path = wrong_groups.roots[0].join("flow.json");
+    let mut flow: Value =
+        serde_json::from_slice(&fs::read(&flow_path).expect("flow bytes")).expect("flow JSON");
+    flow["multi_group_ids"] = json!(["replacement-a", "replacement-b"]);
+    fs::write(
+        &flow_path,
+        serde_json::to_vec_pretty(&flow).expect("flow bytes"),
+    )
+    .expect("flow rewrite");
+    wrong_groups.mutate(0, true, |manifest| {
+        manifest["multi_group_ids"] = flow["multi_group_ids"].clone();
+    });
+    assert!(
+        verify_fixture_pair(wrong_groups.root()).is_err(),
+        "both claimed group ids must be present on the exact signed event"
+    );
+
+    let wrong_signature = PairEvidenceFixture::new();
+    let flow_path = wrong_signature.roots[0].join("flow.json");
+    let mut flow: Value =
+        serde_json::from_slice(&fs::read(&flow_path).expect("flow bytes")).expect("flow JSON");
+    flow["custom_event_signature"] = json!("00".repeat(64));
+    fs::write(
+        &flow_path,
+        serde_json::to_vec_pretty(&flow).expect("flow bytes"),
+    )
+    .expect("flow rewrite");
+    wrong_signature.mutate(0, true, |manifest| {
+        manifest["custom_event_signature"] = flow["custom_event_signature"].clone();
+    });
+    assert!(
+        verify_fixture_pair(wrong_signature.root()).is_err(),
+        "the retained claim must bind the exact signature seen on both relays"
+    );
+}
+
+#[test]
 fn pair_verifier_tracks_exchanges_when_one_relay_session_is_reused() {
     let fixture = PairEvidenceFixture::new();
     for run in 0..2 {
