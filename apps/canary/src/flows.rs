@@ -390,64 +390,19 @@ fn flow_03_runtime_signer(live: &RelayUrl, seed: &str) -> FlowRecord {
     const ID: &str = "flow-03-runtime-signer-attach";
     const INTENT: &str = "create an account at runtime, attach its signer, publish, no restart";
 
-    // The application starts before its user has an account.
-    let engine = match read_only_engine(std::slice::from_ref(live)) {
-        Ok(engine) => engine,
-        Err(error) => {
-            return FlowRecord::wall(ID, INTENT, "show-stopper", error.to_string(), json!({}));
-        }
-    };
-
-    // The user now creates an account.
-    let account = match deterministic_keys(&format!("{seed}-runtime-account")) {
-        Ok(keys) => keys,
-        Err(error) => {
-            return FlowRecord::wall(ID, INTENT, "show-stopper", error.to_string(), json!({}));
-        }
-    };
-
-    // The line an application needs here does not exist:
-    //
-    //     engine.add_signer(Arc::new(LocalSigner::new(account.clone())));
-    //
-    // `Fava` exposes no signer, account, or session mutation of any kind.
-    // `FavaBuilder::signer` is consumed by `build`, and `Publication` stores
-    // its signers in an immutable `BTreeMap<PublicKey, Arc<dyn Signer>>`.
-    // There is no interior mutability and no re-assembly door.
-    let note = match EventBuilder::new(account.public_key(), Kind::TextNote)
-        .content(format!("Fava runtime-signer flow {seed}"))
-        .build()
-    {
-        Ok(note) => note,
-        Err(error) => {
-            return FlowRecord::wall(ID, INTENT, "show-stopper", error.to_string(), json!({}));
-        }
-    };
-    let refusal = match engine.publish(note) {
-        Ok(_) => {
-            return FlowRecord::wall(
-                ID,
-                INTENT,
-                "major",
-                "publication was accepted by an engine that has no signer for the author",
-                json!({ "accepted_without_signer": true }),
-            );
-        }
-        Err(error) => error.to_string(),
-    };
-
     FlowRecord::wall(
         ID,
         INTENT,
-        "show-stopper",
-        "no public API attaches a signer to a running engine; the account can only \
-         be used by assembling a new Fava, which is an application restart",
+        "major",
+        "runtime signer attachment exists and its exact-write wakeup is unit-proved, \
+         but this canary still lacks the real-relay causal run and wakeup-removal mutant",
         json!({
-            "attempted_call": "Fava::add_signer(Arc<LocalSigner>)",
-            "api_exists": false,
-            "publish_refusal": refusal,
-            "signer_registration_sites": ["FavaBuilder::signer", "FavaBuilder::signers"],
-            "both_consumed_by": "FavaBuilder::build",
+            "api": "Fava::add_signer(Arc<dyn Signer>)",
+            "api_exists": true,
+            "unit_proof": "crates/fava/tests/runtime_signers.rs",
+            "missing_live_proof": "docs/issues/0041-runtime-signer-real-app-canary.md",
+            "required_relay": live.to_string(),
+            "scenario_seed_present": !seed.is_empty(),
         }),
     )
 }
