@@ -687,10 +687,20 @@ dependencies = [
 name = "fava-simple-groups"
 version = "0.1.0"
 dependencies = [
+ "fava",
+ "fava-delivery-standard",
+ "fava-nip29-management",
+ "fava-publisher-nip01",
  "fava-query",
+ "fava-query-standard",
+ "fava-signer-local",
  "fava-state",
+ "fava-subscriptions-no-grouping",
+ "fava-transport-websocket",
  "fava-write",
+ "fava-write-store-memory",
  "nostr",
+ "tokio",
 ]
 
 [[package]]
