@@ -1,7 +1,10 @@
 use std::future::Future;
 use std::time::Duration;
 
-use fava::{Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl, Write, all};
+use fava::{
+    Fava, MaterializationId, Observation, Query, Receipt, ReceiptId, RelayUrl, Write,
+    all_terminal,
+};
 use fava_external_semantic_capability_proof::external_query;
 
 const DEADLINE: Duration = Duration::from_secs(2);
@@ -144,7 +147,7 @@ pub async fn wait_terminal(write: &Write, label: &str) -> Receipt {
     with_deadline(
         label,
         || format!("receipt={:?}", write.receipt()),
-        write.settled(all()),
+        write.settled(all_terminal()),
     )
     .await
     .expect("receipt reaches terminal state")
