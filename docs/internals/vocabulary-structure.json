@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "437f8efeef54fc7bc2d837d6fb64548bade58b624fd1d75d843e40e507704390",
+  "inputs_sha256": "472e6dffc1d661fe1bc81642fc91e2f0b81c1c038b996938e93280893b9888cf",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -3141,13 +3141,13 @@
           "signature": "pub enum EventBuildError {\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Serialized event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact event serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::EventBuildError`.",
           "kind": "Enum",
           "path": "fava_write::EventBuildError",
           "signature": "pub enum fava_write::EventBuildError"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::EventBuildError`.",
           "kind": "Enum variant",
           "path": "fava_write::EventBuildError::Encoding",
           "signature": "pub fava_write::EventBuildError::Encoding(alloc::string::String)"
@@ -3159,37 +3159,37 @@
           "signature": "pub fava_write::EventBuildError::ExplicitRoutingAttached"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::EventBuildError`.",
           "kind": "Enum variant",
           "path": "fava_write::EventBuildError::TooLarge",
           "signature": "pub fava_write::EventBuildError::TooLarge"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::EventBuildError`.",
           "kind": "Public field",
           "path": "fava_write::EventBuildError::TooLarge::bytes",
           "signature": "pub fava_write::EventBuildError::TooLarge::bytes: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::EventBuildError`.",
           "kind": "Public field",
           "path": "fava_write::EventBuildError::TooLarge::maximum",
           "signature": "pub fava_write::EventBuildError::TooLarge::maximum: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::EventBuildError`.",
           "kind": "Enum variant",
           "path": "fava_write::EventBuildError::TooManyTags",
           "signature": "pub fava_write::EventBuildError::TooManyTags"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::EventBuildError`.",
           "kind": "Public field",
           "path": "fava_write::EventBuildError::TooManyTags::actual",
           "signature": "pub fava_write::EventBuildError::TooManyTags::actual: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::EventBuildError`.",
           "kind": "Public field",
           "path": "fava_write::EventBuildError::TooManyTags::maximum",
           "signature": "pub fava_write::EventBuildError::TooManyTags::maximum: usize"
@@ -3202,16 +3202,7 @@
         }
       ],
       "name": "EventBuildError",
-      "review_problems": [
-        "fava_write::EventBuildError: missing human interface description",
-        "fava_write::EventBuildError::Encoding: missing human interface description",
-        "fava_write::EventBuildError::TooLarge: missing human interface description",
-        "fava_write::EventBuildError::TooLarge::bytes: missing human interface description",
-        "fava_write::EventBuildError::TooLarge::maximum: missing human interface description",
-        "fava_write::EventBuildError::TooManyTags: missing human interface description",
-        "fava_write::EventBuildError::TooManyTags::actual: missing human interface description",
-        "fava_write::EventBuildError::TooManyTags::maximum: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -3277,19 +3268,19 @@
           "signature": "pub struct EventBuilder {\n    author: PublicKey,\n    kind: Kind,\n    created_at: Timestamp,\n    content: String,\n    tags: Vec<Tag>,\n    routing: WriteRouting,\n    raw_routing_inputs: usize,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Method",
           "path": "fava_write::EventBuilder::created_at",
           "signature": "pub const fn fava_write::EventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Method",
           "path": "fava_write::EventBuilder::build",
           "signature": "pub fn fava_write::EventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Method",
           "path": "fava_write::EventBuilder::content",
           "signature": "pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self"
@@ -3301,7 +3292,7 @@
           "signature": "pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Constructor",
           "path": "fava_write::EventBuilder::from_parts",
           "signature": "pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self"
@@ -3313,19 +3304,25 @@
           "signature": "pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Constructor",
           "path": "fava_write::EventBuilder::new",
           "signature": "pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
+          "description": "Append the tag(s) determined by the target type. Accepts any type that implements [`Taggable`]: - [`Tag`] — appends the tag directly (existing behaviour) - [`PublicKey`] — appends `[\"p\", pubkey_hex]` - `&`[`Event`] — NIP-22: appends `[\"e\", id, \"\", pubkey]` + `[\"p\", pubkey]` + `[\"k\", kind]` - `[S; N] where S: Into<String>` — parses as one raw tag",
+          "kind": "Function",
           "path": "fava_write::EventBuilder::tag",
-          "signature": "pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self"
+          "signature": "pub fn fava_write::EventBuilder::tag(self, impl fava_write::Taggable) -> Self"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Append a NIP-10 style marked event reference. Produces `[\"e\", id, \"\", marker]` + `[\"p\", author_pubkey]`. Use when the event being built needs a threaded reply marker (`\"reply\"`, `\"root\"`, `\"mention\"`) in the NIP-10 deprecated style. Unlike `.tag(&event)`, this does **not** add a `k` tag and places the marker at position 3 of the `e` tag rather than the author pubkey. NIP-10 markers and NIP-22 pubkey hints occupy the same `e`-tag position and must not be combined for the same referenced event.",
+          "kind": "Function",
+          "path": "fava_write::EventBuilder::tag_event_marked",
+          "signature": "pub fn fava_write::EventBuilder::tag_event_marked(self, &nostr::event::Event, &str) -> Self"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_write::EventBuilder`.",
           "kind": "Method",
           "path": "fava_write::EventBuilder::tags",
           "signature": "pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self"
@@ -3337,7 +3334,7 @@
           "signature": "pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::EventBuilder`.",
           "kind": "Struct",
           "path": "fava_write::EventBuilder",
           "signature": "pub struct fava_write::EventBuilder"
@@ -3350,16 +3347,7 @@
         }
       ],
       "name": "EventBuilder",
-      "review_problems": [
-        "fava_write::EventBuilder::created_at: missing human interface description",
-        "fava_write::EventBuilder::build: missing human interface description",
-        "fava_write::EventBuilder::content: missing human interface description",
-        "fava_write::EventBuilder::from_parts: missing human interface description",
-        "fava_write::EventBuilder::new: missing human interface description",
-        "fava_write::EventBuilder::tag: missing human interface description",
-        "fava_write::EventBuilder::tags: missing human interface description",
-        "fava_write::EventBuilder: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -3407,9 +3395,14 @@
             "path": "fava_write::EventBuilder::new"
           },
           {
-            "declaration": "pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self",
+            "declaration": "pub fn fava_write::EventBuilder::tag(self, impl fava_write::Taggable) -> Self",
             "implementation": "impl fava_write::EventBuilder",
             "path": "fava_write::EventBuilder::tag"
+          },
+          {
+            "declaration": "pub fn fava_write::EventBuilder::tag_event_marked(self, &nostr::event::Event, &str) -> Self",
+            "implementation": "impl fava_write::EventBuilder",
+            "path": "fava_write::EventBuilder::tag_event_marked"
           },
           {
             "declaration": "pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self",
@@ -6493,55 +6486,6 @@
       }
     },
     {
-      "interface": [
-        {
-          "description": "A typed refusal for an EventValue that cannot be accepted as local event state, currently an UnsignedEvent missing its computed event id. Lifecycle: Constructed during pre-mutation validation of accept or materialization installation, returned through WriteStoreError::InvalidEvent, and leaves receipt allocation, source revision, and provider work unchanged.",
-          "kind": "Bound declaration",
-          "path": "fava_write::InvalidEventValue",
-          "signature": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum",
-          "path": "fava_write::InvalidEventValue",
-          "signature": "pub enum fava_write::InvalidEventValue"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::InvalidEventValue::MissingId",
-          "signature": "pub fava_write::InvalidEventValue::MissingId"
-        }
-      ],
-      "name": "InvalidEventValue",
-      "review_problems": [
-        "fava_write::InvalidEventValue: missing human interface description",
-        "fava_write::InvalidEventValue::MissingId: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum InvalidEventValue {\n    /// An unsigned body was not finalized with its deterministic id.\n    #[error(\"unsigned event has no computed event id\")]\n    MissingId,\n}",
-            "kind": "enum",
-            "path": "fava_write::InvalidEventValue",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_write::InvalidEventValue",
-            "path": "fava_write::InvalidEventValue"
-          },
-          {
-            "declaration": "pub fava_write::InvalidEventValue::MissingId",
-            "path": "fava_write::InvalidEventValue::MissingId"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
       "interface": [],
       "name": "Kind",
       "review_problems": [],
@@ -6911,31 +6855,31 @@
           "signature": "pub struct LocalWriteEvent {\n    id: EventId,\n    /// Current unsigned or signed materialization.\n    pub event: EventValue,\n    /// Exact local publication evidence.\n    pub publication: PublicationEvidence,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::LocalWriteEvent`.",
           "kind": "Method",
           "path": "fava_write::LocalWriteEvent::id",
           "signature": "pub const fn fava_write::LocalWriteEvent::id(&self) -> nostr::event::id::EventId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::LocalWriteEvent`.",
           "kind": "Public field",
           "path": "fava_write::LocalWriteEvent::event",
           "signature": "pub fava_write::LocalWriteEvent::event: fava_write::EventValue"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::LocalWriteEvent`.",
           "kind": "Public field",
           "path": "fava_write::LocalWriteEvent::publication",
           "signature": "pub fava_write::LocalWriteEvent::publication: fava_write::PublicationEvidence"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::LocalWriteEvent`.",
           "kind": "Constructor",
           "path": "fava_write::LocalWriteEvent::new",
           "signature": "pub fn fava_write::LocalWriteEvent::new(fava_write::EventValue, fava_write::PublicationEvidence) -> core::result::Result<Self, fava_write::InvalidEventValue>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::LocalWriteEvent`.",
           "kind": "Struct",
           "path": "fava_write::LocalWriteEvent",
           "signature": "pub struct fava_write::LocalWriteEvent"
@@ -6948,13 +6892,7 @@
         }
       ],
       "name": "LocalWriteEvent",
-      "review_problems": [
-        "fava_write::LocalWriteEvent::id: missing human interface description",
-        "fava_write::LocalWriteEvent::event: missing human interface description",
-        "fava_write::LocalWriteEvent::publication: missing human interface description",
-        "fava_write::LocalWriteEvent::new: missing human interface description",
-        "fava_write::LocalWriteEvent: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -7080,25 +7018,49 @@
           "description": "The exact identity of one immutable event materialization generation under a stable accepted write and receipt, including generations produced by appending a pre-signature same-coordinate edit; live signing, routing, and replay cannot advance across a failed generation-qualified custody refresh.",
           "kind": "Bound declaration",
           "path": "fava_write::materialization::MaterializationId",
-          "signature": "pub struct MaterializationId(u64);"
+          "signature": "pub struct MaterializationId(NonZeroU64);"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible constant owned by `fava_write::MaterializationId`.",
+          "kind": "Constant",
+          "path": "fava_write::MaterializationId::FIRST",
+          "signature": "pub const fava_write::MaterializationId::FIRST: Self"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_write::MaterializationId`.",
           "kind": "Method",
           "path": "fava_write::MaterializationId::as_u64",
           "signature": "pub const fn fava_write::MaterializationId::as_u64(self) -> u64"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Constructor",
-          "path": "fava_write::MaterializationId::from_u64",
-          "signature": "pub const fn fava_write::MaterializationId::from_u64(u64) -> Self"
+          "description": "Compiler-visible method owned by `fava_write::MaterializationId`.",
+          "kind": "Method",
+          "path": "fava_write::MaterializationId::checked_next",
+          "signature": "pub const fn fava_write::MaterializationId::checked_next(self) -> core::option::Option<Self>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::MaterializationId`.",
+          "kind": "Constructor",
+          "path": "fava_write::MaterializationId::from_nonzero",
+          "signature": "pub const fn fava_write::MaterializationId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_write::MaterializationId`.",
+          "kind": "Constructor",
+          "path": "<fava_write::MaterializationId as core::convert::TryFrom<u64>>::try_from",
+          "signature": "pub fn fava_write::MaterializationId::try_from(u64) -> core::result::Result<Self, Self::Error>"
+        },
+        {
+          "description": "Compiler-visible struct `fava_write::MaterializationId`.",
           "kind": "Struct",
           "path": "fava_write::MaterializationId",
           "signature": "pub struct fava_write::MaterializationId(_)"
+        },
+        {
+          "description": "Compiler-visible type alias owned by `fava_write::MaterializationId`.",
+          "kind": "Type alias",
+          "path": "<fava_write::MaterializationId as core::convert::TryFrom<u64>>::Error",
+          "signature": "pub type fava_write::MaterializationId::Error = core::num::error::TryFromIntError"
         },
         {
           "description": "Exports this term at `fava_write::MaterializationId` from `materialization::MaterializationId`.",
@@ -7108,15 +7070,11 @@
         }
       ],
       "name": "MaterializationId",
-      "review_problems": [
-        "fava_write::MaterializationId::as_u64: missing human interface description",
-        "fava_write::MaterializationId::from_u64: missing human interface description",
-        "fava_write::MaterializationId: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct MaterializationId(u64);",
+            "declaration": "pub struct MaterializationId(NonZeroU64);",
             "kind": "struct",
             "path": "fava_write::materialization::MaterializationId",
             "source": "crates/fava-write/src/materialization.rs",
@@ -7125,18 +7083,38 @@
         ],
         "public_api": [
           {
+            "declaration": "pub const fava_write::MaterializationId::FIRST: Self",
+            "implementation": "impl fava_write::MaterializationId",
+            "path": "fava_write::MaterializationId::FIRST"
+          },
+          {
             "declaration": "pub const fn fava_write::MaterializationId::as_u64(self) -> u64",
             "implementation": "impl fava_write::MaterializationId",
             "path": "fava_write::MaterializationId::as_u64"
           },
           {
-            "declaration": "pub const fn fava_write::MaterializationId::from_u64(u64) -> Self",
+            "declaration": "pub const fn fava_write::MaterializationId::checked_next(self) -> core::option::Option<Self>",
             "implementation": "impl fava_write::MaterializationId",
-            "path": "fava_write::MaterializationId::from_u64"
+            "path": "fava_write::MaterializationId::checked_next"
+          },
+          {
+            "declaration": "pub const fn fava_write::MaterializationId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self",
+            "implementation": "impl fava_write::MaterializationId",
+            "path": "fava_write::MaterializationId::from_nonzero"
+          },
+          {
+            "declaration": "pub fn fava_write::MaterializationId::try_from(u64) -> core::result::Result<Self, Self::Error>",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::MaterializationId",
+            "path": "<fava_write::MaterializationId as core::convert::TryFrom<u64>>::try_from"
           },
           {
             "declaration": "pub struct fava_write::MaterializationId(_)",
             "path": "fava_write::MaterializationId"
+          },
+          {
+            "declaration": "pub type fava_write::MaterializationId::Error = core::num::error::TryFromIntError",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::MaterializationId",
+            "path": "<fava_write::MaterializationId as core::convert::TryFrom<u64>>::Error"
           }
         ],
         "reexports": [
@@ -7255,368 +7233,6 @@
           {
             "declaration": "pub struct fava_event_cache_memory::MemoryEventCache",
             "path": "fava_event_cache_memory::MemoryEventCache"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
-          "description": "The bounded current-process WriteStore implementation used for volatile profiles and deterministic semantic tests. Lifecycle: Starts empty with declared bounds, allocates identities and atomically advances current write/source state, retains terminal receipts only within policy, broadcasts coalescing changes, and discards every obligation when the instance is dropped.",
-          "kind": "Bound declaration",
-          "path": "fava_write_store_memory::MemoryWriteStore",
-          "signature": "pub struct MemoryWriteStore {\n    capacity: NonZeroUsize,\n    state: Mutex<WriteState>,\n    latest: watch::Sender<Arc<SourceSnapshot>>,\n    receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::accept(&self, fava_write::WriteIntent) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_materialized_edit",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::accept_materialized_edit(&self, fava_write::WriteIntent, nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_reserved_materialized_edit",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::accept_reserved_materialized_edit(&self, u64, fava_write::WriteIntent, nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>, core::option::Option<&fava_routing::RoutePlan>) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::active_capacity",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::active_capacity(&self) -> usize"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::apply_route",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::apply_route(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_routing::RoutePlan) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::authorize_signing",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::authorize_signing(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::begin_attempt",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::begin_attempt(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_relay::RelaySessionKey, u32) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write_store_memory::MemoryWriteStore::bounded",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::bounded(core::num::nonzero::NonZeroUsize) -> Self"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::cancel",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::cancel(&self, fava_write::ReceiptId) -> core::result::Result<core::option::Option<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as core::default::Default>::default",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::default() -> Self"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_materialization",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::install_materialization(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, core::option::Option<nostr::event::id::EventId>, &[fava_write::edit::ReplaceableEventEdit], nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>, core::option::Option<&fava_routing::RoutePlan>) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_signed",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::install_signed(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, nostr::event::Event) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::len",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::len(&self) -> core::result::Result<usize, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::materialized_edits",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::materialized_edits(&self, fava_write::ReceiptId, fava_write::materialization::MaterializationId) -> core::result::Result<core::option::Option<(alloc::vec::Vec<fava_write::edit::ReplaceableEventEdit>, nostr::key::public_key::PublicKey, core::option::Option<(nostr::event::id::EventId, nostr::types::time::Timestamp)>, core::option::Option<nostr::event::id::EventId>)>, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_query::QuerySource>::open",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::open(&self, &fava_query::Query) -> core::result::Result<fava_query::OpenedQuerySource, fava_query::QuerySourceError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::receipt(&self, fava_write::ReceiptId) -> core::result::Result<core::option::Option<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt_changes",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::receipt_changes(&self) -> tokio::sync::broadcast::Receiver<(fava_write::ReceiptId, core::option::Option<fava_write::receipt::Receipt>)>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_materialization_failure",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::record_materialization_failure(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, core::option::Option<nostr::event::id::EventId>, core::option::Option<&fava_write::EventValue>, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_outcome",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::record_outcome(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_relay::RelaySessionKey, u32, fava_write::receipt::RelayDeliveryOutcome) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_refusal",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::record_signer_refusal(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_retryable",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::record_signer_retryable(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_materialized_edits",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::recover_materialized_edits(&self) -> core::result::Result<alloc::vec::Vec<(fava_write::receipt::Receipt, alloc::vec::Vec<fava_write::edit::ReplaceableEventEdit>, nostr::key::public_key::PublicKey, core::option::Option<(nostr::event::id::EventId, nostr::types::time::Timestamp)>, core::option::Option<nostr::event::id::EventId>)>, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_open",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::recover_open(&self) -> core::result::Result<alloc::vec::Vec<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::release_active",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::release_active(&self, u64) -> core::result::Result<(), fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::remove_receipt",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::remove_receipt(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::reserve_active",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::reserve_active(&self, &fava_write::edit::ReplaceableEventEdit, nostr::key::public_key::PublicKey) -> core::result::Result<u64, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::signing_successor",
-          "signature": "pub fn fava_write_store_memory::MemoryWriteStore::signing_successor(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId) -> core::result::Result<bool, fava_write_store::WriteStoreError>"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Struct",
-          "path": "fava_write_store_memory::MemoryWriteStore",
-          "signature": "pub struct fava_write_store_memory::MemoryWriteStore"
-        }
-      ],
-      "name": "MemoryWriteStore",
-      "review_problems": [
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_materialized_edit: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_reserved_materialized_edit: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::active_capacity: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::apply_route: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::authorize_signing: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::begin_attempt: missing human interface description",
-        "fava_write_store_memory::MemoryWriteStore::bounded: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::cancel: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as core::default::Default>::default: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_materialization: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_signed: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::len: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::materialized_edits: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_query::QuerySource>::open: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt_changes: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_materialization_failure: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_outcome: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_refusal: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_retryable: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_materialized_edits: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_open: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::release_active: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::remove_receipt: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::reserve_active: missing human interface description",
-        "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::signing_successor: missing human interface description",
-        "fava_write_store_memory::MemoryWriteStore: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub struct MemoryWriteStore {\n    capacity: NonZeroUsize,\n    state: Mutex<WriteState>,\n    latest: watch::Sender<Arc<SourceSnapshot>>,\n    receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,\n}",
-            "kind": "struct",
-            "path": "fava_write_store_memory::MemoryWriteStore",
-            "source": "crates/fava-write-store-memory/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::accept(&self, fava_write::WriteIntent) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::accept_materialized_edit(&self, fava_write::WriteIntent, nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_materialized_edit"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::accept_reserved_materialized_edit(&self, u64, fava_write::WriteIntent, nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>, core::option::Option<&fava_routing::RoutePlan>) -> core::result::Result<fava_write_store::AcceptedWrite, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::accept_reserved_materialized_edit"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::active_capacity(&self) -> usize",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::active_capacity"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::apply_route(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_routing::RoutePlan) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::apply_route"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::authorize_signing(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::authorize_signing"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::begin_attempt(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_relay::RelaySessionKey, u32) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::begin_attempt"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::bounded(core::num::nonzero::NonZeroUsize) -> Self",
-            "implementation": "impl fava_write_store_memory::MemoryWriteStore",
-            "path": "fava_write_store_memory::MemoryWriteStore::bounded"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::cancel(&self, fava_write::ReceiptId) -> core::result::Result<core::option::Option<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::cancel"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::default() -> Self",
-            "implementation": "impl core::default::Default for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as core::default::Default>::default"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::install_materialization(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, core::option::Option<nostr::event::id::EventId>, &[fava_write::edit::ReplaceableEventEdit], nostr::event::unsigned::UnsignedEvent, core::option::Option<&fava_write::EventValue>, core::option::Option<&fava_routing::RoutePlan>) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_materialization"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::install_signed(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, nostr::event::Event) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::install_signed"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::len(&self) -> core::result::Result<usize, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::len"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::materialized_edits(&self, fava_write::ReceiptId, fava_write::materialization::MaterializationId) -> core::result::Result<core::option::Option<(alloc::vec::Vec<fava_write::edit::ReplaceableEventEdit>, nostr::key::public_key::PublicKey, core::option::Option<(nostr::event::id::EventId, nostr::types::time::Timestamp)>, core::option::Option<nostr::event::id::EventId>)>, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::materialized_edits"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::open(&self, &fava_query::Query) -> core::result::Result<fava_query::OpenedQuerySource, fava_query::QuerySourceError>",
-            "implementation": "impl fava_query::QuerySource for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_query::QuerySource>::open"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::receipt(&self, fava_write::ReceiptId) -> core::result::Result<core::option::Option<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::receipt_changes(&self) -> tokio::sync::broadcast::Receiver<(fava_write::ReceiptId, core::option::Option<fava_write::receipt::Receipt>)>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::receipt_changes"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::record_materialization_failure(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, core::option::Option<nostr::event::id::EventId>, core::option::Option<&fava_write::EventValue>, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_materialization_failure"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::record_outcome(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, &fava_relay::RelaySessionKey, u32, fava_write::receipt::RelayDeliveryOutcome) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_outcome"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::record_signer_refusal(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_refusal"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::record_signer_retryable(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, alloc::string::String) -> core::result::Result<fava_write::receipt::Receipt, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::record_signer_retryable"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::recover_materialized_edits(&self) -> core::result::Result<alloc::vec::Vec<(fava_write::receipt::Receipt, alloc::vec::Vec<fava_write::edit::ReplaceableEventEdit>, nostr::key::public_key::PublicKey, core::option::Option<(nostr::event::id::EventId, nostr::types::time::Timestamp)>, core::option::Option<nostr::event::id::EventId>)>, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_materialized_edits"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::recover_open(&self) -> core::result::Result<alloc::vec::Vec<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::recover_open"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::release_active(&self, u64) -> core::result::Result<(), fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::release_active"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::remove_receipt(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::remove_receipt"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::reserve_active(&self, &fava_write::edit::ReplaceableEventEdit, nostr::key::public_key::PublicKey) -> core::result::Result<u64, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::reserve_active"
-          },
-          {
-            "declaration": "pub fn fava_write_store_memory::MemoryWriteStore::signing_successor(&self, fava_write::WriteId, fava_write::ReceiptId, fava_write::materialization::MaterializationId, nostr::event::id::EventId) -> core::result::Result<bool, fava_write_store::WriteStoreError>",
-            "implementation": "impl fava_write_store::WriteStore for fava_write_store_memory::MemoryWriteStore",
-            "path": "<fava_write_store_memory::MemoryWriteStore as fava_write_store::WriteStore>::signing_successor"
-          },
-          {
-            "declaration": "pub struct fava_write_store_memory::MemoryWriteStore",
-            "path": "fava_write_store_memory::MemoryWriteStore"
           }
         ],
         "reexports": []
@@ -9687,55 +9303,55 @@
           "signature": "pub struct PublicationEvidence {\n    /// Reattachable receipt identity.\n    pub receipt_id: ReceiptId,\n    /// Accepted write identity.\n    pub write_id: WriteId,\n    /// Exact current immutable materialization generation.\n    pub materialization_id: MaterializationId,\n    /// Qualified source event used for the current materialization, when any.\n    pub materialization_source: Option<EventId>,\n    /// Bounded post-accept materialization failure attributed to current work.\n    pub materialization_failure: Option<String>,\n    /// Bounded retired generation, event, source, and optional failure facts.\n    pub retired_materializations:\n        Vec<(MaterializationId, EventId, Option<EventId>, Option<String>)>,\n    /// Current signing fact.\n    pub signature: SignatureState,\n    /// Exact current fact for every selected relay session.\n    #[serde(with = \"crate::delivery_map\")]\n    pub destinations: BTreeMap<RelaySessionKey, RelayDeliveryOutcome>,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::destinations",
           "signature": "pub fava_write::PublicationEvidence::destinations: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_failure",
           "signature": "pub fava_write::PublicationEvidence::materialization_failure: core::option::Option<alloc::string::String>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_id",
           "signature": "pub fava_write::PublicationEvidence::materialization_id: fava_write::MaterializationId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_source",
           "signature": "pub fava_write::PublicationEvidence::materialization_source: core::option::Option<nostr::event::id::EventId>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::receipt_id",
           "signature": "pub fava_write::PublicationEvidence::receipt_id: fava_write::ReceiptId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::retired_materializations",
           "signature": "pub fava_write::PublicationEvidence::retired_materializations: alloc::vec::Vec<(fava_write::MaterializationId, nostr::event::id::EventId, core::option::Option<nostr::event::id::EventId>, core::option::Option<alloc::string::String>)>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::signature",
           "signature": "pub fava_write::PublicationEvidence::signature: fava_write::SignatureState"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::write_id",
           "signature": "pub fava_write::PublicationEvidence::write_id: fava_write::WriteId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::PublicationEvidence`.",
           "kind": "Struct",
           "path": "fava_write::PublicationEvidence",
           "signature": "pub struct fava_write::PublicationEvidence"
@@ -9748,17 +9364,7 @@
         }
       ],
       "name": "PublicationEvidence",
-      "review_problems": [
-        "fava_write::PublicationEvidence::destinations: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_failure: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_id: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_source: missing human interface description",
-        "fava_write::PublicationEvidence::receipt_id: missing human interface description",
-        "fava_write::PublicationEvidence::retired_materializations: missing human interface description",
-        "fava_write::PublicationEvidence::signature: missing human interface description",
-        "fava_write::PublicationEvidence::write_id: missing human interface description",
-        "fava_write::PublicationEvidence: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -13113,103 +12719,103 @@
           "signature": "pub struct Receipt {\n    /// Stable accepted-write identity.\n    pub write_id: WriteId,\n    /// Stable application-visible receipt identity.\n    pub receipt_id: ReceiptId,\n    /// Last exact local event; cancelled receipts retain it as historical evidence.\n    pub current: LocalWriteEvent,\n    /// Selected routing mode.\n    pub routing: WriteRouting,\n    /// Aggregate current receipt result.\n    pub outcome: ReceiptOutcome,\n    /// Last route revision atomically applied to this receipt.\n    pub route_revision: u64,\n    /// Whether the current route has no unresolved target.\n    pub route_settled: bool,\n    /// Exact bounded shortfalls and settled-absence reasons for the current route.\n    pub route_shortfalls: Vec<String>,\n    /// Current destinations still required by the live route.\n    #[serde(with = \"crate::session_set\")]\n    pub desired_destinations: BTreeSet<RelaySessionKey>,\n    /// Number of durably authorized attempts per destination.\n    #[serde(with = \"crate::attempt_map\")]\n    pub attempts: BTreeMap<RelaySessionKey, u32>,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::is_terminal",
           "signature": "pub const fn fava_write::Receipt::is_terminal(&self) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::attempts",
           "signature": "pub fava_write::Receipt::attempts: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, u32>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::current",
           "signature": "pub fava_write::Receipt::current: fava_write::LocalWriteEvent"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::desired_destinations",
           "signature": "pub fava_write::Receipt::desired_destinations: alloc::collections::btree::set::BTreeSet<fava_relay::RelaySessionKey>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::outcome",
           "signature": "pub fava_write::Receipt::outcome: fava_write::ReceiptOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::receipt_id",
           "signature": "pub fava_write::Receipt::receipt_id: fava_write::ReceiptId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_revision",
           "signature": "pub fava_write::Receipt::route_revision: u64"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_settled",
           "signature": "pub fava_write::Receipt::route_settled: bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_shortfalls",
           "signature": "pub fava_write::Receipt::route_shortfalls: alloc::vec::Vec<alloc::string::String>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::routing",
           "signature": "pub fava_write::Receipt::routing: fava_write::WriteRouting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::write_id",
           "signature": "pub fava_write::Receipt::write_id: fava_write::WriteId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::acknowledged",
           "signature": "pub fn fava_write::Receipt::acknowledged(&self) -> usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::desired",
           "signature": "pub fn fava_write::Receipt::desired(&self) -> usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::desires",
           "signature": "pub fn fava_write::Receipt::desires(&self, &fava_relay::RelaySessionKey) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::destinations",
           "signature": "pub fn fava_write::Receipt::destinations(&self) -> &alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::rejected",
           "signature": "pub fn fava_write::Receipt::rejected(&self) -> usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::Receipt`.",
           "kind": "Struct",
           "path": "fava_write::Receipt",
           "signature": "pub struct fava_write::Receipt"
@@ -13222,25 +12828,7 @@
         }
       ],
       "name": "Receipt",
-      "review_problems": [
-        "fava_write::Receipt::is_terminal: missing human interface description",
-        "fava_write::Receipt::attempts: missing human interface description",
-        "fava_write::Receipt::current: missing human interface description",
-        "fava_write::Receipt::desired_destinations: missing human interface description",
-        "fava_write::Receipt::outcome: missing human interface description",
-        "fava_write::Receipt::receipt_id: missing human interface description",
-        "fava_write::Receipt::route_revision: missing human interface description",
-        "fava_write::Receipt::route_settled: missing human interface description",
-        "fava_write::Receipt::route_shortfalls: missing human interface description",
-        "fava_write::Receipt::routing: missing human interface description",
-        "fava_write::Receipt::write_id: missing human interface description",
-        "fava_write::Receipt::acknowledged: missing human interface description",
-        "fava_write::Receipt::desired: missing human interface description",
-        "fava_write::Receipt::desires: missing human interface description",
-        "fava_write::Receipt::destinations: missing human interface description",
-        "fava_write::Receipt::rejected: missing human interface description",
-        "fava_write::Receipt: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -13338,99 +12926,37 @@
     {
       "interface": [
         {
-          "description": "The stable application-visible key used to reattach to the current and terminal facts of one publication obligation. Lifecycle: Minted once in the atomic accept transaction, remains unchanged through rematerialization, retry, restart, cancellation, and settlement, and ceases to resolve only when bounded terminal-receipt retention explicitly removes it.",
-          "kind": "Bound declaration",
-          "path": "fava_write::ReceiptId",
-          "signature": "pub struct ReceiptId(u64);"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::ReceiptId::as_u64",
-          "signature": "pub const fn fava_write::ReceiptId::as_u64(self) -> u64"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Constructor",
-          "path": "fava_write::ReceiptId::from_u64",
-          "signature": "pub const fn fava_write::ReceiptId::from_u64(u64) -> Self"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Struct",
-          "path": "fava_write::ReceiptId",
-          "signature": "pub struct fava_write::ReceiptId(_)"
-        }
-      ],
-      "name": "ReceiptId",
-      "review_problems": [
-        "fava_write::ReceiptId::as_u64: missing human interface description",
-        "fava_write::ReceiptId::from_u64: missing human interface description",
-        "fava_write::ReceiptId: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub struct ReceiptId(u64);",
-            "kind": "struct",
-            "path": "fava_write::ReceiptId",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub const fn fava_write::ReceiptId::as_u64(self) -> u64",
-            "implementation": "impl fava_write::ReceiptId",
-            "path": "fava_write::ReceiptId::as_u64"
-          },
-          {
-            "declaration": "pub const fn fava_write::ReceiptId::from_u64(u64) -> Self",
-            "implementation": "impl fava_write::ReceiptId",
-            "path": "fava_write::ReceiptId::from_u64"
-          },
-          {
-            "declaration": "pub struct fava_write::ReceiptId(_)",
-            "path": "fava_write::ReceiptId"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
           "description": "The obligation-level current state distinguishing still-open work, safe pre-handoff cancellation, complete terminal destination facts, and a settled automatic route with no destination. Lifecycle: Starts Open at custody, may remain Open across signer and route changes, reaches one terminal variant only when store-owned facts satisfy it, and is retained with the terminal receipt rather than recomputed from missing history.",
           "kind": "Bound declaration",
           "path": "fava_write::receipt::ReceiptOutcome",
           "signature": "pub enum ReceiptOutcome {\n    /// Signing or destination work remains open.\n    Open,\n    /// Application cancelled while every destination was definitely pre-handoff.\n    Cancelled,\n    /// Every selected destination has an exact terminal fact.\n    Complete,\n    /// Automatic routing settled without selecting a destination.\n    NoDestination,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::ReceiptOutcome`.",
           "kind": "Enum",
           "path": "fava_write::ReceiptOutcome",
           "signature": "pub enum fava_write::ReceiptOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Cancelled",
           "signature": "pub fava_write::ReceiptOutcome::Cancelled"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Complete",
           "signature": "pub fava_write::ReceiptOutcome::Complete"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::NoDestination",
           "signature": "pub fava_write::ReceiptOutcome::NoDestination"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Open",
           "signature": "pub fava_write::ReceiptOutcome::Open"
@@ -13443,13 +12969,7 @@
         }
       ],
       "name": "ReceiptOutcome",
-      "review_problems": [
-        "fava_write::ReceiptOutcome: missing human interface description",
-        "fava_write::ReceiptOutcome::Cancelled: missing human interface description",
-        "fava_write::ReceiptOutcome::Complete: missing human interface description",
-        "fava_write::ReceiptOutcome::NoDestination: missing human interface description",
-        "fava_write::ReceiptOutcome::Open: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -14004,103 +13524,103 @@
           "signature": "pub enum RelayDeliveryOutcome {\n    /// Destination is durable but has not crossed a handoff boundary.\n    Pending,\n    /// One durable attempt may already have handed bytes to transport.\n    Attempting,\n    /// A definite pre-handoff failure remains eligible for policy retry.\n    Retryable {\n        /// Exact definite pre-handoff failure.\n        reason: String,\n    },\n    /// Relay accepted the event with this exact message.\n    Acknowledged {\n        /// Exact bounded relay message.\n        message: String,\n    },\n    /// Relay rejected the event with this exact message.\n    Rejected {\n        /// Exact bounded relay message.\n        message: String,\n    },\n    /// Relay demanded authentication this attempt did not satisfy, after handoff.\n    AuthenticationDenied {\n        /// Exact bounded relay authentication fact.\n        reason: String,\n    },\n    /// Bounded policy stopped after definite pre-handoff failure.\n    GivenUp {\n        /// Exact policy reason.\n        reason: String,\n    },\n    /// Handoff or recovery cannot prove whether the relay received the event.\n    Unknown {\n        /// Exact ambiguity reason.\n        reason: String,\n    },\n    /// Destination was cancelled while definitely pre-handoff.\n    CancelledBeforeHandoff,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Method",
           "path": "fava_write::RelayDeliveryOutcome::is_terminal",
           "signature": "pub const fn fava_write::RelayDeliveryOutcome::is_terminal(&self) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum",
           "path": "fava_write::RelayDeliveryOutcome",
           "signature": "pub enum fava_write::RelayDeliveryOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Acknowledged",
           "signature": "pub fava_write::RelayDeliveryOutcome::Acknowledged"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Acknowledged::message",
           "signature": "pub fava_write::RelayDeliveryOutcome::Acknowledged::message: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Attempting",
           "signature": "pub fava_write::RelayDeliveryOutcome::Attempting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::AuthenticationDenied",
           "signature": "pub fava_write::RelayDeliveryOutcome::AuthenticationDenied"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff",
           "signature": "pub fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::GivenUp",
           "signature": "pub fava_write::RelayDeliveryOutcome::GivenUp"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::GivenUp::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::GivenUp::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Pending",
           "signature": "pub fava_write::RelayDeliveryOutcome::Pending"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Rejected",
           "signature": "pub fava_write::RelayDeliveryOutcome::Rejected"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Rejected::message",
           "signature": "pub fava_write::RelayDeliveryOutcome::Rejected::message: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Retryable",
           "signature": "pub fava_write::RelayDeliveryOutcome::Retryable"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Retryable::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::Retryable::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Unknown",
           "signature": "pub fava_write::RelayDeliveryOutcome::Unknown"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Unknown::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::Unknown::reason: alloc::string::String"
@@ -14113,25 +13633,7 @@
         }
       ],
       "name": "RelayDeliveryOutcome",
-      "review_problems": [
-        "fava_write::RelayDeliveryOutcome::is_terminal: missing human interface description",
-        "fava_write::RelayDeliveryOutcome: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Acknowledged: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Acknowledged::message: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Attempting: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::AuthenticationDenied: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::GivenUp: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::GivenUp::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Pending: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Rejected: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Rejected::message: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Retryable: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Retryable::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Unknown: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Unknown::reason: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -15552,43 +15054,43 @@
           "signature": "pub struct ReplaceableEventEdit {\n    kind: Kind,\n    identifier: Option<String>,\n    change: Vec<u8>,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventEdit::kind",
           "signature": "pub const fn fava_write::ReplaceableEventEdit::kind(&self) -> nostr::event::kind::Kind"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventEdit::change",
           "signature": "pub fn fava_write::ReplaceableEventEdit::change(&self) -> &[u8]"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Method",
           "path": "<fava_write::ReplaceableEventEdit as serde_core::de::Deserialize<'de>>::deserialize",
           "signature": "pub fn fava_write::ReplaceableEventEdit::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventEdit::identifier",
           "signature": "pub fn fava_write::ReplaceableEventEdit::identifier(&self) -> core::option::Option<&str>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Constructor",
           "path": "fava_write::ReplaceableEventEdit::new",
           "signature": "pub fn fava_write::ReplaceableEventEdit::new(nostr::event::kind::Kind, core::option::Option<alloc::string::String>, alloc::vec::Vec<u8>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventEdit`.",
           "kind": "Method",
           "path": "<fava_write::ReplaceableEventEdit as serde_core::ser::Serialize>::serialize",
           "signature": "pub fn fava_write::ReplaceableEventEdit::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::ReplaceableEventEdit`.",
           "kind": "Struct",
           "path": "fava_write::ReplaceableEventEdit",
           "signature": "pub struct fava_write::ReplaceableEventEdit"
@@ -15601,15 +15103,7 @@
         }
       ],
       "name": "ReplaceableEventEdit",
-      "review_problems": [
-        "fava_write::ReplaceableEventEdit::kind: missing human interface description",
-        "fava_write::ReplaceableEventEdit::change: missing human interface description",
-        "<fava_write::ReplaceableEventEdit as serde_core::de::Deserialize<'de>>::deserialize: missing human interface description",
-        "fava_write::ReplaceableEventEdit::identifier: missing human interface description",
-        "fava_write::ReplaceableEventEdit::new: missing human interface description",
-        "<fava_write::ReplaceableEventEdit as serde_core::ser::Serialize>::serialize: missing human interface description",
-        "fava_write::ReplaceableEventEdit: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -15673,25 +15167,25 @@
           "signature": "pub trait ReplaceableEventMaterializer: Send + Sync {\n    /// Exact replaceable or addressable event kind owned by this provider.\n    fn kind(&self) -> Kind;\n\n    /// Whether this provider owns the edit's coordinate and change encoding.\n    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;\n\n    /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.\n    ///\n    /// The caller supplies the accepted write's exact author and timestamp.\n    /// Implementations return only an unsigned event and receive no custody,\n    /// signer, routing, publication, delivery, cache, or receipt authority.\n    ///\n    /// # Arguments\n    ///\n    /// * `edit` - the opaque protocol-owned change to apply\n    /// * `author` - the accepted write's exact author\n    /// * `source` - the current qualified event for this coordinate, or\n    ///   `None` when the coordinate is protocol-defined empty state\n    /// * `created_at` - the accepted write's exact timestamp\n    ///\n    /// # Errors\n    ///\n    /// Returns an existing typed write refusal when the opaque change or\n    /// resulting event cannot be materialized.\n    fn materialize(\n        &self,\n        edit: &ReplaceableEventEdit,\n        author: PublicKey,\n        source: Option<&EventValue>,\n        created_at: Timestamp,\n    ) -> Result<UnsignedEvent, WriteIntentError>;\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventMaterializer::kind",
           "signature": "pub fn fava_write::ReplaceableEventMaterializer::kind(&self) -> nostr::event::kind::Kind"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventMaterializer::materialize",
           "signature": "pub fn fava_write::ReplaceableEventMaterializer::materialize(&self, &fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, core::option::Option<&fava_write::EventValue>, nostr::types::time::Timestamp) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReplaceableEventMaterializer`.",
           "kind": "Method",
           "path": "fava_write::ReplaceableEventMaterializer::supports",
           "signature": "pub fn fava_write::ReplaceableEventMaterializer::supports(&self, &fava_write::ReplaceableEventEdit) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible trait `fava_write::ReplaceableEventMaterializer`.",
           "kind": "Trait",
           "path": "fava_write::ReplaceableEventMaterializer",
           "signature": "pub trait fava_write::ReplaceableEventMaterializer: core::marker::Send + core::marker::Sync"
@@ -15704,12 +15198,7 @@
         }
       ],
       "name": "ReplaceableEventMaterializer",
-      "review_problems": [
-        "fava_write::ReplaceableEventMaterializer::kind: missing human interface description",
-        "fava_write::ReplaceableEventMaterializer::materialize: missing human interface description",
-        "fava_write::ReplaceableEventMaterializer::supports: missing human interface description",
-        "fava_write::ReplaceableEventMaterializer: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -18100,37 +17589,37 @@
           "signature": "pub enum SignatureState {\n    /// Exact unsigned event exists.\n    Unsigned,\n    /// The write store durably authorized signer invocation for this exact generation.\n    Authorized,\n    /// Exact signing work stopped before a signer effect and may be retried.\n    Retryable(String),\n    /// Exact signed event exists.\n    Signed,\n    /// Signer refused or produced invalid output.\n    Refused(String),\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::SignatureState`.",
           "kind": "Enum",
           "path": "fava_write::SignatureState",
           "signature": "pub enum fava_write::SignatureState"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Authorized",
           "signature": "pub fava_write::SignatureState::Authorized"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Refused",
           "signature": "pub fava_write::SignatureState::Refused(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Retryable",
           "signature": "pub fava_write::SignatureState::Retryable(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Signed",
           "signature": "pub fava_write::SignatureState::Signed"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Unsigned",
           "signature": "pub fava_write::SignatureState::Unsigned"
@@ -18143,14 +17632,7 @@
         }
       ],
       "name": "SignatureState",
-      "review_problems": [
-        "fava_write::SignatureState: missing human interface description",
-        "fava_write::SignatureState::Authorized: missing human interface description",
-        "fava_write::SignatureState::Refused: missing human interface description",
-        "fava_write::SignatureState::Retryable: missing human interface description",
-        "fava_write::SignatureState::Signed: missing human interface description",
-        "fava_write::SignatureState::Unsigned: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -24353,7 +23835,7 @@
     {
       "interface": [
         {
-          "description": "An accepted local publication obligation, its application handle, and its current event and receipt facts. Lifecycle: Fava creates the handle only after fava-publication atomically accepts custody; the handle reads receipt facts while neutral owners retain and remove them.",
+          "description": "An accepted local publication obligation, its application handle, and its current event and receipt facts. Lifecycle: Fava creates the handle only after fava-publication atomically accepts custody; the write store mints nonzero WriteId and ReceiptId values in that commit, while public fallible reconstruction supports durable import and receipt reattachment without granting mutation authority. The handle reads receipt facts while neutral owners retain and remove them.",
           "kind": "Bound declaration",
           "path": "fava::publication::Write",
           "signature": "pub struct Write {\n    id: WriteId,\n    receipt_id: ReceiptId,\n    publication: Publication,\n}"
@@ -24389,46 +23871,46 @@
           "signature": "pub const fn fava::Write::write_id(&self) -> fava_write::WriteId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::LocalWriteEvent`.",
           "kind": "Method",
           "path": "fava_write::LocalWriteEvent::id",
           "signature": "pub const fn fava_write::LocalWriteEvent::id(&self) -> nostr::event::id::EventId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::is_terminal",
           "signature": "pub const fn fava_write::Receipt::is_terminal(&self) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReceiptId`.",
           "kind": "Method",
           "path": "fava_write::ReceiptId::as_u64",
           "signature": "pub const fn fava_write::ReceiptId::as_u64(self) -> u64"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::ReceiptId`.",
           "kind": "Constructor",
-          "path": "fava_write::ReceiptId::from_u64",
-          "signature": "pub const fn fava_write::ReceiptId::from_u64(u64) -> Self"
+          "path": "fava_write::ReceiptId::from_nonzero",
+          "signature": "pub const fn fava_write::ReceiptId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Method",
           "path": "fava_write::RelayDeliveryOutcome::is_terminal",
           "signature": "pub const fn fava_write::RelayDeliveryOutcome::is_terminal(&self) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteId`.",
           "kind": "Method",
           "path": "fava_write::WriteId::as_u64",
           "signature": "pub const fn fava_write::WriteId::as_u64(self) -> u64"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteId`.",
           "kind": "Constructor",
-          "path": "fava_write::WriteId::from_u64",
-          "signature": "pub const fn fava_write::WriteId::from_u64(u64) -> Self"
+          "path": "fava_write::WriteId::from_nonzero",
+          "signature": "pub const fn fava_write::WriteId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self"
         },
         {
           "description": "Compiler-visible enum `fava::PublishError`.",
@@ -24443,31 +23925,31 @@
           "signature": "pub enum fava_publication::PublicationError"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::EventValue`.",
           "kind": "Enum",
           "path": "fava_write::EventValue",
           "signature": "pub enum fava_write::EventValue"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::InvalidEventValue`.",
           "kind": "Enum",
           "path": "fava_write::InvalidEventValue",
           "signature": "pub enum fava_write::InvalidEventValue"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::ReceiptOutcome`.",
           "kind": "Enum",
           "path": "fava_write::ReceiptOutcome",
           "signature": "pub enum fava_write::ReceiptOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum",
           "path": "fava_write::RelayDeliveryOutcome",
           "signature": "pub enum fava_write::RelayDeliveryOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::SignatureState`.",
           "kind": "Enum",
           "path": "fava_write::SignatureState",
           "signature": "pub enum fava_write::SignatureState"
@@ -24545,283 +24027,283 @@
           "signature": "pub fava_publication::PublicationError::Store(fava_write_store::WriteStoreError)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::EventValue`.",
           "kind": "Enum variant",
           "path": "fava_write::EventValue::Signed",
           "signature": "pub fava_write::EventValue::Signed(nostr::event::Event)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::EventValue`.",
           "kind": "Enum variant",
           "path": "fava_write::EventValue::Unsigned",
           "signature": "pub fava_write::EventValue::Unsigned(nostr::event::unsigned::UnsignedEvent)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::InvalidEventValue`.",
           "kind": "Enum variant",
           "path": "fava_write::InvalidEventValue::MissingId",
           "signature": "pub fava_write::InvalidEventValue::MissingId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::LocalWriteEvent`.",
           "kind": "Public field",
           "path": "fava_write::LocalWriteEvent::event",
           "signature": "pub fava_write::LocalWriteEvent::event: fava_write::EventValue"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::LocalWriteEvent`.",
           "kind": "Public field",
           "path": "fava_write::LocalWriteEvent::publication",
           "signature": "pub fava_write::LocalWriteEvent::publication: fava_write::PublicationEvidence"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::destinations",
           "signature": "pub fava_write::PublicationEvidence::destinations: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_failure",
           "signature": "pub fava_write::PublicationEvidence::materialization_failure: core::option::Option<alloc::string::String>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_id",
           "signature": "pub fava_write::PublicationEvidence::materialization_id: fava_write::MaterializationId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::materialization_source",
           "signature": "pub fava_write::PublicationEvidence::materialization_source: core::option::Option<nostr::event::id::EventId>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::receipt_id",
           "signature": "pub fava_write::PublicationEvidence::receipt_id: fava_write::ReceiptId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::retired_materializations",
           "signature": "pub fava_write::PublicationEvidence::retired_materializations: alloc::vec::Vec<(fava_write::MaterializationId, nostr::event::id::EventId, core::option::Option<nostr::event::id::EventId>, core::option::Option<alloc::string::String>)>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::signature",
           "signature": "pub fava_write::PublicationEvidence::signature: fava_write::SignatureState"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::PublicationEvidence`.",
           "kind": "Public field",
           "path": "fava_write::PublicationEvidence::write_id",
           "signature": "pub fava_write::PublicationEvidence::write_id: fava_write::WriteId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::attempts",
           "signature": "pub fava_write::Receipt::attempts: alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, u32>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::current",
           "signature": "pub fava_write::Receipt::current: fava_write::LocalWriteEvent"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::desired_destinations",
           "signature": "pub fava_write::Receipt::desired_destinations: alloc::collections::btree::set::BTreeSet<fava_relay::RelaySessionKey>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::outcome",
           "signature": "pub fava_write::Receipt::outcome: fava_write::ReceiptOutcome"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::receipt_id",
           "signature": "pub fava_write::Receipt::receipt_id: fava_write::ReceiptId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_revision",
           "signature": "pub fava_write::Receipt::route_revision: u64"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_settled",
           "signature": "pub fava_write::Receipt::route_settled: bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::route_shortfalls",
           "signature": "pub fava_write::Receipt::route_shortfalls: alloc::vec::Vec<alloc::string::String>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::routing",
           "signature": "pub fava_write::Receipt::routing: fava_write::WriteRouting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::Receipt`.",
           "kind": "Public field",
           "path": "fava_write::Receipt::write_id",
           "signature": "pub fava_write::Receipt::write_id: fava_write::WriteId"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Cancelled",
           "signature": "pub fava_write::ReceiptOutcome::Cancelled"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Complete",
           "signature": "pub fava_write::ReceiptOutcome::Complete"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::NoDestination",
           "signature": "pub fava_write::ReceiptOutcome::NoDestination"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::ReceiptOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::ReceiptOutcome::Open",
           "signature": "pub fava_write::ReceiptOutcome::Open"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Acknowledged",
           "signature": "pub fava_write::RelayDeliveryOutcome::Acknowledged"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Acknowledged::message",
           "signature": "pub fava_write::RelayDeliveryOutcome::Acknowledged::message: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Attempting",
           "signature": "pub fava_write::RelayDeliveryOutcome::Attempting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::AuthenticationDenied",
           "signature": "pub fava_write::RelayDeliveryOutcome::AuthenticationDenied"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff",
           "signature": "pub fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::GivenUp",
           "signature": "pub fava_write::RelayDeliveryOutcome::GivenUp"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::GivenUp::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::GivenUp::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Pending",
           "signature": "pub fava_write::RelayDeliveryOutcome::Pending"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Rejected",
           "signature": "pub fava_write::RelayDeliveryOutcome::Rejected"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Rejected::message",
           "signature": "pub fava_write::RelayDeliveryOutcome::Rejected::message: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Retryable",
           "signature": "pub fava_write::RelayDeliveryOutcome::Retryable"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Retryable::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::Retryable::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Enum variant",
           "path": "fava_write::RelayDeliveryOutcome::Unknown",
           "signature": "pub fava_write::RelayDeliveryOutcome::Unknown"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::RelayDeliveryOutcome`.",
           "kind": "Public field",
           "path": "fava_write::RelayDeliveryOutcome::Unknown::reason",
           "signature": "pub fava_write::RelayDeliveryOutcome::Unknown::reason: alloc::string::String"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Authorized",
           "signature": "pub fava_write::SignatureState::Authorized"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Refused",
           "signature": "pub fava_write::SignatureState::Refused(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Retryable",
           "signature": "pub fava_write::SignatureState::Retryable(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Signed",
           "signature": "pub fava_write::SignatureState::Signed"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::SignatureState`.",
           "kind": "Enum variant",
           "path": "fava_write::SignatureState::Unsigned",
           "signature": "pub fava_write::SignatureState::Unsigned"
@@ -24887,76 +24369,88 @@
           "signature": "pub fn fava_publication::Publication::stale_signer_completions(&self) -> alloc::vec::Vec<(fava_write::ReceiptId, fava_write::WriteId, fava_write::materialization::MaterializationId, nostr::event::id::EventId, alloc::string::String)>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::author",
           "signature": "pub fn fava_write::EventValue::author(&self) -> nostr::key::public_key::PublicKey"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::coordinate",
           "signature": "pub fn fava_write::EventValue::coordinate(&self) -> core::result::Result<fava_state::EventCoordinate, fava_write::InvalidEventValue>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::created_at",
           "signature": "pub fn fava_write::EventValue::created_at(&self) -> nostr::types::time::Timestamp"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::id",
           "signature": "pub fn fava_write::EventValue::id(&self) -> core::option::Option<nostr::event::id::EventId>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::kind",
           "signature": "pub fn fava_write::EventValue::kind(&self) -> nostr::event::kind::Kind"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::EventValue`.",
           "kind": "Method",
           "path": "fava_write::EventValue::tags",
           "signature": "pub fn fava_write::EventValue::tags(&self) -> &[nostr::event::tag::Tag]"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::LocalWriteEvent`.",
           "kind": "Constructor",
           "path": "fava_write::LocalWriteEvent::new",
           "signature": "pub fn fava_write::LocalWriteEvent::new(fava_write::EventValue, fava_write::PublicationEvidence) -> core::result::Result<Self, fava_write::InvalidEventValue>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::acknowledged",
           "signature": "pub fn fava_write::Receipt::acknowledged(&self) -> usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::desired",
           "signature": "pub fn fava_write::Receipt::desired(&self) -> usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::desires",
           "signature": "pub fn fava_write::Receipt::desires(&self, &fava_relay::RelaySessionKey) -> bool"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::destinations",
           "signature": "pub fn fava_write::Receipt::destinations(&self) -> &alloc::collections::btree::map::BTreeMap<fava_relay::RelaySessionKey, fava_write::RelayDeliveryOutcome>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::Receipt`.",
           "kind": "Method",
           "path": "fava_write::Receipt::rejected",
           "signature": "pub fn fava_write::Receipt::rejected(&self) -> usize"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_write::ReceiptId`.",
+          "kind": "Constructor",
+          "path": "<fava_write::ReceiptId as core::convert::TryFrom<u64>>::try_from",
+          "signature": "pub fn fava_write::ReceiptId::try_from(u64) -> core::result::Result<Self, Self::Error>"
+        },
+        {
+          "description": "Compiler-visible method owned by `fava_write::WriteId`.",
+          "kind": "Constructor",
+          "path": "<fava_write::WriteId as core::convert::TryFrom<u64>>::try_from",
+          "signature": "pub fn fava_write::WriteId::try_from(u64) -> core::result::Result<Self, Self::Error>"
         },
         {
           "description": "Compiler-visible struct `fava::Write`.",
@@ -24971,34 +24465,46 @@
           "signature": "pub struct fava_publication::Publication"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::LocalWriteEvent`.",
           "kind": "Struct",
           "path": "fava_write::LocalWriteEvent",
           "signature": "pub struct fava_write::LocalWriteEvent"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::PublicationEvidence`.",
           "kind": "Struct",
           "path": "fava_write::PublicationEvidence",
           "signature": "pub struct fava_write::PublicationEvidence"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::Receipt`.",
           "kind": "Struct",
           "path": "fava_write::Receipt",
           "signature": "pub struct fava_write::Receipt"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::ReceiptId`.",
           "kind": "Struct",
           "path": "fava_write::ReceiptId",
           "signature": "pub struct fava_write::ReceiptId(_)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::WriteId`.",
           "kind": "Struct",
           "path": "fava_write::WriteId",
           "signature": "pub struct fava_write::WriteId(_)"
+        },
+        {
+          "description": "Compiler-visible type alias owned by `fava_write::ReceiptId`.",
+          "kind": "Type alias",
+          "path": "<fava_write::ReceiptId as core::convert::TryFrom<u64>>::Error",
+          "signature": "pub type fava_write::ReceiptId::Error = core::num::error::TryFromIntError"
+        },
+        {
+          "description": "Compiler-visible type alias owned by `fava_write::WriteId`.",
+          "kind": "Type alias",
+          "path": "<fava_write::WriteId as core::convert::TryFrom<u64>>::Error",
+          "signature": "pub type fava_write::WriteId::Error = core::num::error::TryFromIntError"
         },
         {
           "description": "Exports this term at `fava::PublishError` from `publication::PublishError`.",
@@ -25053,72 +24559,13 @@
       "review_problems": [
         "fava_publication::Publication::wait_terminal: missing human interface description",
         "fava_publication::Publication::wait_until: missing human interface description",
-        "fava_write::LocalWriteEvent::id: missing human interface description",
-        "fava_write::Receipt::is_terminal: missing human interface description",
-        "fava_write::ReceiptId::as_u64: missing human interface description",
-        "fava_write::ReceiptId::from_u64: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::is_terminal: missing human interface description",
-        "fava_write::WriteId::as_u64: missing human interface description",
-        "fava_write::WriteId::from_u64: missing human interface description",
         "fava_publication::PublicationError: missing human interface description",
-        "fava_write::EventValue: missing human interface description",
-        "fava_write::InvalidEventValue: missing human interface description",
-        "fava_write::ReceiptOutcome: missing human interface description",
-        "fava_write::RelayDeliveryOutcome: missing human interface description",
-        "fava_write::SignatureState: missing human interface description",
         "fava_publication::PublicationError::NotConfigured: missing human interface description",
         "fava_publication::PublicationError::ReceiptChangesClosed: missing human interface description",
         "fava_publication::PublicationError::ReceiptMissing: missing human interface description",
         "fava_publication::PublicationError::Routing: missing human interface description",
         "fava_publication::PublicationError::RuntimeUnavailable: missing human interface description",
         "fava_publication::PublicationError::Store: missing human interface description",
-        "fava_write::EventValue::Signed: missing human interface description",
-        "fava_write::EventValue::Unsigned: missing human interface description",
-        "fava_write::InvalidEventValue::MissingId: missing human interface description",
-        "fava_write::LocalWriteEvent::event: missing human interface description",
-        "fava_write::LocalWriteEvent::publication: missing human interface description",
-        "fava_write::PublicationEvidence::destinations: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_failure: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_id: missing human interface description",
-        "fava_write::PublicationEvidence::materialization_source: missing human interface description",
-        "fava_write::PublicationEvidence::receipt_id: missing human interface description",
-        "fava_write::PublicationEvidence::retired_materializations: missing human interface description",
-        "fava_write::PublicationEvidence::signature: missing human interface description",
-        "fava_write::PublicationEvidence::write_id: missing human interface description",
-        "fava_write::Receipt::attempts: missing human interface description",
-        "fava_write::Receipt::current: missing human interface description",
-        "fava_write::Receipt::desired_destinations: missing human interface description",
-        "fava_write::Receipt::outcome: missing human interface description",
-        "fava_write::Receipt::receipt_id: missing human interface description",
-        "fava_write::Receipt::route_revision: missing human interface description",
-        "fava_write::Receipt::route_settled: missing human interface description",
-        "fava_write::Receipt::route_shortfalls: missing human interface description",
-        "fava_write::Receipt::routing: missing human interface description",
-        "fava_write::Receipt::write_id: missing human interface description",
-        "fava_write::ReceiptOutcome::Cancelled: missing human interface description",
-        "fava_write::ReceiptOutcome::Complete: missing human interface description",
-        "fava_write::ReceiptOutcome::NoDestination: missing human interface description",
-        "fava_write::ReceiptOutcome::Open: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Acknowledged: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Acknowledged::message: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Attempting: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::AuthenticationDenied: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::AuthenticationDenied::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::CancelledBeforeHandoff: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::GivenUp: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::GivenUp::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Pending: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Rejected: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Rejected::message: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Retryable: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Retryable::reason: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Unknown: missing human interface description",
-        "fava_write::RelayDeliveryOutcome::Unknown::reason: missing human interface description",
-        "fava_write::SignatureState::Authorized: missing human interface description",
-        "fava_write::SignatureState::Refused: missing human interface description",
-        "fava_write::SignatureState::Retryable: missing human interface description",
-        "fava_write::SignatureState::Signed: missing human interface description",
-        "fava_write::SignatureState::Unsigned: missing human interface description",
         "fava_publication::Publication::accept: missing human interface description",
         "fava_publication::Publication::cancel: missing human interface description",
         "fava_publication::Publication::new: missing human interface description",
@@ -25127,24 +24574,7 @@
         "fava_publication::Publication::recover: missing human interface description",
         "fava_publication::Publication::remove_receipt: missing human interface description",
         "fava_publication::Publication::stale_signer_completions: missing human interface description",
-        "fava_write::EventValue::author: missing human interface description",
-        "fava_write::EventValue::coordinate: missing human interface description",
-        "fava_write::EventValue::created_at: missing human interface description",
-        "fava_write::EventValue::id: missing human interface description",
-        "fava_write::EventValue::kind: missing human interface description",
-        "fava_write::EventValue::tags: missing human interface description",
-        "fava_write::LocalWriteEvent::new: missing human interface description",
-        "fava_write::Receipt::acknowledged: missing human interface description",
-        "fava_write::Receipt::desired: missing human interface description",
-        "fava_write::Receipt::desires: missing human interface description",
-        "fava_write::Receipt::destinations: missing human interface description",
-        "fava_write::Receipt::rejected: missing human interface description",
-        "fava_publication::Publication: missing human interface description",
-        "fava_write::LocalWriteEvent: missing human interface description",
-        "fava_write::PublicationEvidence: missing human interface description",
-        "fava_write::Receipt: missing human interface description",
-        "fava_write::ReceiptId: missing human interface description",
-        "fava_write::WriteId: missing human interface description"
+        "fava_publication::Publication: missing human interface description"
       ],
       "structure": {
         "private_architectural_state": [
@@ -25198,9 +24628,9 @@
             "path": "fava_write::ReceiptId::as_u64"
           },
           {
-            "declaration": "pub const fn fava_write::ReceiptId::from_u64(u64) -> Self",
+            "declaration": "pub const fn fava_write::ReceiptId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self",
             "implementation": "impl fava_write::ReceiptId",
-            "path": "fava_write::ReceiptId::from_u64"
+            "path": "fava_write::ReceiptId::from_nonzero"
           },
           {
             "declaration": "pub const fn fava_write::RelayDeliveryOutcome::is_terminal(&self) -> bool",
@@ -25213,9 +24643,9 @@
             "path": "fava_write::WriteId::as_u64"
           },
           {
-            "declaration": "pub const fn fava_write::WriteId::from_u64(u64) -> Self",
+            "declaration": "pub const fn fava_write::WriteId::from_nonzero(core::num::nonzero::NonZeroU64) -> Self",
             "implementation": "impl fava_write::WriteId",
-            "path": "fava_write::WriteId::from_u64"
+            "path": "fava_write::WriteId::from_nonzero"
           },
           {
             "declaration": "pub enum fava::PublishError",
@@ -25592,6 +25022,16 @@
             "path": "fava_write::Receipt::rejected"
           },
           {
+            "declaration": "pub fn fava_write::ReceiptId::try_from(u64) -> core::result::Result<Self, Self::Error>",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::ReceiptId",
+            "path": "<fava_write::ReceiptId as core::convert::TryFrom<u64>>::try_from"
+          },
+          {
+            "declaration": "pub fn fava_write::WriteId::try_from(u64) -> core::result::Result<Self, Self::Error>",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::WriteId",
+            "path": "<fava_write::WriteId as core::convert::TryFrom<u64>>::try_from"
+          },
+          {
             "declaration": "pub struct fava::Write",
             "path": "fava::Write"
           },
@@ -25618,6 +25058,16 @@
           {
             "declaration": "pub struct fava_write::WriteId(_)",
             "path": "fava_write::WriteId"
+          },
+          {
+            "declaration": "pub type fava_write::ReceiptId::Error = core::num::error::TryFromIntError",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::ReceiptId",
+            "path": "<fava_write::ReceiptId as core::convert::TryFrom<u64>>::Error"
+          },
+          {
+            "declaration": "pub type fava_write::WriteId::Error = core::num::error::TryFromIntError",
+            "implementation": "impl core::convert::TryFrom<u64> for fava_write::WriteId",
+            "path": "<fava_write::WriteId as core::convert::TryFrom<u64>>::Error"
           }
         ],
         "reexports": [
@@ -25736,177 +25186,115 @@
     {
       "interface": [
         {
-          "description": "The stable store-owned identity of one accepted write across its current and retired event materializations. Lifecycle: Minted once in acceptance, retained unchanged through signing, routing, retries, rematerialization, cancellation, and recovery, and retired only with the store's bounded obligation/receipt policy.",
-          "kind": "Bound declaration",
-          "path": "fava_write::WriteId",
-          "signature": "pub struct WriteId(u64);"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Method",
-          "path": "fava_write::WriteId::as_u64",
-          "signature": "pub const fn fava_write::WriteId::as_u64(self) -> u64"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Constructor",
-          "path": "fava_write::WriteId::from_u64",
-          "signature": "pub const fn fava_write::WriteId::from_u64(u64) -> Self"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Struct",
-          "path": "fava_write::WriteId",
-          "signature": "pub struct fava_write::WriteId(_)"
-        }
-      ],
-      "name": "WriteId",
-      "review_problems": [
-        "fava_write::WriteId::as_u64: missing human interface description",
-        "fava_write::WriteId::from_u64: missing human interface description",
-        "fava_write::WriteId: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub struct WriteId(u64);",
-            "kind": "struct",
-            "path": "fava_write::WriteId",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub const fn fava_write::WriteId::as_u64(self) -> u64",
-            "implementation": "impl fava_write::WriteId",
-            "path": "fava_write::WriteId::as_u64"
-          },
-          {
-            "declaration": "pub const fn fava_write::WriteId::from_u64(u64) -> Self",
-            "implementation": "impl fava_write::WriteId",
-            "path": "fava_write::WriteId::from_u64"
-          },
-          {
-            "declaration": "pub struct fava_write::WriteId(_)",
-            "path": "fava_write::WriteId"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
           "description": "A neutral checked request carrying a publication payload and durable routing fact between publication and write-store contracts. Lifecycle: The fava facade constructs WriteIntent privately after resolving its publication scope and any EventBuilder-carried route; fava-publication and write-store providers consume and reconstruct it until the accepted obligation ends.",
           "kind": "Bound declaration",
           "path": "fava_write::WriteIntent",
           "signature": "pub struct WriteIntent {\n    payload: WritePayload,\n    routing: WriteRouting,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::payload",
           "signature": "pub const fn fava_write::WriteIntent::payload(&self) -> &fava_write::WritePayload"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::routing",
           "signature": "pub const fn fava_write::WriteIntent::routing(&self) -> &fava_write::WriteRouting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::WritePayload`.",
           "kind": "Enum",
           "path": "fava_write::WritePayload",
           "signature": "pub enum fava_write::WritePayload"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::WriteRouting`.",
           "kind": "Enum",
           "path": "fava_write::WriteRouting",
           "signature": "pub enum fava_write::WriteRouting"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WritePayload`.",
           "kind": "Enum variant",
           "path": "fava_write::WritePayload::Edit",
           "signature": "pub fava_write::WritePayload::Edit"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WritePayload`.",
           "kind": "Public field",
           "path": "fava_write::WritePayload::Edit::author",
           "signature": "pub fava_write::WritePayload::Edit::author: nostr::key::public_key::PublicKey"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WritePayload`.",
           "kind": "Public field",
           "path": "fava_write::WritePayload::Edit::edit",
           "signature": "pub fava_write::WritePayload::Edit::edit: fava_write::ReplaceableEventEdit"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WritePayload`.",
           "kind": "Enum variant",
           "path": "fava_write::WritePayload::Event",
           "signature": "pub fava_write::WritePayload::Event(nostr::event::unsigned::UnsignedEvent)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WritePayload`.",
           "kind": "Enum variant",
           "path": "fava_write::WritePayload::Presigned",
           "signature": "pub fava_write::WritePayload::Presigned(nostr::event::Event)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteRouting`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteRouting::Automatic",
           "signature": "pub fava_write::WriteRouting::Automatic"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteRouting`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteRouting::Explicit",
           "signature": "pub fava_write::WriteRouting::Explicit(alloc::vec::Vec<nostr::types::url::RelayUrl>)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::author",
           "signature": "pub fn fava_write::WriteIntent::author(&self) -> nostr::key::public_key::PublicKey"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::edit_as",
           "signature": "pub fn fava_write::WriteIntent::edit_as(fava_write::ReplaceableEventEdit, nostr::key::public_key::PublicKey, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::event",
           "signature": "pub fn fava_write::WriteIntent::event(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::into_parts",
           "signature": "pub fn fava_write::WriteIntent::into_parts(self) -> (fava_write::WritePayload, fava_write::WriteRouting)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntent`.",
           "kind": "Method",
           "path": "fava_write::WriteIntent::presigned",
           "signature": "pub fn fava_write::WriteIntent::presigned(nostr::event::Event, fava_write::WriteRouting) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteRouting`.",
           "kind": "Method",
           "path": "fava_write::WriteRouting::explicit",
           "signature": "pub fn fava_write::WriteRouting::explicit(impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible struct `fava_write::WriteIntent`.",
           "kind": "Struct",
           "path": "fava_write::WriteIntent",
           "signature": "pub struct fava_write::WriteIntent"
@@ -25919,26 +25307,7 @@
         }
       ],
       "name": "WriteIntent",
-      "review_problems": [
-        "fava_write::WriteIntent::payload: missing human interface description",
-        "fava_write::WriteIntent::routing: missing human interface description",
-        "fava_write::WritePayload: missing human interface description",
-        "fava_write::WriteRouting: missing human interface description",
-        "fava_write::WritePayload::Edit: missing human interface description",
-        "fava_write::WritePayload::Edit::author: missing human interface description",
-        "fava_write::WritePayload::Edit::edit: missing human interface description",
-        "fava_write::WritePayload::Event: missing human interface description",
-        "fava_write::WritePayload::Presigned: missing human interface description",
-        "fava_write::WriteRouting::Automatic: missing human interface description",
-        "fava_write::WriteRouting::Explicit: missing human interface description",
-        "fava_write::WriteIntent::author: missing human interface description",
-        "fava_write::WriteIntent::edit_as: missing human interface description",
-        "fava_write::WriteIntent::event: missing human interface description",
-        "fava_write::WriteIntent::into_parts: missing human interface description",
-        "fava_write::WriteIntent::presigned: missing human interface description",
-        "fava_write::WriteRouting::explicit: missing human interface description",
-        "fava_write::WriteIntent: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -26048,7 +25417,7 @@
           "signature": "pub enum WriteIntentError {\n    /// Explicit publication requires at least one relay.\n    #[error(\"explicit publication requires at least one relay\")]\n    EmptyExplicitRelays,\n    /// Explicit relay fan-out exceeds the declared bound.\n    #[error(\"explicit relay count exceeds bound: {actual} > {maximum}\")]\n    TooManyExplicitRelays {\n        /// Actual relay count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Raw explicit relay input exceeds the pre-normalization work bound.\n    #[error(\"raw explicit relay input exceeds bound: {actual} > {maximum}\")]\n    TooManyRawExplicitRelays {\n        /// Raw input count before duplicate normalization.\n        actual: usize,\n        /// Declared raw-input maximum.\n        maximum: usize,\n    },\n    /// A deserialized or reconstructed explicit route contains a duplicate.\n    #[error(\"explicit publication route repeats relay identity {relay}\")]\n    DuplicateExplicitRelay {\n        /// Repeated exact relay identity.\n        relay: RelayUrl,\n    },\n    /// Event id or signature is invalid.\n    #[error(\"event verification failed: {0}\")]\n    InvalidEvent(String),\n    /// Complete event is already expired.\n    #[error(\"event is already expired\")]\n    Expired,\n    /// Event contains too many tags.\n    #[error(\"event tags exceed bound: {actual} > {maximum}\")]\n    TooManyTags {\n        /// Actual tag count.\n        actual: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Event exceeds the declared byte bound.\n    #[error(\"event bytes exceed bound: {bytes} > {maximum}\")]\n    TooLarge {\n        /// Actual serialized bytes.\n        bytes: usize,\n        /// Declared maximum.\n        maximum: usize,\n    },\n    /// Exact serialization failed.\n    #[error(\"event encoding failed: {0}\")]\n    Encoding(String),\n    /// Event-only construction would discard local explicit routing.\n    #[error(\"event-only construction cannot discard explicit publication routing\")]\n    ExplicitRoutingAttached,\n    /// Builder and facade both selected an explicit publication route.\n    #[error(\"builder and facade cannot both select an explicit publication route\")]\n    ConflictingExplicitRoutes,\n}"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum `fava_write::WriteIntentError`.",
           "kind": "Enum",
           "path": "fava_write::WriteIntentError",
           "signature": "pub enum fava_write::WriteIntentError"
@@ -26060,31 +25429,31 @@
           "signature": "pub fava_write::WriteIntentError::ConflictingExplicitRoutes"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::DuplicateExplicitRelay",
           "signature": "pub fava_write::WriteIntentError::DuplicateExplicitRelay"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::DuplicateExplicitRelay::relay",
           "signature": "pub fava_write::WriteIntentError::DuplicateExplicitRelay::relay: nostr::types::url::RelayUrl"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::EmptyExplicitRelays",
           "signature": "pub fava_write::WriteIntentError::EmptyExplicitRelays"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::Encoding",
           "signature": "pub fava_write::WriteIntentError::Encoding(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::Expired",
           "signature": "pub fava_write::WriteIntentError::Expired"
@@ -26096,110 +25465,92 @@
           "signature": "pub fava_write::WriteIntentError::ExplicitRoutingAttached"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::InvalidEvent",
           "signature": "pub fava_write::WriteIntentError::InvalidEvent(alloc::string::String)"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::TooLarge",
           "signature": "pub fava_write::WriteIntentError::TooLarge"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooLarge::bytes",
           "signature": "pub fava_write::WriteIntentError::TooLarge::bytes: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooLarge::maximum",
           "signature": "pub fava_write::WriteIntentError::TooLarge::maximum: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::TooManyExplicitRelays",
           "signature": "pub fava_write::WriteIntentError::TooManyExplicitRelays"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyExplicitRelays::actual",
           "signature": "pub fava_write::WriteIntentError::TooManyExplicitRelays::actual: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyExplicitRelays::maximum",
           "signature": "pub fava_write::WriteIntentError::TooManyExplicitRelays::maximum: usize"
         },
         {
-          "description": "Raw explicit relay input exceeds the pre-normalization work bound.",
-          "kind": "Compiler-visible item",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
+          "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays",
           "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays"
         },
         {
-          "description": "Raw input count before duplicate normalization.",
-          "kind": "Compiler-visible item",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
+          "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::actual",
           "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::actual: usize"
         },
         {
-          "description": "Declared raw-input maximum.",
-          "kind": "Compiler-visible item",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
+          "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum",
           "signature": "pub fava_write::WriteIntentError::TooManyRawExplicitRelays::maximum: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible enum variant owned by `fava_write::WriteIntentError`.",
           "kind": "Enum variant",
           "path": "fava_write::WriteIntentError::TooManyTags",
           "signature": "pub fava_write::WriteIntentError::TooManyTags"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyTags::actual",
           "signature": "pub fava_write::WriteIntentError::TooManyTags::actual: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible public field owned by `fava_write::WriteIntentError`.",
           "kind": "Public field",
           "path": "fava_write::WriteIntentError::TooManyTags::maximum",
           "signature": "pub fava_write::WriteIntentError::TooManyTags::maximum: usize"
         },
         {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
+          "description": "Compiler-visible method owned by `fava_write::WriteIntentError`.",
           "kind": "Method",
           "path": "<fava_write::WriteIntentError as core::convert::From<fava_write::EventBuildError>>::from",
           "signature": "pub fn fava_write::WriteIntentError::from(fava_write::EventBuildError) -> Self"
         }
       ],
       "name": "WriteIntentError",
-      "review_problems": [
-        "fava_write::WriteIntentError: missing human interface description",
-        "fava_write::WriteIntentError::DuplicateExplicitRelay: missing human interface description",
-        "fava_write::WriteIntentError::DuplicateExplicitRelay::relay: missing human interface description",
-        "fava_write::WriteIntentError::EmptyExplicitRelays: missing human interface description",
-        "fava_write::WriteIntentError::Encoding: missing human interface description",
-        "fava_write::WriteIntentError::Expired: missing human interface description",
-        "fava_write::WriteIntentError::InvalidEvent: missing human interface description",
-        "fava_write::WriteIntentError::TooLarge: missing human interface description",
-        "fava_write::WriteIntentError::TooLarge::bytes: missing human interface description",
-        "fava_write::WriteIntentError::TooLarge::maximum: missing human interface description",
-        "fava_write::WriteIntentError::TooManyExplicitRelays: missing human interface description",
-        "fava_write::WriteIntentError::TooManyExplicitRelays::actual: missing human interface description",
-        "fava_write::WriteIntentError::TooManyExplicitRelays::maximum: missing human interface description",
-        "fava_write::WriteIntentError::TooManyTags: missing human interface description",
-        "fava_write::WriteIntentError::TooManyTags::actual: missing human interface description",
-        "fava_write::WriteIntentError::TooManyTags::maximum: missing human interface description",
-        "<fava_write::WriteIntentError as core::convert::From<fava_write::EventBuildError>>::from: missing human interface description"
-      ],
+      "review_problems": [],
       "structure": {
         "private_architectural_state": [
           {
@@ -26299,99 +25650,6 @@
             "declaration": "pub fn fava_write::WriteIntentError::from(fava_write::EventBuildError) -> Self",
             "implementation": "impl core::convert::From<fava_write::EventBuildError> for fava_write::WriteIntentError",
             "path": "<fava_write::WriteIntentError as core::convert::From<fava_write::EventBuildError>>::from"
-          }
-        ],
-        "reexports": []
-      }
-    },
-    {
-      "interface": [
-        {
-          "description": "The exhaustive accepted input form: complete UnsignedEvent, durable ReplaceableEventEdit with author resolved before custody, or verified presigned Event. Lifecycle: Validated before acceptance, stored unchanged as the durable operation input, materializes zero or more current events under the same write, and remains available for restart/rematerialization until the obligation's retention ends.",
-          "kind": "Bound declaration",
-          "path": "fava_write::WritePayload",
-          "signature": "pub enum WritePayload {\n    /// Complete unsigned event body.\n    Event(UnsignedEvent),\n    /// Persistable protocol-owned change awaiting or surviving materialization.\n    Edit {\n        /// Durable protocol-owned change.\n        edit: ReplaceableEventEdit,\n        /// Author resolved exactly once before custody.\n        author: PublicKey,\n    },\n    /// Verified complete signed event.\n    Presigned(Event),\n}"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum",
-          "path": "fava_write::WritePayload",
-          "signature": "pub enum fava_write::WritePayload"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::WritePayload::Edit",
-          "signature": "pub fava_write::WritePayload::Edit"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Public field",
-          "path": "fava_write::WritePayload::Edit::author",
-          "signature": "pub fava_write::WritePayload::Edit::author: nostr::key::public_key::PublicKey"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Public field",
-          "path": "fava_write::WritePayload::Edit::edit",
-          "signature": "pub fava_write::WritePayload::Edit::edit: fava_write::ReplaceableEventEdit"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::WritePayload::Event",
-          "signature": "pub fava_write::WritePayload::Event(nostr::event::unsigned::UnsignedEvent)"
-        },
-        {
-          "description": "Review blocked: no human description is bound for this compiler-visible item.",
-          "kind": "Enum variant",
-          "path": "fava_write::WritePayload::Presigned",
-          "signature": "pub fava_write::WritePayload::Presigned(nostr::event::Event)"
-        }
-      ],
-      "name": "WritePayload",
-      "review_problems": [
-        "fava_write::WritePayload: missing human interface description",
-        "fava_write::WritePayload::Edit: missing human interface description",
-        "fava_write::WritePayload::Edit::author: missing human interface description",
-        "fava_write::WritePayload::Edit::edit: missing human interface description",
-        "fava_write::WritePayload::Event: missing human interface description",
-        "fava_write::WritePayload::Presigned: missing human interface description"
-      ],
-      "structure": {
-        "private_architectural_state": [
-          {
-            "declaration": "pub enum WritePayload {\n    /// Complete unsigned event body.\n    Event(UnsignedEvent),\n    /// Persistable protocol-owned change awaiting or surviving materialization.\n    Edit {\n        /// Durable protocol-owned change.\n        edit: ReplaceableEventEdit,\n        /// Author resolved exactly once before custody.\n        author: PublicKey,\n    },\n    /// Verified complete signed event.\n    Presigned(Event),\n}",
-            "kind": "enum",
-            "path": "fava_write::WritePayload",
-            "source": "crates/fava-write/src/lib.rs",
-            "visibility": "public"
-          }
-        ],
-        "public_api": [
-          {
-            "declaration": "pub enum fava_write::WritePayload",
-            "path": "fava_write::WritePayload"
-          },
-          {
-            "declaration": "pub fava_write::WritePayload::Edit",
-            "path": "fava_write::WritePayload::Edit"
-          },
-          {
-            "declaration": "pub fava_write::WritePayload::Edit::author: nostr::key::public_key::PublicKey",
-            "path": "fava_write::WritePayload::Edit::author"
-          },
-          {
-            "declaration": "pub fava_write::WritePayload::Edit::edit: fava_write::ReplaceableEventEdit",
-            "path": "fava_write::WritePayload::Edit::edit"
-          },
-          {
-            "declaration": "pub fava_write::WritePayload::Event(nostr::event::unsigned::UnsignedEvent)",
-            "path": "fava_write::WritePayload::Event"
-          },
-          {
-            "declaration": "pub fava_write::WritePayload::Presigned(nostr::event::Event)",
-            "path": "fava_write::WritePayload::Presigned"
           }
         ],
         "reexports": []
