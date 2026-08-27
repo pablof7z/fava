@@ -1,3 +1,5 @@
+//! Kind-39000 group metadata: [`SimpleGroupMetadata`] and its decoder.
+
 use fava_write::{EventValue, PublicKey};
 
 use crate::records::{SimpleGroupDecodeError, required_value, state_event};

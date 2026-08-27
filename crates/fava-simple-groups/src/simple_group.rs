@@ -1,3 +1,5 @@
+//! [`SimpleGroup`]: the group id/relays value that queries and event builders compose against.
+
 use std::collections::BTreeSet;
 use std::fmt;
 

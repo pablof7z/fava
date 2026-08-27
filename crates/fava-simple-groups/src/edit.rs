@@ -1,3 +1,11 @@
+//! Kind-10009 Simple Group List edits: encode, decode, and materialize.
+//!
+//! The five saved-list operations (save/remove/rename a group, save/remove a
+//! bare relay) are packed into the private binary format read and written by
+//! [`encode`]/[`decode_edit`], then folded onto the previous kind-10009 tag
+//! set by [`apply`]. [`saved_group_list_materializer`] is the only way a
+//! caller outside this module reaches that logic.
+
 use std::sync::Arc;
 
 use fava_write::{
@@ -352,6 +360,11 @@ fn take_simple_group(input: &mut &[u8]) -> Result<(String, Vec<RelayUrl>), Write
     Ok((id, relays))
 }
 
+/// The kind-10009 [`ReplaceableEventMaterializer`] returned by [`saved_group_list_materializer`].
+///
+/// Turns a decoded saved-list edit back into tags by replaying it against the
+/// prior kind-10009 event, so a save/remove/rename only ever touches the
+/// entries it names.
 struct SavedGroupListMaterializer;
 
 impl ReplaceableEventMaterializer for SavedGroupListMaterializer {

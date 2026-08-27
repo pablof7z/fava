@@ -1,3 +1,6 @@
+//! Shared decode error type and tag-reading helpers used by every
+//! kind-3900x state-event decoder in this crate.
+
 use std::fmt;
 
 use fava_write::{EventValue, Kind, PublicKey, Tag};

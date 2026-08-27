@@ -1,3 +1,6 @@
+//! Kind-39001 through kind-39004 group-membership state: admins, members,
+//! roles, and `LiveKit` participants, each with its own decoder.
+
 use fava_write::{EventValue, PublicKey};
 
 use crate::records::{SimpleGroupDecodeError, required_value, state_event};
@@ -34,6 +37,11 @@ pub struct SimpleGroupLivekitParticipants {
     participants: Vec<Result<PublicKey, SimpleGroupDecodeError>>,
 }
 
+/// Generate the `id()`/`author()` pair shared by every kind-3900x state struct in this module.
+///
+/// All four types here decode to the same `(id, author, ..)` shape from
+/// [`state_event`](crate::records::state_event); this spares each of them a
+/// hand-written, identical pair of accessors.
 macro_rules! common_accessors {
     ($type:ty) => {
         impl $type {

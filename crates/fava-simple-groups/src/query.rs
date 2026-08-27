@@ -1,3 +1,5 @@
+//! The closed set of NIP-29 state-event kinds and the kind-10009 saved-list query.
+
 use fava_query::{Kind, PublicKey, Query, QueryError};
 
 /// Exact NIP-29 state mapping: Metadata→39000, Admins→39001, Members→39002,

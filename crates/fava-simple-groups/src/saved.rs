@@ -1,3 +1,5 @@
+//! Kind-10009 Simple Group List reads: [`SavedGroupList`], [`SavedSimpleGroup`], and their decoder.
+
 use std::fmt;
 
 use fava_write::{EventValue, Kind, PublicKey};

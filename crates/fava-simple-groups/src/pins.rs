@@ -1,3 +1,5 @@
+//! Kind-39005 group pins: [`SimpleGroupPins`] and its decoder.
+
 use fava_write::{EventValue, PublicKey, Tag};
 
 use crate::records::{SimpleGroupDecodeError, required_value, state_event};
