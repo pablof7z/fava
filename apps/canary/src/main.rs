@@ -12,8 +12,9 @@ mod sealed_executable;
 use canary::{
     CroissantNip02Options, FlowOptions, ReconOptions, SmokeOptions, run_croissant_nip02_scenario,
     run_croissant_simple_groups_scenario, run_live_scenario, run_m3_live_scenario,
-    run_public_recon, run_publication_scenario, run_real_relay_smoke, run_routing_scenario,
-    scenario_registry, verify_croissant_run_pair, verify_croissant_simple_groups_pair,
+    run_phase_e_gates, run_public_recon, run_publication_scenario, run_real_relay_smoke,
+    run_routing_scenario, scenario_registry, verify_croissant_run_pair,
+    verify_croissant_simple_groups_pair,
 };
 
 struct CroissantSimpleGroupsCliOptions {
@@ -145,6 +146,24 @@ async fn run() -> canary::CanaryResult<()> {
         }
         "crash-child" => canary::run_crash_child(arguments.collect()).await,
         "flow-close-child" => canary::run_flow_close_child(arguments.collect()).await,
+        "phase-e-gates" => {
+            let mut runs_directory =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+            while let Some(flag) = arguments.next() {
+                let value = arguments.next().ok_or_else(usage)?;
+                match flag.as_str() {
+                    "--runs-dir" => runs_directory = PathBuf::from(value),
+                    _ => return Err(usage()),
+                }
+            }
+            let outcome = run_phase_e_gates(runs_directory).await?;
+            println!("passed phase-e-gates");
+            println!("gate2 (ephemeral-restart): {}", outcome.gate2_ephemeral);
+            println!("gate3 (persistent-restart): {}", outcome.gate3_persistent);
+            println!("gate4 (nip05-negative-cache): {}", outcome.gate4_nip05);
+            println!("gate5 (nip11-stale-result): {}", outcome.gate5_nip11);
+            Ok(())
+        }
         _ => Err(usage()),
     }
 }

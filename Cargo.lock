@@ -297,6 +297,7 @@ dependencies = [
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
+ "fava-fetch-cache",
  "fava-nip02",
  "fava-observe",
  "fava-publication",
@@ -386,6 +387,30 @@ dependencies = [
  "fava-state",
  "nostr",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-event-cache-persistent"
+version = "0.1.0"
+dependencies = [
+ "fava-event-cache",
+ "fava-query",
+ "fava-relay",
+ "fava-state",
+ "nostr",
+ "redb",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-fetch-cache"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
  "tokio",
 ]
 

@@ -8,6 +8,8 @@ members = [
     "crates/fava-query-standard",
     "crates/fava-event-cache",
     "crates/fava-event-cache-memory",
+    "crates/fava-event-cache-persistent",
+    "crates/fava-fetch-cache",
     "crates/fava-write-store",
     "crates/fava-write-store-memory",
     "crates/fava-observe",
@@ -54,6 +56,8 @@ rust-version = "1.90"
 fava-relay = { path = "crates/fava-relay" }
 fava-event-cache = { path = "crates/fava-event-cache" }
 fava-event-cache-memory = { path = "crates/fava-event-cache-memory" }
+fava-event-cache-persistent = { path = "crates/fava-event-cache-persistent" }
+fava-fetch-cache = { path = "crates/fava-fetch-cache" }
 fava-observe = { path = "crates/fava-observe" }
 fava-wire = { path = "crates/fava-wire" }
 fava-subscriptions = { path = "crates/fava-subscriptions" }

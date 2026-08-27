@@ -6,6 +6,7 @@ use std::sync::Arc;
 use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
+use fava_event_cache_memory::MemoryEventCache;
 use fava_observe::Observer;
 use fava_publication::Publication;
 use fava_publisher::Publisher;
@@ -55,6 +56,16 @@ impl FavaBuilder {
     {
         self.event_cache = Some(cache);
         self
+    }
+
+    /// Explicitly select an ephemeral (in-memory) event cache profile.
+    ///
+    /// The cache is empty on every open. Events are lost on process exit.
+    /// Use this method to make the ephemeral choice explicit rather than
+    /// implicit; it is equivalent to `event_cache(Arc::new(MemoryEventCache::default()))`.
+    #[must_use]
+    pub fn event_cache_ephemeral(self) -> Self {
+        self.event_cache(Arc::new(MemoryEventCache::default()))
     }
 
     /// Select one write-store provider.

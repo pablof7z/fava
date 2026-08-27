@@ -22,6 +22,8 @@ fava = { path = "../../crates/fava" }
 # See .planning/audit/2026-08-23/dx-walls.md.
 fava-event-cache = { path = "../../crates/fava-event-cache" }
 fava-event-cache-memory = { path = "../../crates/fava-event-cache-memory" }
+fava-event-cache-persistent = { path = "../../crates/fava-event-cache-persistent" }
+fava-fetch-cache = { path = "../../crates/fava-fetch-cache" }
 fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
 fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }
 fava-query-standard = { path = "../../crates/fava-query-standard" }

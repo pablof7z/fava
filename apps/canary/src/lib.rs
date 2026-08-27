@@ -26,6 +26,7 @@ mod live;
 mod multi;
 mod pinned_build_input;
 mod proxy;
+mod phase_e;
 mod publication;
 mod publication_child;
 mod publication_support;
@@ -44,6 +45,7 @@ pub use croissant_nip02::{
 pub use croissant_simple_groups_evidence::verify_croissant_simple_groups_pair;
 pub use flows::{FlowOptions, run_flow_close_child, run_flows_scenario};
 pub use live::run_live_scenario;
+pub use phase_e::{PhaseEOutcome, run_phase_e_gates};
 pub use multi::run_m3_live_scenario;
 pub use publication::run_publication_scenario;
 pub use publication_child::run_crash_child;

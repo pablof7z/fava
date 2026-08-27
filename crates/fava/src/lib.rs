@@ -5,6 +5,26 @@ mod publication;
 mod query_source;
 mod session;
 
+/// Bounded-freshness fetch cache and NIP-05 / NIP-11 service surface.
+///
+/// [`fetch::FetchCache`] stores HTTP outcomes keyed by URL. Both NIP-05
+/// identifier resolution and NIP-11 relay info fetching are available as
+/// standalone functions that use this cache rather than live network calls
+/// when a fresh entry is already present.
+pub mod fetch {
+    pub use fava_fetch_cache::{
+        FetchAge, FetchCache, FetchOutcome, HttpFetcher, HttpResponse, MemoryFetchCache,
+    };
+    /// NIP-05 identifier resolution with negative-cache semantics.
+    pub mod nip05 {
+        pub use fava_fetch_cache::nip05::{Nip05Result, resolve};
+    }
+    /// NIP-11 relay info fetching with stale-result evidence.
+    pub mod nip11 {
+        pub use fava_fetch_cache::nip11::{Nip11Result, fetch};
+    }
+}
+
 use std::sync::Arc;
 
 pub use builder::{BuildError, FavaBuilder};

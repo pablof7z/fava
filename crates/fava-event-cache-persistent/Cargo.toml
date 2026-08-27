@@ -1,0 +1,23 @@
+[package]
+name = "fava-event-cache-persistent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-event-cache.workspace = true
+fava-query.workspace = true
+fava-relay.workspace = true
+fava-state.workspace = true
+nostr.workspace = true
+redb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+nostr = { workspace = true, features = ["os-rng"] }
+
+[lints]
+workspace = true

@@ -7,6 +7,8 @@ rust-version.workspace = true
 [dependencies]
 fava-diagnostics.workspace = true
 fava-event-cache.workspace = true
+fava-event-cache-memory.workspace = true
+fava-fetch-cache.workspace = true
 fava-observe.workspace = true
 fava-publication.workspace = true
 fava-publisher.workspace = true
@@ -28,7 +30,6 @@ tokio.workspace = true
 
 [dev-dependencies]
 fava-bookmarks.workspace = true
-fava-event-cache-memory.workspace = true
 fava-delivery-standard.workspace = true
 fava-publisher.workspace = true
 fava-signer.workspace = true
