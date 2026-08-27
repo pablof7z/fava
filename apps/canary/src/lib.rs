@@ -21,10 +21,12 @@ mod croissant_simple_groups_wire;
 mod environment;
 mod flows;
 mod gate_signer;
+mod go_relay;
 mod hostile;
 mod live;
 mod multi;
 mod pinned_build_input;
+mod phase_f;
 mod proxy;
 mod phase_e;
 mod publication;
@@ -47,6 +49,7 @@ pub use flows::{FlowOptions, run_flow_close_child, run_flows_scenario};
 pub use live::run_live_scenario;
 pub use phase_e::{PhaseEOutcome, run_phase_e_gates};
 pub use multi::run_m3_live_scenario;
+pub use phase_f::{PhaseFOptions, run_communities_lifecycle, run_crash_recovery, run_relay29_lifecycle};
 pub use publication::run_publication_scenario;
 pub use publication_child::run_crash_child;
 pub use recon::{ReconOptions, ReconOutcome};
@@ -210,6 +213,9 @@ pub fn has_executor(id: &str) -> bool {
             | "croissant-nip02-public-flow"
             | "croissant-simple-groups-public-flow"
             | "dx-flows"
+            | "phase-f-relay29-lifecycle"
+            | "phase-f-communities-lifecycle"
+            | "phase-f-crash-recovery"
     )
 }
 

@@ -35,6 +35,8 @@ fava-relay = { path = "../../crates/fava-relay" }
 fava-state = { path = "../../crates/fava-state" }
 fava-signer = { path = "../../crates/fava-signer" }
 fava-signer-local = { path = "../../crates/fava-signer-local" }
+fava-nip29-management = { path = "../../crates/fava-nip29-management" }
+fava-session = { path = "../../crates/fava-session" }
 fava-simple-groups = { path = "../../crates/fava-simple-groups" }
 fava-subscriptions-no-grouping = { path = "../../crates/fava-subscriptions-no-grouping" }
 fava-subscriptions-standard = { path = "../../crates/fava-subscriptions-standard" }

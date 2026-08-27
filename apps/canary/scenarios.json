@@ -250,6 +250,24 @@
       "milestone": "M7.1.1",
       "requirements": ["GROUP-04/05/06/07/08/12 public multi-relay fork, publication, refusal, cancellation, and cleanup proof against two controlled Croissant children"],
       "status": "enabled"
+    },
+    {
+      "id": "phase-f-relay29-lifecycle",
+      "milestone": "Phase-F",
+      "requirements": ["NIP-29 group lifecycle against relay29 (pre-spec custom kinds); documents relay-side gap with wire transcript"],
+      "status": "enabled"
+    },
+    {
+      "id": "phase-f-communities-lifecycle",
+      "milestone": "Phase-F",
+      "requirements": ["Full NIP-29 group lifecycle plus NIP-42 AUTH proof against communities-relay (khatru29-based standard relay)"],
+      "status": "enabled"
+    },
+    {
+      "id": "phase-f-crash-recovery",
+      "milestone": "Phase-F",
+      "requirements": ["Crash-recovery against relay29: publish event, SIGKILL fava, new instance recovers receipt, no duplicate EVENT on wire"],
+      "status": "enabled"
     }
   ]
 }
