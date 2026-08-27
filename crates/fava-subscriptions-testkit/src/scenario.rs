@@ -8,6 +8,7 @@ use fava_subscriptions::{
     RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
 };
 
+/// Mints a fresh revision from a throwaway single-use authority, for scenarios that need one.
 fn fresh_revision() -> PlanRevision {
     PlanRevisionIssuer::new()
         .expect("test revision authority")
