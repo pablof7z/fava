@@ -1,5 +1,6 @@
 [package]
 name = "fava-subscriptions"
+description = "Exact mapping from logical relay demand to Nostr subscriptions."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

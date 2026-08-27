@@ -1,7 +1,7 @@
 //! Exact mapping from logical relay demand to Nostr subscriptions.
 //!
 //! The planner owns the whole mapping from *logical* demand to *wire*
-//! subscriptions and nothing else: it allocates every wire [`SubscriptionId`],
+//! subscriptions and nothing else: it allocates every wire [`fava_wire::SubscriptionId`],
 //! decides grouping and splitting, and proves grouping did not change meaning
 //! (RELAY-003). It owns the diff — given the complete current demand for one
 //! relay and the set currently installed on that relay's session, it decides
