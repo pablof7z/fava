@@ -1,3 +1,6 @@
+//! [`FilterSelection`], the declarative axes a literal [`Query`] is built from,
+//! and the `Query` builder methods that populate them.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use nostr::filter::SingleLetterTag;
