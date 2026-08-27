@@ -25,7 +25,7 @@ pub enum ProviderCompletion<T> {
         operation: OperationName,
         /// Generation this completion belongs to.
         generation: OperationGeneration,
-        /// The provider's value.
+        /// What the provider returned.
         value: T,
     },
     /// The deadline expired. The provider may still be running; the runtime
@@ -89,7 +89,7 @@ impl<T> ProviderCompletion<T> {
         }
     }
 
-    /// The value, when the provider completed.
+    /// What the provider returned, if it ran to completion.
     #[must_use]
     pub fn value(self) -> Option<T> {
         match self {
