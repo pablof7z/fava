@@ -54,6 +54,12 @@ impl QueryEvaluator for StandardQueryEvaluator {
     }
 }
 
+/// One event id's accumulated evidence while every source is being merged.
+///
+/// `relay` collects every relay occurrence seen for this id so
+/// [`relay_occurrences_for_event`] can reconstruct authority-relevant
+/// context; `event` is upgraded to a signed copy as soon as one arrives,
+/// since a signed event always supersedes an unsigned local one.
 struct Candidate {
     event: EventValue,
     relay: Vec<RelayEvent>,
