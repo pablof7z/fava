@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 use crate::{FetchCache, FetchOutcome, HttpFetcher};
 
-/// Result of a NIP-05 resolve call.
+/// Whether a NIP-05 identifier resolved, was absent, or was answered from cache,
+/// and how stale that answer is.
 #[derive(Clone, Debug)]
 pub enum Nip05Result {
     /// Public key resolved fresh within the requested TTL.

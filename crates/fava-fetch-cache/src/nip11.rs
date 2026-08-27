@@ -9,12 +9,13 @@ use std::time::{Duration, Instant};
 
 use crate::{FetchCache, FetchOutcome, HttpFetcher};
 
-/// Result of a NIP-11 relay info fetch call.
+/// The relay's NIP-11 document when one is available, and whether it is within
+/// its TTL, past it, or the fetch failed.
 #[derive(Clone, Debug)]
 pub enum Nip11Result {
     /// Fresh relay info document (within TTL).
     Fresh {
-        /// Raw JSON body of the relay info document.
+        /// Raw JSON body of the NIP-11 document.
         info_json: String,
     },
     /// Cached relay info document, but the TTL has elapsed.
@@ -36,7 +37,7 @@ impl Nip11Result {
         matches!(self, Self::Stale { .. })
     }
 
-    /// The raw info JSON, if available (fresh or stale).
+    /// The relay's NIP-11 document, whether within its TTL or past it.
     #[must_use]
     pub fn info_json(&self) -> Option<&str> {
         match self {

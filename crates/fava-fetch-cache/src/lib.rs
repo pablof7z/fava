@@ -2,8 +2,8 @@
 //!
 //! A `FetchCache` remembers the outcome of a keyed fetch — success, negative
 //! (not found), or error — for a bounded TTL. After the TTL, a previous result
-//! is still available as [`FetchOutcome::Stale`] with the age as evidence
-//! rather than being silently dropped or returned as fresh.
+//! is still available as [`FetchOutcome::Ok`] carrying a [`FetchAge`] that reports
+//! it as no longer fresh, rather than being silently dropped or returned as fresh.
 //!
 //! Service functions in [`nip05`] and [`nip11`] use this cache to implement
 //! bounded-freshness NIP-05 identifier resolution and NIP-11 relay info
