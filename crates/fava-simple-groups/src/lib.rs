@@ -1,5 +1,5 @@
+//! Implements NIP-29 simple-group semantics and the kind-10009 Simple Group List.
 #![doc = include_str!("../README.md")]
-//! Pure simple-group domain composition over ordinary Fava query and write contracts.
 
 mod edit;
 pub mod management;
