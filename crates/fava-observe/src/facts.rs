@@ -72,7 +72,10 @@ impl Engine {
             return;
         };
         let revision = planned.map_or_else(
-            || slot.revision.map_or(0, |revision| revision.sequence().get()),
+            || {
+                slot.revision
+                    .map_or(0, |revision| revision.sequence().get())
+            },
             |plan| plan.revision.sequence().get(),
         );
         for item in cohort {
@@ -125,7 +128,8 @@ impl Engine {
             self.registry.record_sharing(
                 owner,
                 relay,
-                slot.revision.map_or(0, |revision| revision.sequence().get()),
+                slot.revision
+                    .map_or(0, |revision| revision.sequence().get()),
                 slot.owners(id),
                 Some(RelayShortfall {
                     branches,

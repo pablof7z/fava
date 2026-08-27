@@ -7,8 +7,8 @@ use std::num::NonZeroU64;
 
 use fava_query::{
     AuthenticationState, BoundedText, DesiredPlanEvidence, ObservationId, OperationGenerations,
-    QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline,
-    RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
+    QueryBranchId, QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence,
+    RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceKind,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
 use nostr::key::Keys;

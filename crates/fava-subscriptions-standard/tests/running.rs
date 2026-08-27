@@ -6,7 +6,7 @@ mod support;
 use std::collections::BTreeSet;
 
 use fava_subscriptions::{
-    EoseCompleteness, InstalledSubscriptions, PlanRevision, RelayReadConstraints, ShortfallReason,
+    EoseCompleteness, InstalledSubscriptions, RelayReadConstraints, ShortfallReason,
     WithdrawalReason,
 };
 use fava_subscriptions_standard::StandardSubscriptionPlanner;

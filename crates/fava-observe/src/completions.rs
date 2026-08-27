@@ -72,11 +72,11 @@ impl Engine {
         let rearm;
         {
             let Some(slot) = self.slots.get_mut(relay) else {
-                self.release_lease(lease);
+                self.release_lease(lease, generation);
                 return false;
             };
             if slot.generation != generation {
-                self.release_lease(lease);
+                self.release_lease(lease, generation);
                 return false;
             }
             let session = Arc::clone(lease.session());
@@ -142,7 +142,7 @@ impl Engine {
         }
         {
             if let Some(lease) = lease {
-                self.release_lease(lease);
+                self.release_lease(lease, generation);
             }
         }
         self.publish_state_for_relay(relay, &failure_state(detail));
@@ -186,7 +186,7 @@ impl Engine {
             self.registry.record_state(
                 owner,
                 relay,
-                generation,
+                Some(generation),
                 RelaySourceState::Open { requested_at },
             );
         }
@@ -395,8 +395,11 @@ impl Engine {
         self.providers.diagnostics.forget_relay(relay);
     }
 
-    pub(crate) fn release_lease(&self, lease: Box<RelaySessionLease>) {
-        let generation = lease.session().identity().generation;
+    pub(crate) fn release_lease(
+        &self,
+        lease: Box<RelaySessionLease>,
+        generation: OperationGeneration,
+    ) {
         operations::release(
             &self.runtime,
             lease,

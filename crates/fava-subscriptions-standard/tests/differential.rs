@@ -10,7 +10,7 @@ mod support;
 
 use std::collections::BTreeSet;
 
-use fava_subscriptions::{PlanRevision, RelayDemand, SubscriptionPlanner};
+use fava_subscriptions::{RelayDemand, SubscriptionPlanner};
 use fava_subscriptions_no_grouping::planner as no_grouping;
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_subscriptions_testkit::{
@@ -19,7 +19,7 @@ use fava_subscriptions_testkit::{
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
-use support::{bounded_demand, declared, demand, demand_id, relay, revision};
+use support::{bounded_demand, declared, demand, demand_id, relay};
 
 fn grouping() -> StandardSubscriptionPlanner {
     StandardSubscriptionPlanner::new()

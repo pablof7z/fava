@@ -311,10 +311,7 @@ impl Engine {
         }
         let generation;
         {
-            let slot = self
-                .slots
-                .get_mut(relay)
-                .expect("slot was inserted above");
+            let slot = self.slots.get_mut(relay).expect("slot was inserted above");
             if slot.busy || slot.session.is_some() {
                 return;
             }

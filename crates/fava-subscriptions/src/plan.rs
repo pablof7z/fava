@@ -130,10 +130,7 @@ mod plan_revision_tests {
         revisions.next = NonZeroU64::new(u64::MAX);
         let last = revisions.allocate().expect("maximum issues once");
         assert_eq!(last.sequence().get(), u64::MAX);
-        assert_eq!(
-            revisions.allocate(),
-            Err(PlanRevisionExhausted::Sequence)
-        );
+        assert_eq!(revisions.allocate(), Err(PlanRevisionExhausted::Sequence));
     }
 }
 

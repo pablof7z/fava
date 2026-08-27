@@ -13,9 +13,9 @@ use std::num::NonZeroUsize;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
-    InstalledSubscriptions, PlanConformanceError, PlanRevision, PlannedSubscription,
-    RelayReadConstraints, ShortfallReason, SubscriptionAttribution, SubscriptionPlan,
-    SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription, validate_plan,
+    InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
+    ShortfallReason, SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall,
+    WithdrawalReason, WithdrawnSubscription, validate_plan,
 };
 use nostr::event::Kind;
 use nostr::filter::Filter;

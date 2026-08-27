@@ -7,9 +7,9 @@ use std::num::NonZeroUsize;
 
 use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
-    InstalledSubscriptions, PlanConformanceError, PlanRevision, PlannedSubscription,
-    RelayReadConstraints, SubscriptionAttribution, SubscriptionPlan, WithdrawalReason,
-    WithdrawnSubscription, filter_covers, validate_plan,
+    InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
+    SubscriptionAttribution, SubscriptionPlan, WithdrawalReason, WithdrawnSubscription,
+    filter_covers, validate_plan,
 };
 use fava_wire::SubscriptionId;
 use nostr::event::{EventId, Kind};

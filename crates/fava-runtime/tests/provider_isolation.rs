@@ -9,8 +9,10 @@ mod support;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use fava_query::OperationGenerations;
 use fava_runtime::{
     OperationGeneration, OperationName, ProviderCompletion, Runtime, RuntimeError, TaskName,
 };
@@ -20,7 +22,23 @@ use support::{config, runtime};
 const SIGN: OperationName = OperationName("sign_event");
 
 fn generation(value: u64) -> OperationGeneration {
-    OperationGeneration(value)
+    static GENERATIONS: OnceLock<Mutex<(OperationGenerations, Vec<OperationGeneration>)>> =
+        OnceLock::new();
+    let index = usize::try_from(value).expect("test generation fits usize");
+    let mut state = GENERATIONS
+        .get_or_init(|| {
+            Mutex::new((
+                OperationGenerations::new().expect("test generation authority"),
+                Vec::new(),
+            ))
+        })
+        .lock()
+        .expect("generation fixture lock");
+    while state.1.len() <= index {
+        let next = state.0.allocate().expect("test generation");
+        state.1.push(next);
+    }
+    state.1[index]
 }
 
 #[tokio::test]
@@ -269,7 +287,7 @@ async fn provider_calls_beyond_the_declared_operation_bound_are_refused() {
 async fn a_stale_completion_is_rejectable_by_generation() {
     let runtime = runtime();
     let superseded = generation(1);
-    let current = superseded.next();
+    let current = generation(2);
 
     let completion: ProviderCompletion<u8> = runtime
         .call_provider(SIGN, superseded, Duration::from_secs(1), async { 9 })
@@ -331,12 +349,12 @@ async fn every_completion_variant_carries_its_authorising_identity() {
 }
 
 #[tokio::test]
-async fn generations_advance_monotonically_and_saturate() {
-    assert_eq!(OperationGeneration::default(), generation(0));
-    assert!(generation(1).next() > generation(1));
-    assert_eq!(
-        OperationGeneration(u64::MAX).next(),
-        OperationGeneration(u64::MAX)
+async fn owner_issued_generations_are_monotonic_and_authority_scoped() {
+    assert!(generation(2) > generation(1));
+    let mut independent = OperationGenerations::new().expect("independent authority");
+    assert_ne!(
+        generation(1),
+        independent.allocate().expect("independent generation")
     );
 }
 

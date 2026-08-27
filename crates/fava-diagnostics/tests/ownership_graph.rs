@@ -9,8 +9,8 @@ use fava_diagnostics::{
     ObservationId, ObservationWireBinding, OperationGeneration, QueryBranchId, QueryDiagnostic,
     RelayDiagnostic, RelaySessionState, RelaySourceState, WireSubscriptionDiagnostic,
 };
-use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_query::OperationGenerations;
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_wire::SubscriptionId;
 use nostr::types::{RelayUrl, Timestamp};
 

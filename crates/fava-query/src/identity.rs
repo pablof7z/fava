@@ -193,9 +193,7 @@ impl OperationGenerations {
     /// Returns typed exhaustion after the maximum sequence has been issued
     /// once. It never wraps, saturates, or returns the same identity twice.
     pub fn allocate(&mut self) -> Result<OperationGeneration, OperationGenerationExhausted> {
-        let sequence = self
-            .next
-            .ok_or(OperationGenerationExhausted::Sequence)?;
+        let sequence = self.next.ok_or(OperationGenerationExhausted::Sequence)?;
         self.next = sequence.get().checked_add(1).and_then(NonZeroU64::new);
         Ok(OperationGeneration {
             authority: self.authority,
