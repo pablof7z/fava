@@ -80,6 +80,8 @@ impl Publication {
         None
     }
 
+    /// Mark signing retryable after the route-activation retry bound ran out
+    /// without a route settling.
     pub(super) fn record_activation_exhaustion(&self, receipt: &Receipt) {
         if !matches!(receipt.current.event, EventValue::Unsigned(_)) {
             return;

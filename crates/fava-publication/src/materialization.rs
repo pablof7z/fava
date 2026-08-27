@@ -96,6 +96,8 @@ pub(super) struct PreparedSemantic {
     pub(super) sources: OpenedSemanticSources,
 }
 
+/// Live tracking for one open receipt's replaceable-event materialization: the
+/// queued edits, the source it selected, and the source that last failed.
 pub(super) struct SemanticState {
     pub(super) edits: Vec<ReplaceableEventEdit>,
     pub(super) author: PublicKey,

@@ -307,6 +307,7 @@ impl Publication {
         }
     }
 
+    /// Attribute a materialization failure to the source observation that closed.
     fn record_source_failure(&self, receipt: &Receipt, state: &SemanticState, kind: &SourceKind) {
         let source = state.sources.selected(state.selected_id);
         let label = match kind {
