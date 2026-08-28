@@ -110,7 +110,7 @@ let relay = group
     .relays()
     .next()
     .expect("SimpleGroup guarantees at least one relay");
-let event = invite(author, group, &invitee, &relay).map_err(build_error)?;
+let event = invite(author, group, &[invitee], &relay).map_err(build_error)?;
 ```
 
 The demo passes `&relay` directly because it already has the variable, but both callers are expressing the same intent: use the group's relay. `invite()` should default to the first group relay, accepting an `Option<&RelayUrl>` for the rare override case.

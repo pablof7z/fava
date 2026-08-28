@@ -142,7 +142,7 @@ async fn main() -> DemoResult<()> {
 
     let invite_code = format!("invite-{group_id}");
     let invitation = append_tags(
-        invite(alice.public_key(), &group, &bob.public_key(), &relay)?,
+        invite(alice.public_key(), &group, &[bob.public_key()], &relay)?,
         [Tag::parse(["code", &invite_code])?],
     )?;
     let invitation_kind = invitation.kind;
@@ -183,7 +183,7 @@ async fn main() -> DemoResult<()> {
     )
     .await?;
 
-    let bob_member = put_user(alice.public_key(), &group, &bob.public_key(), &["member"])?;
+    let bob_member = put_user(alice.public_key(), &group, &[bob.public_key()], &["member"])?;
     let put_user_kind = bob_member.kind;
     let bob_member =
         support::publish_accepted(&fava, &relay, "put_user(Alice, Bob, member)", bob_member)
@@ -201,7 +201,7 @@ async fn main() -> DemoResult<()> {
         &fava,
         &relay,
         "put_user(Alice, Carol, member)",
-        put_user(alice.public_key(), &group, &carol.public_key(), &["member"])?,
+        put_user(alice.public_key(), &group, &[carol.public_key()], &["member"])?,
     )
     .await?;
     let left = support::publish_accepted(
@@ -224,14 +224,14 @@ async fn main() -> DemoResult<()> {
         &fava,
         &relay,
         "put_user(Alice, Carol) — add her again before removal",
-        put_user(alice.public_key(), &group, &carol.public_key(), &[])?,
+        put_user(alice.public_key(), &group, &[carol.public_key()], &[])?,
     )
     .await?;
     let removed = support::publish_accepted(
         &fava,
         &relay,
         "remove_user(Alice, Carol)",
-        remove_user(alice.public_key(), &group, &carol.public_key())?,
+        remove_user(alice.public_key(), &group, &[carol.public_key()])?,
     )
     .await?;
     let remove_kind = removed.current.event.kind();
@@ -355,7 +355,7 @@ async fn main() -> DemoResult<()> {
             &relay,
             "invite(Dave, Carol)",
             "Dave cannot invite anyone into a group he is not in",
-            invite(dave.public_key(), &group, &carol.public_key(), &relay)?,
+            invite(dave.public_key(), &group, &[carol.public_key()], &relay)?,
         )
         .await?;
         support::publish_rejected(
@@ -371,7 +371,7 @@ async fn main() -> DemoResult<()> {
             &relay,
             "put_user(Alice, Bob, member) again",
             "Bob already holds exactly that role",
-            put_user(alice.public_key(), &group, &bob.public_key(), &["member"])?,
+            put_user(alice.public_key(), &group, &[bob.public_key()], &["member"])?,
         )
         .await?;
         support::publish_rejected(
@@ -379,7 +379,7 @@ async fn main() -> DemoResult<()> {
             &relay,
             "remove_user(Alice, Carol) again",
             "Carol has already been removed",
-            remove_user(alice.public_key(), &group, &carol.public_key())?,
+            remove_user(alice.public_key(), &group, &[carol.public_key()])?,
         )
         .await?;
         support::publish_rejected(
@@ -632,10 +632,10 @@ fn typed_management_kinds(
     Ok(vec![
         create.kind,
         edit_metadata(alice.public_key(), group, &MetadataEdit::default())?.kind,
-        invite(alice.public_key(), group, &bob.public_key(), relay)?.kind,
+        invite(alice.public_key(), group, &[bob.public_key()], relay)?.kind,
         join_request(bob.public_key(), group)?.kind,
-        put_user(alice.public_key(), group, &bob.public_key(), &[])?.kind,
-        remove_user(alice.public_key(), group, &bob.public_key())?.kind,
+        put_user(alice.public_key(), group, &[bob.public_key()], &[])?.kind,
+        remove_user(alice.public_key(), group, &[bob.public_key()])?.kind,
         delete_event(alice.public_key(), group, &target)?.kind,
         delete_group(alice.public_key(), group)?.kind,
         leave_group(bob.public_key(), group)?.kind,

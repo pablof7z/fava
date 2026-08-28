@@ -261,8 +261,13 @@ async fn relay29_try_operations(
     // ── Attempt invite (kind 9009) ────────────────────────────────────────────
     use fava_simple_groups::invite;
     let other_key = deterministic_keys(&format!("phase-f-relay29-other\0{}", options.seed))?;
-    let invite_ev =
-        invite(author.public_key(), &group, &other_key.public_key(), &relay).map_err(error)?;
+    let invite_ev = invite(
+        author.public_key(),
+        &group,
+        &[other_key.public_key()],
+        &relay,
+    )
+    .map_err(error)?;
     let invite_write = fava
         .to([relay.clone()])
         .map_err(error)?
@@ -556,7 +561,7 @@ async fn communities_run_lifecycle(
     let put_ev = put_user(
         author.public_key(),
         &group,
-        &member_keys.public_key(),
+        &[member_keys.public_key()],
         &["member"],
     )
     .map_err(error)?;
@@ -596,7 +601,7 @@ async fn communities_run_lifecycle(
 
     // ── Step 5: remove_user ───────────────────────────────────────────────────
     let remove_ev =
-        remove_user(author.public_key(), &group, &member_keys.public_key()).map_err(error)?;
+        remove_user(author.public_key(), &group, &[member_keys.public_key()]).map_err(error)?;
     let remove_write = fava
         .to([relay.clone()])
         .map_err(error)?
