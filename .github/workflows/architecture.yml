@@ -187,6 +187,41 @@ jobs:
       - name: List canary scenarios
         run: cargo run --quiet --manifest-path apps/canary/Cargo.toml --locked -- list
 
+  symbol-gate:
+    name: Symbol Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.90.0"
+          components: rust-analyzer
+      - uses: Swatinem/rust-cache@v2
+      # Cache the symbol-gate binary so it is not recompiled on every run.
+      - name: Cache symbol-gate binary
+        id: sg-bin-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/symbol-gate
+          key: symbol-gate-bin-0.1.1-${{ runner.os }}-${{ runner.arch }}
+      - name: Install symbol-gate
+        if: steps.sg-bin-cache.outputs.cache-hit != 'true'
+        run: cargo install symbol-gate --version 0.1.1 --locked
+      # Trust-key boundary: the public keys that verify approvals live only in
+      # .symbol-gate/trusted_keys, which is committed to the repository. No CI
+      # secret is injected; trust is controlled by code review, not CI config.
+      - name: Verify symbol approvals
+        run: |
+          start_ms=$(date +%s%3N)
+          symbol-gate verify
+          end_ms=$(date +%s%3N)
+          elapsed_ms=$((end_ms - start_ms))
+          {
+            echo "## Symbol Gate"
+            echo ""
+            echo "Verification completed in ${elapsed_ms} ms."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   file-size:
     name: File size limits
     runs-on: ubuntu-latest
