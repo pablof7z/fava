@@ -1,0 +1,14 @@
+{
+  "id": "9a4463c0c6767dcc3283ab6125bc81e6de5ff832e38b1099c8ce9c36b45d0738",
+  "pubkey": "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "created_at": 1787917166,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava_simple_groups::management::GroupAccess"
+    ]
+  ],
+  "content": "pub enum GroupAccess {\n    Closed,\n    Open,\n}",
+  "sig": "25c00c226ffffc31bbd04d7459375cfeb7fac3f9152bb3b2bdf76a84ebdc1fef07d7897524c9ec6c2b8bd7f0ae380060c83c8e692ad5073c89b18d73263668e4"
+}

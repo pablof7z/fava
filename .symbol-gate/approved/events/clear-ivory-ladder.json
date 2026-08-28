@@ -1,0 +1,14 @@
+{
+  "id": "8699d9b0704017d097229dc467fc287a1f250610e025627fd56f9a26f23286fb",
+  "pubkey": "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "created_at": 1787917320,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava_simple_groups::management::GroupVisibility"
+    ]
+  ],
+  "content": "pub enum GroupVisibility {\n    Private,\n    Public,\n}",
+  "sig": "352b8b363933f5c4a29ed30cd47b13bc5c07427b7db185aa455884a2f7ea3c18a5c651c3d74e8074dcfd97de5b807899bfda6889eb3f741f2a949552b03f841a"
+}

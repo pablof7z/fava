@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "approvals": {
+    "fava_simple_groups::management::GroupAccess": [
+      "keen-coral-garden.json"
+    ],
+    "fava_simple_groups::management::GroupVisibility": [
+      "clear-ivory-ladder.json"
+    ]
+  },
+  "notes": {},
+  "questions": {}
+}
