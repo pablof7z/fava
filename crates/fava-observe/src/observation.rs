@@ -1,6 +1,7 @@
 //! The application handle of one installed observation.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fava_query::{ObservationId, QueryRevision, QuerySnapshot};
 use tokio::sync::watch;
@@ -71,6 +72,43 @@ impl Observation {
         );
         self.delivered_revision = latest.revision;
         Ok(latest)
+    }
+
+    /// Wait, within one caller-supplied bound, for a current snapshot that
+    /// satisfies `predicate`.
+    ///
+    /// The predicate first sees the snapshot available when this method is
+    /// called. Later checks see only snapshots delivered by this same
+    /// observation. It runs at most once for each snapshot this call observes.
+    /// This method neither opens work nor changes the observation lifecycle.
+    /// A timed-out wait leaves the observation open, so a later call can still
+    /// receive a snapshot that arrived at the boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Ok(None)` when the one caller-supplied bound expires without a
+    /// match. Returns [`ObservationClosed`] unchanged when the observation
+    /// ends. Cancelling this future leaves later delivery for the handle; a
+    /// delivered snapshot advances it only through [`Self::changed`].
+    pub async fn wait_until(
+        &mut self,
+        timeout: Duration,
+        mut predicate: impl FnMut(&QuerySnapshot) -> bool,
+    ) -> Result<Option<Arc<QuerySnapshot>>, ObservationClosed> {
+        match tokio::time::timeout(timeout, async {
+            let mut snapshot = self.current();
+            loop {
+                if predicate(snapshot.as_ref()) {
+                    return Ok(Some(snapshot));
+                }
+                snapshot = self.changed().await?;
+            }
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Ok(None),
+        }
     }
 
     /// Close this observation. Repeated close is harmless.

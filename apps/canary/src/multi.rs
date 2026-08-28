@@ -314,18 +314,16 @@ async fn wait_events(
     event_id: EventId,
     evidence_count: usize,
 ) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if observation.current().events.iter().any(|record| {
+    observation
+        .wait_until(Duration::from_secs(5), |snapshot| {
+            snapshot.events.iter().any(|record| {
                 record.id() == event_id && record.relay_occurrences().len() == evidence_count
-            }) {
-                return Ok(());
-            }
-            observation.changed().await.map_err(error)?;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("application event deadline elapsed"))?
+            })
+        })
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("multi-relay event observation deadline elapsed"))?;
+    Ok(())
 }
 
 async fn wait<T>(duration: Duration, mut value: impl FnMut() -> Option<T>) -> CanaryResult<T> {

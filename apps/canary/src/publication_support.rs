@@ -86,29 +86,25 @@ pub(crate) async fn wait_record(
     event_id: fava_write::EventId,
     relay_count: usize,
 ) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if observation.current().events.iter().any(|event| {
+    observation
+        .wait_until(Duration::from_secs(5), |snapshot| {
+            snapshot.events.iter().any(|event| {
                 event.id() == event_id && event.relay_occurrences().len() == relay_count
-            }) {
-                return Ok(());
-            }
-            observation.changed().await.map_err(error)?;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("query evidence deadline elapsed"))?
+            })
+        })
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("published record observation deadline elapsed"))?;
+    Ok(())
 }
 
 pub(crate) async fn wait_empty(observation: &mut Observation) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while !observation.current().events.is_empty() {
-            observation.changed().await.map_err(error)?;
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|_| CanaryError::new("query retraction deadline elapsed"))?
+    observation
+        .wait_until(Duration::from_secs(5), |snapshot| snapshot.events.is_empty())
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("empty observation deadline elapsed"))?;
+    Ok(())
 }
 
 pub(crate) async fn wait_until(predicate: impl Fn() -> bool) -> CanaryResult<()> {

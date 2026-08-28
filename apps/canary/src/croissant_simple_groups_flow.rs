@@ -669,17 +669,11 @@ async fn wait_observation(
     observation: &mut Observation,
     predicate: impl Fn(&fava::QuerySnapshot) -> bool,
 ) -> CanaryResult<Arc<fava::QuerySnapshot>> {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let current = observation.current();
-            if predicate(&current) {
-                return Ok(current);
-            }
-            observation.changed().await.map_err(error)?;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("simple-groups observation deadline elapsed"))?
+    observation
+        .wait_until(Duration::from_secs(10), predicate)
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("simple-group observation deadline elapsed"))
 }
 
 fn tag(values: &[&str]) -> CanaryResult<Tag> {

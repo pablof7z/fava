@@ -1,5 +1,12 @@
 # fava-observe
 
+`Observation::wait_until(timeout, predicate)` is the bounded predicate wait
+for an already-open query. It examines the installed current snapshot before
+awaiting later delivery from that exact handle. `Some` is the matching
+snapshot, `None` is expiry of the caller-supplied bound, and
+`ObservationClosed` remains the error; timing out leaves the observation, its
+demand, and a later completion intact.
+
 ## Complete public API inventory
 
 Generated from rustdoc with `python3 tools/crate_readme_api.py update <crate>`.
@@ -30,6 +37,7 @@ Compiler-visible struct `fava_observe::Observation`.
 | **`current`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_observe::Observation::current","signature":"pub fn fava_observe::Observation::current(&self) -> alloc::sync::Arc<fava_query::QuerySnapshot>","evidence":"cargo-public-api@0.52.0: pub fn fava_observe::Observation::current(&self) -> alloc::sync::Arc<fava_query::QuerySnapshot>"} --> | Compiler-visible method owned by `fava_observe::Observation`. |
 | **`core::ops::drop::Drop::drop`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_observe::Observation as core::ops::drop::Drop>::drop","signature":"pub fn fava_observe::Observation::drop(&mut self)","evidence":"cargo-public-api@0.52.0: pub fn fava_observe::Observation::drop(&mut self)"} --> | Compiler-visible method owned by `fava_observe::Observation`. |
 | **`id`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_observe::Observation::id","signature":"pub const fn fava_observe::Observation::id(&self) -> fava_query::identity::ObservationId","evidence":"cargo-public-api@0.52.0: pub const fn fava_observe::Observation::id(&self) -> fava_query::identity::ObservationId"} --> | Compiler-visible method owned by `fava_observe::Observation`. |
+| **`wait_until`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_observe::Observation::wait_until","signature":"pub async fn fava_observe::Observation::wait_until(&mut self, core::time::Duration, impl core::ops::function::FnMut(&fava_query::QuerySnapshot) -> bool) -> core::result::Result<core::option::Option<alloc::sync::Arc<fava_query::QuerySnapshot>>, fava_observe::ObservationClosed>","evidence":"cargo-public-api@0.52.0: pub async fn fava_observe::Observation::wait_until(&mut self, core::time::Duration, impl core::ops::function::FnMut(&fava_query::QuerySnapshot) -> bool) -> core::result::Result<core::option::Option<alloc::sync::Arc<fava_query::QuerySnapshot>>, fava_observe::ObservationClosed>"} --> | Compiler-visible method owned by `fava_observe::Observation`. |
 
 ### `ObservationClosed` (Struct)
 

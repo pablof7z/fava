@@ -1182,20 +1182,12 @@ async fn observe_local(engine: &Fava, query: Query) -> CanaryResult<fava::QueryS
 }
 
 async fn wait_for(observation: &mut Observation, expected: usize) -> CanaryResult<usize> {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let count = observation.current().events.len();
-            if count >= expected {
-                return Ok(count);
-            }
-            observation
-                .changed()
-                .await
-                .map_err(|_| CanaryError::new("observation closed before the expected records"))?;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("timed out awaiting query records"))?
+    let snapshot = observation
+        .wait_until(Duration::from_secs(10), |snapshot| snapshot.events.len() >= expected)
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("flow observation deadline elapsed"))?;
+    Ok(snapshot.events.len())
 }
 
 async fn closed_port() -> CanaryResult<u16> {

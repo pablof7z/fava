@@ -244,25 +244,21 @@ async fn wait_event(
     event_id: EventId,
     minimum_count: usize,
 ) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let current = observation.current();
-            if current.events.len() >= minimum_count
-                && current.events.iter().any(|record| record.id() == event_id)
-                && current.events.iter().all(|record| {
+    observation
+        .wait_until(Duration::from_secs(5), |snapshot| {
+            snapshot.events.len() >= minimum_count
+                && snapshot.events.iter().any(|record| record.id() == event_id)
+                && snapshot.events.iter().all(|record| {
                     record
                         .relay_occurrences()
                         .occurrences()
                         .all(|evidence| !evidence.session.relay.as_str().is_empty())
                 })
-            {
-                return Ok(());
-            }
-            observation.changed().await.map_err(error)?;
-        }
-    })
-    .await
-    .map_err(|_| CanaryError::new("application event deadline elapsed"))?
+        })
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("live event observation deadline elapsed"))?;
+    Ok(())
 }
 
 async fn wait<T>(duration: Duration, mut value: impl FnMut() -> Option<T>) -> CanaryResult<T> {

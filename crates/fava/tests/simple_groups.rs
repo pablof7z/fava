@@ -202,18 +202,9 @@ async fn wait_for(
     observation: &mut fava::Observation,
     predicate: impl Fn(&fava::QuerySnapshot) -> bool,
 ) -> Arc<fava::QuerySnapshot> {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let current = observation.current();
-            if predicate(&current) {
-                return current;
-            }
-            observation
-                .changed()
-                .await
-                .expect("observation remains open");
-        }
-    })
-    .await
-    .expect("snapshot deadline")
+    observation
+        .wait_until(Duration::from_secs(1), predicate)
+        .await
+        .expect("observation stays open")
+        .expect("snapshot deadline")
 }

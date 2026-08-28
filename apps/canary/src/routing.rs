@@ -291,14 +291,12 @@ fn parse_urls(relays: &[LabRelay]) -> CanaryResult<Vec<RelayUrl>> {
 }
 
 async fn wait_events(observation: &mut Observation, count: usize) -> CanaryResult<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while observation.current().events.len() < count {
-            observation.changed().await.map_err(error)?;
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|_| CanaryError::new("application event deadline elapsed"))?
+    observation
+        .wait_until(Duration::from_secs(5), |snapshot| snapshot.events.len() >= count)
+        .await
+        .map_err(error)?
+        .ok_or_else(|| CanaryError::new("routing observation deadline elapsed"))?;
+    Ok(())
 }
 
 async fn open(fava: &Fava, query: Query) -> CanaryResult<Observation> {

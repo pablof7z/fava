@@ -368,28 +368,23 @@ pub(super) async fn confirm_relay_copy(
     kind: Kind,
     expected_tags: &[(&str, String)],
 ) -> DemoResult<()> {
-    let snapshot = match tokio::time::timeout(OPERATION_TIMEOUT, async {
-        loop {
-            let current = observation.current();
-            if current
+    let snapshot = match observation
+        .wait_until(OPERATION_TIMEOUT, |snapshot| {
+            snapshot
                 .events
                 .iter()
                 .any(|record| record.id() == id && !record.relay_occurrences().is_empty())
-            {
-                return Ok::<_, Box<dyn Error + Send + Sync>>(current);
-            }
-            observation.changed().await?;
-        }
-    })
-    .await
+        })
+        .await
     {
-        Ok(result) => result?,
-        Err(_) => {
+        Ok(Some(snapshot)) => snapshot,
+        Ok(None) => {
             return Err(format!(
                 "{label} — the relay never served kind {kind} ({id}) back within {OPERATION_TIMEOUT:?}; it was acknowledged but its effect is unconfirmed"
             )
             .into());
         }
+        Err(error) => return Err(error.into()),
     };
 
     let record = snapshot
@@ -437,16 +432,10 @@ pub(super) async fn wait_for(
     observation: &mut Observation,
     predicate: impl Fn(&QuerySnapshot) -> bool,
 ) -> DemoResult<Arc<QuerySnapshot>> {
-    tokio::time::timeout(OPERATION_TIMEOUT, async {
-        loop {
-            let current = observation.current();
-            if predicate(&current) {
-                return Ok::<_, Box<dyn Error + Send + Sync>>(current);
-            }
-            observation.changed().await?;
-        }
+    let snapshot = observation.wait_until(OPERATION_TIMEOUT, predicate).await?;
+    snapshot.ok_or_else(|| {
+        format!("observation predicate did not match within {OPERATION_TIMEOUT:?}").into()
     })
-    .await?
 }
 
 pub(super) async fn wait_for_optional(
@@ -454,20 +443,7 @@ pub(super) async fn wait_for_optional(
     within: Duration,
     predicate: impl Fn(&QuerySnapshot) -> bool,
 ) -> DemoResult<Option<Arc<QuerySnapshot>>> {
-    match tokio::time::timeout(within, async {
-        loop {
-            let current = observation.current();
-            if predicate(&current) {
-                return Ok::<_, Box<dyn Error + Send + Sync>>(current);
-            }
-            observation.changed().await?;
-        }
-    })
-    .await
-    {
-        Ok(result) => result.map(Some),
-        Err(_) => Ok(None),
-    }
+    Ok(observation.wait_until(within, predicate).await?)
 }
 
 pub(super) fn has_metadata_and_members(snapshot: &QuerySnapshot) -> bool {

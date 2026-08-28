@@ -328,6 +328,33 @@ impl Observation {
 
     pub async fn changed(
         &mut self,
+    ) -> Result<Arc<QuerySnapshot>, ObservationClosed>;
+
+    pub async fn wait_until(
+        &mut self,
+        timeout: Duration,
+        predicate: impl FnMut(&QuerySnapshot) -> bool,
+    ) -> Result<Option<Arc<QuerySnapshot>>, ObservationClosed>;
+}
+```
+
+`wait_until` is one bounded wait on the already-open observation. It first
+tests `current()`, then consumes only later delivered current states from that
+same handle. Its `FnMut` predicate runs at most once for every snapshot the
+call observes: the initial snapshot and each later delivered snapshot. A
+timeout returns `Ok(None)` and leaves the observation open; an observation
+closure remains `Err(ObservationClosed)`. Cancelling the wait cannot publish,
+close, reopen, or consume a later observation completion.
+
+```rust
+if let Some(visible) = feed
+    .wait_until(Duration::from_secs(5), |snapshot| !snapshot.events.is_empty())
+    .await?
+{
+    render(visible);
+}
+```
+
 ## 8. Example: articles by people muted by people I follow
 
 Assume protocol crates expose common typed query combinators.

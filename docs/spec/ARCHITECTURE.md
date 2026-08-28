@@ -2195,7 +2195,7 @@ Committed source changes, route-plan changes, subscription-plan changes, session
 
 ### Delivery model
 
-Application-facing query delivery is a bounded latest-state stream. Intermediate internal states may coalesce; every delivered update is sufficient to derive the exact current result from the last delivered revision.
+Application-facing query delivery is a bounded latest-state stream. Intermediate internal states may coalesce; every delivered update is sufficient to derive the exact current result from the last delivered revision. `Observation::wait_until` is a handle operation over that same stream: it checks the installed current snapshot and then awaits later delivery only until its explicit caller-supplied duration. Its predicate runs at most once for each snapshot the call observes. Timeout is `Ok(None)` and leaves the installed observation and its demand unchanged; closure and failure remain the handle's `Err(ObservationClosed)`. A cancelled wait cannot claim a stale completion or alter another wait's delivery revision.
 
 ### Suggested internal modules
 

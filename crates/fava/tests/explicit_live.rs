@@ -315,16 +315,13 @@ async fn explicit_live_query_attributes_event_eose_and_exact_cancellation() {
     );
     push(&peer, &RelayMessage::eose(subscription.clone()));
 
-    let snapshot = tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let snapshot = observation.changed().await.expect("query stays open");
-            if !snapshot.events.is_empty() {
-                return snapshot;
-            }
-        }
-    })
-    .await
-    .expect("event deadline");
+    let snapshot = observation
+        .wait_until(Duration::from_secs(1), |snapshot| {
+            !snapshot.events.is_empty()
+        })
+        .await
+        .expect("observation stays open")
+        .expect("event deadline");
     assert_eq!(snapshot.events.len(), 1);
     assert_eq!(snapshot.events[0].id(), event.id);
     assert_eq!(snapshot.events[0].relay_occurrences().len(), 1);
@@ -558,17 +555,14 @@ async fn await_state(
     key: &RelaySessionKey,
     predicate: impl Fn(&RelaySourceState) -> bool,
 ) -> fava_query::RelayQueryEvidence {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let current = relay_occurrence(&observation.current(), key);
-            if predicate(&current.state) {
-                return current;
-            }
-            observation.changed().await.expect("query stays open");
-        }
-    })
-    .await
-    .expect("relay state deadline elapsed")
+    let snapshot = observation
+        .wait_until(Duration::from_secs(1), |snapshot| {
+            predicate(&relay_occurrence(snapshot, key).state)
+        })
+        .await
+        .expect("observation stays open")
+        .expect("relay state deadline elapsed");
+    relay_occurrence(&snapshot, key)
 }
 
 async fn wait_until(predicate: impl Fn() -> bool) {

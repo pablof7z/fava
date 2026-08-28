@@ -85,20 +85,27 @@ pub(super) async fn wait_failure(fava: &Fava, receipt_id: fava::ReceiptId) -> fa
 }
 
 pub(super) async fn wait_public_failure(observation: &mut fava::Observation) -> String {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        loop {
-            let snapshot = observation.changed().await.expect("query stays open");
-            if let Some(failure) = snapshot.events.iter().find_map(|record| {
+    let snapshot = observation
+        .wait_until(Duration::from_secs(1), |snapshot| {
+            snapshot.events.iter().any(|record| {
                 record
                     .publication()
-                    .and_then(|evidence| evidence.materialization_failure.clone())
-            }) {
-                return failure;
-            }
-        }
-    })
-    .await
-    .expect("failure becomes visible through ordinary query")
+                    .and_then(|evidence| evidence.materialization_failure.as_ref())
+                    .is_some()
+            })
+        })
+        .await
+        .expect("observation stays open")
+        .expect("failure becomes visible through ordinary query");
+    snapshot
+        .events
+        .iter()
+        .find_map(|record| {
+            record
+                .publication()
+                .and_then(|evidence| evidence.materialization_failure.clone())
+        })
+        .expect("matching snapshot carries a failure")
 }
 
 pub(super) fn save_source(cache: &MemoryEventCache, source: Event) {

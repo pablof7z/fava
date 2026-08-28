@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{EventValue, Fava, Query};
+use fava::{EventValue, Fava, ObservationClosed, Query};
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_write_store::WriteStore;
@@ -77,4 +77,57 @@ async fn cancelled_pulls_and_large_burst_deliver_one_exact_latest_state() {
         .expect("latest-state deadline")
         .expect("observation stays open");
     assert_eq!(latest.events.len(), 256);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn bounded_predicate_wait_preserves_timeout_closure_and_later_delivery() {
+    let (fava, writes) = assembly();
+    let mut observation = fava
+        .observe(Query::events().cache_only())
+        .await
+        .expect("observation opens");
+
+    let initial = observation
+        .wait_until(Duration::ZERO, |snapshot| snapshot.events.is_empty())
+        .await
+        .expect("the installed observation remains open")
+        .expect("the installed snapshot is checked before the timeout");
+    assert!(initial.events.is_empty());
+
+    let mut predicate_calls = 0;
+    assert_eq!(
+        observation
+            .wait_until(Duration::ZERO, |_| {
+                predicate_calls += 1;
+                false
+            })
+            .await,
+        Ok(None)
+    );
+    assert_eq!(predicate_calls, 1, "the initial snapshot is tested once");
+
+    let event = EventBuilder::new(Kind::TextNote, "after timeout")
+        .custom_created_at(Timestamp::from(1))
+        .finalize(&Keys::generate())
+        .expect("event signs");
+    writes
+        .accept_materialized(EventValue::Signed(event))
+        .expect("event accepts");
+
+    let delivered = observation
+        .wait_until(Duration::from_secs(1), |snapshot| {
+            !snapshot.events.is_empty()
+        })
+        .await
+        .expect("timeout did not close the observation")
+        .expect("the later snapshot matches");
+    assert_eq!(delivered.events.len(), 1);
+
+    observation.close();
+    assert_eq!(
+        observation
+            .wait_until(Duration::from_secs(1), |_| false)
+            .await,
+        Err(ObservationClosed)
+    );
 }
