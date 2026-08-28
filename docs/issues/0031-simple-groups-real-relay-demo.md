@@ -24,11 +24,10 @@ The demo uses every current typed `fava-simple-groups` management constructor, e
 selectors and decoders, and the complete saved-group edit/query lifecycle. It
 prints the exact acknowledgement or decoded result for every step.
 
-The current typed metadata edit does not expose `supported_kinds`, and the
-current typed invite and join-request constructors do not expose Croissant's
-required invite code. The demo retains each typed constructor as the management
-kind owner, then rebuilds that returned unsigned event with the additional
-protocol tags. It contains no raw management kind construction.
+The typed metadata edit supplies `supported_kinds` directly through
+`MetadataEdit`, preserving caller kind order and repetitions. Typed invite and
+join-request builders encode their exact invite codes directly. The demo uses
+no raw management kind or protocol-tag reconstruction.
 
 This issue adds no production API, crate, provider contract, lifecycle owner,
 compatibility path, or architectural vocabulary.

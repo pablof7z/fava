@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use fava_query::{Kind, PublicKey, Query, RelayUrl};
 use fava_simple_groups::{
-    SavedGroupList, SavedGroupListDecodeError, SavedSimpleGroup, SimpleGroup, SimpleGroupAdmins,
-    SimpleGroupConstructionError, SimpleGroupDecodeError, SimpleGroupEventBuilder,
-    SimpleGroupLivekitParticipants, SimpleGroupMembers, SimpleGroupMetadata, SimpleGroupPins,
-    SimpleGroupRoles, SimpleGroupStateEventKind, remove_saved_relay, remove_saved_simple_group,
-    rename_saved_simple_group, save_relay, save_simple_group, saved_group_list_materializer,
-    saved_group_lists,
+    MetadataEdit, SavedGroupList, SavedGroupListDecodeError, SavedSimpleGroup, SimpleGroup,
+    SimpleGroupAdmins, SimpleGroupConstructionError, SimpleGroupDecodeError,
+    SimpleGroupEventBuilder, SimpleGroupLivekitParticipants, SimpleGroupMembers,
+    SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles, SimpleGroupStateEventKind,
+    edit_metadata, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
+    save_relay, save_simple_group, saved_group_list_materializer, saved_group_lists,
 };
 use fava_write::{
     EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
@@ -127,6 +127,54 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
     let _: Result<ReplaceableEventEdit, WriteIntentError> = save_relay(relay());
     let _: Result<ReplaceableEventEdit, WriteIntentError> = remove_saved_relay(relay());
     let _: Arc<dyn ReplaceableEventMaterializer> = saved_group_list_materializer();
+}
+
+#[test]
+fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
+    let group = SimpleGroup::new("photos", vec![relay()]).expect("valid group");
+    let (repeated, _) = edit_metadata(
+        key(),
+        &group,
+        &MetadataEdit {
+            supported_kinds: Some(vec![Kind::TextNote, Kind::Reaction, Kind::TextNote]),
+            ..Default::default()
+        },
+    )
+    .expect("metadata event builds")
+    .into_event_and_routing()
+    .expect("event and routing build");
+    assert_eq!(
+        repeated
+            .tags
+            .iter()
+            .find(|tag| tag.as_slice().first().map(String::as_str) == Some("supported_kinds"))
+            .map(|tag| tag.as_slice()),
+        Some(
+            ["supported_kinds", "1", "7", "1"]
+                .map(str::to_owned)
+                .as_slice()
+        )
+    );
+
+    let (empty, _) = edit_metadata(
+        key(),
+        &group,
+        &MetadataEdit {
+            supported_kinds: Some(vec![]),
+            ..Default::default()
+        },
+    )
+    .expect("metadata event builds")
+    .into_event_and_routing()
+    .expect("event and routing build");
+    assert_eq!(
+        empty
+            .tags
+            .iter()
+            .find(|tag| tag.as_slice().first().map(String::as_str) == Some("supported_kinds"))
+            .map(|tag| tag.as_slice()),
+        Some(["supported_kinds"].map(str::to_owned).as_slice())
+    );
 }
 
 #[test]

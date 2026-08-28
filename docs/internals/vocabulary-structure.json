@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "8dd051f7f643ad6232ed3b14c7288f3f2a314144a5508f0652148307c36723b9",
+  "inputs_sha256": "4a87b0df9fb8a802b1aadaa4a0b371d44401210fc040eff899773a15137a8802",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -7230,10 +7230,10 @@
     {
       "interface": [
         {
-          "description": "A partial metadata update for a NIP-29 simple group, expressed as a kind-9002 management event body.",
+          "description": "A partial metadata update for a NIP-29 simple group, expressed as a kind-9002 management event body. Its optional ordered exact supported-kind list omits the tag and declares all kinds supported when None, or emits an empty tag and declares no kinds supported when Some(empty).",
           "kind": "Bound declaration",
           "path": "fava_simple_groups::management::MetadataEdit",
-          "signature": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n}"
+          "signature": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n    /// Exact supported event kinds in caller order.\n    ///\n    /// `None` omits the `supported_kinds` tag, declaring all kinds supported.\n    /// `Some(vec![])` emits an explicitly empty `[\"supported_kinds\"]` tag,\n    /// declaring no kinds supported. Repeated kinds are retained.\n    pub supported_kinds: Option<Vec<Kind>>,\n}"
         },
         {
           "description": "Supplies the exact group description; `None` emits no `about` tag.",
@@ -7260,13 +7260,19 @@
           "signature": "pub fava_simple_groups::MetadataEdit::picture: core::option::Option<alloc::string::String>"
         },
         {
+          "description": "Supplies exact NIP-29 supported kinds in caller order. `None` omits the tag and declares all kinds supported; `Some(vec![])` emits <code>[\"supported_kinds\"]</code> and declares no kinds supported; repetitions remain present.",
+          "kind": "Public field",
+          "path": "fava_simple_groups::MetadataEdit::supported_kinds",
+          "signature": "pub fava_simple_groups::MetadataEdit::supported_kinds: core::option::Option<alloc::vec::Vec<nostr::event::kind::Kind>>"
+        },
+        {
           "description": "Selects public or member-only content visibility; `None` emits no `private` tag.",
           "kind": "Public field",
           "path": "fava_simple_groups::MetadataEdit::visibility",
           "signature": "pub fava_simple_groups::MetadataEdit::visibility: core::option::Option<fava_simple_groups::GroupVisibility>"
         },
         {
-          "description": "The exact optional fields used to build one kind-9002 metadata replacement request; `None` omits that field's tag.",
+          "description": "The exact optional fields used to build one kind-9002 metadata replacement request. For `supported_kinds`, `None` omits the tag and declares all kinds supported; `Some(vec![])` emits its explicit empty tag and declares no kinds supported. Supplied kinds retain caller order and repetitions.",
           "kind": "Struct",
           "path": "fava_simple_groups::MetadataEdit",
           "signature": "pub struct fava_simple_groups::MetadataEdit"
@@ -7283,7 +7289,7 @@
       "structure": {
         "private_architectural_state": [
           {
-            "declaration": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n}",
+            "declaration": "pub struct MetadataEdit {\n    /// Human-readable group name.\n    pub name: Option<String>,\n    /// Group description.\n    pub about: Option<String>,\n    /// URL of the group picture.\n    pub picture: Option<String>,\n    /// Whether the group is private (relay withholds content from non-members).\n    /// `None` means public (no `[\"private\"]` tag emitted).\n    pub visibility: Option<GroupVisibility>,\n    /// Whether joining requires approval.\n    /// `None` means open (no `[\"closed\"]` tag emitted).\n    pub access: Option<GroupAccess>,\n    /// Exact supported event kinds in caller order.\n    ///\n    /// `None` omits the `supported_kinds` tag, declaring all kinds supported.\n    /// `Some(vec![])` emits an explicitly empty `[\"supported_kinds\"]` tag,\n    /// declaring no kinds supported. Repeated kinds are retained.\n    pub supported_kinds: Option<Vec<Kind>>,\n}",
             "kind": "struct",
             "path": "fava_simple_groups::management::MetadataEdit",
             "source": "crates/fava-simple-groups/src/management.rs",
@@ -7306,6 +7312,10 @@
           {
             "declaration": "pub fava_simple_groups::MetadataEdit::picture: core::option::Option<alloc::string::String>",
             "path": "fava_simple_groups::MetadataEdit::picture"
+          },
+          {
+            "declaration": "pub fava_simple_groups::MetadataEdit::supported_kinds: core::option::Option<alloc::vec::Vec<nostr::event::kind::Kind>>",
+            "path": "fava_simple_groups::MetadataEdit::supported_kinds"
           },
           {
             "declaration": "pub fava_simple_groups::MetadataEdit::visibility: core::option::Option<fava_simple_groups::GroupVisibility>",

@@ -68,10 +68,10 @@ class CanonicalPackageTest(unittest.TestCase):
         root = Path(__file__).parents[2]
         manifest = package.expected_manifest(root)
         self.assertEqual(manifest["term_count"], 35)
-        self.assertEqual(manifest["package_byte_length"], 126748)
+        self.assertEqual(manifest["package_byte_length"], 129312)
         self.assertEqual(
             manifest["package_sha256"],
-            "287df1fa9ddd264d2ce7371123ba477d72b699f7f6b870509641396ca1407cbc",
+            "b9920482fac500f1611ffa16f8c28eaa2fe49af961204a0fc3de23e37d75631b",
         )
         self.assertEqual(
             [term["index"] for term in manifest["terms"]], list(range(35))

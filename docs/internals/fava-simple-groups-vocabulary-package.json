@@ -7,8 +7,8 @@
   },
   "ordering": "ascending lexicographic order of exact UTF-8 term-name bytes",
   "owner": "fava-simple-groups",
-  "package_byte_length": 126748,
-  "package_sha256": "287df1fa9ddd264d2ce7371123ba477d72b699f7f6b870509641396ca1407cbc",
+  "package_byte_length": 129123,
+  "package_sha256": "0d3e8be2f92b398e1de5a3a2ea60c8fee1ece3d86b4bd6bdc744c00d57ee7041",
   "term_count": 35,
   "terms": [
     {
@@ -28,10 +28,10 @@
       "name_utf8_byte_length": 15
     },
     {
-      "frame_byte_length": 4559,
+      "frame_byte_length": 6375,
       "index": 2,
-      "markdown_sha256": "5c406ccfe09c21f593ab981b4d808056329fd5a99e56b9148c8b4912b2581c07",
-      "markdown_utf8_byte_length": 4531,
+      "markdown_sha256": "e4b41b56cbefe4027288b738112b7179f74963cdcf32e8f2babb865a7fc90771",
+      "markdown_utf8_byte_length": 6347,
       "name": "MetadataEdit",
       "name_utf8_byte_length": 12
     },
@@ -180,10 +180,10 @@
       "name_utf8_byte_length": 12
     },
     {
-      "frame_byte_length": 1563,
+      "frame_byte_length": 1676,
       "index": 21,
-      "markdown_sha256": "99b672e0420f408ce9868c068812ff9ad19198e86c36d52a6b242c1b9c518b44",
-      "markdown_utf8_byte_length": 1534,
+      "markdown_sha256": "da40fedcbd654abbd805b84998ffdd5087cd19aaaeb651c5f25c0ab0f099c36f",
+      "markdown_utf8_byte_length": 1647,
       "name": "edit_metadata",
       "name_utf8_byte_length": 13
     },
@@ -196,10 +196,10 @@
       "name_utf8_byte_length": 18
     },
     {
-      "frame_byte_length": 1478,
+      "frame_byte_length": 1675,
       "index": 23,
-      "markdown_sha256": "570d884d68fa330c8763b6744cf60332ca91272446fa16eb01b61dea07f8ee37",
-      "markdown_utf8_byte_length": 1456,
+      "markdown_sha256": "0a16c0fb3759b4a8de5646f0ab8c5aa9cafa181cc6a216c62f385c7496b4a55a",
+      "markdown_utf8_byte_length": 1653,
       "name": "invite",
       "name_utf8_byte_length": 6
     },
@@ -220,10 +220,10 @@
       "name_utf8_byte_length": 11
     },
     {
-      "frame_byte_length": 1463,
+      "frame_byte_length": 1616,
       "index": 26,
-      "markdown_sha256": "a4160a543f3138ec449c875cbe172a91901d8a92380e5992f7af8ca2c90f1798",
-      "markdown_utf8_byte_length": 1439,
+      "markdown_sha256": "a9c05f8876255ccb6e26c39f0ed602432b5cf7a17b48b18599ca0840d790ecc9",
+      "markdown_utf8_byte_length": 1592,
       "name": "put_user",
       "name_utf8_byte_length": 8
     },
@@ -244,10 +244,10 @@
       "name_utf8_byte_length": 25
     },
     {
-      "frame_byte_length": 1484,
+      "frame_byte_length": 1580,
       "index": 29,
-      "markdown_sha256": "8df4f7d73589bf43eae5e4495d56e7a3df6fa0b0b664eb33c88ee7074dd36717",
-      "markdown_utf8_byte_length": 1457,
+      "markdown_sha256": "f0d7b2da590bb3661bb1f28ebf4d7e29572dfcd433080a2565c8c136e4845bf3",
+      "markdown_utf8_byte_length": 1553,
       "name": "remove_user",
       "name_utf8_byte_length": 11
     },

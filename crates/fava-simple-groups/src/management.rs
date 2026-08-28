@@ -19,7 +19,7 @@
 //! Kind numbers 9000–9009 and 9021–9022 are private constants in this module.
 //! No caller, test, or example writes `Kind::from_u16(9NNN)`.
 
-use fava_write::{EventBuilder, EventId, PublicKey, Tag, WriteIntentError};
+use fava_write::{EventBuilder, EventId, Kind, PublicKey, Tag, WriteIntentError};
 
 use crate::SimpleGroup;
 
@@ -55,6 +55,7 @@ const KIND_LEAVE_GROUP: u16 = 9022;
 ///     picture: None,
 ///     visibility: Some(GroupVisibility::Private),
 ///     access: Some(GroupAccess::Closed),
+///     supported_kinds: Some(vec![fava_write::Kind::TextNote]),
 /// };
 /// ```
 #[derive(Clone, Debug, Default)]
@@ -71,6 +72,12 @@ pub struct MetadataEdit {
     /// Whether joining requires approval.
     /// `None` means open (no `["closed"]` tag emitted).
     pub access: Option<GroupAccess>,
+    /// Exact supported event kinds in caller order.
+    ///
+    /// `None` omits the `supported_kinds` tag, declaring all kinds supported.
+    /// `Some(vec![])` emits an explicitly empty `["supported_kinds"]` tag,
+    /// declaring no kinds supported. Repeated kinds are retained.
+    pub supported_kinds: Option<Vec<Kind>>,
 }
 
 /// Group visibility: whether the relay exposes content to non-members.
@@ -177,6 +184,13 @@ pub fn edit_metadata(
     }
     if edit.access == Some(GroupAccess::Closed) {
         extra.push(parse_tag(["closed"])?);
+    }
+    if let Some(kinds) = &edit.supported_kinds {
+        let mut values = vec!["supported_kinds".to_owned()];
+        values.extend(kinds.iter().map(|kind| kind.as_u16().to_string()));
+        extra.push(
+            Tag::parse(values).map_err(|error| WriteIntentError::Encoding(error.to_string()))?,
+        );
     }
     build(author, KIND_EDIT_METADATA, group, extra)
 }
@@ -476,11 +490,6 @@ mod tests {
         result.unwrap().into_event_and_routing().unwrap().0
     }
 
-    /// Build the routing from a constructor result, panicking on any failure.
-    fn build_routing(result: Result<EventBuilder, WriteIntentError>) -> WriteRouting {
-        result.unwrap().into_event_and_routing().unwrap().1
-    }
-
     fn h_tag(event: &UnsignedEvent, id: &str) -> bool {
         event.tags.iter().any(|t| {
             let s = t.as_slice();
@@ -506,6 +515,13 @@ mod tests {
         })
     }
 
+    fn tag_values(event: &UnsignedEvent, name: &str) -> Option<Vec<String>> {
+        event.tags.iter().find_map(|tag| {
+            (tag.as_slice().first().map(String::as_str) == Some(name))
+                .then(|| tag.as_slice().to_vec())
+        })
+    }
+
     fn p_tags(event: &UnsignedEvent) -> Vec<Vec<String>> {
         event
             .tags
@@ -513,10 +529,6 @@ mod tests {
             .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
             .map(|tag| tag.as_slice().to_vec())
             .collect()
-    }
-
-    fn group_relay() -> RelayUrl {
-        RelayUrl::parse("wss://relay.example").unwrap()
     }
 
     #[test]
@@ -537,6 +549,7 @@ mod tests {
             picture: Some("https://example.com/cats.png".to_owned()),
             visibility: Some(GroupVisibility::Private),
             access: Some(GroupAccess::Closed),
+            supported_kinds: Some(vec![Kind::TextNote, Kind::from_u16(30_023), Kind::TextNote]),
         };
         let event = build_event(edit_metadata(author(), &group, &edit));
         assert_eq!(event.kind.as_u16(), KIND_EDIT_METADATA);
@@ -546,6 +559,31 @@ mod tests {
         assert!(has_tag_name(&event, "picture"));
         assert!(has_tag_name(&event, "private"));
         assert!(has_tag_name(&event, "closed"));
+        assert_eq!(
+            tag_values(&event, "supported_kinds").as_deref(),
+            Some(
+                ["supported_kinds", "1", "30023", "1"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn edit_metadata_encodes_explicitly_empty_supported_kinds() {
+        let event = build_event(edit_metadata(
+            author(),
+            &group(),
+            &MetadataEdit {
+                supported_kinds: Some(vec![]),
+                ..Default::default()
+            },
+        ));
+
+        assert_eq!(
+            tag_values(&event, "supported_kinds"),
+            Some(vec!["supported_kinds".to_owned()])
+        );
     }
 
     #[test]
@@ -556,6 +594,7 @@ mod tests {
         assert!(!has_tag_name(&event, "name"));
         assert!(!has_tag_name(&event, "private"));
         assert!(!has_tag_name(&event, "closed"));
+        assert!(!has_tag_name(&event, "supported_kinds"));
     }
 
     #[test]
@@ -725,15 +764,16 @@ mod tests {
         assert_eq!(event.tags.len(), 1);
     }
 
-    /// Confirms every constructor emits the group's `h` tag correctly.
+    /// Confirms every constructor emits the `h` tag and embeds the group's relay routing.
     #[test]
-    fn all_constructors_have_h_tag() {
+    fn all_constructors_have_h_tag_and_routing() {
         let group = group();
         let a = author();
         let user = Keys::generate().public_key();
         let target = EventId::from_byte_array([1u8; 32]);
-
-        let builders = [
+        let relay = RelayUrl::parse("wss://relay.example").unwrap();
+        let expected = WriteRouting::Explicit(vec![relay]);
+        for builder in [
             create_group(a, &group).unwrap(),
             edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
             invite(a, &group, "code").unwrap(),
@@ -743,41 +783,13 @@ mod tests {
             delete_event(a, &group, &target).unwrap(),
             delete_group(a, &group).unwrap(),
             leave_group(a, &group).unwrap(),
-        ];
-
-        for builder in builders {
-            let (event, _) = builder.into_event_and_routing().unwrap();
+        ] {
+            let (event, routing) = builder.into_event_and_routing().unwrap();
             assert!(
                 h_tag(&event, "cats"),
                 "missing h tag in kind {}",
                 event.kind.as_u16()
             );
-        }
-    }
-
-    /// Confirms every constructor embeds the group's relay route.
-    #[test]
-    fn all_constructors_have_group_relay_routing() {
-        let group = group();
-        let a = author();
-        let user = Keys::generate().public_key();
-        let target = EventId::from_byte_array([1u8; 32]);
-        let expected = WriteRouting::Explicit(vec![group_relay()]);
-
-        let builders = [
-            create_group(a, &group).unwrap(),
-            edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
-            invite(a, &group, "code").unwrap(),
-            join_request(a, &group, None).unwrap(),
-            put_user(a, &group, &[user], &[]).unwrap(),
-            remove_user(a, &group, &[user]).unwrap(),
-            delete_event(a, &group, &target).unwrap(),
-            delete_group(a, &group).unwrap(),
-            leave_group(a, &group).unwrap(),
-        ];
-
-        for builder in builders {
-            let routing = build_routing(Ok(builder));
             assert_eq!(routing, expected);
         }
     }

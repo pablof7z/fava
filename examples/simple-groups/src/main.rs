@@ -24,7 +24,7 @@ mod support;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fava::{EventBuilder, Kind, Query, Tag};
+use fava::{EventBuilder, Kind, Query};
 use fava_simple_groups::{
     GroupAccess, GroupVisibility, MetadataEdit, SimpleGroup, SimpleGroupEventBuilder,
     SimpleGroupStateEventKind, create_group, delete_event, delete_group, edit_metadata, invite,
@@ -114,13 +114,24 @@ async fn main() -> DemoResult<()> {
             picture: Some("https://example.com/fava-demo.png".to_owned()),
             visibility: Some(GroupVisibility::Public),
             access: Some(GroupAccess::Closed),
+            supported_kinds: Some(vec![
+                Kind::from_u16(9007),
+                Kind::from_u16(9002),
+                Kind::from_u16(9009),
+                Kind::from_u16(9021),
+                Kind::from_u16(9000),
+                Kind::from_u16(9001),
+                Kind::from_u16(9005),
+                Kind::from_u16(9008),
+                Kind::from_u16(9022),
+                Kind::TextNote,
+                Kind::Reaction,
+            ]),
         },
     )?;
-    let management_kinds = typed_management_kinds();
-    let metadata = with_supported_kinds(metadata, &management_kinds)?;
     let edited = support::publish_builder(
         &fava,
-        "edit_metadata(Alice, group, name/about/picture) + supported_kinds tag",
+        "edit_metadata(Alice, group, name/about/picture/supported_kinds)",
         metadata,
     )
     .await?;
@@ -577,33 +588,6 @@ fn content_of(event: &fava::EventValue) -> String {
     }
 }
 
-fn with_supported_kinds(
-    builder: EventBuilder,
-    management_kinds: &[Kind],
-) -> DemoResult<EventBuilder> {
-    let mut values = vec!["supported_kinds".to_owned()];
-    values.extend(
-        management_kinds
-            .iter()
-            .chain([Kind::TextNote, Kind::Reaction].iter())
-            .map(|kind| kind.as_u16().to_string()),
-    );
-    Ok(builder.tags([Tag::parse(values)?]))
-}
-
-fn typed_management_kinds() -> Vec<Kind> {
-    vec![
-        Kind::from_u16(9000),
-        Kind::from_u16(9001),
-        Kind::from_u16(9002),
-        Kind::from_u16(9005),
-        Kind::from_u16(9007),
-        Kind::from_u16(9008),
-        Kind::from_u16(9009),
-        Kind::from_u16(9021),
-        Kind::from_u16(9022),
-    ]
-}
 
 fn unique_group_id() -> Result<String, Box<dyn Error + Send + Sync>> {
     let millis = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
