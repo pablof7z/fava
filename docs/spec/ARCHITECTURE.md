@@ -532,6 +532,18 @@ impl EventBuilder {
     pub fn tag(self, tag: Tag) -> Self;
     pub fn build(self) -> Result<UnsignedEvent, EventBuildError>;
 }
+
+impl From<UnsignedEvent> for EventBuilder {
+    fn from(event: UnsignedEvent) -> Self {
+        Self::from_parts(
+            event.pubkey,
+            event.kind,
+            event.created_at,
+            event.tags.into_iter().collect(),
+            event.content,
+        )
+    }
+}
 ```
 
 `EventBuilder` understands generic Nostr event fields, validated tags, and a
@@ -541,6 +553,10 @@ quote, follow, bookmark, group, or other event-kind meaning. Protocol crates
 calculate those tags and compose the builder rather than constructing another
 signing or publication path. Event-only construction refuses an explicit route;
 the Fava facade alone consumes the event and route together into `WriteIntent`.
+Consuming an `UnsignedEvent` into `EventBuilder` reopens its body for generic
+mutation: it preserves author, kind, timestamp, ordered tags, and content,
+discards the body's derived id, and starts with automatic routing. The final
+builder boundary recomputes the id and reapplies generic bounds.
 
 ### Write vocabulary
 

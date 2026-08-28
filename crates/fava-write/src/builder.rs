@@ -18,7 +18,9 @@ const MAX_TAGS: usize = 2_000;
 /// byte bounds once, in [`EventBuilder::build`]. Reach for it when assembling
 /// an event from application-level fields; when every field is already known
 /// up front, such as re-encoding a previously decoded event, construct it
-/// directly with [`EventBuilder::from_parts`] instead.
+/// directly with [`EventBuilder::from_parts`] instead. To reopen a finalized
+/// [`UnsignedEvent`], consume it with [`EventBuilder::from`]; that preserves
+/// its body while discarding its derived id and local routing.
 ///
 /// # Examples
 ///
@@ -183,6 +185,23 @@ impl EventBuilder {
             });
         }
         Ok(event)
+    }
+}
+
+impl From<UnsignedEvent> for EventBuilder {
+    /// Reopen an unsigned event body for further generic construction.
+    ///
+    /// This consumes every serialized body field in its original tag order,
+    /// starts with automatic routing, and deliberately discards the derived
+    /// id. [`EventBuilder::build`] computes one id from the final body.
+    fn from(event: UnsignedEvent) -> Self {
+        Self::from_parts(
+            event.pubkey,
+            event.kind,
+            event.created_at,
+            event.tags.into_iter().collect(),
+            event.content,
+        )
     }
 }
 

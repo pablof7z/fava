@@ -1,7 +1,8 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
 use fava_write::{
-    EventBuildError, EventBuilder, Kind, Tag, Timestamp, WriteIntentError, WriteRouting,
+    EventBuildError, EventBuilder, Kind, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    WriteRouting,
 };
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
@@ -49,6 +50,80 @@ fn raw_parts_and_bulk_tags_preserve_every_exact_field_and_order() {
     assert_eq!(from_parts.tags.as_slice(), tags.as_slice());
     assert_eq!(from_parts.content, "opaque raw content");
     assert!(from_parts.id.is_some());
+}
+
+#[test]
+fn reopening_an_unsigned_event_preserves_its_body_recomputes_identity_and_resets_routing() {
+    let author = keys().public_key();
+    let kind = Kind::Custom(60_006);
+    let created_at = Timestamp::from(124);
+    let original_tags = vec![custom("x-first", "one"), custom("x-second", "two")];
+    let original = EventBuilder::from_parts(
+        author,
+        kind,
+        created_at,
+        original_tags.clone(),
+        "opaque raw content".to_owned(),
+    )
+    .build()
+    .expect("original event builds");
+    let original_id = original.id.expect("original id is derived");
+    let appended = custom("x-appended", "three");
+
+    let (reopened, routing) = EventBuilder::from(original)
+        .tag(appended.clone())
+        .into_event_and_routing()
+        .expect("reopened event builds");
+
+    assert_eq!(reopened.pubkey, author);
+    assert_eq!(reopened.kind, kind);
+    assert_eq!(reopened.created_at, created_at);
+    assert_eq!(reopened.content, "opaque raw content");
+    assert_eq!(
+        reopened.tags.as_slice(),
+        &[original_tags, vec![appended]].concat()
+    );
+    assert_ne!(reopened.id, Some(original_id));
+    reopened
+        .verify_id()
+        .expect("reopened id matches its final body");
+    assert_eq!(routing, WriteRouting::Automatic);
+}
+
+#[test]
+fn reopening_an_unsigned_event_reapplies_final_tag_and_byte_bounds() {
+    let author = keys().public_key();
+    let tags = (0..2_000)
+        .map(|index| custom("x-hostile", &index.to_string()))
+        .collect::<Vec<_>>();
+    let mut oversized = UnsignedEvent::new(
+        author,
+        Timestamp::from(1),
+        Kind::Custom(60_007),
+        Vec::new(),
+        "z".repeat(131_073),
+    );
+    oversized.ensure_id();
+
+    assert!(matches!(
+        EventBuilder::from(UnsignedEvent::new(
+            author,
+            Timestamp::from(1),
+            Kind::Custom(60_007),
+            tags,
+            String::new(),
+        ),)
+        .tag(custom("x-overflow", "tag"))
+        .build(),
+        Err(EventBuildError::TooManyTags {
+            actual: 2_001,
+            maximum: 2_000,
+        })
+    ));
+    assert!(matches!(
+        EventBuilder::from(oversized).build(),
+        Err(EventBuildError::TooLarge { .. })
+    ));
 }
 
 #[test]

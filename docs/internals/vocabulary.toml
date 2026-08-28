@@ -1109,13 +1109,13 @@ spec_symbols = ["UnsignedEvent"]
 [[term]]
 name = "EventBuilder"
 source = "fava"
-meaning = "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, and bounded neutral local publication routing."
+meaning = "A generic constructor for an UnsignedEvent from author, kind, content, timestamp, validated Tags, bounded neutral local publication routing, or a consumed existing unsigned body reopened for generic mutation."
 owner = "fava-write"
 nearest_nostr = "Event"
 distinction = "Nostr defines Event fields but not local delivery intent; EventBuilder provides checked construction and route accumulation without interpreting any event kind. Its route is neither serialized nor signed."
-lifecycle = "An application or protocol crate composes fields, tags, and an optional local route; each route addition consumes a finite owned vector and increments a transient raw-input count before normalization; Fava consumes the event and normalized route into WriteIntent."
+lifecycle = "An application or protocol crate composes fields, tags, and an optional local route, or consumes one finalized UnsignedEvent and reopens its body with automatic routing and no retained derived id; each route addition consumes a finite owned vector and increments a transient raw-input count before normalization; final construction recomputes the id and applies bounds before Fava consumes the event and normalized route into WriteIntent."
 forcing_requirement = "One fluent concrete builder must retain a selected route, refuse cumulative raw routing work before normalization, and keep duplicate occurrences distinct from destination capacity without learning protocol group meaning."
-falsifier = "Builder and facade tests fail if raw route inputs can exceed 1,024 occurrences, duplicates consume the 256-destination capacity, event-only construction drops an attached route, or Fava mishandles the attached route."
+falsifier = "Builder and facade tests fail if reopening an unsigned event changes its body fields or tag order, retains its old id or routing, raw route inputs can exceed 1,024 occurrences, duplicates consume the 256-destination capacity, event-only construction drops an attached route, or Fava mishandles the attached route."
 symbols = [
     "fava_write::EventBuilder",
 ]
