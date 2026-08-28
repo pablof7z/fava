@@ -221,8 +221,16 @@ jobs:
       - name: Time the extraction
         run: |
           start=$(date +%s%3N)
+          set +e
           symbol-gate status --json > /tmp/sg-status.json
+          rc=$?
+          set -e
           echo "extract_ms=$(( $(date +%s%3N) - start ))" >> "$GITHUB_ENV"
+          if [ "$rc" -ne 0 ]; then
+            echo "status exited $rc; its JSON payload carries the reason:"
+            cat /tmp/sg-status.json
+            exit "$rc"
+          fi
       # Trust-key boundary: the public keys that verify approvals live only in
       # .symbol-gate/trusted_keys, which is committed to the repository. No CI
       # secret is injected; trust is controlled by code review, not CI config.
