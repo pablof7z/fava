@@ -1,0 +1,18 @@
+{
+  "blocked_by": "The current REPL has no command file for configuration, membership, saved-list edits, event deletion, or group deletion. Add that app-owned ordinary command file and result fields, then change only status and command_file here.",
+  "id": "full-nip29-contract",
+  "required_facts": [
+    {"operation": "create", "relay": "group", "kind": 9007, "tags": [["h", "$group_id"]]},
+    {"operation": "configure", "relay": "group", "kind": 9002, "tags_include": ["h", "name", "about", "private", "closed", "supported_kinds"]},
+    {"operation": "add-member", "relay": "group", "kind": 9000, "tags_include": ["h", "p"]},
+    {"operation": "authorized-content", "relay": "group", "kind": 12345, "tags": [["h", "$group_id"]]},
+    {"operation": "rejected-content", "relay": "group", "kind": 12345, "tags": [["h", "$group_id"]], "present": false},
+    {"operation": "relay-state", "relay": "group", "kinds": [39000, 39001, 39002, 39003, 39004, 39005], "authors": "relay"},
+    {"operation": "save-list", "relay": "state", "kind": 10009, "author": "alice"},
+    {"operation": "delete-event", "relay": "group", "kind": 9005, "tags_include": ["h", "e"]},
+    {"operation": "deleted-event-absent", "relay": "group", "present": false},
+    {"operation": "delete-group", "relay": "group", "kind": 9008, "tags": [["h", "$group_id"]]},
+    {"operation": "deleted-group-state-absent", "relay": "group", "present": false}
+  ],
+  "status": "blocked"
+}

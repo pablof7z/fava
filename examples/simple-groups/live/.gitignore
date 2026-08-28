@@ -1,0 +1,4 @@
+runs/
+.scratch/
+__pycache__/
+*.pyc

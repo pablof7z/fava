@@ -1,0 +1,7 @@
+{"fields":{"alias":"group","relay":"ws://127.0.0.1:63730"},"kind":"relay-added","status":"ok","summary":"group -> ws://127.0.0.1:63730"}
+{"fields":{"alias":"state","relay":"ws://127.0.0.1:63731"},"kind":"relay-added","status":"ok","summary":"state -> ws://127.0.0.1:63731"}
+{"fields":{"account":"alice","public_key":"18858eb3fef7b3e2f9df1e76eb81f673217eb67a5dd556a79992c7a5fd5324e9"},"kind":"account-selected","status":"ok","summary":"selected alice"}
+{"fields":{"author":"18858eb3fef7b3e2f9df1e76eb81f673217eb67a5dd556a79992c7a5fd5324e9","event_id":"be629e5dc7b364df5d4a5208da4a19ce082c648a29dc8ccb53d8a9962b52cc66","group":"fava-e2e-group","write_id":"1"},"kind":"group-created","status":"ok","summary":"created and selected fava-e2e-group on ws://127.0.0.1:63730"}
+{"fields":{"author":"18858eb3fef7b3e2f9df1e76eb81f673217eb67a5dd556a79992c7a5fd5324e9","event_id":"e31304e0d7985ebd32504995e3a30957574f26cb7146f185cb244e76e4052465","group":"fava-e2e-group","kind":"12345","write_id":"2"},"kind":"group-event-published","status":"ok","summary":"published kind 12345 to fava-e2e-group"}
+{"fields":{"accounts":"alice,bob","captures":"","relays":"group=ws://127.0.0.1:63730,state=ws://127.0.0.1:63731","selected_account":"alice"},"kind":"dump","status":"ok","summary":"bounded shell state"}
+{"fields":{},"kind":"quit","status":"ok","summary":"session closed"}

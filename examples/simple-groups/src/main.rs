@@ -124,6 +124,7 @@ impl GroupCommands<'_> {
                     format!("created and selected {id} on {relay}"),
                 )
                 .with_field("group", id)
+                .and_then(|result| result.with_field("author", author.to_hex()))
                 .and_then(|result| result.with_field("event_id", receipt.current.id().to_hex()))
                 .and_then(|result| {
                     result.with_field("write_id", write.write_id().as_u64().to_string())
@@ -165,6 +166,7 @@ impl GroupCommands<'_> {
                 }
                 CommandResult::success("group-deleted", format!("deleted {id}"))
                     .with_field("group", id)
+                    .and_then(|result| result.with_field("author", author.to_hex()))
                     .and_then(|result| result.with_field("event_id", receipt.current.id().to_hex()))
                     .and_then(|result| {
                         result.with_field("write_id", write.write_id().as_u64().to_string())
@@ -257,6 +259,7 @@ impl GroupCommands<'_> {
         )
         .with_field("group", id)
         .and_then(|result| result.with_field("kind", kind.as_u16().to_string()))
+        .and_then(|result| result.with_field("author", author.to_hex()))
         .and_then(|result| result.with_field("event_id", receipt.current.id().to_hex()))
         .and_then(|result| result.with_field("write_id", write.write_id().as_u64().to_string()))
     }

@@ -1,0 +1,36 @@
+{
+  "app_exit": "zero",
+  "assertions": [
+    {
+      "event": {
+        "content": "",
+        "id": "$create.event_id",
+        "kind": 9007,
+        "pubkey": "$create.author",
+        "tags": [["h", "$group_id"]]
+      },
+      "filter": {"ids": ["$create.event_id"]},
+      "present": true,
+      "relay": "group"
+    },
+    {
+      "event": {
+        "content": "arbitrary-kind content",
+        "id": "$content.event_id",
+        "kind": 12345,
+        "pubkey": "$content.author",
+        "tags": [["h", "$group_id"]]
+      },
+      "filter": {"ids": ["$content.event_id"]},
+      "present": true,
+      "relay": "group"
+    }
+  ],
+  "captures": {
+    "content": {"fields": {"kind": "12345"}, "kind": "group-event-published"},
+    "create": {"fields": {}, "kind": "group-created"}
+  },
+  "command_file": "commands/smoke-create-content.txt",
+  "id": "smoke-create-content",
+  "status": "executable"
+}

@@ -54,7 +54,8 @@ for it. A command-file replay renders that refusal and exits unsuccessfully
 without consuming a later command as its value.
 
 Each create/event publish/delete waits at most 20 seconds for
-`fava::all_acknowledged()`. The result records exact `event_id` and `write_id`.
+`fava::all_acknowledged()`. The result records exact `author`, `event_id`, and
+`write_id`.
 The app starts with disposable Alice and Bob signers registered in Fava; account
 selection chooses the unsigned-event author, never exposes a secret.
 
