@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7, the tag-value query slice, Phase 07.1, and the approved `fava-simple-groups` Phase 07.1.1 are complete; urgent Phase 07.2 restores the specified runtime signer lifecycle before M8. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
+Fava advances from the completed M0 evidence baseline through authoritative milestones M1 through M11 plus focused inserted phases that repair or add required public capabilities before the next major milestone. M1-M7, the tag-value query slice, Phase 07.1, the approved `fava-simple-groups` Phase 07.1.1, Phase 07.2, and Phases 07.3-07.6 are merged; Phases 07.3-07.6 were executed without GSD plans (each records an EXECUTED-WITHOUT-PLAN.md) and await Phase 07.9 verification. Phase 07.7 (Facade Lifecycle) is the current phase. Each phase delivers one public-facade capability, retains its complete exit gates, and is complete only when every mapped requirement satisfies the project Definition of Done.
 
 ## Completed Prerequisite Baseline
 
@@ -26,10 +26,10 @@ The five open product decisions remain unpromised unless their owning phase qual
 - [x] **Phase 07.1: Universal Publication Vocabulary and Typed NIP-02 Reads** - Complete the active follow-up slice selected before group capability work. (completed 2026-08-22)
 - [x] **Phase 07.1.1: Multi-Relay Simple Groups** - Deliver `fava-simple-groups` from its README North Star with exact per-host truth and ordinary Fava lifecycles.
 - [x] **Phase 07.2: Runtime Signer Lifecycle and Parked-Write Wakeup** - Attach, replace, and remove signers at runtime and wake only exact matching accepted writes without rebuilding Fava. (completed 2026-08-23)
-- [ ] **Phase 07.3: Architecture Gate Integrity and Requirement Traceability** - Make the vocabulary, requirement, and verification gates truthful before measuring any remediation against them.
-- [ ] **Phase 07.4: Neutral Contract Correction** - Reshape transport, subscription-planning, evidence, and diagnostics contracts so their specified owners can express the facts they own.
-- [ ] **Phase 07.5: Create the fava-runtime Execution Owner** - Build the named-but-absent execution owner: tasks, deadlines, isolation, cancellation, and shutdown joins.
-- [ ] **Phase 07.6: Restore fava-observe Live-Query Ownership** - Move the live-query lifecycle to its specified owner and delete the facade relay layer outright.
+- [x] **Phase 07.3: Architecture Gate Integrity and Requirement Traceability** - Executed without GSD plan; merged 2026-08-23. Verification deferred to Phase 07.9.
+- [x] **Phase 07.4: Neutral Contract Correction** - Executed without GSD plan; merged 2026-08-23. Verification deferred to Phase 07.9.
+- [x] **Phase 07.5: Create the fava-runtime Execution Owner** - Executed without GSD plan; merged 2026-08-23. 4 detached tokio::spawns remain unregistered (fava-routing/chain.rs, fava-publication ×2, fava/src/query_source.rs); verification deferred to Phase 07.9.
+- [x] **Phase 07.6: Restore fava-observe Live-Query Ownership** - Executed without GSD plan; merged 2026-08-23. Verification deferred to Phase 07.9.
 - [ ] **Phase 07.7: Facade Lifecycle and fava-session Signer Ownership** - Give the facade a real lifecycle and the account/signer set its specified owner.
 - [ ] **Phase 07.8: Independent Correctness Defects** - Fix the confirmed defects that are not consequences of the ownership inversion.
 - [ ] **Phase 07.9: Evidence Reconstruction and Milestone Verdict Revocation** - Prove public promises through the real path and withdraw the verdicts that rest on evidence which cannot.
@@ -475,7 +475,7 @@ Plans:
 
 ## Progress
 
-**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 07.1 → Phase 07.1.1 (`fava-simple-groups`) → Phase 07.2 (runtime signer lifecycle) → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
+**Execution order:** Completed M0 baseline → Phase 1 (M1) → Phase 2 (M2) → Phase 3 (M3) → Phase 4 (M4) → Phase 5 (M5) → Phase 6 (M6) → Phase 06.1 (tag-filter remediation) → Phase 7 (M7) → Phase 07.1 → Phase 07.1.1 (`fava-simple-groups`) → Phase 07.2 (runtime signer lifecycle) → Phases 07.3-07.6 (remediation, executed without GSD plans) → Phase 07.7 → Phase 07.8 → Phase 07.9 → Phase 8 (M8) → Phase 9 (M9) → Phase 10 (M10) → Phase 11 (M11)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -485,10 +485,18 @@ Plans:
 | 4. Ordered Routing and Subscription Planning | pre-GSD | Complete | 2026-08-21 |
 | 5. Durable Explicit-Route Publication | pre-GSD | Complete | 2026-08-21 |
 | 6. Automatic Routing and Partial Delivery | pre-GSD | Complete | 2026-08-21 |
-| 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete    | 2026-08-21 |
+| 06.1. Literal Tag-Value Query Semantics Remediation | 3/3 | Complete | 2026-08-21 |
 | 7. Semantic Writes and Capability Composition | 9/9 | Complete | 2026-08-21 |
-| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete    | 2026-08-22 |
+| 07.1. Universal Publication Vocabulary and Typed NIP-02 Reads | 12/12 | Complete | 2026-08-22 |
 | 07.1.1. Multi-Relay Simple Groups | 12/12 | Complete | 2026-08-22 |
+| 07.2. Runtime Signer Lifecycle and Parked-Write Wakeup | 2/2 | Complete | 2026-08-23 |
+| 07.3. Architecture Gate Integrity and Requirement Traceability | executed-without-plan | Merged (unverified) | 2026-08-23 |
+| 07.4. Neutral Contract Correction | executed-without-plan | Merged (unverified) | 2026-08-23 |
+| 07.5. Create the fava-runtime Execution Owner | executed-without-plan | Merged (unverified) | 2026-08-23 |
+| 07.6. Restore fava-observe Live-Query Ownership | executed-without-plan | Merged (unverified) | 2026-08-23 |
+| 07.7. Facade Lifecycle and fava-session Signer Ownership | 0/TBD | Not started | - |
+| 07.8. Independent Correctness Defects | 1/5 | In progress | - |
+| 07.9. Evidence Reconstruction and Milestone Verdict Revocation | 0/TBD | Not started | - |
 | 8. Authentication, Hostile Boundaries, and Boundedness | 0/TBD | Not started | - |
 | 9. Truthful Profiles and Protocol Services | 0/TBD | Not started | - |
 | 10. Provider Substitution Qualification | 0/TBD | Not started | - |

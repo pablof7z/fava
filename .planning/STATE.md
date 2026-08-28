@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-current_phase: 07.3
-current_phase_name: Architecture Gate Integrity and Requirement Traceability
+current_phase: 07.7
+current_phase_name: Facade Lifecycle and fava-session Signer Ownership
 status: not_started
-stopped_at: Phase 07.2 complete and merged; remediation series 07.3-07.9 inserted from the 2026-08-23 architecture audit
-last_updated: "2026-08-23T14:30:00Z"
-last_activity: 2026-08-23
-last_activity_desc: Phase 07.2 merged; full-workspace architecture audit complete; remediation phases 07.3-07.9 inserted before Phase 8
+stopped_at: Phases 07.3-07.6 executed without GSD plans and merged (2026-08-23); 07.7 not started; 07.8 has 1 of 5 plans complete
+last_updated: "2026-08-29T00:00:00Z"
+last_activity: 2026-08-29
+last_activity_desc: Phases 07.3-07.6 merged via direct agent dispatch without GSD plans; 07.8-01 plan complete; 4 detached tokio::spawns flagged for fava-runtime registration
 state_head: HEAD
 progress:
   total_phases: 22
-  completed_phases: 10
+  completed_phases: 14
   total_plans: 38
   completed_plans: 38
-  percent: 45
+  percent: 63
 ---
 
 # Project State
@@ -23,20 +23,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-21)
 
 **Core value:** Applications can rely on coherent live queries and durable writes with exact, bounded, failure-isolated lifecycle and evidence semantics across replaceable provider compositions.
-**Current focus:** Phase 8 — Authentication, Hostile Boundaries, and Boundedness
+**Current focus:** Phase 07.7 — Facade Lifecycle and fava-session Signer Ownership
 
 ## Current Position
 
-Phase: 07.3 (Architecture Gate Integrity and Requirement Traceability) — NOT STARTED
+Phase: 07.7 (Facade Lifecycle and fava-session Signer Ownership) — NOT STARTED
 Plan: none authored
 Status: not_started
-Last activity: 2026-08-23 — Phase 07.2 merged; architecture audit complete; remediation series inserted
+Last activity: 2026-08-29 — Phases 07.3-07.6 merged without GSD plans; 07.8-01 done; 07.7 not started
 
-Progress: [████░░░░░░] 45%
+Progress: [██████░░░░] 63%
 
-Phase progress is 10/22. Phase 07.2 (Runtime Signer Lifecycle) completed and
-merged as `0b23b52`, delivering `crates/fava-session` and migrating
-`fava-publication` off its private signer registry.
+Phase progress is 14/22. Phases 07.3 (Architecture Gate Integrity), 07.4
+(Neutral Contract Correction), 07.5 (fava-runtime Execution Owner), and 07.6
+(Restore fava-observe Live-Query Ownership) were implemented by direct agent
+dispatch without GSD plan/execute/verify cycles (merged 2026-08-23). Each phase
+directory holds an EXECUTED-WITHOUT-PLAN.md with no retrospective SUMMARY;
+Phase 07.9 carries the verification obligation.
+
+Phase 07.7 (Facade Lifecycle and fava-session Signer Ownership) is NOT STARTED.
+Phase 07.8 (Independent Correctness Defects) has 1 of 5 plans complete
+(07.8-01: settled absence requires an answer). Phase 07.9 is NOT STARTED.
+
+**Detached tokio::spawns requiring fava-runtime registration:** Four
+`tokio::spawn` calls remain unregistered with fava-runtime:
+- `fava-routing/chain.rs`
+- `fava-publication` (two locations)
+- `fava/src/query_source.rs`
+These must be registered before Phase 07.5's no-detached-task success criterion
+can be re-verified.
 
 A full-workspace architecture audit on 2026-08-23 recorded **164 findings
 (59 critical, 80 major, 25 minor)** in `.planning/audit/2026-08-23/LEDGER.md`
