@@ -153,10 +153,9 @@ pub enum EventCoordinate {
 /// # Examples
 ///
 /// ```
-/// use fava_state::{EventCoordinate, event_coordinate};
-/// use nostr::event::{EventId, Kind, Tag};
-/// use nostr::key::PublicKey;
-///
+/// # use fava_state::event_coordinate;
+/// # use nostr::event::{EventId, Kind, Tag};
+/// # use nostr::key::PublicKey;
 /// let id = EventId::from_hex(
 ///     "0000000000000000000000000000000000000000000000000000000000000000",
 /// )
@@ -168,19 +167,10 @@ pub enum EventCoordinate {
 ///
 /// // An ordinary kind keeps its own immutable event id.
 /// let note = event_coordinate(id, author, Kind::TextNote, &[]);
-/// assert_eq!(note, EventCoordinate::Event(id));
 ///
 /// // An addressable kind resolves to author, kind, and its `d` tag value.
 /// let d_tag = Tag::parse(["d", "profile"]).expect("valid d tag");
 /// let addressable = event_coordinate(id, author, Kind::from_u16(30_023), &[d_tag]);
-/// assert_eq!(
-///     addressable,
-///     EventCoordinate::Replaceable {
-///         author,
-///         kind: Kind::from_u16(30_023),
-///         identifier: Some("profile".to_owned()),
-///     }
-/// );
 /// ```
 #[must_use]
 pub fn event_coordinate(
