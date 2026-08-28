@@ -307,6 +307,7 @@ dependencies = [
  "fava-relay",
  "fava-router-app-relays",
  "fava-router-fallback-relays",
+ "fava-router-outbox",
  "fava-router-testkit",
  "fava-routing",
  "fava-runtime",

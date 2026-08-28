@@ -9,6 +9,8 @@ use fava_routing::{
 
 struct EmptyRouter;
 
+struct RefusingRouter;
+
 impl Router for EmptyRouter {
     fn name(&self) -> &str {
         "empty"
@@ -53,15 +55,63 @@ impl RouterSession for EmptySession {
     fn close(&mut self) {}
 }
 
-#[test]
-fn empty_chain_settles_absence() {
+impl Router for RefusingRouter {
+    fn name(&self) -> &str {
+        "refusing"
+    }
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Err(RouterError::Refused("test refusal".to_owned()))
+    }
+    fn preview(
+        &self,
+        _: &RouteRequest,
+        _: &RoutePlan,
+        _: &[QuerySnapshot],
+    ) -> Result<RouteContribution, RouterError> {
+        unreachable!("a refusal cannot preview")
+    }
+    fn open(
+        &self,
+        _: RouteRequest,
+        _: Arc<RoutePlan>,
+        _: Vec<QuerySnapshot>,
+    ) -> Result<Box<dyn RouterSession>, RouterError> {
+        unreachable!("a refusal cannot open")
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn router_that_never_answered_keeps_absence_unsettled() {
+    let request = RouteRequest::Read(Query::events());
+    let routers: Vec<Arc<dyn Router>> = vec![Arc::new(EmptyRouter), Arc::new(RefusingRouter)];
+    let session = fava_routing::open(&routers, &request, vec![Vec::new(), Vec::new()])
+        .expect("one router refusal is isolated");
+    let plan = RoutePlan::from_contribution(1, &session.current()).expect("bounded plan");
+
+    assert!(
+        !plan.settled(),
+        "a router that never answered cannot settle absence"
+    );
+    assert!(
+        plan.unresolved
+            .contains(&fava_routing::RouteTarget::WholeRequest)
+    );
+    assert!(
+        plan.shortfalls
+            .iter()
+            .any(|shortfall| shortfall.contains("refusing"))
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn empty_chain_settles_absence() {
     let request = RouteRequest::Read(Query::events());
     let plan = fava_routing::preview(&[], &request, &[]).unwrap();
     assert!(plan.settled());
 }
 
-#[test]
-fn answered_empty_router_settles_absence() {
+#[tokio::test(flavor = "current_thread")]
+async fn answered_empty_router_settles_absence() {
     let request = RouteRequest::Read(Query::events());
     let routers: Vec<Arc<dyn Router>> = vec![Arc::new(EmptyRouter)];
     let session = fava_routing::open(&routers, &request, vec![Vec::new()]).unwrap();

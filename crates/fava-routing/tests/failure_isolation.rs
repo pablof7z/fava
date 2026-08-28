@@ -1,13 +1,19 @@
 //! Failure isolation on router declaration and replacement.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fava_query::{Query, QuerySnapshot};
+use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
-    RouteContribution, RoutePlan, RouteRequest, Router, RouterError, RouterSession,
+    CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
+    Router, RouterError, RouterSession,
 };
+use nostr::types::RelayUrl;
 
 struct Refusing;
+
+struct Surviving;
 
 impl Router for Refusing {
     fn name(&self) -> &str {
@@ -34,16 +40,87 @@ impl Router for Refusing {
     }
 }
 
-#[test]
-fn refusal_is_a_scoped_route_shortfall() {
+impl Router for Surviving {
+    fn name(&self) -> &str {
+        "surviving"
+    }
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+    fn preview(
+        &self,
+        _: &RouteRequest,
+        _: &RoutePlan,
+        inputs: &[QuerySnapshot],
+    ) -> Result<RouteContribution, RouterError> {
+        assert!(inputs.is_empty());
+        Ok(contribution())
+    }
+    fn open(
+        &self,
+        _: RouteRequest,
+        _: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<Box<dyn RouterSession>, RouterError> {
+        assert!(inputs.is_empty());
+        Ok(Box::new(SurvivingSession))
+    }
+}
+
+struct SurvivingSession;
+
+impl RouterSession for SurvivingSession {
+    fn current(&self) -> RouteContribution {
+        contribution()
+    }
+    fn replace(
+        &mut self,
+        _: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        assert!(inputs.is_empty());
+        Ok(self.current())
+    }
+    fn close(&mut self) {}
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn one_router_fails_while_another_continues() {
     let request = RouteRequest::Read(Query::events());
-    let routers: Vec<Arc<dyn Router>> = vec![Arc::new(Refusing)];
-    let session = fava_routing::open(&routers, &request, vec![Vec::new()]).unwrap();
+    let routers: Vec<Arc<dyn Router>> = vec![Arc::new(Surviving), Arc::new(Refusing)];
+    let session = fava_routing::open(&routers, &request, vec![Vec::new(), Vec::new()]).unwrap();
+    let plan = RoutePlan::from_contribution(1, &session.current()).expect("bounded plan");
     assert!(
-        session
-            .current()
-            .shortfalls
+        plan.destinations.contains_key(&relay()),
+        "the surviving router keeps its destination"
+    );
+    assert!(
+        plan.shortfalls
             .iter()
             .any(|shortfall| shortfall.contains("refusing"))
     );
+}
+
+fn relay() -> RelaySessionKey {
+    RelaySessionKey {
+        relay: RelayUrl::parse("wss://surviving.example").expect("relay"),
+        access: RelayAccess::Public,
+    }
+}
+
+fn contribution() -> RouteContribution {
+    let relay = relay();
+    RouteContribution {
+        destinations: vec![RouteDestination::new(
+            relay.clone(),
+            BTreeSet::from([RouteTarget::WholeRequest]),
+            "surviving",
+        )],
+        coverage: BTreeMap::from([(
+            RouteTarget::WholeRequest,
+            CoverageState::Covered(BTreeSet::from([relay])),
+        )]),
+        unresolved: BTreeSet::new(),
+        shortfalls: Vec::new(),
+    }
 }

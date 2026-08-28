@@ -39,6 +39,7 @@ fava-nip02.workspace = true
 fava-simple-groups.workspace = true
 fava-router-app-relays.workspace = true
 fava-router-fallback-relays.workspace = true
+fava-router-outbox.workspace = true
 fava-router-testkit.workspace = true
 fava-state.workspace = true
 fava-subscriptions-no-grouping.workspace = true

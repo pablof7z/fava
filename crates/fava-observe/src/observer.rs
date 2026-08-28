@@ -23,6 +23,8 @@ use crate::registry::Registry;
 use crate::routes::{self, RouteBinding};
 use crate::sources::{Coalesced, OpenSources, Projection, decorate, project, publish};
 
+const EMPTY_ROUTER_INPUT_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+
 /// Configured universal observation owner.
 ///
 /// The owner installs observations, retains their logical relay demand, and
@@ -199,7 +201,7 @@ impl Observer {
         let branch = QueryBranchId::ROOT;
         if let Some(mut binding) = binding {
             self.remove_fresh_sources(&query, installation.id, branch, &mut binding);
-            if !binding.plan.destinations.is_empty() {
+            if !binding.plan.destinations.is_empty() || binding.session.is_some() {
                 if let Err(error) = self.start_engine() {
                     sources.close();
                     self.registry.withdraw(installation.id);
@@ -480,9 +482,6 @@ async fn follow_route_inputs(
     mut session: Box<dyn fava_routing::RouterSession>,
     registry: Arc<Registry>,
 ) {
-    if inputs.is_empty() {
-        std::future::pending::<()>().await;
-    }
     loop {
         let snapshots = inputs
             .iter()
@@ -491,6 +490,13 @@ async fn follow_route_inputs(
         let Ok(contribution) = session.replace(Arc::new(plan.clone()), snapshots) else {
             break;
         };
+        if inputs.is_empty()
+            && fava_routing::RoutePlan::from_contribution(plan.revision, &contribution)
+                .is_ok_and(|current| current == plan)
+        {
+            tokio::time::sleep(EMPTY_ROUTER_INPUT_POLL).await;
+            continue;
+        }
         let Some(revision) = plan.revision.checked_add(1) else {
             break;
         };
@@ -505,13 +511,22 @@ async fn follow_route_inputs(
             origin.revision_of(&plan),
             RelayWithdrawal::RouteWithdrawn,
         );
-        let changes = inputs
-            .iter_mut()
-            .map(|input| Box::pin(input.changed()))
-            .collect::<Vec<_>>();
-        let (changed, _, _) = select_all(changes).await;
-        if changed.is_err() {
-            break;
+        if inputs.is_empty() {
+            // A router with no declared queries can still replace its whole
+            // contribution (for example, after a delayed local policy
+            // update). There is no observation change to await in that case,
+            // so re-evaluate it at a bounded cadence instead of parking the
+            // route session forever.
+            tokio::time::sleep(EMPTY_ROUTER_INPUT_POLL).await;
+        } else {
+            let changes = inputs
+                .iter_mut()
+                .map(|input| Box::pin(input.changed()))
+                .collect::<Vec<_>>();
+            let (changed, _, _) = select_all(changes).await;
+            if changed.is_err() {
+                break;
+            }
         }
     }
     session.close();

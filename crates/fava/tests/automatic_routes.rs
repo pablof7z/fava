@@ -188,6 +188,31 @@ async fn immediate_route_starts_without_opening_a_router_input_query() {
     observation.close();
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn zero_input_router_replaces_its_contribution_after_open() {
+    let later_relay = relay("later");
+    let delayed = Arc::new(DelayedRouter::new("delayed", RouteContribution::default()));
+    let transport = Arc::new(RecordingTransport::default());
+    let fava = assembly(Arc::clone(&transport))
+        .router(Arc::clone(&delayed))
+        .build()
+        .expect("assembly");
+
+    let observation = fava
+        .observe(Query::events())
+        .await
+        .expect("automatic query opens without an initial destination");
+    assert_eq!(transport.open_count(&later_relay), 0);
+
+    delayed.replace(contribution(&[(
+        later_relay.clone(),
+        RouteTarget::WholeRequest,
+    )]));
+    wait_until(|| transport.open_count(&later_relay) == 1).await;
+
+    observation.close();
+}
+
 #[test]
 fn identical_relay_contributions_deduplicate_and_retain_both_reasons() {
     let relay = relay("shared");
@@ -234,7 +259,6 @@ async fn explicit_query_bypasses_every_automatic_router() {
 async fn fallback_covers_currently_uncovered_targets() {
     let authors = [Keys::generate().public_key(), Keys::generate().public_key()];
     let stable = relay("stable");
-    let later = relay("later");
     let fallback = relay("fallback");
     let initial = contribution(&[(stable.clone(), RouteTarget::Author(authors[0]))]);
     let delayed = Arc::new(DelayedRouter::new("coverage", initial));
