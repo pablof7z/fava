@@ -191,7 +191,7 @@ jobs:
     name: Symbol Gate
     runs-on: ubuntu-latest
     env:
-      SG_REV: "640891055e3f9246b1664e99c4a61d80e56668a5"
+      SG_REV: "9112c668e891b358fd8a0becaf41653b33328ae5"
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
