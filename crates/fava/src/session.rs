@@ -3,12 +3,44 @@
 use std::sync::Arc;
 
 use fava_session::SessionError;
-use fava_signer::Signer;
-use fava_write::PublicKey;
+use fava_signer::{Signer, SignerAvailability, SignerError};
+use fava_write::{Event, PublicKey, UnsignedEvent};
+use tokio::sync::watch;
 
 use crate::Fava;
 
 impl Fava {
+    /// Sign one exact unsigned event with its currently attached author signer.
+    ///
+    /// This is for Nostr protocols that require a signed artifact without a
+    /// publication obligation. Publication continues to own durable signing
+    /// and relay delivery for every event that is to be sent to relays.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SignerError::Unavailable`] when no current signer can accept
+    /// work for the event author, or the provider's exact refusal otherwise.
+    pub async fn sign(&self, event: UnsignedEvent) -> Result<Event, SignerError> {
+        let author = event.pubkey;
+        let (generation, availability) = self
+            .session
+            .signer(author)
+            .ok_or_else(|| SignerError::Unavailable(format!("no signer attached for {author}")))?;
+        if !matches!(availability, SignerAvailability::Available) {
+            return Err(SignerError::Unavailable(format!(
+                "signer attached for {author} is unavailable"
+            )));
+        }
+        let (_cancel_tx, cancel) = watch::channel(false);
+        let signing = self
+            .session
+            .invoke_signer(author, generation, event, cancel)
+            .ok_or_else(|| {
+                SignerError::Unavailable(format!("signer attachment changed for {author}"))
+            })?;
+        signing.await
+    }
+
     /// Attach one runtime signer for its exact public key.
     ///
     /// # Errors
