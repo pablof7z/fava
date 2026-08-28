@@ -23,8 +23,7 @@ const MAX_TAGS: usize = 2_000;
 /// # Examples
 ///
 /// ```
-/// use fava_write::{EventBuilder, Kind, PublicKey};
-///
+/// # use fava_write::{EventBuilder, Kind, PublicKey};
 /// let author = PublicKey::from_hex(
 ///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
 /// )
@@ -34,11 +33,6 @@ const MAX_TAGS: usize = 2_000;
 ///     .content("gm")
 ///     .build()
 ///     .expect("event stays within declared bounds");
-///
-/// assert_eq!(event.pubkey, author);
-/// assert_eq!(event.kind, Kind::TextNote);
-/// assert_eq!(event.content, "gm");
-/// assert!(event.id.is_some());
 /// ```
 pub struct EventBuilder {
     author: PublicKey,

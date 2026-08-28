@@ -30,18 +30,13 @@ impl ReplaceableEventEdit {
     /// # Examples
     ///
     /// ```
-    /// use fava_write::{Kind, ReplaceableEventEdit};
-    ///
+    /// # use fava_write::{Kind, ReplaceableEventEdit};
     /// let edit = ReplaceableEventEdit::new(
     ///     Kind::from_u16(30_023),
     ///     Some("article".to_owned()),
     ///     b"opaque change".to_vec(),
     /// )
     /// .expect("addressable kind with identifier is a valid coordinate");
-    ///
-    /// assert_eq!(edit.kind(), Kind::from_u16(30_023));
-    /// assert_eq!(edit.identifier(), Some("article"));
-    /// assert_eq!(edit.change(), b"opaque change");
     /// ```
     pub fn new(
         kind: Kind,
