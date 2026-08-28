@@ -213,7 +213,10 @@ jobs:
       - name: Verify symbol approvals
         run: |
           start_ms=$(date +%s%3N)
+          set +e
           symbol-gate verify
+          sg_exit=$?
+          set -e
           end_ms=$(date +%s%3N)
           elapsed_ms=$((end_ms - start_ms))
           {
@@ -221,6 +224,7 @@ jobs:
             echo ""
             echo "Verification completed in ${elapsed_ms} ms."
           } >> "$GITHUB_STEP_SUMMARY"
+          exit $sg_exit
 
   file-size:
     name: File size limits
