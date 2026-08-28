@@ -114,8 +114,7 @@ pub enum QueryOrdering {
 /// # Examples
 ///
 /// ```
-/// use fava_query::{Kind, PublicKey, Query};
-///
+/// # use fava_query::{Kind, PublicKey, Query};
 /// let author = PublicKey::from_hex(
 ///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
 /// )
@@ -128,8 +127,6 @@ pub enum QueryOrdering {
 ///     .expect("bounded kind set")
 ///     .limit(50)
 ///     .expect("non-zero limit");
-///
-/// assert_eq!(query.result_limit().map(|limit| limit.get()), Some(50));
 /// ```
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Query {

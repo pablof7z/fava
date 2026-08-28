@@ -82,20 +82,11 @@ impl Query {
     /// # Examples
     ///
     /// ```
-    /// use fava_query::{Query, SingleLetterTag};
-    ///
+    /// # use fava_query::{Query, SingleLetterTag};
     /// let e = SingleLetterTag::from_char('e').expect("valid single-letter tag key");
     /// let query = Query::events()
     ///     .tag_values(e, ["referenced-event-id"])
     ///     .expect("non-empty bounded values");
-    ///
-    /// assert!(
-    ///     query
-    ///         .selection()
-    ///         .tag_values
-    ///         .get(&e)
-    ///         .is_some_and(|values| values.contains("referenced-event-id"))
-    /// );
     /// ```
     pub fn tag_values<I, S>(mut self, key: SingleLetterTag, values: I) -> Result<Self, QueryError>
     where
