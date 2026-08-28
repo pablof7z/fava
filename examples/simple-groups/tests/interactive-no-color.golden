@@ -1,0 +1,16 @@
+fava simple-groups  interactive NIP-29 shell
+Tab complete · ↑↓ history · Ctrl-R search · Ctrl-D close · --help grammar
+no-account · no-group · 0 relays › no-account · no-group · 0 relays › relay add group ws://127.0.0.1:18101
+✓  relay added  <ms>
+   alias          group
+   relay          ws://127.0.0.1:18101
+no-account · no-group · 1 relay › no-account · no-group · 1 relay › group open weekend-builders group
+✓  group opened  <ms>
+   group          weekend-builders
+no-account · weekend-builders · 1 relay › no-account · weekend-builders · 1 relay › status
+✓  status  <ms>
+   account        —
+   group          weekend-builders
+   known_groups   weekend-builders
+no-account · weekend-builders · 1 relay › no-account · weekend-builders · 1 relay › quit
+✓  quit  <ms>

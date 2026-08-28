@@ -1,8 +1,6 @@
 //! Kind-10009 saved-list grammar and explicit-relay edit publication.
 
-use std::io::BufRead;
-
-use e2e_support::{CommandResult, E2eSession, InputMode, ShellError};
+use e2e_support::{CommandResult, E2eSession, ShellError};
 use fava_simple_groups::{
     SavedGroupList, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
     save_relay, save_simple_group, saved_group_lists,
@@ -20,63 +18,46 @@ const SAVED_RELAY_REMOVE_USAGE: &str =
     "saved-list relay remove <publication-relay-alias> <saved-relay-alias>";
 
 impl App {
-    pub(crate) fn saved_list_command<R, W>(
+    pub(crate) fn saved_list_command<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         match arguments {
-            [action, rest @ ..] if action == "show" => {
-                self.show_saved_list(session, rest, input, output, mode)
-            }
+            [action, rest @ ..] if action == "show" => self.show_saved_list(session, rest, prompt),
             [group, action, rest @ ..] if group == "group" && action == "add" => {
-                self.save_group(session, rest, input, output, mode)
+                self.save_group(session, rest, prompt)
             }
             [group, action, rest @ ..] if group == "group" && action == "rename" => {
-                self.rename_saved_group(session, rest, input, output, mode)
+                self.rename_saved_group(session, rest, prompt)
             }
             [group, action, rest @ ..] if group == "group" && action == "remove" => {
-                self.remove_saved_group(session, rest, input, output, mode)
+                self.remove_saved_group(session, rest, prompt)
             }
             [relay, action, rest @ ..] if relay == "relay" && action == "add" => {
-                self.save_list_relay(session, rest, input, output, mode)
+                self.save_list_relay(session, rest, prompt)
             }
             [relay, action, rest @ ..] if relay == "relay" && action == "remove" => {
-                self.remove_list_relay(session, rest, input, output, mode)
+                self.remove_list_relay(session, rest, prompt)
             }
             _ => usage("saved-list <show|group|relay> ..."),
         }
     }
 
-    fn show_saved_list<R, W>(
+    fn show_saved_list<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let alias = required_value(
-            session,
-            arguments,
-            0,
-            "relay-alias",
-            SAVED_SHOW_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let alias = required_value(arguments, 0, "relay-alias", SAVED_SHOW_USAGE, prompt)?;
         if arguments.len() > 2 {
             return usage(SAVED_SHOW_USAGE);
         }
@@ -130,28 +111,17 @@ impl App {
             .with_field("stored_events_complete", false)
     }
 
-    fn save_group<R, W>(
+    fn save_group<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let relay_alias = required_value(
-            session,
-            arguments,
-            0,
-            "relay-alias",
-            SAVED_GROUP_ADD_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let relay_alias =
+            required_value(arguments, 0, "relay-alias", SAVED_GROUP_ADD_USAGE, prompt)?;
         if arguments.len() > 2 {
             return usage(SAVED_GROUP_ADD_USAGE);
         }
@@ -161,37 +131,28 @@ impl App {
         self.publish_saved_edit(session, &relay_alias, edit, "saved-group-added", group.id())
     }
 
-    fn rename_saved_group<R, W>(
+    fn rename_saved_group<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         let relay_alias = required_value(
-            session,
             arguments,
             0,
             "relay-alias",
             SAVED_GROUP_RENAME_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         let display_name = required_value(
-            session,
             arguments,
             1,
             "display-name",
             SAVED_GROUP_RENAME_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         if arguments.len() > 2 {
             return usage(SAVED_GROUP_RENAME_USAGE);
@@ -207,27 +168,21 @@ impl App {
         )
     }
 
-    fn remove_saved_group<R, W>(
+    fn remove_saved_group<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         let relay_alias = required_value(
-            session,
             arguments,
             0,
             "relay-alias",
             SAVED_GROUP_REMOVE_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         if arguments.len() > 1 {
             return usage(SAVED_GROUP_REMOVE_USAGE);
@@ -243,37 +198,28 @@ impl App {
         )
     }
 
-    fn save_list_relay<R, W>(
+    fn save_list_relay<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         let publication_alias = required_value(
-            session,
             arguments,
             0,
             "publication-relay-alias",
             SAVED_RELAY_ADD_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         let saved_alias = required_value(
-            session,
             arguments,
             1,
             "saved-relay-alias",
             SAVED_RELAY_ADD_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         if arguments.len() > 2 {
             return usage(SAVED_RELAY_ADD_USAGE);
@@ -282,37 +228,28 @@ impl App {
         self.publish_saved_edit(session, &publication_alias, edit, "saved-relay-added", "")
     }
 
-    fn remove_list_relay<R, W>(
+    fn remove_list_relay<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         let publication_alias = required_value(
-            session,
             arguments,
             0,
             "publication-relay-alias",
             SAVED_RELAY_REMOVE_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         let saved_alias = required_value(
-            session,
             arguments,
             1,
             "saved-relay-alias",
             SAVED_RELAY_REMOVE_USAGE,
-            input,
-            output,
-            mode,
+            prompt,
         )?;
         if arguments.len() > 2 {
             return usage(SAVED_RELAY_REMOVE_USAGE);

@@ -25,10 +25,31 @@ TEARDOWN_SECONDS = 5.0
 APP_SECONDS = 60.0
 INTERACTIVE_SECONDS = 60.0
 MAX_INTERACTIVE_RESULTS = 8
-_HUMAN_RESULT = re.compile(
+_CLASSIC_HUMAN_RESULT = re.compile(
     rb"\[(?:Ok|Refused|Failed)\] ([a-z][a-z-]*): [^\r\n]*\r?\n"
     rb"((?:  [a-z_]+=[^\r\n]*\r?\n)*)"
 )
+_POLISHED_HUMAN_RESULT = re.compile(
+    "(?:✓|!|×)  ([a-z][a-z ]*)  [^\r\n]*\r?\n"
+    "((?:   [^\r\n]*\r?\n)*)".encode()
+)
+_POLISHED_FIELD_NAMES = {"public key": "public_key", "event": "event_id"}
+_POLISHED_CAPTURE_FIELDS = {
+    "account",
+    "public_key",
+    "author",
+    "event_id",
+    "kind",
+    "group",
+    "content",
+}
+_POLISHED_RESULT_KINDS = {
+    "event acknowledged": "group-event-published",
+    "relay state": "group-state",
+}
+_CURSOR_POSITION_QUERY = b"\x1b[6n"
+_CURSOR_POSITION_RESPONSE = b"\x1b[1;1R"
+_POLISHED_PROMPT_SUFFIX = "› ".encode()
 
 
 class BoundedLog:
@@ -243,8 +264,13 @@ def _write_pty(descriptor: int, value: bytes | bytearray) -> None:
 
 
 def _read_pty_until(
-    descriptor: int, transcript: bytearray, marker: bytes, offset: int, deadline: float
-) -> None:
+    descriptor: int,
+    transcript: bytearray,
+    marker: bytes,
+    offset: int,
+    deadline: float,
+    cursor_scan: int,
+) -> int:
     while marker not in transcript[offset:]:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -264,6 +290,14 @@ def _read_pty_until(
         transcript.extend(chunk)
         if len(transcript) > MAX_LOG_BYTES:
             raise HarnessError(f"interactive REPL output exceeded {MAX_LOG_BYTES} bytes")
+        while True:
+            query = transcript.find(_CURSOR_POSITION_QUERY, cursor_scan)
+            if query == -1:
+                cursor_scan = max(cursor_scan, len(transcript) - len(_CURSOR_POSITION_QUERY) + 1)
+                break
+            _write_pty(descriptor, _CURSOR_POSITION_RESPONSE)
+            cursor_scan = query + len(_CURSOR_POSITION_QUERY)
+    return cursor_scan
 
 
 def _drain_pty(descriptor: int, transcript: bytearray, deadline: float) -> None:
@@ -318,28 +352,52 @@ def _stop_pty_process(process: subprocess.Popen[bytes]) -> None:
 
 
 def _human_results(transcript: bytearray) -> dict[str, dict[str, str]]:
-    """Extract only bounded public result fields from a human terminal session."""
+    """Extract bounded public fields from classic or polished terminal results."""
 
     results: dict[str, dict[str, str]] = {}
-    for match in _HUMAN_RESULT.finditer(transcript):
-        if len(results) == MAX_INTERACTIVE_RESULTS:
-            raise HarnessError(f"interactive REPL exceeded {MAX_INTERACTIVE_RESULTS} result records")
-        kind = match.group(1).decode("ascii")
-        if kind in results:
-            raise HarnessError(f"interactive REPL repeated result kind {kind!r}")
+    for match in _CLASSIC_HUMAN_RESULT.finditer(transcript):
         fields: dict[str, str] = {}
         for line in match.group(2).splitlines():
             name, separator, value = line[2:].partition(b"=")
-            if not separator or not name or name in fields:
-                raise HarnessError("interactive REPL rendered an invalid result field")
-            if len(value) > 4_096:
-                raise HarnessError("interactive REPL rendered an oversized result field")
-            try:
-                fields[name.decode("ascii")] = value.decode("ascii")
-            except UnicodeDecodeError as error:
-                raise HarnessError("interactive REPL rendered a non-ASCII public result field") from error
-        results[kind] = fields
+            if not separator:
+                raise HarnessError("interactive REPL rendered an invalid classic result field")
+            _insert_human_field(fields, name.decode("ascii"), value)
+        _insert_human_result(results, match.group(1).decode("ascii"), fields)
+    for match in _POLISHED_HUMAN_RESULT.finditer(transcript):
+        fields = {}
+        for line in match.group(2).splitlines():
+            value = line[3:]
+            split = re.match(rb"([A-Za-z_ ]+?)\s{2,}(.+)$", value)
+            if split is None:
+                continue
+            label = split.group(1).decode("ascii").strip()
+            name = _POLISHED_FIELD_NAMES.get(label, label.replace(" ", "_"))
+            if name not in _POLISHED_CAPTURE_FIELDS:
+                continue
+            _insert_human_field(fields, name, split.group(2))
+        heading = match.group(1).decode("ascii").strip()
+        kind = _POLISHED_RESULT_KINDS.get(heading, heading.replace(" ", "-"))
+        _insert_human_result(results, kind, fields)
     return results
+
+
+def _insert_human_field(fields: dict[str, str], name: str, value: bytes) -> None:
+    if not name or name in fields or len(value) > 4_096:
+        raise HarnessError("interactive REPL rendered an invalid bounded result field")
+    try:
+        fields[name] = value.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise HarnessError("interactive REPL rendered a non-ASCII public result field") from error
+
+
+def _insert_human_result(
+    results: dict[str, dict[str, str]], kind: str, fields: dict[str, str]
+) -> None:
+    if len(results) == MAX_INTERACTIVE_RESULTS:
+        raise HarnessError(f"interactive REPL exceeded {MAX_INTERACTIVE_RESULTS} result records")
+    if kind in results:
+        raise HarnessError(f"interactive REPL repeated result kind {kind!r}")
+    results[kind] = fields
 
 
 def _require_no_secret_echo(transcript: bytearray, secret: bytearray) -> None:
@@ -379,13 +437,23 @@ def run_interactive_import(
         os.close(slave)
         slave = -1
         deadline = time.monotonic() + INTERACTIVE_SECONDS
+        cursor_scan = 0
         phase = "initial prompt"
-        _read_pty_until(master, transcript, b"e2e> ", 0, deadline)
+        cursor_scan = _read_pty_until(
+            master, transcript, _POLISHED_PROMPT_SUFFIX, 0, deadline, cursor_scan
+        )
         phase = "protected secret prompt"
         _write_pty(master, b"account import imported\n")
         prompt_offset = len(transcript)
         try:
-            _read_pty_until(master, transcript, b"account private key: ", prompt_offset, deadline)
+            cursor_scan = _read_pty_until(
+                master,
+                transcript,
+                b"account private key: ",
+                prompt_offset,
+                deadline,
+                cursor_scan,
+            )
         except HarnessError as error:
             preview = bytes(transcript[-4_096:]).decode("utf-8", "replace")
             raise HarnessError(
@@ -395,17 +463,25 @@ def run_interactive_import(
         _write_pty(master, secret)
         _write_pty(master, b"\n")
         import_offset = len(transcript)
-        _read_pty_until(master, transcript, b"] account-imported:", import_offset, deadline)
+        cursor_scan = _read_pty_until(
+            master,
+            transcript,
+            "✓  account imported".encode(),
+            import_offset,
+            deadline,
+            cursor_scan,
+        )
         for text, result_kind in commands:
             phase = f"{result_kind} result"
             _write_pty(master, text.encode("ascii") + b"\n")
             result_offset = len(transcript)
-            _read_pty_until(
-                master,
-                transcript,
-                f"] {result_kind}:".encode("ascii"),
-                result_offset,
-                deadline,
+            heading = next(
+                (heading for heading, kind in _POLISHED_RESULT_KINDS.items() if kind == result_kind),
+                result_kind.replace("-", " "),
+            )
+            marker = f"✓  {heading}".encode()
+            cursor_scan = _read_pty_until(
+                master, transcript, marker, result_offset, deadline, cursor_scan
             )
         phase = "successful exit"
         if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:

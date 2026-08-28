@@ -1,0 +1,5 @@
+{"status":"ok","kind":"relay-added","summary":"group -> ws://127.0.0.1:18101","fields":{"alias":"group","relay":"ws://127.0.0.1:18101"}}
+{"status":"ok","kind":"relay-list","summary":"known relay aliases","fields":{"relay_aliases":["group"],"relay_urls":["ws://127.0.0.1:18101"]}}
+{"status":"ok","kind":"status","summary":"current application selection","fields":{"active_account":"","active_group":"","known_groups":[]}}
+{"status":"ok","kind":"dump","summary":"bounded shell state","fields":{"accounts":[],"captures":[],"relay_aliases":["group"],"relay_urls":["ws://127.0.0.1:18101"],"selected_account":""}}
+{"status":"ok","kind":"quit","summary":"session closed","fields":{}}

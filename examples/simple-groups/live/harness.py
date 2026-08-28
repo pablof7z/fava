@@ -604,7 +604,16 @@ def run_import_proof(arguments: argparse.Namespace) -> int:
             wait_ready(relay)
             log.record("relay-ready", relay=relay.label, url=relay.url)
         results = run_interactive_import(
-            ["cargo", "run", "--quiet", "--locked", "--manifest-path", "examples/simple-groups/Cargo.toml", "--"],
+            [
+                "cargo",
+                "run",
+                "--quiet",
+                "--locked",
+                "--manifest-path",
+                "examples/simple-groups/Cargo.toml",
+                "--",
+                "--no-color",
+            ],
             environment,
             secret,
             (

@@ -6,11 +6,27 @@ the signer attachment, write, receipt, query, observation, and diagnostics
 lifecycles; this app owns the NIP-29 command grammar and selected
 `SimpleGroup`; `e2e-support` owns the bounded common shell.
 
+On a real terminal the same grammar uses a `reedline` editor: the prompt shows
+selected account, group, and relay count; Tab completes commands/options; inline
+usage hints and syntax highlighting remain terminal-local; Up/Down and Ctrl-R
+browse bounded in-process history. The interactive renderer aligns result facts,
+uses compact tables, and calls out receipt outcomes with elapsed command time.
+On narrow terminals fields and tables compact without exceeding the available
+column width. `NO_COLOR=1` or `--no-color` removes application color.
+Protected-looking ordinary input never enters editor history, and account import
+remains a no-echo prompt.
+
 Run it interactively against a controlled group relay and a separate user
 relay for kind 10009:
 
 ```sh
 cargo run --manifest-path examples/simple-groups/Cargo.toml
+```
+
+Disable application color in a TTY:
+
+```sh
+cargo run --manifest-path examples/simple-groups/Cargo.toml -- --no-color
 ```
 
 Replay the identical grammar without a PTY:
@@ -20,12 +36,12 @@ cargo run --manifest-path examples/simple-groups/Cargo.toml -- --jsonl \
   --script examples/simple-groups/scenarios/full-repl.txt
 ```
 
-Every command emits one deterministic typed result. `--jsonl` emits exactly
-one JSON object per line with `status`, `kind`, `summary`, and stable typed
-`fields` (text, nonnegative integer, boolean, or bounded scalar arrays). `capture
-<name> <last-result-field>` accepts only a scalar field for `${name}`
-interpolation. JSONL is refused for interactive input so prompts cannot corrupt
-the stream. Results omit relay-received event content,
+Non-TTY execution keeps the existing plain renderer; `--jsonl` emits exactly
+one deterministic typed result per line with `status`, `kind`, `summary`, and
+stable typed `fields` (text, nonnegative integer, boolean, or bounded scalar
+arrays). `capture <name> <last-result-field>` accepts only a scalar field for
+`${name}` interpolation. JSONL is refused for interactive input so prompts
+cannot corrupt the stream. Results omit relay-received event content,
 tags, relay responses, and diagnostics text. An explicit event publish returns
 only its caller-supplied content, after protected-secret and result-size checks,
 so external input cannot turn a result into a secret-bearing transcript.

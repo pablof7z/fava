@@ -1,9 +1,8 @@
 //! Application-owned group context and top-level command dispatch.
 
 use std::collections::BTreeMap;
-use std::io::BufRead;
 
-use e2e_support::{CommandResult, E2eSession, InputMode, ResultValue, ShellError};
+use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{Fava, Receipt, ReceiptOutcome, RelayDeliveryOutcome, Write};
 use fava_simple_groups::SimpleGroup;
 
@@ -32,32 +31,23 @@ impl App {
         }
     }
 
-    pub(crate) fn execute<R, W>(
+    pub(crate) fn execute<P>(
         &mut self,
-        session: &mut E2eSession,
+        session: &E2eSession,
         words: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         match words {
             [command] if command == "status" => self.status(session),
-            [command, rest @ ..] if command == "routes" => {
-                self.routes_command(session, rest, input, output, mode)
-            }
-            [command, rest @ ..] if command == "receipt" => {
-                self.receipt_command(session, rest, input, output, mode)
-            }
+            [command, rest @ ..] if command == "routes" => self.routes_command(session, rest),
+            [command, rest @ ..] if command == "receipt" => self.receipt_command(rest, prompt),
             [command] if command == "diagnostics" => self.diagnostics(),
-            [command, rest @ ..] if command == "group" => {
-                self.group_command(session, rest, input, output, mode)
-            }
+            [command, rest @ ..] if command == "group" => self.group_command(session, rest, prompt),
             [command, rest @ ..] if command == "saved-list" => {
-                self.saved_list_command(session, rest, input, output, mode)
+                self.saved_list_command(session, rest, prompt)
             }
             _ => Err(ShellError::UnknownCommand {
                 command: words.join(" "),
@@ -192,17 +182,13 @@ impl App {
             )
     }
 
-    fn receipt_command<R, W>(
+    fn receipt_command<P>(
         &self,
-        session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         match arguments {
             [action] if action == "list" => {
@@ -220,16 +206,8 @@ impl App {
                     )
             }
             [action, rest @ ..] if action == "show" => {
-                let raw = required_value(
-                    session,
-                    rest,
-                    0,
-                    "receipt-id",
-                    "receipt show <receipt-id>",
-                    input,
-                    output,
-                    mode,
-                )?;
+                let raw =
+                    required_value(rest, 0, "receipt-id", "receipt show <receipt-id>", prompt)?;
                 if rest.len() > 1 {
                     return usage("receipt show <receipt-id>");
                 }
@@ -272,29 +250,19 @@ impl App {
     }
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the parser needs its one stream, one output, mode, token position, prompt label, and exact replay usage at the call site"
-)]
-pub(crate) fn required_value<R, W>(
-    session: &E2eSession,
+pub(crate) fn required_value<P>(
     arguments: &[String],
     index: usize,
     label: &str,
     usage_text: &'static str,
-    input: &mut R,
-    output: &mut W,
-    mode: InputMode,
+    prompt: &mut P,
 ) -> Result<String, ShellError>
 where
-    R: BufRead,
-    W: std::io::Write,
+    P: FnMut(&str) -> Result<Option<String>, ShellError>,
 {
     match arguments.get(index) {
         Some(value) => Ok(value.clone()),
-        None => session
-            .prompt_value(input, output, mode, label)?
-            .ok_or(ShellError::Usage { usage: usage_text }),
+        None => prompt(label)?.ok_or(ShellError::Usage { usage: usage_text }),
     }
 }
 

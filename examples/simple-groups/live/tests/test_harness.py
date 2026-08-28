@@ -36,7 +36,7 @@ from harness import (
     validate_executable_scenario,
 )
 from harness_safety import MAX_ARTIFACT_FILE_BYTES, MAX_FILTER_BYTES, scan_secret_absence
-from harness_process import _human_results, _require_no_secret_echo
+from harness_process import _human_results, _read_pty_until, _require_no_secret_echo
 from relay_inspection import InspectionError, assert_event, inspect_until_eose
 
 
@@ -271,6 +271,62 @@ class FixtureTests(unittest.TestCase):
         with self.assertRaisesRegex(HarnessError, "did not use the imported public key"):
             _import_captures(results)
         secret[:] = b"\0" * len(secret)
+
+    def test_cursor_query_fragment_crossing_output_phases_receives_response(self) -> None:
+        harness, terminal = socket.socketpair()
+        try:
+            transcript = bytearray()
+            terminal.sendall(b"phase-one\x1b[")
+            cursor_scan = _read_pty_until(
+                harness.fileno(),
+                transcript,
+                b"phase-one",
+                0,
+                time.monotonic() + 1,
+                0,
+            )
+            offset = len(transcript)
+            terminal.sendall(b"6nphase-two")
+            _read_pty_until(
+                harness.fileno(),
+                transcript,
+                b"phase-two",
+                offset,
+                time.monotonic() + 1,
+                cursor_scan,
+            )
+            terminal.settimeout(1)
+            self.assertEqual(terminal.recv(32), b"\x1b[1;1R")
+        finally:
+            harness.close()
+            terminal.close()
+
+    def test_polished_interactive_results_retain_public_import_evidence(self) -> None:
+        results = _human_results(
+            bytearray(
+                "✓  account imported  3 ms\r\n"
+                "   account         imported\r\n"
+                "   public key      ".encode()
+                + b"a" * 64
+                + "\r\n✓  group created  8 ms\r\n"
+                "   author          ".encode()
+                + b"a" * 64
+                + "\r\n   event           ".encode()
+                + b"c" * 64
+                + b"\r\n   kind            9007\r\n"
+                + "✓  event acknowledged  9 ms\r\n"
+                "   author          ".encode()
+                + b"a" * 64
+                + "\r\n   event           ".encode()
+                + b"d" * 64
+                + b"\r\n   kind            12345\r\n"
+                + "   route           group  •  acknowledged\r\n".encode()
+            )
+        )
+        captures = _import_captures(results)
+        self.assertEqual(captures["imported"]["public_key"], "a" * 64)
+        self.assertEqual(captures["created"]["event_id"], "c" * 64)
+        self.assertEqual(captures["content"]["event_id"], "d" * 64)
 
     def test_full_contract_is_staged_with_only_the_four_croissant_state_kinds(self) -> None:
         contract = json.loads(

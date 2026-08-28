@@ -1,10 +1,9 @@
 //! Bounded public query, decoder, route, and saved-list workflows.
 
 use std::collections::BTreeMap;
-use std::io::BufRead;
 use std::sync::Arc;
 
-use e2e_support::{CommandResult, E2eSession, InputMode, ResultValue, ShellError};
+use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError};
 use fava::{EventValue, Query, QuerySnapshot};
 use fava_simple_groups::{
     SimpleGroupAdmins, SimpleGroupLivekitParticipants, SimpleGroupMembers, SimpleGroupMetadata,
@@ -20,18 +19,11 @@ const PRESENTATION_LIST_LIMIT: usize = 16;
 const LIMITED_REQUEST_EOSE: &str = "LimitedRequest";
 
 impl App {
-    pub(crate) fn routes_command<R, W>(
+    pub(crate) fn routes_command(
         &self,
         _session: &E2eSession,
         arguments: &[String],
-        _input: &mut R,
-        _output: &mut W,
-        _mode: InputMode,
-    ) -> Result<CommandResult, ShellError>
-    where
-        R: BufRead,
-        W: std::io::Write,
-    {
+    ) -> Result<CommandResult, ShellError> {
         if arguments.len() > 1 {
             return usage("routes [limit]");
         }
@@ -49,18 +41,11 @@ impl App {
             .with_field("shortfalls", plan.shortfalls.len())
     }
 
-    pub(crate) fn events_command<R, W>(
+    pub(crate) fn events_command(
         &self,
         _session: &E2eSession,
         arguments: &[String],
-        _input: &mut R,
-        _output: &mut W,
-        _mode: InputMode,
-    ) -> Result<CommandResult, ShellError>
-    where
-        R: BufRead,
-        W: std::io::Write,
-    {
+    ) -> Result<CommandResult, ShellError> {
         if arguments.len() > 1 {
             return usage(EVENTS_USAGE);
         }
@@ -92,18 +77,11 @@ impl App {
             .with_field("stored_events_complete", false)
     }
 
-    pub(crate) fn state_command<R, W>(
+    pub(crate) fn state_command(
         &self,
         _session: &E2eSession,
         arguments: &[String],
-        _input: &mut R,
-        _output: &mut W,
-        _mode: InputMode,
-    ) -> Result<CommandResult, ShellError>
-    where
-        R: BufRead,
-        W: std::io::Write,
-    {
+    ) -> Result<CommandResult, ShellError> {
         if arguments.len() > 1 {
             return usage(STATE_USAGE);
         }

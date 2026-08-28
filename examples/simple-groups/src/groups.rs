@@ -1,10 +1,6 @@
 //! NIP-29 grammar and self-routed management/publication workflows.
 
-use std::io::BufRead;
-
-use e2e_support::{
-    CommandResult, E2eSession, InputMode, ResultValue, ShellError, parse_public_key,
-};
+use e2e_support::{CommandResult, E2eSession, ResultValue, ShellError, parse_public_key};
 use fava_simple_groups::{
     SimpleGroup, create_group, delete_group, edit_metadata, invite, join_request, leave_group,
     put_user, remove_user,
@@ -22,79 +18,52 @@ const MEMBER_ADD_USAGE: &str = "group member add <public-key> [role ...]";
 const MEMBER_REMOVE_USAGE: &str = "group member remove <public-key>";
 
 impl App {
-    pub(crate) fn group_command<R, W>(
+    pub(crate) fn group_command<P>(
         &mut self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         match arguments {
             [action, rest @ ..] if action == "create" => {
-                self.create_group_command(session, rest, input, output, mode)
+                self.create_group_command(session, rest, prompt)
             }
             [action, rest @ ..] if action == "open" => {
-                self.open_group_command(session, rest, input, output, mode)
+                self.open_group_command(session, rest, prompt)
             }
             [action] if action == "list" => self.list_groups(),
-            [action, rest @ ..] if action == "switch" => {
-                self.switch_group_command(session, rest, input, output, mode)
-            }
+            [action, rest @ ..] if action == "switch" => self.switch_group_command(rest, prompt),
             [action, rest @ ..] if action == "edit" => {
-                self.edit_group_command(session, rest, input, output, mode)
+                self.edit_group_command(session, rest, prompt)
             }
-            [action, rest @ ..] if action == "invite" => {
-                self.invite_command(session, rest, input, output, mode)
-            }
+            [action, rest @ ..] if action == "invite" => self.invite_command(session, rest, prompt),
             [action, rest @ ..] if action == "join" => self.join_command(session, rest),
-            [action, rest @ ..] if action == "member" => {
-                self.member_command(session, rest, input, output, mode)
-            }
+            [action, rest @ ..] if action == "member" => self.member_command(session, rest, prompt),
             [action] if action == "leave" => self.leave_command(session),
-            [action, rest @ ..] if action == "delete" => {
-                self.delete_group_command(session, rest, input, output, mode)
-            }
-            [action, rest @ ..] if action == "event" => {
-                self.event_command(session, rest, input, output, mode)
-            }
-            [action, rest @ ..] if action == "events" => {
-                self.events_command(session, rest, input, output, mode)
-            }
-            [action, rest @ ..] if action == "state" => {
-                self.state_command(session, rest, input, output, mode)
-            }
+            [action, rest @ ..] if action == "delete" => self.delete_group_command(session, rest),
+            [action, rest @ ..] if action == "event" => self.event_command(session, rest, prompt),
+            [action, rest @ ..] if action == "events" => self.events_command(session, rest),
+            [action, rest @ ..] if action == "state" => self.state_command(session, rest),
             _ => usage(
                 "group <create|open|list|switch|edit|invite|join|member|leave|delete|event|events|state> ...",
             ),
         }
     }
 
-    fn create_group_command<R, W>(
+    fn create_group_command<P>(
         &mut self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let (id, group) = group_from_arguments(
-            session,
-            arguments,
-            "group-id",
-            GROUP_CREATE_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let (id, group) =
+            group_from_arguments(session, arguments, "group-id", GROUP_CREATE_USAGE, prompt)?;
         if self.groups.contains_key(&id) {
             return Err(ShellError::Domain(format!(
                 "simple group {id:?} is already known"
@@ -117,27 +86,17 @@ impl App {
         Ok(result)
     }
 
-    fn open_group_command<R, W>(
+    fn open_group_command<P>(
         &mut self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let (id, group) = group_from_arguments(
-            session,
-            arguments,
-            "group-id",
-            GROUP_OPEN_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let (id, group) =
+            group_from_arguments(session, arguments, "group-id", GROUP_OPEN_USAGE, prompt)?;
         if let Some(existing) = self.groups.get(&id) {
             if existing != &group {
                 return Err(ShellError::Domain(format!(
@@ -165,28 +124,15 @@ impl App {
             )
     }
 
-    fn switch_group_command<R, W>(
+    fn switch_group_command<P>(
         &mut self,
-        session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let id = required_value(
-            session,
-            arguments,
-            0,
-            "group-id",
-            GROUP_SWITCH_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let id = required_value(arguments, 0, "group-id", GROUP_SWITCH_USAGE, prompt)?;
         if arguments.len() > 1 {
             return usage(GROUP_SWITCH_USAGE);
         }
@@ -197,20 +143,17 @@ impl App {
         CommandResult::success("group-selected", format!("selected {id}")).with_field("group", id)
     }
 
-    fn edit_group_command<R, W>(
+    fn edit_group_command<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         let group = self.selected_group()?.clone();
-        let edit = metadata_edit(session, arguments, input, output, mode)?;
+        let edit = metadata_edit(arguments, prompt)?;
         let builder = edit_metadata(session.selected_account()?.public_key(), &group, &edit)
             .map_err(domain_error)?;
         let write = self.fava.publish(builder).map_err(domain_error)?;
@@ -224,28 +167,16 @@ impl App {
         )
     }
 
-    fn invite_command<R, W>(
+    fn invite_command<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        let code = required_value(
-            session,
-            arguments,
-            0,
-            "invite-code",
-            GROUP_INVITE_USAGE,
-            input,
-            output,
-            mode,
-        )?;
+        let code = required_value(arguments, 0, "invite-code", GROUP_INVITE_USAGE, prompt)?;
         if arguments.len() > 1 {
             return usage(GROUP_INVITE_USAGE);
         }
@@ -296,30 +227,18 @@ impl App {
         )
     }
 
-    fn member_command<R, W>(
+    fn member_command<P>(
         &self,
         session: &E2eSession,
         arguments: &[String],
-        input: &mut R,
-        output: &mut W,
-        mode: InputMode,
+        prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
-        R: BufRead,
-        W: std::io::Write,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         match arguments {
             [action, rest @ ..] if action == "add" => {
-                let public_key = required_value(
-                    session,
-                    rest,
-                    0,
-                    "public-key",
-                    MEMBER_ADD_USAGE,
-                    input,
-                    output,
-                    mode,
-                )?;
+                let public_key = required_value(rest, 0, "public-key", MEMBER_ADD_USAGE, prompt)?;
                 let public_key = parse_public_key(&public_key)?;
                 let roles = rest.iter().skip(1).map(String::as_str).collect::<Vec<_>>();
                 let group = self.selected_group()?.clone();
@@ -341,16 +260,8 @@ impl App {
                 )
             }
             [action, rest @ ..] if action == "remove" => {
-                let public_key = required_value(
-                    session,
-                    rest,
-                    0,
-                    "public-key",
-                    MEMBER_REMOVE_USAGE,
-                    input,
-                    output,
-                    mode,
-                )?;
+                let public_key =
+                    required_value(rest, 0, "public-key", MEMBER_REMOVE_USAGE, prompt)?;
                 if rest.len() > 1 {
                     return usage(MEMBER_REMOVE_USAGE);
                 }
@@ -391,18 +302,11 @@ impl App {
         )
     }
 
-    fn delete_group_command<R, W>(
+    fn delete_group_command(
         &mut self,
         session: &E2eSession,
         arguments: &[String],
-        _input: &mut R,
-        _output: &mut W,
-        _mode: InputMode,
-    ) -> Result<CommandResult, ShellError>
-    where
-        R: BufRead,
-        W: std::io::Write,
-    {
+    ) -> Result<CommandResult, ShellError> {
         let id = match arguments {
             [] => self
                 .selected_group
@@ -437,34 +341,26 @@ impl App {
     }
 }
 
-fn group_from_arguments<R, W>(
+fn group_from_arguments<P>(
     session: &E2eSession,
     arguments: &[String],
     id_label: &str,
     usage_text: &'static str,
-    input: &mut R,
-    output: &mut W,
-    mode: InputMode,
+    prompt: &mut P,
 ) -> Result<(String, SimpleGroup), ShellError>
 where
-    R: BufRead,
-    W: std::io::Write,
+    P: FnMut(&str) -> Result<Option<String>, ShellError>,
 {
-    let id = required_value(
-        session, arguments, 0, id_label, usage_text, input, output, mode,
-    )?;
+    let id = required_value(arguments, 0, id_label, usage_text, prompt)?;
     let relay_aliases = if arguments.len() > 1 {
         arguments[1..].to_vec()
     } else {
         vec![required_value(
-            session,
             arguments,
             1,
             "relay-alias",
             usage_text,
-            input,
-            output,
-            mode,
+            prompt,
         )?]
     };
     let relays = relay_aliases

@@ -290,6 +290,7 @@ name = "fava-event-cache"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "nostr",
  "thiserror",
@@ -341,6 +342,7 @@ dependencies = [
  "fava-subscriptions",
  "fava-transport",
  "fava-wire",
+ "futures-util",
  "nostr",
  "serde_json",
  "thiserror",

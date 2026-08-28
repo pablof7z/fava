@@ -1,8 +1,6 @@
 //! NIP-29 metadata edit option parsing.
 
-use std::io::BufRead;
-
-use e2e_support::{E2eSession, InputMode, ShellError};
+use e2e_support::ShellError;
 use fava::Kind;
 use fava_simple_groups::{GroupAccess, GroupVisibility, MetadataEdit};
 
@@ -10,16 +8,12 @@ use crate::app::{required_value, usage};
 
 const GROUP_EDIT_USAGE: &str = "group edit [--name <text>] [--about <text>] [--picture <url>] [--private|--public] [--closed|--open] [--supported-kinds <kind> ...]";
 
-pub(crate) fn metadata_edit<R, W>(
-    session: &E2eSession,
+pub(crate) fn metadata_edit<P>(
     arguments: &[String],
-    input: &mut R,
-    output: &mut W,
-    mode: InputMode,
+    prompt: &mut P,
 ) -> Result<MetadataEdit, ShellError>
 where
-    R: BufRead,
-    W: std::io::Write,
+    P: FnMut(&str) -> Result<Option<String>, ShellError>,
 {
     let mut edit = MetadataEdit::default();
     let mut index = 0;
@@ -27,40 +21,31 @@ where
         match argument.as_str() {
             "--name" => {
                 edit.name = Some(required_value(
-                    session,
                     arguments,
                     index + 1,
                     "name",
                     GROUP_EDIT_USAGE,
-                    input,
-                    output,
-                    mode,
+                    prompt,
                 )?);
                 index += 2;
             }
             "--about" => {
                 edit.about = Some(required_value(
-                    session,
                     arguments,
                     index + 1,
                     "about",
                     GROUP_EDIT_USAGE,
-                    input,
-                    output,
-                    mode,
+                    prompt,
                 )?);
                 index += 2;
             }
             "--picture" => {
                 edit.picture = Some(required_value(
-                    session,
                     arguments,
                     index + 1,
                     "picture",
                     GROUP_EDIT_USAGE,
-                    input,
-                    output,
-                    mode,
+                    prompt,
                 )?);
                 index += 2;
             }

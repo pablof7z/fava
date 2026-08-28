@@ -31,6 +31,16 @@ fn ordinary_non_pty_replay_uses_shared_commands_and_typed_jsonl() {
 }
 
 #[test]
+fn noninteractive_jsonl_is_byte_for_byte_stable() {
+    let output = run_script("noninteractive-jsonl.txt");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        include_str!("noninteractive-jsonl.golden")
+    );
+}
+
+#[test]
 fn replay_refuses_a_missing_domain_value_without_consuming_the_next_line() {
     let output = run_script("missing-required.txt");
     assert!(!output.status.success());
@@ -164,4 +174,234 @@ fn every_domain_command_family_has_black_box_typed_jsonl_without_live_success() 
         );
     }
     fs::remove_file(script).unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn interactive_pty_no_color_matches_the_ansi_stripped_golden() {
+    let raw = run_interactive_pty("env NO_COLOR=1 COLUMNS=88", true);
+    assert!(
+        !raw.contains("\x1b[38;"),
+        "NO_COLOR emitted an ANSI color: {raw:?}"
+    );
+    assert!(
+        !raw.contains("\x1b[9"),
+        "NO_COLOR emitted an ANSI color: {raw:?}"
+    );
+    assert_eq!(
+        normalize_pty(&raw),
+        include_str!("interactive-no-color.golden")
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn interactive_pty_emits_color_until_no_color_is_requested() {
+    let raw = run_interactive_pty("env -u NO_COLOR COLUMNS=88", false);
+    assert!(raw.contains("\x1b[38;") || raw.contains("\x1b[1;96m"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn interactive_pty_no_color_flag_removes_color_codes() {
+    let raw = run_interactive_pty_with_args("env -u NO_COLOR COLUMNS=88", false, "--no-color");
+    assert!(!raw.contains("\x1b[38;"), "--no-color emitted ANSI color");
+    assert!(!raw.contains("\x1b[9"), "--no-color emitted ANSI color");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn interactive_pty_receipt_completion_lists_documented_actions() {
+    let raw = run_logged_interactive_pty_commands(
+        "env NO_COLOR=1 COLUMNS=88",
+        "",
+        r#"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {no-account}
+send -raw "receipt "
+send -raw "\t"
+expect -re {list}
+expect -re {show}
+send -raw "\003"
+expect -re {input cancelled}
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {no-account}
+send "quit\r"
+expect eof
+"#,
+    );
+    let plain = plain_pty(&raw);
+    let plain_lower = plain.to_ascii_lowercase();
+    assert!(
+        plain_lower.contains("list"),
+        "receipt list was not completed: {plain:?}"
+    );
+    assert!(
+        plain_lower.contains("show"),
+        "receipt show was not completed: {plain:?}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn interactive_pty_elides_legal_context_names_at_40_columns() {
+    let account = "a".repeat(32);
+    let group = "g".repeat(32);
+    let commands = format!(
+        r#"
+expect -re {{6n}}
+send -raw "\033\[1;1R"
+expect -re {{no-account}}
+send "account new {account}\r"
+expect -re {{6n}}
+send -raw "\033\[1;1R"
+expect -re {{account created}}
+send "relay add group ws://127.0.0.1:18101\r"
+expect -re {{6n}}
+send -raw "\033\[1;1R"
+expect -re {{relay added}}
+send "group open {group} group\r"
+expect -re {{6n}}
+send -raw "\033\[1;1R"
+expect -re {{group opened}}
+expect -re {{6n}}
+send -raw "\033\[1;1R"
+expect -re {{1 relay}}
+send "quit\r"
+after 100
+"#,
+    );
+    let raw = run_logged_interactive_pty_commands("env NO_COLOR=1 COLUMNS=40", "", &commands);
+    let plain = plain_pty(&raw);
+    let expected = "aaaaaaaaaa… · ggggggggggg… · 1 relay › ";
+    assert_eq!(expected.chars().count(), 39);
+    assert!(
+        plain.lines().any(|line| line.starts_with(expected)),
+        "missing elided 40-column prompt: {plain:?}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn run_interactive_pty(environment: &str, full_session: bool) -> String {
+    run_interactive_pty_with_args(environment, full_session, "")
+}
+
+#[cfg(target_os = "macos")]
+fn run_interactive_pty_with_args(environment: &str, full_session: bool, arguments: &str) -> String {
+    let commands = if full_session {
+        r#"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {no-account}
+send "relay add group ws://127.0.0.1:18101\r"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {no-account}
+send "group open weekend-builders group\r"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {weekend-builders}
+send "status\r"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {weekend-builders}
+send "quit\r"
+expect eof
+"#
+    } else {
+        r#"
+expect -re {6n}
+send -raw "\033\[1;1R"
+expect -re {no-account}
+send "quit\r"
+expect eof
+"#
+    };
+    run_interactive_pty_commands(environment, arguments, commands)
+}
+
+#[cfg(target_os = "macos")]
+fn run_interactive_pty_commands(environment: &str, arguments: &str, commands: &str) -> String {
+    let binary = env!("CARGO_BIN_EXE_simple-groups");
+    let program = format!(
+        "set timeout 15\nspawn {environment} $env(FAVA_REPL_BINARY) {arguments}\n{commands}"
+    );
+    let output = Command::new("/usr/bin/expect")
+        .args(["-c", &program])
+        .env("FAVA_REPL_BINARY", binary)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
+#[cfg(target_os = "macos")]
+fn run_logged_interactive_pty_commands(
+    environment: &str,
+    arguments: &str,
+    commands: &str,
+) -> String {
+    let binary = env!("CARGO_BIN_EXE_simple-groups");
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let log = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join(format!(".fava-simple-groups-pty-{nonce}.log"));
+    let program = format!(
+        "set timeout 3\nexpect_after {{ exit 1 }}\nlog_file -noappend $env(FAVA_REPL_LOG)\nspawn {environment} $env(FAVA_REPL_BINARY) {arguments}\n{commands}"
+    );
+    let output = Command::new("/usr/bin/expect")
+        .args(["-c", &program])
+        .env("FAVA_REPL_BINARY", binary)
+        .env("FAVA_REPL_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let raw = fs::read_to_string(&log).unwrap();
+    fs::remove_file(log).unwrap();
+    raw
+}
+
+#[cfg(target_os = "macos")]
+fn normalize_pty(raw: &str) -> String {
+    let text = plain_pty(raw);
+    let text = &text[text.find("fava simple-groups").unwrap()..];
+    text.lines()
+        .map(normalize_timing)
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+#[cfg(target_os = "macos")]
+fn plain_pty(raw: &str) -> String {
+    String::from_utf8(strip_ansi_escapes::strip(raw))
+        .unwrap()
+        .replace('\r', "")
+}
+
+#[cfg(target_os = "macos")]
+fn normalize_timing(line: &str) -> String {
+    let Some(ms) = line.rfind(" ms") else {
+        return line.to_owned();
+    };
+    let digits = line[..ms]
+        .char_indices()
+        .rev()
+        .take_while(|(_, character)| character.is_ascii_digit())
+        .last()
+        .map_or(ms, |(index, _)| index);
+    format!("{}<ms>{}", &line[..digits], &line[ms + 3..])
 }

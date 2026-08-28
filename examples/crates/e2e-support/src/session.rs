@@ -6,7 +6,7 @@ use std::io::{BufRead, Write};
 
 use fava::{Fava, RelayUrl};
 
-use crate::ingress::{looks_secret, reject_prompted_value, reject_unsafe_words};
+use crate::ingress::{looks_secret, reject_unsafe_words};
 use crate::result::sensitive_value;
 use crate::{Account, CommandResult, Limits, OutputFormat, Secret, ShellError};
 
@@ -191,6 +191,34 @@ impl E2eSession {
         F: FnMut(&mut Self, &[String]) -> Result<CommandResult, ShellError>,
         P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
+        self.execute_line_with_domain_prompt(line, mode, &mut prompt, |session, words, _| {
+            domain(session, words)
+        })
+    }
+
+    /// Execute one line while giving the domain dispatcher the ordinary-value
+    /// prompt used by the shared shell commands.
+    ///
+    /// This keeps command parsing, secret refusal, bounded history, and
+    /// result retention in this shell while allowing a concrete interactive
+    /// frontend to own its terminal line editor for both command and value
+    /// entry.
+    ///
+    /// # Errors
+    ///
+    /// Refuses oversized, secret-looking, malformed, or unknown retained input
+    /// before it reaches the real domain command implementation.
+    pub fn execute_line_with_domain_prompt<F, P>(
+        &mut self,
+        line: &str,
+        mode: InputMode,
+        prompt: &mut P,
+        mut domain: F,
+    ) -> Result<CommandResult, ShellError>
+    where
+        F: FnMut(&mut Self, &[String], &mut P) -> Result<CommandResult, ShellError>,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
+    {
         if line.len() > self.limits.line_bytes() {
             return Err(ShellError::Limit {
                 what: "command line bytes",
@@ -212,26 +240,26 @@ impl E2eSession {
         self.record_history(&expanded, &words)?;
         let result = match words.as_slice() {
             [command, action, arguments @ ..] if command == "account" => {
-                self.account_command(action, arguments, mode, &mut prompt)
+                self.account_command(action, arguments, mode, prompt)
             }
             [command] if command == "account" => Err(ShellError::Usage {
                 usage: "account <new|import|list|switch|remove> ...",
             }),
             [command, action, arguments @ ..] if command == "relay" => {
-                self.relay_command(action, arguments, &mut prompt)
+                self.relay_command(action, arguments, prompt)
             }
             [command] if command == "relay" => Err(ShellError::Usage {
                 usage: "relay <add|list|remove> ...",
             }),
             [command, arguments @ ..] if command == "capture" => {
-                self.capture_command(arguments, &mut prompt)
+                self.capture_command(arguments, prompt)
             }
             [command] if command == "dump" => self.dump(),
             [command] if command == "quit" || command == "exit" => {
                 self.quitting = true;
                 Ok(CommandResult::success("quit", "session closed"))
             }
-            _ => domain(self, &words),
+            _ => domain(self, &words, prompt),
         }?;
         result.enforce_bounds(self.limits.capture_bytes(), self.limits.result_fields())?;
         self.last_result = Some(result.clone());
@@ -268,6 +296,12 @@ impl E2eSession {
             .ok_or_else(|| ShellError::UnknownRelay {
                 alias: alias.to_owned(),
             })
+    }
+
+    /// Return the currently retained public relay-alias count.
+    #[must_use]
+    pub fn relay_count(&self) -> usize {
+        self.relays.len()
     }
 
     /// Refuse a value that cannot safely become one capture-safe result field.
@@ -408,13 +442,7 @@ where
         return Ok(None);
     }
     let value = value.trim_end().to_owned();
-    reject_prompted_value(label, &value)?;
-    if value.len() > limits.line_bytes() {
-        return Err(ShellError::Limit {
-            what: "prompt value bytes",
-            maximum: limits.line_bytes(),
-        });
-    }
+    limits.validate_prompt_value(label, &value)?;
     Ok(Some(value))
 }
 
