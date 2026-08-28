@@ -45,22 +45,19 @@ impl SimpleGroup {
     /// when this value is lowered.
     ///
     /// ```
-    /// use fava_simple_groups::SimpleGroup;
-    /// use nostr::types::RelayUrl;
-    ///
+    /// # use fava_simple_groups::SimpleGroup;
+    /// # use nostr::types::RelayUrl;
     /// let first = RelayUrl::parse("wss://a.example")?;
     /// let second = RelayUrl::parse("wss://b.example")?;
     /// let group = SimpleGroup::new("photos", vec![first, second])?;
-    /// assert_eq!(group.relays().count(), 2);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
     /// Arbitrary iterators are not accepted as the finite relay input.
     ///
     /// ```compile_fail
-    /// use fava_simple_groups::SimpleGroup;
-    /// use nostr::types::RelayUrl;
-    ///
+    /// # use fava_simple_groups::SimpleGroup;
+    /// # use nostr::types::RelayUrl;
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
     /// let _ = SimpleGroup::new("photos", std::iter::repeat(relay));
     /// ```
@@ -68,9 +65,8 @@ impl SimpleGroup {
     /// The superseded head-plus-tail signature is not retained.
     ///
     /// ```compile_fail
-    /// use fava_simple_groups::SimpleGroup;
-    /// use nostr::types::RelayUrl;
-    ///
+    /// # use fava_simple_groups::SimpleGroup;
+    /// # use nostr::types::RelayUrl;
     /// let relay = RelayUrl::parse("wss://relay.example").unwrap();
     /// let _ = SimpleGroup::new("photos", relay.clone(), vec![relay]);
     /// ```

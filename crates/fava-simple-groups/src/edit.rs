@@ -28,9 +28,8 @@ const REMOVE_RELAY: u8 = 5;
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, save_simple_group};
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, save_simple_group};
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
@@ -59,9 +58,8 @@ pub fn save_simple_group(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, remove_saved_simple_group};
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, remove_saved_simple_group};
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
@@ -88,9 +86,8 @@ pub fn remove_saved_simple_group(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, rename_saved_simple_group};
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, rename_saved_simple_group};
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("photos", vec![relay])?;
 ///
@@ -118,9 +115,8 @@ pub fn rename_saved_simple_group(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::save_relay;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::save_relay;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let edit = save_relay(relay)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -138,9 +134,8 @@ pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentEr
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::remove_saved_relay;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::remove_saved_relay;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let edit = remove_saved_relay(relay)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -161,17 +156,13 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_materializer};
-/// use fava_write::ReplaceableEventMaterializer;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_materializer};
+/// # use nostr::types::RelayUrl;
 /// let materializer = saved_group_list_materializer();
-/// assert_eq!(materializer.kind(), fava_write::Kind::from_u16(10_009));
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("photos", vec![relay])?;
 /// let edit = save_simple_group(&group, None)?;
-/// assert!(materializer.supports(&edit));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[must_use]

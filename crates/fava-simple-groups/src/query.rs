@@ -54,9 +54,8 @@ impl From<SimpleGroupStateEventKind> for Kind {
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::saved_group_lists;
-/// use nostr::key::Keys;
-///
+/// # use fava_simple_groups::saved_group_lists;
+/// # use nostr::key::Keys;
 /// let keys = Keys::generate();
 /// let query = saved_group_lists([keys.public_key()])?;
 ///

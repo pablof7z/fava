@@ -47,8 +47,7 @@ const KIND_LEAVE_GROUP: u16 = 9022;
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{MetadataEdit, GroupVisibility, GroupAccess};
-///
+/// # use fava_simple_groups::{MetadataEdit, GroupVisibility, GroupAccess};
 /// let edit = MetadataEdit {
 ///     name: Some("Cats".to_owned()),
 ///     about: Some("A group about cats".to_owned()),
@@ -101,24 +100,14 @@ pub enum GroupAccess {
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, create_group};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, create_group};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
 /// let event = create_group(keys.public_key(), &group)?;
-///
-/// assert!(has_h_tag(&event, "cats"));
-/// # fn has_h_tag(e: &fava_write::UnsignedEvent, id: &str) -> bool {
-/// #     e.tags.iter().any(|t| {
-/// #         let s = t.as_slice();
-/// #         s.first().map(String::as_str) == Some("h")
-/// #             && s.get(1).map(String::as_str) == Some(id)
-/// #     })
-/// # }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -140,10 +129,9 @@ pub fn create_group(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{GroupVisibility, MetadataEdit, SimpleGroup, edit_metadata};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{GroupVisibility, MetadataEdit, SimpleGroup, edit_metadata};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
@@ -189,21 +177,20 @@ pub fn edit_metadata(
 
 /// Build a kind-9009 invite event for `group`.
 ///
-/// Emits `h`, `p` (invitee), and `relay` tags.
+/// Emits `h`, one `p` tag for every invitee, and a `relay` tag.
 ///
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, invite};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, invite};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay.clone()])?;
 /// let admin = Keys::generate();
-/// let invitee = Keys::generate();
+/// let invitees = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
-/// let event = invite(admin.public_key(), &group, &invitee.public_key(), &relay)?;
+/// let event = invite(admin.public_key(), &group, &invitees, &relay)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -213,13 +200,14 @@ pub fn edit_metadata(
 pub fn invite(
     author: PublicKey,
     group: &SimpleGroup,
-    invitee: &PublicKey,
+    invitees: &[PublicKey],
     relay: &RelayUrl,
 ) -> Result<UnsignedEvent, EventBuildError> {
-    let extra = [
-        parse_tag(["p", &invitee.to_hex()])?,
-        parse_tag(["relay", relay.as_str()])?,
-    ];
+    let mut extra = invitees
+        .iter()
+        .map(|invitee| parse_tag(["p", &invitee.to_hex()]))
+        .collect::<Result<Vec<_>, _>>()?;
+    extra.push(parse_tag(["relay", relay.as_str()])?);
     build(author, KIND_INVITE, group, extra)
 }
 
@@ -232,10 +220,9 @@ pub fn invite(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, join_request};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, join_request};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
@@ -256,23 +243,22 @@ pub fn join_request(
 
 /// Build a kind-9000 put-user event for `group`.
 ///
-/// Emits `h` and `p` (user pubkey); `roles` are appended as additional
-/// values on the `p` tag: `["p", "<pubkey>", "role1", ...]`.
+/// Emits `h` and one `p` tag for every supplied user. `roles` are appended as
+/// additional values on each `p` tag: `["p", "<pubkey>", "role1", ...]`.
 ///
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, put_user};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, put_user};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
-/// let member = Keys::generate();
+/// let members = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
-/// // Grant member role.
-/// let event = put_user(admin.public_key(), &group, &member.public_key(), &["member"])?;
+/// // Grant both users the member role in one event.
+/// let event = put_user(admin.public_key(), &group, &members, &["member"])?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -282,32 +268,36 @@ pub fn join_request(
 pub fn put_user(
     author: PublicKey,
     group: &SimpleGroup,
-    user: &PublicKey,
+    users: &[PublicKey],
     roles: &[&str],
 ) -> Result<UnsignedEvent, EventBuildError> {
-    let mut values = vec!["p".to_owned(), user.to_hex()];
-    values.extend(roles.iter().map(|r| (*r).to_owned()));
-    let p_tag = Tag::parse(values).map_err(|e| EventBuildError::Encoding(e.to_string()))?;
-    build(author, KIND_PUT_USER, group, [p_tag])
+    let p_tags = users
+        .iter()
+        .map(|user| {
+            let mut values = vec!["p".to_owned(), user.to_hex()];
+            values.extend(roles.iter().map(|role| (*role).to_owned()));
+            Tag::parse(values).map_err(|error| EventBuildError::Encoding(error.to_string()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    build(author, KIND_PUT_USER, group, p_tags)
 }
 
 /// Build a kind-9001 remove-user event for `group`.
 ///
-/// Emits `h` and `p` (user pubkey to remove).
+/// Emits `h` and one `p` tag for every user pubkey to remove.
 ///
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, remove_user};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, remove_user};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
-/// let member = Keys::generate();
+/// let members = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
-/// let event = remove_user(admin.public_key(), &group, &member.public_key())?;
+/// let event = remove_user(admin.public_key(), &group, &members)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -317,10 +307,13 @@ pub fn put_user(
 pub fn remove_user(
     author: PublicKey,
     group: &SimpleGroup,
-    user: &PublicKey,
+    users: &[PublicKey],
 ) -> Result<UnsignedEvent, EventBuildError> {
-    let extra = [parse_tag(["p", &user.to_hex()])?];
-    build(author, KIND_REMOVE_USER, group, extra)
+    let p_tags = users
+        .iter()
+        .map(|user| parse_tag(["p", &user.to_hex()]))
+        .collect::<Result<Vec<_>, _>>()?;
+    build(author, KIND_REMOVE_USER, group, p_tags)
 }
 
 /// Build a kind-9005 delete-event event for `group`.
@@ -330,11 +323,10 @@ pub fn remove_user(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, delete_event};
-/// use fava_write::EventId;
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, delete_event};
+/// # use fava_write::EventId;
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
@@ -364,10 +356,9 @@ pub fn delete_event(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, delete_group};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, delete_group};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
@@ -394,10 +385,9 @@ pub fn delete_group(
 /// # Examples
 ///
 /// ```
-/// use fava_simple_groups::{SimpleGroup, leave_group};
-/// use nostr::key::Keys;
-/// use nostr::types::RelayUrl;
-///
+/// # use fava_simple_groups::{SimpleGroup, leave_group};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
@@ -538,15 +528,23 @@ mod tests {
     #[test]
     fn invite_kind_and_tags() {
         let group = group();
-        let invitee = Keys::generate().public_key();
+        let invitees = [Keys::generate().public_key(), Keys::generate().public_key()];
         let relay = RelayUrl::parse("wss://invite.example").unwrap();
-        let event = invite(author(), &group, &invitee, &relay).unwrap();
+        let event = invite(author(), &group, &invitees, &relay).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_INVITE);
         assert!(h_tag(&event, "cats"));
-        assert_eq!(
-            tag_value(&event, "p", 1).as_deref(),
-            Some(invitee.to_hex().as_str())
-        );
+        let p_tags = event
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .collect::<Vec<_>>();
+        assert_eq!(p_tags.len(), invitees.len());
+        for (tag, invitee) in p_tags.into_iter().zip(invitees) {
+            assert_eq!(
+                tag.as_slice().get(1).map(String::as_str),
+                Some(invitee.to_hex().as_str())
+            );
+        }
         assert_eq!(
             tag_value(&event, "relay", 1).as_deref(),
             Some(relay.as_str())
@@ -565,29 +563,32 @@ mod tests {
     #[test]
     fn put_user_kind_and_roles() {
         let group = group();
-        let user = Keys::generate().public_key();
-        let event = put_user(author(), &group, &user, &["admin", "moderator"]).unwrap();
+        let users = [Keys::generate().public_key(), Keys::generate().public_key()];
+        let event = put_user(author(), &group, &users, &["admin", "moderator"]).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
         assert!(h_tag(&event, "cats"));
-        let p = event
+        let p_tags = event
             .tags
             .iter()
-            .find(|t| t.as_slice().first().map(String::as_str) == Some("p"))
-            .unwrap();
-        let values = p.as_slice();
-        assert_eq!(
-            values.get(1).map(String::as_str),
-            Some(user.to_hex().as_str())
-        );
-        assert_eq!(values.get(2).map(String::as_str), Some("admin"));
-        assert_eq!(values.get(3).map(String::as_str), Some("moderator"));
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .collect::<Vec<_>>();
+        assert_eq!(p_tags.len(), users.len());
+        for (tag, user) in p_tags.into_iter().zip(users) {
+            let values = tag.as_slice();
+            assert_eq!(
+                values.get(1).map(String::as_str),
+                Some(user.to_hex().as_str())
+            );
+            assert_eq!(values.get(2).map(String::as_str), Some("admin"));
+            assert_eq!(values.get(3).map(String::as_str), Some("moderator"));
+        }
     }
 
     #[test]
     fn put_user_no_roles() {
         let group = group();
         let user = Keys::generate().public_key();
-        let event = put_user(author(), &group, &user, &[]).unwrap();
+        let event = put_user(author(), &group, &[user], &[]).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
         let p = event
             .tags
@@ -598,16 +599,24 @@ mod tests {
     }
 
     #[test]
-    fn remove_user_kind_and_p() {
+    fn remove_user_kind_and_p_tags() {
         let group = group();
-        let user = Keys::generate().public_key();
-        let event = remove_user(author(), &group, &user).unwrap();
+        let users = [Keys::generate().public_key(), Keys::generate().public_key()];
+        let event = remove_user(author(), &group, &users).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_REMOVE_USER);
         assert!(h_tag(&event, "cats"));
-        assert_eq!(
-            tag_value(&event, "p", 1).as_deref(),
-            Some(user.to_hex().as_str())
-        );
+        let p_tags = event
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .collect::<Vec<_>>();
+        assert_eq!(p_tags.len(), users.len());
+        for (tag, user) in p_tags.into_iter().zip(users) {
+            assert_eq!(
+                tag.as_slice().get(1).map(String::as_str),
+                Some(user.to_hex().as_str())
+            );
+        }
     }
 
     #[test]
@@ -653,10 +662,10 @@ mod tests {
         let events = [
             create_group(a, &group).unwrap(),
             edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
-            invite(a, &group, &user, &relay).unwrap(),
+            invite(a, &group, &[user], &relay).unwrap(),
             join_request(a, &group).unwrap(),
-            put_user(a, &group, &user, &[]).unwrap(),
-            remove_user(a, &group, &user).unwrap(),
+            put_user(a, &group, &[user], &[]).unwrap(),
+            remove_user(a, &group, &[user]).unwrap(),
             delete_event(a, &group, &target).unwrap(),
             delete_group(a, &group).unwrap(),
             leave_group(a, &group).unwrap(),

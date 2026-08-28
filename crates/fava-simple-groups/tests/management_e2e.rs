@@ -134,6 +134,51 @@ async fn start_relay(dir: &Path, whitelist: Option<&str>) -> RelayProcess {
     }
 }
 
+/// Start Croissant, which applies NIP-29 management events to real group state.
+async fn start_nip29_relay(dir: &Path) -> RelayProcess {
+    let port = free_port();
+    let data = dir.join("croissant-data");
+    std::fs::create_dir_all(&data).expect("create Croissant data directory");
+    let bin = PathBuf::from(
+        std::env::var("NIP29_RELAY_BIN")
+            .expect("set NIP29_RELAY_BIN to an external Croissant binary"),
+    );
+    assert!(
+        bin.exists(),
+        "Croissant binary not found at {}",
+        bin.display()
+    );
+
+    let mut child = Command::new(&bin)
+        .env("PORT", port.to_string())
+        .env("HOST", "127.0.0.1")
+        .env("DATAPATH", &data)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn Croissant");
+
+    let addr = format!("127.0.0.1:{port}");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if TcpStream::connect(&addr).await.is_ok() {
+            break;
+        }
+        if let Some(status) = child.try_wait().expect("poll Croissant") {
+            panic!("Croissant exited before readiness: {status}");
+        }
+        assert!(Instant::now() < deadline, "Croissant readiness timeout");
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+
+    RelayProcess {
+        child,
+        url: format!("ws://127.0.0.1:{port}"),
+    }
+}
+
 // ── Wire helpers ──────────────────────────────────────────────────────────────
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -204,6 +249,63 @@ async fn req(ws: &mut Ws, sub_id: &str, filter: Value) -> Vec<Value> {
     events
 }
 
+fn append_tag(event: UnsignedEvent, tag: Tag) -> UnsignedEvent {
+    let mut tags = event.tags.to_vec();
+    tags.push(tag);
+    EventBuilder::from_parts(
+        event.pubkey,
+        event.kind,
+        event.created_at,
+        tags,
+        event.content,
+    )
+    .build()
+    .expect("rebuild event with tag")
+}
+
+fn p_tags(event: &Value) -> Vec<Vec<String>> {
+    event["tags"]
+        .as_array()
+        .expect("event tags")
+        .iter()
+        .filter_map(|tag| {
+            let values = tag.as_array()?;
+            (values.first().and_then(Value::as_str) == Some("p")).then(|| {
+                values
+                    .iter()
+                    .map(|value| value.as_str().expect("string tag value").to_owned())
+                    .collect()
+            })
+        })
+        .collect()
+}
+
+async fn submit_and_assert_p_tags(
+    ws: &mut Ws,
+    sub_id: &str,
+    group_id: &str,
+    event: UnsignedEvent,
+    signer: &Keys,
+    expected_p_tags: Vec<Vec<String>>,
+) {
+    let event_id = event.id.expect("builder sets event id").to_hex();
+    let kind = event.kind.as_u16();
+    let (ok, message) = submit(ws, event, signer).await;
+    assert!(ok, "Croissant rejected kind-{kind}: {message}");
+
+    let events = req(ws, sub_id, json!({ "kinds": [kind], "#h": [group_id] })).await;
+    let matching = events
+        .iter()
+        .filter(|event| event["id"].as_str() == Some(&event_id))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matching.len(),
+        1,
+        "expected one persisted kind-{kind} event"
+    );
+    assert_eq!(p_tags(matching[0]), expected_p_tags);
+}
+
 fn tempdir() -> PathBuf {
     let ns = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -270,7 +372,7 @@ async fn gate2_put_user_and_39001_observation() {
     let pu = put_user(
         admin_keys.public_key(),
         &group,
-        &member_keys.public_key(),
+        &[member_keys.public_key()],
         &["admin"],
     )
     .expect("put_user");
@@ -345,7 +447,7 @@ async fn gate3_wrong_authority_relay_rejects() {
     let tampered = put_user(
         rogue_keys.public_key(),
         &group,
-        &admin_keys.public_key(),
+        &[admin_keys.public_key()],
         &[],
     )
     .expect("put_user");
@@ -401,7 +503,13 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "invite",
-            invite(admin_keys.public_key(), &group, &user_keys.public_key(), &r).unwrap(),
+            invite(
+                admin_keys.public_key(),
+                &group,
+                &[user_keys.public_key()],
+                &r,
+            )
+            .unwrap(),
             &admin_keys,
         ),
         (
@@ -414,7 +522,7 @@ async fn gate4_all_constructors_accepted() {
             put_user(
                 admin_keys.public_key(),
                 &group,
-                &user_keys.public_key(),
+                &[user_keys.public_key()],
                 &["member"],
             )
             .unwrap(),
@@ -422,7 +530,7 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "remove_user",
-            remove_user(admin_keys.public_key(), &group, &user_keys.public_key()).unwrap(),
+            remove_user(admin_keys.public_key(), &group, &[user_keys.public_key()]).unwrap(),
             &admin_keys,
         ),
         (
@@ -446,6 +554,137 @@ async fn gate4_all_constructors_accepted() {
         let (ok, msg) = submit(&mut ws, event.clone(), signer).await;
         eprintln!("[gate4] {name} OK={ok} msg={msg:?}");
         assert!(ok, "{name} was rejected by relay: {msg}");
+    }
+
+    relay.child.kill().await.ok();
+}
+
+/// Array-based management constructors preserve one, many, and no `p` tags on
+/// a real NIP-29 relay. Croissant refuses empty `put_user` and `remove_user`
+/// target lists; a create-invite remains useful with a code and no invitee.
+#[tokio::test]
+#[ignore = "requires Croissant; set NIP29_RELAY_BIN and run with -- --ignored"]
+async fn array_management_constructors_preserve_target_cardinality() {
+    let tmp = tempdir();
+    let mut relay = start_nip29_relay(&tmp).await;
+    let mut ws = ws_connect(&relay.url).await;
+
+    let admin = Keys::generate();
+    let one_user = Keys::generate().public_key();
+    let many_users = [
+        Keys::generate().public_key(),
+        Keys::generate().public_key(),
+        Keys::generate().public_key(),
+    ];
+    let group_id = "array-management";
+    let group = SimpleGroup::new(group_id, vec![RelayUrl::parse(&relay.url).unwrap()]).unwrap();
+
+    let (ok, message) = submit(
+        &mut ws,
+        create_group(admin.public_key(), &group).expect("create group"),
+        &admin,
+    )
+    .await;
+    assert!(ok, "Croissant rejected create-group: {message}");
+
+    let (ok, message) = submit(
+        &mut ws,
+        edit_metadata(
+            admin.public_key(),
+            &group,
+            &MetadataEdit {
+                access: Some(GroupAccess::Closed),
+                ..Default::default()
+            },
+        )
+        .expect("close group"),
+        &admin,
+    )
+    .await;
+    assert!(ok, "Croissant rejected close-group: {message}");
+
+    let one_p_tag = vec![vec!["p".to_owned(), one_user.to_hex()]];
+    let many_p_tags = many_users
+        .iter()
+        .map(|user| vec!["p".to_owned(), user.to_hex()])
+        .collect::<Vec<_>>();
+
+    submit_and_assert_p_tags(
+        &mut ws,
+        "put-one",
+        group_id,
+        put_user(admin.public_key(), &group, &[one_user], &["member"]).expect("put one"),
+        &admin,
+        vec![vec!["p".to_owned(), one_user.to_hex(), "member".to_owned()]],
+    )
+    .await;
+    submit_and_assert_p_tags(
+        &mut ws,
+        "put-many",
+        group_id,
+        put_user(admin.public_key(), &group, &many_users, &["member"]).expect("put many"),
+        &admin,
+        many_p_tags
+            .iter()
+            .map(|tag| [tag.clone(), vec!["member".to_owned()]].concat())
+            .collect(),
+    )
+    .await;
+    submit_and_assert_p_tags(
+        &mut ws,
+        "remove-one",
+        group_id,
+        remove_user(admin.public_key(), &group, &[one_user]).expect("remove one"),
+        &admin,
+        one_p_tag.clone(),
+    )
+    .await;
+    submit_and_assert_p_tags(
+        &mut ws,
+        "remove-many",
+        group_id,
+        remove_user(admin.public_key(), &group, &many_users).expect("remove many"),
+        &admin,
+        many_p_tags.clone(),
+    )
+    .await;
+
+    for (sub_id, code, invitees, expected) in [
+        ("invite-one", "array-invite-one", vec![one_user], one_p_tag),
+        (
+            "invite-many",
+            "array-invite-many",
+            many_users.to_vec(),
+            many_p_tags,
+        ),
+        ("invite-empty", "array-invite-empty", Vec::new(), Vec::new()),
+    ] {
+        let invitation = append_tag(
+            invite(
+                admin.public_key(),
+                &group,
+                &invitees,
+                &RelayUrl::parse(&relay.url).unwrap(),
+            )
+            .expect("build invite"),
+            Tag::parse(["code", code]).expect("code tag"),
+        );
+        submit_and_assert_p_tags(&mut ws, sub_id, group_id, invitation, &admin, expected).await;
+    }
+
+    for (name, event) in [
+        (
+            "put-user",
+            put_user(admin.public_key(), &group, &[], &["member"]).expect("build empty put"),
+        ),
+        (
+            "remove-user",
+            remove_user(admin.public_key(), &group, &[]).expect("build empty remove"),
+        ),
+    ] {
+        let (ok, message) = submit(&mut ws, event, &admin).await;
+        assert!(!ok, "Croissant accepted an empty {name} target list");
+        assert!(message.contains("missing 'p' tags"), "{name}: {message}");
     }
 
     relay.child.kill().await.ok();
