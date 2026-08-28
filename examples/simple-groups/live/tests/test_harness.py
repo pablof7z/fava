@@ -212,38 +212,43 @@ class FixtureTests(unittest.TestCase):
     def test_jsonl_is_deterministic(self) -> None:
         self.assertEqual(json_line({"z": 1, "a": 2}), '{"a":2,"z":1}\n')
 
-    def test_blocked_contract_keeps_every_required_future_proof(self) -> None:
+    def test_full_contract_is_staged_with_only_the_four_croissant_state_kinds(self) -> None:
         contract = json.loads(
             (LIVE / "scenarios" / "full-nip29-contract.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(contract["status"], "blocked")
-        self.assertEqual(
-            {fact["operation"] for fact in contract["required_facts"]},
-            {
-                "add-member",
-                "authorized-content",
-                "configure",
-                "create",
-                "delete-event",
-                "delete-group",
-                "deleted-event-absent",
-                "deleted-group-state-absent",
-                "rejected-content",
-                "relay-state",
-                "save-list",
-            },
-        )
+        self.assertEqual(contract["status"], "executable")
+        self.assertEqual([stage["after_line"] for stage in contract["stages"]], [24, 28, 32, 41])
+        state = contract["stages"][0]["assertions"][-1]
+        self.assertEqual(state["required_kinds"], [39000, 39001, 39002, 39003])
+        self.assertNotIn(39004, state["required_kinds"])
+        validate_executable_scenario(contract)
 
-    def test_full_contract_cannot_be_marked_executable_without_concrete_assertions(self) -> None:
+    def test_staged_contract_refuses_removed_stage_assertions(self) -> None:
         contract = json.loads(
             (LIVE / "scenarios" / "full-nip29-contract.json").read_text(encoding="utf-8")
         )
-        contract["status"] = "executable"
-        with self.assertRaisesRegex(HarnessError, "convert required_facts"):
+        contract["stages"][0]["assertions"] = []
+        with self.assertRaisesRegex(HarnessError, "requires concrete assertions"):
             validate_executable_scenario(contract)
-        contract["required_facts"] = []
-        with self.assertRaisesRegex(HarnessError, "convert required_facts"):
-            validate_executable_scenario(contract)
+
+    def test_croissant_gap_control_keeps_the_9008_absence_explicit(self) -> None:
+        contract = __import__("harness").load_scenario("croissant-9008-retention-gap")
+        self.assertEqual(contract["bounded_gap_control_of"], "full-nip29-contract")
+        self.assertFalse(contract["stages"][-1]["assertions"][0]["present"])
+        self.assertEqual(len([item for stage in contract["stages"] for item in stage["assertions"]]), 18)
+        validate_executable_scenario(contract)
+
+    def test_canonical_croissant_gap_bundle_is_hashed_and_explicit(self) -> None:
+        evidence = LIVE / "evidence" / "2026-08-29-croissant-9008-retention-gap"
+        manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(manifest["artifact_sha256"]), 20)
+        for relative, expected in manifest["artifact_sha256"].items():
+            self.assertEqual(hashlib.sha256((evidence / relative).read_bytes()).hexdigest(), expected)
+        captures = json.loads((evidence / "app-captures.json").read_text(encoding="utf-8"))
+        self.assertEqual(captures["captures"]["group_deleted"]["kind"], 9008)
+        inspection = json.loads((evidence / "inspections" / "15.json").read_text(encoding="utf-8"))
+        self.assertEqual(inspection["events"], [])
+        scan_secret_absence(evidence, ("nsec1favaexperientialproofsentinelneverretain",))
 
     def test_runner_refuses_assertionless_executable_before_artifact_creation(self) -> None:
         forged = {"id": "forged", "status": "executable", "command_file": "commands/none.txt"}

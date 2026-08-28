@@ -1,6 +1,6 @@
 relay add group {{GROUP_RELAY}}
 relay add state {{STATE_RELAY}}
-account use alice
+account new alice
 group create {{GROUP_ID}} group
 group event publish --kind 12345 "arbitrary-kind content"
 dump

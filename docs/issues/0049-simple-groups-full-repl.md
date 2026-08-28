@@ -1,6 +1,7 @@
 # 0049 — Full reusable experiential simple-groups REPL
 
-**Status:** implemented locally; controlled real-relay proof pending
+**Status:** implemented locally; all controlled checks except Croissant's
+non-queryable kind-9008 deletion record are proven
 **Owner:** `examples/simple-groups` owns NIP-29 and kind-10009 grammar, selected
 group state, public Fava workflows, and command DTO selection; `e2e-support`
 owns only shared bounded shell mechanics
@@ -91,14 +92,12 @@ protected key, omitting an event's public author/id/write/kind facts, or using a
 raw NIP-29 management kind must fail focused code, scenario, or live-harness
 assertions.
 
-## Remaining live proof only
+## Remaining live fixture gap only
 
-The independent harness committed as `14ddf490` still needs this branch's full
-scenario command file and result contract integrated on its branch, then a
-supervised run with explicit Croissant and `nostr-rs-relay` executables. The
-remaining proof must demonstrate exact `REQ`/`EOSE` inspection, authorization
-and negative absence claims using the outsider/post-deletion result event ids,
-Croissant-authored 39000/39001/39002/39003 state kinds only, kind-10009 only on
-the ordinary relay, and event/group deletion absence. 39004/39005 remain
-synthetic decoder coverage until a real authoring mechanism proves them. No
-local unit or replay result is a substitute for those real-relay assertions.
+The controlled run used the ordinary full command file and exact direct
+`REQ`/`EOSE` inspection against explicit Croissant and `nostr-rs-relay 0.8.12`.
+It proved the named authorization, routing, state, deletion, and absence claims,
+including 39000/39001/39002/39003 only. The acknowledged kind-9008 id receives
+an empty direct `REQ`/`EOSE` after deletion because Croissant hides the deleted
+group. The full contract remains correctly failing there until the fixture
+exposes that retained deletion record publicly.

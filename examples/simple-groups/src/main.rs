@@ -21,7 +21,8 @@ type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 async fn main() -> AppResult<()> {
     let options = Options::parse()?;
     let fava = support::assemble()?;
-    let mut session = E2eSession::new(Limits::standard(), fava.clone());
+    let limits = Limits::new(4, 8, 8, 16, 512, 4_096, 16, 24, 32)?;
+    let mut session = E2eSession::new(limits, fava.clone());
     let mut app = App::new(fava);
     let mut output = stdout().lock();
 

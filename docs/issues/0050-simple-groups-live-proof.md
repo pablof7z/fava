@@ -1,7 +1,7 @@
 # 0050 — Independent simple-groups experiential REPL live proof
 
-**Status:** harness implemented; complete NIP-29 application flow blocked on
-missing REPL command file
+**Status:** application and harness complete; the sole full-contract gap is
+Croissant hiding its acknowledged kind-9008 deletion event from direct queries
 **Owner:** `examples/simple-groups/live` owns only relay lab lifecycle,
 application invocation, artifacts, and independent wire observation;
 `examples/simple-groups` owns all command grammar and public-Fava event work
@@ -76,23 +76,26 @@ comparison, unresolved command placeholders, ambiguous REPL evidence, and
 non-deterministic JSONL field order. They use a local scripted wire peer, not
 a fake success path for the live scenario.
 
-## Explicit remaining application work
+## Full controlled result — 2026-08-29
 
-`full-nip29-contract` is blocked and its runner exits 2 before starting a
-relay. The present REPL has no ordinary commands for metadata configuration,
-member addition/removal/join, save/remove/rename kind-10009 state, event
-deletion, or group deletion. It therefore cannot honestly demonstrate:
+The ordinary full REPL command file ran through four bounded checkpoints and
+eighteen direct assertions against explicit Croissant and PATH
+`nostr-rs-relay 0.8.12`. It proves create, metadata, invitation, join/leave,
+member management, authorized content, outsider rejection and id absence,
+relay-authored 39000–39003 with a common non-app author, kind-10009 only on
+the ordinary relay, kind-9005 and target absence, and post-delete state/content
+and id absences. It makes no 39004/39005 claim.
 
-- authorized member write plus rejected non-member write and direct absence;
-- relay-authored kinds 39000 through 39005 after configuration/member changes;
-- kind-10009 published and read only from the ordinary relay;
-- exact kind-9005 `h`/`e` deletion, its target's absence, kind-9008 deletion,
-  and deleted-group state absence.
+The final positive kind-9008 assertion correctly fails: its typed application
+capture records acknowledgement, while an independent direct `REQ` by id gets
+the matching `EOSE` with no event. Croissant removes the group before its query
+visibility check and hides its events from unauthenticated readers. This is a
+relay fixture visibility gap, not an application or harness bypass.
 
-When application commands and JSONL fields exist, add their stable command
-file beneath `examples/simple-groups/live/commands/`, replace `required_facts`
-with concrete assertions, then mark the scenario executable. No harness command
-parsing or Fava/event code belongs in that change.
+[`2026-08-29 Croissant gap evidence`](../../examples/simple-groups/live/evidence/2026-08-29-croissant-9008-retention-gap/)
+is the bounded negative control. It retains typed captures, all 18 direct
+`REQ`/`EOSE` inspections, and a hash manifest; no database, relay log, command,
+or temporary directory is retained.
 
 ## Local fixture discovery
 

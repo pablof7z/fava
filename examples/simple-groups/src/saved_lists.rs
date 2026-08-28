@@ -89,7 +89,7 @@ impl App {
             .map_err(domain_error)?
             .limit(limit)
             .map_err(domain_error)?;
-        let snapshot = self.read_complete(query)?;
+        let snapshot = self.read_limited_eose(query)?;
         let mut groups = 0;
         let mut relays = 0;
         let mut failures = 0;
@@ -125,7 +125,9 @@ impl App {
                     .first()
                     .map(|event| event.id().to_hex())
                     .unwrap_or_default(),
-            )
+            )?
+            .with_field("relay_eose", true)?
+            .with_field("stored_events_complete", false)
     }
 
     fn save_group<R, W>(

@@ -21,7 +21,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from harness_safety import (
     MAX_ARTIFACT_FILE_BYTES,
@@ -72,10 +72,18 @@ class RunLog:
 
 class BoundedLog:
     """Drain one child stream while retaining at most its declared byte bound."""
-    def __init__(self, stream: Any, path: Path, byte_limit: int = MAX_LOG_BYTES) -> None:
+    def __init__(
+        self,
+        stream: Any,
+        path: Path,
+        byte_limit: int = MAX_LOG_BYTES,
+        on_line: Callable[[bytes], None] | None = None,
+    ) -> None:
         self.path = path
         self.byte_limit = byte_limit
         self._stream = stream
+        self._on_line = on_line
+        self._partial = bytearray()
         self._overflow = threading.Event()
         self._thread = threading.Thread(target=self._drain, daemon=True)
 
@@ -97,7 +105,7 @@ class BoundedLog:
         retained = 0
         with self.path.open("wb") as destination:
             while True:
-                chunk = self._stream.read(16_384)
+                chunk = self._stream.read1(16_384)
                 if not chunk:
                     return
                 available = max(0, self.byte_limit - retained)
@@ -106,7 +114,14 @@ class BoundedLog:
                 if available:
                     accepted = chunk[:available]
                     destination.write(accepted)
+                    destination.flush()
                     retained += len(accepted)
+                    if self._on_line is not None:
+                        self._partial.extend(accepted)
+                        while b"\n" in self._partial:
+                            line, _, remainder = self._partial.partition(b"\n")
+                            self._partial = bytearray(remainder)
+                            self._on_line(bytes(line))
 
 
 @dataclass
@@ -118,21 +133,33 @@ class ManagedProcess:
     stderr: BoundedLog
 
     @classmethod
-    def start(cls, label: str, command: list[str], directory: Path, environment: dict[str, str]) -> "ManagedProcess":
+    def start(
+        cls,
+        label: str,
+        command: list[str],
+        directory: Path,
+        environment: dict[str, str],
+        on_stdout_line: Callable[[bytes, subprocess.Popen[bytes]], None] | None = None,
+        stdin_pipe: bool = False,
+    ) -> "ManagedProcess":
         if not command:
             raise HarnessError(f"{label} command was empty")
         process = subprocess.Popen(
             command,
             cwd=ROOT,
             env=environment,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
         )
         if process.stdout is None or process.stderr is None:
             raise HarnessError(f"{label} did not expose bounded output streams")
-        stdout = BoundedLog(process.stdout, directory / "stdout.log")
+        stdout = BoundedLog(
+            process.stdout,
+            directory / "stdout.log",
+            on_line=(lambda line: on_stdout_line(line, process)) if on_stdout_line else None,
+        )
         stderr = BoundedLog(process.stderr, directory / "stderr.log")
         stdout.start()
         stderr.start()
@@ -321,11 +348,61 @@ def materialize_commands(source: Path, destination: Path, replacements: dict[str
     destination.write_text(value, encoding="utf-8")
 
 
-def run_app(command: list[str], root: Path, environment: dict[str, str]) -> tuple[int, Path, Path]:
+def run_app(
+    command: list[str],
+    root: Path,
+    environment: dict[str, str],
+    on_row: Callable[[dict[str, Any], subprocess.Popen[bytes]], None] | None = None,
+    input_lines: list[str] | None = None,
+) -> tuple[int, Path, Path]:
     app_root = root / "app"
     app_root.mkdir()
-    process = ManagedProcess.start("REPL application", command, app_root, environment)
+    callback_errors: list[BaseException] = []
+    received_rows = 0
+    row_condition = threading.Condition()
+
+    def on_stdout_line(line: bytes, process: subprocess.Popen[bytes]) -> None:
+        nonlocal received_rows
+        if on_row is None or callback_errors:
+            return
+        try:
+            value = json.loads(line.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise HarnessError("application stdout line was not a JSON object")
+            on_row(value, process)
+            with row_condition:
+                received_rows += 1
+                row_condition.notify_all()
+        except BaseException as error:
+            with row_condition:
+                callback_errors.append(error)
+                row_condition.notify_all()
+
+    process = ManagedProcess.start(
+        "REPL application",
+        command,
+        app_root,
+        environment,
+        on_stdout_line=on_stdout_line,
+        stdin_pipe=input_lines is not None,
+    )
     try:
+        if input_lines is not None:
+            if process.process.stdin is None:
+                raise HarnessError("REPL application did not expose script input")
+            for expected_rows, line in enumerate(input_lines, start=1):
+                process.process.stdin.write((line + "\n").encode("utf-8"))
+                process.process.stdin.flush()
+                deadline = time.monotonic() + APP_SECONDS
+                with row_condition:
+                    while received_rows < expected_rows and not callback_errors:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise HarnessError("REPL application did not render one typed result per command")
+                        row_condition.wait(timeout=remaining)
+                    if callback_errors:
+                        raise callback_errors[0]
+            process.process.stdin.close()
         process.process.wait(timeout=APP_SECONDS)
     except subprocess.TimeoutExpired as error:
         facts = process.stop()
@@ -335,6 +412,8 @@ def run_app(command: list[str], root: Path, environment: dict[str, str]) -> tupl
     require_stopped("REPL application", facts)
     if facts["output_overflowed"]:
         raise HarnessError("REPL application exceeded the retained output bound")
+    if callback_errors:
+        raise callback_errors[0]
     return int(facts["returncode"]), process.stdout.path, process.stderr.path
 
 
@@ -370,6 +449,23 @@ def load_scenario(name: str) -> dict[str, Any]:
         raise HarnessError(f"scenario {name!r} is invalid JSON") from error
     if not isinstance(value, dict) or value.get("id") != name:
         raise HarnessError(f"scenario {name!r} did not have its exact id")
+    base_name = value.get("bounded_gap_control_of")
+    if base_name is not None:
+        if base_name != "full-nip29-contract":
+            raise HarnessError("bounded gap control named an unsupported base scenario")
+        base = load_scenario(base_name)
+        result = json.loads(json.dumps(base))
+        result["id"] = name
+        result["bounded_gap_control_of"] = base_name
+        final_assertion = result["stages"][-1]["assertions"][0]
+        if final_assertion.get("event", {}).get("kind") != 9008:
+            raise HarnessError("bounded gap control base omitted exact kind-9008 assertion")
+        result["stages"][-1]["assertions"][0] = {
+            "filter": final_assertion["filter"],
+            "present": False,
+            "relay": "group",
+        }
+        return result
     return value
 
 
@@ -385,6 +481,28 @@ def validate_executable_scenario(scenario: dict[str, Any]) -> tuple[str, ...]:
     if expected_exit not in {"zero", "nonzero"}:
         raise HarnessError("executable scenario app_exit must be 'zero' or 'nonzero'")
     assertions = scenario.get("assertions")
+    stages = scenario.get("stages")
+    if assertions is not None and stages is not None:
+        raise HarnessError("executable scenario may use assertions or stages, not both")
+    if stages is not None:
+        if not isinstance(stages, list) or not stages:
+            raise HarnessError("executable scenario requires nonempty bounded assertion stages")
+        previous_line = 0
+        flattened: list[Any] = []
+        for stage_number, stage in enumerate(stages, start=1):
+            if not isinstance(stage, dict):
+                raise HarnessError(f"scenario stage {stage_number} was not an object")
+            after_line = stage.get("after_line")
+            if not isinstance(after_line, int) or not 0 < after_line <= MAX_JSONL_ROWS:
+                raise HarnessError(f"scenario stage {stage_number} after_line was outside JSONL bounds")
+            if after_line <= previous_line:
+                raise HarnessError("scenario stages must have strictly increasing after_line values")
+            previous_line = after_line
+            staged_assertions = stage.get("assertions")
+            if not isinstance(staged_assertions, list) or not staged_assertions:
+                raise HarnessError(f"scenario stage {stage_number} requires concrete assertions")
+            flattened.extend(staged_assertions)
+        assertions = flattened
     if not isinstance(assertions, list) or not assertions:
         raise HarnessError("executable scenario requires at least one concrete assertion")
     if len(assertions) > MAX_ASSERTIONS:
@@ -406,6 +524,10 @@ def validate_executable_scenario(scenario: dict[str, Any]) -> tuple[str, ...]:
         if filter_bytes > MAX_FILTER_BYTES:
             raise HarnessError(f"scenario assertion {number} filter exceeded {MAX_FILTER_BYTES} bytes")
         if assertion["present"]:
+            if assertion.get("collection") == "relay-state":
+                if assertion.get("required_kinds") != [39000, 39001, 39002, 39003]:
+                    raise HarnessError(f"scenario assertion {number} has invalid relay-state kinds")
+                continue
             event = assertion.get("event")
             if not isinstance(event, dict) or not {"id", "pubkey", "kind", "content", "tags"}.issubset(event):
                 raise HarnessError(
@@ -467,7 +589,8 @@ def inspect_assertions(
     rows: list[dict[str, Any]],
     context: dict[str, Any],
     artifacts: Path,
-) -> None:
+    assertion_offset: int = 0,
+) -> dict[str, Any]:
     captures = result_captures(rows, scenario.get("captures", {}))
     context = {**context, **captures}
     for number, assertion in enumerate(scenario.get("assertions", []), start=1):
@@ -491,7 +614,7 @@ def inspect_assertions(
             )
         inspection = inspect_until_eose(
             relays[relay_name].url,
-            f"assert-{number}",
+            f"assert-{assertion_offset + number}",
             event_filter,
             INSPECTION_SECONDS,
         )
@@ -502,9 +625,26 @@ def inspect_assertions(
         ) + "\n"
         if len(rendered.encode("utf-8")) > MAX_ARTIFACT_FILE_BYTES:
             raise HarnessError(f"inspection {number} exceeded the retained file byte bound")
-        (inspection_path / f"{number:02d}.json").write_text(rendered, encoding="utf-8")
+        (inspection_path / f"{assertion_offset + number:02d}.json").write_text(rendered, encoding="utf-8")
         expected_present = bool(assertion.get("present", True))
         if expected_present:
+            if assertion.get("collection") == "relay-state":
+                required_kinds = assertion["required_kinds"]
+                if len(inspection.events) != len(required_kinds):
+                    raise HarnessError(f"assertion {number} expected one record for each relay state kind")
+                kinds = [event.get("kind") for event in inspection.events]
+                if sorted(kinds) != required_kinds:
+                    raise HarnessError(f"assertion {number} did not return exactly the required relay state kinds")
+                authors = {event.get("pubkey") for event in inspection.events}
+                if len(authors) != 1 or not all(isinstance(author, str) for author in authors):
+                    raise HarnessError(f"assertion {number} state records did not share one relay author")
+                app_authors = {context.get("alice", {}).get("author"), context.get("bob", {}).get("author")}
+                if authors & app_authors:
+                    raise HarnessError(f"assertion {number} state records used an application author")
+                for event in inspection.events:
+                    if ["d", context["group_id"]] not in event.get("tags", []):
+                        raise HarnessError(f"assertion {number} state record omitted the exact group tag")
+                continue
             if len(inspection.events) != 1:
                 raise HarnessError(f"assertion {number} expected one event, found {len(inspection.events)}")
             expected = resolve(assertion.get("event", {}), context)
@@ -513,6 +653,7 @@ def inspect_assertions(
             assert_event(inspection.events[0], expected)
         elif inspection.events:
             raise HarnessError(f"assertion {number} expected no unauthorized effect, found {len(inspection.events)} events")
+    return context
 
 
 def require_stopped(label: str, facts: dict[str, Any]) -> None:
@@ -547,10 +688,12 @@ def cleanup_before_retention(scratch: Path, artifacts: Path, sentinels: tuple[st
         raise scan_error
 
 
-def command_for(arguments: argparse.Namespace, commands: Path) -> list[str]:
+def command_for(arguments: argparse.Namespace, commands: Path, streamed: bool = False) -> list[str]:
     if arguments.app_command:
+        if streamed:
+            raise HarnessError("staged scenarios require the ordinary REPL command")
         return [part.format(commands=str(commands)) for part in arguments.app_command]
-    return [
+    command = [
         "cargo",
         "run",
         "--quiet",
@@ -558,10 +701,11 @@ def command_for(arguments: argparse.Namespace, commands: Path) -> list[str]:
         "--manifest-path",
         "examples/simple-groups/Cargo.toml",
         "--",
-        "--script",
-        str(commands),
         "--jsonl",
     ]
+    if not streamed:
+        command[command.index("--jsonl"):command.index("--jsonl")] = ["--script", str(commands)]
+    return command
 
 
 def require_binary(value: str, label: str) -> Path:
@@ -700,7 +844,38 @@ def run(arguments: argparse.Namespace) -> int:
             commands,
             {"GROUP_RELAY": group.url, "STATE_RELAY": state.url, "GROUP_ID": arguments.group_id},
         )
-        status, stdout, stderr = run_app(command_for(arguments, commands), arguments.artifacts, environment)
+        stage_context: dict[str, Any] = {"group_id": arguments.group_id, "group_relay": group.url}
+        stages = scenario.get("stages", [])
+        stage_index = 0
+        assertion_offset = 0
+        streamed_rows: list[dict[str, Any]] = []
+
+        def inspect_stage(row: dict[str, Any], process: subprocess.Popen[bytes]) -> None:
+            nonlocal assertion_offset, stage_index, stage_context
+            streamed_rows.append(row)
+            if stage_index >= len(stages):
+                return
+            stage = stages[stage_index]
+            if len(streamed_rows) != stage["after_line"]:
+                return
+            stage_context = inspect_assertions(
+                stage,
+                {relay.label: relay for relay in relays},
+                streamed_rows,
+                stage_context,
+                arguments.artifacts,
+                assertion_offset,
+            )
+            assertion_offset += len(stage["assertions"])
+            stage_index += 1
+
+        status, stdout, stderr = run_app(
+            command_for(arguments, commands, streamed=bool(stages)),
+            arguments.artifacts,
+            environment,
+            inspect_stage if stages else None,
+            commands.read_text(encoding="utf-8").splitlines() if stages else None,
+        )
         expected_exit = scenario.get("app_exit", "zero")
         if (expected_exit == "zero" and status != 0) or (expected_exit == "nonzero" and status == 0):
             raise HarnessError(f"application exit {status} did not satisfy {expected_exit!r}")
@@ -709,14 +884,31 @@ def run(arguments: argparse.Namespace) -> int:
             "".join(json_line(row) for row in rows), encoding="utf-8"
         )
         result_rows = len(rows)
+        if stages:
+            captures = {key: value for key, value in stage_context.items() if key not in {"group_id", "group_relay"}}
+            rendered_captures = json.dumps(
+                {"captures": captures, "schema": "fava-simple-groups-live-captures-v1"},
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            ) + "\n"
+            if len(rendered_captures.encode("utf-8")) > MAX_ARTIFACT_FILE_BYTES:
+                raise HarnessError("application captures exceeded the retained file byte bound")
+            (arguments.artifacts / "app-captures.json").write_text(rendered_captures, encoding="utf-8")
         log.record("application-finished", exit=status, result_rows=result_rows)
-        inspect_assertions(
-            scenario,
-            {relay.label: relay for relay in relays},
-            rows,
-            {"group_id": arguments.group_id},
-            arguments.artifacts,
-        )
+        if stages:
+            if stage_index != len(stages):
+                raise HarnessError("application ended before every declared assertion stage")
+            if rows != streamed_rows:
+                raise HarnessError("streamed REPL evidence differed from retained JSONL")
+        else:
+            inspect_assertions(
+                scenario,
+                {relay.label: relay for relay in relays},
+                rows,
+                {"group_id": arguments.group_id},
+                arguments.artifacts,
+            )
     except BaseException as error:
         run_error = error
     finally:

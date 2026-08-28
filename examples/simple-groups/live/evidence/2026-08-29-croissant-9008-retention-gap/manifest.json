@@ -1,0 +1,27 @@
+{
+  "artifact_sha256": {
+    "app-captures.json": "857fe053e4c26ee7453a241a98454cf29fb289dc99054437bdec6003227f8e9f",
+    "inspections/01.json": "06b87f18914f6afe89a18f370b4e53e81f9fd03dca488085ca62255de6c8967d",
+    "inspections/02.json": "ccaf06b37592dc49b5794bf2a556fa4c0387194d3778cbbaa18ad6233234759f",
+    "inspections/03.json": "b990d153d1a3cbe972d1139b63991396a823b9bd231ac211657fcfa537a2da2e",
+    "inspections/04.json": "6e5f75feb4775c503ff1b9fb7a61385156954320b2f55992f587a4c9960bcd97",
+    "inspections/05.json": "96086235923b4a66a84dd3969ebb1cef437570fd44ca6c38c339737286762810",
+    "inspections/06.json": "e0ff054b0de219f1c7955ad773bcf6a81354ed433ceef427258e4be08cd125bf",
+    "inspections/07.json": "3c6857b44df69370fe40e83290d202068915ceb7159b22fe37cde9e0525d15fe",
+    "inspections/08.json": "8b72a6ff20c2891ea393b8f81b3ee08a8245255749189d79d3549470b32a9e48",
+    "inspections/09.json": "732dd0dd2b7b7c04fb2fab177eaec015ea1ab4f48167038928126a1209bba5bb",
+    "inspections/10.json": "9242b2346b7413b969ded7b59e296c262324ff9434763c233f5f604323c2a8e3",
+    "inspections/11.json": "ff4d240e6cf4f1fb3dfcdf3a1245d0338479baf55da6b21137b90c8d3a0f3c7c",
+    "inspections/12.json": "b5387e41dbea080e14c85fac205230f446d720c50870e8d0708539592be07ba9",
+    "inspections/13.json": "7838d0d9a209103b85a92e0fe4a836dfa16179703bf49c1dc9e041118a8f9178",
+    "inspections/14.json": "9062b7f001cc389793ec37ec0b7ad2d089a1a613b6dd7c822aa589722f6f49f0",
+    "inspections/15.json": "09660eebedc1d904e49f11826a610baf1ed437a5ee8f457e46a9db79f73fbe53",
+    "inspections/16.json": "c0a76e854689caace4a78d3446a7f912198a1fdbf66e7498953c90c0cf3e27c0",
+    "inspections/17.json": "c2050f966ed33455f6757502f3358dc77128cdaa74c640bcde7b26a86e315b04",
+    "inspections/18.json": "caa1d9a4591912862a8ffb8a0ac94480e3147612647d42489e7e9e0d3d9dc322",
+    "result.json": "092573c106d187895acf8555147034af3eaddbf0eb53d6cbfd3ca9301a0ee0f4"
+  },
+  "recorded_on": "2026-08-29",
+  "scenario": "croissant-9008-retention-gap",
+  "schema": "fava-simple-groups-live-proof-evidence-v1"
+}

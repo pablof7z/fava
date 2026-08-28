@@ -30,6 +30,10 @@ tags, relay responses, and diagnostics text. An explicit event publish returns
 only its caller-supplied content, after protected-secret and result-size checks,
 so external input cannot turn a result into a secret-bearing transcript.
 
+Bounded `group events`, `group state`, and saved-list reads report
+`relay_eose: true` for their result-limited request while reporting
+`stored_events_complete: false`; a cap never claims full stored history.
+
 ## Shared shell grammar
 
 ```text

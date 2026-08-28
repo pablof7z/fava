@@ -1,18 +1,68 @@
 {
-  "blocked_by": "The current REPL has no command file for configuration, membership, saved-list edits, event deletion, or group deletion. Add that app-owned ordinary command file and result fields, then change only status and command_file here.",
   "id": "full-nip29-contract",
-  "required_facts": [
-    {"operation": "create", "relay": "group", "kind": 9007, "tags": [["h", "$group_id"]]},
-    {"operation": "configure", "relay": "group", "kind": 9002, "tags_include": ["h", "name", "about", "private", "closed", "supported_kinds"]},
-    {"operation": "add-member", "relay": "group", "kind": 9000, "tags_include": ["h", "p"]},
-    {"operation": "authorized-content", "relay": "group", "kind": 12345, "tags": [["h", "$group_id"]]},
-    {"operation": "rejected-content", "relay": "group", "kind": 12345, "tags": [["h", "$group_id"]], "present": false},
-    {"operation": "relay-state", "relay": "group", "kinds": [39000, 39001, 39002, 39003, 39004, 39005], "authors": "relay"},
-    {"operation": "save-list", "relay": "state", "kind": 10009, "author": "alice"},
-    {"operation": "delete-event", "relay": "group", "kind": 9005, "tags_include": ["h", "e"]},
-    {"operation": "deleted-event-absent", "relay": "group", "present": false},
-    {"operation": "delete-group", "relay": "group", "kind": 9008, "tags": [["h", "$group_id"]]},
-    {"operation": "deleted-group-state-absent", "relay": "group", "present": false}
-  ],
-  "status": "blocked"
+  "status": "executable",
+  "app_exit": "zero",
+  "command_file": "commands/full-nip29-contract.txt",
+  "stages": [
+    {
+      "after_line": 24,
+      "captures": {
+        "alice": {"kind": "group-created", "fields": {"kind": 9007}},
+        "bob": {"kind": "group-join-requested", "fields": {"kind": 9021}},
+        "metadata": {"kind": "group-edited", "fields": {"kind": 9002}},
+        "invite": {"kind": "group-invited", "fields": {"kind": 9009}},
+        "member_add": {"kind": "group-member-added", "fields": {"kind": 9000}},
+        "content": {"kind": "group-event-published", "fields": {"kind": 12345}},
+        "outsider": {"kind": "group-event-rejected", "fields": {"kind": 12345}},
+        "state_read": {"kind": "group-state", "fields": {"relay_eose": true, "stored_events_complete": false}},
+        "events_read": {"kind": "group-events", "fields": {"relay_eose": true, "stored_events_complete": false}}
+      },
+      "assertions": [
+        {"relay": "group", "present": true, "filter": {"ids": ["$alice.event_id"]}, "event": {"id": "$alice.event_id", "pubkey": "$alice.author", "kind": 9007, "content": "", "tags": [["h", "$group_id"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$metadata.event_id"]}, "event": {"id": "$metadata.event_id", "pubkey": "$metadata.author", "kind": 9002, "content": "", "tags": [["h", "$group_id"], ["name", "Fava E2E group"], ["about", "controlled reusable proof"], ["closed"], ["supported_kinds", "1", "1", "12345", "9009", "9000", "9005", "9021", "9022", "9001", "9008"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$invite.event_id"]}, "event": {"id": "$invite.event_id", "pubkey": "$invite.author", "kind": 9009, "content": "", "tags": [["h", "$group_id"], ["code", "reusable-code"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$member_add.event_id"]}, "event": {"id": "$member_add.event_id", "pubkey": "$member_add.author", "kind": 9000, "content": "", "tags": [["h", "$group_id"], ["p", "$bob.author", "member"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$content.event_id"]}, "event": {"id": "$content.event_id", "pubkey": "$content.author", "kind": 12345, "content": "arbitrary-kind content", "tags": [["h", "$group_id"]]}},
+        {"relay": "group", "present": false, "filter": {"ids": ["$outsider.event_id"]}},
+        {"relay": "group", "present": true, "collection": "relay-state", "required_kinds": [39000, 39001, 39002, 39003], "filter": {"#d": ["$group_id"], "kinds": [39000, 39001, 39002, 39003]}}
+      ]
+    },
+    {
+      "after_line": 28,
+      "captures": {"saved": {"kind": "saved-relay-added", "fields": {"kind": 10009}}},
+      "assertions": [
+        {"relay": "state", "present": true, "filter": {"ids": ["$saved.event_id"]}, "event": {"id": "$saved.event_id", "pubkey": "$saved.author", "kind": 10009, "content": "", "tags": [["group", "$group_id", "$group_relay", "Fava E2E group renamed"], ["r", "$group_relay"]]}},
+        {"relay": "group", "present": false, "filter": {"ids": ["$saved.event_id"]}}
+      ]
+    },
+    {
+      "after_line": 32,
+      "captures": {
+        "delete_event": {"kind": "group-event-deleted", "fields": {"kind": 9005}},
+        "join": {"kind": "group-join-requested", "fields": {"kind": 9021}},
+        "leave": {"kind": "group-left", "fields": {"kind": 9022}},
+        "remove": {"kind": "group-member-removed", "fields": {"kind": 9001}}
+      },
+      "assertions": [
+        {"relay": "group", "present": true, "filter": {"ids": ["$delete_event.event_id"]}, "event": {"id": "$delete_event.event_id", "pubkey": "$delete_event.author", "kind": 9005, "content": "", "tags": [["h", "$group_id"], ["e", "$content.event_id"]]}},
+        {"relay": "group", "present": false, "filter": {"ids": ["$content.event_id"]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$join.event_id"]}, "event": {"id": "$join.event_id", "pubkey": "$join.author", "kind": 9021, "content": "controlled join request", "tags": [["h", "$group_id"], ["code", "reusable-code"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$leave.event_id"]}, "event": {"id": "$leave.event_id", "pubkey": "$leave.author", "kind": 9022, "content": "", "tags": [["h", "$group_id"]]}},
+        {"relay": "group", "present": true, "filter": {"ids": ["$remove.event_id"]}, "event": {"id": "$remove.event_id", "pubkey": "$remove.author", "kind": 9001, "content": "", "tags": [["h", "$group_id"], ["p", "$bob.author"]]}}
+      ]
+    },
+    {
+      "after_line": 41,
+      "captures": {
+        "group_deleted": {"kind": "group-deleted", "fields": {"kind": 9008}},
+        "post_deleted": {"kind": "group-event-rejected", "fields": {"content": "post-deletion write", "kind": 12345}}
+      },
+      "assertions": [
+        {"relay": "group", "present": true, "filter": {"ids": ["$group_deleted.event_id"]}, "event": {"id": "$group_deleted.event_id", "pubkey": "$group_deleted.author", "kind": 9008, "content": "", "tags": [["h", "$group_id"]]}},
+        {"relay": "group", "present": false, "filter": {"ids": ["$post_deleted.event_id"]}},
+        {"relay": "group", "present": false, "filter": {"#d": ["$group_id"], "kinds": [39000, 39001, 39002, 39003]}},
+        {"relay": "group", "present": false, "filter": {"#h": ["$group_id"], "kinds": [12345]}}
+      ]
+    }
+  ]
 }

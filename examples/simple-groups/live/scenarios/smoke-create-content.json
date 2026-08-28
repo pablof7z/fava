@@ -27,7 +27,7 @@
     }
   ],
   "captures": {
-    "content": {"fields": {"kind": "12345"}, "kind": "group-event-published"},
+    "content": {"fields": {"kind": 12345}, "kind": "group-event-published"},
     "create": {"fields": {}, "kind": "group-created"}
   },
   "command_file": "commands/smoke-create-content.txt",

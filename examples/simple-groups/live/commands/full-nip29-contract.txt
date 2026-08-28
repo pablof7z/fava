@@ -1,14 +1,14 @@
+relay add group {{GROUP_RELAY}}
+relay add state {{STATE_RELAY}}
 account new alice
 capture alice-key public_key
 account new bob
 capture bob-key public_key
-relay add group ws://127.0.0.1:18101
-relay add state ws://127.0.0.1:18102
 account switch alice
-group create fava-e2e-group group
+group create {{GROUP_ID}} group
 group edit --name "Fava E2E group" --about "controlled reusable proof" --public --closed --supported-kinds 1 1 12345 9009 9000 9005 9021 9022 9001 9008
 account switch bob
-group open fava-e2e-group group
+group open {{GROUP_ID}} group
 group event expect-rejection --kind 12345 "outsider write"
 capture outsider-event event_id
 account switch alice
@@ -31,7 +31,7 @@ group member remove ${bob-key}
 saved-list relay remove state group
 saved-list group remove state
 group delete
-group open fava-e2e-group group
+group open {{GROUP_ID}} group
 group event expect-rejection --kind 12345 "post-deletion write"
 capture post-deletion-event event_id
 receipt list

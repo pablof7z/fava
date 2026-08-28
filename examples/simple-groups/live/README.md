@@ -61,15 +61,11 @@ python3 examples/simple-groups/live/harness.py run \
   --artifacts "$artifacts"
 ```
 
-`scenarios/full-nip29-contract.json` is deliberately blocked, rather than a
-fake proof. It records the exact future evidence required for metadata
-configuration, member admission and rejection, relay-authored state,
-kind-10009 saved lists on the ordinary relay, event/group deletion, and all
-post-deletion absence checks. The current REPL has no commands for those
-operations. When it does, add its ordinary command file under `commands/` and
-replace `required_facts` with concrete assertions before marking it executable;
-the harness already accepts ordinary command files and does not acquire a
-command grammar.
+`full-nip29-contract` streams the ordinary full REPL command file one line at a
+time, pausing only between commands for four bounded direct `REQ`/`EOSE`
+checkpoints. It proves kinds 39000–39003 only, never 39004/39005. The final
+positive kind-9008 assertion remains a Croissant fixture gap: the acknowledged
+deletion id returns an empty direct `REQ`/`EOSE` after group removal.
 
 ## Canonical real-relay evidence
 
@@ -80,6 +76,11 @@ SHA-256 values and ordinary-relay version; `app-results.jsonl` is REPL output;
 hashes every retained record. It intentionally excludes run logs, relay logs,
 relay databases, commands, and TMPDIR. Re-run the command above when either
 binary changes; this bundle identifies a historical run, not a fresh proof.
+
+[`evidence/2026-08-29-croissant-9008-retention-gap/`](evidence/2026-08-29-croissant-9008-retention-gap/)
+is the compact full-flow negative control: typed captures, 18 bounded direct
+inspections, and a manifest only. Inspection 15 is the empty exact kind-9008
+id query; inspections 16–18 prove the required post-delete absences.
 
 Run the harness contract tests:
 

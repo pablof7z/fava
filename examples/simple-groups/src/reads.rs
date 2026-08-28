@@ -17,6 +17,7 @@ use crate::support::OPERATION_TIMEOUT;
 const EVENTS_USAGE: &str = "group events [limit]";
 const STATE_USAGE: &str = "group state [limit]";
 const PRESENTATION_LIST_LIMIT: usize = 16;
+const LIMITED_REQUEST_EOSE: &str = "LimitedRequest";
 
 impl App {
     pub(crate) fn routes_command<R, W>(
@@ -68,7 +69,7 @@ impl App {
         let query = group
             .events(Query::events().limit(limit).map_err(domain_error)?)
             .map_err(domain_error)?;
-        let snapshot = self.read_complete(query)?;
+        let snapshot = self.read_limited_eose(query)?;
         let kinds = kind_counts(snapshot.as_ref());
         CommandResult::success("group-events", "bounded group event snapshot")
             .with_field("group", group.id())?
@@ -87,7 +88,8 @@ impl App {
                     .map(|event| event.id().to_hex())
                     .unwrap_or_default(),
             )?
-            .with_field("stored_events_complete", true)
+            .with_field("relay_eose", true)?
+            .with_field("stored_events_complete", false)
     }
 
     pub(crate) fn state_command<R, W>(
@@ -112,7 +114,7 @@ impl App {
             .map_err(domain_error)?
             .limit(limit)
             .map_err(domain_error)?;
-        let snapshot = self.read_complete(query)?;
+        let snapshot = self.read_limited_eose(query)?;
         let mut decoded = BTreeMap::new();
         let mut failures = 0usize;
         for event in snapshot.events.iter() {
@@ -131,22 +133,27 @@ impl App {
                 decoded.len().saturating_sub(PRESENTATION_LIST_LIMIT),
             )?
             .with_field("decode_failures", failures)?
-            .with_field("stored_events_complete", true)
+            .with_field("relay_eose", true)?
+            .with_field("stored_events_complete", false)
     }
 
-    pub(crate) fn read_complete(&self, query: Query) -> Result<Arc<QuerySnapshot>, ShellError> {
+    pub(crate) fn read_limited_eose(&self, query: Query) -> Result<Arc<QuerySnapshot>, ShellError> {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut observation = self.fava.observe(query).await.map_err(domain_error)?;
                 let snapshot = observation
                     .wait_until(OPERATION_TIMEOUT, |snapshot| {
-                        snapshot.evidence.all_relays_stored_events_complete()
+                        snapshot.evidence.relays.iter().all(|relay| {
+                            relay.shortfall.as_ref().is_some_and(|shortfall| {
+                                shortfall.detail.as_str() == LIMITED_REQUEST_EOSE
+                            })
+                        })
                     })
                     .await
                     .map_err(domain_error)?
                     .ok_or_else(|| {
                         ShellError::Domain(format!(
-                            "query did not reach relay EOSE within {OPERATION_TIMEOUT:?}"
+                            "bounded query did not reach relay EOSE within {OPERATION_TIMEOUT:?}"
                         ))
                     })?;
                 observation.close();
