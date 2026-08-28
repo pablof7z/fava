@@ -250,6 +250,9 @@ fn verify_req(
 ) -> CanaryResult<()> {
     let subscription = payload.get(1).and_then(Value::as_str).unwrap_or_default();
     let filter = payload.get(2).and_then(Value::as_object);
+    let state_event_kinds = SimpleGroupStateEventKind::ALL
+        .map(Kind::from)
+        .map(|kind| u64::from(kind.as_u16()));
     let query_kind = if filter
         .is_some_and(|filter| exact_filter(filter, "#h", claims.simple_group, &[9], Some(16)))
     {
@@ -264,7 +267,7 @@ fn verify_req(
             filter,
             "#d",
             claims.simple_group,
-            &[39000, 39001, 39002, 39003, 39004, 39005],
+            &state_event_kinds,
             None,
         )
     }) {
@@ -448,9 +451,9 @@ fn verify_response(
                 ));
             }
             if event.pubkey.to_hex() == claims.relay_signer {
-                match event.kind.as_u16() {
-                    39000 => select_current(metadata_winner, event),
-                    39001 => select_current(admin_winner, event),
+                match SimpleGroupStateEventKind::try_from(event.kind) {
+                    Ok(SimpleGroupStateEventKind::Metadata) => select_current(metadata_winner, event),
+                    Ok(SimpleGroupStateEventKind::Admins) => select_current(admin_winner, event),
                     _ => {}
                 }
             }

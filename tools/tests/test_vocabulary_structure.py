@@ -704,8 +704,8 @@ class HumanReviewInventoryTest(unittest.TestCase):
         self.assertEqual(coverage["unbound"], [])
         self.assertEqual(coverage["multiply_bound"], [])
         self.assertEqual(coverage["collisions"], [])
-        self.assertEqual(coverage["public_items"], 122)
-        self.assertEqual(coverage["bound_items"], 122)
+        self.assertEqual(coverage["public_items"], 124)
+        self.assertEqual(coverage["bound_items"], 124)
 
     def test_simple_groups_free_functions_and_module_have_own_terms(self) -> None:
         root = Path(__file__).parents[2]

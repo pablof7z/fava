@@ -3,7 +3,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use nostr::event::Event;
+use fava_simple_groups::SimpleGroupStateEventKind;
+use nostr::event::{Event, Kind};
 use serde_json::{Map, Value, json};
 
 use crate::croissant_simple_groups_evidence_support::EvidenceSnapshot;

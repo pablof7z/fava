@@ -1,7 +1,7 @@
 {
   "cargo_public_api": "0.52.0",
   "format": 2,
-  "inputs_sha256": "4a87b0df9fb8a802b1aadaa4a0b371d44401210fc040eff899773a15137a8802",
+  "inputs_sha256": "7fcb9bc3eccee19988dadb4331c6ea413214497d7cd69e5375415a1695a2f9e2",
   "rustdoc_toolchain": "nightly-2026-07-07",
   "terms": [
     {
@@ -19396,6 +19396,18 @@
           "signature": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self"
         },
         {
+          "description": "Converts only the six exact kinds 39000 through 39005; every other generic kind is returned unchanged.",
+          "kind": "Constructor",
+          "path": "<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::try_from",
+          "signature": "pub fn fava_simple_groups::SimpleGroupStateEventKind::try_from(nostr::event::kind::Kind) -> core::result::Result<Self, Self::Error>"
+        },
+        {
+          "description": "Returns the rejected generic kind unchanged, keeping the closed-family refusal attributable without a new error type.",
+          "kind": "Type alias",
+          "path": "<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::Error",
+          "signature": "pub type fava_simple_groups::SimpleGroupStateEventKind::Error = nostr::event::kind::Kind"
+        },
+        {
           "description": "Enumerates all six relay-generated simple-group state-event kinds for callers that intentionally select the complete state family.",
           "kind": "Constant",
           "path": "fava_simple_groups::SimpleGroupStateEventKind::ALL",
@@ -19470,6 +19482,16 @@
             "declaration": "pub fn nostr::event::kind::Kind::from(fava_simple_groups::SimpleGroupStateEventKind) -> Self",
             "implementation": "impl core::convert::From<fava_simple_groups::SimpleGroupStateEventKind> for nostr::event::kind::Kind",
             "path": "<nostr::event::kind::Kind as core::convert::From<fava_simple_groups::SimpleGroupStateEventKind>>::from"
+          },
+          {
+            "declaration": "pub type fava_simple_groups::SimpleGroupStateEventKind::Error = nostr::event::kind::Kind",
+            "implementation": "impl core::convert::TryFrom<nostr::event::kind::Kind> for fava_simple_groups::SimpleGroupStateEventKind",
+            "path": "<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::Error"
+          },
+          {
+            "declaration": "pub fn fava_simple_groups::SimpleGroupStateEventKind::try_from(nostr::event::kind::Kind) -> core::result::Result<Self, Self::Error>",
+            "implementation": "impl core::convert::TryFrom<nostr::event::kind::Kind> for fava_simple_groups::SimpleGroupStateEventKind",
+            "path": "<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::try_from"
           },
           {
             "declaration": "pub const fava_simple_groups::SimpleGroupStateEventKind::ALL: [Self; 6]",

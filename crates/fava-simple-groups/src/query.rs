@@ -49,6 +49,25 @@ impl From<SimpleGroupStateEventKind> for Kind {
     }
 }
 
+impl TryFrom<Kind> for SimpleGroupStateEventKind {
+    type Error = Kind;
+
+    /// Convert only the six exact NIP-29 state-event kinds to their closed
+    /// selectors. Returns the unchanged generic kind when it is outside that
+    /// family.
+    fn try_from(value: Kind) -> Result<Self, Self::Error> {
+        match value.as_u16() {
+            39_000 => Ok(Self::Metadata),
+            39_001 => Ok(Self::Admins),
+            39_002 => Ok(Self::Members),
+            39_003 => Ok(Self::Roles),
+            39_004 => Ok(Self::LivekitParticipants),
+            39_005 => Ok(Self::Pins),
+            _ => Err(value),
+        }
+    }
+}
+
 /// Build the ordinary kind-10009 Simple Group List query for exact authors.
 ///
 /// # Examples

@@ -217,7 +217,7 @@ fn compiler_inventory_is_grouped_described_evidenced_and_catalogued() {
             .expect("metadata item");
         assert!(identities.insert(item), "duplicate API identity: {item}");
         assert!(
-            catalog.contains(&format!("\"item\": \"{item}\"")),
+            CATALOG.contains(&format!("\"item\": \"{item}\"")),
             "catalog disagrees for {item}"
         );
         assert!(catalog.contains("\"purpose\": ") && catalog.contains("\"evidence\": "));

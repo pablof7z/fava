@@ -1114,11 +1114,13 @@ Example coverage: [KIND-1](#kind-1).
 | --- | --- |
 | **`ALL`**<br><sub>Constant</sub><!-- api-item {"kind":"Constant","item":"fava_simple_groups::SimpleGroupStateEventKind::ALL","signature":"pub const fava_simple_groups::SimpleGroupStateEventKind::ALL: [Self; 6]","evidence":"crates/fava-simple-groups/src/query.rs; NIP-29 kinds 39000-39005"} --> | Enumerates all six relay-generated simple-group state-event kinds for callers that intentionally select the complete state family. |
 | **`Admins`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::Admins","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::Admins","evidence":"NIP-29 kind 39001","example":"KIND-1"} --> | Admins selects kind 39001 group administrators and their role labels.<br><br>Example: [KIND-1](#kind-1). |
+| **`core::convert::TryFrom<nostr::event::kind::Kind>::Error`**<br><sub>Type alias</sub><!-- api-item {"kind":"Type alias","item":"<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::Error","signature":"pub type fava_simple_groups::SimpleGroupStateEventKind::Error = nostr::event::kind::Kind","evidence":"docs/issues/0048-reverse-state-kind.md; crates/fava-simple-groups/src/query.rs; NIP-29 state kinds 39000-39005"} --> | Returns the rejected generic kind unchanged, keeping the closed-family refusal attributable without a new error type. |
 | **`LivekitParticipants`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::LivekitParticipants","evidence":"NIP-29 kind 39004 LiveKit participants","example":"KIND-1"} --> | `LivekitParticipants` selects kind 39004 current `LiveKit` participation, not membership.<br><br>Example: [KIND-1](#kind-1). |
 | **`Members`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::Members","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::Members","evidence":"NIP-29 kind 39002","example":"KIND-1"} --> | Members selects kind 39002 positive member entries.<br><br>Example: [KIND-1](#kind-1). |
 | **`Metadata`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::Metadata","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::Metadata","evidence":"NIP-29 kind 39000","example":"KIND-1"} --> | Metadata selects kind 39000 group metadata.<br><br>Example: [KIND-1](#kind-1). |
 | **`Pins`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::Pins","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::Pins","evidence":"NIP-29 kind 39005","example":"KIND-1"} --> | Pins selects kind 39005 ordered group pins.<br><br>Example: [KIND-1](#kind-1). |
 | **`Roles`**<br><sub>Enum variant</sub><!-- api-item {"kind":"Enum variant","item":"fava_simple_groups::SimpleGroupStateEventKind::Roles","signature":"pub fava_simple_groups::SimpleGroupStateEventKind::Roles","evidence":"NIP-29 kind 39003","example":"KIND-1"} --> | Roles selects kind 39003 role definitions.<br><br>Example: [KIND-1](#kind-1). |
+| **`core::convert::TryFrom<nostr::event::kind::Kind>::try_from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_simple_groups::SimpleGroupStateEventKind as core::convert::TryFrom<nostr::event::kind::Kind>>::try_from","signature":"pub fn fava_simple_groups::SimpleGroupStateEventKind::try_from(nostr::event::kind::Kind) -> core::result::Result<Self, Self::Error>","evidence":"docs/issues/0048-reverse-state-kind.md; crates/fava-simple-groups/src/query.rs; NIP-29 state kinds 39000-39005"} --> | Converts only the six exact kinds 39000 through 39005; every other generic kind is returned unchanged. |
 
 <a id="kind-1"></a>
 #### KIND-1 — concrete coverage
@@ -1170,6 +1172,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         all.selection().kinds,
         Some((39_000..=39_005).map(Kind::from_u16).collect()),
     );
+    assert_eq!(
+        SimpleGroupStateEventKind::try_from(Kind::from_u16(39_000)),
+        Ok(SimpleGroupStateEventKind::Metadata),
+    );
+    let outside = Kind::from_u16(39_006);
+    assert_eq!(SimpleGroupStateEventKind::try_from(outside), Err(outside));
     let _: Query = all;
     Ok(())
 }
