@@ -177,7 +177,13 @@ pub fn edit_metadata(
 
 /// Build a kind-9009 invite event for `group`.
 ///
-/// Emits `h`, one `p` tag for every invitee, and a `relay` tag.
+/// Emits `h`, one optional `p` tag for every invitee, and a `relay` tag.
+///
+/// NIP-29's kind 9009 requires a `code` tag while invitee `p` tags are
+/// optional, so an empty `invitees` slice is valid. This constructor does not
+/// yet accept the required code: callers must reopen this unsigned body through
+/// [`EventBuilder::from`] and append the exact `code` tag before publication.
+/// That temporary composition gap is a caller-visible DX limitation.
 ///
 /// # Examples
 ///
@@ -196,7 +202,8 @@ pub fn edit_metadata(
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`EventBuildError`] when the completed event exceeds a universal
+/// `fava-write` construction bound.
 pub fn invite(
     author: PublicKey,
     group: &SimpleGroup,
@@ -264,7 +271,8 @@ pub fn join_request(
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`EventBuildError`] when the completed event exceeds a universal
+/// `fava-write` construction bound.
 pub fn put_user(
     author: PublicKey,
     group: &SimpleGroup,
@@ -303,7 +311,8 @@ pub fn put_user(
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`EventBuildError`] when the completed event exceeds a universal
+/// `fava-write` construction bound.
 pub fn remove_user(
     author: PublicKey,
     group: &SimpleGroup,
@@ -473,6 +482,15 @@ mod tests {
         })
     }
 
+    fn p_tags(event: &UnsignedEvent) -> Vec<Vec<String>> {
+        event
+            .tags
+            .iter()
+            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
+            .map(|tag| tag.as_slice().to_vec())
+            .collect()
+    }
+
     #[test]
     fn create_group_kind_and_h() {
         let group = group();
@@ -526,29 +544,27 @@ mod tests {
     }
 
     #[test]
-    fn invite_kind_and_tags() {
+    fn invite_preserves_optional_target_cardinality() {
         let group = group();
         let invitees = [Keys::generate().public_key(), Keys::generate().public_key()];
         let relay = RelayUrl::parse("wss://invite.example").unwrap();
         let event = invite(author(), &group, &invitees, &relay).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_INVITE);
         assert!(h_tag(&event, "cats"));
-        let p_tags = event
-            .tags
-            .iter()
-            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .collect::<Vec<_>>();
-        assert_eq!(p_tags.len(), invitees.len());
-        for (tag, invitee) in p_tags.into_iter().zip(invitees) {
-            assert_eq!(
-                tag.as_slice().get(1).map(String::as_str),
-                Some(invitee.to_hex().as_str())
-            );
-        }
+        assert_eq!(
+            p_tags(&event),
+            invitees
+                .iter()
+                .map(|invitee| vec!["p".to_owned(), invitee.to_hex()])
+                .collect::<Vec<_>>()
+        );
         assert_eq!(
             tag_value(&event, "relay", 1).as_deref(),
             Some(relay.as_str())
         );
+
+        let empty = invite(author(), &group, &[], &relay).unwrap();
+        assert!(p_tags(&empty).is_empty());
     }
 
     #[test]
@@ -561,27 +577,44 @@ mod tests {
     }
 
     #[test]
-    fn put_user_kind_and_roles() {
+    fn put_user_preserves_target_cardinality_and_common_roles() {
         let group = group();
-        let users = [Keys::generate().public_key(), Keys::generate().public_key()];
+        let first = Keys::generate().public_key();
+        let second = Keys::generate().public_key();
+        let users = [first, second, first];
         let event = put_user(author(), &group, &users, &["admin", "moderator"]).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
         assert!(h_tag(&event, "cats"));
-        let p_tags = event
-            .tags
-            .iter()
-            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .collect::<Vec<_>>();
-        assert_eq!(p_tags.len(), users.len());
-        for (tag, user) in p_tags.into_iter().zip(users) {
-            let values = tag.as_slice();
-            assert_eq!(
-                values.get(1).map(String::as_str),
-                Some(user.to_hex().as_str())
-            );
-            assert_eq!(values.get(2).map(String::as_str), Some("admin"));
-            assert_eq!(values.get(3).map(String::as_str), Some("moderator"));
-        }
+        assert_eq!(
+            p_tags(&event),
+            users
+                .iter()
+                .map(|user| {
+                    vec![
+                        "p".to_owned(),
+                        user.to_hex(),
+                        "admin".to_owned(),
+                        "moderator".to_owned(),
+                    ]
+                })
+                .collect::<Vec<_>>()
+        );
+        let empty = put_user(author(), &group, &[], &[]).unwrap();
+        assert!(h_tag(&empty, "cats"));
+        assert!(p_tags(&empty).is_empty());
+    }
+
+    #[test]
+    fn put_user_preserves_generic_event_build_refusals() {
+        let group = group();
+        let users = vec![Keys::generate().public_key(); 2_001];
+        assert!(matches!(
+            put_user(author(), &group, &users, &[]),
+            Err(EventBuildError::TooManyTags {
+                actual: 2_002,
+                maximum: 2_000,
+            })
+        ));
     }
 
     #[test]
@@ -599,24 +632,22 @@ mod tests {
     }
 
     #[test]
-    fn remove_user_kind_and_p_tags() {
+    fn remove_user_preserves_target_cardinality_and_encodes_empty() {
         let group = group();
         let users = [Keys::generate().public_key(), Keys::generate().public_key()];
         let event = remove_user(author(), &group, &users).unwrap();
         assert_eq!(event.kind.as_u16(), KIND_REMOVE_USER);
         assert!(h_tag(&event, "cats"));
-        let p_tags = event
-            .tags
-            .iter()
-            .filter(|tag| tag.as_slice().first().map(String::as_str) == Some("p"))
-            .collect::<Vec<_>>();
-        assert_eq!(p_tags.len(), users.len());
-        for (tag, user) in p_tags.into_iter().zip(users) {
-            assert_eq!(
-                tag.as_slice().get(1).map(String::as_str),
-                Some(user.to_hex().as_str())
-            );
-        }
+        assert_eq!(
+            p_tags(&event),
+            users
+                .iter()
+                .map(|user| vec!["p".to_owned(), user.to_hex()])
+                .collect::<Vec<_>>()
+        );
+        let empty = remove_user(author(), &group, &[]).unwrap();
+        assert!(h_tag(&empty, "cats"));
+        assert!(p_tags(&empty).is_empty());
     }
 
     #[test]

@@ -10,6 +10,7 @@
 //! Requires `nostr-rs-relay` on PATH or at `~/.cargo/bin/nostr-rs-relay`.
 //! Override with the `RELAY_BIN` env var.
 
+use std::fmt;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -183,13 +184,41 @@ async fn start_nip29_relay(dir: &Path) -> RelayProcess {
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+#[derive(Debug)]
+enum ReadbackError {
+    Timeout,
+    Closed,
+    WebSocket(String),
+    Protocol(String),
+    TooManyEvents { maximum: usize },
+}
+
+impl fmt::Display for ReadbackError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Timeout => formatter.write_str("relay readback timed out before matching EOSE"),
+            Self::Closed => formatter.write_str("relay closed before matching EOSE"),
+            Self::WebSocket(error) => {
+                write!(formatter, "relay readback WebSocket failure: {error}")
+            }
+            Self::Protocol(error) => write!(formatter, "relay readback protocol failure: {error}"),
+            Self::TooManyEvents { maximum } => {
+                write!(
+                    formatter,
+                    "relay readback exceeded its {maximum}-event bound"
+                )
+            }
+        }
+    }
+}
+
 async fn ws_connect(url: &str) -> Ws {
     let (ws, _) = connect_async(url).await.expect("ws connect");
     ws
 }
 
-/// Sign an [`UnsignedEvent`] and submit it. Returns `(ok, message)` from the relay OK frame.
-async fn submit(ws: &mut Ws, event: UnsignedEvent, keys: &Keys) -> (bool, String) {
+/// Sign an [`UnsignedEvent`] and submit it. Returns `(event id, ok, message)`.
+async fn submit_with_id(ws: &mut Ws, event: UnsignedEvent, keys: &Keys) -> (String, bool, String) {
     let signed = event.finalize(keys).expect("sign");
     let id = signed.id.to_hex();
     let msg = json!(["EVENT", signed]);
@@ -210,13 +239,24 @@ async fn submit(ws: &mut Ws, event: UnsignedEvent, keys: &Keys) -> (bool, String
         {
             let accepted = arr.get(2).and_then(Value::as_bool).unwrap_or(false);
             let message = arr.get(3).and_then(Value::as_str).unwrap_or("").to_owned();
-            return (accepted, message);
+            return (id, accepted, message);
         }
     }
 }
 
-/// Send REQ and collect events until EOSE.
-async fn req(ws: &mut Ws, sub_id: &str, filter: Value) -> Vec<Value> {
+/// Sign and submit when the acknowledgement is the only required observation.
+async fn submit(ws: &mut Ws, event: UnsignedEvent, keys: &Keys) -> (bool, String) {
+    let (_, accepted, message) = submit_with_id(ws, event, keys).await;
+    (accepted, message)
+}
+
+/// Send REQ and retain at most `maximum` matching events through its matching EOSE.
+async fn req(
+    ws: &mut Ws,
+    sub_id: &str,
+    filter: Value,
+    maximum: usize,
+) -> Result<Vec<Value>, ReadbackError> {
     ws.send(Message::Text(
         json!(["REQ", sub_id, filter]).to_string().into(),
     ))
@@ -228,25 +268,70 @@ async fn req(ws: &mut Ws, sub_id: &str, filter: Value) -> Vec<Value> {
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            break;
+            return Err(ReadbackError::Timeout);
         }
-        let Ok(Some(Ok(frame))) = timeout(remaining, ws.next()).await else {
-            break;
-        };
-        let text = frame.into_text().expect("text");
-        let value: Value = serde_json::from_str(&text).expect("json");
-        let arr = value.as_array().expect("array");
+        let frame = timeout(remaining, ws.next())
+            .await
+            .map_err(|_| ReadbackError::Timeout)?
+            .ok_or(ReadbackError::Closed)?
+            .map_err(|error| ReadbackError::WebSocket(error.to_string()))?;
+        let text = frame
+            .into_text()
+            .map_err(|error| ReadbackError::WebSocket(error.to_string()))?;
+        let value: Value = serde_json::from_str(&text)
+            .map_err(|error| ReadbackError::Protocol(error.to_string()))?;
+        let arr = value
+            .as_array()
+            .ok_or_else(|| ReadbackError::Protocol("frame is not an array".to_owned()))?;
         match arr.first().and_then(Value::as_str) {
             Some("EVENT") if arr.get(1).and_then(Value::as_str) == Some(sub_id) => {
-                if let Some(ev) = arr.get(2) {
-                    events.push(ev.clone());
+                let event = arr.get(2).ok_or_else(|| {
+                    ReadbackError::Protocol("EVENT frame omits its event body".to_owned())
+                })?;
+                if events.len() == maximum {
+                    return Err(ReadbackError::TooManyEvents { maximum });
                 }
+                events.push(event.clone());
             }
-            Some("EOSE") => break,
+            Some("EOSE") if arr.get(1).and_then(Value::as_str) == Some(sub_id) => {
+                return Ok(events);
+            }
             _ => {}
         }
     }
-    events
+}
+
+/// Read back exactly one event by id with a one-event relay retention bound.
+async fn readback_one(ws: &mut Ws, sub_id: &str, event_id: &str) -> Value {
+    let mut events = req(ws, sub_id, json!({ "ids": [event_id], "limit": 1 }), 1)
+        .await
+        .expect("readback reaches matching EOSE without timeout, closure, or websocket error");
+    assert_eq!(
+        events.len(),
+        1,
+        "relay did not retain exactly one submitted event"
+    );
+    events.pop().expect("one retained event")
+}
+
+fn tag_rows(event: &Value, name: &str) -> Vec<Vec<String>> {
+    event["tags"]
+        .as_array()
+        .expect("event tags array")
+        .iter()
+        .filter_map(Value::as_array)
+        .filter(|tag| tag.first().and_then(Value::as_str) == Some(name))
+        .map(|tag| {
+            tag.iter()
+                .map(Value::as_str)
+                .map(|value| value.expect("string tag value").to_owned())
+                .collect()
+        })
+        .collect()
+}
+
+fn p_rows(event: &Value) -> Vec<Vec<String>> {
+    tag_rows(event, "p")
 }
 
 fn append_tag(event: UnsignedEvent, tag: Tag) -> UnsignedEvent {
@@ -398,8 +483,10 @@ async fn gate2_put_user_and_39001_observation() {
         &mut ws,
         "sub-39001",
         json!({ "kinds": [39001], "#d": ["phase-b-gate2"] }),
+        1,
     )
-    .await;
+    .await
+    .expect("admin readback reaches matching EOSE");
     assert!(
         !events.is_empty(),
         "no kind-39001 event returned from relay"
@@ -467,6 +554,8 @@ async fn gate3_wrong_authority_relay_rejects() {
 // ── Gate 4: all nine constructors produce relay-accepted events ───────────────
 
 /// Smoke: every typed constructor builds a valid event that a permissive relay accepts.
+/// Management constructors use several targets here, so the real wire path
+/// exercises multiple exact `p` rows in one event body.
 #[tokio::test]
 #[ignore = "requires nostr-rs-relay binary; run with -- --ignored"]
 async fn gate4_all_constructors_accepted() {
@@ -476,15 +565,31 @@ async fn gate4_all_constructors_accepted() {
 
     let admin_keys = Keys::generate();
     let user_keys = Keys::generate();
+    let other_user_key = Keys::generate();
+    let user_targets = [user_keys.public_key(), other_user_key.public_key()];
     let r = RelayUrl::parse(&relay.url).unwrap();
     let group = SimpleGroup::new("phase-b-gate4", vec![r.clone()]).unwrap();
     let target_id = EventId::from_byte_array([0u8; 32]);
 
-    let cases: Vec<(&str, UnsignedEvent, &Keys)> = vec![
+    let target_p_rows = user_targets
+        .iter()
+        .map(|target| vec!["p".to_owned(), target.to_hex()])
+        .collect::<Vec<_>>();
+    let put_user_p_rows = user_targets
+        .iter()
+        .map(|target| vec!["p".to_owned(), target.to_hex(), "member".to_owned()])
+        .collect::<Vec<_>>();
+    let invite =
+        EventBuilder::from(invite(admin_keys.public_key(), &group, &user_targets, &r).unwrap())
+            .tag(Tag::parse(["code", "gate4-required-invite-code"]).unwrap())
+            .build()
+            .unwrap();
+    let cases: Vec<(&str, UnsignedEvent, &Keys, Option<Vec<Vec<String>>>)> = vec![
         (
             "create_group",
             create_group(admin_keys.public_key(), &group).unwrap(),
             &admin_keys,
+            None,
         ),
         (
             "edit_metadata",
@@ -500,60 +605,69 @@ async fn gate4_all_constructors_accepted() {
             )
             .unwrap(),
             &admin_keys,
+            None,
         ),
-        (
-            "invite",
-            invite(
-                admin_keys.public_key(),
-                &group,
-                &[user_keys.public_key()],
-                &r,
-            )
-            .unwrap(),
-            &admin_keys,
-        ),
+        ("invite", invite, &admin_keys, Some(target_p_rows.clone())),
         (
             "join_request",
             join_request(user_keys.public_key(), &group).unwrap(),
             &user_keys,
+            None,
         ),
         (
             "put_user",
-            put_user(
-                admin_keys.public_key(),
-                &group,
-                &[user_keys.public_key()],
-                &["member"],
-            )
-            .unwrap(),
+            put_user(admin_keys.public_key(), &group, &user_targets, &["member"]).unwrap(),
             &admin_keys,
+            Some(put_user_p_rows),
         ),
         (
             "remove_user",
-            remove_user(admin_keys.public_key(), &group, &[user_keys.public_key()]).unwrap(),
+            remove_user(admin_keys.public_key(), &group, &user_targets).unwrap(),
             &admin_keys,
+            Some(target_p_rows),
         ),
         (
             "delete_event",
             delete_event(admin_keys.public_key(), &group, &target_id).unwrap(),
             &admin_keys,
+            None,
         ),
         (
             "delete_group",
             delete_group(admin_keys.public_key(), &group).unwrap(),
             &admin_keys,
+            None,
         ),
         (
             "leave_group",
             leave_group(user_keys.public_key(), &group).unwrap(),
             &user_keys,
+            None,
         ),
     ];
 
-    for (name, event, signer) in &cases {
-        let (ok, msg) = submit(&mut ws, event.clone(), signer).await;
+    for (index, (name, event, signer, expected_p_rows)) in cases.iter().enumerate() {
+        let (event_id, ok, msg) = submit_with_id(&mut ws, event.clone(), signer).await;
         eprintln!("[gate4] {name} OK={ok} msg={msg:?}");
         assert!(ok, "{name} was rejected by relay: {msg}");
+        if let Some(expected_p_rows) = expected_p_rows {
+            let stored = readback_one(&mut ws, &format!("gate4-{index}"), &event_id).await;
+            assert_eq!(
+                &p_rows(&stored),
+                expected_p_rows,
+                "{name} relay readback changed ordered repeated p rows"
+            );
+            if *name == "invite" {
+                assert_eq!(
+                    tag_rows(&stored, "code"),
+                    vec![vec![
+                        "code".to_owned(),
+                        "gate4-required-invite-code".to_owned(),
+                    ]],
+                    "invite relay readback changed its exact code tag"
+                );
+            }
+        }
     }
 
     relay.child.kill().await.ok();

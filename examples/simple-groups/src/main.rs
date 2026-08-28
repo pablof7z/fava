@@ -646,16 +646,7 @@ fn append_tags(
     event: fava::UnsignedEvent,
     extra: impl IntoIterator<Item = Tag>,
 ) -> DemoResult<fava::UnsignedEvent> {
-    let mut tags = event.tags.to_vec();
-    tags.extend(extra);
-    Ok(EventBuilder::from_parts(
-        event.pubkey,
-        event.kind,
-        event.created_at,
-        tags,
-        event.content,
-    )
-    .build()?)
+    Ok(EventBuilder::from(event).tags(extra).build()?)
 }
 
 fn unique_group_id() -> Result<String, Box<dyn Error + Send + Sync>> {

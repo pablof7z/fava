@@ -97,7 +97,7 @@ it or introduce a parallel content-event constructor.
 pub fn invite(
     author: PublicKey,
     group: &SimpleGroup,
-    invitee: &PublicKey,
+    invitees: &[PublicKey],
     relay: &RelayUrl,          // ← caller must supply; group already owns its relays
 ) -> Result<UnsignedEvent, EventBuildError>
 ```
@@ -125,20 +125,13 @@ fn append_tags(
     event: fava::UnsignedEvent,
     extra: impl IntoIterator<Item = Tag>,
 ) -> DemoResult<fava::UnsignedEvent> {
-    let mut tags = event.tags.to_vec();
-    tags.extend(extra);
-    Ok(EventBuilder::from_parts(
-        event.pubkey,
-        event.kind,
-        event.created_at,
-        tags,
-        event.content,
-    )
-    .build()?)
+    Ok(EventBuilder::from(event).tags(extra).build()?)
 }
 ```
 
-nip29-test has an identical `append_code` function, 9 lines for the same operation. Two independent apps, same workaround. `EventBuilder::from_parts` is the only escape hatch; callers have to know it exists. A `.with_tag()` / `.with_tags()` method on `UnsignedEvent` would eliminate both functions.
+Issue 0042 supplies the generic reopening boundary: callers consume the
+unsigned body, append exact tags, and rebuild. `append_code` follows the same
+two-step composition without copying five event fields.
 
 ---
 
@@ -309,7 +302,6 @@ Any app that displays per-relay delivery outcomes needs `fava-state` in its Carg
 
 | Friction | Evidence | Possible boundary |
 |----------|----------|-------------------|
-| Both apps independently write `append_tags` / `append_code` | Two identical `EventBuilder::from_parts` workarounds | Builder-level tag composition without rebuilding `UnsignedEvent` |
 | Both apps independently implement observation polling | `wait_for` in the demo and `cmd_read` in nip29-test | A bounded `Observation` predicate wait |
 | 9–10 provider crates and a long assembly block per app | Every app repeats the same role selection | A documented standard profile without bypassing provider contracts |
 | `RelaySessionKey` is not in `fava` re-exports | nip29-test needs `fava-state` for receipt display | Re-export the receipt-facing type from `fava` |
