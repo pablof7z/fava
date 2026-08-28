@@ -190,6 +190,8 @@ jobs:
   symbol-gate:
     name: Symbol Gate
     runs-on: ubuntu-latest
+    env:
+      SG_REV: "640891055e3f9246b1664e99c4a61d80e56668a5"
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -197,32 +199,50 @@ jobs:
           toolchain: "1.90.0"
           components: rust-analyzer
       - uses: Swatinem/rust-cache@v2
-      # Cache the symbol-gate binary so it is not recompiled on every run.
+      # Pinned to a commit rather than a crates.io version. The published
+      # 0.1.1 and this repository's 0.1.1 are different programs -- symbol-gate
+      # does not bump versions -- so a version number does not say which
+      # declaration renderer verified these signatures. A commit does.
       - name: Cache symbol-gate binary
         id: sg-bin-cache
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/symbol-gate
-          key: symbol-gate-bin-0.1.1-${{ runner.os }}-${{ runner.arch }}
+          key: symbol-gate-bin-${{ env.SG_REV }}-${{ runner.os }}-${{ runner.arch }}
       - name: Install symbol-gate
         if: steps.sg-bin-cache.outputs.cache-hit != 'true'
-        run: cargo install symbol-gate --version 0.1.1 --locked
+        run: |
+          cargo install symbol-gate \
+            --git https://github.com/pablof7z/symbol-gate \
+            --rev "$SG_REV" --locked
+      # Extraction is the whole cost of the gate: it re-derives every
+      # declaration from source. Signature checking is a byte comparison over
+      # the result, so timing them apart says which one to worry about.
+      - name: Time the extraction
+        run: |
+          start=$(date +%s%3N)
+          symbol-gate status --json > /tmp/sg-status.json
+          echo "extract_ms=$(( $(date +%s%3N) - start ))" >> "$GITHUB_ENV"
       # Trust-key boundary: the public keys that verify approvals live only in
       # .symbol-gate/trusted_keys, which is committed to the repository. No CI
       # secret is injected; trust is controlled by code review, not CI config.
       - name: Verify symbol approvals
         run: |
-          start_ms=$(date +%s%3N)
+          start=$(date +%s%3N)
           set +e
           symbol-gate verify
           sg_exit=$?
           set -e
-          end_ms=$(date +%s%3N)
-          elapsed_ms=$((end_ms - start_ms))
+          verify_ms=$(( $(date +%s%3N) - start ))
           {
             echo "## Symbol Gate"
             echo ""
-            echo "Verification completed in ${elapsed_ms} ms."
+            echo "| step | ms |"
+            echo "| --- | --: |"
+            echo "| extract | ${extract_ms} |"
+            echo "| verify | ${verify_ms} |"
+            echo ""
+            jq -r '"\(.result.symbols) symbols, \(.result.signed) signed, policy_signed=\(.result.policy_signed)"' /tmp/sg-status.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit $sg_exit
 
