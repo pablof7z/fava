@@ -252,7 +252,6 @@ impl FavaBuilder {
             observer,
             write_store,
             diagnostics,
-            routers: self.routers,
             session,
             publication,
         })

@@ -2,16 +2,35 @@
 
 use std::cell::Cell;
 
-use fava_query::QuerySource;
+use fava_query::{QuerySource, SourceCoverage};
+use fava_relay::RelaySessionKey;
 use fava_state::{
     EventStateMutation, RelayEvent, event_is_expired, mutations_for_event, mutations_for_expiration,
 };
 use nostr::event::EventId;
+use nostr::filter::Filter;
 use nostr::types::Timestamp;
 use thiserror::Error;
 
 /// Event-cache provider contract.
 pub trait EventCache: QuerySource + Send + Sync {
+    /// Return one retained proven completion for this exact source and filter.
+    ///
+    /// The provider owns retention and coherence. A miss says only that this
+    /// provider has no reusable proof for this exact request.
+    fn source_coverage(
+        &self,
+        session: &RelaySessionKey,
+        filter: &Filter,
+    ) -> Result<Option<SourceCoverage>, EventCacheError>;
+
+    /// Retain one attributed proven completion.
+    ///
+    /// Implementations refuse before mutation when their completion bound
+    /// would be exceeded, and invalidate retained coverage whenever their
+    /// event state can make that completion window stale.
+    fn retain_source_coverage(&self, coverage: SourceCoverage) -> Result<(), EventCacheError>;
+
     /// Atomically read current event state, decide a mutation batch, and commit it.
     ///
     /// This is the single serialized event-state writer. Implementations must

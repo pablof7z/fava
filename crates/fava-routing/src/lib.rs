@@ -1,23 +1,20 @@
 //! Ordered asynchronous composition of relay-routing contributions.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
-use fava_query::Query;
+use fava_query::{Query, QuerySnapshot};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_write::{EventId, EventValue};
 use nostr::key::PublicKey;
 use nostr::types::RelayUrl;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::watch;
 
 mod chain;
 mod serde_maps;
 
-pub use chain::{open, preview};
+pub use chain::{open, preview, queries};
 
 /// Facts for which automatic relay destinations are requested.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -333,6 +330,13 @@ pub trait Router: Send + Sync {
     /// Stable configured router-instance name used for attribution.
     fn name(&self) -> &str;
 
+    /// Declare the complete ordinary query set this policy needs.
+    fn queries(
+        &self,
+        request: &RouteRequest,
+        upstream: &RoutePlan,
+    ) -> Result<Vec<Query>, RouterError>;
+
     /// Evaluate current known facts without starting acquisition.
     ///
     /// # Errors
@@ -342,6 +346,7 @@ pub trait Router: Send + Sync {
         &self,
         request: &RouteRequest,
         upstream: &RoutePlan,
+        inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError>;
 
     /// Open one live complete-contribution sequence.
@@ -352,7 +357,8 @@ pub trait Router: Send + Sync {
     fn open(
         &self,
         request: RouteRequest,
-        upstream: watch::Receiver<Arc<RoutePlan>>,
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError>;
 }
 
@@ -361,11 +367,12 @@ pub trait RouterSession: Send {
     /// Immediate complete current contribution.
     fn current(&self) -> RouteContribution;
 
-    /// Await a later complete replacement contribution.
-    #[allow(clippy::type_complexity)]
-    fn next_change(
+    /// Atomically replace this router's complete input set.
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>>;
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError>;
 
     /// Release all work owned by this router session.
     fn close(&mut self);

@@ -2,7 +2,6 @@
 
 mod builder;
 mod publication;
-mod query_source;
 mod session;
 
 /// Bounded-freshness fetch cache and NIP-05 / NIP-11 service surface.
@@ -43,7 +42,6 @@ pub use fava_query::{
     EventRecord, Freshness, Query, QueryRevision, QuerySnapshot, ResultAuthority, SingleLetterTag,
 };
 pub use fava_routing::RoutePlan;
-use fava_routing::{RouteRequest, Router};
 pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;
@@ -105,7 +103,6 @@ pub struct Fava {
     observer: Observer,
     write_store: Arc<dyn WriteStore>,
     diagnostics: Arc<Diagnostics>,
-    routers: Vec<Arc<dyn Router>>,
     session: Session,
     publication: Option<Publication>,
 }
@@ -256,16 +253,6 @@ impl Fava {
         reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
     )]
     pub fn preview_routes(&self, query: &Query) -> Result<RoutePlan, ObserveError> {
-        let request = RouteRequest::Read(query.clone());
-        match query.source().acquisition() {
-            fava_query::QueryAcquisition::Explicit(relays) => {
-                RoutePlan::explicit(relays.iter().cloned(), query.access(), &request.targets())
-                    .map_err(|error| ObserveError::Relay(error.to_string()))
-            }
-            fava_query::QueryAcquisition::Automatic => {
-                fava_routing::preview(&self.routers, &request)
-                    .map_err(|error| ObserveError::Relay(error.to_string()))
-            }
-        }
+        self.observer.preview_routes(query)
     }
 }

@@ -6,10 +6,10 @@ rust-version.workspace = true
 
 [dependencies]
 fava-query.workspace = true
+fava-relay.workspace = true
 fava-state.workspace = true
 nostr.workspace = true
 thiserror.workspace = true
 
 [lints]
 workspace = true
-

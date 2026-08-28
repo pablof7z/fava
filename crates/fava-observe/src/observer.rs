@@ -5,13 +5,14 @@ use std::sync::{Arc, OnceLock};
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
 use fava_query::{
-    Freshness, ObservationId, Query, QueryBranchId, QueryEvaluator, QueryRevision, QuerySnapshot,
-    QuerySource, RelayWithdrawal, SourceKind,
+    Freshness, ObservationId, Query, QueryAcquisition, QueryBranchId, QueryEvaluator,
+    QueryRevision, QuerySnapshot, QuerySource, RelayWithdrawal, SourceKind,
 };
 use fava_routing::Router;
-use fava_runtime::Runtime;
+use fava_runtime::{Runtime, TaskName};
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::{Transport, TransportBounds, TransportDeadlines};
+use futures_util::future::select_all;
 
 use crate::admission::ADMISSION_WINDOW;
 use crate::engine::{Engine, RelayProviders};
@@ -161,9 +162,6 @@ impl Observer {
     )]
     pub fn open(&self, query: Query) -> Result<Observation, ObserveError> {
         let live = query.freshness() != Freshness::CacheOnly;
-        if live {
-            self.start_engine()?;
-        }
 
         let cache = self
             .event_cache
@@ -186,7 +184,7 @@ impl Observer {
         let mut sources = OpenSources::new(cache, writes);
 
         let binding = if live {
-            match routes::bind(&query, &self.routers) {
+            match routes::bind(&query, &self.routers, |input| self.local_snapshot(input)) {
                 Ok(binding) => Some(binding),
                 Err(error) => {
                     sources.close();
@@ -199,7 +197,15 @@ impl Observer {
 
         let installation = self.registry.install(self.runtime.cancellation_token());
         let branch = QueryBranchId::ROOT;
-        if let Some(binding) = binding {
+        if let Some(mut binding) = binding {
+            self.remove_fresh_sources(&query, installation.id, branch, &mut binding);
+            if !binding.plan.destinations.is_empty() {
+                if let Err(error) = self.start_engine() {
+                    sources.close();
+                    self.registry.withdraw(installation.id);
+                    return Err(error);
+                }
+            }
             self.retain(
                 installation.id,
                 branch,
@@ -253,6 +259,75 @@ impl Observer {
         ))
     }
 
+    /// Evaluate automatic routing from current local router inputs without
+    /// opening observations or relay work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ObserveError`] when a local source or router refuses its
+    /// exact preview input.
+    #[allow(
+        clippy::result_large_err,
+        reason = "ObserveError preserves the refusing local-source role"
+    )]
+    pub fn preview_routes(&self, query: &Query) -> Result<fava_routing::RoutePlan, ObserveError> {
+        let request = fava_routing::RouteRequest::Read(query.clone());
+        match query.source().acquisition() {
+            QueryAcquisition::Explicit(relays) => fava_routing::RoutePlan::explicit(
+                relays.iter().cloned(),
+                query.access(),
+                &request.targets(),
+            )
+            .map_err(|error| ObserveError::Relay(error.to_string())),
+            QueryAcquisition::Automatic => {
+                let declared = fava_routing::queries(&self.routers, &request)
+                    .map_err(|error| ObserveError::Relay(error.to_string()))?;
+                let inputs = declared
+                    .iter()
+                    .map(|queries| {
+                        queries
+                            .iter()
+                            .map(|input| self.local_snapshot(input))
+                            .collect()
+                    })
+                    .collect::<Result<Vec<Vec<_>>, _>>()?;
+                fava_routing::preview(&self.routers, &request, &inputs)
+                    .map_err(|error| ObserveError::Relay(error.to_string()))
+            }
+        }
+    }
+
+    /// Remove only sources backed by one still-fresh exact proven completion.
+    ///
+    /// The decision is made once during open.  No retained timer owns a later
+    /// recheck, so a MaxAge observation keeps local replacements but cannot
+    /// restart relay work merely by becoming old.
+    fn remove_fresh_sources(
+        &self,
+        query: &Query,
+        id: ObservationId,
+        branch: QueryBranchId,
+        binding: &mut RouteBinding,
+    ) {
+        let Freshness::MaxAge(age) = query.freshness() else {
+            return;
+        };
+        let Some(cache) = &self.events else {
+            return;
+        };
+        let filter = fava_subscriptions::demand_for_query(id, branch, query).filter;
+        let opened_at = nostr::types::Timestamp::now();
+        binding.plan.destinations.retain(|session, _| {
+            let Ok(Some(coverage)) = cache.source_coverage(session, &filter) else {
+                return true;
+            };
+            opened_at
+                .as_secs()
+                .saturating_sub(coverage.completed_at.as_secs())
+                > age.as_secs()
+        });
+    }
+
     #[allow(
         clippy::result_large_err,
         reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
@@ -267,6 +342,31 @@ impl Observer {
         Ok(initial)
     }
 
+    fn local_snapshot(&self, query: &Query) -> Result<QuerySnapshot, ObserveError> {
+        let cache = self
+            .event_cache
+            .open(query)
+            .map_err(|error| ObserveError::SourceOpen {
+                role: SourceKind::EventCache,
+                error,
+            })?;
+        let writes = match self.write_store.open(query) {
+            Ok(writes) => writes,
+            Err(error) => {
+                let mut changes = cache.changes;
+                changes.close();
+                return Err(ObserveError::SourceOpen {
+                    role: SourceKind::WriteStore,
+                    error,
+                });
+            }
+        };
+        let sources = OpenSources::new(cache, writes);
+        let result = self.evaluate_initial(query, &sources);
+        sources.close();
+        result
+    }
+
     fn retain(
         &self,
         id: ObservationId,
@@ -278,6 +378,7 @@ impl Observer {
         let RouteBinding {
             plan,
             session,
+            inputs,
             origin,
         } = binding;
         self.registry.assign(
@@ -288,21 +389,53 @@ impl Observer {
             RelayWithdrawal::RouteWithdrawn,
         );
         if let Some(session) = session {
-            let task = routes::follow(
-                &self.runtime,
+            self.follow_routes(
+                id,
+                branch,
+                query.clone(),
+                plan,
+                origin,
+                inputs,
                 session,
-                routes::Following {
-                    id,
-                    registry: Arc::clone(&self.registry),
-                    query: query.clone(),
-                    branch,
-                    cancel: cancel.clone(),
-                    revision: plan.revision,
-                },
+                cancel,
             );
-            if let Some(task) = task {
-                self.registry.attach(id, task);
-            }
+        }
+    }
+
+    fn follow_routes(
+        &self,
+        id: ObservationId,
+        branch: QueryBranchId,
+        request: Query,
+        plan: fava_routing::RoutePlan,
+        origin: routes::Origin,
+        input_queries: Vec<Query>,
+        session: Box<dyn fava_routing::RouterSession>,
+        cancel: &fava_runtime::CancellationToken,
+    ) {
+        let mut inputs = Vec::with_capacity(input_queries.len());
+        for input in input_queries {
+            let Ok(observation) = self.open(input) else {
+                return;
+            };
+            inputs.push(observation);
+        }
+        let task = self.runtime.spawn_cancellable(
+            TaskName("observe.router-inputs"),
+            cancel.clone(),
+            follow_route_inputs(
+                id,
+                branch,
+                request,
+                plan,
+                origin,
+                inputs,
+                session,
+                Arc::clone(&self.registry),
+            ),
+        );
+        if let Ok(task) = task {
+            self.registry.attach(id, task);
         }
     }
 
@@ -335,6 +468,53 @@ impl Observer {
         });
         started
     }
+}
+
+async fn follow_route_inputs(
+    id: ObservationId,
+    branch: QueryBranchId,
+    query: Query,
+    mut plan: fava_routing::RoutePlan,
+    origin: routes::Origin,
+    mut inputs: Vec<Observation>,
+    mut session: Box<dyn fava_routing::RouterSession>,
+    registry: Arc<Registry>,
+) {
+    if inputs.is_empty() {
+        std::future::pending::<()>().await;
+    }
+    loop {
+        let snapshots = inputs
+            .iter()
+            .map(|observation| observation.current().as_ref().clone())
+            .collect();
+        let Ok(contribution) = session.replace(Arc::new(plan.clone()), snapshots) else {
+            break;
+        };
+        let Some(revision) = plan.revision.checked_add(1) else {
+            break;
+        };
+        let Ok(next) = fava_routing::RoutePlan::from_contribution(revision, &contribution) else {
+            break;
+        };
+        plan = next;
+        registry.assign(
+            id,
+            branch,
+            routes::demand_for(id, branch, &query, &plan, origin),
+            origin.revision_of(&plan),
+            RelayWithdrawal::RouteWithdrawn,
+        );
+        let changes = inputs
+            .iter_mut()
+            .map(|input| Box::pin(input.changed()))
+            .collect::<Vec<_>>();
+        let (changed, _, _) = select_all(changes).await;
+        if changed.is_err() {
+            break;
+        }
+    }
+    session.close();
 }
 
 /// The runtime an owner constructs when the assembly supplies none.

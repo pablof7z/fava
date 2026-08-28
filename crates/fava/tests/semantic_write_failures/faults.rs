@@ -4,7 +4,7 @@ use std::sync::{Arc, Barrier, Mutex};
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges,
+    SourceChanges, SourceCoverage,
 };
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
@@ -80,6 +80,16 @@ impl QuerySource for ClosingEventCache {
 }
 
 impl EventCache for ClosingEventCache {
+    fn source_coverage(
+        &self,
+        session: &RelaySessionKey,
+        filter: &nostr::filter::Filter,
+    ) -> Result<Option<SourceCoverage>, EventCacheError> {
+        self.inner.source_coverage(session, filter)
+    }
+    fn retain_source_coverage(&self, coverage: SourceCoverage) -> Result<(), EventCacheError> {
+        self.inner.retain_source_coverage(coverage)
+    }
     fn commit(&self, mutations: Vec<EventStateMutation>) -> Result<(), EventCacheError> {
         self.inner.commit(mutations)
     }

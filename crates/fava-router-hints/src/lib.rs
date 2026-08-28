@@ -1,11 +1,9 @@
 //! Relay routing from Nostr reference hints and admitted event evidence.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use fava_query::EventRecord;
+use fava_query::{EventRecord, Query, QuerySnapshot};
 use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
@@ -13,7 +11,6 @@ use fava_routing::{
 };
 use fava_write::EventId;
 use nostr::types::RelayUrl;
-use tokio::sync::watch;
 
 /// Router contributing relays justified by Nostr references and observations.
 pub struct HintRouter {
@@ -125,19 +122,39 @@ impl Router for HintRouter {
         &self.name
     }
 
+    fn queries(
+        &self,
+        _request: &RouteRequest,
+        _upstream: &RoutePlan,
+    ) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         request: &RouteRequest,
         _upstream: &RoutePlan,
+        inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "hint router accepts no query inputs".to_owned(),
+            ));
+        }
         Ok(self.contribution(request))
     }
 
     fn open(
         &self,
         request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "hint router accepts no query inputs".to_owned(),
+            ));
+        }
         Ok(Box::new(HintSession {
             current: self.contribution(&request),
         }))
@@ -153,10 +170,17 @@ impl RouterSession for HintSession {
         self.current.clone()
     }
 
-    fn next_change(
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
-        Box::pin(std::future::pending())
+        _upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "hint router accepts no query inputs".to_owned(),
+            ));
+        }
+        Ok(self.current())
     }
 
     fn close(&mut self) {}

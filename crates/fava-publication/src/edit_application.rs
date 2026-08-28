@@ -368,8 +368,12 @@ impl Publication {
                 &request.targets(),
             )
             .map_err(|error| PublicationError::Routing(error.to_string())),
-            WriteRouting::Automatic => fava_routing::preview(self.routers.as_slice(), &request)
-                .map_err(|error| PublicationError::Routing(error.to_string())),
+            WriteRouting::Automatic => fava_routing::preview(
+                self.routers.as_slice(),
+                &request,
+                &vec![Vec::new(); self.routers.len()],
+            )
+            .map_err(|error| PublicationError::Routing(error.to_string())),
         }
     }
 

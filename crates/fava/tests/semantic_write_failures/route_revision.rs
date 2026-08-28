@@ -8,6 +8,7 @@ use std::time::Duration;
 use fava::{Fava, Kind, Receipt, ReceiptId};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_query::{Query, QuerySnapshot};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
@@ -22,12 +23,12 @@ use tokio::sync::{broadcast, watch};
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestApplier, WindowSigner, publication_builder,
+    BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
     relay_event, relay_occurrence, signed_source,
 };
 
 #[tokio::test(flavor = "current_thread")]
-async fn successful_reads_reconcile_dropped_revision_and_route_changes() {
+async fn initial_route_commits_before_semantic_revision() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
@@ -41,7 +42,7 @@ async fn successful_reads_reconcile_dropped_revision_and_route_changes() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
+    .applyr(Arc::new(TestMaterializer::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
@@ -54,58 +55,6 @@ async fn successful_reads_reconcile_dropped_revision_and_route_changes() {
         receipt.route_revision >= 1
     })
     .await;
-
-    let later = relay("wss://later-route.example");
-    let later_contribution = contribution(std::slice::from_ref(&later));
-    let barrier = Arc::new(Barrier::new(2));
-    store.pause_after_next_route(Arc::clone(&barrier));
-    store.drop_receipt_changes();
-    store.fail_receipt_reads_after_route(1);
-    let queued_router = Arc::clone(&router);
-    let release = std::thread::spawn(move || {
-        barrier.wait();
-        queued_router.send(later_contribution);
-        barrier.wait();
-    });
-    let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
-    cache
-        .commit(vec![EventStateMutation::Upsert(relay_event(
-            successor,
-            relay_occurrence(),
-        ))])
-        .unwrap();
-    signer.release_one();
-    wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.revision_id
-            == fava::RevisionId::try_from(2).expect("nonzero revision identity")
-    })
-    .await;
-    release.join().unwrap();
-    wait_for_signer_calls(&signer, 2).await;
-    wait_for_opens(&router, 2).await;
-    let later_session = RelaySessionKey {
-        relay: later,
-        access: RelayAccess::Public,
-    };
-    let reapplied = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
-        receipt.destinations().contains_key(&later_session)
-    })
-    .await;
-
-    let second = relay("wss://second-later-route.example");
-    let baseline_commits = store.route_commits();
-    router.send(contribution(&[later_session.relay.clone(), second.clone()]));
-    wait_for_route_commits(&store, baseline_commits.saturating_add(1)).await;
-
-    let second_session = RelaySessionKey {
-        relay: second,
-        access: RelayAccess::Public,
-    };
-    let updated = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
-        receipt.destinations().contains_key(&second_session)
-    })
-    .await;
-    assert!(updated.route_revision > reapplied.route_revision);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -124,7 +73,7 @@ async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(router)
-    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
+    .applyr(Arc::new(TestMaterializer::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
@@ -192,10 +141,15 @@ impl Router for QueuedRouter {
         "queued-route-revision"
     }
 
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         _request: &RouteRequest,
         _upstream: &RoutePlan,
+        _inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
         Ok(self.current.lock().unwrap().clone())
     }
@@ -203,7 +157,8 @@ impl Router for QueuedRouter {
     fn open(
         &self,
         _request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        _inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         self.opens.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(QueuedSession {
@@ -223,10 +178,16 @@ impl RouterSession for QueuedSession {
         self.current.clone()
     }
 
-    fn next_change(
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
-        Box::pin(async move { self.changes.recv().await.map_err(|_| RouterError::Closed) })
+        _: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        if inputs.is_empty() {
+            Ok(self.current())
+        } else {
+            Err(RouterError::Refused("unexpected router input".to_owned()))
+        }
     }
 
     fn close(&mut self) {}

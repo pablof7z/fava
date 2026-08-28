@@ -48,6 +48,7 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
         .preview(
             &RouteRequest::Write(EventValue::Unsigned(reply)),
             &RoutePlan::default(),
+            &[],
         )
         .unwrap();
     let plan = RoutePlan::from_contribution(1, &contribution).unwrap();

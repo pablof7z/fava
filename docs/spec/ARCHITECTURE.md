@@ -1270,31 +1270,65 @@ A router emits complete replacement snapshots for its own contribution. A later 
 
 ### Router contract
 
-Conceptual signal-oriented shape:
+The exact value-input contract is:
 
 ```rust
 pub trait Router: Send + Sync {
+    fn name(&self) -> &str;
+
+    fn queries(
+        &self,
+        request: &RouteRequest,
+        upstream: &RoutePlan,
+    ) -> Result<Vec<Query>, RouterError>;
+
+    fn preview(
+        &self,
+        request: &RouteRequest,
+        upstream: &RoutePlan,
+        inputs: &[QuerySnapshot],
+    ) -> Result<RouteContribution, RouterError>;
+
     fn open(
         &self,
         request: RouteRequest,
-        upstream: UpstreamRouteSignal,
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError>;
 }
 
 pub trait RouterSession: Send {
     fn current(&self) -> RouteContribution;
-    fn next_change(&mut self) -> RouteChangeFuture<'_>;
+    fn replace(
+        &mut self,
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError>;
     fn close(&mut self);
 }
 ```
 
-The implementation may use callbacks, channels, streams, or signals internally. The contract semantics are:
+Routers declare ordinary bounded queries; the engine validates the full set,
+opens and owns the observations, and gives each session a same-order complete
+`Vec<QuerySnapshot>`. `inputs[i]` is the current complete snapshot for
+`queries[i]`; the vector is an atomic full replacement, never a delta. Query
+shortfalls and evidence stay inside their snapshots. A declaration, open, or
+replacement failure is one router-attributed shortfall: the prior coherent
+contribution and every other router survive.
 
-1. opening a router session produces an immediate complete current contribution;
-2. the initial contribution never waits on network acquisition;
-3. later knowledge produces a replacement contribution asynchronously;
-4. closing the session releases all router-owned acquisition work;
-5. one router's delay does not prevent other routers' contributions from entering the plan.
+The engine privately fences `(route-session, router-index, input-generation)`.
+It installs a candidate generation only after every initial local snapshot and
+`replace` succeed, then closes the prior observations. Stale completions are
+inert; close fences first, closes each exact observation once, invokes
+`RouterSession::close` once, and is idempotent. No router owns an observation,
+query opener, cache, or acquisition lifecycle.
+
+`preview` follows the same declaration and ordered evaluation with one-shot
+local source snapshots only: zero relay frames, retained observations, or
+source coverage. Query sets are bounded to 256 entries per router, each query
+must pass its normal bounds, explicit acquisition is non-empty and nonautomatic,
+and a positive result limit is at most 4,096. Invalid sets cause zero partial
+work.
 
 ### Ordered composition
 
@@ -1312,7 +1346,9 @@ router 3 sees routers 1 + 2
 final current RoutePlan
 ```
 
-When an upstream router changes, downstream routers receive the new upstream plan and recompute their current contribution. The chain is acyclic: a router observes only the accumulated output of earlier routers.
+On each engine-owned replacement, downstream routers receive the new upstream
+plan and recompute their current contribution. The chain is acyclic: a router
+observes only the accumulated output of earlier routers.
 
 This is the mechanism used by fallback routing. A fallback router can inspect current upstream coverage and contribute only for targets it considers insufficiently covered.
 

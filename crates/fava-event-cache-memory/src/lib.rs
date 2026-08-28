@@ -7,12 +7,13 @@ use std::sync::{Arc, Mutex};
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceClosed, QuerySourceError, SourceChangeFuture,
-    SourceChanges, SourceEvent, SourceKind, SourceRetraction, SourceRevision, SourceSnapshot,
-    SourceStatus,
+    SourceChanges, SourceCoverage, SourceEvent, SourceKind, SourceRetraction, SourceRevision,
+    SourceSnapshot, SourceStatus,
 };
 use fava_relay::RelaySessionKey;
 use fava_state::{EventStateMutation, RelayEvent, RetractionCause};
 use nostr::event::{EventId, Kind};
+use nostr::filter::Filter;
 use tokio::sync::watch;
 
 /// Bounded in-memory cache with coherent latest-state observations.
@@ -31,6 +32,8 @@ struct CacheState {
     /// Retractions applied to reach `revision`. Reset by every commit, so a
     /// snapshot reports exactly what its own revision removed.
     retractions: Vec<SourceRetraction>,
+    /// Proven EOSE facts that remain coherent with the retained event state.
+    coverage: Vec<SourceCoverage>,
 }
 
 impl Default for MemoryEventCache {
@@ -141,6 +144,12 @@ impl MemoryEventCache {
             }
             next.events.insert(key, incoming);
         }
+        // An event-state transition can change the answer to an arbitrary
+        // retained filter.  Forgetting coverage is conservative and keeps the
+        // cache's reusable proof coherent without a second invalidation owner.
+        if next.events != current.events {
+            next.coverage.clear();
+        }
         Ok(next)
     }
 
@@ -162,6 +171,42 @@ impl MemoryEventCache {
 }
 
 impl EventCache for MemoryEventCache {
+    fn source_coverage(
+        &self,
+        session: &RelaySessionKey,
+        filter: &Filter,
+    ) -> Result<Option<SourceCoverage>, EventCacheError> {
+        let guard = self
+            .state
+            .lock()
+            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
+        Ok(guard
+            .coverage
+            .iter()
+            .find(|coverage| &coverage.session == session && &coverage.filter == filter)
+            .cloned())
+    }
+
+    fn retain_source_coverage(&self, coverage: SourceCoverage) -> Result<(), EventCacheError> {
+        let mut guard = self
+            .state
+            .lock()
+            .map_err(|_| EventCacheError::Refused("cache state lock poisoned".to_owned()))?;
+        let mut next = guard.clone();
+        if let Some(existing) = next.coverage.iter_mut().find(|existing| {
+            existing.session == coverage.session && existing.filter == coverage.filter
+        }) {
+            *existing = coverage;
+        } else {
+            if next.coverage.len() >= self.capacity.get() {
+                next.coverage.remove(0);
+            }
+            next.coverage.push(coverage);
+        }
+        *guard = next;
+        Ok(())
+    }
+
     fn transact(
         &self,
         decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,

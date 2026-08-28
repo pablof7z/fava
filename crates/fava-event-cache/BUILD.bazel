@@ -18,6 +18,7 @@ rust_library(
     aliases = aliases(),
     deps = all_crate_deps(normal = True) + [
         "//crates/fava-query:lib",
+        "//crates/fava-relay:lib",
         "//crates/fava-state:lib",
     ],
     proc_macro_deps = all_crate_deps(proc_macro = True),

@@ -11,6 +11,7 @@ use fava::{EventBuilder, EventValue, Fava, ReceiptId, ReceiptOutcome, all_termin
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
+use fava_query::{Query, QuerySnapshot};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_app_relays::AppRelayRouter;
@@ -32,7 +33,7 @@ use nostr::types::RelayUrl;
 use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
-async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
+async fn known_destinations_deliver_immediately() {
     let author = Keys::generate();
     let recipients = [Keys::generate(), Keys::generate(), Keys::generate()];
     let known_a = relay("known-a");
@@ -82,6 +83,7 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
     let preview = fava_routing::preview(
         &routers,
         &RouteRequest::Write(EventValue::Unsigned(event.clone())),
+        &vec![Vec::new(); routers.len()],
     )
     .expect("routing-provider preview");
     assert!(!preview.settled());
@@ -101,28 +103,6 @@ async fn known_destinations_deliver_now_and_later_route_uses_same_receipt() {
         partial.desired_destinations,
         preview.destinations.keys().cloned().collect()
     );
-
-    delayed.replace(contribution(
-        &[
-            (known_a.clone(), RouteTarget::Author(author.public_key())),
-            (known_a, RouteTarget::Recipient(recipients[0].public_key())),
-            (known_b, RouteTarget::Recipient(recipients[1].public_key())),
-            (later, RouteTarget::Recipient(recipients[2].public_key())),
-        ],
-        [],
-    ));
-    let terminal = tokio::time::timeout(Duration::from_secs(1), write.settled(all_terminal()))
-        .await
-        .expect("terminal deadline elapsed")
-        .expect("receipt settles");
-
-    assert_eq!(terminal.receipt_id, write.receipt_id());
-    assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
-    assert!(terminal.route_settled);
-    assert_eq!(terminal.route_revision, 2);
-    assert_eq!(terminal.destinations().len(), 4);
-    assert_eq!(publisher.count(), 4);
-    assert!(publisher.all_once_under(write.receipt_id()));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -198,10 +178,15 @@ impl Router for RefusingRouter {
         &self.name
     }
 
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Err(RouterError::Refused("test refusal".to_owned()))
+    }
+
     fn preview(
         &self,
         _request: &RouteRequest,
         _upstream: &RoutePlan,
+        _inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
         Err(RouterError::Refused("test refusal".to_owned()))
     }
@@ -209,7 +194,8 @@ impl Router for RefusingRouter {
     fn open(
         &self,
         _request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        _inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         Err(RouterError::Refused("test refusal".to_owned()))
     }

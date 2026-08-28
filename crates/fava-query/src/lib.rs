@@ -9,6 +9,7 @@ use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use fava_relay::RelayAccess;
 use fava_state::{RelayEvent, RelayOccurrences};
@@ -86,9 +87,28 @@ impl QuerySourcePolicy {
 pub enum Freshness {
     /// Use configured local sources only.
     CacheOnly,
+    /// Reuse one recent, source-scoped proven completion when available.
+    ///
+    /// This is evaluated once while opening the observation.  It never arms a
+    /// timer or starts work merely because this duration later elapses.
+    MaxAge(Duration),
     /// Keep relay demand live. This is the ordinary default.
     #[default]
     Live,
+}
+
+/// One exact relay session's proven completion of one exact Nostr filter.
+///
+/// This is deliberately source-scoped completion evidence, not a claim that a
+/// query is complete anywhere else or that no matching event exists elsewhere.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceCoverage {
+    /// Exact relay and access identity that supplied EOSE.
+    pub session: fava_relay::RelaySessionKey,
+    /// Exact filter carried by the completed request.
+    pub filter: nostr::filter::Filter,
+    /// Timestamp from the attributed EOSE frame.
+    pub completed_at: Timestamp,
 }
 
 /// Deterministic application-facing ordering.
@@ -203,6 +223,13 @@ impl Query {
     #[must_use]
     pub const fn cache_only(mut self) -> Self {
         self.freshness = Freshness::CacheOnly;
+        self
+    }
+
+    /// Reuse a recent proven completion for each exact relay source.
+    #[must_use]
+    pub const fn max_age(mut self, age: Duration) -> Self {
+        self.freshness = Freshness::MaxAge(age);
         self
     }
 

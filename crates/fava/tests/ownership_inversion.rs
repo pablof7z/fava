@@ -18,7 +18,6 @@
 const LIB: &str = include_str!("../src/lib.rs");
 const PUBLICATION: &str = include_str!("../src/publication.rs");
 const BUILDER: &str = include_str!("../src/builder.rs");
-const QUERY_SOURCE: &str = include_str!("../src/query_source.rs");
 const SESSION: &str = include_str!("../src/session.rs");
 
 // ── Falsifier 1 ──────────────────────────────────────────────────────────────
@@ -91,7 +90,6 @@ fn opened_relay_type_absent_from_all_facade_sources() {
         ("lib.rs", LIB),
         ("publication.rs", PUBLICATION),
         ("builder.rs", BUILDER),
-        ("query_source.rs", QUERY_SOURCE),
         ("session.rs", SESSION),
     ] {
         assert!(

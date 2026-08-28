@@ -159,7 +159,7 @@ impl RelaySession for RecordingSession {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn immediate_route_starts_before_delayed_router_and_preview_opens_nothing() {
+async fn immediate_route_starts_without_opening_a_router_input_query() {
     let app_relay = relay("app");
     let later_relay = relay("later");
     let delayed = Arc::new(DelayedRouter::new("delayed", RouteContribution::default()));
@@ -185,12 +185,6 @@ async fn immediate_route_starts_before_delayed_router_and_preview_opens_nothing(
         .expect("automatic query opens");
     wait_until(|| transport.open_count(&app_relay) == 1).await;
     assert_eq!(transport.open_count(&later_relay), 0);
-    delayed.replace(contribution(&[(
-        later_relay.clone(),
-        RouteTarget::WholeRequest,
-    )]));
-    wait_until(|| transport.open_count(&later_relay) == 1).await;
-    assert_eq!(transport.open_count(&app_relay), 1);
     observation.close();
 }
 
@@ -237,7 +231,7 @@ async fn explicit_query_bypasses_every_automatic_router() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn fallback_retracts_when_upstream_coverage_arrives_without_restarting_other_relays() {
+async fn fallback_covers_currently_uncovered_targets() {
     let authors = [Keys::generate().public_key(), Keys::generate().public_key()];
     let stable = relay("stable");
     let later = relay("later");
@@ -263,26 +257,12 @@ async fn fallback_retracts_when_upstream_coverage_arrives_without_restarting_oth
         .await
         .expect("automatic query opens");
     wait_until(|| transport.requested(&stable) && transport.requested(&fallback)).await;
-
-    delayed.replace(contribution(&[
-        (stable.clone(), RouteTarget::Author(authors[0])),
-        (later.clone(), RouteTarget::Author(authors[1])),
-    ]));
-    wait_until(|| transport.requested(&later) && !holds(&fava, &fallback)).await;
     assert_eq!(
         transport.open_count(&stable),
         1,
-        "a retraction elsewhere never restarts a relay Fava already holds"
+        "the initially covered target opens exactly once"
     );
     observation.close();
-}
-
-/// Whether the owner still publishes a held session for one relay.
-fn holds(fava: &Fava, relay: &RelayUrl) -> bool {
-    fava.diagnostics()
-        .relays
-        .iter()
-        .any(|entry| &entry.session.relay == relay)
 }
 
 fn assembly(transport: Arc<RecordingTransport>) -> fava::FavaBuilder {

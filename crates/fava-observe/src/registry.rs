@@ -79,6 +79,19 @@ impl Default for Registry {
 }
 
 impl Registry {
+    /// Exact filter retained for one observation's demand at one source.
+    pub(crate) fn filter_for(
+        &self,
+        id: ObservationId,
+        session: &RelaySessionKey,
+    ) -> Option<nostr::filter::Filter> {
+        self.lock()
+            .observations
+            .get(&id)
+            .and_then(|installed| installed.relays.get(session))
+            .map(|assigned| assigned.demand.filter.clone())
+    }
+
     /// Install one observation and return its identity plus its wake input.
     pub(crate) fn install(&self, cancel: CancellationToken) -> Installation {
         let (wake, woken) = watch::channel(0);

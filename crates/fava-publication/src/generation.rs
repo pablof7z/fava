@@ -32,7 +32,11 @@ impl Publication {
             };
 
             let request = RouteRequest::Write(receipt.current.event.clone());
-            let opened = fava_routing::open(self.routers.as_slice(), &request);
+            let opened = fava_routing::open(
+                self.routers.as_slice(),
+                &request,
+                vec![Vec::new(); self.routers.len()],
+            );
             let current = self.read_receipt(receipt.receipt_id, cancel).await?;
             if current != receipt {
                 if let Ok(mut routes) = opened {

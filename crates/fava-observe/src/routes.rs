@@ -4,20 +4,19 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fava_query::{
-    ObservationId, Query, QueryAcquisition, QueryBranchId, RelayWithdrawal, RouteOrigin,
+    ObservationId, Query, QueryAcquisition, QueryBranchId, QuerySnapshot, RouteOrigin,
 };
 use fava_relay::RelaySessionKey;
 use fava_routing::{RoutePlan, RouteRequest, Router, RouterSession};
-use fava_runtime::{CancellationToken, Runtime, TaskHandle, TaskName};
 use fava_subscriptions::{RelayDemand, demand_for_query};
 
 use crate::error::ObserveError;
-use crate::registry::Registry;
 
 /// The route plan bound to one observation, plus any open router session.
 pub(crate) struct RouteBinding {
     pub(crate) plan: RoutePlan,
     pub(crate) session: Option<Box<dyn RouterSession>>,
+    pub(crate) inputs: Vec<Query>,
     pub(crate) origin: Origin,
 }
 
@@ -52,6 +51,7 @@ impl Origin {
 pub(crate) fn bind(
     query: &Query,
     routers: &[Arc<dyn Router>],
+    mut snapshot: impl FnMut(&Query) -> Result<QuerySnapshot, ObserveError>,
 ) -> Result<RouteBinding, ObserveError> {
     let request = RouteRequest::Read(query.clone());
     match query.source().acquisition() {
@@ -62,16 +62,25 @@ pub(crate) fn bind(
             Ok(RouteBinding {
                 plan,
                 session: None,
+                inputs: Vec::new(),
                 origin: Origin::Explicit,
             })
         }
         QueryAcquisition::Automatic => {
-            let session = fava_routing::open(routers, &request)
+            let declared = fava_routing::queries(routers, &request)
+                .map_err(|error| ObserveError::Relay(error.to_string()))?;
+            let inputs = declared
+                .iter()
+                .map(|queries| queries.iter().map(&mut snapshot).collect())
+                .collect::<Result<Vec<Vec<_>>, _>>()?;
+            let input_queries = declared.into_iter().flatten().collect();
+            let session = fava_routing::open(routers, &request, inputs)
                 .map_err(|error| ObserveError::Relay(error.to_string()))?;
             match RoutePlan::from_contribution(1, &session.current()) {
                 Ok(plan) => Ok(RouteBinding {
                     plan,
                     session: Some(session),
+                    inputs: input_queries,
                     origin: Origin::Automatic,
                 }),
                 Err(error) => {
@@ -97,57 +106,4 @@ pub(crate) fn demand_for(
         .keys()
         .map(|relay| (relay.clone(), (demand.clone(), origin.at(plan.revision))))
         .collect()
-}
-
-/// Everything one observation's route-following task needs.
-pub(crate) struct Following {
-    /// Observation whose demand the route revisions replace.
-    pub(crate) id: ObservationId,
-    /// Registry the retained demand lives in.
-    pub(crate) registry: Arc<Registry>,
-    /// Query whose filter every destination carries.
-    pub(crate) query: Query,
-    /// Branch the demand belongs to.
-    pub(crate) branch: QueryBranchId,
-    /// Cancellation installed with the observation.
-    pub(crate) cancel: CancellationToken,
-    /// Revision the initial contribution produced.
-    pub(crate) revision: u64,
-}
-
-/// Follow later route revisions and retain the demand each one implies.
-pub(crate) fn follow(
-    runtime: &Runtime,
-    mut session: Box<dyn RouterSession>,
-    following: Following,
-) -> Option<TaskHandle<Option<()>>> {
-    let Following {
-        id,
-        registry,
-        query,
-        branch,
-        cancel,
-        mut revision,
-    } = following;
-    runtime
-        .spawn_cancellable(TaskName("observe.routes"), cancel, async move {
-            loop {
-                let Ok(contribution) = session.next_change().await else {
-                    break;
-                };
-                revision = revision.saturating_add(1);
-                let Ok(plan) = RoutePlan::from_contribution(revision, &contribution) else {
-                    break;
-                };
-                registry.assign(
-                    id,
-                    branch,
-                    demand_for(id, branch, &query, &plan, Origin::Automatic),
-                    Some(plan.revision),
-                    RelayWithdrawal::RouteWithdrawn,
-                );
-            }
-            session.close();
-        })
-        .ok()
 }

@@ -358,7 +358,7 @@ fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
         .build()
         .unwrap();
     let request = RouteRequest::Write(EventValue::Unsigned(event.clone()));
-    let plan = fava_routing::preview(&[], &request).unwrap();
+    let plan = fava_routing::preview(&[], &request, &[]).unwrap();
     let store = MemoryWriteStore::default();
     let accepted = store
         .accept(WriteIntent::event(event, WriteRouting::Automatic).unwrap())

@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use fava::{EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_query::{Query, QuerySnapshot};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::EventStateMutation;
 use fava_write::WriteIntent;
@@ -193,10 +194,15 @@ impl Router for ComposingRouter {
         "generation-composition-barrier"
     }
 
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         _request: &RouteRequest,
         _upstream: &RoutePlan,
+        _inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
         Ok(contribution(self.current.clone()))
     }
@@ -204,7 +210,8 @@ impl Router for ComposingRouter {
     fn open(
         &self,
         request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        _inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         let open = self.opens.fetch_add(1, Ordering::SeqCst) + 1;
         let relay = if open == 1 {
@@ -250,17 +257,16 @@ impl RouterSession for ImmediateSession {
         self.current.clone()
     }
 
-    fn next_change(
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
-        Box::pin(async move {
-            if self.emitted {
-                std::future::pending().await
-            } else {
-                self.emitted = true;
-                Ok(self.current.clone())
-            }
-        })
+        _: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        if inputs.is_empty() {
+            Ok(self.current())
+        } else {
+            Err(RouterError::Refused("unexpected router input".to_owned()))
+        }
     }
 
     fn close(&mut self) {

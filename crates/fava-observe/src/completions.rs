@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use fava_query::{BoundedText, ObservationId, OperationGeneration, RelaySourceState};
+use fava_query::{
+    BoundedText, ObservationId, OperationGeneration, RelaySourceState, SourceCoverage,
+};
 use fava_relay::RelaySessionKey;
 use fava_transport::{RelayInbound, RelaySessionLease};
 use fava_wire::SubscriptionId;
@@ -332,6 +334,31 @@ impl Engine {
                     slot.settled.insert(id.clone(), true);
                 }
                 if proves == fava_subscriptions::EoseCompleteness::Proven {
+                    let owners = self
+                        .slots
+                        .get(relay)
+                        .and_then(|slot| slot.installed.get(&id))
+                        .map(|entry| {
+                            entry
+                                .serves
+                                .iter()
+                                .map(|demand| demand.owner)
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    for owner in owners {
+                        let Some(filter) = self.registry.filter_for(owner, relay) else {
+                            continue;
+                        };
+                        // Cache refusal is scoped to reusable completion. The
+                        // EOSE remains ordinary observation evidence and a
+                        // later open simply reacquires this source.
+                        let _ = self.providers.cache.retain_source_coverage(SourceCoverage {
+                            session: relay.clone(),
+                            filter,
+                            completed_at: at,
+                        });
+                    }
                     self.publish_for_subscription(
                         relay,
                         &id,

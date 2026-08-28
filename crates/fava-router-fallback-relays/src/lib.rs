@@ -1,18 +1,16 @@
 //! Reactive fallback relays as one independent routing policy.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
 use std::num::NonZeroUsize;
-use std::pin::Pin;
 use std::sync::Arc;
 
+use fava_query::{Query, QuerySnapshot};
 use fava_relay::RelaySessionKey;
 use fava_routing::{
     CoverageState, RouteContribution, RouteDestination, RoutePlan, RouteRequest, RouteTarget,
     Router, RouterError, RouterSession,
 };
 use nostr::types::RelayUrl;
-use tokio::sync::watch;
 
 /// Router contributing configured relays while upstream target coverage is low.
 pub struct FallbackRelayRouter {
@@ -110,20 +108,40 @@ impl Router for FallbackRelayRouter {
         &self.name
     }
 
+    fn queries(
+        &self,
+        _request: &RouteRequest,
+        _upstream: &RoutePlan,
+    ) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         request: &RouteRequest,
         upstream: &RoutePlan,
+        inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "fallback router accepts no query inputs".to_owned(),
+            ));
+        }
         Ok(self.contribution(request, upstream))
     }
 
     fn open(
         &self,
         request: RouteRequest,
-        upstream: watch::Receiver<Arc<RoutePlan>>,
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
-        let current = self.contribution(&request, &upstream.borrow());
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "fallback router accepts no query inputs".to_owned(),
+            ));
+        }
+        let current = self.contribution(&request, &upstream);
         Ok(Box::new(FallbackSession {
             request,
             upstream,
@@ -138,7 +156,7 @@ impl Router for FallbackRelayRouter {
 
 struct FallbackSession {
     request: RouteRequest,
-    upstream: watch::Receiver<Arc<RoutePlan>>,
+    upstream: Arc<RoutePlan>,
     current: RouteContribution,
     relays: BTreeSet<RelayUrl>,
     minimum: NonZeroUsize,
@@ -151,24 +169,26 @@ impl RouterSession for FallbackSession {
         self.current.clone()
     }
 
-    fn next_change(
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
-        Box::pin(async move {
-            self.upstream
-                .changed()
-                .await
-                .map_err(|_| RouterError::Closed)?;
-            let router = FallbackRelayRouter {
-                name: String::new(),
-                relays: self.relays.clone(),
-                minimum: self.minimum,
-                reads: self.reads,
-                writes: self.writes,
-            };
-            self.current = router.contribution(&self.request, &self.upstream.borrow_and_update());
-            Ok(self.current.clone())
-        })
+        upstream: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        if !inputs.is_empty() {
+            return Err(RouterError::Refused(
+                "fallback router accepts no query inputs".to_owned(),
+            ));
+        }
+        self.upstream = upstream;
+        let router = FallbackRelayRouter {
+            name: String::new(),
+            relays: self.relays.clone(),
+            minimum: self.minimum,
+            reads: self.reads,
+            writes: self.writes,
+        };
+        self.current = router.contribution(&self.request, &self.upstream);
+        Ok(self.current.clone())
     }
 
     fn close(&mut self) {}

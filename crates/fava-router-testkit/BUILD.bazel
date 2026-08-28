@@ -13,7 +13,10 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     edition = crate_edition(),
     aliases = aliases(),
-    deps = all_crate_deps(normal = True) + ["//crates/fava-routing:lib"],
+    deps = all_crate_deps(normal = True) + [
+        "//crates/fava-query:lib",
+        "//crates/fava-routing:lib",
+    ],
     proc_macro_deps = all_crate_deps(proc_macro = True),
     compile_data = ["Cargo.toml"],
     visibility = ["//visibility:public"],

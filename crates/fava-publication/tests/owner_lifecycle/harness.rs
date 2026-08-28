@@ -8,6 +8,7 @@ use std::time::Duration;
 use fava_delivery::{DeliveryDecision, DeliveryFacts, DeliveryPolicy};
 use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
+use fava_query::{Query, QuerySnapshot};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
@@ -197,10 +198,19 @@ impl Router for RefusingRouter {
         "refusing"
     }
 
+    fn queries(
+        &self,
+        _request: &RouteRequest,
+        _upstream: &RoutePlan,
+    ) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         _request: &RouteRequest,
         _upstream: &RoutePlan,
+        _inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
         Ok(RouteContribution::default())
     }
@@ -208,7 +218,8 @@ impl Router for RefusingRouter {
     fn open(
         &self,
         _request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        _inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         Err(RouterError::Refused(
             "router refuses to open a live session".to_owned(),

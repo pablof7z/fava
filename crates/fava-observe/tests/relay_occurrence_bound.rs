@@ -40,6 +40,21 @@ impl SourceChanges for NullChanges {
 }
 
 impl EventCache for NullCache {
+    fn source_coverage(
+        &self,
+        _session: &fava_relay::RelaySessionKey,
+        _filter: &nostr::filter::Filter,
+    ) -> Result<Option<fava_query::SourceCoverage>, EventCacheError> {
+        Ok(None)
+    }
+
+    fn retain_source_coverage(
+        &self,
+        _coverage: fava_query::SourceCoverage,
+    ) -> Result<(), EventCacheError> {
+        Ok(())
+    }
+
     fn transact(
         &self,
         decide: &dyn Fn(&[RelayEvent]) -> Vec<EventStateMutation>,

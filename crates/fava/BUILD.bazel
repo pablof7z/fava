@@ -615,6 +615,19 @@ rust_test(
 )
 
 rust_test(
+    name = "max_age",
+    srcs = ["tests/max_age.rs"],
+    crate_name = "max_age",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+    ], FAVA_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "ownership_inversion",
     srcs = ["tests/ownership_inversion.rs"],
     crate_name = "ownership_inversion",
@@ -628,7 +641,6 @@ rust_test(
         "src/lib.rs",
         "src/publication.rs",
         "src/builder.rs",
-        "src/query_source.rs",
         "src/session.rs",
     ],
 )

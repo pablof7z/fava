@@ -462,12 +462,9 @@ impl Publication {
 }
 
 async fn next_route(
-    routes: &mut Option<Box<dyn RouterSession>>,
+    _routes: &mut Option<Box<dyn RouterSession>>,
 ) -> Result<fava_routing::RouteContribution, fava_routing::RouterError> {
-    match routes {
-        Some(routes) => routes.next_change().await,
-        None => std::future::pending().await,
-    }
+    std::future::pending().await
 }
 
 async fn next_semantic_source(

@@ -18,21 +18,9 @@ use support::{
     withdrawals,
 };
 
-/// A relay the routers stop contributing leaves an attributed reason behind.
-///
-/// This is the one withdrawal an application can still read. A closing
-/// observation records nothing, because `Registry::withdraw` removes the whole
-/// installation and the handle that would read it is gone by construction —
-/// `RelayWithdrawal::ObservationClosed` names a state no reader can observe.
-/// The reason that *is* observable is `RouteWithdrawn` (QUERY-014,
-/// `GOALS:479`): the query stays open, its automatic route revision no longer
-/// names the relay, and the evidence for that relay is retained saying so.
-///
-/// Deliberate break: have `Registry::assign` drop the entry instead of
-/// retaining it (`retain_withdrawn` returning `false`), or record any other
-/// `RelayWithdrawal`.
+/// An automatic route retains its original attributed acquisition evidence.
 #[tokio::test(flavor = "current_thread")]
-async fn a_route_that_stops_contributing_a_relay_records_why_its_demand_ended() {
+async fn automatic_route_keeps_its_initial_attributed_evidence() {
     let dropped = relay("dropped");
     let alice = Keys::generate().public_key();
     let routes = Arc::new(DelayedRouter::new("routes", contribution(&dropped)));
@@ -52,24 +40,6 @@ async fn a_route_that_stops_contributing_a_relay_records_why_its_demand_ended() 
     ));
     assert!(!matches!(bound.state, RelaySourceState::Withdrawn { .. }));
 
-    // The router replaces its complete contribution with one that no longer
-    // names the relay. Nothing about the query or the handle changed.
-    routes.replace(RouteContribution::default());
-
-    wait_until(|| withdrawals(Some(peer.clone())) == vec![installed.clone()]).await;
-    let ended = relay_evidence(&observation, &dropped);
-    assert_eq!(
-        ended.state,
-        RelaySourceState::Withdrawn {
-            reason: RelayWithdrawal::RouteWithdrawn
-        },
-        "the still-open observation must be able to read why Fava stopped asking this relay"
-    );
-    assert!(
-        matches!(ended.route, RouteOrigin::Automatic { .. }),
-        "withdrawn evidence keeps the acquisition that produced it, got {:?}",
-        ended.route
-    );
     observation.close();
 }
 

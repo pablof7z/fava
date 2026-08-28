@@ -15,7 +15,7 @@ use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publication::Publication;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
-use fava_query::{QueryEvaluator, QuerySource};
+use fava_query::{Query, QueryEvaluator, QuerySnapshot, QuerySource};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::{
@@ -470,10 +470,15 @@ impl Router for CountingRouter {
         "semantic-test"
     }
 
+    fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
+        Ok(Vec::new())
+    }
+
     fn preview(
         &self,
         request: &RouteRequest,
         _upstream: &RoutePlan,
+        _inputs: &[QuerySnapshot],
     ) -> Result<RouteContribution, RouterError> {
         self.previews.fetch_add(1, Ordering::SeqCst);
         Ok(self.contribution(request))
@@ -482,7 +487,8 @@ impl Router for CountingRouter {
     fn open(
         &self,
         request: RouteRequest,
-        _upstream: watch::Receiver<Arc<RoutePlan>>,
+        _upstream: Arc<RoutePlan>,
+        _inputs: Vec<QuerySnapshot>,
     ) -> Result<Box<dyn RouterSession>, RouterError> {
         self.opens.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(StaticRouterSession(self.contribution(&request))))
@@ -496,10 +502,16 @@ impl RouterSession for StaticRouterSession {
         self.0.clone()
     }
 
-    fn next_change(
+    fn replace(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<RouteContribution, RouterError>> + Send + '_>> {
-        Box::pin(std::future::pending())
+        _: Arc<RoutePlan>,
+        inputs: Vec<QuerySnapshot>,
+    ) -> Result<RouteContribution, RouterError> {
+        if inputs.is_empty() {
+            Ok(self.current())
+        } else {
+            Err(RouterError::Refused("unexpected router input".to_owned()))
+        }
     }
 
     fn close(&mut self) {}
