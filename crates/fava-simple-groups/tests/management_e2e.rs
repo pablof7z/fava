@@ -334,20 +334,6 @@ fn p_rows(event: &Value) -> Vec<Vec<String>> {
     tag_rows(event, "p")
 }
 
-fn append_tag(event: UnsignedEvent, tag: Tag) -> UnsignedEvent {
-    let mut tags = event.tags.to_vec();
-    tags.push(tag);
-    EventBuilder::from_parts(
-        event.pubkey,
-        event.kind,
-        event.created_at,
-        tags,
-        event.content,
-    )
-    .build()
-    .expect("rebuild event with tag")
-}
-
 fn p_tags(event: &Value) -> Vec<Vec<String>> {
     event["tags"]
         .as_array()
@@ -365,10 +351,16 @@ fn p_tags(event: &Value) -> Vec<Vec<String>> {
         .collect()
 }
 
+fn build_event(builder: EventBuilder) -> UnsignedEvent {
+    builder
+        .into_event_and_routing()
+        .expect("management builder constructs its event")
+        .0
+}
+
 async fn submit_and_assert_p_tags(
     ws: &mut Ws,
     sub_id: &str,
-    group_id: &str,
     event: UnsignedEvent,
     signer: &Keys,
     expected_p_tags: Vec<Vec<String>>,
@@ -378,17 +370,8 @@ async fn submit_and_assert_p_tags(
     let (ok, message) = submit(ws, event, signer).await;
     assert!(ok, "Croissant rejected kind-{kind}: {message}");
 
-    let events = req(ws, sub_id, json!({ "kinds": [kind], "#h": [group_id] })).await;
-    let matching = events
-        .iter()
-        .filter(|event| event["id"].as_str() == Some(&event_id))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        matching.len(),
-        1,
-        "expected one persisted kind-{kind} event"
-    );
-    assert_eq!(p_tags(matching[0]), expected_p_tags);
+    let stored = readback_one(ws, sub_id, &event_id).await;
+    assert_eq!(p_tags(&stored), expected_p_tags);
 }
 
 fn tempdir() -> PathBuf {
@@ -415,7 +398,11 @@ async fn gate1_create_group_accepted() {
     let r = RelayUrl::parse(&relay.url).unwrap();
     let group = SimpleGroup::new("phase-b-cats", vec![r]).unwrap();
 
-    let event = create_group(keys.public_key(), &group).expect("create_group");
+    let event = create_group(keys.public_key(), &group)
+        .expect("create_group")
+        .into_event_and_routing()
+        .expect("build event")
+        .0;
 
     let (ok, msg) = submit(&mut ws, event, &keys).await;
     eprintln!("[gate1] create_group OK={ok} msg={msg:?}");
@@ -448,7 +435,11 @@ async fn gate2_put_user_and_39001_observation() {
     let group = SimpleGroup::new("phase-b-gate2", vec![r]).unwrap();
 
     // — create_group (kind 9007) —
-    let cg = create_group(admin_keys.public_key(), &group).expect("create_group");
+    let cg = create_group(admin_keys.public_key(), &group)
+        .expect("create_group")
+        .into_event_and_routing()
+        .expect("build event")
+        .0;
     let (ok, msg) = submit(&mut ws, cg, &admin_keys).await;
     eprintln!("[gate2] create_group OK={ok} msg={msg:?}");
     assert!(ok, "create_group rejected: {msg}");
@@ -460,7 +451,10 @@ async fn gate2_put_user_and_39001_observation() {
         &[member_keys.public_key()],
         &["admin"],
     )
-    .expect("put_user");
+    .expect("put_user")
+    .into_event_and_routing()
+    .expect("build event")
+    .0;
     let (ok, msg) = submit(&mut ws, pu, &admin_keys).await;
     eprintln!("[gate2] put_user OK={ok} msg={msg:?}");
     assert!(ok, "put_user rejected: {msg}");
@@ -537,7 +531,10 @@ async fn gate3_wrong_authority_relay_rejects() {
         &[admin_keys.public_key()],
         &[],
     )
-    .expect("put_user");
+    .expect("put_user")
+    .into_event_and_routing()
+    .expect("build event")
+    .0;
 
     let (ok, msg) = submit(&mut ws, tampered, &rogue_keys).await;
     eprintln!("[gate3] rogue put_user OK={ok} msg={msg:?}");
@@ -579,15 +576,23 @@ async fn gate4_all_constructors_accepted() {
         .iter()
         .map(|target| vec!["p".to_owned(), target.to_hex(), "member".to_owned()])
         .collect::<Vec<_>>();
-    let invite =
-        EventBuilder::from(invite(admin_keys.public_key(), &group, &user_targets, &r).unwrap())
-            .tag(Tag::parse(["code", "gate4-required-invite-code"]).unwrap())
-            .build()
-            .unwrap();
+    let invite_event = invite(
+        admin_keys.public_key(),
+        &group,
+        "gate4-required-invite-code",
+    )
+    .unwrap()
+    .into_event_and_routing()
+    .unwrap()
+    .0;
     let cases: Vec<(&str, UnsignedEvent, &Keys, Option<Vec<Vec<String>>>)> = vec![
         (
             "create_group",
-            create_group(admin_keys.public_key(), &group).unwrap(),
+            create_group(admin_keys.public_key(), &group)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &admin_keys,
             None,
         ),
@@ -603,44 +608,71 @@ async fn gate4_all_constructors_accepted() {
                     ..Default::default()
                 },
             )
-            .unwrap(),
+            .unwrap()
+            .into_event_and_routing()
+            .unwrap()
+            .0,
             &admin_keys,
             None,
         ),
-        ("invite", invite, &admin_keys, Some(target_p_rows.clone())),
+        ("invite", invite_event, &admin_keys, None),
         (
             "join_request",
-            join_request(user_keys.public_key(), &group).unwrap(),
+            join_request(user_keys.public_key(), &group, None)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &user_keys,
             None,
         ),
         (
             "put_user",
-            put_user(admin_keys.public_key(), &group, &user_targets, &["member"]).unwrap(),
+            put_user(admin_keys.public_key(), &group, &user_targets, &["member"])
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &admin_keys,
             Some(put_user_p_rows),
         ),
         (
             "remove_user",
-            remove_user(admin_keys.public_key(), &group, &user_targets).unwrap(),
+            remove_user(admin_keys.public_key(), &group, &user_targets)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &admin_keys,
             Some(target_p_rows),
         ),
         (
             "delete_event",
-            delete_event(admin_keys.public_key(), &group, &target_id).unwrap(),
+            delete_event(admin_keys.public_key(), &group, &target_id)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &admin_keys,
             None,
         ),
         (
             "delete_group",
-            delete_group(admin_keys.public_key(), &group).unwrap(),
+            delete_group(admin_keys.public_key(), &group)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &admin_keys,
             None,
         ),
         (
             "leave_group",
-            leave_group(user_keys.public_key(), &group).unwrap(),
+            leave_group(user_keys.public_key(), &group)
+                .unwrap()
+                .into_event_and_routing()
+                .unwrap()
+                .0,
             &user_keys,
             None,
         ),
@@ -650,13 +682,15 @@ async fn gate4_all_constructors_accepted() {
         let (event_id, ok, msg) = submit_with_id(&mut ws, event.clone(), signer).await;
         eprintln!("[gate4] {name} OK={ok} msg={msg:?}");
         assert!(ok, "{name} was rejected by relay: {msg}");
-        if let Some(expected_p_rows) = expected_p_rows {
+        if expected_p_rows.is_some() || *name == "invite" {
             let stored = readback_one(&mut ws, &format!("gate4-{index}"), &event_id).await;
-            assert_eq!(
-                &p_rows(&stored),
-                expected_p_rows,
-                "{name} relay readback changed ordered repeated p rows"
-            );
+            if let Some(expected_p_rows) = expected_p_rows {
+                assert_eq!(
+                    &p_rows(&stored),
+                    expected_p_rows,
+                    "{name} relay readback changed ordered repeated p rows"
+                );
+            }
             if *name == "invite" {
                 assert_eq!(
                     tag_rows(&stored, "code"),
@@ -673,12 +707,12 @@ async fn gate4_all_constructors_accepted() {
     relay.child.kill().await.ok();
 }
 
-/// Array-based management constructors preserve one, many, and no `p` tags on
-/// a real NIP-29 relay. Croissant refuses empty `put_user` and `remove_user`
-/// target lists; a create-invite remains useful with a code and no invitee.
+/// Array-based user-management constructors preserve one, many, and no `p`
+/// tags on a real NIP-29 relay. Croissant refuses empty `put_user` and
+/// `remove_user` targets; an invitation carries a code and no user targets.
 #[tokio::test]
 #[ignore = "requires Croissant; set NIP29_RELAY_BIN and run with -- --ignored"]
-async fn array_management_constructors_preserve_target_cardinality() {
+async fn array_user_management_constructors_preserve_target_cardinality() {
     let tmp = tempdir();
     let mut relay = start_nip29_relay(&tmp).await;
     let mut ws = ws_connect(&relay.url).await;
@@ -690,12 +724,15 @@ async fn array_management_constructors_preserve_target_cardinality() {
         Keys::generate().public_key(),
         Keys::generate().public_key(),
     ];
-    let group_id = "array-management";
-    let group = SimpleGroup::new(group_id, vec![RelayUrl::parse(&relay.url).unwrap()]).unwrap();
+    let group = SimpleGroup::new(
+        "array-management",
+        vec![RelayUrl::parse(&relay.url).unwrap()],
+    )
+    .unwrap();
 
     let (ok, message) = submit(
         &mut ws,
-        create_group(admin.public_key(), &group).expect("create group"),
+        build_event(create_group(admin.public_key(), &group).expect("create group")),
         &admin,
     )
     .await;
@@ -703,15 +740,17 @@ async fn array_management_constructors_preserve_target_cardinality() {
 
     let (ok, message) = submit(
         &mut ws,
-        edit_metadata(
-            admin.public_key(),
-            &group,
-            &MetadataEdit {
-                access: Some(GroupAccess::Closed),
-                ..Default::default()
-            },
-        )
-        .expect("close group"),
+        build_event(
+            edit_metadata(
+                admin.public_key(),
+                &group,
+                &MetadataEdit {
+                    access: Some(GroupAccess::Closed),
+                    ..Default::default()
+                },
+            )
+            .expect("close group"),
+        ),
         &admin,
     )
     .await;
@@ -726,8 +765,9 @@ async fn array_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "put-one",
-        group_id,
-        put_user(admin.public_key(), &group, &[one_user], &["member"]).expect("put one"),
+        build_event(
+            put_user(admin.public_key(), &group, &[one_user], &["member"]).expect("put one"),
+        ),
         &admin,
         vec![vec!["p".to_owned(), one_user.to_hex(), "member".to_owned()]],
     )
@@ -735,8 +775,9 @@ async fn array_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "put-many",
-        group_id,
-        put_user(admin.public_key(), &group, &many_users, &["member"]).expect("put many"),
+        build_event(
+            put_user(admin.public_key(), &group, &many_users, &["member"]).expect("put many"),
+        ),
         &admin,
         many_p_tags
             .iter()
@@ -747,8 +788,7 @@ async fn array_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "remove-one",
-        group_id,
-        remove_user(admin.public_key(), &group, &[one_user]).expect("remove one"),
+        build_event(remove_user(admin.public_key(), &group, &[one_user]).expect("remove one")),
         &admin,
         one_p_tag.clone(),
     )
@@ -756,35 +796,22 @@ async fn array_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "remove-many",
-        group_id,
-        remove_user(admin.public_key(), &group, &many_users).expect("remove many"),
+        build_event(remove_user(admin.public_key(), &group, &many_users).expect("remove many")),
         &admin,
         many_p_tags.clone(),
     )
     .await;
 
-    for (sub_id, code, invitees, expected) in [
-        ("invite-one", "array-invite-one", vec![one_user], one_p_tag),
-        (
-            "invite-many",
-            "array-invite-many",
-            many_users.to_vec(),
-            many_p_tags,
-        ),
-        ("invite-empty", "array-invite-empty", Vec::new(), Vec::new()),
-    ] {
-        let invitation = append_tag(
-            invite(
-                admin.public_key(),
-                &group,
-                &invitees,
-                &RelayUrl::parse(&relay.url).unwrap(),
-            )
-            .expect("build invite"),
-            Tag::parse(["code", code]).expect("code tag"),
-        );
-        submit_and_assert_p_tags(&mut ws, sub_id, group_id, invitation, &admin, expected).await;
-    }
+    let invitation =
+        build_event(invite(admin.public_key(), &group, "array-invite-code").expect("build invite"));
+    let (invitation_id, ok, message) = submit_with_id(&mut ws, invitation, &admin).await;
+    assert!(ok, "Croissant rejected invite: {message}");
+    let stored = readback_one(&mut ws, "invite", &invitation_id).await;
+    assert_eq!(p_rows(&stored), Vec::<Vec<String>>::new());
+    assert_eq!(
+        tag_rows(&stored, "code"),
+        vec![vec!["code".to_owned(), "array-invite-code".to_owned()]]
+    );
 
     for (name, event) in [
         (
@@ -796,7 +823,7 @@ async fn array_management_constructors_preserve_target_cardinality() {
             remove_user(admin.public_key(), &group, &[]).expect("build empty remove"),
         ),
     ] {
-        let (ok, message) = submit(&mut ws, event, &admin).await;
+        let (ok, message) = submit(&mut ws, build_event(event), &admin).await;
         assert!(!ok, "Croissant accepted an empty {name} target list");
         assert!(message.contains("missing 'p' tags"), "{name}: {message}");
     }

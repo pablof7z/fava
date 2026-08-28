@@ -27132,10 +27132,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9007 create-group event with the exact group id in one `h` tag. It does not publish the event or decide relay authorization.",
+          "description": "Builds a self-routed kind-9007 event builder with the exact group id in one `h` tag. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::create_group",
-          "signature": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::create_group` from `management::create_group`.",
@@ -27150,7 +27150,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::create_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::create_group"
           }
         ],
@@ -27165,10 +27165,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9005 group event-deletion request with exact `h` and `e` tags. Relay acceptance and deletion effects remain outside this constructor.",
+          "description": "Builds a self-routed kind-9005 event builder with exact `h` and `e` tags. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::delete_event",
-          "signature": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::delete_event` from `management::delete_event`.",
@@ -27183,7 +27183,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::delete_event(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &nostr::event::id::EventId) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::delete_event"
           }
         ],
@@ -27198,10 +27198,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9008 delete-group request carrying the exact group id. It does not authorize, publish, or apply deletion.",
+          "description": "Builds a self-routed kind-9008 event builder carrying the exact group id. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::delete_group",
-          "signature": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::delete_group` from `management::delete_group`.",
@@ -27216,7 +27216,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::delete_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::delete_group"
           }
         ],
@@ -27231,10 +27231,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9002 metadata replacement body from the exact optional fields, visibility, and access supplied by the caller. Omitted fields emit no corresponding tag.",
+          "description": "Builds a self-routed kind-9002 event builder from the exact optional fields, visibility, and access supplied by the caller. Omitted fields emit no corresponding tag. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::edit_metadata",
-          "signature": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::edit_metadata` from `management::edit_metadata`.",
@@ -27249,7 +27249,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::edit_metadata(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &fava_simple_groups::MetadataEdit) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::edit_metadata"
           }
         ],
@@ -27286,10 +27286,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9009 invitation with exact `h`, one `p` tag for every supplied key, and a relay tag. Empty slices emit no `p` tags. Reopen the body through `EventBuilder::from` to add the required `code` tag where a relay requires it.",
+          "description": "Builds a self-routed kind-9009 event builder with exact `h` and `code` tags only; no `p` tags. Takes an exact required code string. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::invite",
-          "signature": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &nostr::types::url::RelayUrl) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::invite` from `management::invite`.",
@@ -27304,7 +27304,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &nostr::types::url::RelayUrl) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::invite(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::invite"
           }
         ],
@@ -27319,10 +27319,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9021 join request carrying the exact group id. Optional invitation context and publication remain caller composition.",
+          "description": "Builds a self-routed kind-9021 event builder. Emits `h` and, when code is `Some`, the exact invite code tag. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::join_request",
-          "signature": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::join_request` from `management::join_request`.",
@@ -27337,7 +27337,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::join_request"
           }
         ],
@@ -27352,10 +27352,10 @@
     {
       "interface": [
         {
-          "description": "Builds an unsigned kind-9022 leave request for the author and exact group id. Relay acceptance and membership state remain outside this constructor.",
+          "description": "Builds a self-routed kind-9022 event builder carrying the exact group id. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::leave_group",
-          "signature": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::leave_group` from `management::leave_group`.",
@@ -27370,7 +27370,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::leave_group"
           }
         ],
@@ -27385,10 +27385,10 @@
     {
       "interface": [
         {
-          "description": "Builds one unsigned kind-9000 put-user event with the exact group id and one `p` tag, including the common caller-supplied roles, for every supplied user key. Empty slices emit no `p` tags.",
+          "description": "Builds a self-routed kind-9000 event builder with one `p` tag per supplied user key and the common caller-supplied roles. Empty slices emit no `p` tags. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::put_user",
-          "signature": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &[&str]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &[&str]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::put_user` from `management::put_user`.",
@@ -27403,7 +27403,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &[&str]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &[&str]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::put_user"
           }
         ],
@@ -27484,10 +27484,10 @@
     {
       "interface": [
         {
-          "description": "Builds one unsigned kind-9001 remove-user event with the exact group id and one `p` tag for every supplied user key. Empty slices emit no `p` tags.",
+          "description": "Builds a self-routed kind-9001 event builder with one `p` tag for every supplied user key. Empty slices emit no `p` tags. Publish via `fava.publish(builder)`.",
           "kind": "Function",
           "path": "fava_simple_groups::remove_user",
-          "signature": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>"
+          "signature": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>"
         },
         {
           "description": "Exports this term at `fava_simple_groups::remove_user` from `management::remove_user`.",
@@ -27502,7 +27502,7 @@
         "private_architectural_state": [],
         "public_api": [
           {
-            "declaration": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey]) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::builder::EventBuildError>",
+            "declaration": "pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>",
             "path": "fava_simple_groups::remove_user"
           }
         ],

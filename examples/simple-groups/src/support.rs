@@ -210,38 +210,6 @@ pub(super) fn assemble(alice: &Keys, bob: &Keys, carol: &Keys, dave: &Keys) -> D
         .build()?)
 }
 
-/// Publish to `relay`, wait for every destination fact, and require exact relay
-/// acknowledgement evidence.
-///
-/// Settling on [`all_terminal`] rather than a bare acknowledgement threshold is
-/// what makes a rejection legible: the relay's own message reaches the caller
-/// instead of a bare timeout.
-pub(super) async fn publish_accepted(
-    fava: &Fava,
-    relay: &RelayUrl,
-    label: &str,
-    event: UnsignedEvent,
-) -> DemoResult<Receipt> {
-    let event_id = event.compute_id();
-    let kind = event.kind;
-    println!("   {label}");
-    let write = fava.to([relay.clone()])?.publish(event)?;
-    let receipt = settle(label, write.settled(all_terminal())).await?;
-    if receipt.acknowledged() == 0 {
-        return Err(format!(
-            "{label} — expected {relay} to acknowledge kind {kind} ({event_id}); it returned {}",
-            outcomes(&receipt)
-        )
-        .into());
-    }
-    println!(
-        "      kind={kind}, event={event_id}, acknowledged={}, rejected={}",
-        receipt.acknowledged(),
-        receipt.rejected()
-    );
-    Ok(receipt)
-}
-
 /// Publish to `relay` and require exact relay *rejection* evidence.
 ///
 /// `expected` states, in the demo's own words, why the relay should refuse. The
@@ -298,6 +266,30 @@ pub(super) async fn publish_builder(
         receipt.rejected()
     );
     Ok(receipt)
+}
+
+pub(super) async fn publish_builder_rejected(
+    fava: &Fava,
+    label: &str,
+    expected: &str,
+    builder: EventBuilder,
+) -> DemoResult<String> {
+    println!("   {label}");
+    println!("      expected: {expected}");
+    let write = fava.publish(builder)?;
+    let receipt = settle(label, write.settled(all_terminal())).await?;
+    let Some(message) = rejection_message(&receipt) else {
+        return Err(format!(
+            "{label} — expected rejection because {expected}; it returned {}",
+            outcomes(&receipt)
+        )
+        .into());
+    };
+    if message.is_empty() {
+        return Err(format!("{label} — relay rejected without stating a reason").into());
+    }
+    println!("      relay said: {message}");
+    Ok(message.to_owned())
 }
 
 pub(super) async fn publish_edit(

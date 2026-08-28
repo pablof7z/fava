@@ -90,9 +90,8 @@ async fn main() -> DemoResult<()> {
     );
 
     println!("\n6. Typed management — every call is acknowledged and then read back off the relay");
-    let created = support::publish_accepted(
+    let created = support::publish_builder(
         &fava,
-        &relay,
         "create_group(Alice, group)",
         create_group(alice.public_key(), &group)?,
     )
@@ -117,12 +116,10 @@ async fn main() -> DemoResult<()> {
             access: Some(GroupAccess::Closed),
         },
     )?;
-    let management_kinds = typed_management_kinds(&group, &alice, &bob, &relay)?;
-    let metadata_kind = metadata.kind;
+    let management_kinds = typed_management_kinds();
     let metadata = with_supported_kinds(metadata, &management_kinds)?;
-    let edited = support::publish_accepted(
+    let edited = support::publish_builder(
         &fava,
-        &relay,
         "edit_metadata(Alice, group, name/about/picture) + supported_kinds tag",
         metadata,
     )
@@ -131,7 +128,7 @@ async fn main() -> DemoResult<()> {
         &mut group_events,
         "edit_metadata(Alice, group)",
         edited.current.id(),
-        metadata_kind,
+        edited.current.event.kind(),
         &[
             ("h", group_id.clone()),
             ("name", "Fava Relay Demo".to_owned()),
@@ -141,72 +138,59 @@ async fn main() -> DemoResult<()> {
     .await?;
 
     let invite_code = format!("invite-{group_id}");
-    let invitation = append_tags(
-        invite(alice.public_key(), &group, &[bob.public_key()], &relay)?,
-        [Tag::parse(["code", &invite_code])?],
-    )?;
-    let invitation_kind = invitation.kind;
-    let invited = support::publish_accepted(
+    let invited = support::publish_builder(
         &fava,
-        &relay,
-        "invite(Alice, Bob) + relay-required code tag",
-        invitation,
+        "invite(Alice, group, code)",
+        invite(alice.public_key(), &group, &invite_code)?,
     )
     .await?;
     support::confirm_relay_copy(
         &mut group_events,
-        "invite(Alice, Bob)",
+        "invite(Alice, group)",
         invited.current.id(),
-        invitation_kind,
-        &[
-            ("h", group_id.clone()),
-            ("p", bob.public_key().to_hex()),
-            ("code", invite_code.clone()),
-        ],
-    )
-    .await?;
-
-    let bob_join = append_tags(
-        join_request(bob.public_key(), &group)?,
-        [Tag::parse(["code", &invite_code])?],
-    )?;
-    let join_kind = bob_join.kind;
-    let joined =
-        support::publish_accepted(&fava, &relay, "join_request(Bob) + invite code", bob_join)
-            .await?;
-    support::confirm_relay_copy(
-        &mut group_events,
-        "join_request(Bob)",
-        joined.current.id(),
-        join_kind,
+        invited.current.event.kind(),
         &[("h", group_id.clone()), ("code", invite_code.clone())],
     )
     .await?;
 
-    let bob_member = put_user(alice.public_key(), &group, &[bob.public_key()], &["member"])?;
-    let put_user_kind = bob_member.kind;
-    let bob_member =
-        support::publish_accepted(&fava, &relay, "put_user(Alice, Bob, member)", bob_member)
-            .await?;
+    let joined = support::publish_builder(
+        &fava,
+        "join_request(Bob, code)",
+        join_request(bob.public_key(), &group, Some(&invite_code))?,
+    )
+    .await?;
+    support::confirm_relay_copy(
+        &mut group_events,
+        "join_request(Bob)",
+        joined.current.id(),
+        joined.current.event.kind(),
+        &[("h", group_id.clone()), ("code", invite_code.clone())],
+    )
+    .await?;
+
+    let bob_member = support::publish_builder(
+        &fava,
+        "put_user(Alice, Bob, member)",
+        put_user(alice.public_key(), &group, &[bob.public_key()], &["member"])?,
+    )
+    .await?;
     support::confirm_relay_copy(
         &mut group_events,
         "put_user(Alice, Bob, member)",
         bob_member.current.id(),
-        put_user_kind,
+        bob_member.current.event.kind(),
         &[("h", group_id.clone()), ("p", bob.public_key().to_hex())],
     )
     .await?;
 
-    support::publish_accepted(
+    support::publish_builder(
         &fava,
-        &relay,
         "put_user(Alice, Carol, member)",
         put_user(alice.public_key(), &group, &[carol.public_key()], &["member"])?,
     )
     .await?;
-    let left = support::publish_accepted(
+    let left = support::publish_builder(
         &fava,
-        &relay,
         "leave_group(Carol)",
         leave_group(carol.public_key(), &group)?,
     )
@@ -220,16 +204,14 @@ async fn main() -> DemoResult<()> {
         &[("h", group_id.clone())],
     )
     .await?;
-    support::publish_accepted(
+    support::publish_builder(
         &fava,
-        &relay,
         "put_user(Alice, Carol) — add her again before removal",
         put_user(alice.public_key(), &group, &[carol.public_key()], &[])?,
     )
     .await?;
-    let removed = support::publish_accepted(
+    let removed = support::publish_builder(
         &fava,
-        &relay,
         "remove_user(Alice, Carol)",
         remove_user(alice.public_key(), &group, &[carol.public_key()])?,
     )
@@ -327,17 +309,15 @@ async fn main() -> DemoResult<()> {
         "\n9. Management refusals — the same typed calls made without the authority to make them"
     );
     if derives_state {
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "create_group(Alice, group) again",
             "the group already exists",
             create_group(alice.public_key(), &group)?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "edit_metadata(Dave, group, name=Hijacked)",
             "Dave is not a member of this closed group",
             edit_metadata(
@@ -350,41 +330,36 @@ async fn main() -> DemoResult<()> {
             )?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
-            "invite(Dave, Carol)",
+            "invite(Dave, group, code)",
             "Dave cannot invite anyone into a group he is not in",
-            invite(dave.public_key(), &group, &[carol.public_key()], &relay)?,
+            invite(dave.public_key(), &group, "demo-code")?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "join_request(Dave) with no invite code",
             "the group is closed and Dave holds no code",
-            join_request(dave.public_key(), &group)?,
+            join_request(dave.public_key(), &group, None)?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "put_user(Alice, Bob, member) again",
             "Bob already holds exactly that role",
             put_user(alice.public_key(), &group, &[bob.public_key()], &["member"])?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "remove_user(Alice, Carol) again",
             "Carol has already been removed",
             remove_user(alice.public_key(), &group, &[carol.public_key()])?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "delete_event(Alice, an id the relay never stored)",
             "the target event does not exist on this relay",
             delete_event(
@@ -394,17 +369,15 @@ async fn main() -> DemoResult<()> {
             )?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "delete_group(Bob)",
             "Bob is a plain member, not an admin",
             delete_group(bob.public_key(), &group)?,
         )
         .await?;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "leave_group(Dave)",
             "Dave cannot leave a group he never joined",
             leave_group(dave.public_key(), &group)?,
@@ -497,9 +470,8 @@ async fn main() -> DemoResult<()> {
     .await?;
 
     println!("\n11. Deletion — and the relay-visible effect of each deletion");
-    let deleted_event = support::publish_accepted(
+    let deleted_event = support::publish_builder(
         &fava,
-        &relay,
         "delete_event(Alice, group content)",
         delete_event(alice.public_key(), &group, &content_id)?,
     )
@@ -529,9 +501,8 @@ async fn main() -> DemoResult<()> {
         println!("   it would simply store the content again.");
     }
 
-    let deleted_group = support::publish_accepted(
+    let deleted_group = support::publish_builder(
         &fava,
-        &relay,
         "delete_group(Alice, group)",
         delete_group(alice.public_key(), &group)?,
     )
@@ -543,9 +514,8 @@ async fn main() -> DemoResult<()> {
         // visible in what it does next, not in a read-back: every further
         // management call for this id must be refused as unknown.
         support::wait_next_second().await;
-        support::publish_rejected(
+        support::publish_builder_rejected(
             &fava,
-            &relay,
             "edit_metadata(Alice, group) after delete_group",
             "the group no longer exists on this relay",
             edit_metadata(
@@ -608,9 +578,9 @@ fn content_of(event: &fava::EventValue) -> String {
 }
 
 fn with_supported_kinds(
-    event: fava::UnsignedEvent,
+    builder: EventBuilder,
     management_kinds: &[Kind],
-) -> DemoResult<fava::UnsignedEvent> {
+) -> DemoResult<EventBuilder> {
     let mut values = vec!["supported_kinds".to_owned()];
     values.extend(
         management_kinds
@@ -618,35 +588,21 @@ fn with_supported_kinds(
             .chain([Kind::TextNote, Kind::Reaction].iter())
             .map(|kind| kind.as_u16().to_string()),
     );
-    append_tags(event, [Tag::parse(values)?])
+    Ok(builder.tags([Tag::parse(values)?]))
 }
 
-fn typed_management_kinds(
-    group: &SimpleGroup,
-    alice: &Keys,
-    bob: &Keys,
-    relay: &fava::RelayUrl,
-) -> DemoResult<Vec<Kind>> {
-    let create = create_group(alice.public_key(), group)?;
-    let target = create.compute_id();
-    Ok(vec![
-        create.kind,
-        edit_metadata(alice.public_key(), group, &MetadataEdit::default())?.kind,
-        invite(alice.public_key(), group, &[bob.public_key()], relay)?.kind,
-        join_request(bob.public_key(), group)?.kind,
-        put_user(alice.public_key(), group, &[bob.public_key()], &[])?.kind,
-        remove_user(alice.public_key(), group, &[bob.public_key()])?.kind,
-        delete_event(alice.public_key(), group, &target)?.kind,
-        delete_group(alice.public_key(), group)?.kind,
-        leave_group(bob.public_key(), group)?.kind,
-    ])
-}
-
-fn append_tags(
-    event: fava::UnsignedEvent,
-    extra: impl IntoIterator<Item = Tag>,
-) -> DemoResult<fava::UnsignedEvent> {
-    Ok(EventBuilder::from(event).tags(extra).build()?)
+fn typed_management_kinds() -> Vec<Kind> {
+    vec![
+        Kind::from_u16(9000),
+        Kind::from_u16(9001),
+        Kind::from_u16(9002),
+        Kind::from_u16(9005),
+        Kind::from_u16(9007),
+        Kind::from_u16(9008),
+        Kind::from_u16(9009),
+        Kind::from_u16(9021),
+        Kind::from_u16(9022),
+    ]
 }
 
 fn unique_group_id() -> Result<String, Box<dyn Error + Send + Sync>> {

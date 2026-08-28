@@ -2,14 +2,16 @@
 //!
 //! This module owns the group lifecycle write surface. Every NIP-29 management
 //! kind number lives here and nowhere else; callers see typed functions that
-//! return [`UnsignedEvent`] values, not raw kind integers.
+//! return [`EventBuilder`] values, not raw kind integers.
 //!
 //! # Publish path
 //!
+//! Every constructor returns an [`EventBuilder`] already routed to the group's
+//! relays. Publish through `Fava::publish`:
+//!
 //! ```ignore
-//! // create_group returns a ready-to-publish UnsignedEvent.
-//! let event = create_group(author.public_key(), &group)?;
-//! let write = fava.to(group.relays().collect::<Vec<_>>())?.publish(event)?;
+//! let builder = create_group(author.public_key(), &group)?;
+//! let write = fava.publish(builder)?;
 //! ```
 //!
 //! # Encapsulation guarantee
@@ -17,8 +19,7 @@
 //! Kind numbers 9000–9009 and 9021–9022 are private constants in this module.
 //! No caller, test, or example writes `Kind::from_u16(9NNN)`.
 
-use fava_write::{EventBuildError, EventBuilder, EventId, PublicKey, Tag, UnsignedEvent};
-use nostr::types::RelayUrl;
+use fava_write::{EventBuilder, EventId, PublicKey, Tag, WriteIntentError};
 
 use crate::SimpleGroup;
 
@@ -94,8 +95,10 @@ pub enum GroupAccess {
 
 /// Build a kind-9007 create-group event for `group`.
 ///
-/// The event carries a single `h` tag with the group id. The relay creates
-/// the group when it accepts this event from an authorized pubkey.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. The event carries a single `h` tag with the group
+/// id. The relay creates the group when it accepts this event from an authorized
+/// pubkey.
 ///
 /// # Examples
 ///
@@ -107,24 +110,26 @@ pub enum GroupAccess {
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
-/// let event = create_group(keys.public_key(), &group)?;
+/// let builder = create_group(keys.public_key(), &group)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn create_group(
     author: PublicKey,
     group: &SimpleGroup,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     build(author, KIND_CREATE_GROUP, group, [])
 }
 
 /// Build a kind-9002 edit-metadata event for `group`.
 ///
-/// Tags for `None` fields in `edit` are omitted; the relay resets absent
-/// fields to their default values.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Tags for `None` fields in `edit` are omitted; the
+/// relay resets absent fields to their default values.
 ///
 /// # Examples
 ///
@@ -136,7 +141,7 @@ pub fn create_group(
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
-/// let event = edit_metadata(
+/// let builder = edit_metadata(
 ///     keys.public_key(),
 ///     &group,
 ///     &MetadataEdit {
@@ -150,12 +155,13 @@ pub fn create_group(
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn edit_metadata(
     author: PublicKey,
     group: &SimpleGroup,
     edit: &MetadataEdit,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     let mut extra: Vec<Tag> = Vec::new();
     if let Some(name) = &edit.name {
         extra.push(parse_tag(["name", name])?);
@@ -175,15 +181,11 @@ pub fn edit_metadata(
     build(author, KIND_EDIT_METADATA, group, extra)
 }
 
-/// Build a kind-9009 invite event for `group`.
+/// Build a kind-9009 invite event for `group` with the exact invite code.
 ///
-/// Emits `h`, one optional `p` tag for every invitee, and a `relay` tag.
-///
-/// NIP-29's kind 9009 requires a `code` tag while invitee `p` tags are
-/// optional, so an empty `invitees` slice is valid. This constructor does not
-/// yet accept the required code: callers must reopen this unsigned body through
-/// [`EventBuilder::from`] and append the exact `code` tag before publication.
-/// That temporary composition gap is a caller-visible DX limitation.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Emits `h` and the exact `code` tag only. An
+/// empty code string is valid and emits `["code", ""]`.
 ///
 /// # Examples
 ///
@@ -192,37 +194,32 @@ pub fn edit_metadata(
 /// # use nostr::key::Keys;
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::new("cats", vec![relay.clone()])?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
-/// let invitees = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
-/// let event = invite(admin.public_key(), &group, &invitees, &relay)?;
+/// let builder = invite(admin.public_key(), &group, "my-invite-code")?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the completed event exceeds a universal
-/// `fava-write` construction bound.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn invite(
     author: PublicKey,
     group: &SimpleGroup,
-    invitees: &[PublicKey],
-    relay: &RelayUrl,
-) -> Result<UnsignedEvent, EventBuildError> {
-    let mut extra = invitees
-        .iter()
-        .map(|invitee| parse_tag(["p", &invitee.to_hex()]))
-        .collect::<Result<Vec<_>, _>>()?;
-    extra.push(parse_tag(["relay", relay.as_str()])?);
-    build(author, KIND_INVITE, group, extra)
+    code: &str,
+) -> Result<EventBuilder, WriteIntentError> {
+    let code_tag = parse_tag(["code", code])?;
+    build(author, KIND_INVITE, group, [code_tag])
 }
 
 /// Build a kind-9021 join-request event for `group`.
 ///
-/// Emits only the required `h` tag. Callers that need the optional `p` or
-/// `relay` fields construct that exact variant through the generic
-/// [`EventBuilder`](fava_write::EventBuilder) before publication.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Emits `h` and, when `code` is `Some`, the exact
+/// invite code tag. The optional reason field stays ordinary builder
+/// `.content(...)` on the returned builder.
 ///
 /// # Examples
 ///
@@ -234,24 +231,33 @@ pub fn invite(
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
-/// let event = join_request(keys.public_key(), &group)?;
+/// let builder = join_request(keys.public_key(), &group, None)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn join_request(
     author: PublicKey,
     group: &SimpleGroup,
-) -> Result<UnsignedEvent, EventBuildError> {
-    build(author, KIND_JOIN_REQUEST, group, [])
+    code: Option<&str>,
+) -> Result<EventBuilder, WriteIntentError> {
+    let extra: Vec<Tag> = if let Some(c) = code {
+        vec![parse_tag(["code", c])?]
+    } else {
+        vec![]
+    };
+    build(author, KIND_JOIN_REQUEST, group, extra)
 }
 
 /// Build a kind-9000 put-user event for `group`.
 ///
-/// Emits `h` and one `p` tag for every supplied user. `roles` are appended as
-/// additional values on each `p` tag: `["p", "<pubkey>", "role1", ...]`.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Emits `h` and one `p` tag for every supplied user.
+/// `roles` are appended as additional values on each `p` tag:
+/// `["p", "<pubkey>", "role1", ...]`. Empty slices emit no `p` tags.
 ///
 /// # Examples
 ///
@@ -265,26 +271,26 @@ pub fn join_request(
 /// let members = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
 /// // Grant both users the member role in one event.
-/// let event = put_user(admin.public_key(), &group, &members, &["member"])?;
+/// let builder = put_user(admin.public_key(), &group, &members, &["member"])?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the completed event exceeds a universal
-/// `fava-write` construction bound.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn put_user(
     author: PublicKey,
     group: &SimpleGroup,
     users: &[PublicKey],
     roles: &[&str],
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     let p_tags = users
         .iter()
         .map(|user| {
             let mut values = vec!["p".to_owned(), user.to_hex()];
             values.extend(roles.iter().map(|role| (*role).to_owned()));
-            Tag::parse(values).map_err(|error| EventBuildError::Encoding(error.to_string()))
+            Tag::parse(values).map_err(|error| WriteIntentError::Encoding(error.to_string()))
         })
         .collect::<Result<Vec<_>, _>>()?;
     build(author, KIND_PUT_USER, group, p_tags)
@@ -292,7 +298,9 @@ pub fn put_user(
 
 /// Build a kind-9001 remove-user event for `group`.
 ///
-/// Emits `h` and one `p` tag for every user pubkey to remove.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Emits `h` and one `p` tag for every user pubkey
+/// to remove. Empty slices emit no `p` tags.
 ///
 /// # Examples
 ///
@@ -305,19 +313,19 @@ pub fn put_user(
 /// let admin = Keys::generate();
 /// let members = [Keys::generate().public_key(), Keys::generate().public_key()];
 ///
-/// let event = remove_user(admin.public_key(), &group, &members)?;
+/// let builder = remove_user(admin.public_key(), &group, &members)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the completed event exceeds a universal
-/// `fava-write` construction bound.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn remove_user(
     author: PublicKey,
     group: &SimpleGroup,
     users: &[PublicKey],
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     let p_tags = users
         .iter()
         .map(|user| parse_tag(["p", &user.to_hex()]))
@@ -327,7 +335,8 @@ pub fn remove_user(
 
 /// Build a kind-9005 delete-event event for `group`.
 ///
-/// Emits `h` and `e` (id of the event to delete).
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. Emits `h` and `e` (id of the event to delete).
 ///
 /// # Examples
 ///
@@ -341,26 +350,28 @@ pub fn remove_user(
 /// let admin = Keys::generate();
 /// let target = EventId::from_byte_array([1u8; 32]);
 ///
-/// let event = delete_event(admin.public_key(), &group, &target)?;
+/// let builder = delete_event(admin.public_key(), &group, &target)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn delete_event(
     author: PublicKey,
     group: &SimpleGroup,
     event_id: &EventId,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     let extra = [parse_tag(["e", &event_id.to_hex()])?];
     build(author, KIND_DELETE_EVENT, group, extra)
 }
 
 /// Build a kind-9008 delete-group event for `group`.
 ///
-/// The relay removes the group when it accepts this event from an authorized
-/// pubkey. Only the `h` tag is emitted.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. The relay removes the group when it accepts this
+/// event from an authorized pubkey. Only the `h` tag is emitted.
 ///
 /// # Examples
 ///
@@ -372,24 +383,26 @@ pub fn delete_event(
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let admin = Keys::generate();
 ///
-/// let event = delete_group(admin.public_key(), &group)?;
+/// let builder = delete_group(admin.public_key(), &group)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn delete_group(
     author: PublicKey,
     group: &SimpleGroup,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     build(author, KIND_DELETE_GROUP, group, [])
 }
 
 /// Build a kind-9022 leave-group event for `group`.
 ///
-/// The relay removes the author from the group when it accepts this event.
-/// Only the `h` tag is emitted.
+/// Returns an [`EventBuilder`] routed to the group's relays; publish via
+/// `fava.publish(builder)`. The relay removes the author from the group when
+/// it accepts this event. Only the `h` tag is emitted.
 ///
 /// # Examples
 ///
@@ -401,40 +414,41 @@ pub fn delete_group(
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let keys = Keys::generate();
 ///
-/// let event = leave_group(keys.public_key(), &group)?;
+/// let builder = leave_group(keys.public_key(), &group)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// # Errors
 ///
-/// Returns [`EventBuildError`] when the event exceeds declared bounds.
+/// Returns [`WriteIntentError`] when the group's relay route exceeds declared
+/// bounds.
 pub fn leave_group(
     author: PublicKey,
     group: &SimpleGroup,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     build(author, KIND_LEAVE_GROUP, group, [])
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/// Build one management event: `h` tag first, then `extra` tags.
+/// Build one management event body and attach the group's relay routing.
 fn build(
     author: PublicKey,
     kind_u16: u16,
     group: &SimpleGroup,
     extra: impl IntoIterator<Item = Tag>,
-) -> Result<UnsignedEvent, EventBuildError> {
+) -> Result<EventBuilder, WriteIntentError> {
     let h_tag = parse_tag(["h", group.id()])?;
     let mut tags = vec![h_tag];
     tags.extend(extra);
     EventBuilder::new(author, nostr::event::Kind::from_u16(kind_u16))
         .tags(tags)
-        .build()
+        .to_relays(group.relays().collect::<Vec<_>>())
 }
 
-/// Parses a tag, converting the error to [`EventBuildError`].
-fn parse_tag<'a>(values: impl IntoIterator<Item = &'a str>) -> Result<Tag, EventBuildError> {
-    Tag::parse(values).map_err(|e| EventBuildError::Encoding(e.to_string()))
+/// Parses a tag, converting the error to [`WriteIntentError`].
+fn parse_tag<'a>(values: impl IntoIterator<Item = &'a str>) -> Result<Tag, WriteIntentError> {
+    Tag::parse(values).map_err(|e| WriteIntentError::Encoding(e.to_string()))
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -444,7 +458,7 @@ mod tests {
     use nostr::key::Keys;
     use nostr::types::RelayUrl;
 
-    use fava_write::EventId;
+    use fava_write::{EventBuildError, EventId, UnsignedEvent, WriteRouting};
 
     use super::*;
 
@@ -455,6 +469,16 @@ mod tests {
 
     fn author() -> PublicKey {
         Keys::generate().public_key()
+    }
+
+    /// Build an event from a constructor result, panicking on any failure.
+    fn build_event(result: Result<EventBuilder, WriteIntentError>) -> UnsignedEvent {
+        result.unwrap().into_event_and_routing().unwrap().0
+    }
+
+    /// Build the routing from a constructor result, panicking on any failure.
+    fn build_routing(result: Result<EventBuilder, WriteIntentError>) -> WriteRouting {
+        result.unwrap().into_event_and_routing().unwrap().1
     }
 
     fn h_tag(event: &UnsignedEvent, id: &str) -> bool {
@@ -491,10 +515,14 @@ mod tests {
             .collect()
     }
 
+    fn group_relay() -> RelayUrl {
+        RelayUrl::parse("wss://relay.example").unwrap()
+    }
+
     #[test]
     fn create_group_kind_and_h() {
         let group = group();
-        let event = create_group(author(), &group).unwrap();
+        let event = build_event(create_group(author(), &group));
         assert_eq!(event.kind.as_u16(), KIND_CREATE_GROUP);
         assert!(h_tag(&event, "cats"));
         assert_eq!(event.tags.len(), 1, "only h tag");
@@ -510,7 +538,7 @@ mod tests {
             visibility: Some(GroupVisibility::Private),
             access: Some(GroupAccess::Closed),
         };
-        let event = edit_metadata(author(), &group, &edit).unwrap();
+        let event = build_event(edit_metadata(author(), &group, &edit));
         assert_eq!(event.kind.as_u16(), KIND_EDIT_METADATA);
         assert!(h_tag(&event, "cats"));
         assert_eq!(tag_value(&event, "name", 1).as_deref(), Some("Cats"));
@@ -523,7 +551,7 @@ mod tests {
     #[test]
     fn edit_metadata_omits_optional_tags() {
         let group = group();
-        let event = edit_metadata(author(), &group, &MetadataEdit::default()).unwrap();
+        let event = build_event(edit_metadata(author(), &group, &MetadataEdit::default()));
         assert_eq!(event.kind.as_u16(), KIND_EDIT_METADATA);
         assert!(!has_tag_name(&event, "name"));
         assert!(!has_tag_name(&event, "private"));
@@ -538,42 +566,56 @@ mod tests {
             access: Some(GroupAccess::Open),
             ..Default::default()
         };
-        let event = edit_metadata(author(), &group, &edit).unwrap();
+        let event = build_event(edit_metadata(author(), &group, &edit));
         assert!(!has_tag_name(&event, "private"));
         assert!(!has_tag_name(&event, "closed"));
     }
 
     #[test]
-    fn invite_preserves_optional_target_cardinality() {
+    fn invite_emits_exact_code_tag_and_no_p_or_relay_tags() {
         let group = group();
-        let invitees = [Keys::generate().public_key(), Keys::generate().public_key()];
-        let relay = RelayUrl::parse("wss://invite.example").unwrap();
-        let event = invite(author(), &group, &invitees, &relay).unwrap();
+        let code = "test-invite-code";
+        let event = build_event(invite(author(), &group, code));
         assert_eq!(event.kind.as_u16(), KIND_INVITE);
         assert!(h_tag(&event, "cats"));
         assert_eq!(
-            p_tags(&event),
-            invitees
-                .iter()
-                .map(|invitee| vec!["p".to_owned(), invitee.to_hex()])
-                .collect::<Vec<_>>()
+            tag_value(&event, "code", 1).as_deref(),
+            Some(code),
+            "code tag carries the exact supplied code"
         );
-        assert_eq!(
-            tag_value(&event, "relay", 1).as_deref(),
-            Some(relay.as_str())
+        assert!(p_tags(&event).is_empty(), "invite must not emit p tags");
+        assert!(
+            !has_tag_name(&event, "relay"),
+            "invite must not emit relay tag"
         );
+        assert_eq!(event.tags.len(), 2, "exactly h and code");
 
-        let empty = invite(author(), &group, &[], &relay).unwrap();
-        assert!(p_tags(&empty).is_empty());
+        // Empty code string is valid.
+        let empty_code = build_event(invite(author(), &group, ""));
+        assert_eq!(
+            tag_value(&empty_code, "code", 1).as_deref(),
+            Some(""),
+            "empty code emits [\"code\", \"\"]"
+        );
     }
 
     #[test]
-    fn join_request_kind_and_h() {
+    fn join_request_kind_h_and_optional_code() {
         let group = group();
-        let event = join_request(author(), &group).unwrap();
+        let event = build_event(join_request(author(), &group, None));
         assert_eq!(event.kind.as_u16(), KIND_JOIN_REQUEST);
         assert!(h_tag(&event, "cats"));
-        assert_eq!(event.tags.len(), 1);
+        assert_eq!(event.tags.len(), 1, "only h tag when no code");
+
+        let with_code = build_event(join_request(author(), &group, Some("my-code")));
+        assert_eq!(with_code.kind.as_u16(), KIND_JOIN_REQUEST);
+        assert!(h_tag(&with_code, "cats"));
+        assert_eq!(
+            tag_value(&with_code, "code", 1).as_deref(),
+            Some("my-code"),
+            "code tag carries the exact supplied code"
+        );
+        assert_eq!(with_code.tags.len(), 2, "h and code");
     }
 
     #[test]
@@ -582,7 +624,7 @@ mod tests {
         let first = Keys::generate().public_key();
         let second = Keys::generate().public_key();
         let users = [first, second, first];
-        let event = put_user(author(), &group, &users, &["admin", "moderator"]).unwrap();
+        let event = build_event(put_user(author(), &group, &users, &["admin", "moderator"]));
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
         assert!(h_tag(&event, "cats"));
         assert_eq!(
@@ -599,17 +641,19 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         );
-        let empty = put_user(author(), &group, &[], &[]).unwrap();
+        let empty = build_event(put_user(author(), &group, &[], &[]));
         assert!(h_tag(&empty, "cats"));
         assert!(p_tags(&empty).is_empty());
     }
 
     #[test]
-    fn put_user_preserves_generic_event_build_refusals() {
+    fn put_user_build_refusals_surface_at_build_time() {
         let group = group();
         let users = vec![Keys::generate().public_key(); 2_001];
         assert!(matches!(
-            put_user(author(), &group, &users, &[]),
+            put_user(author(), &group, &users, &[])
+                .unwrap()
+                .into_event_and_routing(),
             Err(EventBuildError::TooManyTags {
                 actual: 2_002,
                 maximum: 2_000,
@@ -621,7 +665,7 @@ mod tests {
     fn put_user_no_roles() {
         let group = group();
         let user = Keys::generate().public_key();
-        let event = put_user(author(), &group, &[user], &[]).unwrap();
+        let event = build_event(put_user(author(), &group, &[user], &[]));
         assert_eq!(event.kind.as_u16(), KIND_PUT_USER);
         let p = event
             .tags
@@ -635,7 +679,7 @@ mod tests {
     fn remove_user_preserves_target_cardinality_and_encodes_empty() {
         let group = group();
         let users = [Keys::generate().public_key(), Keys::generate().public_key()];
-        let event = remove_user(author(), &group, &users).unwrap();
+        let event = build_event(remove_user(author(), &group, &users));
         assert_eq!(event.kind.as_u16(), KIND_REMOVE_USER);
         assert!(h_tag(&event, "cats"));
         assert_eq!(
@@ -645,7 +689,7 @@ mod tests {
                 .map(|user| vec!["p".to_owned(), user.to_hex()])
                 .collect::<Vec<_>>()
         );
-        let empty = remove_user(author(), &group, &[]).unwrap();
+        let empty = build_event(remove_user(author(), &group, &[]));
         assert!(h_tag(&empty, "cats"));
         assert!(p_tags(&empty).is_empty());
     }
@@ -654,7 +698,7 @@ mod tests {
     fn delete_event_kind_and_e() {
         let group = group();
         let target = EventId::from_byte_array([42u8; 32]);
-        let event = delete_event(author(), &group, &target).unwrap();
+        let event = build_event(delete_event(author(), &group, &target));
         assert_eq!(event.kind.as_u16(), KIND_DELETE_EVENT);
         assert!(h_tag(&event, "cats"));
         assert_eq!(
@@ -666,7 +710,7 @@ mod tests {
     #[test]
     fn delete_group_kind_and_h() {
         let group = group();
-        let event = delete_group(author(), &group).unwrap();
+        let event = build_event(delete_group(author(), &group));
         assert_eq!(event.kind.as_u16(), KIND_DELETE_GROUP);
         assert!(h_tag(&event, "cats"));
         assert_eq!(event.tags.len(), 1);
@@ -675,7 +719,7 @@ mod tests {
     #[test]
     fn leave_group_kind_and_h() {
         let group = group();
-        let event = leave_group(author(), &group).unwrap();
+        let event = build_event(leave_group(author(), &group));
         assert_eq!(event.kind.as_u16(), KIND_LEAVE_GROUP);
         assert!(h_tag(&event, "cats"));
         assert_eq!(event.tags.len(), 1);
@@ -687,14 +731,13 @@ mod tests {
         let group = group();
         let a = author();
         let user = Keys::generate().public_key();
-        let relay = RelayUrl::parse("wss://relay.example").unwrap();
         let target = EventId::from_byte_array([1u8; 32]);
 
-        let events = [
+        let builders = [
             create_group(a, &group).unwrap(),
             edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
-            invite(a, &group, &[user], &relay).unwrap(),
-            join_request(a, &group).unwrap(),
+            invite(a, &group, "code").unwrap(),
+            join_request(a, &group, None).unwrap(),
             put_user(a, &group, &[user], &[]).unwrap(),
             remove_user(a, &group, &[user]).unwrap(),
             delete_event(a, &group, &target).unwrap(),
@@ -702,12 +745,40 @@ mod tests {
             leave_group(a, &group).unwrap(),
         ];
 
-        for event in &events {
+        for builder in builders {
+            let (event, _) = builder.into_event_and_routing().unwrap();
             assert!(
-                h_tag(event, "cats"),
+                h_tag(&event, "cats"),
                 "missing h tag in kind {}",
                 event.kind.as_u16()
             );
+        }
+    }
+
+    /// Confirms every constructor embeds the group's relay route.
+    #[test]
+    fn all_constructors_have_group_relay_routing() {
+        let group = group();
+        let a = author();
+        let user = Keys::generate().public_key();
+        let target = EventId::from_byte_array([1u8; 32]);
+        let expected = WriteRouting::Explicit(vec![group_relay()]);
+
+        let builders = [
+            create_group(a, &group).unwrap(),
+            edit_metadata(a, &group, &MetadataEdit::default()).unwrap(),
+            invite(a, &group, "code").unwrap(),
+            join_request(a, &group, None).unwrap(),
+            put_user(a, &group, &[user], &[]).unwrap(),
+            remove_user(a, &group, &[user]).unwrap(),
+            delete_event(a, &group, &target).unwrap(),
+            delete_group(a, &group).unwrap(),
+            leave_group(a, &group).unwrap(),
+        ];
+
+        for builder in builders {
+            let routing = build_routing(Ok(builder));
+            assert_eq!(routing, expected);
         }
     }
 }

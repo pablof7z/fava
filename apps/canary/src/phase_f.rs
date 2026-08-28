@@ -213,11 +213,8 @@ async fn relay29_try_operations(
     )?;
 
     // ── Attempt create_group (kind 9007) ──────────────────────────────────────
-    let create_ev = create_group(author.public_key(), &group).map_err(error)?;
     let create_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(create_ev)
+        .publish(create_group(author.public_key(), &group).map_err(error)?)
         .map_err(error)?;
     let create_receipt = wait_terminal(&create_write).await?;
     let create_group_outcome = format!("{:?}", receipt_summary(&create_receipt));
@@ -240,11 +237,8 @@ async fn relay29_try_operations(
     // ── Attempt join_request (kind 9021) ─────────────────────────────────────
     // kind 9021 is outside the 9000-9020 moderation range → may be accepted.
     use fava_simple_groups::join_request;
-    let join_ev = join_request(author.public_key(), &group).map_err(error)?;
     let join_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(join_ev)
+        .publish(join_request(author.public_key(), &group, None).map_err(error)?)
         .map_err(error)?;
     let join_receipt = wait_terminal(&join_write).await?;
     let join_request_outcome = format!("{:?}", receipt_summary(&join_receipt));
@@ -260,18 +254,8 @@ async fn relay29_try_operations(
 
     // ── Attempt invite (kind 9009) ────────────────────────────────────────────
     use fava_simple_groups::invite;
-    let other_key = deterministic_keys(&format!("phase-f-relay29-other\0{}", options.seed))?;
-    let invite_ev = invite(
-        author.public_key(),
-        &group,
-        &[other_key.public_key()],
-        &relay,
-    )
-    .map_err(error)?;
     let invite_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(invite_ev)
+        .publish(invite(author.public_key(), &group, "phase-f-invite-code").map_err(error)?)
         .map_err(error)?;
     let invite_receipt = wait_terminal(&invite_write).await?;
     let invite_rejection = if invite_receipt.acknowledged() == 0 {
@@ -292,11 +276,8 @@ async fn relay29_try_operations(
 
     // ── Attempt delete_group (kind 9008) ──────────────────────────────────────
     use fava_simple_groups::delete_group;
-    let delete_ev = delete_group(author.public_key(), &group).map_err(error)?;
     let delete_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(delete_ev)
+        .publish(delete_group(author.public_key(), &group).map_err(error)?)
         .map_err(error)?;
     let delete_receipt = wait_terminal(&delete_write).await?;
     let delete_group_rejection = if delete_receipt.acknowledged() == 0 {
@@ -316,11 +297,8 @@ async fn relay29_try_operations(
     )?;
 
     // ── Attempt leave_group (kind 9022) ───────────────────────────────────────
-    let leave_ev = leave_group(author.public_key(), &group).map_err(error)?;
     let leave_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(leave_ev)
+        .publish(leave_group(author.public_key(), &group).map_err(error)?)
         .map_err(error)?;
     let leave_receipt = wait_terminal(&leave_write).await?;
     let leave_group_outcome = format!("{:?}", receipt_summary(&leave_receipt));
@@ -498,11 +476,8 @@ async fn communities_run_lifecycle(
     )?;
 
     // ── Step 1: create_group ──────────────────────────────────────────────────
-    let create_ev = create_group(author.public_key(), &group).map_err(error)?;
     let create_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(create_ev)
+        .publish(create_group(author.public_key(), &group).map_err(error)?)
         .map_err(error)?;
     let create_receipt = wait_terminal(&create_write).await?;
     // Nip42Publisher re-sends the event after AUTH; the re-send may arrive at the relay
@@ -533,20 +508,19 @@ async fn communities_run_lifecycle(
 
     // ── Step 2: edit_metadata ─────────────────────────────────────────────────
     use fava_simple_groups::edit_metadata;
-    let meta_ev = edit_metadata(
-        author.public_key(),
-        &group,
-        &MetadataEdit {
-            name: Some(format!("Phase F test group ({})", options.seed)),
-            about: Some("Created by fava Phase F canary".to_owned()),
-            ..Default::default()
-        },
-    )
-    .map_err(error)?;
     let meta_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(meta_ev)
+        .publish(
+            edit_metadata(
+                author.public_key(),
+                &group,
+                &MetadataEdit {
+                    name: Some(format!("Phase F test group ({})", options.seed)),
+                    about: Some("Created by fava Phase F canary".to_owned()),
+                    ..Default::default()
+                },
+            )
+            .map_err(error)?,
+        )
         .map_err(error)?;
     let meta_receipt = wait_terminal(&meta_write).await?;
     artifacts.record(
@@ -558,17 +532,16 @@ async fn communities_run_lifecycle(
     )?;
 
     // ── Step 3: put_user (add member) ─────────────────────────────────────────
-    let put_ev = put_user(
-        author.public_key(),
-        &group,
-        &[member_keys.public_key()],
-        &["member"],
-    )
-    .map_err(error)?;
     let put_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(put_ev)
+        .publish(
+            put_user(
+                author.public_key(),
+                &group,
+                &[member_keys.public_key()],
+                &["member"],
+            )
+            .map_err(error)?,
+        )
         .map_err(error)?;
     let put_receipt = wait_terminal(&put_write).await?;
     if put_receipt.acknowledged() == 0 {
@@ -600,12 +573,10 @@ async fn communities_run_lifecycle(
     )?;
 
     // ── Step 5: remove_user ───────────────────────────────────────────────────
-    let remove_ev =
-        remove_user(author.public_key(), &group, &[member_keys.public_key()]).map_err(error)?;
     let remove_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(remove_ev)
+        .publish(
+            remove_user(author.public_key(), &group, &[member_keys.public_key()]).map_err(error)?,
+        )
         .map_err(error)?;
     let remove_receipt = wait_terminal(&remove_write).await?;
     artifacts.record(
@@ -618,11 +589,8 @@ async fn communities_run_lifecycle(
     )?;
 
     // ── Step 6: leave_group ───────────────────────────────────────────────────
-    let leave_ev = leave_group(author.public_key(), &group).map_err(error)?;
     let leave_write = fava
-        .to([relay.clone()])
-        .map_err(error)?
-        .publish(leave_ev)
+        .publish(leave_group(author.public_key(), &group).map_err(error)?)
         .map_err(error)?;
     let leave_receipt = wait_terminal(&leave_write).await?;
     artifacts.record(
