@@ -1558,3 +1558,143 @@ meaning = "A partial metadata update for a NIP-29 simple group, expressed as a k
 owner = "fava-simple-groups"
 symbols = ["fava_simple_groups::MetadataEdit"]
 crates = []
+
+[[term]]
+name = "e2e_support"
+source = "fava"
+nearest_nostr = "Nostr client end-to-end command session"
+meaning = "The private repository package containing bounded terminal and command-file mechanics shared by runnable Fava E2E applications."
+owner = "examples/e2e-support"
+distinction = "It owns application-shell ingress and retained shell state only; Fava owns provider, signer, publication, query, and observation lifecycle, while each example owns its domain commands."
+counterexample = "A Fava provider profile, a generic domain-command dispatcher, or apps/canary relay fixture is not the e2e_support package."
+lifecycle = "Compiled as a private package and instantiated as one E2eSession per example process; it opens no relay, signer, write, or observation itself."
+forcing_requirement = "The user-approved reusable E2E foundation needs one concrete shared owner for interactive and piped command ingress, aliases, protected prompts, output, captures, and bounds before a second app starts."
+falsifier = "The simple-groups script and package tests fail if a shared command bypasses E2eSession, if generic support parses a group command, or if replacing simple-groups domain grammar requires a support-package change."
+symbols = []
+crates = ["e2e-support"]
+
+[[term]]
+name = "Account"
+source = "fava"
+nearest_nostr = "NIP-01 event author public key"
+meaning = "One bounded application-local account alias paired with the exact public key whose signer the domain application already registered in Fava."
+owner = "examples/e2e-support"
+distinction = "A PublicKey identifies an event author and Fava Session owns runtime signer attachment; Account owns only shell-visible author selection and never owns secret keys or signer lifecycle."
+counterexample = "A LocalSigner, a Fava Session attachment, or a raw public key without an application alias is not an Account."
+lifecycle = "Supplied by the domain app at E2eSession construction, retained within its account limit, selected by alias, and dropped with the session."
+forcing_requirement = "Reusable scripts need to select one of several already configured authors without introducing a signer provider, secret store, or each app inventing divergent account alias behavior."
+falsifier = "The account-selection test fails if an alias can select an unregistered key, duplicate aliases replace silently, or selecting Alice changes Fava signer attachment."
+symbols = ["e2e_support::Account"]
+crates = []
+
+[[term]]
+name = "CommandResult"
+source = "fava"
+nearest_nostr = "Nostr client command outcome"
+meaning = "One bounded terminal result with a status, stable kind, concise summary, and capture-safe scalar fields."
+owner = "examples/e2e-support"
+distinction = "Receipt is durable Fava publication evidence and QuerySnapshot is query-owned state; CommandResult is an app-shell presentation value and may summarize either without becoming either owner."
+counterexample = "A raw Fava error string, a retained transcript, or a relay delivery outcome is not a CommandResult."
+lifecycle = "Created for one built-in or domain command, size-checked before rendering and retention as the next capture source, then replaced by the next command result."
+forcing_requirement = "Piped E2E runs require deterministic human and JSONL output with fields that interpolation can use without serializing Fava internals or secrets."
+falsifier = "The foundation test fails if JSONL omits the kind, capture cannot recover a declared field, or an over-bound result remains as the next capture source."
+symbols = ["e2e_support::CommandResult"]
+crates = []
+
+[[term]]
+name = "E2eSession"
+source = "fava"
+nearest_nostr = "Nostr client interactive command session"
+meaning = "The bounded private application-shell state that executes shared commands and passes remaining tokenized lines to one concrete domain grammar."
+owner = "examples/e2e-support"
+distinction = "Fava Session owns mutable signer attachment; E2eSession owns terminal input, aliases, selected Account, history, captures, output sequencing, and no Fava provider state."
+counterexample = "A Fava Session, a command plugin registry, a NIP-29 group context, or a relay process fixture is not an E2eSession."
+lifecycle = "Constructed by one app entry point with bounded accounts, processes interactive or script lines sequentially, retains only declared finite shell state, and drops at process exit."
+forcing_requirement = "Dozens of E2E apps need identical safe ingress and scripting behavior while their domain grammar must remain replaceable outside the shared foundation."
+falsifier = "The simple-groups consumer test fails if group command tokens are parsed inside E2eSession, scripts take a different execution path than interactive input, or a selected account persists outside its session."
+symbols = ["e2e_support::E2eSession"]
+crates = []
+
+[[term]]
+name = "InputMode"
+source = "fava"
+nearest_nostr = "Nostr client terminal input"
+meaning = "The explicit choice between prompt-bearing terminal input and replay input for the same E2eSession executor."
+owner = "examples/e2e-support"
+distinction = "It changes prompt availability and replay failure exit behavior; command grammar, interpolation, history, aliases, result rendering, and domain dispatch are identical."
+counterexample = "A separate test scenario language, pseudo-terminal protocol, or an alternate domain command parser is not InputMode."
+lifecycle = "Selected once by the app entry point for an input stream and consulted before each line read; it retains no input bytes or terminal handle."
+forcing_requirement = "Controlled E2E proof needs ordinary stdin command files without a PTY while people need the same commands interactively."
+falsifier = "The script test fails if InputMode::Script emits prompts, consumes a following line for a required prompt, or if a command accepted interactively reaches different alias/capture handling when piped."
+symbols = ["e2e_support::InputMode"]
+crates = []
+
+[[term]]
+name = "Limits"
+source = "fava"
+nearest_nostr = "Client-local resource refusal"
+meaning = "The finite per-session maxima for account and relay aliases, captures, history, line and result bytes, result field count, argument count, and alias bytes."
+owner = "examples/e2e-support"
+distinction = "Fava generic limits govern protocol/provider work; Limits governs only application-shell inputs and retained E2E presentation state."
+counterexample = "A relay NIP-11 limit, Fava write bound, or unbounded configuration bag is not Limits."
+lifecycle = "Validated at session construction, read before each allocation or retention, and immutable for the whole E2eSession."
+forcing_requirement = "Externally influenced scripts, interpolation, aliases, history, captures, and JSONL must refuse before retained state exceeds an explicit application-owned ceiling."
+falsifier = "The bounds test fails if a second relay alias survives a one-alias policy, a second result field survives a one-field policy, or an unknown interpolation allocates a capture."
+symbols = ["e2e_support::Limits"]
+crates = []
+
+[[term]]
+name = "OutputFormat"
+source = "fava"
+nearest_nostr = "Client-local command rendering"
+meaning = "The selected human or one-record-per-line JSON rendering for a bounded CommandResult."
+owner = "examples/e2e-support"
+distinction = "It projects a command result after work; it is not a relay wire format, Fava diagnostic schema, or domain DTO contract."
+counterexample = "A Nostr EVENT serialization, RelayMessage, or application command grammar is not an OutputFormat."
+lifecycle = "Chosen by one app invocation and used transiently to render each result without retaining a transcript."
+forcing_requirement = "Interactive diagnosis and machine-checked scripts require one result vocabulary with a human mode and deterministic JSONL mode."
+falsifier = "The foundation test fails if JsonLines omits its trailing newline or changes a typed result kind while Human rendering alone remains readable."
+symbols = ["e2e_support::OutputFormat"]
+crates = []
+
+[[term]]
+name = "ResultStatus"
+source = "fava"
+nearest_nostr = "Client command terminal classification"
+meaning = "The explicit command-level classification of successful completion, pre-action refusal, or attempted domain failure."
+owner = "examples/e2e-support"
+distinction = "RelayDeliveryOutcome classifies one destination and ReceiptOutcome classifies a durable write; ResultStatus classifies the shell line that may not open a write at all."
+counterexample = "A timeout fabricated as acknowledgement, a relay rejection, or an exception string is not a ResultStatus."
+lifecycle = "Set when one CommandResult is created and immutable until that result is rendered and superseded."
+forcing_requirement = "JSONL scripts need a stable typed outcome without treating all Fava failures as terminal delivery facts or all shell refusals as publication failures."
+falsifier = "The renderer test fails if a shell rejection serializes as success or a domain attempted failure loses its non-success classification."
+symbols = ["e2e_support::ResultStatus"]
+crates = []
+
+[[term]]
+name = "Secret"
+source = "fava"
+nearest_nostr = "Nostr private key material"
+meaning = "Opaque secret text accepted only through a non-echo interactive prompt and usable only by a scoped domain conversion."
+owner = "examples/e2e-support"
+distinction = "A Secret is not a signer, key store, account, or serializable result; it protects shell ingress and leaves actual signing ownership with selected Fava providers."
+counterexample = "A secret passed in an argv token, command file, environment variable, history record, capture, dump, or JSONL result is not a Secret."
+lifecycle = "Prompted only from a terminal, held in zeroizing memory for the scoped conversion, never retained by E2eSession history/captures/results, and erased on drop."
+forcing_requirement = "Reusable E2E apps need to obtain credentials without teaching every app to hide terminal echo or accidentally retaining secret text in replay artifacts."
+falsifier = "The secret-history test fails if a protected prompt adds a history entry, a refused secret-shaped script command is rendered with its value, or a secret-shaped result field can be captured or rendered."
+symbols = ["e2e_support::Secret"]
+crates = []
+
+[[term]]
+name = "ShellError"
+source = "fava"
+nearest_nostr = "Client-local command refusal"
+meaning = "The typed refusal or scoped application-shell failure emitted before or while one E2E command line is dispatched."
+owner = "examples/e2e-support"
+distinction = "Fava errors attribute provider, protocol, publication, and observation ownership; ShellError attributes only alias, parsing, interpolation, retained-bound, secret-ingress, rendering, and delegated domain command boundaries."
+counterexample = "A PublishError, relay rejection, malformed Nostr event, or silent history drop is not a ShellError."
+lifecycle = "Constructed for one rejected or failed shell line, rendered as one bounded result by the runner, and dropped without retained error history."
+forcing_requirement = "A reusable script runner must refuse unsafe or over-bound input with an exact local reason rather than silently dropping data or translating it into a Fava lifecycle outcome."
+falsifier = "The foundation tests fail if an unknown capture, missing last-result field, second bounded relay alias, or secret-looking argv token reaches domain code without its exact ShellError."
+symbols = ["e2e_support::ShellError"]
+crates = []

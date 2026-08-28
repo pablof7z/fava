@@ -8,6 +8,7 @@ publish = false
 [workspace]
 
 [dependencies]
+e2e-support = { path = "../crates/e2e-support" }
 fava = { path = "../../crates/fava" }
 fava-delivery-standard = { path = "../../crates/fava-delivery-standard" }
 fava-publisher-nip01 = { path = "../../crates/fava-publisher-nip01" }

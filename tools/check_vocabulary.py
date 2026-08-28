@@ -19,7 +19,9 @@ PUBLIC_NOUN = re.compile(
     re.MULTILINE,
 )
 # Build output, retained canary evidence (`apps/canary/runs/`), and runnable
-# consumer examples do not define Fava's architectural crate vocabulary.
+# consumer examples do not define Fava's architectural crate vocabulary. The
+# reusable private contracts under `examples/crates/` are the deliberate
+# exception handled by `package_manifests` below.
 IGNORED_DIRECTORY_NAMES = frozenset({"examples", "node_modules", "runs", "target"})
 RUST_SOURCE_DIRECTORIES = ("src", "tests", "benches", "examples")
 SPEC_CRATE = re.compile(r"\b(fava(?:-[a-z0-9]+)+)(?![-a-z0-9])")
@@ -179,6 +181,15 @@ def package_manifests(root: Path) -> list[Path]:
             if entry.is_symlink():
                 continue
             if entry.is_dir():
+                if entry.name == "examples":
+                    # Runnable examples are downstream applications, but the
+                    # repository-owned reusable support package beneath
+                    # `examples/crates/` is a cross-example contract and must
+                    # pass the same closed-vocabulary gate as a core crate.
+                    support_root = entry / "crates"
+                    if support_root.is_dir():
+                        pending.append(support_root)
+                    continue
                 if entry.name.startswith(".") or entry.name.startswith("bazel-"):
                     continue
                 if entry.name in IGNORED_DIRECTORY_NAMES:
