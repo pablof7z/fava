@@ -1,5 +1,7 @@
+account new alice
+account list
 relay add group ws://127.0.0.1:18101
-account use alice
-group list
+relay list
+status
 dump
 quit

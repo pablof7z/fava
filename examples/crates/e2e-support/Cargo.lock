@@ -205,6 +205,10 @@ name = "e2e-support"
 version = "0.1.0"
 dependencies = [
  "fava",
+ "fava-query-standard",
+ "fava-signer-local",
+ "fava-write-store-memory",
+ "nostr",
  "rpassword",
  "serde",
  "serde_json",
@@ -372,6 +376,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-query-standard"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-relay",
+ "fava-state",
+ "fava-write",
+ "nostr",
+ "thiserror",
+]
+
+[[package]]
 name = "fava-relay"
 version = "0.1.0"
 dependencies = [
@@ -419,6 +435,16 @@ version = "0.1.0"
 dependencies = [
  "fava-write",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-signer-local"
+version = "0.1.0"
+dependencies = [
+ "fava-signer",
+ "fava-write",
+ "nostr",
  "tokio",
 ]
 
@@ -482,6 +508,21 @@ dependencies = [
  "fava-routing",
  "fava-state",
  "fava-write",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "fava-write-store-memory"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-relay",
+ "fava-routing",
+ "fava-state",
+ "fava-write",
+ "fava-write-store",
+ "nostr",
  "thiserror",
  "tokio",
 ]
@@ -567,6 +608,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
+ "rand_core 0.10.1",
 ]
 
 [[package]]

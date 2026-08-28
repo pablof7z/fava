@@ -1,10 +1,13 @@
 //! Shared interactive and script command execution for concrete E2E examples.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, Write};
 
-use fava::RelayUrl;
+use fava::{Fava, RelayUrl};
 
+use crate::ingress::{looks_secret, reject_prompted_value, reject_unsafe_words};
+use crate::result::sensitive_value;
 use crate::{Account, CommandResult, Limits, OutputFormat, Secret, ShellError};
 
 /// Whether the same command executor is fed by a terminal or a command file.
@@ -18,54 +21,36 @@ pub enum InputMode {
 
 /// Bounded, application-owned terminal state shared by one concrete E2E app.
 pub struct E2eSession {
-    limits: Limits,
-    accounts: BTreeMap<String, Account>,
-    selected_account: Option<String>,
-    relays: BTreeMap<String, RelayUrl>,
-    captures: BTreeMap<String, String>,
-    history: VecDeque<String>,
-    last_result: Option<CommandResult>,
+    pub(crate) limits: Limits,
+    pub(crate) fava: Fava,
+    pub(crate) accounts: BTreeMap<String, Account>,
+    pub(crate) selected_account: Option<String>,
+    pub(crate) relays: BTreeMap<String, RelayUrl>,
+    pub(crate) captures: BTreeMap<String, String>,
+    pub(crate) history: VecDeque<String>,
+    pub(crate) last_result: Option<CommandResult>,
     quitting: bool,
 }
 
 impl E2eSession {
-    /// Construct a shell with application-provided accounts and no relay aliases.
+    /// Construct a shell with no accounts or relay aliases.
     ///
-    /// # Errors
-    ///
-    /// Refuses invalid or duplicated account aliases before retaining them.
-    pub fn new(
-        limits: Limits,
-        accounts: impl IntoIterator<Item = Account>,
-    ) -> Result<Self, ShellError> {
-        let mut retained = BTreeMap::new();
-        for account in accounts {
-            if retained.len() == limits.accounts() {
-                return Err(ShellError::Limit {
-                    what: "accounts",
-                    maximum: limits.accounts(),
-                });
-            }
-            validate_alias("account", account.alias(), limits.alias_bytes())?;
-            if retained
-                .insert(account.alias().to_owned(), account.clone())
-                .is_some()
-            {
-                return Err(ShellError::DuplicateAccount {
-                    alias: account.alias().to_owned(),
-                });
-            }
-        }
-        Ok(Self {
+    /// Accounts enter only through the protected shared commands. Their local
+    /// signers are attached through this public Fava handle; the shell never
+    /// reaches into Fava session state.
+    #[must_use]
+    pub fn new(limits: Limits, fava: Fava) -> Self {
+        Self {
             limits,
-            accounts: retained,
+            fava,
+            accounts: BTreeMap::new(),
             selected_account: None,
             relays: BTreeMap::new(),
             captures: BTreeMap::new(),
             history: VecDeque::new(),
             last_result: None,
             quitting: false,
-        })
+        }
     }
 
     /// Run terminal and piped scripts through exactly the same line executor.
@@ -96,6 +81,9 @@ impl E2eSession {
             InputMode,
         ) -> Result<CommandResult, ShellError>,
     {
+        if matches!(mode, InputMode::Interactive) && matches!(format, OutputFormat::JsonLines) {
+            return Err(ShellError::InteractiveJsonLines);
+        }
         let mut line = String::new();
         loop {
             if matches!(mode, InputMode::Interactive) {
@@ -112,11 +100,28 @@ impl E2eSession {
             {
                 return Ok(());
             }
-            let execution = self.execute_line(line.trim_end(), |session, words| {
-                domain(session, words, input, output, mode)
-            });
+            let limits = self.limits;
+            let streams = RefCell::new((&mut *input, &mut *output));
+            let execution = self.execute_line_with_prompt(
+                line.trim_end(),
+                mode,
+                |label| {
+                    let mut streams = streams.borrow_mut();
+                    let (input, output) = &mut *streams;
+                    prompt_value(limits, *input, *output, mode, label)
+                },
+                |session, words| {
+                    let mut streams = streams.borrow_mut();
+                    let (input, output) = &mut *streams;
+                    domain(session, words, *input, *output, mode)
+                },
+            );
             let (rendered, failure) = match execution {
                 Ok(result) => (format.render(&result)?, None),
+                Err(ShellError::CommandFailed { result }) => {
+                    let rendered = format.render(&result)?;
+                    (rendered, Some(ShellError::CommandFailed { result }))
+                }
                 Err(error @ ShellError::Domain(_)) => {
                     let summary = bounded_summary(&error.to_string(), self.limits.capture_bytes());
                     (
@@ -152,13 +157,39 @@ impl E2eSession {
     ///
     /// Refuses oversized, secret-looking, malformed, or unknown retained input
     /// before it reaches the real domain command implementation.
-    pub fn execute_line<F>(
+    pub fn execute_line<F>(&mut self, line: &str, domain: F) -> Result<CommandResult, ShellError>
+    where
+        F: FnMut(&mut Self, &[String]) -> Result<CommandResult, ShellError>,
+    {
+        self.execute_line_with_prompt(
+            line,
+            InputMode::Script,
+            |_| Err(ShellError::NonInteractivePrompt),
+            domain,
+        )
+    }
+
+    /// Execute one line through the shared parser and dispatcher with an
+    /// application-supplied ordinary-value prompt.
+    ///
+    /// The runtime uses this for interactive and script streams alike. The
+    /// prompt decides whether an omitted required value can be supplied; it
+    /// must return [`ShellError::NonInteractivePrompt`] for a replay.
+    ///
+    /// # Errors
+    ///
+    /// Refuses oversized, secret-looking, malformed, or unknown retained input
+    /// before it reaches the real domain command implementation.
+    pub fn execute_line_with_prompt<F, P>(
         &mut self,
         line: &str,
+        mode: InputMode,
+        mut prompt: P,
         mut domain: F,
     ) -> Result<CommandResult, ShellError>
     where
         F: FnMut(&mut Self, &[String]) -> Result<CommandResult, ShellError>,
+        P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
         if line.len() > self.limits.line_bytes() {
             return Err(ShellError::Limit {
@@ -177,18 +208,24 @@ impl E2eSession {
                 maximum: self.limits.arguments(),
             });
         }
-        if words.iter().any(|word| looks_secret(word)) {
-            return Err(ShellError::SecretOnCommandLine);
-        }
+        reject_unsafe_words(&words)?;
         self.record_history(&expanded, &words)?;
         let result = match words.as_slice() {
-            [command, action, alias] if command == "account" && action == "use" => {
-                self.use_account(alias)
+            [command, action, arguments @ ..] if command == "account" => {
+                self.account_command(action, arguments, mode, &mut prompt)
             }
-            [command, action, alias, url] if command == "relay" && action == "add" => {
-                self.add_relay(alias, url)
+            [command] if command == "account" => Err(ShellError::Usage {
+                usage: "account <new|import|list|switch|remove> ...",
+            }),
+            [command, action, arguments @ ..] if command == "relay" => {
+                self.relay_command(action, arguments, &mut prompt)
             }
-            [command, name, field] if command == "capture" => self.capture(name, field),
+            [command] if command == "relay" => Err(ShellError::Usage {
+                usage: "relay <add|list|remove> ...",
+            }),
+            [command, arguments @ ..] if command == "capture" => {
+                self.capture_command(arguments, &mut prompt)
+            }
             [command] if command == "dump" => self.dump(),
             [command] if command == "quit" || command == "exit" => {
                 self.quitting = true;
@@ -214,6 +251,12 @@ impl E2eSession {
             .ok_or(ShellError::NoSelectedAccount)
     }
 
+    /// Return the selected account alias without requiring one to exist.
+    #[must_use]
+    pub fn selected_account_alias(&self) -> Option<&str> {
+        self.selected_account.as_deref()
+    }
+
     /// Resolve one application-owned relay alias.
     ///
     /// # Errors
@@ -225,6 +268,29 @@ impl E2eSession {
             .ok_or_else(|| ShellError::UnknownRelay {
                 alias: alias.to_owned(),
             })
+    }
+
+    /// Refuse a value that cannot safely become one capture-safe result field.
+    ///
+    /// Domain commands call this before publishing content they promise to
+    /// expose exactly in their terminal result, so a renderer bound never
+    /// turns an already-accepted write into an unreportable command outcome.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed limit refusal before the caller can accept work whose
+    /// exact value would exceed the one result-field bound.
+    pub fn validate_result_value(&self, value: &str) -> Result<(), ShellError> {
+        if sensitive_value(value) {
+            Err(ShellError::SecretOnCommandLine)
+        } else if value.len() > self.limits.capture_bytes() {
+            Err(ShellError::Limit {
+                what: "result field bytes",
+                maximum: self.limits.capture_bytes(),
+            })
+        } else {
+            Ok(())
+        }
     }
 
     /// Return bounded history entries; protected prompts are absent by construction.
@@ -261,106 +327,7 @@ impl E2eSession {
         R: BufRead,
         W: Write,
     {
-        if matches!(mode, InputMode::Script) {
-            return Err(ShellError::NonInteractivePrompt);
-        }
-        output
-            .write_all(format!("{label}> ").as_bytes())
-            .map_err(|error| output_error(&error))?;
-        output.flush().map_err(|error| output_error(&error))?;
-
-        let mut value = String::new();
-        if input
-            .read_line(&mut value)
-            .map_err(|error| output_error(&error))?
-            == 0
-        {
-            return Ok(None);
-        }
-        let value = value.trim_end().to_owned();
-        if value.len() > self.limits.line_bytes() {
-            return Err(ShellError::Limit {
-                what: "prompt value bytes",
-                maximum: self.limits.line_bytes(),
-            });
-        }
-        Ok(Some(value))
-    }
-
-    fn use_account(&mut self, alias: &str) -> Result<CommandResult, ShellError> {
-        let account = self
-            .accounts
-            .get(alias)
-            .ok_or_else(|| ShellError::UnknownAccount {
-                alias: alias.to_owned(),
-            })?;
-        self.selected_account = Some(alias.to_owned());
-        CommandResult::success("account-selected", format!("selected {alias}"))
-            .with_field("account", alias)
-            .and_then(|result| result.with_field("public_key", account.public_key().to_hex()))
-    }
-
-    fn add_relay(&mut self, alias: &str, url: &str) -> Result<CommandResult, ShellError> {
-        validate_alias("relay", alias, self.limits.alias_bytes())?;
-        if !self.relays.contains_key(alias) && self.relays.len() == self.limits.relays() {
-            return Err(ShellError::Limit {
-                what: "relay aliases",
-                maximum: self.limits.relays(),
-            });
-        }
-        let relay = RelayUrl::parse(url).map_err(|error| ShellError::InvalidRelayUrl {
-            input: url.to_owned(),
-            reason: error.to_string(),
-        })?;
-        self.relays.insert(alias.to_owned(), relay.clone());
-        CommandResult::success("relay-added", format!("{alias} -> {relay}"))
-            .with_field("alias", alias)
-            .and_then(|result| result.with_field("relay", relay.to_string()))
-    }
-
-    fn capture(&mut self, name: &str, field: &str) -> Result<CommandResult, ShellError> {
-        validate_alias("capture", name, self.limits.alias_bytes())?;
-        if !self.captures.contains_key(name) && self.captures.len() == self.limits.captures() {
-            return Err(ShellError::Limit {
-                what: "captures",
-                maximum: self.limits.captures(),
-            });
-        }
-        let value = self
-            .last_result
-            .as_ref()
-            .and_then(|result| result.field(field))
-            .ok_or_else(|| ShellError::MissingResultField {
-                name: field.to_owned(),
-            })?;
-        if value.len() > self.limits.capture_bytes() {
-            return Err(ShellError::Limit {
-                what: "capture bytes",
-                maximum: self.limits.capture_bytes(),
-            });
-        }
-        self.captures.insert(name.to_owned(), value.to_owned());
-        CommandResult::success("capture-set", format!("captured {field} as {name}"))
-            .with_field("capture", name)
-    }
-
-    fn dump(&self) -> Result<CommandResult, ShellError> {
-        let accounts = self.accounts.keys().cloned().collect::<Vec<_>>().join(",");
-        let relays = self
-            .relays
-            .iter()
-            .map(|(alias, relay)| format!("{alias}={relay}"))
-            .collect::<Vec<_>>()
-            .join(",");
-        let captures = self.captures.keys().cloned().collect::<Vec<_>>().join(",");
-        CommandResult::success("dump", "bounded shell state")
-            .with_field(
-                "selected_account",
-                self.selected_account.as_deref().unwrap_or(""),
-            )
-            .and_then(|result| result.with_field("accounts", accounts))
-            .and_then(|result| result.with_field("relays", relays))
-            .and_then(|result| result.with_field("captures", captures))
+        prompt_value(self.limits, input, output, mode, label)
     }
 
     fn interpolate(&self, line: &str) -> Result<String, ShellError> {
@@ -413,7 +380,49 @@ impl E2eSession {
     }
 }
 
-fn validate_alias(kind: &'static str, alias: &str, maximum: usize) -> Result<(), ShellError> {
+fn prompt_value<R, W>(
+    limits: Limits,
+    input: &mut R,
+    output: &mut W,
+    mode: InputMode,
+    label: &str,
+) -> Result<Option<String>, ShellError>
+where
+    R: BufRead,
+    W: Write,
+{
+    if matches!(mode, InputMode::Script) {
+        return Err(ShellError::NonInteractivePrompt);
+    }
+    output
+        .write_all(format!("{label}> ").as_bytes())
+        .map_err(|error| output_error(&error))?;
+    output.flush().map_err(|error| output_error(&error))?;
+
+    let mut value = String::new();
+    if input
+        .read_line(&mut value)
+        .map_err(|error| output_error(&error))?
+        == 0
+    {
+        return Ok(None);
+    }
+    let value = value.trim_end().to_owned();
+    reject_prompted_value(label, &value)?;
+    if value.len() > limits.line_bytes() {
+        return Err(ShellError::Limit {
+            what: "prompt value bytes",
+            maximum: limits.line_bytes(),
+        });
+    }
+    Ok(Some(value))
+}
+
+pub(crate) fn validate_alias(
+    kind: &'static str,
+    alias: &str,
+    maximum: usize,
+) -> Result<(), ShellError> {
     let valid = !alias.is_empty()
         && alias.len() <= maximum
         && alias.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
@@ -453,15 +462,6 @@ fn split_command(line: &str) -> Result<Vec<String>, ShellError> {
         words.push(current);
     }
     Ok(words)
-}
-
-fn looks_secret(word: &str) -> bool {
-    let lower = word.to_ascii_lowercase();
-    lower.starts_with("nsec1")
-        || lower.starts_with("-----begin")
-        || lower.starts_with("secret=")
-        || lower.starts_with("password=")
-        || lower.starts_with("token=")
 }
 
 fn output_error(error: &std::io::Error) -> ShellError {

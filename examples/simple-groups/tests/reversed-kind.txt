@@ -1,0 +1,2 @@
+group event publish payload --kind 12345
+quit

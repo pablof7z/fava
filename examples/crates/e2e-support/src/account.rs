@@ -12,9 +12,7 @@ pub struct Account {
 }
 
 impl Account {
-    /// Construct one named account whose signer was registered by the domain app.
-    #[must_use]
-    pub fn new(alias: impl Into<String>, public_key: PublicKey) -> Self {
+    pub(crate) fn new(alias: impl Into<String>, public_key: PublicKey) -> Self {
         Self {
             alias: alias.into(),
             public_key,

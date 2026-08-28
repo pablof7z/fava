@@ -266,6 +266,8 @@ name = "e2e-support"
 version = "0.1.0"
 dependencies = [
  "fava",
+ "fava-signer-local",
+ "nostr",
  "rpassword",
  "serde",
  "serde_json",
@@ -1288,6 +1290,7 @@ dependencies = [
  "fava-transport-websocket",
  "fava-write-store-memory",
  "nostr",
+ "serde_json",
  "tokio",
 ]
 

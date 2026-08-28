@@ -2,9 +2,18 @@
 
 use thiserror::Error;
 
+use crate::result::CommandResult;
+
 /// A bounded, attributed refusal while reading or executing one shell command.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ShellError {
+    /// A domain command attempted work and supplied a safe typed terminal
+    /// failure record which must be rendered before replay stops.
+    #[error("command emitted a failed result")]
+    CommandFailed {
+        /// Safe, bounded public evidence for the attempted command.
+        result: CommandResult,
+    },
     /// An application-owned collection reached its declared maximum.
     #[error("{what} exceeds its limit of {maximum}")]
     Limit {
@@ -16,8 +25,9 @@ pub enum ShellError {
     /// A command's quoting is malformed before it reaches domain code.
     #[error("unterminated quoted argument")]
     UnterminatedQuote,
-    /// A command line attempted to pass a secret through history-bearing input.
-    #[error("secret-looking input is refused on the command line; use a protected prompt")]
+    /// Ordinary command or prompt input attempted to pass a secret through
+    /// history, output, capture, or domain input.
+    #[error("secret-looking ordinary input is refused; use a protected secret prompt")]
     SecretOnCommandLine,
     /// A capture reference did not name a retained capture.
     #[error("unknown capture {name:?}")]
@@ -31,6 +41,15 @@ pub enum ShellError {
         /// Missing result field name.
         name: String,
     },
+    /// A result field exists but is not one capture-safe scalar.
+    #[error("last result field {name:?} is not a capture-safe scalar")]
+    NonScalarResultField {
+        /// Existing non-scalar field name.
+        name: String,
+    },
+    /// A result array tried to become a generic nested data structure.
+    #[error("nested result arrays are forbidden")]
+    NestedResultArray,
     /// A capture reference was syntactically invalid.
     #[error("invalid capture reference {reference:?}")]
     InvalidCaptureReference {
@@ -74,6 +93,12 @@ pub enum ShellError {
         /// Repeated account alias.
         alias: String,
     },
+    /// A protected imported key could not form a local signer.
+    #[error("protected account key is not a valid Nostr secret key")]
+    InvalidImportedAccount,
+    /// Fava refused an account signer attachment change.
+    #[error("account signer operation failed: {0}")]
+    AccountSigner(String),
     /// A result field could leak secret material into a renderer, capture, or dump.
     #[error("sensitive result field {name:?} is forbidden")]
     SensitiveResultField {
@@ -95,6 +120,9 @@ pub enum ShellError {
     /// A protected prompt is unavailable for noninteractive script input.
     #[error("protected prompting requires an interactive terminal")]
     NonInteractiveSecretPrompt,
+    /// JSONL must not share a stream with interactive prompts.
+    #[error("interactive input cannot use JSONL output; use --script or human output")]
+    InteractiveJsonLines,
     /// A domain-required ordinary value cannot be requested from a replay.
     #[error("interactive prompting is unavailable for script input")]
     NonInteractivePrompt,

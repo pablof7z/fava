@@ -74,8 +74,8 @@ impl Limits {
             captures: 8,
             history: 16,
             line_bytes: 512,
-            capture_bytes: 256,
-            result_fields: 8,
+            capture_bytes: 4_096,
+            result_fields: 16,
             arguments: 16,
             alias_bytes: 32,
         }
