@@ -72,3 +72,51 @@ Short member description.
 - Label arguments through nearby text.
 - Use valid Rust syntax, double-quoted strings, and explicit `vec![...]` values.
 - Keep samples focused on the symbol’s normal use.
+
+## Keep a usage sample to the lines that show the thing
+
+A sample is read next to the declaration, by someone deciding whether the name
+and shape are right. Every line that is not the thing being shown costs them
+attention and buys nothing.
+
+Show the calls. Nothing else:
+
+```rust
+let relay = RelayUrl::parse("wss://relay.example")?;
+let group = SimpleGroup::new("cats", vec![relay])?;
+let keys = Keys::generate();
+
+let event = create_group(keys.public_key(), &group)?;
+```
+
+Not this — the imports, the assertion and the helper are scaffolding for the
+compiler, not information for the reader:
+
+```rust
+use fava_simple_groups::{SimpleGroup, create_group};
+use nostr::key::Keys;
+use nostr::types::RelayUrl;
+
+let relay = RelayUrl::parse("wss://relay.example")?;
+let group = SimpleGroup::new("cats", vec![relay])?;
+let keys = Keys::generate();
+
+let event = create_group(keys.public_key(), &group)?;
+
+assert!(has_h_tag(&event, "cats"));
+# fn has_h_tag(e: &fava_write::UnsignedEvent, id: &str) -> bool { … }
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+- **No `use` lines.** Hide them with `#` so the doctest still compiles.
+- **No assertions.** An `assert!` proves the sample to the test runner, not to
+  the reader; a reader wanting proof reads the tests. If a return value matters,
+  the binding shows it.
+- **No helper functions.** If a sample needs one to make its point, the sample
+  is showing too much.
+- **No `Ok::<(), _>(())` tail** in view; hide it.
+
+The sample must still be **real** — taken from code that runs, in the e2e app or
+the crate's own tests, and still compiling as a doctest. Minimal and true, not
+minimal and invented. Cutting a line that the compiler needs means hiding it
+with `#`, never deleting it.
