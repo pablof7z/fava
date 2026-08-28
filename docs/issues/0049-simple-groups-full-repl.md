@@ -83,6 +83,11 @@ workaround, provider profile, or canary dependency.
 - `scenarios/full-repl.txt` is the complete controlled two-relay walkthrough,
   including metadata `supported_kinds`, membership, saved lists, event deletion,
   and group deletion.
+- The explicit isolated-PTY account-import proof creates one disposable valid
+  nsec only in memory, fails on echo, scans retained artifacts with that exact
+  input, and proves its returned public key is the direct-relay author of
+  Fava-created kind 9007 and arbitrary kind 12345 events. Its canonical record
+  contains public captures and EOSE evidence only.
 
 Deleting `SimpleGroupEventBuilder` from arbitrary event publication, accepting
 reversed publish tokens, routing a

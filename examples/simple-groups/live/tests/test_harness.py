@@ -25,6 +25,8 @@ from harness import (
     HarnessError,
     ManagedProcess,
     cleanup_before_retention,
+    generate_nsec,
+    _import_captures,
     inspect_assertions,
     json_line,
     materialize_commands,
@@ -34,6 +36,7 @@ from harness import (
     validate_executable_scenario,
 )
 from harness_safety import MAX_ARTIFACT_FILE_BYTES, MAX_FILTER_BYTES, scan_secret_absence
+from harness_process import _human_results, _require_no_secret_echo
 from relay_inspection import InspectionError, assert_event, inspect_until_eose
 
 
@@ -212,6 +215,63 @@ class FixtureTests(unittest.TestCase):
     def test_jsonl_is_deterministic(self) -> None:
         self.assertEqual(json_line({"z": 1, "a": 2}), '{"a":2,"z":1}\n')
 
+    def test_every_live_harness_code_file_stays_within_the_hard_line_limit(self) -> None:
+        for source in LIVE.glob("*.py"):
+            self.assertLessEqual(
+                len(source.read_text(encoding="utf-8").splitlines()),
+                800,
+                source.name,
+            )
+
+    def test_generated_nsec_is_valid_bounded_bech32_and_mutable(self) -> None:
+        secret = generate_nsec()
+        try:
+            self.assertIsInstance(secret, bytearray)
+            self.assertTrue(secret.startswith(b"nsec1"))
+            self.assertLessEqual(len(secret), 1_024)
+            alphabet = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+            values = [alphabet.index(value) for value in secret[5:]]
+            expanded = [ord(character) >> 5 for character in "nsec"] + [0] + [ord(character) & 31 for character in "nsec"]
+            self.assertEqual(__import__("harness")._bech32_polymod(expanded + values), 1)
+            payload = values[:-6]
+            restored = 0
+            bits = 0
+            scalar = bytearray()
+            for value in payload:
+                restored = (restored << 5) | value
+                bits += 5
+                while bits >= 8:
+                    bits -= 8
+                    scalar.append((restored >> bits) & 255)
+            self.assertEqual(len(scalar), 32)
+            self.assertGreater(int.from_bytes(scalar, "big"), 0)
+            scalar[:] = b"\0" * len(scalar)
+        finally:
+            secret[:] = b"\0" * len(secret)
+
+    def test_interactive_import_falsifiers_reject_secret_echo_and_key_mismatch(self) -> None:
+        secret = bytearray(b"nsec1disposabletestsecret")
+        with self.assertRaisesRegex(HarnessError, "echoed"):
+            _require_no_secret_echo(bytearray(b"safe " + secret), secret)
+        results = _human_results(
+            bytearray(
+                b"[Ok] account-imported: account-imported and selected imported\r\n"
+                b"  account=imported\r\n"
+                b"  public_key=" + b"a" * 64 + b"\r\n"
+                b"[Ok] group-created: created\r\n"
+                b"  author=" + b"b" * 64 + b"\r\n"
+                b"  event_id=" + b"c" * 64 + b"\r\n"
+                b"  kind=9007\r\n"
+                b"[Ok] group-event-published: published\r\n"
+                b"  author=" + b"a" * 64 + b"\r\n"
+                b"  event_id=" + b"d" * 64 + b"\r\n"
+                b"  kind=12345\r\n"
+            )
+        )
+        with self.assertRaisesRegex(HarnessError, "did not use the imported public key"):
+            _import_captures(results)
+        secret[:] = b"\0" * len(secret)
+
     def test_full_contract_is_staged_with_only_the_four_croissant_state_kinds(self) -> None:
         contract = json.loads(
             (LIVE / "scenarios" / "full-nip29-contract.json").read_text(encoding="utf-8")
@@ -249,6 +309,26 @@ class FixtureTests(unittest.TestCase):
         inspection = json.loads((evidence / "inspections" / "15.json").read_text(encoding="utf-8"))
         self.assertEqual(inspection["events"], [])
         scan_secret_absence(evidence, ("nsec1favaexperientialproofsentinelneverretain",))
+
+    def test_canonical_account_import_bundle_is_hashed_and_secret_free(self) -> None:
+        evidence = LIVE / "evidence" / "2026-08-29-account-import-proof"
+        manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["scenario"], "account-import-proof")
+        self.assertEqual(len(manifest["artifact_sha256"]), 4)
+        for relative, expected_hash in manifest["artifact_sha256"].items():
+            self.assertEqual(hashlib.sha256((evidence / relative).read_bytes()).hexdigest(), expected_hash)
+        captures = json.loads((evidence / "app-captures.json").read_text(encoding="utf-8"))["captures"]
+        self.assertEqual(captures["imported"]["account"], "imported")
+        self.assertEqual(captures["imported"]["public_key"], captures["created"]["author"])
+        self.assertEqual(captures["imported"]["public_key"], captures["content"]["author"])
+        self.assertEqual(captures["content"]["kind"], "12345")
+        for number in ("01", "02"):
+            inspection = json.loads((evidence / "inspections" / f"{number}.json").read_text(encoding="utf-8"))
+            self.assertEqual(inspection["terminal"], "EOSE")
+            self.assertEqual(len(inspection["events"]), 1)
+            self.assertEqual(inspection["events"][0]["pubkey"], captures["imported"]["public_key"])
+        self.assertFalse((evidence / "run.jsonl").exists())
+        scan_secret_absence(evidence, ("nsec1",))
 
     def test_runner_refuses_assertionless_executable_before_artifact_creation(self) -> None:
         forged = {"id": "forged", "status": "executable", "command_file": "commands/none.txt"}

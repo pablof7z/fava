@@ -61,6 +61,25 @@ python3 examples/simple-groups/live/harness.py run \
   --artifacts "$artifacts"
 ```
 
+`import-proof` is the one explicit, user-approved interactive path. It creates
+one valid disposable nsec in memory, runs `account import imported` through an
+isolated PTY, and never writes that input to a command file, argv, environment,
+history, stdout/stderr log, capture, or canonical evidence. The PTY transcript
+is bounded only in memory and the run fails on any secret echo. The app returns
+the imported public key; it then creates and publishes arbitrary kind 12345
+through public Fava APIs. Two independent exact-ID group-relay `REQ`/`EOSE`
+reads require that public key as author. Scratch is erased, then every retained
+artifact is scanned with the actual generated nsec before it is zeroed.
+
+```sh
+artifacts="$(mktemp -d examples/simple-groups/live/runs/import.XXXXXX)"
+rmdir "$artifacts"
+python3 examples/simple-groups/live/harness.py import-proof \
+  --nip29-bin /Users/pablofernandez/Work/croissant/croissant \
+  --ordinary-bin nostr-rs-relay \
+  --artifacts "$artifacts"
+```
+
 `full-nip29-contract` streams the ordinary full REPL command file one line at a
 time, pausing only between commands for four bounded direct `REQ`/`EOSE`
 checkpoints. It proves kinds 39000–39003 only, never 39004/39005. The final
@@ -81,6 +100,11 @@ binary changes; this bundle identifies a historical run, not a fresh proof.
 is the compact full-flow negative control: typed captures, 18 bounded direct
 inspections, and a manifest only. Inspection 15 is the empty exact kind-9008
 id query; inspections 16–18 prove the required post-delete absences.
+
+[`evidence/2026-08-29-account-import-proof/`](evidence/2026-08-29-account-import-proof/)
+is the compact successful protected-import record: public typed import/create/
+content captures, two direct EOSE inspections, and a hash manifest. It excludes
+the PTY transcript, nsec, run log, command file, relay log/database, and TMPDIR.
 
 Run the harness contract tests:
 

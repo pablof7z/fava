@@ -17,6 +17,9 @@ thiserror = "=2.0.20"
 zeroize = "=1.9.0"
 rpassword = "=7.4.0"
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "=0.31.3", default-features = false, features = ["fs", "term"] }
+
 [dev-dependencies]
 fava-query-standard = { path = "../../../crates/fava-query-standard" }
 fava-write-store-memory = { path = "../../../crates/fava-write-store-memory" }

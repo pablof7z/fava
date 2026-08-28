@@ -1,0 +1,11 @@
+{
+  "artifact_sha256": {
+    "app-captures.json": "3f4324b1396017281b173ecf96903c2c1508cf6d3074834cf4036ce74283584a",
+    "inspections/01.json": "506e60b15ea4132047255931cd5e48cbb1e1b86969da503d00798f80cb5173cc",
+    "inspections/02.json": "62c829c7e96c44ebe9c504bc549e5c8c84103564441b6d217edec81ec84fd818",
+    "result.json": "db209e16f50b97d293c06853bb237bf4117a72b358c9e28f9f01af59602ac893"
+  },
+  "recorded_on": "2026-08-29",
+  "scenario": "account-import-proof",
+  "schema": "fava-simple-groups-live-proof-evidence-v1"
+}

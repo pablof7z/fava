@@ -1,6 +1,6 @@
 //! Protected secret input that never reaches command parsing or history.
 
-use std::io::{IsTerminal as _, stdin};
+use std::io::{BufRead as _, IsTerminal as _, stdin};
 use std::sync::Arc;
 
 use fava::{Fava, PublicKey};
@@ -24,9 +24,7 @@ impl Secret {
         if !stdin().is_terminal() {
             return Err(ShellError::NonInteractiveSecretPrompt);
         }
-        rpassword::prompt_password(label)
-            .map(|value| Self(Zeroizing::new(value)))
-            .map_err(|error| ShellError::Output(error.to_string()))
+        protected_terminal_input(label).map(Self)
     }
 
     /// Parse the protected input and attach its local signer through Fava.
@@ -40,4 +38,52 @@ impl Secret {
             .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
         Ok(public_key)
     }
+}
+
+#[cfg(unix)]
+fn protected_terminal_input(label: &str) -> Result<Zeroizing<String>, ShellError> {
+    use std::os::fd::AsFd as _;
+    use std::{fs::File, io::Write as _};
+
+    use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
+    use nix::unistd::dup;
+
+    let input = stdin();
+    let mut input = input.lock();
+    let terminal = dup(input.as_fd()).map_err(|error| ShellError::Output(error.to_string()))?;
+    let original = tcgetattr(&terminal).map_err(|error| ShellError::Output(error.to_string()))?;
+    let mut hidden = original.clone();
+    hidden.local_flags.remove(LocalFlags::ECHO);
+    hidden.local_flags.insert(LocalFlags::ECHONL);
+    tcsetattr(&terminal, SetArg::TCSANOW, &hidden)
+        .map_err(|error| ShellError::Output(error.to_string()))?;
+
+    let mut output =
+        File::from(dup(&terminal).map_err(|error| ShellError::Output(error.to_string()))?);
+    let prompt = output
+        .write_all(label.as_bytes())
+        .and_then(|()| output.flush());
+    if let Err(error) = prompt {
+        let _ = tcsetattr(&terminal, SetArg::TCSANOW, &original);
+        return Err(ShellError::Output(error.to_string()));
+    }
+
+    let mut value = Zeroizing::new(String::new());
+    let read = input.read_line(&mut value);
+    let restore = tcsetattr(&terminal, SetArg::TCSANOW, &original);
+    if let Err(error) = restore {
+        return Err(ShellError::Output(error.to_string()));
+    }
+    read.map_err(|error| ShellError::Output(error.to_string()))?;
+    while value.ends_with(['\n', '\r']) {
+        value.pop();
+    }
+    Ok(value)
+}
+
+#[cfg(not(unix))]
+fn protected_terminal_input(label: &str) -> Result<Zeroizing<String>, ShellError> {
+    rpassword::prompt_password(label)
+        .map(Zeroizing::new)
+        .map_err(|error| ShellError::Output(error.to_string()))
 }

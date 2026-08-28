@@ -42,7 +42,9 @@ async fn main() -> AppResult<()> {
         } else {
             InputMode::Script
         };
-        let mut input = BufReader::new(stdin().lock());
+        // Do not hold the global stdin lock across the REPL: protected account
+        // import acquires it briefly for its no-echo terminal read.
+        let mut input = BufReader::new(stdin());
         run(
             &mut session,
             &mut app,

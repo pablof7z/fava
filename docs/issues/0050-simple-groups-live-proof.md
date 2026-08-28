@@ -39,6 +39,15 @@ relay or artifact is created. Current event results expose public `author`
 alongside `event_id`, so an assertion does not infer identity from a private
 key or from an app cache.
 
+Protected `account import` is deliberately not a command-file exception. Its
+explicit user-approved proof uses one isolated PTY only: the harness generates
+one valid mutable nsec, feeds it only after the app's no-echo prompt, rejects a
+PTY echo, returns only typed public fields, erases scratch, scans every
+retained artifact for that exact nsec, and zeroes the input. The harness still
+does not construct, sign, or publish an event. The application imports through
+`Fava::add_signer`, and the harness separately proves the returned public key
+authored exact-ID kind 9007 and 12345 events before matching `EOSE`.
+
 ## Current executable evidence
 
 `smoke-create-content` runs the current commands:
@@ -97,6 +106,20 @@ is the bounded negative control. It retains typed captures, all 18 direct
 `REQ`/`EOSE` inspections, and a hash manifest; no database, relay log, command,
 or temporary directory is retained.
 
+## Protected account-import result — 2026-08-29
+
+The isolated PTY proof ran against explicit
+`/Users/pablofernandez/Work/croissant/croissant` and PATH
+`nostr-rs-relay 0.8.12`. The generated nsec imported successfully without echo;
+the returned public key is the exact author of the Fava-created kind-9007 event
+and Fava-published arbitrary kind-12345 content event. Each independent
+group-relay query returned exactly that event and its matching `EOSE`. The
+retained run scan used the actual nsec and passed.
+
+[`2026-08-29 account-import evidence`](../../examples/simple-groups/live/evidence/2026-08-29-account-import-proof/)
+contains only public captures, two direct inspections, result metadata, and
+their hashes. It contains neither the nsec nor a PTY transcript.
+
 ## Local fixture discovery
 
 This machine currently has a Croissant executable at
@@ -115,3 +138,8 @@ group alive after its parent exits, preserving the secret input, skipping the
 failure-path retained scan, or turning a blocked full-flow contract into a pass
 must fail focused tests or the live run. Replacing the NIP-29 relay with an
 ordinary relay invalidates all authorization claims by construction.
+
+For protected import, making the generated scalar invalid, accepting an echoed
+nsec, losing the typed imported public key, allowing the create/content author
+to differ from it, omitting either matching EOSE, or retaining any `nsec1`
+material in canonical evidence fails a bounded unit or live assertion.

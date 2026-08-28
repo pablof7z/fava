@@ -98,10 +98,10 @@ def _bounded_artifact_files(root: Path) -> Iterable[tuple[Path, int]]:
             yield path, size
 
 
-def scan_secret_absence(root: Path, needles: Iterable[str]) -> ArtifactScan:
+def scan_secret_absence(root: Path, needles: Iterable[str | bytes]) -> ArtifactScan:
     """Scan every retained regular file without unbounded reads or traversal."""
 
-    encoded_needles = [needle.encode("utf-8") for needle in needles]
+    encoded_needles = [needle.encode("utf-8") if isinstance(needle, str) else needle for needle in needles]
     overlap_size = max((len(needle) - 1 for needle in encoded_needles), default=0)
     file_count = 0
     total_bytes = 0

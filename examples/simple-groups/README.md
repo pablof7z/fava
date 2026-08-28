@@ -153,6 +153,14 @@ without adding it to history. In a script the same omission returns one typed
 refusal and exits before consuming the next line. Protected account import
 uses its own no-echo prompt and is always unavailable to a script.
 
+The controlled live harness has one explicit interactive `account import`
+proof path. It injects one generated disposable nsec only through an isolated
+PTY, requires no echo, compares the returned public key to an exact direct
+relay readback of Fava-published kind 9007 and 12345 events, removes transient
+state, then scans every retained artifact for that exact input. The canonical
+record retains public captures and readback only; it contains no nsec or PTY
+transcript. See [`live/README.md`](live/README.md).
+
 `tests/shell.txt` proves a no-PTY shared-shell replay. `tests/missing-kind.txt`
 and `tests/missing-required.txt` prove that replay cannot consume a later line
 as a prompt response. `scenarios/full-repl.txt` is the controlled live-relay
