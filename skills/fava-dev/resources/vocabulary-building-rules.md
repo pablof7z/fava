@@ -39,38 +39,53 @@ The 4,096 limit belongs to `Query`, not `SimpleGroup`.
 - Error: include only refusals owned or deliberately translated by this symbol.
 - Edge case: include only surprising behavior caused by this symbol.
 
-## Make reviews skimmable
+## Structure the doc comment
 
-Use this hierarchy:
+The description lives in the symbol's own doc comment, and symbol-gate reads its
+sections the way rustdoc does — so write the conventional ones. To document a
+parameter, add an `# Arguments` section with one `` * `name` - text `` entry per
+argument; that entry is the single form symbol-gate attaches to a parameter.
 
-~~~~markdown
-# crate_name (module)
-Short module description.
-
-## TypeOrFunction
-Short identity description.
-
-### method_or_variant
-Short member description.
-
-#### parameters
-- **name** `Type` — meaning
-
-#### errors
-- **ErrorType** — owned refusal
-
-#### usage sample
-```rust
-// ordinary application code
-```
+~~~~rust
+/// Build a kind-9009 invite event for `group` with the exact invite code.
+///
+/// Returns an [`EventBuilder`] routed to the group's relays.
+///
+/// # Arguments
+///
+/// * `author` - the key that signs the invite event
+/// * `group` - the group the invite is routed to
+/// * `code` - the exact invite code embedded in the `code` tag
+///
+/// # Errors
+///
+/// Returns [`WriteIntentError`] when the group's relay route exceeds its bounds.
+///
+/// # Examples
+///
+/// ```
+/// # use fava_simple_groups::{SimpleGroup, invite};
+/// # use nostr::key::Keys;
+/// # use nostr::types::RelayUrl;
+/// let relay = RelayUrl::parse("wss://relay.example")?;
+/// let group = SimpleGroup::new("cats", vec![relay])?;
+/// let admin = Keys::generate();
+/// let builder = invite(admin.public_key(), &group, "my-invite-code")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn invite(author: PublicKey, group: &SimpleGroup, code: &str)
+    -> Result<EventBuilder, WriteIntentError>
 ~~~~
 
+- **Parameters go only in `# Arguments`**, one `` * `name` - text `` per
+  argument. Prose that mentions a parameter in passing does not document it — a
+  parameter with no entry renders as *undocumented* in review.
+- **Errors go in `# Errors`, examples in `# Examples`** — the same headings
+  rustdoc uses, so the doc reads right in `cargo doc` and in the review panel.
 - Omit filenames, governance essays, record counts, implementation archaeology, and dependency internals.
 - Prefer bullets over paragraphs.
 - Avoid repeating information already clear from the signature.
-- Use ordinary application code.
-- Label arguments through nearby text.
-- Use valid Rust syntax, double-quoted strings, and explicit `vec![...]` values.
+- Use ordinary application code, valid Rust syntax, double-quoted strings, and explicit `vec![...]` values.
 - Keep samples focused on the symbol’s normal use.
 
 ## Keep a usage sample to the lines that show the thing
