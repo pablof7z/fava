@@ -6,9 +6,7 @@ import os
 import shutil
 import stat
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 
 MAX_LOG_BYTES = 1_048_576
@@ -18,8 +16,6 @@ MAX_JSONL_ROWS = 128
 MAX_JSONL_LINE_BYTES = 65_536
 MAX_ASSERTIONS = 24
 MAX_FILTER_BYTES = 16_384
-MAX_SECRET_SENTINELS = 16
-MAX_SECRET_SENTINEL_BYTES = 1_024
 MAX_ARTIFACT_ENTRIES = 256
 MAX_ARTIFACT_FILES = 128
 MAX_ARTIFACT_FILE_BYTES = 2_097_152
@@ -29,14 +25,6 @@ MAX_BINARY_BYTES = 64 * 1_048_576
 
 class HarnessError(RuntimeError):
     """A bounded harness responsibility could not meet its contract."""
-
-
-@dataclass(frozen=True)
-class ArtifactScan:
-    """The bounded, retained artifact surface examined for secret material."""
-
-    file_count: int
-    total_bytes: int
 
 
 def read_bounded_text(path: Path, byte_limit: int, label: str) -> str:
@@ -54,13 +42,14 @@ def read_bounded_text(path: Path, byte_limit: int, label: str) -> str:
         raise HarnessError(f"{label} was not UTF-8 text") from error
 
 
-def _bounded_artifact_files(root: Path) -> Iterable[tuple[Path, int]]:
+def _bounded_artifact_files(root: Path) -> list[tuple[Path, int]]:
     """Walk retained artifacts with explicit entry, file, and byte bounds."""
 
     entries_seen = 0
     files_seen = 0
     total_bytes = 0
     directories = [root]
+    result = []
     while directories:
         directory = directories.pop()
         try:
@@ -95,32 +84,15 @@ def _bounded_artifact_files(root: Path) -> Iterable[tuple[Path, int]]:
             total_bytes += size
             if total_bytes > MAX_ARTIFACT_TOTAL_BYTES:
                 raise HarnessError(f"retained artifacts exceeded {MAX_ARTIFACT_TOTAL_BYTES} bytes")
-            yield path, size
+            result.append((path, size))
+    return result
 
 
-def scan_secret_absence(root: Path, needles: Iterable[str | bytes]) -> ArtifactScan:
-    """Scan every retained regular file without unbounded reads or traversal."""
+def check_retained_artifacts(root: Path) -> None:
+    """Enforce entry, file, and byte bounds on every retained regular file."""
 
-    encoded_needles = [needle.encode("utf-8") if isinstance(needle, str) else needle for needle in needles]
-    overlap_size = max((len(needle) - 1 for needle in encoded_needles), default=0)
-    file_count = 0
-    total_bytes = 0
-    for path, size in _bounded_artifact_files(root):
-        file_count += 1
-        total_bytes += size
-        overlap = b""
-        try:
-            with path.open("rb") as source:
-                while chunk := source.read(65_536):
-                    examined = overlap + chunk
-                    if any(needle in examined for needle in encoded_needles):
-                        raise HarnessError(
-                            f"secret sentinel was retained in artifact {path.relative_to(root)}"
-                        )
-                    overlap = examined[-overlap_size:] if overlap_size else b""
-        except OSError as error:
-            raise HarnessError(f"retained artifact could not be read: {path.relative_to(root)}") from error
-    return ArtifactScan(file_count=file_count, total_bytes=total_bytes)
+    for _path, _size in _bounded_artifact_files(root):
+        pass
 
 
 def new_scratch(live: Path) -> Path:

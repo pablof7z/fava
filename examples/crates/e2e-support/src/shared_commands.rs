@@ -6,7 +6,6 @@ use fava::RelayUrl;
 use fava_signer_local::LocalSigner;
 use nostr::key::Keys;
 
-use crate::ingress::credential_bearing_relay_url;
 use crate::session::validate_alias;
 use crate::{Account, CommandResult, E2eSession, InputMode, ResultValue, ShellError};
 
@@ -15,7 +14,7 @@ impl E2eSession {
         &mut self,
         action: &str,
         arguments: &[String],
-        mode: InputMode,
+        _mode: InputMode,
         prompt: &mut P,
     ) -> Result<CommandResult, ShellError>
     where
@@ -31,14 +30,12 @@ impl E2eSession {
                 self.new_account(&alias)
             }
             "import" => {
-                if matches!(mode, InputMode::Script) {
-                    return Err(ShellError::NonInteractiveSecretPrompt);
-                }
                 let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
-                if arguments.len() > 1 {
+                let nsec = required_value(arguments, 1, "account-nsec", USAGE, prompt)?;
+                if arguments.len() > 2 {
                     return usage(USAGE);
                 }
-                self.import_account(&alias)
+                self.import_account(&alias, &nsec)
             }
             "list" if arguments.is_empty() => self.list_accounts(),
             "switch" => {
@@ -111,10 +108,22 @@ impl E2eSession {
         self.add_account(alias, Keys::generate(), "account-created")
     }
 
-    fn import_account(&mut self, alias: &str) -> Result<CommandResult, ShellError> {
+    fn import_account(&mut self, alias: &str, nsec: &str) -> Result<CommandResult, ShellError> {
         self.prepare_account_alias(alias)?;
-        let secret = self.prompt_secret("account private key: ")?;
-        self.add_imported_account(alias, secret)
+        let keys = Keys::parse(nsec).map_err(|_| ShellError::InvalidImportedAccount)?;
+        let public_key = keys.public_key();
+        self.fava
+            .add_signer(Arc::new(LocalSigner::new(keys)))
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.accounts
+            .insert(alias.to_owned(), Account::new(alias, public_key));
+        self.selected_account = Some(alias.to_owned());
+        CommandResult::success(
+            "account-imported",
+            format!("account-imported and selected {alias}"),
+        )
+        .with_field("account", alias)
+        .and_then(|result| result.with_field("public_key", public_key.to_hex()))
     }
 
     fn add_account(
@@ -134,23 +143,6 @@ impl E2eSession {
         CommandResult::success(result_kind, format!("{result_kind} and selected {alias}"))
             .with_field("account", alias)
             .and_then(|result| result.with_field("public_key", public_key.to_hex()))
-    }
-
-    fn add_imported_account(
-        &mut self,
-        alias: &str,
-        secret: crate::Secret,
-    ) -> Result<CommandResult, ShellError> {
-        let public_key = secret.attach_local_signer(&self.fava)?;
-        self.accounts
-            .insert(alias.to_owned(), Account::new(alias, public_key));
-        self.selected_account = Some(alias.to_owned());
-        CommandResult::success(
-            "account-imported",
-            format!("account-imported and selected {alias}"),
-        )
-        .with_field("account", alias)
-        .and_then(|result| result.with_field("public_key", public_key.to_hex()))
     }
 
     fn prepare_account_alias(&self, alias: &str) -> Result<(), ShellError> {
@@ -214,9 +206,6 @@ impl E2eSession {
 
     fn add_relay(&mut self, alias: &str, url: &str) -> Result<CommandResult, ShellError> {
         validate_alias("relay", alias, self.limits.alias_bytes())?;
-        if credential_bearing_relay_url(url) {
-            return Err(ShellError::SecretOnCommandLine);
-        }
         if !self.relays.contains_key(alias) && self.relays.len() == self.limits.relays() {
             return Err(ShellError::Limit {
                 what: "relay aliases",

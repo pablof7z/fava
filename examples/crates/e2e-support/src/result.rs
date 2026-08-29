@@ -42,20 +42,6 @@ impl ResultValue {
         Self::Text(value.into())
     }
 
-    /// Construct public text, replacing a secret-shaped external diagnostic.
-    ///
-    /// Relay-provided messages are public protocol facts unless they resemble
-    /// credentials; that exceptional text is retained only as a redaction.
-    #[must_use]
-    pub fn public_text(value: impl Into<String>) -> Self {
-        let value = value.into();
-        if sensitive_value(&value) || contains_raw_hex_run(&value) {
-            Self::Text("<redacted>".to_owned())
-        } else {
-            Self::Text(value)
-        }
-    }
-
     /// Construct one ordered array value.
     #[must_use]
     pub fn array(values: impl IntoIterator<Item = Self>) -> Self {
@@ -70,14 +56,6 @@ impl ResultValue {
             Self::Integer(value) => Some(value.to_string()),
             Self::Boolean(value) => Some(value.to_string()),
             Self::Array(_) => None,
-        }
-    }
-
-    fn is_sensitive(&self) -> bool {
-        match self {
-            Self::Text(value) => sensitive_value(value),
-            Self::Integer(_) | Self::Boolean(_) => false,
-            Self::Array(values) => values.iter().any(Self::is_sensitive),
         }
     }
 
@@ -191,12 +169,11 @@ impl CommandResult {
         }
     }
 
-    /// Add one safe scalar or array field available to JSONL output.
+    /// Add one scalar or array field available to JSONL output.
     ///
     /// # Errors
     ///
-    /// Refuses secret-shaped field names or values before they can enter a
-    /// renderer, capture, history-adjacent dump, or script transcript.
+    /// Returns a limit error if the field count or byte bounds are exceeded.
     pub fn with_field(
         mut self,
         name: impl Into<String>,
@@ -204,9 +181,6 @@ impl CommandResult {
     ) -> Result<Self, ShellError> {
         let name = name.into();
         let value = value.into();
-        if sensitive_field_name(&name) || value.is_sensitive() {
-            return Err(ShellError::SensitiveResultField { name });
-        }
         self.fields.insert(name, value);
         Ok(self)
     }
@@ -306,26 +280,4 @@ impl OutputFormat {
                 .map_err(|error| ShellError::Json(error.to_string())),
         }
     }
-}
-
-pub(crate) fn sensitive_field_name(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "secret" | "password" | "token" | "private_key" | "nsec"
-    )
-}
-
-fn contains_raw_hex_run(value: &str) -> bool {
-    value
-        .split(|character: char| !character.is_ascii_hexdigit())
-        .any(|segment| segment.len() >= 64)
-}
-
-pub(crate) fn sensitive_value(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    lower.contains("nsec1")
-        || lower.contains("-----begin")
-        || lower.contains("secret=")
-        || lower.contains("password=")
-        || lower.contains("token=")
 }

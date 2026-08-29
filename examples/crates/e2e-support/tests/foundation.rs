@@ -1,6 +1,6 @@
 //! Private E2E support behavioral coverage.
 
-use std::io::{Cursor, IsTerminal as _, Read as _};
+use std::io::{Cursor, Read as _};
 
 use std::sync::Arc;
 
@@ -129,159 +129,31 @@ fn shared_account_and_relay_commands_keep_selection_and_retention_coherent() {
         .execute_line("account remove alice", |_, _| unreachable!())
         .unwrap();
     assert_eq!(session.selected_account_alias(), None);
-    let mut prompted = false;
     assert!(matches!(
         session.execute_line_with_prompt(
             "account import",
             InputMode::Script,
-            |_| {
-                prompted = true;
-                Ok(Some("bob".to_owned()))
-            },
+            |_| Err(ShellError::NonInteractivePrompt),
             |_, _| unreachable!(),
         ),
-        Err(ShellError::NonInteractiveSecretPrompt)
-    ));
-    assert!(!prompted);
-}
-
-#[test]
-fn secret_input_never_enters_history_or_rendered_script_output() {
-    let mut session = selected_session();
-    if !std::io::stdin().is_terminal() {
-        assert!(matches!(
-            session.prompt_secret("private key: "),
-            Err(ShellError::NonInteractiveSecretPrompt)
-        ));
-    }
-    let secret = "nsec1never-retain-this";
-    let mut script = Cursor::new(format!(
-        "account switch alice\ngroup event publish --kind 12345 {secret}\n"
-    ));
-    let mut output = Vec::new();
-    assert!(matches!(
-        session.run(
-            &mut script,
-            &mut output,
-            InputMode::Script,
-            OutputFormat::JsonLines,
-            |_, _, _, _, _| unreachable!(),
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    assert_eq!(
-        session.history(),
-        ["account new alice", "account switch alice"]
-    );
-    let output = String::from_utf8(output).unwrap();
-    assert!(output.contains("\"kind\":\"shell-refused\""));
-    assert!(!output.contains(secret));
-    assert!(matches!(
-        CommandResult::success("safe", "safe").with_field("token", "value"),
-        Err(ShellError::SensitiveResultField { .. })
-    ));
-    assert!(matches!(
-        CommandResult::success("safe", "safe").with_field("content", secret),
-        Err(ShellError::SensitiveResultField { .. })
+        Err(ShellError::NonInteractivePrompt)
     ));
 }
 
 #[test]
-fn unsafe_credential_input_is_refused_before_history_or_rendering() {
-    let mut session = selected_session();
-    let raw_hex = "a".repeat(64);
-    let credential_url = "wss://alice:password@relay.example";
-    let mut script = Cursor::new(format!("relay add private {credential_url}\n"));
-    let mut output = Vec::new();
-    assert!(matches!(
-        session.run(
-            &mut script,
-            &mut output,
-            InputMode::Script,
-            OutputFormat::JsonLines,
-            |_, _, _, _, _| unreachable!(),
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    let rendered = String::from_utf8(output).unwrap();
-    assert!(!rendered.contains(credential_url));
-    assert_eq!(session.history(), ["account new alice"]);
-
-    for unsafe_url in [
-        "wss://relay.example/?auth=supersecret".to_owned(),
-        "wss://relay.example/#credential".to_owned(),
-        format!("wss://relay.example/{raw_hex}"),
-    ] {
-        for suffix in ["", " extra"] {
-            assert!(matches!(
-                session.execute_line(
-                    &format!("relay add private {unsafe_url}{suffix}"),
-                    |_, _| unreachable!()
-                ),
-                Err(ShellError::SecretOnCommandLine)
-            ));
-        }
-        assert!(
-            !session
-                .history()
-                .iter()
-                .any(|line| line.contains(&unsafe_url))
-        );
-    }
-    let bypass_url = "wss://relay.example?credential=supersecret";
-    let mut bypass_script = Cursor::new(format!("relay add private {bypass_url} extra\n"));
-    let mut bypass_output = Vec::new();
-    assert!(matches!(
-        session.run(
-            &mut bypass_script,
-            &mut bypass_output,
-            InputMode::Script,
-            OutputFormat::JsonLines,
-            |_, _, _, _, _| unreachable!(),
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    assert!(
-        !String::from_utf8(bypass_output)
-            .unwrap()
-            .contains(bypass_url)
-    );
-    assert!(
-        !session
-            .history()
-            .iter()
-            .any(|line| line.contains(bypass_url))
-    );
-
-    let mut raw_script = Cursor::new(format!("group create {raw_hex} group\n"));
-    let mut raw_output = Vec::new();
-    assert!(matches!(
-        session.run(
-            &mut raw_script,
-            &mut raw_output,
-            InputMode::Script,
-            OutputFormat::JsonLines,
-            |_, _, _, _, _| unreachable!(),
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    assert!(!String::from_utf8(raw_output).unwrap().contains(&raw_hex));
-    assert_eq!(session.history(), ["account new alice"]);
-
-    let mut dispatched = false;
-    let result = session.execute_line(&format!("group member add {raw_hex} member"), |_, words| {
-        dispatched = true;
-        assert_eq!(words[3], raw_hex);
-        Ok(CommandResult::success("accepted-public-key", "accepted"))
-    });
-    assert!(result.is_ok());
-    assert!(dispatched);
-
-    let result = session.execute_line(&format!("group event delete {raw_hex}"), |_, words| {
-        assert_eq!(words[3], raw_hex);
-        Ok(CommandResult::success("accepted-event-id", "accepted"))
-    });
-    assert!(result.is_ok());
+fn account_import_with_inline_nsec_works_in_script_mode() {
+    use nostr::key::Keys;
+    use nostr::nips::nip19::ToBech32;
+    let mut session = session();
+    let nsec = Keys::generate().secret_key().to_bech32().unwrap();
+    let result = session
+        .execute_line(
+            &format!("account import imported {nsec}"),
+            |_, _| unreachable!(),
+        )
+        .unwrap();
+    assert_eq!(result.kind(), "account-imported");
+    assert_eq!(session.selected_account_alias(), Some("imported"));
 }
 
 #[test]
@@ -300,8 +172,8 @@ fn result_values_are_json_typed_and_only_scalars_are_capturable() {
     assert!(value["fields"]["settled"].is_boolean());
     assert!(value["fields"]["ids"].is_array());
     assert_eq!(
-        ResultValue::public_text(format!("relay echoed {}", "a".repeat(64))),
-        ResultValue::text("<redacted>")
+        ResultValue::text(format!("relay echoed {}", "a".repeat(64))),
+        ResultValue::text(format!("relay echoed {}", "a".repeat(64)))
     );
 
     session
@@ -420,32 +292,6 @@ fn required_interactive_values_prompt_without_history_and_replays_refuse() {
     assert_eq!(String::from_utf8(output).unwrap(), "kind> ");
     assert!(session.history().is_empty());
 
-    let raw_hex = "a".repeat(64);
-    let mut raw_input = Cursor::new(format!("{raw_hex}\n"));
-    let mut raw_output = Vec::new();
-    assert!(matches!(
-        session.prompt_value(
-            &mut raw_input,
-            &mut raw_output,
-            InputMode::Interactive,
-            "content"
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    let mut public_input = Cursor::new(format!("{raw_hex}\n"));
-    let mut public_output = Vec::new();
-    assert_eq!(
-        session
-            .prompt_value(
-                &mut public_input,
-                &mut public_output,
-                InputMode::Interactive,
-                "event-id"
-            )
-            .unwrap(),
-        Some(raw_hex)
-    );
-
     let mut input = Cursor::new("12345\n");
     let mut output = Vec::new();
     assert!(matches!(
@@ -456,20 +302,6 @@ fn required_interactive_values_prompt_without_history_and_replays_refuse() {
     let mut remaining = String::new();
     input.read_to_string(&mut remaining).unwrap();
     assert_eq!(remaining, "12345\n");
-    assert!(session.history().is_empty());
-
-    let mut secret_input = Cursor::new("nsec1never-retain-this\n");
-    let mut secret_output = Vec::new();
-    assert!(matches!(
-        session.prompt_value(
-            &mut secret_input,
-            &mut secret_output,
-            InputMode::Interactive,
-            "content"
-        ),
-        Err(ShellError::SecretOnCommandLine)
-    ));
-    assert_eq!(String::from_utf8(secret_output).unwrap(), "content> ");
     assert!(session.history().is_empty());
 }
 

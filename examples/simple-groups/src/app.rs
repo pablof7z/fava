@@ -304,7 +304,7 @@ fn receipt_result(
             .destinations()
             .keys()
             .take(PRESENTATION_LIST_LIMIT)
-            .map(|destination| ResultValue::public_text(destination.relay.to_string())),
+            .map(|destination| ResultValue::text(destination.relay.to_string())),
     );
     let delivery_outcomes = ResultValue::array(
         receipt
@@ -318,7 +318,7 @@ fn receipt_result(
             .destinations()
             .values()
             .take(PRESENTATION_LIST_LIMIT)
-            .map(|outcome| ResultValue::public_text(delivery_reason(outcome).unwrap_or_default())),
+            .map(|outcome| ResultValue::text(delivery_reason(outcome).unwrap_or_default())),
     );
     let mut result = result
         .with_field("author", receipt.current.event.author().to_hex())?

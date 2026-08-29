@@ -1,7 +1,6 @@
 //! Explicit resource limits for private E2E command sessions.
 
 use crate::ShellError;
-use crate::ingress::reject_prompted_value;
 
 /// Every application-owned retained-input and execution boundary for one shell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,10 +113,8 @@ impl Limits {
     ///
     /// # Errors
     ///
-    /// Refuses protected-looking input and values over this policy's command
-    /// line bound, matching the shared buffered prompt path.
-    pub fn validate_prompt_value(self, label: &str, value: &str) -> Result<(), ShellError> {
-        reject_prompted_value(label, value)?;
+    /// Refuses values over this policy's command line bound.
+    pub fn validate_prompt_value(self, value: &str) -> Result<(), ShellError> {
         if value.len() > self.line_bytes {
             return Err(ShellError::Limit {
                 what: "prompt value bytes",

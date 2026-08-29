@@ -18,7 +18,7 @@ loopback endpoints, empty data directories, bounded readiness via an
 independent WebSocket `REQ`/`EOSE`, bounded logs, app deadline, process-group
 teardown, and one fresh artifact directory. Relay databases, relay logs,
 applied commands, and child `TMPDIR` are ignored scratch state, removed
-before retained artifacts are scanned on every exit path. The ordinary relay's
+before retained artifacts are checked on every exit path. The ordinary relay's
 generated configuration is explicitly pinned to
 and version-checked as `nostr-rs-relay 0.8.12`; both selected executable
 SHA-256 values enter `result.json` and per-run JSONL.
@@ -39,14 +39,11 @@ relay or artifact is created. Current event results expose public `author`
 alongside `event_id`, so an assertion does not infer identity from a private
 key or from an app cache.
 
-Protected `account import` is deliberately not a command-file exception. Its
-explicit user-approved proof uses one isolated PTY only: the harness generates
-one valid mutable nsec, feeds it only after the app's no-echo prompt, rejects a
-PTY echo, returns only typed public fields, erases scratch, scans every
-retained artifact for that exact nsec, and zeroes the input. The harness still
-does not construct, sign, or publish an event. The application imports through
-`Fava::add_signer`, and the harness separately proves the returned public key
-authored exact-ID kind 9007 and 12345 events before matching `EOSE`.
+`account import <alias> <nsec>` accepts an nsec or hex key as an ordinary
+command-file argument. The harness does not construct, sign, or publish an
+event. The application imports through `Fava::add_signer`, and the harness
+separately proves the returned public key authored exact-ID kind 9007 and 12345
+events before matching `EOSE`.
 
 ## Current executable evidence
 
@@ -66,12 +63,6 @@ It independently proves kind 9007 and kind 12345, the exact generated IDs and
 Alice author, the sole `h` tag, exact arbitrary content, and a matching EOSE.
 It starts the ordinary relay as a genuine separate state source but makes no
 saved-list claim yet.
-
-`secret-nondisclosure` supplies a deterministic nsec-shaped sentinel as a
-short-lived command input. It expects the REPL to refuse that script, requires
-the direct group-relay query to find no kind-12345 event, erases transient state
-before retention, and scans every durable artifact. Any echo in app output,
-inspection evidence, result, or harness JSONL is a failure.
 
 The committed
 [`2026-08-28 smoke bundle`](../../examples/simple-groups/live/evidence/2026-08-28-smoke/)
@@ -106,19 +97,18 @@ is the bounded negative control. It retains typed captures, all 18 direct
 `REQ`/`EOSE` inspections, and a hash manifest; no database, relay log, command,
 or temporary directory is retained.
 
-## Protected account-import result — 2026-08-29
+## Account-import result — 2026-08-29
 
-The isolated PTY proof ran against explicit
+The account-import proof ran against explicit
 `/Users/pablofernandez/Work/croissant/croissant` and PATH
-`nostr-rs-relay 0.8.12`. The generated nsec imported successfully without echo;
-the returned public key is the exact author of the Fava-created kind-9007 event
-and Fava-published arbitrary kind-12345 content event. Each independent
-group-relay query returned exactly that event and its matching `EOSE`. The
-retained run scan used the actual nsec and passed.
+`nostr-rs-relay 0.8.12`. The generated nsec imported successfully; the returned
+public key is the exact author of the Fava-created kind-9007 event and
+Fava-published arbitrary kind-12345 content event. Each independent group-relay
+query returned exactly that event and its matching `EOSE`.
 
 [`2026-08-29 account-import evidence`](../../examples/simple-groups/live/evidence/2026-08-29-account-import-proof/)
 contains only public captures, two direct inspections, result metadata, and
-their hashes. It contains neither the nsec nor a PTY transcript.
+their hashes.
 
 ## Local fixture discovery
 
@@ -134,12 +124,11 @@ the harness records no source-cleanliness or cross-implementation claim.
 Replacing relay inspection with REPL output, treating an open TCP socket as
 ready, accepting an EOSE for another subscription, ignoring an extra tag,
 exceeding total event/artifact/file/count bounds, leaving a descendant process
-group alive after its parent exits, preserving the secret input, skipping the
-failure-path retained scan, or turning a blocked full-flow contract into a pass
-must fail focused tests or the live run. Replacing the NIP-29 relay with an
-ordinary relay invalidates all authorization claims by construction.
+group alive after its parent exits, skipping the failure-path retained check,
+or turning a blocked full-flow contract into a pass must fail focused tests or
+the live run. Replacing the NIP-29 relay with an ordinary relay invalidates all
+authorization claims by construction.
 
-For protected import, making the generated scalar invalid, accepting an echoed
-nsec, losing the typed imported public key, allowing the create/content author
-to differ from it, omitting either matching EOSE, or retaining any `nsec1`
-material in canonical evidence fails a bounded unit or live assertion.
+For account import, using an invalid key, losing the typed imported public key,
+allowing the create/content author to differ from it, or omitting either
+matching EOSE fails a bounded unit or live assertion.

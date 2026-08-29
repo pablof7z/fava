@@ -56,3 +56,18 @@ Keep the workload model to declarative event queries and write intents. Keep sha
 Nostr input is adversarial. Protocol decoders extract the required semantic positions and continue: ignore unknown tags, unused extra values, and repetitions unless the protocol assigns them meaning. Malformed optional or sibling material stays scoped and never erases valid decoded data. Do not turn harmless junk into whole-event failure or invent stricter protocol rules. Validate only invariants owned by the decoder's domain. Preserve foreign values for their owner; never parse or reject a generic protocol value merely to provide a convenient typed result.
 
 Separate a replaceable contract from its implementation crate early, even with one implementation. Delaying the split couples the interface to that one mechanism; the contract crate forces an abstract, externally usable interface with a sound shape, not one that only fits how the first implementation happens to work. This is not stabilizing an empty provider framework: a contract carrying its first real implementation is not empty. Do not suggest collapsing or deferring a contract/impl split as simplification.
+
+## No invented security or privacy guardrails
+
+No security or privacy guardrail may be invented anywhere in this repository without an authoritative owner and explicit approval from Pablo. Invented guardrails are code whose only purpose is to protect against the developer's own test data—they create false assurance, block testability, and add complexity without a genuine threat model.
+
+Every testing surface in this repository—not only the two paths listed below—must treat all values, including private keys in any format, as ordinary bounded test data. The following are permanently forbidden in any test, example, harness, or support crate without an explicit authorized owner:
+
+- Refusing values that look like credentials (nsec, hex keys, credential-bearing URLs)
+- Redacting values in output or result fields
+- Protected/no-echo prompts or refusing any command in script mode
+- Suppressing history entries based on content resemblance to secrets
+- Scanning retained artifacts or test outputs for secret material
+- Zeroizing test buffers
+
+Functional bounds (byte limits, count limits, format validity) are not guardrails and remain required. Security policy belongs in production application code, not in test infrastructure. See `docs/issues/0053-testing-surface-no-security-guardrails.md`.

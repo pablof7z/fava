@@ -25,10 +25,6 @@ pub enum ShellError {
     /// A command's quoting is malformed before it reaches domain code.
     #[error("unterminated quoted argument")]
     UnterminatedQuote,
-    /// Ordinary command or prompt input attempted to pass a secret through
-    /// history, output, capture, or domain input.
-    #[error("secret-looking ordinary input is refused; use a protected secret prompt")]
-    SecretOnCommandLine,
     /// A capture reference did not name a retained capture.
     #[error("unknown capture {name:?}")]
     UnknownCapture {
@@ -93,18 +89,12 @@ pub enum ShellError {
         /// Repeated account alias.
         alias: String,
     },
-    /// A protected imported key could not form a local signer.
-    #[error("protected account key is not a valid Nostr secret key")]
+    /// An imported key could not form a local signer.
+    #[error("imported account key is not a valid Nostr secret key")]
     InvalidImportedAccount,
     /// Fava refused an account signer attachment change.
     #[error("account signer operation failed: {0}")]
     AccountSigner(String),
-    /// A result field could leak secret material into a renderer, capture, or dump.
-    #[error("sensitive result field {name:?} is forbidden")]
-    SensitiveResultField {
-        /// Forbidden field name.
-        name: String,
-    },
     /// One built-in command has an invalid argument shape.
     #[error("usage: {usage}")]
     Usage {
@@ -117,9 +107,6 @@ pub enum ShellError {
         /// Unknown command head.
         command: String,
     },
-    /// A protected prompt is unavailable for noninteractive script input.
-    #[error("protected prompting requires an interactive terminal")]
-    NonInteractiveSecretPrompt,
     /// JSONL must not share a stream with interactive prompts.
     #[error("interactive input cannot use JSONL output; use --script or human output")]
     InteractiveJsonLines,

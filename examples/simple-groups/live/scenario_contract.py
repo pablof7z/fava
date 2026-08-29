@@ -9,13 +9,11 @@ from harness_safety import (
     MAX_ASSERTIONS,
     MAX_FILTER_BYTES,
     MAX_JSONL_ROWS,
-    MAX_SECRET_SENTINEL_BYTES,
-    MAX_SECRET_SENTINELS,
     HarnessError,
 )
 
 
-def validate_executable_scenario(scenario: dict[str, Any]) -> tuple[str, ...]:
+def validate_executable_scenario(scenario: dict[str, Any]) -> None:
     if "required_facts" in scenario:
         raise HarnessError("executable scenario must convert required_facts into concrete assertions")
     if not isinstance(scenario.get("command_file"), str) or not scenario["command_file"]:
@@ -62,12 +60,6 @@ def validate_executable_scenario(scenario: dict[str, Any]) -> tuple[str, ...]:
             raise HarnessError(f"scenario assertion {number} requires exact id, pubkey, kind, content, and tags")
         elif not assertion["present"] and "event" in assertion:
             raise HarnessError(f"negative scenario assertion {number} must not carry an ignored event")
-    sentinels = scenario.get("secret_sentinels", [])
-    if not isinstance(sentinels, list) or len(sentinels) > MAX_SECRET_SENTINELS:
-        raise HarnessError("scenario secret_sentinels exceeded its count bound")
-    if any(not isinstance(item, str) or not item or len(item.encode()) > MAX_SECRET_SENTINEL_BYTES for item in sentinels):
-        raise HarnessError("scenario secret sentinel was invalid")
-    return tuple(sentinels)
 
 
 def result_captures(rows: list[dict[str, Any]], definitions: dict[str, Any]) -> dict[str, dict[str, Any]]:

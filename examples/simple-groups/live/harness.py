@@ -12,8 +12,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
-import secrets
 import shutil
 import subprocess
 import sys
@@ -31,13 +29,11 @@ from harness_safety import (
     MAX_JSONL_ROWS,
     MAX_LOG_BYTES,
     MAX_SCENARIO_BYTES,
-    MAX_SECRET_SENTINEL_BYTES,
-    MAX_SECRET_SENTINELS,
     HarnessError,
     new_scratch,
     read_bounded_text,
     remove_scratch,
-    scan_secret_absence,
+    check_retained_artifacts,
 )
 from relay_inspection import InspectionError, assert_event, inspect_until_eose
 from harness_process import (
@@ -46,7 +42,6 @@ from harness_process import (
     materialize_commands,
     require_stopped,
     run_app,
-    run_interactive_import,
     start_croissant,
     start_ordinary,
     wait_ready,
@@ -56,56 +51,8 @@ from scenario_contract import resolve, result_captures, validate_executable_scen
 LIVE = Path(__file__).resolve().parent
 SCENARIOS = LIVE / "scenarios"
 INSPECTION_SECONDS = 10.0
-GROUP_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-HEX_ID_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+GROUP_ID_PATTERN = __import__("re").compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
-
-def _bech32_polymod(values: list[int]) -> int:
-    checksum = 1
-    for value in values:
-        top = checksum >> 25
-        checksum = ((checksum & 0x1FFFFFF) << 5) ^ value
-        for number, generator in enumerate((0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)):
-            if (top >> number) & 1:
-                checksum ^= generator
-    return checksum
-
-
-def _bech32_values(value: bytes) -> list[int]:
-    result: list[int] = []
-    accumulator = 0
-    bits = 0
-    for byte in value:
-        accumulator = (accumulator << 8) | byte
-        bits += 8
-        while bits >= 5:
-            bits -= 5
-            result.append((accumulator >> bits) & 31)
-    if bits:
-        result.append((accumulator << (5 - bits)) & 31)
-    return result
-
-
-def generate_nsec() -> bytearray:
-    """Generate one valid, mutable NIP-19 nsec without retaining its scalar."""
-
-    scalar = bytearray(32)
-    try:
-        while True:
-            scalar[:] = secrets.token_bytes(32)
-            if 0 < int.from_bytes(scalar, "big") < SECP256K1_ORDER:
-                break
-        human = b"nsec"
-        expanded = [byte >> 5 for byte in human] + [0] + [byte & 31 for byte in human]
-        payload = _bech32_values(scalar)
-        checksum = _bech32_polymod(expanded + payload + [0] * 6) ^ 1
-        alphabet = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-        return bytearray(b"nsec1" + bytes(alphabet[value] for value in payload + [
-            (checksum >> 5 * (5 - index)) & 31 for index in range(6)
-        ]))
-    finally:
-        scalar[:] = b"\0" * len(scalar)
 
 def json_line(value: dict[str, Any]) -> str:
     """Render deterministic, one-object-per-line evidence."""
@@ -250,8 +197,8 @@ def inspect_assertions(
     return context
 
 
-def cleanup_before_retention(scratch: Path, artifacts: Path, sentinels: tuple[str, ...]) -> None:
-    """Erase all transient state, then scan every retained artifact on every outcome."""
+def cleanup_before_retention(scratch: Path, artifacts: Path) -> None:
+    """Erase all transient state and validate retained artifact bounds."""
 
     cleanup_error: BaseException | None = None
     scan_error: BaseException | None = None
@@ -260,7 +207,7 @@ def cleanup_before_retention(scratch: Path, artifacts: Path, sentinels: tuple[st
     except BaseException as error:
         cleanup_error = error
     try:
-        scan_secret_absence(artifacts, sentinels)
+        check_retained_artifacts(artifacts)
     except BaseException as error:
         scan_error = error
     if cleanup_error is not None and scan_error is not None:
@@ -344,7 +291,7 @@ def write_result(
     result_rows: int | None,
     outcome: str,
 ) -> None:
-    """Write a compact, secret-free run result before the final retention scan."""
+    """Write a compact run result before the final retention scan."""
 
     value: dict[str, Any] = {
         "fixtures": {
@@ -371,7 +318,7 @@ def run(arguments: argparse.Namespace) -> int:
         reason = scenario.get("blocked_by", "scenario is not executable")
         print(json_line({"action": "scenario-unavailable", "reason": reason, "scenario": arguments.scenario}), end="")
         return 2
-    secret_sentinels = validate_executable_scenario(scenario)
+    validate_executable_scenario(scenario)
     arguments.artifacts = arguments.artifacts.resolve()
     if not GROUP_ID_PATTERN.fullmatch(arguments.group_id):
         raise HarnessError("group id must be lowercase ASCII and at most 63 characters")
@@ -517,164 +464,9 @@ def run(arguments: argparse.Namespace) -> int:
         except BaseException as error:
             finalization_error = error
         try:
-            cleanup_before_retention(scratch, arguments.artifacts, secret_sentinels)
+            cleanup_before_retention(scratch, arguments.artifacts)
         except BaseException as error:
             scan_error = error
-    errors: list[BaseException] = []
-    if run_error is not None:
-        errors.append(run_error)
-    errors.extend(HarnessError(message) for message in teardown_errors)
-    if finalization_error is not None:
-        errors.append(HarnessError("retained-artifact finalization failed"))
-    if scan_error is not None:
-        errors.append(scan_error)
-    if errors:
-        if len(errors) == 1:
-            raise errors[0]
-        raise HarnessError("harness failure plus " + "; ".join(str(error) for error in errors)) from errors[0]
-    return 0
-
-
-def _require_import_result(
-    results: dict[str, dict[str, str]], kind: str, required: tuple[str, ...]
-) -> dict[str, str]:
-    fields = results.get(kind)
-    if fields is None:
-        raise HarnessError(f"interactive import omitted typed {kind!r} result")
-    missing = [name for name in required if not fields.get(name)]
-    if missing:
-        raise HarnessError(f"interactive import {kind!r} omitted public fields {missing!r}")
-    return fields
-
-
-def _import_captures(results: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
-    imported = _require_import_result(results, "account-imported", ("account", "public_key"))
-    created = _require_import_result(results, "group-created", ("author", "event_id", "kind"))
-    content = _require_import_result(results, "group-event-published", ("author", "event_id", "kind"))
-    if imported["account"] != "imported" or not HEX_ID_PATTERN.fullmatch(imported["public_key"]):
-        raise HarnessError("interactive import did not return its exact public account identity")
-    for label, values, expected_kind in (("created", created, "9007"), ("content", content, "12345")):
-        if values.get("kind") != expected_kind:
-            raise HarnessError(f"interactive import {label} result had unexpected kind")
-        if not HEX_ID_PATTERN.fullmatch(values["author"]) or not HEX_ID_PATTERN.fullmatch(values["event_id"]):
-            raise HarnessError(f"interactive import {label} result had malformed public event identity")
-        if values["author"] != imported["public_key"]:
-            raise HarnessError(f"interactive import {label} did not use the imported public key")
-    return {
-        "imported": {"account": imported["account"], "public_key": imported["public_key"]},
-        "created": {"author": created["author"], "event_id": created["event_id"], "kind": created["kind"]},
-        "content": {"author": content["author"], "event_id": content["event_id"], "kind": content["kind"]},
-    }
-
-
-def run_import_proof(arguments: argparse.Namespace) -> int:
-    """Exercise protected account import once without retaining its disposable nsec."""
-
-    arguments.artifacts = arguments.artifacts.resolve()
-    if not GROUP_ID_PATTERN.fullmatch(arguments.group_id):
-        raise HarnessError("group id must be lowercase ASCII and at most 63 characters")
-    if arguments.artifacts.exists():
-        raise HarnessError(f"artifact directory must be new: {arguments.artifacts}")
-    nip29_binary = require_binary(arguments.nip29_bin, "NIP-29 relay")
-    ordinary_binary = require_binary(arguments.ordinary_bin, "ordinary relay")
-    ordinary_version = ordinary_fixture_version(ordinary_binary)
-    arguments.artifacts.mkdir(parents=True, mode=0o700)
-    log = RunLog(arguments.artifacts / "run.jsonl")
-    scratch = new_scratch(LIVE)
-    scratch_tmp = scratch / "tmp"
-    scratch_tmp.mkdir(mode=0o700)
-    environment = {**os.environ, "TMPDIR": str(scratch_tmp)}
-    secret = generate_nsec()
-    relays: list[Relay] = []
-    fixture_hashes: dict[str, str] = {}
-    captures: dict[str, dict[str, str]] | None = None
-    run_error: BaseException | None = None
-    teardown_errors: list[str] = []
-    finalization_error: BaseException | None = None
-    scan_error: BaseException | None = None
-    try:
-        fixture_hashes = {"group": binary_sha256(nip29_binary), "state": binary_sha256(ordinary_binary)}
-        log.record("relay-fixture-selected", relay="group", sha256=fixture_hashes["group"], source="explicit-path")
-        log.record("relay-fixture-selected", relay="state", sha256=fixture_hashes["state"], source="explicit-path", version=ordinary_version)
-        group = start_croissant(nip29_binary, scratch, environment)
-        relays.append(group)
-        state = start_ordinary(ordinary_binary, scratch, environment)
-        relays.append(state)
-        for relay in relays:
-            wait_ready(relay)
-            log.record("relay-ready", relay=relay.label, url=relay.url)
-        results = run_interactive_import(
-            [
-                "cargo",
-                "run",
-                "--quiet",
-                "--locked",
-                "--manifest-path",
-                "examples/simple-groups/Cargo.toml",
-                "--",
-                "--no-color",
-            ],
-            environment,
-            secret,
-            (
-                (f"relay add group {group.url}", "relay-added"),
-                (f"group create {arguments.group_id} group", "group-created"),
-                ("group event publish --kind 12345 imported-account-proof", "group-event-published"),
-                ("quit", "quit"),
-            ),
-        )
-        captures = _import_captures(results)
-        rendered_captures = json.dumps(
-            {"captures": captures, "schema": "fava-simple-groups-live-import-captures-v1"},
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        ) + "\n"
-        if len(rendered_captures.encode("utf-8")) > MAX_ARTIFACT_FILE_BYTES:
-            raise HarnessError("interactive import captures exceeded the retained file byte bound")
-        (arguments.artifacts / "app-captures.json").write_text(rendered_captures, encoding="utf-8")
-        inspect_assertions(
-            {
-                "assertions": [
-                    {"relay": "group", "present": True, "filter": {"ids": ["$created.event_id"]}, "event": {"id": "$created.event_id", "pubkey": "$imported.public_key", "kind": 9007, "content": "", "tags": [["h", "$group_id"]]}},
-                    {"relay": "group", "present": True, "filter": {"ids": ["$content.event_id"]}, "event": {"id": "$content.event_id", "pubkey": "$imported.public_key", "kind": 12345, "content": "imported-account-proof", "tags": [["h", "$group_id"]]}},
-                ]
-            },
-            {"group": group, "state": state},
-            [],
-            {**captures, "group_id": arguments.group_id},
-            arguments.artifacts,
-        )
-        log.record("interactive-import-finished", account="imported", public_key=captures["imported"]["public_key"])
-    except BaseException as error:
-        run_error = error
-    finally:
-        for relay in reversed(relays):
-            try:
-                facts = relay.process.stop()
-                log.record("relay-stopped", relay=relay.label, **facts)
-                require_stopped(f"{relay.label} relay", facts)
-            except BaseException as error:
-                teardown_errors.append(str(error))
-        try:
-            if fixture_hashes:
-                write_result(
-                    arguments.artifacts,
-                    "account-import-proof",
-                    fixture_hashes,
-                    ordinary_version,
-                    None,
-                    "passed" if run_error is None and not teardown_errors else "failed",
-                )
-            log.record("retained-artifact-scan", scenario="account-import-proof")
-        except BaseException as error:
-            finalization_error = error
-        try:
-            cleanup_before_retention(scratch, arguments.artifacts, (secret,))
-        except BaseException as error:
-            scan_error = error
-        finally:
-            secret[:] = b"\0" * len(secret)
     errors: list[BaseException] = []
     if run_error is not None:
         errors.append(run_error)
@@ -723,13 +515,6 @@ def parser() -> argparse.ArgumentParser:
         nargs="+",
         help="argv template; each argument may contain {commands}, never executed by a shell",
     )
-    import_parser = subcommands.add_parser(
-        "import-proof", help="run the isolated protected account-import live proof"
-    )
-    import_parser.add_argument("--nip29-bin", required=True, help="Croissant-compatible NIP-29 relay executable")
-    import_parser.add_argument("--ordinary-bin", required=True, help="nostr-rs-relay 0.8.12 executable")
-    import_parser.add_argument("--artifacts", required=True, type=Path, help="new output directory")
-    import_parser.add_argument("--group-id", default="fava-import-e2e-group")
     return result
 
 
@@ -738,8 +523,6 @@ def main() -> int:
     try:
         if arguments.subcommand == "discover":
             return discover(arguments)
-        if arguments.subcommand == "import-proof":
-            return run_import_proof(arguments)
         return run(arguments)
     except HarnessError as error:
         print(json_line({"action": "harness-failed", "reason": str(error)}), end="", file=sys.stderr)

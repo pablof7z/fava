@@ -13,7 +13,6 @@ use reedline::{
 use crate::terminal_editor::{
     ShellCompleter, ShellHighlighter, ShellPrompt, UsageHinter, ValuePrompt,
 };
-use crate::terminal_history::SafeHistory;
 
 const HISTORY_LIMIT: usize = 16;
 const MENU_NAME: &str = "simple_groups_completion";
@@ -40,7 +39,7 @@ impl Terminal {
         let completion_menu = Box::new(ColumnarMenu::default().with_name(MENU_NAME));
         let command_editor = Reedline::create()
             .with_ansi_colors(color)
-            .with_history(Box::new(SafeHistory::new(HISTORY_LIMIT)?))
+            .with_history(Box::new(FileBackedHistory::new(HISTORY_LIMIT)?))
             .with_hinter(Box::new(UsageHinter { color }))
             .with_completer(Box::new(ShellCompleter))
             .with_highlighter(Box::new(ShellHighlighter))
@@ -91,7 +90,7 @@ impl Terminal {
             .map_err(|error| ShellError::Output(error.to_string()))?
         {
             Signal::Success(value) => {
-                self.limits.validate_prompt_value(label, &value)?;
+                self.limits.validate_prompt_value(&value)?;
                 Ok(Some(value))
             }
             _ => Ok(None),

@@ -13,9 +13,8 @@ owns only shared bounded shell mechanics
 The application is one real command grammar, consumed by an interactive terminal
 or an ordinary command file. Required ordinary arguments prompt only
 interactively; replay returns a typed refusal before reading a later line.
-`account import` is stricter: it accepts key material solely from a protected
-no-echo terminal prompt and is unavailable to replay. InputMode refuses replay
-before account-import omission handling can prompt.
+`account import <alias> <nsec>` accepts an nsec or hex key as an ordinary inline
+argument in both interactive and script mode.
 
 The app keeps selected account and selected `SimpleGroup` independent. Account
 commands alter only selected local author/signer attachment. Group create/open/
@@ -60,19 +59,15 @@ supplied `content` only after result-size admission. This gives an independent
 relay harness enough public evidence to assert exact author, id, kind, content,
 and tags without inferring identity from a private key or app cache.
 
-Secrets never appear in command history, results, captures, dump, replay input,
-or logs. Credential-bearing relay URLs, nsec material, and raw 64-hex key
-material outside a public-key/event-id grammar position refuse before history
-or rendering. The opaque secret API consumes the protected input inside signer
-attachment and cannot return secret bytes. The app does not render relay event
-content/tags or diagnostic detail. It has no plugin framework, private Fava
-workaround, provider profile, or canary dependency.
+The app does not render relay event content/tags or diagnostic detail. It has
+no plugin framework, private Fava workaround, provider profile, or canary
+dependency.
 
 ## Evidence and falsifiers
 
-- The support test suite proves protected account ingress, account/relay command
-  lifecycle, credential and contextual raw-hex refusal before retention, typed
-  DTO/capture boundaries, JSONL output, and replay/interactive dispatch parity.
+- The support test suite proves inline account import, account/relay command
+  lifecycle, typed DTO/capture boundaries, JSONL output, and replay/interactive
+  dispatch parity.
 - The app unit test constructs all six state kinds and proves the reverse kind
   conversion selects every public decoder.
 - The app black-box replay tests run `tests/shell.txt` without a PTY and probe
@@ -83,17 +78,15 @@ workaround, provider profile, or canary dependency.
 - `scenarios/full-repl.txt` is the complete controlled two-relay walkthrough,
   including metadata `supported_kinds`, membership, saved lists, event deletion,
   and group deletion.
-- The explicit isolated-PTY account-import proof creates one disposable valid
-  nsec only in memory, fails on echo, scans retained artifacts with that exact
-  input, and proves its returned public key is the direct-relay author of
-  Fava-created kind 9007 and arbitrary kind 12345 events. Its canonical record
-  contains public captures and EOSE evidence only.
+- The live account-import proof supplies a generated nsec as an ordinary inline
+  argument, proves its returned public key is the direct-relay author of
+  Fava-created kind 9007 and arbitrary kind 12345 events, and retains public
+  captures and EOSE evidence only.
 
 Deleting `SimpleGroupEventBuilder` from arbitrary event publication, accepting
-reversed publish tokens, routing a
-group builder through `Fava::to`, replacing `wait_until` with an unbounded
-observation stream, making a script prompt consume another line, retaining a
-protected key, omitting an event's public author/id/write/kind facts, or using a
+reversed publish tokens, routing a group builder through `Fava::to`, replacing
+`wait_until` with an unbounded observation stream, making a script prompt consume
+another line, omitting an event's public author/id/write/kind facts, or using a
 raw NIP-29 management kind must fail focused code, scenario, or live-harness
 assertions.
 

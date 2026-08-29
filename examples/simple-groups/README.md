@@ -13,8 +13,6 @@ browse bounded in-process history. The interactive renderer aligns result facts,
 uses compact tables, and calls out receipt outcomes with elapsed command time.
 On narrow terminals fields and tables compact without exceeding the available
 column width. `NO_COLOR=1` or `--no-color` removes application color.
-Protected-looking ordinary input never enters editor history, and account import
-remains a no-echo prompt.
 
 Run it interactively against a controlled group relay and a separate user
 relay for kind 10009:
@@ -43,8 +41,7 @@ arrays). `capture <name> <last-result-field>` accepts only a scalar field for
 `${name}` interpolation. JSONL is refused for interactive input so prompts
 cannot corrupt the stream. Results omit relay-received event content,
 tags, relay responses, and diagnostics text. An explicit event publish returns
-only its caller-supplied content, after protected-secret and result-size checks,
-so external input cannot turn a result into a secret-bearing transcript.
+only its caller-supplied content after the result-size bound.
 
 Bounded `group events`, `group state`, and saved-list reads report
 `relay_eose: true` for their result-limited request while reporting
@@ -69,17 +66,14 @@ quit
 ```
 
 `account new` creates an ephemeral local Nostr keypair and selects it.
-`account import` accepts an nsec or hex secret only from a no-echo terminal
-prompt, then attaches a `LocalSigner` through `Fava::add_signer`. It cannot run
-from a script, argv, capture, result, history, or environment. `account
-remove` calls `Fava::remove_signer` before it drops the bounded shell alias.
+`account import <alias> <nsec>` attaches a `LocalSigner` through
+`Fava::add_signer`; it accepts an nsec or hex key as an ordinary inline argument
+in both interactive and script mode. `account remove` calls
+`Fava::remove_signer` before it drops the bounded shell alias.
 
-Relay aliases are public endpoint names: credential-bearing URL authorities and
-credential query parameters are refused. The shell also rejects nsec material
-and raw 64-hex key material before history, interpolation, output, or domain
-dispatch unless that exact grammar position is a public key or event id. It bounds
-accounts, relays, captures, history, command and expanded-command size,
-arguments, aliases, result fields, and every retained scalar value.
+Relay aliases are public endpoint names. The shell bounds accounts, relays,
+captures, history, command and expanded-command size, arguments, aliases,
+result fields, and every retained scalar value.
 
 ## Simple-group grammar
 
@@ -166,16 +160,7 @@ only `expect-rejection` is a successful, capturable negative assertion.
 
 An interactive omission of a required ordinary value prompts for that value
 without adding it to history. In a script the same omission returns one typed
-refusal and exits before consuming the next line. Protected account import
-uses its own no-echo prompt and is always unavailable to a script.
-
-The controlled live harness has one explicit interactive `account import`
-proof path. It injects one generated disposable nsec only through an isolated
-PTY, requires no echo, compares the returned public key to an exact direct
-relay readback of Fava-published kind 9007 and 12345 events, removes transient
-state, then scans every retained artifact for that exact input. The canonical
-record retains public captures and readback only; it contains no nsec or PTY
-transcript. See [`live/README.md`](live/README.md).
+refusal and exits before consuming the next line. See [`live/README.md`](live/README.md).
 
 `tests/shell.txt` proves a no-PTY shared-shell replay. `tests/missing-kind.txt`
 and `tests/missing-required.txt` prove that replay cannot consume a later line

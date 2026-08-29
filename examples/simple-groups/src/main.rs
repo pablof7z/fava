@@ -10,7 +10,6 @@ mod support;
 mod terminal;
 mod terminal_completion;
 mod terminal_editor;
-mod terminal_history;
 
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, stdin, stdout};
@@ -56,8 +55,6 @@ async fn main() -> AppResult<()> {
             } else {
                 InputMode::Script
             };
-            // Do not hold the global stdin lock across the REPL: protected
-            // account import acquires it briefly for its no-echo terminal read.
             let mut input = BufReader::new(stdin());
             run(
                 &mut session,

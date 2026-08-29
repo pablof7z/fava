@@ -6,9 +6,7 @@ use std::io::{BufRead, Write};
 
 use fava::{Fava, RelayUrl};
 
-use crate::ingress::{looks_secret, reject_unsafe_words};
-use crate::result::sensitive_value;
-use crate::{Account, CommandResult, Limits, OutputFormat, Secret, ShellError};
+use crate::{Account, CommandResult, Limits, OutputFormat, ShellError};
 
 /// Whether the same command executor is fed by a terminal or a command file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,10 +32,6 @@ pub struct E2eSession {
 
 impl E2eSession {
     /// Construct a shell with no accounts or relay aliases.
-    ///
-    /// Accounts enter only through the protected shared commands. Their local
-    /// signers are attached through this public Fava handle; the shell never
-    /// reaches into Fava session state.
     #[must_use]
     pub fn new(limits: Limits, fava: Fava) -> Self {
         Self {
@@ -155,8 +149,8 @@ impl E2eSession {
     ///
     /// # Errors
     ///
-    /// Refuses oversized, secret-looking, malformed, or unknown retained input
-    /// before it reaches the real domain command implementation.
+    /// Refuses oversized, malformed, or unknown retained input before it
+    /// reaches the real domain command implementation.
     pub fn execute_line<F>(&mut self, line: &str, domain: F) -> Result<CommandResult, ShellError>
     where
         F: FnMut(&mut Self, &[String]) -> Result<CommandResult, ShellError>,
@@ -172,14 +166,10 @@ impl E2eSession {
     /// Execute one line through the shared parser and dispatcher with an
     /// application-supplied ordinary-value prompt.
     ///
-    /// The runtime uses this for interactive and script streams alike. The
-    /// prompt decides whether an omitted required value can be supplied; it
-    /// must return [`ShellError::NonInteractivePrompt`] for a replay.
-    ///
     /// # Errors
     ///
-    /// Refuses oversized, secret-looking, malformed, or unknown retained input
-    /// before it reaches the real domain command implementation.
+    /// Refuses oversized, malformed, or unknown retained input before it
+    /// reaches the real domain command implementation.
     pub fn execute_line_with_prompt<F, P>(
         &mut self,
         line: &str,
@@ -199,15 +189,10 @@ impl E2eSession {
     /// Execute one line while giving the domain dispatcher the ordinary-value
     /// prompt used by the shared shell commands.
     ///
-    /// This keeps command parsing, secret refusal, bounded history, and
-    /// result retention in this shell while allowing a concrete interactive
-    /// frontend to own its terminal line editor for both command and value
-    /// entry.
-    ///
     /// # Errors
     ///
-    /// Refuses oversized, secret-looking, malformed, or unknown retained input
-    /// before it reaches the real domain command implementation.
+    /// Refuses oversized, malformed, or unknown retained input before it
+    /// reaches the real domain command implementation.
     pub fn execute_line_with_domain_prompt<F, P>(
         &mut self,
         line: &str,
@@ -236,8 +221,7 @@ impl E2eSession {
                 maximum: self.limits.arguments(),
             });
         }
-        reject_unsafe_words(&words)?;
-        self.record_history(&expanded, &words)?;
+        self.record_history(&expanded);
         let result = match words.as_slice() {
             [command, action, arguments @ ..] if command == "account" => {
                 self.account_command(action, arguments, mode, prompt)
@@ -304,20 +288,14 @@ impl E2eSession {
         self.relays.len()
     }
 
-    /// Refuse a value that cannot safely become one capture-safe result field.
-    ///
-    /// Domain commands call this before publishing content they promise to
-    /// expose exactly in their terminal result, so a renderer bound never
-    /// turns an already-accepted write into an unreportable command outcome.
+    /// Refuse a value that exceeds the capture-safe result field bound.
     ///
     /// # Errors
     ///
     /// Returns a typed limit refusal before the caller can accept work whose
     /// exact value would exceed the one result-field bound.
     pub fn validate_result_value(&self, value: &str) -> Result<(), ShellError> {
-        if sensitive_value(value) {
-            Err(ShellError::SecretOnCommandLine)
-        } else if value.len() > self.limits.capture_bytes() {
+        if value.len() > self.limits.capture_bytes() {
             Err(ShellError::Limit {
                 what: "result field bytes",
                 maximum: self.limits.capture_bytes(),
@@ -327,23 +305,13 @@ impl E2eSession {
         }
     }
 
-    /// Return bounded history entries; protected prompts are absent by construction.
+    /// Return bounded history entries.
     #[must_use]
     pub fn history(&self) -> Vec<&str> {
         self.history.iter().map(String::as_str).collect()
     }
 
-    /// Read one protected secret without passing it through command parsing or history.
-    ///
-    /// # Errors
-    ///
-    /// Refuses non-terminal input instead of falling back to a script, argv, or
-    /// history-bearing reader.
-    pub fn prompt_secret(&self, label: &str) -> Result<Secret, ShellError> {
-        Secret::prompt(label)
-    }
-
-    /// Prompt for one non-secret domain value without recording it as a command.
+    /// Prompt for one domain value without recording it as a command.
     ///
     /// # Errors
     ///
@@ -402,15 +370,11 @@ impl E2eSession {
         Ok(expanded)
     }
 
-    fn record_history(&mut self, line: &str, words: &[String]) -> Result<(), ShellError> {
-        if words.iter().any(|word| looks_secret(word)) {
-            return Err(ShellError::SecretOnCommandLine);
-        }
+    fn record_history(&mut self, line: &str) {
         if self.history.len() == self.limits.history() {
             self.history.pop_front();
         }
         self.history.push_back(line.to_owned());
-        Ok(())
     }
 }
 
@@ -442,7 +406,7 @@ where
         return Ok(None);
     }
     let value = value.trim_end().to_owned();
-    limits.validate_prompt_value(label, &value)?;
+    limits.validate_prompt_value(&value)?;
     Ok(Some(value))
 }
 

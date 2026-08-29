@@ -53,7 +53,7 @@ const ROOT: &[Completion] = &[
 
 const ACCOUNT: &[Completion] = &[
     item("new", "create and select a local account"),
-    item("import", "protected no-echo import"),
+    item("import", "import a local signer"),
     item("list", "list local accounts"),
     item("switch", "select an account"),
     item("remove", "remove an attached signer"),

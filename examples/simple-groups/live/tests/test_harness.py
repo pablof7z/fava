@@ -25,8 +25,6 @@ from harness import (
     HarnessError,
     ManagedProcess,
     cleanup_before_retention,
-    generate_nsec,
-    _import_captures,
     inspect_assertions,
     json_line,
     materialize_commands,
@@ -35,8 +33,7 @@ from harness import (
     run,
     validate_executable_scenario,
 )
-from harness_safety import MAX_ARTIFACT_FILE_BYTES, MAX_FILTER_BYTES, scan_secret_absence
-from harness_process import _human_results, _read_pty_until, _require_no_secret_echo
+from harness_safety import MAX_ARTIFACT_FILE_BYTES, MAX_FILTER_BYTES, check_retained_artifacts
 from relay_inspection import InspectionError, assert_event, inspect_until_eose
 
 
@@ -223,111 +220,6 @@ class FixtureTests(unittest.TestCase):
                 source.name,
             )
 
-    def test_generated_nsec_is_valid_bounded_bech32_and_mutable(self) -> None:
-        secret = generate_nsec()
-        try:
-            self.assertIsInstance(secret, bytearray)
-            self.assertTrue(secret.startswith(b"nsec1"))
-            self.assertLessEqual(len(secret), 1_024)
-            alphabet = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-            values = [alphabet.index(value) for value in secret[5:]]
-            expanded = [ord(character) >> 5 for character in "nsec"] + [0] + [ord(character) & 31 for character in "nsec"]
-            self.assertEqual(__import__("harness")._bech32_polymod(expanded + values), 1)
-            payload = values[:-6]
-            restored = 0
-            bits = 0
-            scalar = bytearray()
-            for value in payload:
-                restored = (restored << 5) | value
-                bits += 5
-                while bits >= 8:
-                    bits -= 8
-                    scalar.append((restored >> bits) & 255)
-            self.assertEqual(len(scalar), 32)
-            self.assertGreater(int.from_bytes(scalar, "big"), 0)
-            scalar[:] = b"\0" * len(scalar)
-        finally:
-            secret[:] = b"\0" * len(secret)
-
-    def test_interactive_import_falsifiers_reject_secret_echo_and_key_mismatch(self) -> None:
-        secret = bytearray(b"nsec1disposabletestsecret")
-        with self.assertRaisesRegex(HarnessError, "echoed"):
-            _require_no_secret_echo(bytearray(b"safe " + secret), secret)
-        results = _human_results(
-            bytearray(
-                b"[Ok] account-imported: account-imported and selected imported\r\n"
-                b"  account=imported\r\n"
-                b"  public_key=" + b"a" * 64 + b"\r\n"
-                b"[Ok] group-created: created\r\n"
-                b"  author=" + b"b" * 64 + b"\r\n"
-                b"  event_id=" + b"c" * 64 + b"\r\n"
-                b"  kind=9007\r\n"
-                b"[Ok] group-event-published: published\r\n"
-                b"  author=" + b"a" * 64 + b"\r\n"
-                b"  event_id=" + b"d" * 64 + b"\r\n"
-                b"  kind=12345\r\n"
-            )
-        )
-        with self.assertRaisesRegex(HarnessError, "did not use the imported public key"):
-            _import_captures(results)
-        secret[:] = b"\0" * len(secret)
-
-    def test_cursor_query_fragment_crossing_output_phases_receives_response(self) -> None:
-        harness, terminal = socket.socketpair()
-        try:
-            transcript = bytearray()
-            terminal.sendall(b"phase-one\x1b[")
-            cursor_scan = _read_pty_until(
-                harness.fileno(),
-                transcript,
-                b"phase-one",
-                0,
-                time.monotonic() + 1,
-                0,
-            )
-            offset = len(transcript)
-            terminal.sendall(b"6nphase-two")
-            _read_pty_until(
-                harness.fileno(),
-                transcript,
-                b"phase-two",
-                offset,
-                time.monotonic() + 1,
-                cursor_scan,
-            )
-            terminal.settimeout(1)
-            self.assertEqual(terminal.recv(32), b"\x1b[1;1R")
-        finally:
-            harness.close()
-            terminal.close()
-
-    def test_polished_interactive_results_retain_public_import_evidence(self) -> None:
-        results = _human_results(
-            bytearray(
-                "✓  account imported  3 ms\r\n"
-                "   account         imported\r\n"
-                "   public key      ".encode()
-                + b"a" * 64
-                + "\r\n✓  group created  8 ms\r\n"
-                "   author          ".encode()
-                + b"a" * 64
-                + "\r\n   event           ".encode()
-                + b"c" * 64
-                + b"\r\n   kind            9007\r\n"
-                + "✓  event acknowledged  9 ms\r\n"
-                "   author          ".encode()
-                + b"a" * 64
-                + "\r\n   event           ".encode()
-                + b"d" * 64
-                + b"\r\n   kind            12345\r\n"
-                + "   route           group  •  acknowledged\r\n".encode()
-            )
-        )
-        captures = _import_captures(results)
-        self.assertEqual(captures["imported"]["public_key"], "a" * 64)
-        self.assertEqual(captures["created"]["event_id"], "c" * 64)
-        self.assertEqual(captures["content"]["event_id"], "d" * 64)
-
     def test_full_contract_is_staged_with_only_the_four_croissant_state_kinds(self) -> None:
         contract = json.loads(
             (LIVE / "scenarios" / "full-nip29-contract.json").read_text(encoding="utf-8")
@@ -364,63 +256,13 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(captures["captures"]["group_deleted"]["kind"], 9008)
         inspection = json.loads((evidence / "inspections" / "15.json").read_text(encoding="utf-8"))
         self.assertEqual(inspection["events"], [])
-        scan_secret_absence(evidence, ("nsec1favaexperientialproofsentinelneverretain",))
-
-    def test_canonical_account_import_bundle_is_hashed_and_secret_free(self) -> None:
-        evidence = LIVE / "evidence" / "2026-08-29-account-import-proof"
-        manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["scenario"], "account-import-proof")
-        self.assertEqual(len(manifest["artifact_sha256"]), 4)
-        for relative, expected_hash in manifest["artifact_sha256"].items():
-            self.assertEqual(hashlib.sha256((evidence / relative).read_bytes()).hexdigest(), expected_hash)
-        captures = json.loads((evidence / "app-captures.json").read_text(encoding="utf-8"))["captures"]
-        self.assertEqual(captures["imported"]["account"], "imported")
-        self.assertEqual(captures["imported"]["public_key"], captures["created"]["author"])
-        self.assertEqual(captures["imported"]["public_key"], captures["content"]["author"])
-        self.assertEqual(captures["content"]["kind"], "12345")
-        for number in ("01", "02"):
-            inspection = json.loads((evidence / "inspections" / f"{number}.json").read_text(encoding="utf-8"))
-            self.assertEqual(inspection["terminal"], "EOSE")
-            self.assertEqual(len(inspection["events"]), 1)
-            self.assertEqual(inspection["events"][0]["pubkey"], captures["imported"]["public_key"])
-        self.assertFalse((evidence / "run.jsonl").exists())
-        scan_secret_absence(evidence, ("nsec1",))
+        check_retained_artifacts(evidence)
 
     def test_runner_refuses_assertionless_executable_before_artifact_creation(self) -> None:
         forged = {"id": "forged", "status": "executable", "command_file": "commands/none.txt"}
         with patch("harness.load_scenario", return_value=forged):
             with self.assertRaisesRegex(HarnessError, "at least one concrete assertion"):
                 run(SimpleNamespace(scenario="forged"))
-
-    def test_secret_scenario_has_a_negative_relay_assertion(self) -> None:
-        scenario = json.loads(
-            (LIVE / "scenarios" / "secret-nondisclosure.json").read_text(encoding="utf-8")
-        )
-        validate_executable_scenario(scenario)
-        self.assertEqual(
-            scenario["assertions"],
-            [{"filter": {"#h": ["$group_id"], "kinds": [12345]}, "present": False, "relay": "group"}],
-        )
-
-    def test_transient_secret_is_removed_before_failure_scan(self) -> None:
-        import tempfile
-
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
-        scratch = root / "scratch"
-        artifacts = root / "artifacts"
-        scratch.mkdir()
-        artifacts.mkdir()
-        (scratch / "commands.txt").write_text("secret-sentinel", encoding="utf-8")
-        (artifacts / "result.json").write_text("{}", encoding="utf-8")
-        def failed_scan(*_: object) -> None:
-            self.assertFalse(scratch.exists())
-            raise HarnessError("scan failure")
-
-        with patch("harness.scan_secret_absence", side_effect=failed_scan):
-            with self.assertRaisesRegex(HarnessError, "scan failure"):
-                cleanup_before_retention(scratch, artifacts, ("secret-sentinel",))
-        self.assertFalse(scratch.exists())
 
     def test_retention_scan_runs_even_when_transient_cleanup_fails(self) -> None:
         import tempfile
@@ -433,9 +275,9 @@ class FixtureTests(unittest.TestCase):
         artifacts.mkdir()
         scanned: list[bool] = []
         with patch("harness.remove_scratch", side_effect=OSError("refused")):
-            with patch("harness.scan_secret_absence", side_effect=lambda *_: scanned.append(True)):
+            with patch("harness.check_retained_artifacts", side_effect=lambda *_: scanned.append(True)):
                 with self.assertRaisesRegex(HarnessError, "scratch cleanup failed"):
-                    cleanup_before_retention(scratch, artifacts, ())
+                    cleanup_before_retention(scratch, artifacts)
         self.assertEqual(scanned, [True])
 
     def test_result_write_failure_still_cleans_materialized_command_and_scans(self) -> None:
@@ -488,28 +330,24 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(cleaned, [True])
         self.assertFalse(scratch.exists())
 
-    def test_retention_scan_has_file_and_secret_bounds(self) -> None:
+    def test_retention_scan_has_file_bounds(self) -> None:
         import tempfile
 
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
         (root / "large").write_bytes(b"x" * (MAX_ARTIFACT_FILE_BYTES + 1))
         with self.assertRaisesRegex(HarnessError, "retained artifact exceeded"):
-            scan_secret_absence(root, ())
+            check_retained_artifacts(root)
         (root / "large").unlink()
-        (root / "split").write_bytes(b"x" * (65_536 - 3) + b"abc" + b"def")
-        with self.assertRaisesRegex(HarnessError, "secret sentinel"):
-            scan_secret_absence(root, ("abcdef",))
-        (root / "split").unlink()
         (root / "one").write_bytes(b"a")
         (root / "two").write_bytes(b"b")
         with patch("harness_safety.MAX_ARTIFACT_FILES", 1):
             with self.assertRaisesRegex(HarnessError, "exceeded 1 files"):
-                scan_secret_absence(root, ())
+                check_retained_artifacts(root)
         (root / "two").unlink()
         with patch("harness_safety.MAX_ARTIFACT_TOTAL_BYTES", 0):
             with self.assertRaisesRegex(HarnessError, "exceeded 0 bytes"):
-                scan_secret_absence(root, ())
+                check_retained_artifacts(root)
 
     def test_process_group_teardown_kills_descendant_after_parent_exit(self) -> None:
         import tempfile
@@ -536,7 +374,7 @@ class FixtureTests(unittest.TestCase):
         self.assertTrue(facts["group_gone"])
         self.assertTrue(facts["output_threads_joined"])
 
-    def test_canonical_real_relay_bundle_is_hashed_bounded_and_secret_free(self) -> None:
+    def test_canonical_real_relay_bundle_is_hashed_and_bounded(self) -> None:
         evidence = LIVE / "evidence" / "2026-08-28-smoke"
         manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["scenario"], "smoke-create-content")
@@ -555,7 +393,7 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in (evidence / "inspections").iterdir()), ["01.json", "02.json"])
         self.assertFalse((evidence / "run.jsonl").exists())
         self.assertFalse((evidence / "relays").exists())
-        scan_secret_absence(evidence, ("nsec1favaexperientialproofsentinelneverretain",))
+        check_retained_artifacts(evidence)
 
     def _temporary_file(self):
         import tempfile

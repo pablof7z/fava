@@ -5,10 +5,8 @@
 
 mod account;
 mod error;
-mod ingress;
 mod limits;
 mod result;
-mod secret;
 mod session;
 mod shared_commands;
 
@@ -16,5 +14,4 @@ pub use account::{Account, parse_public_key};
 pub use error::ShellError;
 pub use limits::Limits;
 pub use result::{CommandResult, OutputFormat, ResultStatus, ResultValue};
-pub use secret::Secret;
 pub use session::{E2eSession, InputMode};

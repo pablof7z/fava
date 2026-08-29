@@ -15,6 +15,34 @@ fn run_script(name: &str) -> std::process::Output {
 }
 
 #[test]
+fn account_import_with_inline_nsec_succeeds_in_script_mode() {
+    use nostr::key::Keys;
+    use nostr::nips::nip19::ToBech32;
+    let nsec = Keys::generate().secret_key().to_bech32().unwrap();
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join(format!(".fava-import-{nonce}.txt"));
+    fs::write(&script, format!("account import imported {nsec}\n")).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_simple-groups"))
+        .args(["--jsonl", "--script", script.to_str().unwrap()])
+        .output()
+        .unwrap();
+    fs::remove_file(&script).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\"kind\":\"account-imported\""));
+    assert!(!stdout.contains("\"status\":\"refused\""));
+}
+
+#[test]
 fn ordinary_non_pty_replay_uses_shared_commands_and_typed_jsonl() {
     let output = run_script("shell.txt");
     assert!(
