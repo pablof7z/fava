@@ -26,7 +26,7 @@ async fn reapplication_commits_newer_route_revision() {
         contribution(initial),
     ));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let applyr = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -34,7 +34,7 @@ async fn reapplication_commits_newer_route_revision() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&delayed))
-    .applyr(applyr)
+    .applier(applier)
     .build()
     .unwrap();
     let write = fava

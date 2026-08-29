@@ -23,7 +23,7 @@ use tokio::sync::{broadcast, watch};
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
+    BlockingSigner, RecordingPublisher, TestApplier, WindowSigner, publication_builder,
     relay_event, relay_occurrence, signed_source,
 };
 
@@ -42,7 +42,7 @@ async fn initial_route_commits_before_semantic_revision() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .applyr(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
@@ -73,7 +73,7 @@ async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(router)
-    .applyr(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
