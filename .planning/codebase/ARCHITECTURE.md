@@ -77,7 +77,7 @@ third-party graph through `MODULE.bazel`.
 | Delivery authority | Defines M0-M11 vertical milestones and exit gates. | `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md` |
 | Vocabulary authority | Closes concepts, crate names, and public nominal Rust symbols by default. | `docs/internals/vocabulary.toml` |
 | `fava-state` | Owns relay/access/session evidence, event coordinates, replaceable ordering, deletion, and expiration mutations. | `crates/fava-state/src/lib.rs` |
-| `fava-write` | Owns checked event building, write intents, routing mode, identities, materialized events, delivery outcomes, and receipts. | `crates/fava-write/src/lib.rs`, `crates/fava-write/src/builder.rs` |
+| `fava-write` | Owns checked event building, write intents, routing mode, identities, applied events, delivery outcomes, and receipts. | `crates/fava-write/src/lib.rs`, `crates/fava-write/src/builder.rs` |
 | `fava-query` | Owns the sole public query, acquisition versus result authority, source contracts, event records, snapshots, and evaluator contract. | `crates/fava-query/src/lib.rs` |
 | `fava-query-standard` | Supplies same-ID evidence merge, coordinate winner selection, filters, ordering, and limits. | `crates/fava-query-standard/src/lib.rs` |
 | `fava-event-cache` | Defines signed relay-event retention as a specialized `QuerySource`; applies universal admission and expiration rules. | `crates/fava-event-cache/src/lib.rs` |
@@ -241,7 +241,7 @@ contracts, separately selectable implementations, and focused asynchronous lifec
 
 1. The application creates `WriteIntent` in `crates/fava-write/src/lib.rs` and calls `Fava::publish`.
 2. `Publication::accept` in `crates/fava-publication/src/lib.rs` requires Tokio, then
-   `WriteStore::accept` atomically commits identities, materialization, destinations, and revision.
+   `WriteStore::accept` atomically commits identities, revision, destinations, and revision.
 3. The write-source snapshot makes the local event immediately visible without cache pollution.
 4. `Publication` selects signer by author; `install_signed` accepts only a matching body.
 5. Each lane durably calls `begin_attempt`; `Publisher` performs one attempt through `Transport`;

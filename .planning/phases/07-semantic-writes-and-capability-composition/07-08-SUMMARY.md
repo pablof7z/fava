@@ -6,17 +6,17 @@ tags: [rust, semantic-writes, public-facade, canary, capability-composition]
 requires:
   - phase: 07-semantic-writes-and-capability-composition
     plan: 05
-    provides: public NIP-02 semantic helper and materializer
+    provides: public NIP-02 semantic helper and applier
   - phase: 07-semantic-writes-and-capability-composition
     plan: 06
-    provides: public bookmarks semantic helper and materializer
+    provides: public bookmarks semantic helper and applier
   - phase: 07-semantic-writes-and-capability-composition
     plan: 07
     provides: independent external capability and raw future-kind falsifiers
 provides:
   - one shared public-Fava corpus for NIP-02 and bookmarks
   - four deterministic enabled M7 canaries with durable lifecycle evidence
-  - ordinary CLI execution of first-value, rematerialization, inverse, and N+1 proofs
+  - ordinary CLI execution of first-value, reapplication, inverse, and N+1 proofs
 affects: [phase-07-verification, capability-composition, canary-evidence]
 actuals:
   tokens: 36909
@@ -25,8 +25,8 @@ actuals:
 tech-stack:
   added: []
   patterns:
-    - one parameterized public-facade corpus accepts protocol-selected helpers and materializers
-    - real protocol materializers consume engine-owned timestamps while barriers make lifecycle ordering deterministic
+    - one parameterized public-facade corpus accepts protocol-selected helpers and appliers
+    - real protocol appliers consume engine-owned timestamps while barriers make lifecycle ordering deterministic
     - post-store completion acknowledgement distinguishes processed stale success from pending work
     - independent falsifier commands own bounded process groups and inspect locked normal-edge Cargo and Bazel product reachability
     - failed canaries retain bounded self-locating replay bundles without raw caller seeds
@@ -49,8 +49,8 @@ key-files:
     - apps/canary/src/main.rs
     - apps/canary/README.md
 key-decisions:
-  - "Both protocol rows enter the same corpus as public helper functions plus approved ReplaceableEventMaterializer trait objects; universal Fava remains kind-agnostic."
-  - "Semantic edits keep engine-owned materialization time through the real protocol materializers; raw EventBuilder inputs retain caller-owned created_at, tags, content, and identity exactly."
+  - "Both protocol rows enter the same corpus as public helper functions plus approved EditApplier trait objects; universal Fava remains kind-agnostic."
+  - "Semantic edits keep engine-owned revision time through the real protocol appliers; raw EventBuilder inputs retain caller-owned created_at, tags, content, and identity exactly."
   - "The N+1 canary identifies the canonical external package ID, traverses only normal locked Cargo edges, checks Bazel reachability, and bounds the owner plus pipe readers under one operation deadline."
   - "Every failed semantic canary retains bounded failure, replay, report, event-log, and hashed manifest evidence while redacting the raw caller seed."
 patterns-established:
@@ -67,19 +67,19 @@ coverage:
         status: pass
     human_judgment: false
   - id: D2
-    description: "The first-value canary records actor-authored materialization without a prior source, one publication, an exact route, stable IDs, public query visibility, and cache absence."
+    description: "The first-value canary records actor-authored revision without a prior source, one publication, an exact route, stable IDs, public query visibility, and cache absence."
     requirement: CAP-03
     verification:
       - kind: e2e
-        ref: "apps/canary/src/semantic_writes_tests.rs#replaceable_edit_first_value_records_materialization"
+        ref: "apps/canary/src/semantic_writes_tests.rs#replaceable_edit_first_value_records_revision"
         status: pass
     human_judgment: false
   - id: D3
-    description: "The rematerialization canary records source successor attribution, stable receipt identity, new materialization identity, unrelated-state preservation, one effect, and inert retired completion."
+    description: "The reapplication canary records source successor attribution, stable receipt identity, new revision identity, unrelated-state preservation, one effect, and inert retired completion."
     requirement: CAP-06
     verification:
       - kind: e2e
-        ref: "apps/canary/src/semantic_writes_tests.rs#replaceable_edit_rematerialization_records_retired_inertness"
+        ref: "apps/canary/src/semantic_writes_tests.rs#replaceable_edit_reapplication_records_retired_inertness"
         status: pass
     human_judgment: false
   - id: D4
@@ -108,7 +108,7 @@ status: complete
 
 # Phase 07 Plan 08: Public Capability Corpus and M7 Canaries Summary
 
-**NIP-02 and bookmarks now pass one public-Fava lifecycle corpus, while four ordinary CLI canaries emit exact deterministic first-value, rematerialization, inverse, external-capability, and raw-future evidence.**
+**NIP-02 and bookmarks now pass one public-Fava lifecycle corpus, while four ordinary CLI canaries emit exact deterministic first-value, reapplication, inverse, external-capability, and raw-future evidence.**
 
 ## Performance
 
@@ -121,7 +121,7 @@ status: complete
 ## Accomplishments
 
 - Added four guarded shared-corpus tests that run both public capability rows through identical empty, add, duplicate, adjacent, inverse, source-removal, typed-refusal, bounds, and post-store-acknowledged stale-success assertions.
-- Added four enabled M7 canaries using public `Fava`, real protocol materializers, deterministic signatures, bounded barriers, exact timestamp/publication correlation, and no real relay or timing sleep.
+- Added four enabled M7 canaries using public `Fava`, real protocol appliers, deterministic signatures, bounded barriers, exact timestamp/publication correlation, and no real relay or timing sleep.
 - Added ordinary CLI dispatch and documentation for the four exact M7 scenario IDs; every scenario produced its own hashed evidence bundle in a fresh directory.
 - Kept protocol selection outside universal core and proved the canonically identified external package unreachable over normal locked Cargo and Bazel product edges.
 - Added one operation deadline across process ownership and pipe readers, kill/reap proof for descendants retaining pipes, and bounded seed-redacted failure bundles.
@@ -135,7 +135,7 @@ status: complete
 - **First review GREEN:** post-store acknowledgement, exact attempt attribution, owned process-tree termination, and durable failure replay passed. Commits: `cbfb23c`, `0b369c1`, `4e3edac`, `bfdae26`, `b16897b`.
 - **Corpus repair:** the committed RED source-removal/stale-success assertion is now implemented for both public protocol rows with bounded receipt barriers and post-`install_signed` acknowledgement. Commit: `6e43a45`.
 - **Failure-artifact deliberate break:** removing `replay.json` made `failure_bundle_is_durable_and_replayable` fail at `missing replay.json`; restoring it returned the focused test green.
-- **Named deliberate break:** removing Carol from the qualified successor source made `replaceable_edit_rematerialization_records_retired_inertness` fail at `rematerialization lifecycle facts diverged`; restoring the source tag returned all four canaries green.
+- **Named deliberate break:** removing Carol from the qualified successor source made `replaceable_edit_reapplication_records_retired_inertness` fail at `reapplication lifecycle facts diverged`; restoring the source tag returned all four canaries green.
 - **Corpus provenance:** the shared corpus was added only after Plans 05-07 supplied their causal RED/GREEN evidence; it consolidates composition evidence rather than replacing those earlier gates.
 - **Second corpus RED/GREEN:** `d2f3053` failed because the expanded public lifecycle helper was absent; `e65efd3` then passed the complete two-row lifecycle and its named duplicate-to-inverse deliberate break.
 - **Second canary RED/GREEN:** `15933f8` independently exposed wrong external-package reachability, raw-event/timestamp gaps, max-source preservation absence, inherited-pipe deadline escape, and raw-seed persistence; `ef9fc4e` made all focused and full canary gates pass.
@@ -160,7 +160,7 @@ status: complete
 - `crates/fava/tests/semantic_write_capabilities.rs`, `crates/fava/tests/support/semantic_write_capability_protocol.rs`, `crates/fava/tests/support/semantic_write_capability_lifecycle.rs` — complete two-row public capability corpus, typed refusals, exact source removal, and post-store completion witness.
 - `crates/fava/Cargo.toml`, `crates/fava/BUILD.bazel` — public protocol test dependencies and Bazel target.
 - `apps/canary/scenarios.json` — four exact enabled M7 registry entries.
-- `apps/canary/src/semantic_writes.rs`, `apps/canary/src/semantic_write_support.rs` — real-materializer public-Fava scenarios, deterministic signing, exact timestamp/attempt correlation, barriers, and evidence finalization.
+- `apps/canary/src/semantic_writes.rs`, `apps/canary/src/semantic_write_support.rs` — real-applier public-Fava scenarios, deterministic signing, exact timestamp/attempt correlation, barriers, and evidence finalization.
 - `apps/canary/src/semantic_write_store.rs` — post-delegation completion acknowledgement for current and stale signing results.
 - `apps/canary/src/semantic_process.rs`, `apps/canary/src/semantic_n_plus_one.rs` — absolute operation deadline, bounded process-group cleanup, canonical normal-edge Cargo reachability, and Bazel product reachability.
 - `apps/canary/src/semantic_failure.rs` — bounded durable failure evidence and self-locating replay instructions with caller-seed redaction.
@@ -173,7 +173,7 @@ status: complete
 
 - Capability-specific kind meaning stays in the two selected protocol crates; the shared corpus passes their public values and trait objects as data.
 - The canary records effects using a publisher contract and an intentionally unusable transport, proving composition without network behavior.
-- Generic raw events retain the caller's complete `EventBuilder` body, while semantic edits consume the publication engine's one checked timestamp through the selected real materializer.
+- Generic raw events retain the caller's complete `EventBuilder` body, while semantic edits consume the publication engine's one checked timestamp through the selected real applier.
 - Retired-completion inertness is checked only after the delegated write store acknowledges processing; the receipt is then re-read and exact zero stale effects are asserted.
 - The external falsifier remains an independent workspace; one absolute operation deadline covers its owner and pipe readers, followed by bounded process-group cleanup and owner reap.
 - Dependency exclusion identifies the external package by canonical manifest path/ID, traverses only normal `cargo metadata --locked` edges, and also checks `bazel query deps(//...)`.
@@ -196,16 +196,16 @@ status: complete
 - **Verification:** Focused N+1 library test, all four final CLI runs, and strict canary Clippy pass.
 - **Committed in:** `4502778`
 
-**3. [Rule 1 - Authority correction] Removed the materializer timestamp wrapper**
+**3. [Rule 1 - Authority correction] Removed the applier timestamp wrapper**
 - **Found during:** Second post-plan review against the authoritative write contract
-- **Issue:** The plan's phrase "fixed timestamps" had been interpreted as a wrapper that replaced the publication caller's injected time and a cross-run byte-identity promise. That contradicted the existing ownership rule: the engine computes semantic materialization time once, while generic raw `EventBuilder` input preserves the caller's exact timestamp.
-- **Fix:** Deleted the wrapper, registered the real protocol materializers, retained fixed source inputs and explicit barriers, asserted exact timestamp equality within every accepted materialization plus strict generation monotonicity, proved max-source exhaustion preserves current state/evidence, and strengthened the raw future-kind proof for exact `created_at = 42`, tags, content, and ID across custody/signing/publication.
+- **Issue:** The plan's phrase "fixed timestamps" had been interpreted as a wrapper that replaced the publication caller's injected time and a cross-run byte-identity promise. That contradicted the existing ownership rule: the engine computes semantic revision time once, while generic raw `EventBuilder` input preserves the caller's exact timestamp.
+- **Fix:** Deleted the wrapper, registered the real protocol appliers, retained fixed source inputs and explicit barriers, asserted exact timestamp equality within every accepted revision plus strict generation monotonicity, proved max-source exhaustion preserves current state/evidence, and strengthened the raw future-kind proof for exact `created_at = 42`, tags, content, and ID across custody/signing/publication.
 - **Verification:** All four exact canaries and the full 16-test canary library pass; negative scan finds no fixed-timestamp wrapper.
 - **Committed in:** `15933f8`, `ef9fc4e`
 
 **4. [Rule 2 - Attribution] Added post-store acknowledgement and exact publication correlation**
 - **Found during:** Post-plan review
-- **Issue:** A signer barrier did not prove stale completion processing, and count-only publication assertions did not correlate the accepted write to its receipt, materialization, event, session, and attempt.
+- **Issue:** A signer barrier did not prove stale completion processing, and count-only publication assertions did not correlate the accepted write to its receipt, revision, event, session, and attempt.
 - **Fix:** Wrapped the private memory write store to acknowledge after delegated `install_signed`, re-read receipt state after stale success, and validate every exact `PublishAttempt` field.
 - **Verification:** Shared corpus 4/4 and canary library 16/16 pass.
 - **Committed in:** `7cbd56d`, `0b369c1`, `6e43a45`

@@ -2,13 +2,13 @@
 
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
-    EventId, EventValue, MaterializationId, PublicKey, Receipt, ReplaceableEventEdit, Timestamp,
+    EventId, EventValue, RevisionId, PublicKey, Receipt, EventEdit, Timestamp,
     UnsignedEvent, WriteId, WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStoreError;
 
-pub(super) fn validate_materialization(
-    edit: &ReplaceableEventEdit,
+pub(super) fn validate_revision(
+    edit: &EventEdit,
     author: PublicKey,
     event: &UnsignedEvent,
     source: Option<&EventValue>,
@@ -19,25 +19,25 @@ pub(super) fn validate_materialization(
         || event_coordinate_of_unsigned(event)? != edit_coordinate(edit, author)
     {
         return Err(WriteStoreError::Refused(
-            "materialization actor or coordinate does not match edit".to_owned(),
+            "revision actor or coordinate does not match edit".to_owned(),
         ));
     }
     let selected = validate_source(edit, author, source)?;
     let event_id = event
         .id
-        .ok_or_else(|| WriteStoreError::Refused("materialization has no stable id".to_owned()))?;
+        .ok_or_else(|| WriteStoreError::Refused("revision has no stable id".to_owned()))?;
     if selected.is_some_and(|(source_id, source_time)| {
         !event_is_newer((event.created_at, event_id), (source_time, source_id))
     }) {
         return Err(WriteStoreError::Refused(
-            "materialization is not newer than its selected source".to_owned(),
+            "revision is not newer than its selected source".to_owned(),
         ));
     }
     Ok(selected)
 }
 
 pub(super) fn validate_source(
-    edit: &ReplaceableEventEdit,
+    edit: &EventEdit,
     author: PublicKey,
     source: Option<&EventValue>,
 ) -> Result<Option<(EventId, Timestamp)>, WriteStoreError> {
@@ -54,7 +54,7 @@ pub(super) fn validate_source(
     }
     if event_coordinate(
         source.id().ok_or_else(|| {
-            WriteStoreError::Refused("materialization source has no event id".to_owned())
+            WriteStoreError::Refused("revision source has no event id".to_owned())
         })?,
         source.author(),
         source.kind(),
@@ -62,18 +62,18 @@ pub(super) fn validate_source(
     ) != edit_coordinate(edit, author)
     {
         return Err(WriteStoreError::Refused(
-            "materialization source does not match edit coordinate".to_owned(),
+            "revision source does not match edit coordinate".to_owned(),
         ));
     }
     Ok(Some((
         source.id().ok_or_else(|| {
-            WriteStoreError::Refused("materialization source has no event id".to_owned())
+            WriteStoreError::Refused("revision source has no event id".to_owned())
         })?,
         source.created_at(),
     )))
 }
 
-pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+pub(super) fn edit_coordinate(edit: &EventEdit, author: PublicKey) -> EventCoordinate {
     EventCoordinate::Replaceable {
         author,
         kind: edit.kind(),
@@ -82,14 +82,14 @@ pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) ->
 }
 
 pub(super) fn attributed_failure(
-    materialization_id: MaterializationId,
+    revision_id: RevisionId,
     source: Option<EventId>,
     reason: String,
 ) -> String {
     let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
     let prefix = format!(
-        "materialization {} from source {source} failed",
-        materialization_id.as_u64()
+        "revision {} from source {source} failed",
+        revision_id.as_u64()
     );
     let attributed = format!("{prefix}: {reason}");
     drop(reason);
@@ -103,7 +103,7 @@ pub(super) fn attributed_failure(
 fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate, WriteStoreError> {
     let id = event
         .id
-        .ok_or_else(|| WriteStoreError::Refused("materialization has no event id".to_owned()))?;
+        .ok_or_else(|| WriteStoreError::Refused("revision has no event id".to_owned()))?;
     Ok(event_coordinate(
         id,
         event.pubkey,
@@ -115,17 +115,17 @@ fn event_coordinate_of_unsigned(event: &UnsignedEvent) -> Result<EventCoordinate
 pub(super) fn require_current(
     receipt: &Receipt,
     write_id: WriteId,
-    expected: MaterializationId,
+    expected: RevisionId,
     expected_source: Option<EventId>,
     current_source: Option<(EventId, Timestamp)>,
 ) -> Result<(), WriteStoreError> {
     if receipt.is_terminal()
         || receipt.write_id != write_id
-        || receipt.current.publication.materialization_id != expected
+        || receipt.current.publication.revision_id != expected
         || current_source.map(|(id, _)| id) != expected_source
     {
         return Err(WriteStoreError::Refused(
-            "semantic materialization is not current".to_owned(),
+            "semantic revision is not current".to_owned(),
         ));
     }
     Ok(())

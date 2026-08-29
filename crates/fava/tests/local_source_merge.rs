@@ -119,7 +119,7 @@ async fn accepted_local_event_is_visible_without_cache_pollution() {
     assert!(feed.current().events.is_empty());
 
     let accepted = writes
-        .accept_materialized(EventValue::Unsigned(unsigned))
+        .accept_applied(EventValue::Unsigned(unsigned))
         .expect("write-store provider accepts finalized local event");
     let visible = next_snapshot(&mut feed).await;
 
@@ -155,7 +155,7 @@ async fn cancelling_local_replacement_reveals_cached_predecessor() {
     let successor = unsigned_event(&keys, Kind::ContactList, 20, "local");
     let successor_id = successor.id.expect("builder computes id");
     let accepted = writes
-        .accept_materialized(EventValue::Unsigned(successor))
+        .accept_applied(EventValue::Unsigned(successor))
         .expect("local successor accepts");
     let query = Query::events()
         .kinds([Kind::ContactList])
@@ -186,7 +186,7 @@ async fn relay_echo_enriches_one_record_without_erasing_receipt() {
     let keys = Keys::generate();
     let event = signed_event(&keys, Kind::TextNote, 10, "echo");
     let accepted = writes
-        .accept_materialized(EventValue::Signed(event.clone()))
+        .accept_applied(EventValue::Signed(event.clone()))
         .expect("signed local event accepts");
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
@@ -269,7 +269,7 @@ async fn slow_consumer_receives_exact_latest_state_with_bounded_delivery() {
     for index in 1..=3 {
         let event = unsigned_event(&keys, Kind::TextNote, index, format!("event {index}"));
         writes
-            .accept_materialized(EventValue::Unsigned(event))
+            .accept_applied(EventValue::Unsigned(event))
             .expect("local event accepts");
     }
 
@@ -397,13 +397,13 @@ async fn literal_tag_selection_preserves_exact_sources_through_public_observatio
         ])
         .expect("signed cache corpus commits");
     let accepted = writes
-        .accept_materialized(EventValue::Unsigned(unsigned))
+        .accept_applied(EventValue::Unsigned(unsigned))
         .expect("exact unsigned event accepts");
     writes
-        .accept_materialized(EventValue::Unsigned(wrong_value_case))
+        .accept_applied(EventValue::Unsigned(wrong_value_case))
         .expect("wrong-case decoy accepts");
     writes
-        .accept_materialized(EventValue::Unsigned(later_cell_only))
+        .accept_applied(EventValue::Unsigned(later_cell_only))
         .expect("later-cell decoy accepts");
     let all_ids = [
         signed.id,

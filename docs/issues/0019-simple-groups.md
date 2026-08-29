@@ -61,7 +61,7 @@ saved-group and relay entry results. Repetitions survive and malformed siblings
 do not erase valid entries.
 
 Crate-root save, rename, remove, and relay functions return pure
-`ReplaceableEventEdit` values. `saved_group_list_materializer()` integrates the
+`EventEdit` values. `saved_group_list_applier()` integrates the
 private edit codec with Fava's ordinary semantic-write lifecycle. Edits
 preserve opaque content, foreign tags, malformed entries, unused trailing
 values, repetitions according to the exact operation, and unrelated order.
@@ -73,11 +73,11 @@ values, repetitions according to the exact operation, and unrelated order.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
   `SimpleGroupDecodeError`.
-- `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
+- `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListApplier`, and
   `SavedGroupListDecodeError`.
 - Crate/function identities `fava_simple_groups`, `save_simple_group`,
   `remove_saved_simple_group`, `rename_saved_simple_group`, `save_relay`,
-  `remove_saved_relay`, `saved_group_list_materializer`, and
+  `remove_saved_relay`, `saved_group_list_applier`, and
   `saved_group_lists`.
 
 These 22 owner-scoped packets have zero review problems and zero public-API
@@ -85,7 +85,7 @@ retains 354 inherited unique findings, and terminal-name plus external
 owner-signature gates remain independently red.
 
 `RelayUrl`, `Query`, `QuerySnapshot`, `EventCoordinate`, `PublicKey`,
-`UnsignedEvent`, `Write`, and `ReplaceableEventEdit` remain owned by their
+`UnsignedEvent`, `Write`, and `EventEdit` remain owned by their
 established crates. No compatibility aliases, group-specific provider,
 snapshot, projection, disagreement, management, discovery, verification,
 bounds, observation, publication, cancellation, or receipt value exists.

@@ -17,7 +17,7 @@ NIP-29 relay for every authorization claim and a separate real
 loopback endpoints, empty data directories, bounded readiness via an
 independent WebSocket `REQ`/`EOSE`, bounded logs, app deadline, process-group
 teardown, and one fresh artifact directory. Relay databases, relay logs,
-materialized commands, and child `TMPDIR` are ignored scratch state, removed
+applied commands, and child `TMPDIR` are ignored scratch state, removed
 before retained artifacts are scanned on every exit path. The ordinary relay's
 generated configuration is explicitly pinned to
 and version-checked as `nostr-rs-relay 0.8.12`; both selected executable

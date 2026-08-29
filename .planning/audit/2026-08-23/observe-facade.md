@@ -178,9 +178,9 @@ Two problems. (a) `open_session` is unconditionally *open*, never *acquire*; `cr
 
 ### 3.7 Provider-operation generation with late-completion rejection
 
-- Owner: the operation's owner — here `fava-observe` for read operations (analogous to `fava-publication`'s "current materialization generation", `docs/spec/ARCHITECTURE.md:2126`).
+- Owner: the operation's owner — here `fava-observe` for read operations (analogous to `fava-publication`'s "current revision generation", `docs/spec/ARCHITECTURE.md:2126`).
 - Flows through: `fava-transport` (session generation) and `fava-subscriptions` (wire subscription identity).
-- **Adequate? Partly present, by accident, at the wrong owner.** `crates/fava/src/relay.rs:265` rejects an unattributed `EVENT` and `:281-299` reject unattributed `EOSE`/`CLOSED` — that is late-completion rejection, and it is correct behavior, but the attribution map is a facade-private `BTreeMap<SubscriptionId, Filter>` (`crates/fava/src/relay.rs:26`) replaced wholesale on reconnect (`:158`). There is no generation *value* an owner can compare; correctness relies on `SubscriptionId` being freshly allocated (`crates/fava/src/relay.rs:214-222`). No contract crate carries an operation generation for reads. The publication analogue (`MaterializationId`) has a named type; the read side has none.
+- **Adequate? Partly present, by accident, at the wrong owner.** `crates/fava/src/relay.rs:265` rejects an unattributed `EVENT` and `:281-299` reject unattributed `EOSE`/`CLOSED` — that is late-completion rejection, and it is correct behavior, but the attribution map is a facade-private `BTreeMap<SubscriptionId, Filter>` (`crates/fava/src/relay.rs:26`) replaced wholesale on reconnect (`:158`). There is no generation *value* an owner can compare; correctness relies on `SubscriptionId` being freshly allocated (`crates/fava/src/relay.rs:214-222`). No contract crate carries an operation generation for reads. The publication analogue (`RevisionId`) has a named type; the read side has none.
 
 ### 3.8 Route session
 
@@ -269,7 +269,7 @@ The single facade-thinness defect on the publication side is not in `publication
 
 ### cancel-write-bypasses-publication-owner — critical — ownership
 
-**authority** — "exact cancellation eligibility" is listed among `fava-publication`'s owned state, `docs/spec/ARCHITECTURE.md:2129`; "Cancellation is decided from current materialization, signature, and handoff facts." `docs/spec/ARCHITECTURE.md:2181`; WRITE-023: "An application may cancel an accepted write while Fava can still prove that no event bytes have been handed to transport for any destination whose obligation cancellation would erase. Cancellation MUST: terminate current signer/route/delivery work" `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:959-963`.
+**authority** — "exact cancellation eligibility" is listed among `fava-publication`'s owned state, `docs/spec/ARCHITECTURE.md:2129`; "Cancellation is decided from current revision, signature, and handoff facts." `docs/spec/ARCHITECTURE.md:2181`; WRITE-023: "An application may cancel an accepted write while Fava can still prove that no event bytes have been handed to transport for any destination whose obligation cancellation would erase. Cancellation MUST: terminate current signer/route/delivery work" `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:959-963`.
 
 **implementation** — `crates/fava/src/lib.rs:121-125`:
 

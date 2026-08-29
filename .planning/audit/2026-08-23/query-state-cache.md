@@ -354,7 +354,7 @@ async fn expiring_event_is_retracted_from_an_open_query_without_app_action() {
 
 ---
 
-### event-cache-contract-forces-full-materialization — major — replaceability
+### event-cache-contract-forces-full-revision — major — replaceability
 
 **authority**
 `docs/spec/ARCHITECTURE.md:791-795` — the baseline `EventCache` contract is
@@ -366,7 +366,7 @@ async fn expiring_event_is_retracted_from_an_open_query_without_app_action() {
 **implementation**
 `crates/fava-event-cache/src/lib.rs:65` —
 `fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError>;` — every
-implementation must be able to materialize its **entire** retained corpus into
+implementation must be able to apply its **entire** retained corpus into
 one `Vec`. The default `admit` (`:23`) and `expire` (`:38`) both call it on
 every single admitted relay event:
 

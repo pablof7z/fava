@@ -27,7 +27,7 @@ Fava owns the reusable machinery and lifecycle correctness needed to make those 
 Fava has two primary long-lived workload concepts:
 
 1. **Live query.** A declarative request for a current event view. Fava keeps that view coherent as local sources, reactive dependencies, routing knowledge, relay results, and event evidence change.
-2. **Write intent.** An accepted publication obligation. Fava carries it through event materialization where needed, signing, routing, delivery, and exact per-destination outcomes under one reattachable receipt.
+2. **Write intent.** An accepted publication obligation. Fava carries it through edit application where needed, signing, routing, delivery, and exact per-destination outcomes under one reattachable receipt.
 
 Supporting operations—session management, signing without publishing, NIP-05 resolution, NIP-11 relay information, diagnostics, content parsing, and destructive reset—do not create parallel workload models.
 
@@ -95,7 +95,7 @@ The application-facing representation of one logical event plus the evidence Fav
 
 An event record may include:
 
-- an unsigned local event materialization;
+- an unsigned local event revision;
 - a signed event;
 - relays that actually served the signed event;
 - local publication evidence such as a receipt and signing state;
@@ -112,7 +112,7 @@ Persistence, restart reuse, provenance retention, tombstone retention, and histo
 
 ### Write store
 
-The authoritative owner of accepted local publication obligations, replaceable-event edits, current unsigned or signed materializations, receipts, route revisions, delivery facts, cancellation, supersession, and restart recovery.
+The authoritative owner of accepted local publication obligations, replaceable-event edits, current unsigned or signed revisions, receipts, route revisions, delivery facts, cancellation, supersession, and restart recovery.
 
 The write store is also a local query source. Unpublished events do not need to be copied into the event cache in order to appear in live queries.
 
@@ -317,7 +317,7 @@ Depending on the selected product profile, those sources may include:
 - a persistent event cache;
 - an in-memory event cache;
 - no retained relay-event cache;
-- the write store's current local materializations; and
+- the write store's current local revisions; and
 - other selected local query sources.
 
 A persistent cache profile may return relay-observed events after restart. An ephemeral cache profile may return none. Both MUST return the local view they currently have without blocking on relay connectivity.
@@ -331,15 +331,15 @@ The application-facing event view MUST be the deterministic merge of all configu
 At minimum, the standard publication-capable assembly merges:
 
 - signed relay-observed events and relay evidence from the event cache; and
-- current local unsigned or signed materializations and publication evidence from the write store.
+- current local unsigned or signed revisions and publication evidence from the write store.
 
 The merge MUST:
 
 - deduplicate the same event id;
 - combine relay and local publication evidence;
 - apply Nostr replacement and address rules;
-- prefer the current local materialization when it supersedes a cached predecessor;
-- allow the cached predecessor to become visible again when the local materialization is cancelled and still exists in another source;
+- prefer the current local revision when it supersedes a cached predecessor;
+- allow the cached predecessor to become visible again when the local revision is cancelled and still exists in another source;
 - accept admitted live relay occurrences as current query input even when the selected event cache does not retain them; and
 - never require copying an unsigned event into the event cache.
 
@@ -356,7 +356,7 @@ A live query MUST update for:
 - replaceable-event winner changes;
 - valid deletion;
 - expiry;
-- replaceable-event rematerialization;
+- replaceable-event edit reapplication;
 - local write cancellation;
 - relay provenance changes;
 - publication evidence changes;
@@ -539,7 +539,7 @@ Within the facts currently known to an assembly, event state MUST apply determin
 - timestamp and event-id tie-breaking;
 - same-author deletion;
 - expiration;
-- local materialization precedence; and
+- local revision precedence; and
 - provenance/evidence merging.
 
 The same semantics MUST apply regardless of which event-cache or write-store implementation is selected.
@@ -612,13 +612,13 @@ Such facts MUST remain keyed to the exact relay, request shape, relay access, an
 
 ## EVENT-008 — Unpublished local events belong to the write store
 
-Accepted local event materializations MUST be supplied to queries by the write store rather than requiring insertion into the event cache.
+Accepted local event revisions MUST be supplied to queries by the write store rather than requiring insertion into the event cache.
 
 The event cache therefore stores signed relay-observed events according to its contract, while the write store owns local publication state.
 
-This separation MUST preserve optimistic visibility, cancellation, rematerialization, relay echo, and restart behavior without a compensating cache transaction.
+This separation MUST preserve optimistic visibility, cancellation, edit reapplication, relay echo, and restart behavior without a compensating cache transaction.
 
-**Acceptance:** accepting, cancelling, and rematerializing a local event changes the write-store query source only; the event cache remains unchanged until a relay-observed signed event is admitted.
+**Acceptance:** accepting, cancelling, and reapplying a local event's edit changes the write-store query source only; the event cache remains unchanged until a relay-observed signed event is admitted.
 
 ## EVENT-009 — Same-event contributions merge without duplication
 
@@ -722,7 +722,7 @@ The publication lifecycle MUST accept:
 1. an `EventBuilder`, which may carry neutral local routing and whose event
    body identifies the author;
 2. an unsigned event whose `pubkey` already identifies the author;
-3. a `ReplaceableEventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
+3. a `EventEdit` that can produce an unsigned replacement from the latest event at its coordinate; or
 4. a complete pre-signed event.
 
 The accepted form determines the remaining work. It does not create separate publication or receipt systems.
@@ -749,7 +749,7 @@ evidence and does not imply acknowledgement. Applications do not construct
 
 For an unsigned or signed event, the author is the event's `pubkey`.
 
-Before a `ReplaceableEventEdit` has produced an event, the accepted write carries its resolved author. Every materialization MUST produce an event with that author as `pubkey`.
+Before a `EventEdit` has produced an event, the accepted write carries its resolved author. Every edit application MUST produce an event with that author as `pubkey`.
 
 Current-account convenience APIs resolve the selected account before the write is accepted, and the resolved author is committed with it. A later account switch MUST NOT retarget accepted work.
 
@@ -764,12 +764,12 @@ the application `Write` until the write store has atomically committed:
 
 - stable write and receipt identity;
 - the accepted unsigned event, replaceable-event edit, or pre-signed event;
-- the current materialization when one exists;
+- the current revision when one exists;
 - current signing state;
 - cancellation/supersession state required for recovery; and
 - enough information to resume after ordinary process restart.
 
-The accepted local materialization MUST be visible through the write-store query source before `Accepted` is returned.
+The accepted local revision MUST be visible through the write-store query source before `Accepted` is returned.
 
 If commit fails, no receipt, local event record, signer request, route session, or delivery work may remain.
 
@@ -782,7 +782,7 @@ restart recovers one write and the same receipt without resubmission.
 
 ## WRITE-005 — Optimistic visibility comes from the write store
 
-Every accepted materialized event MUST appear immediately in matching open and newly opened queries through the write-store source, whether signed or unsigned and whether online or offline.
+Every accepted event's current revision MUST appear immediately in matching open and newly opened queries through the write-store source, whether signed or unsigned and whether online or offline.
 
 Relay refusal does not delete the local event merely because delivery failed. Delivery evidence changes on the same event record.
 
@@ -792,16 +792,16 @@ Cancellation or replacement by a newer current event retracts or replaces the wr
 
 ## WRITE-006 — Replaceable-event edits survive source changes
 
-A protocol crate may produce a `ReplaceableEventEdit` before the final event body is known, for example `Follow(Bob)` by Alice.
+A protocol crate may produce a `EventEdit` before the final event body is known, for example `Follow(Bob)` by Alice.
 
-The write store MUST retain the edit and its resolved author independently from the current materialization. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
+The write store MUST retain the edit and its resolved author independently from the current revision. The protocol crate that defines the edit applies it to the best qualified source state and may apply it again when a newer qualified source appears. If no prior source event exists, it applies the edit to its defined empty state and produces the first event for that coordinate.
 
 Distinct edits accepted for the same author/kind/identifier coordinate while
 its current generation remains unsigned MUST compose as one durable ordered
 edit sequence. Each accepted edit is applied exactly once in acceptance order;
 the complete sequence is replayed when qualified source state changes and after
 restart. Composition keeps the original write and receipt identity, advances
-the exact materialization generation, retires prior generation evidence, and
+the exact revision generation, retires prior generation evidence, and
 refuses atomically when that evidence bound is exhausted. Protocol-specific
 queues or batching are not part of this lifecycle.
 
@@ -811,32 +811,32 @@ coordinate; reserved inactive coordinates count against the global active
 bound, while an active coordinate's one reservation cannot grow that bound.
 Only matching-coordinate acceptance consumes it. Before installing a
 source-driven successor, publication MUST refresh custody for that exact
-materialization generation and prove that the complete durable edit sequence,
+revision generation and prove that the complete durable edit sequence,
 not merely its final edit, produced the successor.
 
 On restart, publication MUST reconcile each recovered sequence against the
 initial qualified source snapshot before the facade can admit another edit for
 that coordinate. A recovered runner that observes a receipt generation newer
 than its loaded sequence MUST refresh exact-generation custody before
-materialization, signing, or routing begins.
+edit application, signing, or routing begins.
 
 Initialization MUST bind the complete durable edit sequence, current receipt,
-router session, signing request, and route effects to one exact materialization
+router session, signing request, and route effects to one exact revision
 generation. Publication re-reads the receipt after loading custody and after
 opening an automatic router session. Any intervening receipt change discards
 that candidate state, closes the stale session, and restarts from current
-custody before materialization, signing, or route effects proceed.
+custody before edit application, signing, or route effects proceed.
 
 Immediately before signer invocation, the write store MUST durably authorize
-the exact current write, receipt, materialization, and event identity. A
+the exact current write, receipt, revision, and event identity. A
 same-coordinate reservation committed before authorization defers that
 authorization with attributable retryable evidence, so publication refreshes
 the composed generation before invoking a signer. Authorization committed
 first keeps that generation current while at most one coordinate-bound durable
 successor is retained; the successor is promoted only after the authorized
 operation resolves. The retained successor MUST include any route plan derived
-for that exact materialization so promotion cannot apply it to the predecessor
-or lose it on restart. Source-driven rematerialization follows the same rule.
+for that exact revision so promotion cannot apply it to the predecessor
+or lose it on restart. Source-driven edit reapplication follows the same rule.
 On restart, an authorized generation with a durable successor MUST promote the
 successor before facade construction or signer attachment; authorization
 without a successor becomes exact attributable retryable work. An authorization
@@ -850,10 +850,10 @@ called. Cancellation of an authorized operation without a successor MUST
 persist exact attributable retryable custody; replacement or removal may detach
 the future, but its late completion MUST remain inert.
 
-Rematerialization MUST:
+Reapplying an edit MUST:
 
 - preserve unrelated source changes;
-- replace the previous local materialization atomically within write-store authority;
+- replace the previous local revision atomically within write-store authority;
 - keep the same accepted operation and receipt identity;
 - invalidate stale signer and delivery work for the old event generation;
 - never expose a half-applied operation; and
@@ -883,7 +883,7 @@ it never assumes that an old in-process signer operation survived restart.
 
 Unavailable, rejected, invalid-output, cancelled, timed-out, and stale signer results remain distinct.
 
-**Acceptance:** a late signature for a superseded materialization cannot promote or publish it.
+**Acceptance:** a late signature for a superseded revision cannot promote or publish it.
 
 ## WRITE-008 — A missing signer parks the write for its exact pubkey
 
@@ -1089,12 +1089,12 @@ Explicit routes remain fixed. Existing acknowledged destinations are not resent 
 
 ## WRITE-029 — Write recovery is complete before new work is admitted
 
-A persistent write store MUST recover its open obligations, receipts, current materializations, routes, and delivery state before the engine admits new commands that could conflict with them. For semantic writes, engine recovery includes applying the complete durable edit sequence to the initial qualified source snapshot; starting a background runner is not completion of this admission barrier.
+A persistent write store MUST recover its open obligations, receipts, current revisions, routes, and delivery state before the engine admits new commands that could conflict with them. For semantic writes, engine recovery includes applying the complete durable edit sequence to the initial qualified source snapshot; starting a background runner is not completion of this admission barrier.
 
 Recovery work SHOULD scale with current open obligations and bounded retained evidence rather than the total historical number of completed attempts. Repeated superseding writes to one replaceable coordinate MUST recover as bounded current work rather than one active obligation per historical renewal. A live same-coordinate semantic edit sequence MUST recover in its exact accepted order under one stable write and receipt identity; its length is bounded by retained retired-generation evidence.
 
 Every recovered runner MUST bind its loaded sequence to the exact current
-materialization generation. If same-coordinate admission advances the receipt
+revision generation. If same-coordinate admission advances the receipt
 before that runner initializes, it MUST reload the newer complete sequence
 before opening signer or route work or reacting to later source state.
 Router-session opening is not generation validation: recovery MUST re-read the
@@ -1362,7 +1362,7 @@ For replaceable events, a protocol crate SHOULD expose edits such as:
 - add relay / remove relay;
 - add media server / remove media server.
 
-The protocol crate owns how its edit applies to the event coordinate. The write store owns durable custody, materialization generations, signing, routing, delivery, and receipts.
+The protocol crate owns how its edit applies to the event coordinate. The write store owns durable custody, revision generations, signing, routing, delivery, and receipts.
 
 For NIP-02, `contact_list(authors)` and `followers_of(subject)` are fallible
 builders for ordinary kind-3 `Query` values and return the neutral `QueryError`
@@ -1443,7 +1443,7 @@ management-event wrapper.
 
 The capability MUST build the ordinary kind-10009 query for exact authors,
 decode one `SavedGroupList` per event, and provide pure saved-group and relay
-edits plus their materializer. Valid entries, repetitions, malformed siblings,
+edits plus their applier. Valid entries, repetitions, malformed siblings,
 unknown tags, opaque content, unused trailing values, and unrelated order MUST
 survive according to the edit's exact target semantics.
 
@@ -1459,7 +1459,7 @@ semantics. The capability MUST return `QueryError` and `EventBuildError`
 directly from their owners without variant collapse or string translation.
 
 The capability MUST return ordinary `Query`, `UnsignedEvent`, or
-`ReplaceableEventEdit` values and MUST NOT own generic bounds, verification,
+`EventEdit` values and MUST NOT own generic bounds, verification,
 projection, disagreement, discovery, socket, observation, signer, store,
 delivery, retry, cancellation, or receipt policy.
 
@@ -1812,7 +1812,7 @@ A rewrite is conforming only when all of the following are true:
 - Fava remains an embeddable library with live queries and write intents as its primary workload model.
 - Applications can select provider and protocol crates at build time without forking Fava.
 - Every replaceable contract has a public conformance kit and no default-provider privilege.
-- Live queries open atomically, return an immediate local view, and remain coherent across additions, removals, provenance changes, replaceable-event rematerialization, and routing changes.
+- Live queries open atomically, return an immediate local view, and remain coherent across additions, removals, provenance changes, replaceable-event edit reapplication, and routing changes.
 - Local query state deterministically merges event-cache and write-store contributions without copying unsigned events into the event cache.
 - Event-cache persistence and retention claims match the selected implementation/profile exactly.
 - Accepted production writes are durable before `Accepted`, visible through the write-store query source, reattachable by receipt, and recoverable after ordinary restart.

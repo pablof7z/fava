@@ -1,11 +1,11 @@
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
     ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteRouting,
 };
 use fava_write_store::{
-    WriteStoreError, apply_route_to_receipt, validate_current_materialization,
+    WriteStoreError, apply_route_to_receipt, validate_current_revision,
     validate_delivery_outcome, validate_receipt_text,
 };
 
@@ -18,7 +18,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
@@ -30,7 +30,7 @@ impl MemoryWriteStore {
             .writes
             .get_mut(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         match &receipt.current.event {
             EventValue::Signed(current) if current == &event => return Ok(receipt.clone()),
             EventValue::Signed(_) => {
@@ -73,7 +73,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
@@ -83,7 +83,7 @@ impl MemoryWriteStore {
             .writes
             .get_mut(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         match &receipt.current.publication.signature {
             SignatureState::Refused(current) if current == &reason => return Ok(receipt.clone()),
             SignatureState::Authorized => {}
@@ -114,7 +114,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock_state()?;
@@ -123,7 +123,7 @@ impl MemoryWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(&receipt, write_id, revision_id, event_id)?;
         if !matches!(receipt.current.event, EventValue::Unsigned(_)) {
             return Err(WriteStoreError::Refused(
                 "event is already signed".to_owned(),
@@ -157,10 +157,10 @@ impl MemoryWriteStore {
             });
         let signature = if reserved {
             SignatureState::Retryable(format!(
-                "signing authorization for write {} receipt {} materialization {} event {} deferred until its coordinate reservation resolves",
+                "signing authorization for write {} receipt {} revision {} event {} deferred until its coordinate reservation resolves",
                 write_id.as_u64(),
                 receipt_id.as_u64(),
-                materialization_id.as_u64(),
+                revision_id.as_u64(),
                 event_id
             ))
         } else {
@@ -183,7 +183,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
@@ -193,7 +193,7 @@ impl MemoryWriteStore {
             .writes
             .get_mut(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         if !matches!(
             receipt.current.publication.signature,
             SignatureState::Unsigned | SignatureState::Authorized | SignatureState::Retryable(_)
@@ -222,7 +222,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError> {
         let state = self.lock_state()?;
@@ -230,7 +230,7 @@ impl MemoryWriteStore {
             .writes
             .get(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         Ok(state.successors.contains_key(&receipt_id))
     }
 
@@ -252,20 +252,20 @@ impl MemoryWriteStore {
             state.edits.get(&receipt_id).cloned().ok_or_else(|| {
                 WriteStoreError::Refused("semantic custody is missing".to_owned())
             })?;
-        let mut retired = receipt.current.publication.retired_materializations.clone();
+        let mut retired = receipt.current.publication.retired_revisions.clone();
         retired.push((
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
-            receipt.current.publication.materialization_source,
-            receipt.current.publication.materialization_failure.clone(),
+            receipt.current.publication.revision_source,
+            receipt.current.publication.revision_failure.clone(),
         ));
-        let materialization_id = receipt
+        let revision_id = receipt
             .current
             .publication
-            .materialization_id
+            .revision_id
             .checked_next()
             .ok_or_else(|| {
-                WriteStoreError::Refused("materialization identity exhausted".to_owned())
+                WriteStoreError::Refused("revision identity exhausted".to_owned())
             })?;
         let source_correction = edit.is_none();
         let successor_destinations = if source_correction {
@@ -282,10 +282,10 @@ impl MemoryWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id: receipt.write_id,
-            materialization_id,
-            materialization_source: successor_source.map(|(id, _)| id),
-            materialization_failure: None,
-            retired_materializations: retired,
+            revision_id,
+            revision_source: successor_source.map(|(id, _)| id),
+            revision_failure: None,
+            retired_revisions: retired,
             signature: SignatureState::Unsigned,
             destinations: successor_destinations,
         };
@@ -321,7 +321,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
@@ -330,7 +330,7 @@ impl MemoryWriteStore {
             .writes
             .get(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         let mut updated = receipt.clone();
         apply_route_to_receipt(&mut updated, plan)?;
         if updated == *receipt {
@@ -351,7 +351,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -361,7 +361,7 @@ impl MemoryWriteStore {
             .writes
             .get_mut(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         let current_attempt = receipt.attempts.get(session).copied().unwrap_or(0);
         if current_attempt == attempt
             && matches!(
@@ -414,7 +414,7 @@ impl MemoryWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -431,7 +431,7 @@ impl MemoryWriteStore {
             .writes
             .get_mut(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         if receipt.attempts.get(session).copied() != Some(attempt) {
             return Err(WriteStoreError::Refused(
                 "attempt is not current".to_owned(),

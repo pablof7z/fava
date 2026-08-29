@@ -91,7 +91,7 @@ first so the remaining waves are measured by an honest instrument.
   noticed `fava-runtime` was missing for six milestones.
 - `vocab-openedrelay-and-eight-siblings` — `OpenedRelay` is not unique. Eight
   further unapproved lifecycle owners: `fava/query_source.rs:57`,
-  `fava-publication/materialization.rs:17,87,94`, `fava-routing/chain.rs:110`,
+  `fava-publication/revision.rs:17,87,94`, `fava-routing/chain.rs:110`,
   `fava-router-outbox:31,180`, `fava-transport-websocket:82`.
 
 ### Wave 1 — Neutral contract correction
@@ -350,14 +350,14 @@ Supporting findings:
   verification record is absent from disk.
 - `tautological-preview-oracle`, `fixture-asserts-its-own-input`,
   `provenance-supplied-by-fixture` — route plans compared against the same
-  planner call that produced them; receipts, materialization identity, and
+  planner call that produced them; receipts, revision identity, and
   EVENT-003 provenance asserted back out of struct literals the fixture wrote.
 
 **Requirement coverage, of 131 spec requirements: 56 proven, 39 weak or
 non-distinguishing, 36 with no evidence at all.** `OPS` is 0 of 11 proven. `ID`
 is 1 of 8. `PROFILE` is 1 of 8. Zero coverage workspace-wide for shutdown join,
 shared-work refcount, slow-peer backpressure, blocked-provider isolation, and
-provider panic outside a single materializer.
+provider panic outside a single applier.
 
 ### Consequence for the remediation plan
 

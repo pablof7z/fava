@@ -28,7 +28,7 @@ async fn publish_payload_forms_share_one_door_and_unscoped_edit_refuses() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
-        [fava_nip02::materializer()],
+        [fava_nip02::applier()],
     );
 
     let unsigned = EventBuilder::new(keys.public_key(), Kind::TextNote)
@@ -158,7 +158,7 @@ async fn invalid_payload_refuses_without_custody() {
 fn assembly(
     store: Arc<MemoryWriteStore>,
     signers: impl IntoIterator<Item = Arc<dyn Signer>>,
-    materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
+    appliers: impl IntoIterator<Item = Arc<dyn fava::EditApplier>>,
 ) -> Fava {
     let cache = Arc::new(MemoryEventCache::default());
     let publisher = Arc::new(RecordingPublisher::default());
@@ -168,7 +168,7 @@ fn assembly(
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
         .signers(signers)
-        .materializers(materializers)
+        .appliers(appliers)
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()

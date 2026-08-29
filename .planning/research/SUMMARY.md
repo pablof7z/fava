@@ -73,7 +73,7 @@ The feature landscape is largely normative rather than market-selected. Fava's l
 
 - One coherent view from independent event-cache and write-store authorities without cache pollution.
 - Exact source-scoped evidence without global completeness claims.
-- Durable write identity and receipts across kill/restart, route expansion, retry, cancellation, and rematerialization.
+- Durable write identity and receipts across kill/restart, route expansion, retry, cancellation, and reapplication.
 - Useful partial progress before routing or recipient discovery settles.
 - Loss-honest separation of coalescible current state from causal receipt/lifecycle facts.
 - Exact operation and generation identity across reconnect, signer, provider, publication, recovery, and native handles.
@@ -97,11 +97,11 @@ Use semantic-owner values and pure rules at the base, neutral public contracts a
 **Major components:**
 
 1. **Semantic state and query algebra** — canonical query identity; replacement, deletion, expiry, tombstone, merge, ordering, limits, and evidence semantics.
-2. **EventCache and WriteStore** — independent admitted-relay state versus accepted write obligations/materializations/receipts, each exposed as a query source.
+2. **EventCache and WriteStore** — independent admitted-relay state versus accepted write obligations/revisions/receipts, each exposed as a query source.
 3. **Observation owner** — coherent opening, merged current view, bounded delivery, route demand, cancellation, and teardown.
 4. **Wire, transport, ingest, and relay sessions** — bounded bytes, exact attribution, validation, cache admission, reconnect generations, and close/join.
 5. **Routing and subscription planning** — ordered reactive contributions, explicit bypass, logical-demand grouping, and exact shortfall without semantic change.
-6. **Publication owner** — durable acceptance, materialization, signing, route revisions, attempts, receipts, cancellation, settlement, and recovery under one write identity.
+6. **Publication owner** — durable acceptance, revision, signing, route revisions, attempts, receipts, cancellation, settlement, and recovery under one write identity.
 7. **Capability and service owners** — protocol-specific edits and NIP-05/NIP-11 validation/freshness outside universal core; FetchCache stores opaque bytes.
 8. **Runtime/coordinator and diagnostics** — bounded execution, failure isolation, barriers, joins, and typed facts; never a global semantic owner or second authority.
 9. **Thin facade, profiles, and native projection** — explicit assembly and ordinary Rust/Swift/Kotlin products over identical semantics.
@@ -117,7 +117,7 @@ Detailed findings: [ARCHITECTURE.md](./ARCHITECTURE.md).
 2. **Collapsing event-cache and write-store authority** — keep independent contracts/providers/lifecycles, merge only in evaluation, and never cache unpublished local events.
 3. **Reactive loops before coherent identity/removal** — canonicalize queries, use an all-or-nothing opening barrier, model retraction as source revision, and separate current from causal delivery.
 4. **Logical IDs without exact generations** — require owner-issued tokens for every asynchronous completion; stale work is attributable but inert.
-5. **`Accepted` before durable ownership** — atomically commit obligation, receipt, materialization, and recovery cursor before response or external effect; kill at each boundary.
+5. **`Accepted` before durable ownership** — atomically commit obligation, receipt, revision, and recovery cursor before response or external effect; kill at each boundary.
 6. **Serializing partial routing or merging routing with planning** — publish immediate/replacement contributions and allow planning to change wire shape only.
 7. **Nominal replaceability with privileged defaults** — universal owners use neutral contracts; standard and external providers use the same public path and corpus.
 8. **Providers blocking/panicking on owner tasks** — bounded execution, deadlines, panic containment, exact call identity, scoped failure, late-result rejection, bounded shutdown.
@@ -218,11 +218,11 @@ The authoritative M0-M11 order remains the roadmap. Research supports finer vert
 
 ### Phase M7: Semantic Writes and Capability Composition
 
-**Rationale:** Rematerialization requires current source state, durable publication, and automatic routing to share exact generation identity.
+**Rationale:** Rerevision requires current source state, durable publication, and automatic routing to share exact generation identity.
 
-**Delivers:** Capability contract, NIP-02 edit flow, unrelated capability N+1, rematerialization under one receipt, preservation of unrelated changes, stale completion rejection, and negative-dependency proof.
+**Delivers:** Capability contract, NIP-02 edit flow, unrelated capability N+1, reapplication under one receipt, preservation of unrelated changes, stale completion rejection, and negative-dependency proof.
 
-**Addresses:** Protocol helpers without core kind branching, semantic edits, rematerialization, capability extensibility.
+**Addresses:** Protocol helpers without core kind branching, semantic edits, reapplication, capability extensibility.
 
 **Avoids:** Protocol-owned publication, universal NIP enums, receipt replacement, and stale generation completion.
 
@@ -313,9 +313,9 @@ The authoritative M0-M11 order remains the roadmap. Research supports finer vert
 
 ### Gaps to Address
 
-- **M7 capability contract:** Qualify semantic edits, first-value materialization, rematerialization, stable receipt identity, stale-generation refusal, and two unrelated capability crates before M8.
+- **M7 capability contract:** Qualify semantic edits, first-value revision, reapplication, stable receipt identity, stale-generation refusal, and two unrelated capability crates before M8.
 - **Five open product decisions:** Decide windowing, partial-handoff cancellation, outage backfill, full delivery history, and the recommended persistent event-cache profile only with forcing milestone evidence.
-- **Durable write regression:** Preserve the Redb M5 process-kill and recovery corpus while M7 adds materialization generations.
+- **Durable write regression:** Preserve the Redb M5 process-kill and recovery corpus while M7 adds revision generations.
 - **Resource budgets:** Measure representative profiles and encode typed admission/refusal/shortfall per owner.
 - **NIP drift:** Recheck and record pinned revisions for NIP-01/05/09/11/40/42/65 in their owning phases.
 - **Provider isolation:** Determine where cooperative in-process isolation is sufficient and where dedicated thread/process quarantine is required.

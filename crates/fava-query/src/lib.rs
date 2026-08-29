@@ -318,7 +318,7 @@ pub struct SourceRevision(pub u64);
 pub enum SourceEvent {
     /// One atomic live or retained signed relay contribution.
     Relay(RelayEvent),
-    /// Current local materialization and publication evidence from a write store.
+    /// Current local revision and publication evidence from a write store.
     Local(LocalWriteEvent),
 }
 

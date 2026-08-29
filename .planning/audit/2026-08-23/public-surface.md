@@ -58,8 +58,8 @@ Searches that actually ran (results recorded under "Conforming"):
 | `fava-write` | 67 | specified (ARCHITECTURE:495-556). Conforming. |
 | `fava-observe` | 11 | `Observer`/`Observation`/`ObserveError`/`ObservationClosed` registered. Two unspecified-and-leaking items: `attach_cancellation(watch::Sender<bool>)` and `ObserveError::Relay(String)`. |
 | `fava-write-store` | 9 | contract; 10 of 21 trait methods carry default bodies — see `write-store-contract-half-optional`. |
-| `fava-event-cache` | 2 | contract; `events()` is an unbounded required read (existing `event-cache-contract-forces-full-materialization`). |
-| `fava-simple-groups` | 108 | matches partial-spec section 10 item-for-item (`Group::on`, `events`, `records`, `GroupSnapshot::at`/`metadata_differ`, `SimpleGroups::saved_*`/`groups_where_*`/`groups_saved_by`, `prepare`, `project`, materializers). All nominal types registered. Conforming. |
+| `fava-event-cache` | 2 | contract; `events()` is an unbounded required read (existing `event-cache-contract-forces-full-revision`). |
+| `fava-simple-groups` | 108 | matches partial-spec section 10 item-for-item (`Group::on`, `events`, `records`, `GroupSnapshot::at`/`metadata_differ`, `SimpleGroups::saved_*`/`groups_where_*`/`groups_saved_by`, `prepare`, `project`, appliers). All nominal types registered. Conforming. |
 | `fava-nip02` | 26 | matches partial-spec section 10 (`contact_list`, `followers_of`, `follows_of`, `ContactList`, `ContactListRowEvidence`). Conforming. |
 | `fava-nip65`, `fava-bookmarks` | 9 / 5 | pure protocol values + edits, no observation lifecycle. Conforming with partial-spec rule 5. |
 | `fava-routing` | 23 | specified. Conforming for surface shape. |
@@ -266,7 +266,7 @@ fn receipt_changes_is_expressible_without_naming_tokio() {
 work." `AGENTS.md:68` "No hidden runtime feature flags or silent compatibility behavior."
 `AGENTS.md:4` "Do not copy outside implementation code or add compatibility paths."
 `docs/spec/ARCHITECTURE.md:864` the write store must "commit and recover accepted local
-publication obligations and expose their current event materializations as a query source."
+publication obligations and expose their current event revisions as a query source."
 
 **implementation** `crates/fava-write-store/src/lib.rs:33-345`: 10 of the trait's 21
 methods carry default bodies that stand in for an unimplemented provider.
@@ -323,7 +323,7 @@ lands at `crates/fava/src/routes.rs:17`/`:22` and `crates/fava/src/live.rs:23`/`
 Related, in the same function: `crates/fava/src/lib.rs:377-380` infers whether publication
 exists at all from whether any of four unrelated providers happened to be selected
 (`publication_selected = publisher.is_some() || delivery.is_some() || !signers.is_empty()
-|| !materializers.is_empty()`). Selecting none of them yields `publication: None`, and
+|| !appliers.is_empty()`). Selecting none of them yields `publication: None`, and
 every publication call then returns `PublicationError::NotConfigured` at runtime rather
 than at assembly. That is an implicit runtime mode derived from provider presence.
 
@@ -415,7 +415,7 @@ itself and `:449` reads it back with a `cache_only` query.
 
 **observable distinction** Nothing in the M7 evidence exercises real delivery, routing,
 transport handoff, or ingest, yet the artifact and README present the runs as public Fava
-executions. The write/materialization half is genuine; the "public execution" claim
+executions. The write/revision half is genuine; the "public execution" claim
 covers a path in which three of the engine's providers have been replaced by the witness.
 
 **proposed falsifier**
@@ -510,7 +510,7 @@ single provider contract. The builder methods at `crates/fava/src/lib.rs:268`, `
 `:288`, `:298`, `:308`, `:318`, `:335`, `:372`, `:382` are bounded by `EventCache`,
 `WriteStore`, `QueryEvaluator`, `SubscriptionPlanner`, `Transport`, `Router`, `Signer`,
 `Publisher`, and `DeliveryPolicy` — none of which `fava` re-exports.
-(`ReplaceableEventMaterializer` is the sole exception, re-exported at
+(`EditApplier` is the sole exception, re-exported at
 `crates/fava/src/lib.rs:31-37`.)
 
 **observable distinction** An application crate depending only on `fava` cannot write
@@ -588,7 +588,7 @@ changes relevant to the query."
 
 **implementation** `apps/canary/src/local.rs:46-87`, reached from
 `apps/canary/src/main.rs:170`, starts no relay, opens `Query::events().cache_only()`
-(`apps/canary/src/local.rs:48`), and drives state with `writes.accept_materialized`
+(`apps/canary/src/local.rs:48`), and drives state with `writes.accept_applied`
 (`:67`). No relay arrival, no live coalescing, no bounded delivery under relay pressure.
 
 **observable distinction** The coalescing promise is about a slow consumer against a fast
@@ -688,7 +688,7 @@ Drift found, in `docs/issues/`:
 | `docs/issues/0006-ordered-automatic-routing.md:9-10` "withdraws a relay **only when the current merged plan no longer selects it**" | `crates/fava/src/routes.rs:93-98` and `:102-108` `break` on any router-session error or plan-bound violation, falling into `:130-133` which cancels **every** entry in `active` | One oversized or invalid router contribution silently CLOSEs all live subscriptions for that observation, while the `Observation` handle stays open and `changed()` never errors. Already filed as `chain-collapse-tears-down-all-relay-demand`; this is the doc side of it. |
 | `docs/issues/0018-literal-tag-value-filters.md:52-53`, `:94` "300 compatible tag-value logical queries that **share one wire request**" | `crates/fava/src/relay.rs:180` always passes one demand, and `crates/fava/src/relay.rs:241` **actively rejects** any REQ where `filters.len() != 1` as "subscription planner attribution does not match its REQ" | An application selecting `StandardSubscriptionPlanner` and opening 300 compatible observations gets 300 REQs. A conforming planner that *did* group would be refused by the facade. |
 | `docs/issues/0016-runtime-handle-at-assembly.md:14-23` quotes a five-line `Publication::accept` at `crates/fava-publication/src/lib.rs:62-73` | `accept` is now `crates/fava-publication/src/lib.rs:87-131` with a full `WritePayload::Edit` branch; `recover` moved `:81` -> `:138`; the facade's `recover()` call moved `:384` -> `crates/fava/src/lib.rs:430` | Record-only. The substantive claim (the `Handle::try_current()` guards at `crates/fava-publication/src/lib.rs:88`, `:139`, `crates/fava/src/query_source.rs:15`) is still exactly true. |
-| `docs/issues/0017-routers-required-at-assembly.md:14-22` quotes `publication_selected` without the `|| !self.materializers.is_empty()` term | `crates/fava/src/lib.rs:377-380` includes it | Acting on 0017 as written would miss the materializer-only assemblies the proposed refusal would newly break. |
+| `docs/issues/0017-routers-required-at-assembly.md:14-22` quotes `publication_selected` without the `|| !self.appliers.is_empty()` term | `crates/fava/src/lib.rs:377-380` includes it | Acting on 0017 as written would miss the applier-only assemblies the proposed refusal would newly break. |
 
 ## Confirmations of findings already filed elsewhere (not new)
 
@@ -726,7 +726,7 @@ the finding.
   lists wire-grammar consumers as "transport, publisher, ingest, test tools"
   (`docs/spec/ARCHITECTURE.md:2965`) and ingest consumers as "observations, cache,
   publication reconciliation" (`:2966`); the facade appears in neither list.
-- `event-cache-contract-forces-full-materialization` — **added evidence**: the unbounded
+- `event-cache-contract-forces-full-revision` — **added evidence**: the unbounded
   read is `crates/fava-event-cache/src/lib.rs:65`
   (`fn events(&self) -> Result<Vec<CachedEvent>, EventCacheError>`), and the default
   `admit` (`:23`) and `expire` (`:38`) call it once per operation, against a contract that

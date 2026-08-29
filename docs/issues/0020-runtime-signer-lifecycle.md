@@ -22,7 +22,7 @@ specified separation between session state and durable accepted-write state.
   a frozen signer map.
 - Wake only parked writes whose exact event pubkey gains an available signer.
 - Cancel or detach replaced/removed signer operations and reject every stale
-  completion by exact current operation and materialization generation.
+  completion by exact current operation and revision generation.
 - Preserve explicit, inspectable awaiting-signer state without spending a
   delivery attempt or abandoning by elapsed time.
 - Keep signer provider execution outside session/publication locks and store

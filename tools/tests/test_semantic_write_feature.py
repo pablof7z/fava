@@ -172,8 +172,8 @@ class SemanticWriteFeatureMappingTests(unittest.TestCase):
             scenario["name"]: scenario["mapping"] for scenario in self.scenarios
         }
         self.assertEqual(
-            mappings["source-v2 rematerialization"]["test"],
-            "newer_source_rematerializes_once_and_preserves_unrelated_fields",
+            mappings["source-v2 reapplication"]["test"],
+            "newer_source_reapplies_once_and_preserves_unrelated_fields",
         )
         self.assertEqual(
             mappings["retired completion"]["test"],

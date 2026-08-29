@@ -145,8 +145,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 06.1]: Attempt all 300 no-grouping subscriptions concurrently; batch at 32 only after the controlled relay's exact capacity refusal.
 - [Phase 06.1]: Compare exact serving RelaySessionKey values per logical result; observation timestamps remain execution-local facts.
 - [Phase 06.1]: Ignore a crate-like vocabulary candidate only when the same line identifies that exact token as a /tmp evidence path.
-- [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic rematerialization time. — Raw events are complete caller-authored values, while semantic edits must be rematerializable against changing sources without a hidden clock override.
-- [Phase 07]: `ReplaceableEventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
+- [Phase 07]: Apps own complete raw event bodies through EventBuilder, including exact created_at, tags, content, and kind; semantic edits retain engine-owned monotonic reapplication time. — Raw events are complete caller-authored values, while semantic edits must be reappliable against changing sources without a hidden clock override.
+- [Phase 07]: `EventEdit` is exactly `{ kind, identifier, change }`; acceptance freezes and persists the author separately, and opposing operations are separate edits. — This preserves addressable coordinates without giving protocol values lifecycle ownership.
 - [Phase 07.1.1]: The NIP-29 capability is `fava-simple-groups`; its README is the public North Star and multi-relay `Group` aggregation is required, not provisional.
 - [Phase 07.1.1]: One group id may be aggregated over a non-empty host set while each relay's records remain independently authoritative; reads/writes reuse ordinary Fava lifecycles.
 - [Phase 07.1]: Unscoped publish(edit) compiles but refuses MissingAuthor before custody until by(author) supplies the frozen author; a sole registered signer is never selected implicitly.
@@ -172,7 +172,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Canary application flows publish payloads through publish, by, and to; only preview/store/provider boundaries construct neutral WriteIntent values.
 - [Phase 07.1]: Recovered durable obligations without their original Write handle reattach through subscribe-before-read receipt facts and an exact ReceiptId.
 - [Phase 07.1]: Applications publish payloads through optional inert by/to scopes and receive Write after synchronous durable acceptance; neutral WriteIntent and AcceptedWrite remain internal owner vocabulary.
-- [Phase 07.1]: ContactList accounts for every p row; NIP-02 edit materialization owns foreign tag and content preservation.
+- [Phase 07.1]: ContactList accounts for every p row; NIP-02 edit revision owns foreign tag and content preservation.
 - [Phase 07.1]: Simple-groups consumes the universal publication door without claiming Phase 07.1.1 delivery or a current ValueSet surface.
 - [Phase 07.1]: Croissant is supervised as its exact executable, with executable SHA and source HEAD recorded separately.
 - [Phase 07.1]: Kind 9007 and kind 3 cross the same public kind-blind publication lifecycle.
@@ -199,7 +199,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Discovery counts total author or subject inputs before Query canonicalization and refuses exactly at bound plus one.
 - [Phase 07.1.1]: groups_saved_by projects canonical authors from exact group-id and selected-host pairs without ValueSet or lifecycle state.
 - [Phase 07.1.1]: Kind-10009 saved-list edits preserve opaque content and foreign order through target-local surgery.
-- [Phase 07.1.1]: Kinds 9002 and 9010 remain ordinary author-bearing events; only kind 10009 uses ReplaceableEventEdit.
+- [Phase 07.1.1]: Kinds 9002 and 9010 remain ordinary author-bearing events; only kind 10009 uses EventEdit.
 - [Phase 07.1.1]: The public simple-groups North Star composes pure preparation with ordinary facade to/publish/Write; Group owns no lifecycle.
 - [Phase 07.1.1]: Capability production dependencies equal fava-query, fava-state, and fava-write; facade edges remain test/application-only and universal owners stay NIP-29 blind.
 - [Phase 07.1.1]: Closed vocabulary contains exactly the issue-0019-approved implemented crate and public nominal values, checking direct declarations and re-exports.

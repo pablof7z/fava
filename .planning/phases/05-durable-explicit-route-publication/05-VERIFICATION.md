@@ -22,15 +22,15 @@ M5 predates GSD phase artifacts. The owning completion record is
 |-------------|--------|----------|
 | WRITE-01 | ✓ SATISFIED | public lifecycle accepts unsigned and verified signed events |
 | WRITE-02 | ✓ SATISFIED | event author selects signer independently of relay auth |
-| WRITE-03 | ✓ SATISFIED | Redb commits obligation, materialization, receipt, and cursor before acceptance |
-| WRITE-04 | ✓ SATISFIED | accepted local materialization is query-visible before relay OK |
+| WRITE-03 | ✓ SATISFIED | Redb commits obligation, revision, receipt, and cursor before acceptance |
+| WRITE-04 | ✓ SATISFIED | accepted local revision is query-visible before relay OK |
 | WRITE-05 | ✓ SATISFIED | unpublished local material never enters `EventCache`; verified echo may |
 | WRITE-06 | ✓ SATISFIED | exact explicit destinations bypass automatic routers |
 | WRITE-07 | ✓ SATISFIED | publisher owns one handoff attempt; delivery policy owns retry/give-up |
 | WRITE-08 | ✓ SATISFIED | per-relay attempt, text, outcome, ambiguity, and terminal facts remain exact |
 | WRITE-09 | ✓ SATISFIED | pre-handoff cancellation emits no EVENT and is exact/idempotent |
 | WRITE-10 | ✓ SATISFIED | receipt removal is separate from cancellation |
-| WRITE-11 | ✓ SATISFIED | SIGKILL corpus recovers the same obligation, write, receipt, and materialization |
+| WRITE-11 | ✓ SATISFIED | SIGKILL corpus recovers the same obligation, write, receipt, and revision |
 
 ## Current Validation
 

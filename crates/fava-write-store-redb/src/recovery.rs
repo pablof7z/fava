@@ -1,7 +1,7 @@
 //! Exact durable semantic custody recovery reads.
 
 use fava_write::{
-    EventId, MaterializationId, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, Timestamp,
+    EventId, RevisionId, PublicKey, Receipt, ReceiptId, EventEdit, Timestamp,
 };
 use fava_write_store::WriteStoreError;
 
@@ -14,7 +14,7 @@ impl RedbWriteStore {
     ) -> Result<
         Vec<(
             Receipt,
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -45,10 +45,10 @@ impl RedbWriteStore {
     pub(super) fn semantic_custody(
         &self,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
     ) -> Result<
         Option<(
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -59,7 +59,7 @@ impl RedbWriteStore {
         let Some(receipt) = state.receipts.get(&receipt_id) else {
             return Ok(None);
         };
-        if receipt.current.publication.materialization_id != expected {
+        if receipt.current.publication.revision_id != expected {
             return Err(WriteStoreError::Refused(
                 "semantic custody generation is not current".to_owned(),
             ));

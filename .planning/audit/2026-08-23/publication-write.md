@@ -7,7 +7,7 @@
 Authority read in full:
 
 - `docs/spec/ARCHITECTURE.md` §`fava-publication` (2114–2196): owned state, acceptance
-  paths, materialization changes, independent signing/routing, routing behavior,
+  paths, revision changes, independent signing/routing, routing behavior,
   delivery behavior, cancellation, recovery, suggested modules.
 - `docs/spec/ARCHITECTURE.md` Part IX ownership ledger (2955–3010) and "Ordering
   belongs to the lifecycle owner" (3012+).
@@ -19,7 +19,7 @@ Authority read in full:
 
 Implementation read in full:
 
-- `crates/fava-publication/src/{lib.rs,run.rs,delivery.rs,materialization.rs}`
+- `crates/fava-publication/src/{lib.rs,run.rs,delivery.rs,revision.rs}`
 - `crates/fava-write/src/{lib.rs,receipt.rs,routing.rs}` (bounds + WRITE-030 path)
 - `crates/fava-write-store/src/{lib.rs,receipt.rs}`
 - `crates/fava-write-store-memory/src/{lib.rs,state.rs,semantic.rs,lifecycle.rs}`
@@ -124,7 +124,7 @@ if !matches!(signer.availability(), SignerAvailability::Available) { return; }
 ```
 
 `start_signing` is invoked from exactly two sites — `run.rs:57` (once per run task)
-and `run.rs:354` inside `reopen_materialization`. Nothing observes signer availability
+and `run.rs:354` inside `reopen_revision`. Nothing observes signer availability
 transitions, so an `Unavailable → Available` transition (or a signer that would be
 registered later) never re-drives the parked write.
 
@@ -215,12 +215,12 @@ edits through their selected protocol crates, **reopens route sessions, resumes 
 signing, and schedules current lanes. Query and relay execution begin after required
 write-store reconciliation is complete.**"
 `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1013` (WRITE-029) — "MUST
-recover its open obligations, receipts, current materializations, routes, and delivery
+recover its open obligations, receipts, current revisions, routes, and delivery
 state before the engine admits new commands that could conflict with them."
 
 **implementation**
 `crates/fava-publication/src/lib.rs:135-176` — `recover()` reads `recover_open()` /
-`recover_materialized_edits()` and then calls `start(...)`/`start_semantic(...)`, which
+`recover_applied_edits()` and then calls `start(...)`/`start_semantic(...)`, which
 `tokio::spawn` a run task (`crates/fava-publication/src/run.rs:26-40`) and return
 immediately. Route reopening, signing resumption, and lane scheduling all happen inside
 that spawned task, i.e. *after* `FavaBuilder::build()` returns
@@ -254,7 +254,7 @@ async fn recovery_reopens_route_sessions_before_build_returns() {
 **authority**
 `docs/spec/ARCHITECTURE.md:2126` — owned state of the publication owner includes "exact
 cancellation eligibility"; `ARCHITECTURE.md:2181` — "Cancellation is decided from current
-materialization, signature, and handoff facts."
+revision, signature, and handoff facts."
 `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:961-964` (WRITE-023) —
 "Cancellation MUST: terminate current signer/route/delivery work; …"
 `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md:1033` (RELAY-001) — "Fava MUST
@@ -415,7 +415,7 @@ implementation is not evidence of substitutability."
 | `fava-delivery-standard` | none | `src/lib.rs` (2 policy cases) |
 | `fava-write-store-memory` | none | `src/model.rs` only |
 
-The owner of acceptance, materialization, signing, routing, lanes, cancellation and
+The owner of acceptance, revision, signing, routing, lanes, cancellation and
 recovery — `fava-publication` — has **zero** executable evidence at the owning
 component; every claim is proved indirectly through `crates/fava/tests/*`. That is
 exactly the "evidence written to match the implementation" shape the live-query
@@ -508,13 +508,13 @@ plan: `crates/fava-publication/src/run.rs:289-304` applies
 (`crates/fava-write-store/src/receipt.rs:123-140`) *removes* any destination that is
 `Pending` and absent from the new plan. Every correction destination is `Pending` by
 construction, so a router that has since withdrawn a relay silently erases the
-correction obligation the store just created. `reopen_materialization`
+correction obligation the store just created. `reopen_revision`
 (`crates/fava-publication/src/run.rs:345-359`) applies a second router-only plan on
 top for the same generation.
 
 **observable distinction**
 Accept a follow edit routed automatically; let it be acknowledged at relay A; make the
-router withdraw A; ingest a newer contact list so the edit rematerializes. WRITE-022
+router withdraw A; ingest a newer contact list so the edit reapplies. WRITE-022
 requires the successor generation to still carry A as a correction destination; today
 `receipt.desired_destinations` no longer contains A and A never receives the corrected
 event.
@@ -528,7 +528,7 @@ async fn corrected_generation_keeps_predecessor_destinations_after_router_withdr
     write.settled(fava::at_least(1).unwrap()).await.unwrap();     // acknowledged at A
     router.withdraw(relay_a());
     ingest_newer_contact_list(&fava);
-    poll_until(|| write.receipt().unwrap().current.publication.materialization_id.as_u64() == 2);
+    poll_until(|| write.receipt().unwrap().current.publication.revision_id.as_u64() == 2);
     assert!(write.receipt().unwrap().desires(&session_for(relay_a())));
 }
 ```
@@ -547,10 +547,10 @@ or **lifecycle owner** is a vocabulary change"; `docs/internals/vocabulary.toml`
 source of truth and `tools/check_vocabulary.py` only scans `pub struct|enum|trait|type`.
 
 **implementation**
-`crates/fava-publication/src/materialization.rs:18` `pub(super) struct OpenedSemanticSources`
+`crates/fava-publication/src/revision.rs:18` `pub(super) struct OpenedSemanticSources`
 owns two live `OpenedQuerySource` subscriptions plus their per-source liveness and an
-explicit `close()` lifecycle (`:82-85`). `crates/fava-publication/src/materialization.rs:95`
-`pub(super) struct SemanticState` owns the per-write rematerialization lifecycle
+explicit `close()` lifecycle (`:82-85`). `crates/fava-publication/src/revision.rs:95`
+`pub(super) struct SemanticState` owns the per-write reapplication lifecycle
 (selected source id, source floor, failed source id, the sources handle) with
 `accepted`/`recovered`/`close` constructors. Neither appears in
 `docs/internals/vocabulary.toml` (checked the full `name =` index; the `Write` term at
@@ -620,9 +620,9 @@ Each of these was read on both sides and matches the authority:
   the observe hang and it is **absent**.
 - **Exact generation identity on every completion (WRITE-007 / ARCH:2150-2156).**
   `install_signed`, `record_signer_refusal`, `apply_route`, `begin_attempt`,
-  `record_outcome`, `install_materialization`, and `record_materialization_failure` all
-  take `(write_id, receipt_id, materialization_id, event_id)` and are validated by
-  `validate_current_materialization` (`crates/fava-write-store/src/receipt.rs:57-72`).
+  `record_outcome`, `install_revision`, and `record_revision_failure` all
+  take `(write_id, receipt_id, revision_id, event_id)` and are validated by
+  `validate_current_revision` (`crates/fava-write-store/src/receipt.rs:57-72`).
   `install_signed_current` additionally verifies the signature and compares the exact
   unsigned body (`crates/fava-write-store-memory/src/lifecycle.rs:25-48`), and
   `apply_route_to_receipt` enforces strict revision monotonicity
@@ -637,10 +637,10 @@ Each of these was read on both sides and matches the authority:
   (`crates/fava-write-store-memory/src/lib.rs:136-137`).
 - **Per-write delivery fan-out is bounded.** `apply_route_to_receipt` refuses plans over
   `destination_evidence_capacity()` = 256 (`crates/fava-write-store/src/receipt.rs:94-100`),
-  shortfalls are bounded and text-validated (`:110-119`), retired materializations are
+  shortfalls are bounded and text-validated (`:110-119`), retired revisions are
   bounded (`crates/fava-write-store-memory/src/semantic.rs:281-287`), explicit relay sets
-  are bounded at 256 (`crates/fava-write/src/routing.rs:8`), materializers at 64
-  (`crates/fava-publication/src/materialization.rs:15`), and active writes are bounded by
+  are bounded at 256 (`crates/fava-write/src/routing.rs:8`), appliers at 64
+  (`crates/fava-publication/src/revision.rs:15`), and active writes are bounded by
   the store's `active_capacity`. Lane tasks are keyed by session in `active` and
   de-duplicated (`crates/fava-publication/src/delivery.rs:48-52`), so lanes cannot grow
   without bound *within* a write.
@@ -661,8 +661,8 @@ Each of these was read on both sides and matches the authority:
   (`crates/fava-publication/src/run.rs:120`).
 - **No unapproved *public* vocabulary noun in the nine crates.** Every `pub struct|enum|trait`
   in scope maps to a `vocabulary.toml` term (`Write`, `WriteStore`, `PublishAs`,
-  `PublishTo`, `WriteIntent`, `ReplaceableEventEdit`, `ReplaceableEventMaterializer`,
-  `MaterializationId`, `UnsignedEvent`, `EventBuilder`, `Publisher`, `DeliveryPolicy`).
+  `PublishTo`, `WriteIntent`, `EventEdit`, `EditApplier`,
+  `RevisionId`, `UnsignedEvent`, `EventBuilder`, `Publisher`, `DeliveryPolicy`).
   The two private lifecycle nouns are reported above.
 
 ## Open questions
@@ -680,8 +680,8 @@ Each of these was read on both sides and matches the authority:
    says "such as", so this may be intentional; it does mean an application cannot
    distinguish a write parked on a missing signer from one queued behind routing —
    which is precisely the state the `frozen-signer-registry` finding makes permanent.
-3. **Double route application per materialization.** `rematerialize`
-   (`run.rs:289-304`) and the subsequent `reopen_materialization` (`run.rs:345-359`)
+3. **Double route application per revision.** `reapply`
+   (`run.rs:289-304`) and the subsequent `reopen_revision` (`run.rs:345-359`)
    both apply a router-derived plan for the same generation, bumping `route_revision`
    twice. I could not construct an application-visible harm beyond the
    `correction-destinations` finding, so it is folded into that entry rather than filed

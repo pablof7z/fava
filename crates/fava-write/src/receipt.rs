@@ -4,10 +4,10 @@ use fava_relay::RelaySessionKey;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EventId, EventValue, InvalidEventValue, MaterializationId, ReceiptId, WriteId, WriteRouting,
+    EventId, EventValue, InvalidEventValue, RevisionId, ReceiptId, WriteId, WriteRouting,
 };
 
-/// How far signing has got for the current materialization, and why it stopped
+/// How far signing has got for the current revision, and why it stopped
 /// if it did.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SignatureState {
@@ -88,15 +88,15 @@ pub struct PublicationEvidence {
     pub receipt_id: ReceiptId,
     /// Accepted write identity.
     pub write_id: WriteId,
-    /// Exact current immutable materialization generation.
-    pub materialization_id: MaterializationId,
-    /// Qualified source event used for the current materialization, when any.
-    pub materialization_source: Option<EventId>,
-    /// Bounded post-accept materialization failure attributed to current work.
-    pub materialization_failure: Option<String>,
+    /// Exact current immutable revision generation.
+    pub revision_id: RevisionId,
+    /// Qualified source event used for the current revision, when any.
+    pub revision_source: Option<EventId>,
+    /// Bounded post-accept revision failure attributed to current work.
+    pub revision_failure: Option<String>,
     /// Bounded retired generation, event, source, and optional failure facts.
-    pub retired_materializations:
-        Vec<(MaterializationId, EventId, Option<EventId>, Option<String>)>,
+    pub retired_revisions:
+        Vec<(RevisionId, EventId, Option<EventId>, Option<String>)>,
     /// Current signing fact.
     pub signature: SignatureState,
     /// Exact current fact for every selected relay session.
@@ -108,7 +108,7 @@ pub struct PublicationEvidence {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct LocalWriteEvent {
     id: EventId,
-    /// Current unsigned or signed materialization.
+    /// Current unsigned or signed revision.
     pub event: EventValue,
     /// Exact local publication evidence.
     pub publication: PublicationEvidence,

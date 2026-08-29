@@ -267,7 +267,7 @@ async fn execute_flow(
     let local = record(&observation, edit_id)?;
     let local_revision = observation.current().revision.0;
     let local_publication = local.publication().ok_or_else(|| {
-        CanaryError::new("local NIP-02 materialization lacked publication evidence")
+        CanaryError::new("local NIP-02 revision lacked publication evidence")
     })?;
     if local_publication.write_id != edit_write.write_id()
         || local_publication.receipt_id != edit_write.receipt_id()
@@ -285,11 +285,11 @@ async fn execute_flow(
     let relayed = record(&observation, edit_receipt.current.id())?;
     validate_final(relayed.event(), target, &relay, &group_id)?;
     if relay_revision <= local_revision
-        || edit_receipt.current.publication.materialization_source
+        || edit_receipt.current.publication.revision_source
             != Some(baseline_receipt.current.id())
     {
         return Err(CanaryError::new(
-            "relay revision or materialization source did not advance exactly",
+            "relay revision or revision source did not advance exactly",
         ));
     }
     let exact =
@@ -327,7 +327,7 @@ fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .signers([signer])
-        .materializers([fava_nip02::materializer()])
+        .appliers([fava_nip02::applier()])
         .build()
         .map_err(error)
 }
@@ -463,8 +463,8 @@ fn finish_run(
         "receipt_id": scoped_receipt,
         "write_sequence": facts.edit_receipt.write_id.as_u64(),
         "receipt_sequence": facts.edit_receipt.receipt_id.as_u64(),
-        "materialization_id": facts.edit_receipt.current.publication.materialization_id.as_u64(),
-        "materialization_source": facts.edit_receipt.current.publication.materialization_source.map(|id| id.to_hex()),
+        "revision_id": facts.edit_receipt.current.publication.revision_id.as_u64(),
+        "revision_source": facts.edit_receipt.current.publication.revision_source.map(|id| id.to_hex()),
         "local_revision": facts.local_revision,
         "relay_revision": facts.relay_revision,
         "terminal_outcome": format!("{:?}", facts.edit_receipt.outcome),
@@ -505,8 +505,8 @@ fn finish_run(
         "receipt_id": scoped_receipt,
         "write_sequence": facts.edit_receipt.write_id.as_u64(),
         "receipt_sequence": facts.edit_receipt.receipt_id.as_u64(),
-        "materialization_id": facts.edit_receipt.current.publication.materialization_id.as_u64(),
-        "materialization_source": facts.edit_receipt.current.publication.materialization_source.map(|id| id.to_hex()),
+        "revision_id": facts.edit_receipt.current.publication.revision_id.as_u64(),
+        "revision_source": facts.edit_receipt.current.publication.revision_source.map(|id| id.to_hex()),
         "local_revision": facts.local_revision,
         "relay_revision": facts.relay_revision,
         "foreign_tags_preserved": true,

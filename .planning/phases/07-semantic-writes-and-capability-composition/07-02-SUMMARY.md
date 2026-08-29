@@ -6,7 +6,7 @@ tags: [rust, semantic-writes, write-store, concurrency, recovery, tdd]
 requires:
   - phase: 07-semantic-writes-and-capability-composition
     plan: 01
-    provides: bounded semantic edit, materializer, and exact generation identity contracts
+    provides: bounded semantic edit, applier, and exact generation identity contracts
 provides:
   - neutral WriteStore operations for semantic admission, exact generation installation, attributed failure, and live recovery
   - memory-store state machine with one live owner per exact coordinate and stable write and receipt identity
@@ -36,7 +36,7 @@ key-decisions:
   - "Cancel and terminal settlement release coordinate and edit custody while retaining the historical receipt."
 patterns-established:
   - "Semantic custody: the write store owns the coordinate, edit, current generation, selected source, retired evidence, and failure fact."
-  - "Exact replacement: WriteId, ReceiptId, MaterializationId, and selected source are checked before one atomic successor swap."
+  - "Exact replacement: WriteId, ReceiptId, RevisionId, and selected source are checked before one atomic successor swap."
 requirements-completed: [CAP-02, CAP-03, CAP-05]
 coverage:
   - id: D1
@@ -98,15 +98,15 @@ status: complete
 ## Accomplishments
 
 - Extended the neutral write-store contract without new nominal vocabulary: semantic admission, generation installation, failure recording, live recovery, and the store-owned capacity primitive.
-- Implemented one live memory owner per exact coordinate with stable `WriteId` and `ReceiptId`, exact current `MaterializationId` and source checks, bounded retirement, and commit-before-notify observation.
+- Implemented one live memory owner per exact coordinate with stable `WriteId` and `ReceiptId`, exact current `RevisionId` and source checks, bounded retirement, and commit-before-notify observation.
 - Preserved the current generation on failure, bounded provider attribution, cleared failure only with a successful atomic successor, and released semantic custody at cancel or terminal settlement.
 - Kept unpublished generated events entirely in write-store query-source custody; no event-cache insertion path was added.
 
 ## RED and Causal Evidence
 
-- **Task 1 RED:** `cargo test -p fava --test semantic_write_store` failed before production with missing `accept_materialized_edit`, `install_materialization`, and `recover_materialized_edits` methods. Commit: `015330d`.
-- **Task 2 RED:** the same target failed before production only because `record_materialization_failure` did not exist. Commit: `17087a6`.
-- **Named deliberate break:** removing the exact `MaterializationId` comparison made `memory_generation_swap_is_compare_and_set` fail at its stale-generation assertion. Restoring the guard returned all eight tests to GREEN. The isolated causal assertion is committed in `4d6bd5b`.
+- **Task 1 RED:** `cargo test -p fava --test semantic_write_store` failed before production with missing `accept_applied_edit`, `install_revision`, and `recover_applied_edits` methods. Commit: `015330d`.
+- **Task 2 RED:** the same target failed before production only because `record_revision_failure` did not exist. Commit: `17087a6`.
+- **Named deliberate break:** removing the exact `RevisionId` comparison made `memory_generation_swap_is_compare_and_set` fail at its stale-generation assertion. Restoring the guard returned all eight tests to GREEN. The isolated causal assertion is committed in `4d6bd5b`.
 
 ## Task Commits
 
@@ -129,7 +129,7 @@ status: complete
 ## Decisions Made
 
 - Unsupported stores keep the neutral contract replaceable and honest through zero semantic active capacity plus typed refusal; Plan 05 can implement parity without a private bypass.
-- The failed live source remains a private store fact returned through an existing-value recovery tuple; public bounded attribution stays in `PublicationEvidence.materialization_failure`.
+- The failed live source remains a private store fact returned through an existing-value recovery tuple; public bounded attribution stays in `PublicationEvidence.revision_failure`.
 - The ordinary write lifecycle remains authoritative for terminality, while semantic custody is released exactly when that lifecycle cancels or settles.
 
 ## Deviations from Plan
@@ -139,7 +139,7 @@ status: complete
 **1. [Rule 1 - Test bug] Isolated the exact-generation causal assertion**
 - **Found during:** Final named deliberate-break verification
 - **Issue:** The original stale swap changed both expected generation and expected source, so removing only the generation guard did not fail the named CAS test.
-- **Fix:** Held the current source identity constant while supplying a stale `MaterializationId`; the deliberate break then failed exactly the named test.
+- **Fix:** Held the current source identity constant while supplying a stale `RevisionId`; the deliberate break then failed exactly the named test.
 - **Files modified:** `crates/fava/tests/semantic_write_store.rs`
 - **Verification:** The deliberate break failed `memory_generation_swap_is_compare_and_set`; the restored guard passed all eight semantic store tests and the Bazel target.
 - **Committed in:** `4d6bd5b`
@@ -173,7 +173,7 @@ None.
 
 ## Next Phase Readiness
 
-- Plan 07-03 can orchestrate the selected materializer against this store-owned admission and exact generation contract.
+- Plan 07-03 can orchestrate the selected applier against this store-owned admission and exact generation contract.
 - Plan 07-05 still owns durable redb semantic-state parity; the current redb implementation advertises zero semantic capacity rather than accepting unrecoverable custody.
 
 ## Self-Check: PASSED

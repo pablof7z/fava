@@ -17,7 +17,7 @@ use super::*;
 fn restart_builder(
     cache: Arc<MemoryEventCache>,
     store: Arc<RedbWriteStore>,
-    materializer: Arc<TestMaterializer>,
+    applier: Arc<TestApplier>,
 ) -> FavaBuilder {
     Fava::builder()
         .event_cache(cache)
@@ -26,7 +26,7 @@ fn restart_builder(
         .transport(Arc::new(NoopTransport))
         .publisher(Arc::new(PendingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(materializer)
+        .applier(applier)
 }
 
 fn content(receipt: &Receipt) -> &str {
@@ -40,7 +40,7 @@ fn publish_change(fava: &Fava, change: u8) -> fava::Write {
     fava.by(keys().public_key())
         .to([relay()])
         .unwrap()
-        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap())
+        .publish(EventEdit::new(Kind::ContactList, None, vec![change]).unwrap())
         .expect("immediate same-coordinate edit accepts after recovery reconciliation")
 }
 
@@ -57,11 +57,11 @@ async fn assert_restart_then_immediate_edit(
             session(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = restart_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
-        Arc::clone(&materializer),
+        Arc::clone(&applier),
     )
     .build()
     .expect("recovery reconciles before exposing the redb facade");
@@ -71,8 +71,8 @@ async fn assert_restart_then_immediate_edit(
         .unwrap()
         .unwrap();
     assert_eq!(
-        reconciled.current.publication.materialization_id,
-        MaterializationId::try_from(persisted_edits + 1).expect("nonzero materialization identity")
+        reconciled.current.publication.revision_id,
+        RevisionId::try_from(persisted_edits + 1).expect("nonzero revision identity")
     );
     let expected_reconciled = (1..=persisted_edits)
         .fold("restart source".to_owned(), |body, change| {
@@ -92,8 +92,8 @@ async fn assert_restart_then_immediate_edit(
             .unwrap()
             .current
             .publication
-            .materialization_id,
-        MaterializationId::try_from(persisted_edits + 2).expect("nonzero materialization identity")
+            .revision_id,
+        RevisionId::try_from(persisted_edits + 2).expect("nonzero revision identity")
     );
 
     cache
@@ -159,7 +159,7 @@ impl Router for ComposingRouter {
             let RouteRequest::Write(source) = &request else {
                 panic!("semantic router receives a write request");
             };
-            let next_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![9]).unwrap();
+            let next_edit = EventEdit::new(Kind::ContactList, None, vec![9]).unwrap();
             let event = EventBuilder::new(keys().public_key(), Kind::ContactList)
                 .created_at(Timestamp::from(source.created_at().as_secs() + 1))
                 .content(format!("{}|9", event_content(source)))
@@ -170,7 +170,7 @@ impl Router for ComposingRouter {
                 .reserve_active(&next_edit, keys().public_key())
                 .unwrap();
             self.store
-                .accept_reserved_materialized_edit(
+                .accept_reserved_applied_edit(
                     reservation,
                     WriteIntent::edit_as(next_edit, keys().public_key(), WriteRouting::Automatic)
                         .unwrap(),
@@ -249,7 +249,7 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
     let fava = restart_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestApplier::new(Kind::ContactList)),
     )
     .router(Arc::clone(&router))
     .build()
@@ -270,8 +270,8 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
     .await
     .expect("generation-bound route commits");
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::try_from(generation + 1).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id,
+        RevisionId::try_from(generation + 1).expect("nonzero revision identity")
     );
     assert!(receipt.destinations().contains_key(&RelaySessionKey {
         relay: router.current.clone(),
@@ -295,7 +295,7 @@ async fn redb_restart_reconciles_before_immediate_edit_and_late_source() {
     let path = root.join("writes.redb");
     let store = RedbWriteStore::open(&path).unwrap();
     store
-        .accept_materialized_edit(edit_intent(), materialization(1, "1"), None)
+        .accept_applied_edit(edit_intent(), revision(1, "1"), None)
         .unwrap();
     drop(store);
 
@@ -320,9 +320,9 @@ async fn redb_restart_reopens_router_if_generation_changes_during_session_open()
     let path = root.join("writes.redb");
     let store = RedbWriteStore::open(&path).unwrap();
     store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(), keys().public_key(), WriteRouting::Automatic).unwrap(),
-            materialization(1, "1"),
+            revision(1, "1"),
             None,
         )
         .unwrap();

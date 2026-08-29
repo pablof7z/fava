@@ -370,7 +370,7 @@ private, near-duplicate scripted transports exist across the test corpus
 each modelling a different subset of the contract and none modelling the whole of it.
 
 `falsifiers/` contains exactly two external crates: `external-null-cache` (an `EventCache`) and
-`external-semantic-capability` (a materializer). Falsifier A's required external router, planner,
+`external-semantic-capability` (a applier). Falsifier A's required external router, planner,
 transport, delivery policy, and persistent write store do not exist.
 
 **Confidence.** confirmed. (Overlaps `transport-wire-ingest.md` finding `testkit-ships-no-relay-fake`;
@@ -408,7 +408,7 @@ it."
 | Crate | Source lines | Owns (ARCHITECTURE.md) |
 |---|---|---|
 | `fava-publication` | 1,478 | acceptance-before-effect, signer/route independence, stale-generation rejection, recovery |
-| `fava-write-store` | 542 | the write-store contract + `validate_current_materialization` |
+| `fava-write-store` | 542 | the write-store contract + `validate_current_revision` |
 | `fava-router-fallback-relays` | 178 | ROUTER-004 reactive fallback policy |
 | `fava-router-app-relays` | 120 | ROUTER-003 app-relay policy |
 | `fava-publisher-nip01` | 116 | `OK`/`CLOSED`/`AUTH` interpretation, ambiguity mapping |
@@ -594,17 +594,17 @@ conclusions. Production constructors and operations create state."
   map. A publication pipeline that never records a `Pending` or `Unknown` destination passes
   unchanged.
 - `crates/fava/tests/semantic_write_contract.rs:104-141`
-  `materialization_identity_changes_but_receipt_identity_does_not` — constructs
+  `revision_identity_changes_but_receipt_identity_does_not` — constructs
   `PublicationEvidence { .. }` as a literal (120-129) and asserts the fields read back (135-139). No
   generation ever changes.
-- `crates/fava/tests/semantic_write_contract.rs:77-90` — the mock `ExactMaterializer`
+- `crates/fava/tests/semantic_write_contract.rs:77-90` — the mock `ExactApplier`
   (`semantic_write_contract.rs:50-75`) contains `assert!(source.is_none())` **inside its own
-  `materialize`** at line 68 (§15 "a mock that implements the behavior under test"); the test then
+  `apply`** at line 68 (§15 "a mock that implements the behavior under test"); the test then
   passes `None` and `timestamp` explicitly and asserts them back.
 - `crates/fava/tests/semantic_write_contract.rs:93-101` — pure getter round-trip.
 - `crates/fava/tests/support/semantic_write_capability_lifecycle.rs:113-122` and `:146-153` — the
   fixture builds both the initial cached source and the successor by invoking the *same*
-  `materializer` whose output the test later verifies.
+  `applier` whose output the test later verifies.
 
 **Confidence.** confirmed.
 
@@ -651,7 +651,7 @@ EVENT-003 proved from causes.
 **Authority.** §6.2: "Create a write through the public acceptance operation. **Do not hand-write
 write-store state.**"
 
-**Implementation.** `WriteStore::accept_materialized` / `accept` / `accept_materialized_edit` /
+**Implementation.** `WriteStore::accept_applied` / `accept` / `accept_applied_edit` /
 `cancel` called directly in facade tests:
 `crates/fava/tests/local_source_merge.rs:111, 148, 158, 176, 261, 384, 387, 390`;
 `crates/fava/tests/observation_bounds.rs:70-73` (256 events);
@@ -939,7 +939,7 @@ covers identity only; union/intersection/difference and retraction have no tests
   `BTreeSet::from([alice, bob]).into_iter().collect()`, the same construction the implementation uses
   at `src/query.rs:165,176`. Compared against itself.
 - `crates/fava/tests/support/semantic_write_capability_lifecycle.rs:113-122,146-153` — the fixture
-  builds both the initial source and the successor by invoking the same materializer under test.
+  builds both the initial source and the successor by invoking the same applier under test.
 
 **Confidence.** confirmed.
 
@@ -1092,7 +1092,7 @@ Verified by grepping each for `Fava::builder|fava.observe|fava.publish|\.by\(|\.
 | `apps/canary/src/local.rs:197-208,103,136,178,111-114` | M1 local-source-merge scenarios | `RelayEvidence::one(RelaySessionKey::new(parse("wss://m1.local")…))` — a relay session that never existed — inserted via `cache.admit(...)` and then asserted back |
 | `apps/canary/src/semantic_writes.rs:145-150,177-182,273-278,296-301,411-416` | M7 semantic write scenarios | `cache.admit(CachedEvent::new(source, relay_evidence()))` with `relay_evidence()` = `wss://m7-semantic.example` (`semantic_write_support.rs:209-218`), a relay the `NoopTransport` (`:61-75`) can never contact. At `:411-416` the canary re-admits **Fava's own output** as the next "source" |
 | `crates/fava/tests/write_settlement.rs:28-45` + `:261-324` | "receipt counts preserve complete mixed destination evidence" | the whole `Receipt` is a struct literal; the four assertions count the map the fixture wrote |
-| `crates/fava/tests/semantic_write_contract.rs:77-90,93-101,104-141` | first-value materialization, addressable authorship, materialization-vs-receipt identity | all three are struct-literal or getter round-trips; the mock asserts inside its own `materialize` (`:68`) |
+| `crates/fava/tests/semantic_write_contract.rs:77-90,93-101,104-141` | first-value revision, addressable authorship, revision-vs-receipt identity | all three are struct-literal or getter round-trips; the mock asserts inside its own `apply` (`:68`) |
 | `crates/fava/tests/local_source_merge.rs:172,212` | relay echo enrichment; acquisition-vs-provenance authority | the "relay echo" is two `cache.commit(Upsert)` calls (`:179-184,192-197`); the authority distinction is decided by which `RelayEvidence` the fixture wrote (`:216-221` vs `:240-245`) |
 | `crates/fava-subscriptions-standard/tests/grouping.rs:184,209` | RELAY-004 exact relay-limit shortfall | the limit is hand-passed to `StandardSubscriptionPlanner::bounded(...)`; NIP-11 does not exist |
 | `crates/fava/tests/write_bounds.rs:144-176` | automatic route fan-out bounded before receipt mutation | a `RoutePlan` with 257 destinations is hand-built and handed to `MemoryWriteStore::apply_route`. No router in the workspace can produce 257 destinations |
@@ -1212,7 +1212,7 @@ bound, no ambiguous handoff anywhere in that suite.
 | Double | pending | fail-mid | cancel-mid | stale/late | unbounded | panic |
 |---|---|---|---|---|---|---|
 | `crates/fava-router-testkit/src/lib.rs:44` `DelayedRouter` | — (`preview`/`open` are synchronous and always succeed) | — | — | ✓ contribution replaced over a `watch` | — | — |
-| `crates/fava/tests/semantic_write_failures/route_revision.rs:122` `QueuedRouter` | — | — | — | ✓ revision across a materialization boundary | broadcast cap 8, never driven | — |
+| `crates/fava/tests/semantic_write_failures/route_revision.rs:122` `QueuedRouter` | — | — | — | ✓ revision across a revision boundary | broadcast cap 8, never driven | — |
 | `crates/fava/tests/support/semantic_write.rs:369` `CountingRouter` | — (`next_change` = `pending()`) | — | — | — | — | — |
 | `crates/fava/tests/simple_groups.rs:743` `SpyRouter` | — | always refuses; asserted never called | — | — | — | — |
 
@@ -1220,7 +1220,7 @@ bound, no ambiguous handoff anywhere in that suite.
 mid-session through the public path, and no router produces a `shortfall` — `route_shortfalls` is
 asserted non-empty only at `crates/fava/tests/write_bounds.rs:371` from a store-direct `apply_route`.
 
-### Write stores / caches / evaluators / materializers
+### Write stores / caches / evaluators / appliers
 
 | Double | pending | fail-mid | cancel-mid | stale/late | unbounded | panic |
 |---|---|---|---|---|---|---|
@@ -1232,9 +1232,9 @@ asserted non-empty only at `crates/fava/tests/write_bounds.rs:371` from a store-
 | `crates/fava-observe/src/lib.rs:291` `TrackingSource` / `:323` `RefusingSource` | — | ✓ open refusal | — | — | — | — |
 | `crates/fava-observe/src/lib.rs:333` `EmptyEvaluator` / `:345` `FailingEvaluator` | — | ✓ refusal | — | — | — | — |
 | `crates/fava-router-outbox/tests/outbox.rs:141` `WatchSource` | — | — | — | — | — | — |
-| `crates/fava/tests/semantic_write_failures.rs:71` `ControlledMaterializer` | — | ✓ | — | — | ✓ 8 KiB error, 140 KB content | ✓ **the only panicking double in the workspace** |
-| `crates/fava/tests/support/semantic_write.rs:187` `TestMaterializer` | — | — | — | — | — | — |
-| `crates/fava/tests/semantic_write_contract.rs:52` `ExactMaterializer` | — | — | — | — | — | — |
+| `crates/fava/tests/semantic_write_failures.rs:71` `ControlledApplier` | — | ✓ | — | — | ✓ 8 KiB error, 140 KB content | ✓ **the only panicking double in the workspace** |
+| `crates/fava/tests/support/semantic_write.rs:187` `TestApplier` | — | — | — | — | — | — |
+| `crates/fava/tests/semantic_write_contract.rs:52` `ExactApplier` | — | — | — | — | — | — |
 
 `FaultingWriteStore` is the strongest double in the corpus — but it is used **only** inside
 `crates/fava/tests/semantic_write_failures/**`. None of `explicit_publication.rs`,
@@ -1249,7 +1249,7 @@ asserted non-empty only at `crates/fava/tests/write_bounds.rs:371` from a store-
   trait that passes a cancel channel. There is not a single `impl Drop` on any test double in
   `crates/*/tests`, `apps/canary/src`, or `falsifiers/` — so an abandoned `Transport::open_session`,
   `Publisher::publish`, or `WriteStore` call is unobservable.
-- **Panic is expressible for exactly one contract** (`ReplaceableEventMaterializer`).
+- **Panic is expressible for exactly one contract** (`EditApplier`).
 - **No provider double can fail during shutdown**, because there is no `Fava::shutdown` (the public
   surface at `crates/fava/src/lib.rs:98-259` has no such method).
 - **Backpressure evidence** exists in exactly one place — `crates/fava/tests/write_bounds.rs:18`
@@ -1315,7 +1315,7 @@ fails); **U** = undetectable (the linked evidence would stay green under the bre
 | Break | Recorded at | Target evidence | Judgement |
 |---|---|---|---|
 | Emit the merged event twice | `docs/issues/0001:47` | `crates/fava-query-standard/tests/source_merge.rs:120` — **not linked from any feature** | M (weak) — duplicate records are trivially visible, but same-id merge is a real bug class |
-| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | `docs/issues/0010` | `crates/fava/tests/semantic_write_publication/interleavings.rs:94` | **M — the most rigorously executed break in the repo.** One predicate removed from `fava-write-store::validate_current_materialization`, SHA-256 recorded before and after, control tests confirmed still green, causal failure located to an exact line. This is the template the other 40 should follow. Caveat: the owning crate `fava-write-store` has zero tests, so detection was two layers away |
+| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | `docs/issues/0010` | `crates/fava/tests/semantic_write_publication/interleavings.rs:94` | **M — the most rigorously executed break in the repo.** One predicate removed from `fava-write-store::validate_current_revision`, SHA-256 recorded before and after, control tests confirmed still green, causal failure located to an exact line. This is the template the other 40 should follow. Caveat: the owning crate `fava-write-store` has zero tests, so detection was two layers away |
 | `DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` | `docs/issues/0010` | `cargo check -p fava-nip02` | **S** — an inserted `use fava_signer as _;` producing E0432. A compile error about an absent crate, not behavior |
 | `DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` | `docs/issues/0010` | 2-test bound target | **S** — `MAX_TAGS` 2000 → 2001 against a test that hardcodes the boundary |
 | Case-folded grouping axis | `docs/issues/0018:72` | `crates/fava-subscriptions-standard/tests/grouping.rs:112` + canary preflight | **M** — a genuine merge-compatibility mistake, causally detected in two independent places, with SHA-256 before/after and controls. Second-best executed break |
@@ -1467,7 +1467,7 @@ regression by automation.**
 
 Additional classes absent for the whole workspace:
 
-- **Provider panic** — one contract only (`ReplaceableEventMaterializer`).
+- **Provider panic** — one contract only (`EditApplier`).
 - **Ignore-cancellation provider** (Falsifier M) — no double ignores cancellation deliberately.
 - **NIP-42 auth** (RELAY-007) — no implementation, no test.
 - **NIP-05 / NIP-11 fetch cache** (RELAY-009/010, Falsifier L) — `grep -rn "FetchCache\|nip05\|nip11"`
@@ -1476,7 +1476,7 @@ Additional classes absent for the whole workspace:
 - **Planner substitution** (Falsifier J) — two planners, no differential.
 - **External-provider proof** (Falsifier A) — 2 of the 6 required external implementations exist
   (`falsifiers/external-null-cache` = memory/null event cache;
-  `falsifiers/external-semantic-capability` = materializer capability). Missing: external
+  `falsifiers/external-semantic-capability` = applier capability). Missing: external
   static-table router, external no-grouping planner, external scripted transport, external no-retry
   delivery policy, external persistent write store.
 
@@ -1592,7 +1592,7 @@ Each item below came from a search or a read that actually ran.
 - **`crates/fava/tests/semantic_write_failures/**` is the strongest suite in the workspace.**
   `FaultingWriteStore` (`faults.rs:96`) provides eight independent, externally driven fault knobs
   including succeed-then-fail after signature (`:307-310`) and after route (`:335-338`) and a
-  `Barrier` pause inside `apply_route` (`:339-343`). `materializer_panic_is_scoped_and_attributed`
+  `Barrier` pause inside `apply_route` (`:339-343`). `applier_panic_is_scoped_and_attributed`
   (`semantic_write_failures.rs:165`) proves a provider panic is attributed and an unrelated kind still
   progresses (`:196-205`). `source_isolation.rs:44` and `:85` are a true two-way isolation contrast
   with the failure reason naming the specific closed source.

@@ -10,7 +10,7 @@
 //! ```
 //!
 //! ```compile_fail
-//! use fava_nip02::Nip02Materializer;
+//! use fava_nip02::Nip02Applier;
 //! ```
 //!
 //! ```compile_fail
@@ -33,7 +33,7 @@ mod edit;
 mod query;
 
 pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
-pub use edit::{follow, follow_with, materializer, unfollow};
+pub use edit::{follow, follow_with, applier, unfollow};
 pub use query::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
 #[cfg(test)]

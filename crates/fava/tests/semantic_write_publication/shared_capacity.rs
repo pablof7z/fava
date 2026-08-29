@@ -5,17 +5,17 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let first_keys = Keys::generate();
     let second_keys = Keys::generate();
-    let first_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
-    let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let first_applier = Arc::new(TestApplier::new(Kind::ContactList));
+    let second_applier = Arc::new(TestApplier::new(Kind::ContactList));
     let (first, _, _, _, _) = assembly(
         Arc::clone(&store),
         first_keys.clone(),
-        vec![Arc::clone(&first_materializer)],
+        vec![Arc::clone(&first_applier)],
     );
     let (second, _, _, second_signer, second_publisher) = assembly(
         Arc::clone(&store),
         second_keys.clone(),
-        vec![Arc::clone(&second_materializer)],
+        vec![Arc::clone(&second_applier)],
     );
 
     let first_write = first
@@ -37,7 +37,7 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
         first_write.receipt().unwrap().write_id,
         first_write.write_id()
     );
-    assert_eq!(first_materializer.calls().len(), 1);
-    assert_eq!(second_materializer.calls().len(), 0);
+    assert_eq!(first_applier.calls().len(), 1);
+    assert_eq!(second_applier.calls().len(), 0);
     assert_no_effects(&store, &second_signer, &second_publisher, 1);
 }

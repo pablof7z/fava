@@ -3,10 +3,10 @@
 use std::collections::BTreeMap;
 
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
+    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
     ReceiptId, ReceiptOutcome, SignatureState, WriteId, WriteRouting,
 };
-use fava_write_store::{WriteStoreError, validate_current_materialization, validate_receipt_text};
+use fava_write_store::{WriteStoreError, validate_current_revision, validate_receipt_text};
 
 use crate::lifecycle::UnsignedEventView;
 use crate::lifecycle::{destinations, next_revision};
@@ -29,23 +29,23 @@ impl RedbWriteStore {
                     (
                         receipt.write_id,
                         receipt.receipt_id,
-                        receipt.current.publication.materialization_id,
+                        receipt.current.publication.revision_id,
                         receipt.current.id(),
                     )
                 })
                 .collect::<Vec<_>>()
         };
-        for (write_id, receipt_id, materialization_id, event_id) in authorized {
+        for (write_id, receipt_id, revision_id, event_id) in authorized {
             self.record_signer_retryable_current(
                 write_id,
                 receipt_id,
-                materialization_id,
+                revision_id,
                 event_id,
                 format!(
-                    "process ended after signing authorization for write {} receipt {} materialization {} event {}; retry is permitted",
+                    "process ended after signing authorization for write {} receipt {} revision {} event {}; retry is permitted",
                     write_id.as_u64(),
                     receipt_id.as_u64(),
-                    materialization_id.as_u64(),
+                    revision_id.as_u64(),
                     event_id
                 ),
             )?;
@@ -57,7 +57,7 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError> {
         let mut state = self.lock()?;
@@ -66,7 +66,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(&receipt, write_id, revision_id, event_id)?;
         if !matches!(receipt.current.event, EventValue::Unsigned(_)) {
             return Err(WriteStoreError::Refused(
                 "event is already signed".to_owned(),
@@ -100,10 +100,10 @@ impl RedbWriteStore {
             });
         let signature = if reserved {
             SignatureState::Retryable(format!(
-                "signing authorization for write {} receipt {} materialization {} event {} deferred until its coordinate reservation resolves",
+                "signing authorization for write {} receipt {} revision {} event {} deferred until its coordinate reservation resolves",
                 write_id.as_u64(),
                 receipt_id.as_u64(),
-                materialization_id.as_u64(),
+                revision_id.as_u64(),
                 event_id
             ))
         } else {
@@ -127,7 +127,7 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
@@ -138,7 +138,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(&receipt, write_id, revision_id, event_id)?;
         if !matches!(
             receipt.current.publication.signature,
             SignatureState::Unsigned | SignatureState::Authorized | SignatureState::Retryable(_)
@@ -165,7 +165,7 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError> {
         let state = self.lock()?;
@@ -173,7 +173,7 @@ impl RedbWriteStore {
             .receipts
             .get(&receipt_id)
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(receipt, write_id, revision_id, event_id)?;
         Ok(state
             .semantics
             .get(&receipt_id)
@@ -184,7 +184,7 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
@@ -197,7 +197,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(&receipt, write_id, revision_id, event_id)?;
         match &receipt.current.event {
             EventValue::Signed(current) if current == &event => return Ok(receipt),
             EventValue::Signed(_) => {
@@ -239,7 +239,7 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
@@ -250,7 +250,7 @@ impl RedbWriteStore {
             .get(&receipt_id)
             .cloned()
             .ok_or_else(|| WriteStoreError::Refused("receipt does not exist".to_owned()))?;
-        validate_current_materialization(&receipt, write_id, materialization_id, event_id)?;
+        validate_current_revision(&receipt, write_id, revision_id, event_id)?;
         if matches!(&receipt.current.publication.signature, SignatureState::Refused(current) if current == &reason)
         {
             return Ok(receipt);
@@ -318,20 +318,20 @@ impl RedbWriteStore {
                 "durable successor predecessor is not authorized".to_owned(),
             ));
         }
-        let mut retired = receipt.current.publication.retired_materializations.clone();
+        let mut retired = receipt.current.publication.retired_revisions.clone();
         retired.push((
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
-            receipt.current.publication.materialization_source,
-            receipt.current.publication.materialization_failure.clone(),
+            receipt.current.publication.revision_source,
+            receipt.current.publication.revision_failure.clone(),
         ));
-        let materialization_id = receipt
+        let revision_id = receipt
             .current
             .publication
-            .materialization_id
+            .revision_id
             .checked_next()
             .ok_or_else(|| {
-                WriteStoreError::Refused("materialization identity exhausted".to_owned())
+                WriteStoreError::Refused("revision identity exhausted".to_owned())
             })?;
         let source_correction = edit.is_none();
         let successor_destinations = if source_correction {
@@ -348,10 +348,10 @@ impl RedbWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id: receipt.write_id,
-            materialization_id,
-            materialization_source: successor_source.map(|(id, _)| id),
-            materialization_failure: None,
-            retired_materializations: retired,
+            revision_id,
+            revision_source: successor_source.map(|(id, _)| id),
+            revision_failure: None,
+            retired_revisions: retired,
             signature: SignatureState::Unsigned,
             destinations: successor_destinations,
         };

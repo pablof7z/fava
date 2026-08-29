@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Event, Fava, Kind, ReplaceableEventEdit, ReplaceableEventMaterializer, Write};
+use fava::{Event, Fava, Kind, EventEdit, EditApplier, Write};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
@@ -10,7 +10,7 @@ use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
 use nostr::key::Keys;
 
-use super::ControlledMaterializer;
+use super::ControlledApplier;
 use super::support::{
     NoopTransport, RecordingPublisher, UnavailableSigner, relay_event, relay_occurrence, relay_url,
 };
@@ -25,8 +25,8 @@ pub(super) fn edit_intent(author: fava::PublicKey, kind: Kind) -> WriteIntent {
     .unwrap()
 }
 
-pub(super) fn edit(kind: Kind) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit")
+pub(super) fn edit(kind: Kind) -> EventEdit {
+    EventEdit::new(kind, None, vec![1]).expect("bounded edit")
 }
 
 pub(super) fn publish_edit(fava: &Fava, author: fava::PublicKey, kind: Kind) -> Write {
@@ -41,7 +41,7 @@ pub(super) fn assembly<W>(
     keys: &Keys,
     cache: Arc<MemoryEventCache>,
     store: Arc<W>,
-    materializers: Vec<Arc<ControlledMaterializer>>,
+    appliers: Vec<Arc<ControlledApplier>>,
 ) -> Fava
 where
     W: WriteStore + 'static,
@@ -56,10 +56,10 @@ where
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),
         ))
-        .materializers(
-            materializers
+        .appliers(
+            appliers
                 .into_iter()
-                .map(|value| value as Arc<dyn ReplaceableEventMaterializer>),
+                .map(|value| value as Arc<dyn EditApplier>),
         )
         .build()
         .unwrap()
@@ -72,7 +72,7 @@ pub(super) async fn wait_failure(fava: &Fava, receipt_id: fava::ReceiptId) -> fa
             if receipt
                 .current
                 .publication
-                .materialization_failure
+                .revision_failure
                 .is_some()
             {
                 return receipt;
@@ -90,7 +90,7 @@ pub(super) async fn wait_public_failure(observation: &mut fava::Observation) -> 
             snapshot.events.iter().any(|record| {
                 record
                     .publication()
-                    .and_then(|evidence| evidence.materialization_failure.as_ref())
+                    .and_then(|evidence| evidence.revision_failure.as_ref())
                     .is_some()
             })
         })
@@ -103,7 +103,7 @@ pub(super) async fn wait_public_failure(observation: &mut fava::Observation) -> 
         .find_map(|record| {
             record
                 .publication()
-                .and_then(|evidence| evidence.materialization_failure.clone())
+                .and_then(|evidence| evidence.revision_failure.clone())
         })
         .expect("matching snapshot carries a failure")
 }

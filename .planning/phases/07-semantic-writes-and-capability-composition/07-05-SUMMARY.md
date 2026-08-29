@@ -8,7 +8,7 @@ requires:
   - phase: 07-02
     provides: bounded semantic-write state-machine contracts and custody limits
   - phase: 07-04
-    provides: public recovery assembly with validated materializer selection
+    provides: public recovery assembly with validated applier selection
 provides:
   - hard-versioned redb semantic custody with strict refusal of missing or mismatched schemas
   - atomic durable parity for coordinate ownership, generations, failure evidence, and settlement
@@ -48,13 +48,13 @@ key-files:
     - crates/fava-write-store-memory/src/lib.rs
     - crates/fava-write-store-memory/src/semantic.rs
     - crates/fava-publication/src/lib.rs
-    - crates/fava-publication/src/materialization.rs
+    - crates/fava-publication/src/revision.rs
 
 key-decisions:
   - "Stamp schema version 1 only for a genuinely new database; an existing database without that version is incompatible."
   - "Persist receipt and private semantic custody in one row, and reconstruct the coordinate owner before exposing recovered state."
-  - "Keep materializer validation in Fava assembly; the redb provider only reconstructs durable custody tuples."
-  - "Carry the existing source identity and timestamp values together through recovery; never infer a source floor from materialization time."
+  - "Keep applier validation in Fava assembly; the redb provider only reconstructs durable custody tuples."
+  - "Carry the existing source identity and timestamp values together through recovery; never infer a source floor from revision time."
   - "Refuse over-bound or incoherent schema-v1 state before ambiguity repair, publication, or notification."
 
 patterns-established:
@@ -124,7 +124,7 @@ status: complete
 - Matched memory semantic custody in redb, including one coordinate owner, exact generation replacement, failed-source evidence, terminal release, bounded refusal, and notification only after durable commit.
 - Proved first-generation survival, successor and failed-source recovery, and retired/terminal/cancelled inertness after marker-barrier SIGKILL.
 - Refused malformed identities, text, evidence, outcomes, source attribution, and over-bound recovered counts before returning state.
-- Preserved exact persisted source time through the existing recovery tuple so a legitimate newer source resumes once even when materialization time is far ahead.
+- Preserved exact persisted source time through the existing recovery tuple so a legitimate newer source resumes once even when revision time is far ahead.
 - Preserved the original Milestone 5 process-kill evidence and passed all Cargo, canary, vocabulary, and Bazel gates.
 
 ## RED and Deliberate-Break Evidence
@@ -172,13 +172,13 @@ Cross-plan files changed only to carry existing neutral recovery values:
 
 - `crates/fava-write-store/src/lib.rs` - recovery tuple returns the persisted source ID and timestamp together.
 - `crates/fava-write-store-memory/src/{lib.rs,semantic.rs}` - memory provider preserves the same tuple contract.
-- `crates/fava-publication/src/{lib.rs,materialization.rs}` - public recovery uses the persisted timestamp and removes the inferred `created_at - 1` floor and obsolete lookup helper.
+- `crates/fava-publication/src/{lib.rs,revision.rs}` - public recovery uses the persisted timestamp and removes the inferred `created_at - 1` floor and obsolete lookup helper.
 
 ## Decisions Made
 
 - Missing schema metadata on any existing database is incompatible; only a newly created database receives the current stamp.
 - Receipt and semantic custody are stored atomically without introducing a public or cross-crate nominal type.
-- Reopen reconstructs coordinate ownership and exact current/failure identities, while Fava assembly remains the authority that validates materializer selection before recovery.
+- Reopen reconstructs coordinate ownership and exact current/failure identities, while Fava assembly remains the authority that validates applier selection before recovery.
 - Exact retired completion replay is an attributed no-op; it never revives or replaces the current generation.
 - Exact generation/source validation precedes idempotent success, so stale callers cannot reuse current output as an accepted completion.
 - Terminal retention always preserves the receipt currently terminalizing and evicts another retained terminal atomically from durable, mirror, query, and receipt-notification state.
@@ -220,9 +220,9 @@ Cross-plan files changed only to carry existing neutral recovery values:
 **3. [Rule 1 - Bug] Removed inferred source timestamps from public recovery**
 
 - **Found during:** Strengthened successor SIGKILL proof
-- **Issue:** Falling back to `materialization.created_at - 1` could hide a legitimate source newer than the durable selected source and then install empty state.
+- **Issue:** Falling back to `revision.created_at - 1` could hide a legitimate source newer than the durable selected source and then install empty state.
 - **Fix:** Extended the existing neutral recovery tuple with the already-persisted timestamp and qualified recovery directly from that exact value.
-- **Files modified:** `crates/fava-write-store/src/lib.rs`, `crates/fava-write-store-memory/src/{lib.rs,semantic.rs}`, `crates/fava-write-store-redb/src/{ops.rs,semantic.rs}`, `crates/fava-publication/src/{lib.rs,materialization.rs}`
+- **Files modified:** `crates/fava-write-store/src/lib.rs`, `crates/fava-write-store-memory/src/{lib.rs,semantic.rs}`, `crates/fava-write-store-redb/src/{ops.rs,semantic.rs}`, `crates/fava-publication/src/{lib.rs,revision.rs}`
 - **Verification:** The successor SIGKILL scenario advances generation 2 to 3 from the exact source once, then reassembly causes zero calls.
 - **Committed in:** `72fa134`
 
@@ -253,7 +253,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-The durable provider now refuses every tested malformed or over-bound reconstruction before exposure, and public assembly recovers one exactly qualified live generation only after validating the selected materializer. No blockers remain for Plan 07-06.
+The durable provider now refuses every tested malformed or over-bound reconstruction before exposure, and public assembly recovers one exactly qualified live generation only after validating the selected applier. No blockers remain for Plan 07-06.
 
 ## Self-Check: PASSED
 

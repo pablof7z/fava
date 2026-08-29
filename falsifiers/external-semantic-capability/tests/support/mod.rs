@@ -6,7 +6,7 @@ use std::time::Duration;
 use fava::{EventValue, Fava, Receipt, RelayUrl};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_external_semantic_capability_proof::selected_materializer;
+use fava_external_semantic_capability_proof::selected_applier;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer_local::LocalSigner;
@@ -50,7 +50,7 @@ pub fn harness(keys: Keys) -> Harness {
         .subscription_planner(Arc::new(StandardSubscriptionPlanner))
         .transport(Arc::clone(&transport))
         .signer(Arc::new(LocalSigner::new(keys)))
-        .materializers([selected_materializer()])
+        .appliers([selected_applier()])
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()

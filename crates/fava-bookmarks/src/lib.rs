@@ -15,15 +15,15 @@
 //! ```
 //!
 //! ```compile_fail
-//! use fava_bookmarks::BookmarkMaterializer;
+//! use fava_bookmarks::BookmarkApplier;
 //! ```
 
 use std::sync::Arc;
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    EventBuilder, EventId, EventValue, Kind, PublicKey, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventId, EventValue, Kind, PublicKey, EventEdit,
+    EditApplier, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const BOOKMARK_KIND: u16 = 10_003;
@@ -38,7 +38,7 @@ const COORDINATE: u8 = 2;
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
 /// private change encoding.
-pub fn bookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn bookmark_event(target: EventId) -> Result<EventEdit, WriteIntentError> {
     edit(Target::Event(target), Operation::Add)
 }
 
@@ -48,7 +48,7 @@ pub fn bookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteInte
 ///
 /// Returns an existing write-intent refusal when the target cannot fit the
 /// private change encoding.
-pub fn unbookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn unbookmark_event(target: EventId) -> Result<EventEdit, WriteIntentError> {
     edit(Target::Event(target), Operation::Remove)
 }
 
@@ -60,7 +60,7 @@ pub fn unbookmark_event(target: EventId) -> Result<ReplaceableEventEdit, WriteIn
 /// or an invalid replaceable coordinate.
 pub fn bookmark_coordinate(
     target: EventCoordinate,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
     edit(Target::Coordinate(target), Operation::Add)
 }
@@ -73,15 +73,15 @@ pub fn bookmark_coordinate(
 /// or an invalid replaceable coordinate.
 pub fn unbookmark_coordinate(
     target: EventCoordinate,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
     edit(Target::Coordinate(target), Operation::Remove)
 }
 
-/// Select the pure public-bookmark materializer for application assembly.
+/// Select the pure public-bookmark applier for application assembly.
 #[must_use]
-pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
-    Arc::new(BookmarkMaterializer)
+pub fn applier() -> Arc<dyn EditApplier> {
+    Arc::new(BookmarkApplier)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,9 +111,9 @@ struct Change {
     target: Target,
 }
 
-fn edit(target: Target, operation: Operation) -> Result<ReplaceableEventEdit, WriteIntentError> {
+fn edit(target: Target, operation: Operation) -> Result<EventEdit, WriteIntentError> {
     let change = encode(&Change { operation, target })?;
-    ReplaceableEventEdit::new(bookmark_kind(), None, change)
+    EventEdit::new(bookmark_kind(), None, change)
 }
 
 fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
@@ -209,12 +209,12 @@ fn decode_coordinate(bytes: &[u8]) -> Result<EventCoordinate, WriteIntentError> 
     Ok(coordinate)
 }
 
-fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> {
+fn decode_edit(edit: &EventEdit) -> Result<Change, WriteIntentError> {
     validate_edit_coordinate(edit)?;
     decode(edit.change())
 }
 
-fn validate_edit_coordinate(edit: &ReplaceableEventEdit) -> Result<(), WriteIntentError> {
+fn validate_edit_coordinate(edit: &EventEdit) -> Result<(), WriteIntentError> {
     if edit.kind() == bookmark_kind() && edit.identifier().is_none() {
         Ok(())
     } else {
@@ -242,20 +242,20 @@ fn validate_target_coordinate(coordinate: &EventCoordinate) -> Result<(), WriteI
     }
 }
 
-struct BookmarkMaterializer;
+struct BookmarkApplier;
 
-impl ReplaceableEventMaterializer for BookmarkMaterializer {
+impl EditApplier for BookmarkApplier {
     fn kind(&self) -> Kind {
         bookmark_kind()
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         decode_edit(edit).is_ok()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -285,7 +285,7 @@ fn qualified_source(
     }
     if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
-            "bookmark materialization timestamp must succeed its source".to_owned(),
+            "bookmark revision timestamp must succeed its source".to_owned(),
         ));
     }
     let content = match source {

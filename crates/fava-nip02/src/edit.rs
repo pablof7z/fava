@@ -1,10 +1,10 @@
-//! Bounded NIP-02 change encoding and lossless materialization.
+//! Bounded NIP-02 change encoding and lossless revision.
 
 use std::fmt;
 use std::sync::Arc;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier,
     Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
@@ -26,7 +26,7 @@ use crate::bounds;
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
 #[allow(clippy::needless_pass_by_value)]
-pub fn follow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn follow(target: impl fmt::Display) -> Result<EventEdit, WriteIntentError> {
     edit(parse_target(&target)?, Operation::Add)
 }
 
@@ -37,14 +37,14 @@ pub fn follow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, WriteIn
 /// Returns an existing write-intent refusal if the private codec cannot encode
 /// the target within the neutral edit bound.
 #[allow(clippy::needless_pass_by_value)]
-pub fn unfollow(target: impl fmt::Display) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn unfollow(target: impl fmt::Display) -> Result<EventEdit, WriteIntentError> {
     edit(parse_target(&target)?, Operation::Remove)
 }
 
 /// Produce one bounded edit that follows `target` with optional NIP-02 metadata.
 ///
 /// Existing matching rows remain byte-for-byte authoritative; supplied metadata
-/// is used only when materialization appends a missing target.
+/// is used only when revision appends a missing target.
 ///
 /// # Errors
 ///
@@ -55,7 +55,7 @@ pub fn follow_with(
     target: impl fmt::Display,
     relay: Option<RelayUrl>,
     petname: Option<&str>,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     let target = parse_target(&target)?;
     if relay.is_none() && petname.is_none() {
         return edit(target, Operation::Add);
@@ -70,10 +70,10 @@ pub fn follow_with(
     )
 }
 
-/// Select the pure NIP-02 materializer for application assembly.
+/// Select the pure NIP-02 applier for application assembly.
 #[must_use]
-pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
-    Arc::new(Nip02Materializer)
+pub fn applier() -> Arc<dyn EditApplier> {
+    Arc::new(Nip02Applier)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -102,9 +102,9 @@ struct Change {
     target: PublicKey,
 }
 
-fn edit(target: PublicKey, operation: Operation) -> Result<ReplaceableEventEdit, WriteIntentError> {
+fn edit(target: PublicKey, operation: Operation) -> Result<EventEdit, WriteIntentError> {
     let change = encode(&Change { operation, target })?;
-    ReplaceableEventEdit::new(Kind::ContactList, None, change)
+    EventEdit::new(Kind::ContactList, None, change)
 }
 
 fn encode(change: &Change) -> Result<Vec<u8>, WriteIntentError> {
@@ -271,12 +271,12 @@ impl fmt::Write for BoundedTargetText {
     }
 }
 
-fn decode_edit(edit: &ReplaceableEventEdit) -> Result<Change, WriteIntentError> {
+fn decode_edit(edit: &EventEdit) -> Result<Change, WriteIntentError> {
     validate_coordinate(edit)?;
     decode(edit.change())
 }
 
-fn validate_coordinate(edit: &ReplaceableEventEdit) -> Result<(), WriteIntentError> {
+fn validate_coordinate(edit: &EventEdit) -> Result<(), WriteIntentError> {
     if edit.kind() == Kind::ContactList && edit.identifier().is_none() {
         Ok(())
     } else {
@@ -286,20 +286,20 @@ fn validate_coordinate(edit: &ReplaceableEventEdit) -> Result<(), WriteIntentErr
     }
 }
 
-struct Nip02Materializer;
+struct Nip02Applier;
 
-impl ReplaceableEventMaterializer for Nip02Materializer {
+impl EditApplier for Nip02Applier {
     fn kind(&self) -> Kind {
         Kind::ContactList
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         decode_edit(edit).is_ok()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -337,7 +337,7 @@ fn qualified_source(
     }
     if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
-            "NIP-02 materialization timestamp must succeed its source".to_owned(),
+            "NIP-02 revision timestamp must succeed its source".to_owned(),
         ));
     }
     let content = match source {

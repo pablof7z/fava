@@ -77,13 +77,13 @@ pub const BLOCKED: &[Blocked] = &[
         severity: "major",
     },
     Blocked {
-        id: "replaceable-edit-rematerialization",
+        id: "replaceable-edit-reapplication",
         workaround: "NoopTransport, a gate Publisher that holds and releases attempts, and a \
                      CompletionStore that reimplements all twenty-three WriteStore methods as \
                      forwarding wrappers over MemoryWriteStore purely to observe when signing \
                      completed",
         wall: "There is no public signal for publication lifecycle transitions. \
-               Fava::receipt_changes reports committed receipts but not materialization \
+               Fava::receipt_changes reports committed receipts but not revision \
                installation, signer refusal, route application, or attempt start. To see them \
                an application must implement the internal WriteStore contract in full.",
         severity: "major",
@@ -91,7 +91,7 @@ pub const BLOCKED: &[Blocked] = &[
     Blocked {
         id: "replaceable-edit-opposing-operations",
         workaround: "NoopTransport plus the canary Publisher and CompletionStore",
-        wall: "Same as replaceable-edit-rematerialization.",
+        wall: "Same as replaceable-edit-reapplication.",
         severity: "major",
     },
     Blocked {
@@ -129,7 +129,7 @@ pub const BLOCKED: &[Blocked] = &[
     },
     Blocked {
         id: "local-replaceable-shadow-and-cancel",
-        workaround: "same hand-fed EventCache::admit and WriteStore::accept_materialized calls",
+        workaround: "same hand-fed EventCache::admit and WriteStore::accept_applied calls",
         wall: "Same missing local-state door as local-source-merge.",
         severity: "show-stopper",
     },
@@ -143,7 +143,7 @@ pub const BLOCKED: &[Blocked] = &[
     },
     Blocked {
         id: "slow-consumer-latest-state",
-        workaround: "called WriteStore::accept_materialized 256 times to produce a burst",
+        workaround: "called WriteStore::accept_applied 256 times to produce a burst",
         wall: "Same missing local-state door as local-source-merge.",
         severity: "show-stopper",
     },

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use fava_routing::RoutePlan;
 use fava_write::{
     EventValue, LocalWriteEvent, PublicKey, PublicationEvidence, Receipt, ReceiptId,
-    ReceiptOutcome, ReplaceableEventEdit, SignatureState, UnsignedEvent, WriteRouting,
+    ReceiptOutcome, EventEdit, SignatureState, UnsignedEvent, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
@@ -23,7 +23,7 @@ impl MemoryWriteStore {
         &self,
         state: &mut WriteState,
         receipt_id: ReceiptId,
-        edit: ReplaceableEventEdit,
+        edit: EventEdit,
         author: PublicKey,
         routing: &WriteRouting,
         event: UnsignedEvent,
@@ -58,11 +58,11 @@ impl MemoryWriteStore {
                 "same-coordinate edit source is not the exact current generation".to_owned(),
             ));
         }
-        if receipt.current.publication.retired_materializations.len()
+        if receipt.current.publication.retired_revisions.len()
             >= destination_evidence_capacity()
         {
             return Err(WriteStoreError::Refused(
-                "retired materialization evidence capacity reached".to_owned(),
+                "retired revision evidence capacity reached".to_owned(),
             ));
         }
         let successor_route = initial_route
@@ -99,28 +99,28 @@ impl MemoryWriteStore {
             });
         }
 
-        let mut retired = receipt.current.publication.retired_materializations.clone();
+        let mut retired = receipt.current.publication.retired_revisions.clone();
         retired.push((
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
-            receipt.current.publication.materialization_source,
-            receipt.current.publication.materialization_failure.clone(),
+            receipt.current.publication.revision_source,
+            receipt.current.publication.revision_failure.clone(),
         ));
-        let materialization_id = receipt
+        let revision_id = receipt
             .current
             .publication
-            .materialization_id
+            .revision_id
             .checked_next()
             .ok_or_else(|| {
-                WriteStoreError::Refused("materialization identity exhausted".to_owned())
+                WriteStoreError::Refused("revision identity exhausted".to_owned())
             })?;
         let publication = PublicationEvidence {
             receipt_id,
             write_id: receipt.write_id,
-            materialization_id,
-            materialization_source: current_source.map(|(id, _)| id),
-            materialization_failure: None,
-            retired_materializations: retired,
+            revision_id,
+            revision_source: current_source.map(|(id, _)| id),
+            revision_failure: None,
+            retired_revisions: retired,
             signature: SignatureState::Unsigned,
             destinations: destinations(routing),
         };

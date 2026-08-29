@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use fava_relay::RelaySessionKey;
 use fava_transport::Transport;
-use fava_write::{Event, MaterializationId, ReceiptId, WriteId};
+use fava_write::{Event, RevisionId, ReceiptId, WriteId};
 
 /// One exact publication attempt at one exact destination.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,8 +15,8 @@ pub struct PublishAttempt {
     pub write_id: WriteId,
     /// Stable receipt identity.
     pub receipt_id: ReceiptId,
-    /// Exact immutable materialization generation being published.
-    pub materialization_id: MaterializationId,
+    /// Exact immutable revision generation being published.
+    pub revision_id: RevisionId,
     /// One-based durable attempt count for this destination.
     pub number: u32,
     /// Exact relay and access destination.

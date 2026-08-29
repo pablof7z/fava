@@ -2,13 +2,13 @@
 
 ## Defect
 
-`WriteId`, `ReceiptId`, and `MaterializationId` are opaque types, but their
+`WriteId`, `ReceiptId`, and `RevisionId` are opaque types, but their
 infallible numeric constructors admit zero even though durable recovery treats
-zero next identity and zero materialization generation as incoherent. A Redb
+zero next identity and zero revision generation as incoherent. A Redb
 row whose key and every nested write/receipt identity are coherently rewritten
 to zero can therefore reenter custody.
 
-Materialization successor arithmetic is also repeated by both write-store
+Revision successor arithmetic is also repeated by both write-store
 providers instead of being owned by the shared generation value.
 
 ## Required outcome
@@ -20,7 +20,7 @@ mutation authority: only a successful `WriteStore` commit makes an identity
 live, and every later mutation still requires exact current identity.
 
 `WriteId` and `ReceiptId` are minted together by initial acceptance and never
-advance. `MaterializationId` begins at `FIRST` inside the store and advances
+advance. `RevisionId` begins at `FIRST` inside the store and advances
 only through checked successor construction during a currentness-qualified
 store mutation. No caller supplies an initial generation, identity allocator,
 owner token, or wrapper.
@@ -34,7 +34,7 @@ without advancing metadata, publishing a receipt change, or leaving a row.
 
 The memory provider owns the same nonzero next-identity fact for its process
 lifetime and refuses exhaustion without changing revision, receipts, snapshot,
-or notifications. Materialization advancement returns `None` at `u64::MAX` and
+or notifications. Revision advancement returns `None` at `u64::MAX` and
 never wraps.
 
 ## Falsifiers
@@ -45,8 +45,8 @@ never wraps.
 - Replace checked next-identity advancement with wrapping arithmetic;
   `exhausted_write_identity_refuses_without_state_or_notification` and
   `exhausted_durable_identity_refuses_acceptance_atomically` must fail.
-- Replace `MaterializationId::checked_next` with wrapping arithmetic;
-  `materialization_generation_advancement_is_checked` must fail.
+- Replace `RevisionId::checked_next` with wrapping arithmetic;
+  `revision_generation_advancement_is_checked` must fail.
 - Remove public fallible `ReceiptId` reconstruction;
   `ordered_explicit_route_survives_reopen_with_one_lane_per_identity` must stop
   compiling or fail to reattach from its stored numeric identity.

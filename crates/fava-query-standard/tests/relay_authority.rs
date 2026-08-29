@@ -8,7 +8,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::RelayEvent;
 use fava_write::{
-    EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, SignatureState,
+    EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, ReceiptId, SignatureState,
     WriteId,
 };
 use nostr::event::{
@@ -76,11 +76,11 @@ fn local(event: Event) -> SourceSnapshot {
         PublicationEvidence {
             receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
             write_id: WriteId::try_from(2).expect("nonzero write identity"),
-            materialization_id: MaterializationId::try_from(3)
-                .expect("nonzero materialization identity"),
-            materialization_source: None,
-            materialization_failure: None,
-            retired_materializations: Vec::new(),
+            revision_id: RevisionId::try_from(3)
+                .expect("nonzero revision identity"),
+            revision_source: None,
+            revision_failure: None,
+            retired_revisions: Vec::new(),
             signature: SignatureState::Signed,
             destinations: BTreeMap::new(),
         },
@@ -101,11 +101,11 @@ fn local_unsigned(event: UnsignedEvent) -> SourceSnapshot {
         PublicationEvidence {
             receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
             write_id: WriteId::try_from(2).expect("nonzero write identity"),
-            materialization_id: MaterializationId::try_from(3)
-                .expect("nonzero materialization identity"),
-            materialization_source: None,
-            materialization_failure: None,
-            retired_materializations: Vec::new(),
+            revision_id: RevisionId::try_from(3)
+                .expect("nonzero revision identity"),
+            revision_source: None,
+            revision_failure: None,
+            retired_revisions: Vec::new(),
             signature: SignatureState::Unsigned,
             destinations: BTreeMap::new(),
         },

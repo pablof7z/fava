@@ -109,10 +109,10 @@ The five open product decisions remain unpromised unless their owning phase qual
 **Requirements:** WRITE-01, WRITE-02, WRITE-03, WRITE-04, WRITE-05, WRITE-06, WRITE-07, WRITE-08, WRITE-09, WRITE-10, WRITE-11
 **Success Criteria** (what must be TRUE):
 
-  1. An application accepts an unsigned or verified pre-signed event only after its obligation, current materialization, receipt identity, and recovery cursor are durable; unsigned authorship selects the signer without becoming relay-auth identity.
-  2. Matching queries expose the accepted write-store materialization before relay acknowledgement, while the event cache contains no unsigned/unpublished local event and may later admit only the verified relay echo.
+  1. An application accepts an unsigned or verified pre-signed event only after its obligation, current revision, receipt identity, and recovery cursor are durable; unsigned authorship selects the signer without becoming relay-auth identity.
+  2. Matching queries expose the accepted write-store revision before relay acknowledgement, while the event cache contains no unsigned/unpublished local event and may later admit only the verified relay echo.
   3. Exact explicit destinations bypass routers; publisher handoff and delivery retry/give-up policy remain separate, and each destination exposes exact attempt generation, relay text, acknowledgement, rejection, ambiguity, cancellation, and terminal reason.
-  4. Proven pre-handoff cancellation emits zero EVENT frames, retracts local visibility, and records an idempotent terminal receipt independently of receipt removal; process kill after acceptance recovers the same obligation, write, receipt, and materialization without resubmission.
+  4. Proven pre-handoff cancellation emits zero EVENT frames, retracts local visibility, and records an idempotent terminal receipt independently of receipt removal; process kill after acceptance recovers the same obligation, write, receipt, and revision without resubmission.
 
 **Plans:** Pre-GSD execution; completion provenance and requirement evidence are recorded in `05-VERIFICATION.md` without inventing retrospective plans.
 
@@ -168,9 +168,9 @@ Plans:
 **Requirements:** CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08, CAP-09
 **Success Criteria** (what must be TRUE):
 
-  1. A protocol capability crate exposes ordinary event values or authorless semantic edits and opposing operations; acceptance freezes the author once, and a first-value edit materializes and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
-  2. When newer qualified source state arrives, still-live edits rematerialize while preserving unrelated changes and the same write/receipt identity across generations.
-  3. Signer, route, publisher, and delivery completions for retired materialization generations are attributable but inert.
+  1. A protocol capability crate exposes ordinary event values or authorless semantic edits and opposing operations; acceptance freezes the author once, and a first-value edit applies and publishes through the ordinary write receipt without the crate signing, routing, delivering, or owning receipts.
+  2. When newer qualified source state arrives, still-live edits reapply while preserving unrelated changes and the same write/receipt identity across generations.
+  3. Signer, route, publisher, and delivery completions for retired revision generations are attributable but inert.
   4. Two unrelated capability crates pass the shared public corpus; adding capability N+1 changes only its crate and selected assembly metadata, while arbitrary/future event kinds remain usable without universal-core switches.
 
 **Plans:** 9/9 complete
@@ -270,7 +270,7 @@ Plans:
 
   1. An application adds a signer after Fava is built and an already accepted write awaiting that exact pubkey signs and continues under the same write and receipt identity.
   2. Duplicate add refuses without mutation, replacement is explicit, removal preserves accepted writes, and re-add wakes only work for the exact restored pubkey.
-  3. A signer completion released after replacement or removal is attributable but inert by exact operation and materialization generation.
+  3. A signer completion released after replacement or removal is attributable but inert by exact operation and revision generation.
   4. Signer registration is bounded with typed refusal, and signer provider execution occurs outside session/publication locks and store transactions.
 
 **Plans:** TBD

@@ -79,7 +79,7 @@ Evidence is preserved under `apps/canary/runs/` and excluded from Git.
 loopback port and data path. It publishes a kind-9007 group create and then the
 NIP-02 baseline/edit flow through the public `Fava::to(...).publish` lifecycle.
 The retained manifest correlates local observation before signing, the exact
-relay echo, typed lossless decode, write/receipt/materialization/event
+relay echo, typed lossless decode, write/receipt/revision/event
 identities, executable SHA-256, Croissant source HEAD, declared bounds, and
 completed PID/port teardown.
 

@@ -23,7 +23,7 @@ Specs read (whole or by section):
 
 Code read: `crates/fava/src/{lib,live,relay,routes,query_source,publication}.rs`,
 `crates/fava-observe/src/lib.rs`, `crates/fava-routing/src/chain.rs`,
-`crates/fava-publication/src/{lib,run,delivery,materialization}.rs`,
+`crates/fava-publication/src/{lib,run,delivery,revision}.rs`,
 `crates/fava-publisher/src/lib.rs`, `crates/fava-publisher-nip01/src/lib.rs`,
 `crates/fava-signer/src/lib.rs`, `crates/fava-diagnostics/src/lib.rs`, `Cargo.toml`.
 
@@ -139,7 +139,7 @@ async fn close_joins_outstanding_work() {
 | 2 | `crates/fava-routing/src/chain.rs:86` | `fava-routing` (`monitor_router`, one per router) | no | yes — `cancel_rx` | ≤ `MAX_ROUTERS` = 32 per chain; **no cap on chains** | no |
 | 3 | `crates/fava-routing/src/chain.rs:95` | `fava-routing` (`compose_updates`) | no | yes — `cancel_rx` | 1 per chain; no cap on chains | no |
 | 4 | `crates/fava-publication/src/run.rs:40` | `fava-publication` (custody loop, one per receipt) | no | yes — `cancellations` map | 1 per receipt; **no cap on receipts** | no |
-| 5 | `crates/fava-publication/src/run.rs:437` | `fava-publication` (`start_signing`) | no | **only if the provider honours `cancel`** — no Fava-side deadline | 1 per materialization generation | no |
+| 5 | `crates/fava-publication/src/run.rs:437` | `fava-publication` (`start_signing`) | no | **only if the provider honours `cancel`** — no Fava-side deadline | 1 per revision generation | no |
 | 6 | `crates/fava-publication/src/delivery.rs:67` | `fava-publication` (one delivery lane per destination) | no | **only if the provider honours `cancel`** | ≤ `destination_evidence_capacity()` per receipt | no |
 | 7 | `crates/fava/src/live.rs:59` | **`fava` facade** (`OpenedRelay::run`) — architecture assigns this to observe/transport | no | yes — `observation.attach_cancellation` | 1 per explicit relay per observation | no |
 | 8 | `crates/fava/src/routes.rs:53` | **`fava` facade** (automatic route-plan loop) | no | yes | 1 per automatic observation | no |
@@ -148,7 +148,7 @@ async fn close_joins_outstanding_work() {
 
 Test-only harnesses (out of shipping scope, listed for completeness): `crates/fava-transport-websocket/tests/conformance.rs:28,50,68,85`; `crates/fava/tests/write_settlement.rs:67,110,127,177,222`; `crates/fava/tests/semantic_write_failures/faults.rs:119`; `apps/canary/src/{proxy.rs:40, semantic_process.rs:55, croissant_simple_groups.rs:352,376, semantic_write_support.rs:420,427, croissant_simple_groups_supervision_tests.rs:84, hostile.rs:32, croissant.rs:697}`. Notably `apps/canary` is the *only* place in the repository that uses `JoinSet`/`JoinHandle` and actually drains tasks (`apps/canary/src/proxy.rs:105 drain_connections`) — the test harness has the join discipline the library lacks.
 
-Panic isolation: exactly one `catch_unwind` exists in the whole workspace, `crates/fava-publication/src/materialization.rs:218`, guarding the `ReplaceableEventMaterializer` provider. No other provider boundary is guarded. Because handle #1's `JoinHandle` is dropped, a panic inside `evaluator.evaluate(...)` (`crates/fava-observe/src/lib.rs:100` / `:156`) unwinds the task, drops `latest_tx`, and surfaces to the application as `Err(ObservationClosed)` from `Observation::changed()` (`crates/fava-observe/src/lib.rs:195`) — byte-identical to an ordinary close. `DiagnosticsSnapshot` (`crates/fava-diagnostics/src/lib.rs:16-39`) has no provider field at all, so nothing records the panic; `ARCHITECTURE.md:2330` specifies `pub providers: Vec<ProviderDiagnostic>`.
+Panic isolation: exactly one `catch_unwind` exists in the whole workspace, `crates/fava-publication/src/revision.rs:218`, guarding the `EditApplier` provider. No other provider boundary is guarded. Because handle #1's `JoinHandle` is dropped, a panic inside `evaluator.evaluate(...)` (`crates/fava-observe/src/lib.rs:100` / `:156`) unwinds the task, drops `latest_tx`, and surfaces to the application as `Err(ObservationClosed)` from `Observation::changed()` (`crates/fava-observe/src/lib.rs:195`) — byte-identical to an ordinary close. `DiagnosticsSnapshot` (`crates/fava-diagnostics/src/lib.rs:16-39`) has no provider field at all, so nothing records the panic; `ARCHITECTURE.md:2330` specifies `pub providers: Vec<ProviderDiagnostic>`.
 
 **classification** — `homeless` (joins, panic isolation, task bounds); `misplaced` (rows 7-10: task execution owned by the facade).
 
@@ -285,8 +285,8 @@ fn every_named_lifecycle_owner_exists_or_is_scheduled() {
 - **`fava-relay-lab` is correctly absent.** `ARCHITECTURE.md:3674` explicitly forbids the crate and assigns the role to `apps/canary`, which exists and is the only component in the repository with real task-join discipline (`apps/canary/src/proxy.rs:28,40,105` — `JoinHandle` + `JoinSet` + `drain_connections`).
 - **All other missing crates are correctly sequenced.** `fava-auth` → M8; `fava-fetch-cache*`, `fava-nip05*`, `fava-nip11*`, `fava-event-cache-redb`, `fava-standard` → M9; `fava-signer-nip46`, the five outstanding `*-testkit` crates → M10; `fava-ffi`, `fava-content`, `fava-nip18/22/25` → M11. Phases 8-11 are all `[ ]` in `.planning/ROADMAP.md`. None reported.
 - **Cancellation, where present, is genuinely wired.** Rows 1-4 and 7-9 of the spawned-task table all observe a `watch::Receiver<bool>` under `biased` `select!` and terminate. `Observation` cancels on `close()` and on `Drop`; `FavaChanges` likewise (`crates/fava/src/query_source.rs:81-85`). The gap is joins and provider deadlines, not the absence of cancellation signalling.
-- **The materializer provider boundary *is* panic-isolated** — `crates/fava-publication/src/materialization.rs:218` `std::panic::catch_unwind(AssertUnwindSafe(...))`. It is the sole conforming instance of `ARCHITECTURE.md:2353` and shows the intended shape.
-- **Routing fan-out is bounded** — `crates/fava-routing/src/chain.rs:13-19` (`MAX_ROUTERS` 32, `MAX_DESTINATIONS`/`MAX_TARGETS`/`MAX_COVERAGE`/`MAX_COVERED_SESSIONS`/`MAX_SHORTFALLS` 256, `MAX_TEXT_BYTES` 4096). Delivery lanes are bounded per receipt by `destination_evidence_capacity()` (`crates/fava-publication/src/run.rs:61`). Materializers are capped at 64 (`materialization.rs:15`). The unbounded dimensions are *counts of owners* (observations, chains, receipts), which is the runtime resource bound.
+- **The applier provider boundary *is* panic-isolated** — `crates/fava-publication/src/revision.rs:218` `std::panic::catch_unwind(AssertUnwindSafe(...))`. It is the sole conforming instance of `ARCHITECTURE.md:2353` and shows the intended shape.
+- **Routing fan-out is bounded** — `crates/fava-routing/src/chain.rs:13-19` (`MAX_ROUTERS` 32, `MAX_DESTINATIONS`/`MAX_TARGETS`/`MAX_COVERAGE`/`MAX_COVERED_SESSIONS`/`MAX_SHORTFALLS` 256, `MAX_TEXT_BYTES` 4096). Delivery lanes are bounded per receipt by `destination_evidence_capacity()` (`crates/fava-publication/src/run.rs:61`). Appliers are capped at 64 (`revision.rs:15`). The unbounded dimensions are *counts of owners* (observations, chains, receipts), which is the runtime resource bound.
 - **`fava-diagnostics` exists and is bounded** (`crates/fava-diagnostics/src/lib.rs:72 bounded(capacity)`), so its absence from this report is a positive finding, not an omission.
 
 ## Open questions

@@ -5,7 +5,7 @@ use fava_delivery::{DeliveryDecision, DeliveryFacts};
 use fava_publisher::{PublishAttempt, PublishOutcome};
 use fava_relay::RelaySessionKey;
 use fava_write::{
-    EventId, EventValue, MaterializationId, Receipt, ReceiptId, RelayDeliveryOutcome, WriteId,
+    EventId, EventValue, RevisionId, Receipt, ReceiptId, RelayDeliveryOutcome, WriteId,
 };
 use tokio::sync::{mpsc, watch};
 
@@ -19,13 +19,13 @@ impl Publication {
         receipt: &Receipt,
         active: &mut BTreeMap<
             RelaySessionKey,
-            (WriteId, ReceiptId, MaterializationId, EventId, u64),
+            (WriteId, ReceiptId, RevisionId, EventId, u64),
         >,
         finished: &mpsc::Sender<(
             RelaySessionKey,
             WriteId,
             ReceiptId,
-            MaterializationId,
+            RevisionId,
             EventId,
             u64,
         )>,
@@ -51,7 +51,7 @@ impl Publication {
             let mut cancel = cancel.clone();
             let write_id = receipt.write_id;
             let receipt_id = receipt.receipt_id;
-            let materialization_id = receipt.current.publication.materialization_id;
+            let revision_id = receipt.current.publication.revision_id;
             let event_id = receipt.current.id();
             let route_revision = receipt.route_revision;
             active.insert(
@@ -59,7 +59,7 @@ impl Publication {
                 (
                     write_id,
                     receipt_id,
-                    materialization_id,
+                    revision_id,
                     event_id,
                     route_revision,
                 ),
@@ -70,7 +70,7 @@ impl Publication {
                     .run_destination(
                         write_id,
                         receipt_id,
-                        materialization_id,
+                        revision_id,
                         event_id,
                         session.clone(),
                         lane_cancel,
@@ -81,7 +81,7 @@ impl Publication {
                         session,
                         write_id,
                         receipt_id,
-                        materialization_id,
+                        revision_id,
                         event_id,
                         route_revision,
                     )) => { let _ = result; }
@@ -95,7 +95,7 @@ impl Publication {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: RelaySessionKey,
         mut cancel: watch::Receiver<bool>,
@@ -105,7 +105,7 @@ impl Publication {
                 return;
             };
             if receipt.write_id != write_id
-                || receipt.current.publication.materialization_id != materialization_id
+                || receipt.current.publication.revision_id != revision_id
                 || receipt.current.id() != event_id
                 || !receipt.desires(&session)
             {
@@ -121,7 +121,7 @@ impl Publication {
                     let _ = self.store.record_outcome(
                         write_id,
                         receipt_id,
-                        materialization_id,
+                        revision_id,
                         event_id,
                         &session,
                         attempts,
@@ -133,7 +133,7 @@ impl Publication {
                     self.attempt(
                         write_id,
                         receipt_id,
-                        materialization_id,
+                        revision_id,
                         event_id,
                         &session,
                         attempts,
@@ -149,7 +149,7 @@ impl Publication {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         prior_attempts: u32,
@@ -160,7 +160,7 @@ impl Publication {
         let Ok(receipt) = self.store.begin_attempt(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt_number,
@@ -173,7 +173,7 @@ impl Publication {
         let attempt = PublishAttempt {
             write_id: receipt.write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             number: attempt_number,
             session: session.clone(),
             event,
@@ -186,7 +186,7 @@ impl Publication {
         let _ = self.store.record_outcome(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt_number,

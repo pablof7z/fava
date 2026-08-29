@@ -1,6 +1,6 @@
 use fava_routing::{CoverageState, RoutePlan};
 use fava_write::{
-    EventId, MaterializationId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteId,
+    EventId, RevisionId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteId,
     WriteRouting,
 };
 
@@ -51,7 +51,7 @@ pub fn validate_delivery_outcome(outcome: &RelayDeliveryOutcome) -> Result<(), W
 ///
 /// One number applied independently to unrelated quantities, not a bound on a
 /// single thing. Callers apply it to route destination fan-out, route
-/// shortfalls, retired materializations, correction destinations, desired
+/// shortfalls, retired revisions, correction destinations, desired
 /// destinations, delivery attempts, and explicit routing relays; a write store
 /// that exceeds one refuses with a message naming that exact count.
 /// `fava-publication` reuses it again as its activation and recovery retry
@@ -61,24 +61,24 @@ pub const fn destination_evidence_capacity() -> usize {
     DESTINATION_EVIDENCE_CAPACITY
 }
 
-/// Validate exact current write, materialization, and event identity.
+/// Validate exact current write, revision, and event identity.
 ///
 /// # Errors
 ///
-/// Returns [`WriteStoreError`] when the named materialization is not current.
-pub fn validate_current_materialization(
+/// Returns [`WriteStoreError`] when the named revision is not current.
+pub fn validate_current_revision(
     receipt: &Receipt,
     write_id: WriteId,
-    materialization_id: MaterializationId,
+    revision_id: RevisionId,
     event_id: EventId,
 ) -> Result<(), WriteStoreError> {
     if receipt.is_terminal()
         || receipt.write_id != write_id
-        || receipt.current.publication.materialization_id != materialization_id
+        || receipt.current.publication.revision_id != revision_id
         || receipt.current.id() != event_id
     {
         Err(WriteStoreError::Refused(
-            "write materialization is not current".to_owned(),
+            "write revision is not current".to_owned(),
         ))
     } else {
         Ok(())

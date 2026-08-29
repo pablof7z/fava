@@ -1,13 +1,13 @@
 use std::cell::Cell;
 use std::fmt;
 
-use fava_write::{Kind, ReplaceableEventEdit, WriteIntentError};
+use fava_write::{Kind, EventEdit, WriteIntentError};
 use nostr::nips::nip19::ToBech32;
 use nostr::nips::nip21::ToNostrUri;
 use nostr::types::RelayUrl;
 
-use super::{materialize, source, tag, target_tags};
-use crate::{follow, follow_with, materializer, unfollow};
+use super::{apply, source, tag, target_tags};
+use crate::{follow, follow_with, applier, unfollow};
 
 #[test]
 fn edit_codec_accepts_keys_and_supported_key_strings() {
@@ -35,8 +35,8 @@ fn edit_codec_accepts_keys_and_supported_key_strings() {
     assert!(matches!(refused, WriteIntentError::InvalidEvent(_)));
     assert!(!refused.to_string().contains("raw-secret-invalid-key"));
 
-    let followed = materialize(actor.public_key(), &follow(target).expect("edit"), None, 1)
-        .expect("key edit materializes");
+    let followed = apply(actor.public_key(), &follow(target).expect("edit"), None, 1)
+        .expect("key edit applies");
     assert_eq!(followed.tags.as_slice(), &[tag(&["p", &target.to_hex()])]);
 }
 
@@ -52,14 +52,14 @@ fn edit_codec_encodes_optional_metadata_without_collapsing_petname_presence() {
     );
 
     let relay_only = follow_with(target, Some(relay.clone()), None).expect("relay edit");
-    let relay_event = materialize(actor.public_key(), &relay_only, None, 1).expect("relay row");
+    let relay_event = apply(actor.public_key(), &relay_only, None, 1).expect("relay row");
     assert_eq!(
         relay_event.tags.as_slice(),
         &[tag(&["p", &target.to_hex(), relay.as_str()])]
     );
 
     let empty_petname = follow_with(target, None, Some("")).expect("present empty petname");
-    let empty_event = materialize(actor.public_key(), &empty_petname, None, 1).expect("empty name");
+    let empty_event = apply(actor.public_key(), &empty_petname, None, 1).expect("empty name");
     assert_eq!(
         empty_event.tags.as_slice(),
         &[tag(&["p", &target.to_hex(), "", ""])]
@@ -68,7 +68,7 @@ fn edit_codec_encodes_optional_metadata_without_collapsing_petname_presence() {
     let exact_petname = "a\u{301}";
     let complete = follow_with(target, Some(relay.clone()), Some(exact_petname))
         .expect("complete metadata edit");
-    let complete_event = materialize(actor.public_key(), &complete, None, 1).expect("complete row");
+    let complete_event = apply(actor.public_key(), &complete, None, 1).expect("complete row");
     assert_eq!(
         complete_event.tags.as_slice(),
         &[tag(&["p", &target.to_hex(), relay.as_str(), exact_petname])]
@@ -99,10 +99,10 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
     );
     malformed.extend_from_slice(raw_relay.as_bytes());
     malformed.push(0);
-    let malformed = ReplaceableEventEdit::new(Kind::ContactList, None, malformed)
+    let malformed = EventEdit::new(Kind::ContactList, None, malformed)
         .expect("neutral edit accepts opaque bounded bytes");
-    assert!(!materializer().supports(&malformed));
-    let error = materialize(actor.public_key(), &malformed, None, 1)
+    assert!(!applier().supports(&malformed));
+    let error = apply(actor.public_key(), &malformed, None, 1)
         .expect_err("invalid encoded relay refuses");
     assert!(matches!(error, WriteIntentError::Encoding(_)));
     assert!(!error.to_string().contains(raw_relay));
@@ -170,7 +170,7 @@ fn nip02_preserves_foreign_kind3_bytes() {
         original.clone(),
     );
 
-    let followed = materialize(
+    let followed = apply(
         actor.public_key(),
         &follow_with(
             target,
@@ -196,7 +196,7 @@ fn nip02_preserves_foreign_kind3_bytes() {
         ]
     );
 
-    let unfollowed = materialize(
+    let unfollowed = apply(
         actor.public_key(),
         &unfollow(target).expect("unfollow edit"),
         Some(&base),
@@ -229,7 +229,7 @@ fn follow_edits_are_stable_over_empty_and_newer_qualified_sources() {
     )
     .expect("metadata edit");
 
-    let empty = materialize(actor.public_key(), &edit, None, 1).expect("empty source");
+    let empty = apply(actor.public_key(), &edit, None, 1).expect("empty source");
     assert_eq!(
         empty.tags.as_slice(),
         &[tag(&[
@@ -259,7 +259,7 @@ fn follow_edits_are_stable_over_empty_and_newer_qualified_sources() {
         "newer-legacy-content",
         newer_tags.clone(),
     );
-    let rebased = materialize(actor.public_key(), &edit, Some(&newer), 21).expect("rebase");
+    let rebased = apply(actor.public_key(), &edit, Some(&newer), 21).expect("rebase");
     assert_eq!(rebased.content, "newer-legacy-content");
     assert_eq!(rebased.tags.as_slice(), newer_tags.as_slice());
 
@@ -271,13 +271,13 @@ fn follow_edits_are_stable_over_empty_and_newer_qualified_sources() {
         rebased.tags.clone().to_vec(),
     );
     let repeated =
-        materialize(actor.public_key(), &edit, Some(&signed_rebased), 22).expect("repeated add");
+        apply(actor.public_key(), &edit, Some(&signed_rebased), 22).expect("repeated add");
     assert_eq!(repeated.tags, rebased.tags);
     assert_eq!(target_tags(&repeated, target), 1);
 
     let remove = unfollow(target).expect("remove");
     let removed =
-        materialize(actor.public_key(), &remove, Some(&signed_rebased), 22).expect("remove once");
+        apply(actor.public_key(), &remove, Some(&signed_rebased), 22).expect("remove once");
     let signed_removed = source(
         &actor,
         Kind::ContactList,
@@ -286,7 +286,7 @@ fn follow_edits_are_stable_over_empty_and_newer_qualified_sources() {
         removed.tags.clone().to_vec(),
     );
     let removed_again =
-        materialize(actor.public_key(), &remove, Some(&signed_removed), 23).expect("remove twice");
+        apply(actor.public_key(), &remove, Some(&signed_removed), 23).expect("remove twice");
     assert_eq!(removed_again.tags, removed.tags);
 }
 
@@ -303,7 +303,7 @@ fn nip02_errors_and_sources_do_not_log_raw_inputs() {
         vec![tag(&["raw-secret-tag"])],
     );
     tampered.content.push('!');
-    let error = materialize(
+    let error = apply(
         actor.public_key(),
         &follow(target).expect("edit"),
         Some(&tampered),

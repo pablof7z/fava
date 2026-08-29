@@ -221,7 +221,7 @@ The tracked implementation covers M0-M6. Current crate membership contains no M7
 
 **Core Logic:**
 - `crates/fava-state/src/lib.rs`: Event state, deletion, expiration, and relay evidence.
-- `crates/fava-write/src/lib.rs`: Intent, materialization, receipt, and outcome values.
+- `crates/fava-write/src/lib.rs`: Intent, revision, receipt, and outcome values.
 - `crates/fava-query/src/lib.rs`: Query, source, event-record, snapshot, and evaluator contracts.
 - `crates/fava-observe/src/lib.rs`: Local merged observation lifecycle.
 - `crates/fava-routing/src/lib.rs`: Routing values and provider contract.
@@ -330,8 +330,8 @@ The tracked implementation covers M0-M6. Current crate membership contains no M7
 - Add specified `crates/fava-nip02/` and a second unrelated protocol crate only when M7 begins;
   each depends on ordinary query/write values, not runtime, transport, stores, routers, or publisher.
 - Put generic replaceable-event edit values with their approved semantic owner, durable edit storage
-  behind `crates/fava-write-store/`, and rematerialization in `crates/fava-publication/`.
-- Prove first value, rematerialization, inverse, stale generation, and protocol N+1 without changing
+  behind `crates/fava-write-store/`, and reapplication in `crates/fava-publication/`.
+- Prove first value, reapplication, inverse, stale generation, and protocol N+1 without changing
   NIP-specific behavior in `crates/fava/src/lib.rs`.
 
 **Later Specified Owners:**

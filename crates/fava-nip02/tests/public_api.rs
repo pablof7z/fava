@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use fava_query::{Query, QueryError, QuerySnapshot};
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier,
     Tag, Timestamp, WriteIntentError,
 };
 use nostr::types::RelayUrl;
@@ -13,10 +13,10 @@ use fava_nip02::{
     ContactList, ContactListError, ContactListRowEvidence, Follow, IntoContactAuthors,
 };
 
-type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
+type EditResult = Result<EventEdit, WriteIntentError>;
+type Selection = fn() -> Arc<dyn EditApplier>;
 
-const MATERIALIZER: Selection = fava_nip02::materializer;
+const APPLIER: Selection = fava_nip02::applier;
 const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
 const FOLLOWERS_OF: fn(PublicKey) -> Result<Query, QueryError> = fava_nip02::followers_of;
 
@@ -39,7 +39,7 @@ fn inspect_row(row: &ContactListRowEvidence) -> (usize, &[String]) {
 
 #[test]
 fn external_surface_uses_only_approved_functions_and_types() {
-    assert_eq!(MATERIALIZER().kind(), Kind::ContactList);
+    assert_eq!(APPLIER().kind(), Kind::ContactList);
 
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")

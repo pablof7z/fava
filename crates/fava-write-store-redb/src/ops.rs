@@ -1,13 +1,13 @@
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit, SignatureState,
     UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
-    validate_current_materialization, validate_delivery_outcome,
+    validate_current_revision, validate_delivery_outcome,
 };
 use tokio::sync::broadcast;
 
@@ -21,7 +21,7 @@ impl WriteStore for RedbWriteStore {
 
     fn reserve_active(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: fava_write::PublicKey,
     ) -> Result<u64, WriteStoreError> {
         self.reserve_active_slot(edit, author)
@@ -52,7 +52,7 @@ impl WriteStore for RedbWriteStore {
             WritePayload::Event(event) => (EventValue::Unsigned(event), SignatureState::Unsigned),
             WritePayload::Edit { .. } => {
                 return Err(WriteStoreError::Refused(
-                    "replaceable-event edit requires materialization before acceptance".to_owned(),
+                    "replaceable-event edit requires revision before acceptance".to_owned(),
                 ));
             }
             WritePayload::Presigned(event) => (EventValue::Signed(event), SignatureState::Signed),
@@ -65,10 +65,10 @@ impl WriteStore for RedbWriteStore {
             PublicationEvidence {
                 receipt_id,
                 write_id,
-                materialization_id: fava_write::MaterializationId::FIRST,
-                materialization_source: None,
-                materialization_failure: None,
-                retired_materializations: Vec::new(),
+                revision_id: fava_write::RevisionId::FIRST,
+                revision_source: None,
+                revision_failure: None,
+                retired_revisions: Vec::new(),
                 signature,
                 destinations,
             },
@@ -99,7 +99,7 @@ impl WriteStore for RedbWriteStore {
         })
     }
 
-    fn accept_materialized_edit(
+    fn accept_applied_edit(
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
@@ -108,7 +108,7 @@ impl WriteStore for RedbWriteStore {
         self.accept_semantic(intent, event, source)
     }
 
-    fn accept_reserved_materialized_edit(
+    fn accept_reserved_applied_edit(
         &self,
         reservation: u64,
         intent: WriteIntent,
@@ -119,13 +119,13 @@ impl WriteStore for RedbWriteStore {
         self.accept_reserved_semantic(reservation, intent, event, source, initial_route)
     }
 
-    fn install_materialization(
+    fn install_revision(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
-        applied_edits: &[ReplaceableEventEdit],
+        applied_edits: &[EventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
@@ -142,11 +142,11 @@ impl WriteStore for RedbWriteStore {
         )
     }
 
-    fn record_materialization_failure(
+    fn record_revision_failure(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
         source: Option<&EventValue>,
         reason: String,
@@ -162,12 +162,12 @@ impl WriteStore for RedbWriteStore {
     }
 
     #[allow(clippy::type_complexity)]
-    fn recover_materialized_edits(
+    fn recover_applied_edits(
         &self,
     ) -> Result<
         Vec<(
             Receipt,
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             fava_write::PublicKey,
             Option<(EventId, fava_write::Timestamp)>,
             Option<EventId>,
@@ -178,13 +178,13 @@ impl WriteStore for RedbWriteStore {
     }
 
     #[allow(clippy::type_complexity)]
-    fn materialized_edits(
+    fn applied_edits(
         &self,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
     ) -> Result<
         Option<(
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             fava_write::PublicKey,
             Option<(EventId, fava_write::Timestamp)>,
             Option<EventId>,
@@ -198,35 +198,35 @@ impl WriteStore for RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
-        self.install_signed_current(write_id, receipt_id, materialization_id, event_id, event)
+        self.install_signed_current(write_id, receipt_id, revision_id, event_id, event)
     }
 
     fn authorize_signing(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError> {
-        self.authorize_signing_current(write_id, receipt_id, materialization_id, event_id)
+        self.authorize_signing_current(write_id, receipt_id, revision_id, event_id)
     }
 
     fn record_signer_retryable(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.record_signer_retryable_current(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             reason,
         )
@@ -236,24 +236,24 @@ impl WriteStore for RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError> {
-        self.has_signing_successor(write_id, receipt_id, materialization_id, event_id)
+        self.has_signing_successor(write_id, receipt_id, revision_id, event_id)
     }
 
     fn record_signer_refusal(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.record_signer_refusal_current(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             reason,
         )
@@ -263,12 +263,12 @@ impl WriteStore for RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
-            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            validate_current_revision(receipt, write_id, revision_id, event_id)?;
             apply_route_to_receipt(receipt, plan)
         })
     }
@@ -277,13 +277,13 @@ impl WriteStore for RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
     ) -> Result<Receipt, WriteStoreError> {
         self.update(receipt_id, |receipt| {
-            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            validate_current_revision(receipt, write_id, revision_id, event_id)?;
             if !matches!(receipt.current.event, EventValue::Signed(_)) {
                 return Err(WriteStoreError::Refused("event is not signed".to_owned()));
             }
@@ -329,7 +329,7 @@ impl WriteStore for RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -342,7 +342,7 @@ impl WriteStore for RedbWriteStore {
             ));
         }
         self.update(receipt_id, |receipt| {
-            validate_current_materialization(receipt, write_id, materialization_id, event_id)?;
+            validate_current_revision(receipt, write_id, revision_id, event_id)?;
             if receipt.attempts.get(session).copied() != Some(attempt) {
                 return Err(WriteStoreError::Refused(
                     "attempt is not current".to_owned(),

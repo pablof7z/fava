@@ -1,6 +1,6 @@
 //! Coordinate-bound bounded reservations for volatile semantic admission.
 
-use fava_write::{PublicKey, ReplaceableEventEdit};
+use fava_write::{PublicKey, EventEdit};
 use fava_write_store::WriteStoreError;
 
 use super::MemoryWriteStore;
@@ -9,7 +9,7 @@ use super::state::{capacity_reached, edit_coordinate};
 impl MemoryWriteStore {
     pub(super) fn reserve_active_slot(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
     ) -> Result<u64, WriteStoreError> {
         let mut state = self.lock_state()?;

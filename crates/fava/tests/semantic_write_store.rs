@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 
 use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
-    Event, EventBuilder, EventValue, Kind, MaterializationId, ReceiptId, ReplaceableEventEdit,
+    Event, EventBuilder, EventValue, Kind, RevisionId, ReceiptId, EventEdit,
     Timestamp, UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -22,31 +22,31 @@ mod current_guard;
 #[path = "semantic_write_store/signing_authorization.rs"]
 mod signing_authorization;
 
-fn edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
+fn edit() -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }
 
-fn materialization(actor: fava_write::PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
+fn revision(actor: fava_write::PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
     EventBuilder::new(actor, Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
         .build()
-        .expect("valid materialization")
+        .expect("valid revision")
 }
 fn source(keys: &Keys, created_at: u64, content: &str) -> Event {
-    materialization(keys.public_key(), created_at, content)
+    revision(keys.public_key(), created_at, content)
         .finalize(keys)
         .expect("valid signed source")
 }
 fn accept(
     store: &MemoryWriteStore,
-    edit: ReplaceableEventEdit,
+    edit: EventEdit,
     author: fava_write::PublicKey,
     event: UnsignedEvent,
     source: Option<&EventValue>,
 ) -> fava_write_store::AcceptedWrite {
     store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit, author, WriteRouting::Automatic).expect("valid edit intent"),
             event,
             source,
@@ -62,7 +62,7 @@ fn memory_first_edit_has_no_prior() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 10, "first"),
+        revision(keys.public_key(), 10, "first"),
         None,
     );
 
@@ -71,15 +71,15 @@ fn memory_first_edit_has_no_prior() {
         .expect("store readable")
         .expect("receipt retained");
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::FIRST
+        receipt.current.publication.revision_id,
+        RevisionId::FIRST
     );
-    assert_eq!(receipt.current.publication.materialization_source, None);
+    assert_eq!(receipt.current.publication.revision_source, None);
     assert!(
         receipt
             .current
             .publication
-            .retired_materializations
+            .retired_revisions
             .is_empty()
     );
 }
@@ -100,7 +100,7 @@ fn memory_apply_route_replay_compares_complete_persisted_effect() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 1, "apply route"),
+        revision(keys.public_key(), 1, "apply route"),
         None,
     );
     let first_target = RouteTarget::Author(Keys::generate().public_key());
@@ -115,7 +115,7 @@ fn memory_apply_route_replay_compares_complete_persisted_effect() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &first,
         )
@@ -131,7 +131,7 @@ fn memory_apply_route_replay_compares_complete_persisted_effect() {
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &first,
             )
@@ -150,7 +150,7 @@ fn memory_apply_route_replay_compares_complete_persisted_effect() {
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &mismatch,
             )
@@ -221,9 +221,9 @@ fn assert_route_effect_replay_is_exact(
     let keys = Keys::generate();
     let intent =
         || WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap();
-    let event = || materialization(keys.public_key(), 1, "route effect");
+    let event = || revision(keys.public_key(), 1, "route effect");
     let accepted = store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             store.reserve_active(&edit(), keys.public_key()).unwrap(),
             intent(),
             event(),
@@ -235,7 +235,7 @@ fn assert_route_effect_replay_is_exact(
     assert_eq!(retained.route_shortfalls, expected_shortfalls, "{label}");
     let mut changes = store.receipt_changes();
     let replayed = store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             store.reserve_active(&edit(), keys.public_key()).unwrap(),
             intent(),
             event(),
@@ -251,7 +251,7 @@ fn assert_route_effect_replay_is_exact(
     assert!(changes.try_recv().is_err(), "{label} exact replay notified");
     assert!(
         store
-            .accept_reserved_materialized_edit(
+            .accept_reserved_applied_edit(
                 store.reserve_active(&edit(), keys.public_key()).unwrap(),
                 intent(),
                 event(),
@@ -281,18 +281,18 @@ fn memory_generation_swap_is_compare_and_set() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "generation one"),
+        revision(keys.public_key(), 11, "generation one"),
         Some(&EventValue::Signed(base.clone())),
     );
     let successor_source = source(&keys, 20, "successor source");
     let successor = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
-            materialization(keys.public_key(), 21, "generation two"),
+            revision(keys.public_key(), 21, "generation two"),
             Some(&EventValue::Signed(successor_source.clone())),
             None,
         )
@@ -301,17 +301,17 @@ fn memory_generation_swap_is_compare_and_set() {
     assert_eq!(successor.write_id, accepted.write_id);
     assert_eq!(successor.receipt_id, accepted.receipt_id);
     assert_eq!(
-        successor.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        successor.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
-        successor.current.publication.materialization_source,
+        successor.current.publication.revision_source,
         Some(successor_source.id)
     );
     assert_eq!(
-        successor.current.publication.retired_materializations,
+        successor.current.publication.retired_revisions,
         vec![(
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             accepted.current.id(),
             Some(base.id),
             None,
@@ -322,13 +322,13 @@ fn memory_generation_swap_is_compare_and_set() {
     let later_source = source(&keys, 30, "later source");
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
-                materialization(keys.public_key(), 31, "stale swap"),
+                revision(keys.public_key(), 31, "stale swap"),
                 Some(&EventValue::Signed(later_source.clone())),
                 None,
             )
@@ -349,7 +349,7 @@ fn memory_unqualified_source_is_inert() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 21, "current"),
+        revision(keys.public_key(), 21, "current"),
         Some(&EventValue::Signed(selected.clone())),
     );
     let mut changes = store.receipt_changes();
@@ -357,13 +357,13 @@ fn memory_unqualified_source_is_inert() {
     for candidate in [&selected, &older] {
         assert!(
             store
-                .install_materialization(
+                .install_revision(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     Some(selected.id),
                     std::slice::from_ref(&edit()),
-                    materialization(keys.public_key(), 22, "inert"),
+                    revision(keys.public_key(), 22, "inert"),
                     Some(&EventValue::Signed(candidate.clone())),
                     None,
                 )
@@ -372,13 +372,13 @@ fn memory_unqualified_source_is_inert() {
     }
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 Some(selected.id),
                 std::slice::from_ref(&edit()),
-                materialization(keys.public_key(), 22, "missing source"),
+                revision(keys.public_key(), 22, "missing source"),
                 None,
                 None,
             )
@@ -386,18 +386,18 @@ fn memory_unqualified_source_is_inert() {
         "source removal is a qualified transition"
     );
     let removed = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    assert_eq!(removed.current.publication.materialization_source, None);
+    assert_eq!(removed.current.publication.revision_source, None);
 
     let unchanged = removed.clone();
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity"),
+                RevisionId::try_from(2).expect("nonzero revision identity"),
                 None,
                 std::slice::from_ref(&edit()),
-                materialization(keys.public_key(), 23, "already empty"),
+                revision(keys.public_key(), 23, "already empty"),
                 None,
                 None,
             )
@@ -423,16 +423,16 @@ fn memory_failure_preserves_current_and_is_attributed() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         Some(&EventValue::Signed(base.clone())),
     );
     let failed_source = source(&keys, 20, "failed source");
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
     let record_failure = || {
-        store.record_materialization_failure(
+        store.record_revision_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(failed_source.clone())),
             "x".repeat(5_000),
@@ -441,12 +441,12 @@ fn memory_failure_preserves_current_and_is_attributed() {
     let failed = record_failure().expect("post-accept failure is durable evidence");
 
     let mut without_failure = failed.clone();
-    without_failure.current.publication.materialization_failure = None;
+    without_failure.current.publication.revision_failure = None;
     assert_eq!(without_failure, before);
     let failure = failed
         .current
         .publication
-        .materialization_failure
+        .revision_failure
         .as_deref()
         .expect("failure is visible");
     assert!(failure.contains(&failed_source.id.to_string()));
@@ -456,7 +456,7 @@ fn memory_failure_preserves_current_and_is_attributed() {
     assert_eq!(record_failure().unwrap(), failed);
     assert!(changes.try_recv().is_err());
 
-    let recovered = store.recover_materialized_edits().unwrap();
+    let recovered = store.recover_applied_edits().unwrap();
     assert_eq!(recovered[0].2, keys.public_key());
     assert_eq!(recovered[0].4, Some(failed_source.id));
 }
@@ -470,27 +470,27 @@ fn memory_successful_retry_clears_failure_atomically() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         Some(&EventValue::Signed(base.clone())),
     );
     let retry_source = source(&keys, 20, "retry source");
     store
-        .record_materialization_failure(
+        .record_revision_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(retry_source.clone())),
             "first attempt failed".to_owned(),
         )
         .unwrap();
     let mut changes = store.receipt_changes();
-    let successor_event = materialization(keys.public_key(), 21, "retry succeeded");
+    let successor_event = revision(keys.public_key(), 21, "retry succeeded");
     let successor = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -500,28 +500,28 @@ fn memory_successful_retry_clears_failure_atomically() {
         .expect("retry installs atomically");
 
     assert_eq!(
-        successor.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        successor.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
-        successor.current.publication.materialization_source,
+        successor.current.publication.revision_source,
         Some(retry_source.id)
     );
-    assert_eq!(successor.current.publication.materialization_failure, None);
+    assert_eq!(successor.current.publication.revision_failure, None);
     assert!(
-        successor.current.publication.retired_materializations[0]
+        successor.current.publication.retired_revisions[0]
             .3
             .as_deref()
             .is_some_and(|failure| failure.contains("first attempt failed"))
     );
-    assert_eq!(store.recover_materialized_edits().unwrap()[0].4, None);
+    assert_eq!(store.recover_applied_edits().unwrap()[0].4, None);
     assert_eq!(changes.try_recv().unwrap().1, Some(successor.clone()));
 
     let repeated = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::try_from(2).expect("nonzero materialization identity"),
+            RevisionId::try_from(2).expect("nonzero revision identity"),
             Some(retry_source.id),
             std::slice::from_ref(&edit()),
             successor_event,
@@ -544,23 +544,23 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 10, "live"),
+        revision(keys.public_key(), 10, "live"),
         None,
     );
-    let recovered = store.recover_materialized_edits().unwrap();
+    let recovered = store.recover_applied_edits().unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0.receipt_id, accepted.receipt_id);
     assert_eq!(recovered[0].2, keys.public_key());
 
     let cancelled = store.cancel(accepted.receipt_id).unwrap().unwrap();
     assert!(cancelled.is_terminal());
-    assert!(store.recover_materialized_edits().unwrap().is_empty());
+    assert!(store.recover_applied_edits().unwrap().is_empty());
     assert!(
         store
-            .record_materialization_failure(
+            .record_revision_failure(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 None,
                 None,
                 "late completion".to_owned(),
@@ -572,14 +572,14 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 20, "new owner"),
+        revision(keys.public_key(), 20, "new owner"),
         None,
     );
     let settled = store
         .apply_route(
             replacement.write_id,
             replacement.receipt_id,
-            replacement.current.publication.materialization_id,
+            replacement.current.publication.revision_id,
             replacement.current.id(),
             &RoutePlan {
                 revision: 1,
@@ -591,7 +591,7 @@ fn memory_live_edit_recovers_once_and_terminal_is_inert() {
         )
         .expect("empty route settles terminally");
     assert!(settled.is_terminal());
-    assert!(store.recover_materialized_edits().unwrap().is_empty());
+    assert!(store.recover_applied_edits().unwrap().is_empty());
 }
 
 #[test]
@@ -604,21 +604,21 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
         &bounded,
         edit(),
         first_keys.public_key(),
-        materialization(first_keys.public_key(), 1, "capacity owner"),
+        revision(first_keys.public_key(), 1, "capacity owner"),
         None,
     );
     let second_keys = Keys::generate();
     assert!(
         bounded
-            .accept_materialized_edit(
+            .accept_applied_edit(
                 WriteIntent::edit_as(edit(), second_keys.public_key(), WriteRouting::Automatic,)
                     .unwrap(),
-                materialization(second_keys.public_key(), 1, "refused"),
+                revision(second_keys.public_key(), 1, "refused"),
                 None,
             )
             .is_err()
     );
-    assert_eq!(bounded.recover_materialized_edits().unwrap().len(), 1);
+    assert_eq!(bounded.recover_applied_edits().unwrap().len(), 1);
 
     let store = MemoryWriteStore::default();
     let keys = Keys::generate();
@@ -626,22 +626,22 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 1, "generation zero"),
+        revision(keys.public_key(), 1, "generation zero"),
         None,
     );
-    let mut expected = MaterializationId::FIRST;
+    let mut expected = RevisionId::FIRST;
     let mut expected_source = None;
     for generation in 0..destination_evidence_capacity() {
         let source_time = 2 + (generation as u64 * 2);
         let next_source = source(&keys, source_time, &format!("source {generation}"));
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
                 expected,
                 expected_source,
                 std::slice::from_ref(&edit()),
-                materialization(
+                revision(
                     keys.public_key(),
                     source_time + 1,
                     &format!("generation {generation}"),
@@ -652,7 +652,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
             .unwrap();
         expected = expected
             .checked_next()
-            .expect("next materialization identity");
+            .expect("next revision identity");
         expected_source = Some(next_source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -660,13 +660,13 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
     let overflow_source = source(&keys, 1_000, "overflow source");
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
                 expected,
                 expected_source,
                 std::slice::from_ref(&edit()),
-                materialization(keys.public_key(), 1_001, "overflow generation"),
+                revision(keys.public_key(), 1_001, "overflow generation"),
                 Some(&EventValue::Signed(overflow_source.clone())),
                 None,
             )
@@ -688,10 +688,10 @@ fn memory_reservation_is_coordinate_bound_and_repeated_coordinate_bounded() {
         .reserve_active(&edit(), owner.public_key())
         .expect("one coordinate reserves");
 
-    let mismatch = store.accept_reserved_materialized_edit(
+    let mismatch = store.accept_reserved_applied_edit(
         reservation,
         WriteIntent::edit_as(edit(), intruder.public_key(), WriteRouting::Automatic).unwrap(),
-        materialization(intruder.public_key(), 1, "wrong coordinate"),
+        revision(intruder.public_key(), 1, "wrong coordinate"),
         None,
         None,
     );
@@ -705,10 +705,10 @@ fn memory_reservation_is_coordinate_bound_and_repeated_coordinate_bounded() {
     );
 
     let accepted = store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             reservation,
             WriteIntent::edit_as(edit(), owner.public_key(), WriteRouting::Automatic).unwrap(),
-            materialization(owner.public_key(), 1, "matching coordinate"),
+            revision(owner.public_key(), 1, "matching coordinate"),
             None,
             None,
         )
@@ -733,19 +733,19 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
     let store = MemoryWriteStore::default();
     let keys = Keys::generate();
     let actor = keys.public_key();
-    let first_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap();
-    let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+    let first_edit = EventEdit::new(Kind::ContactList, None, vec![1]).unwrap();
+    let second_edit = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
     let first = accept(
         &store,
         first_edit,
         actor,
-        materialization(actor, 1, "first"),
+        revision(actor, 1, "first"),
         None,
     );
     let composed = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(second_edit.clone(), actor, WriteRouting::Automatic).unwrap(),
-            materialization(actor, 2, "first|second"),
+            revision(actor, 2, "first|second"),
             Some(&first.current.event),
         )
         .unwrap();
@@ -754,13 +754,13 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
 
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 first.write_id,
                 first.receipt_id,
-                composed.current.publication.materialization_id,
-                composed.current.publication.materialization_source,
+                composed.current.publication.revision_id,
+                composed.current.publication.revision_source,
                 std::slice::from_ref(&second_edit),
-                materialization(actor, 11, "newer|second-only"),
+                revision(actor, 11, "newer|second-only"),
                 Some(&EventValue::Signed(successor)),
                 None,
             )
@@ -776,24 +776,24 @@ fn memory_composed_edit_bound_refuses_atomically() {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let first_edit =
-        ReplaceableEventEdit::new(Kind::ContactList, None, u16::MAX.to_be_bytes().to_vec())
+        EventEdit::new(Kind::ContactList, None, u16::MAX.to_be_bytes().to_vec())
             .unwrap();
     let first = accept(
         &store,
         first_edit,
         actor,
-        materialization(actor, 1, "0"),
+        revision(actor, 1, "0"),
         None,
     );
     let mut current = first.clone();
 
     for index in 0..destination_evidence_capacity() {
         let change = u16::try_from(index).unwrap().to_be_bytes().to_vec();
-        let next_edit = ReplaceableEventEdit::new(Kind::ContactList, None, change).unwrap();
+        let next_edit = EventEdit::new(Kind::ContactList, None, change).unwrap();
         let next = store
-            .accept_materialized_edit(
+            .accept_applied_edit(
                 WriteIntent::edit_as(next_edit, actor, WriteRouting::Automatic).unwrap(),
-                materialization(actor, u64::try_from(index).unwrap() + 2, "composed"),
+                revision(actor, u64::try_from(index).unwrap() + 2, "composed"),
                 Some(&current.current.event),
             )
             .expect("bounded composition remains available");
@@ -804,19 +804,19 @@ fn memory_composed_edit_bound_refuses_atomically() {
 
     let before = store.receipt(first.receipt_id).unwrap().unwrap();
     let edits_before = store
-        .materialized_edits(
+        .applied_edits(
             first.receipt_id,
-            current.current.publication.materialization_id,
+            current.current.publication.revision_id,
         )
         .unwrap()
         .unwrap();
     let mut changes = store.receipt_changes();
-    let overflow = ReplaceableEventEdit::new(Kind::ContactList, None, vec![3, 4, 5]).unwrap();
+    let overflow = EventEdit::new(Kind::ContactList, None, vec![3, 4, 5]).unwrap();
     assert!(
         store
-            .accept_materialized_edit(
+            .accept_applied_edit(
                 WriteIntent::edit_as(overflow, actor, WriteRouting::Automatic).unwrap(),
-                materialization(actor, 1_000, "overflow"),
+                revision(actor, 1_000, "overflow"),
                 Some(&current.current.event),
             )
             .is_err()
@@ -824,9 +824,9 @@ fn memory_composed_edit_bound_refuses_atomically() {
     assert_eq!(store.receipt(first.receipt_id).unwrap(), Some(before));
     assert_eq!(
         store
-            .materialized_edits(
+            .applied_edits(
                 first.receipt_id,
-                current.current.publication.materialization_id,
+                current.current.publication.revision_id,
             )
             .unwrap(),
         Some(edits_before)

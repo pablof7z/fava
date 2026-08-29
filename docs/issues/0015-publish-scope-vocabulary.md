@@ -26,7 +26,7 @@ signer call, or transport work.
 - **Closest existing concept:** `WriteIntent`.
 - **Observable distinction:** `PublishAs` has no payload and no custody. It
   selects one exact author before an edit is supplied and accepts only
-  `ReplaceableEventEdit`.
+  `EventEdit`.
 - **Counterexample:** `fava.by(alice)` dropped without `publish` leaves the
   write store unchanged; an accepted `WriteIntent` has durable custody.
 - **Owner and lifecycle:** created by `Fava::by` or `PublishTo::by`, consumed by

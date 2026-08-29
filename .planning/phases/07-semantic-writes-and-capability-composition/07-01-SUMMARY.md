@@ -8,9 +8,9 @@ requires:
     provides: stable write and receipt identities plus the ordinary write lifecycle
 provides:
   - seven-scenario semantic-write behavior map with stable Rust evidence destinations
-  - bounded persistable ReplaceableEventEdit with inverse and structural validation
-  - pure ReplaceableEventMaterializer contract with caller-injected Timestamp
-  - exact MaterializationId and current/retired publication attribution fields
+  - bounded persistable EventEdit with inverse and structural validation
+  - pure EditApplier contract with caller-injected Timestamp
+  - exact RevisionId and current/retired publication attribution fields
 affects: [07-02, 07-03, 07-04, protocol-capabilities, write-store, publication]
 actuals:
   tokens: 6810
@@ -20,15 +20,15 @@ tech-stack:
   added: []
   patterns:
     - opaque protocol-owned edit bytes behind a neutral bounded value
-    - exact caller-injected time at the materializer boundary
-    - stable write and receipt identity with changing materialization identity
+    - exact caller-injected time at the applier boundary
+    - stable write and receipt identity with changing revision identity
 key-files:
   created:
     - features/semantic-writes.feature
     - tools/tests/test_semantic_write_feature.py
     - crates/fava/tests/semantic_write_contract.rs
     - crates/fava-write/src/edit.rs
-    - crates/fava-write/src/materialization.rs
+    - crates/fava-write/src/revision.rs
   modified:
     - crates/fava-write/src/lib.rs
     - crates/fava/BUILD.bazel
@@ -36,10 +36,10 @@ key-files:
 key-decisions:
   - "Core validates edit structure and byte bounds but does not decide provider availability or protocol meaning."
   - "EventCoordinate receives a private explicit serde representation inside the edit codec rather than a new public wrapper."
-  - "Materializers receive qualified source by reference and exact caller-supplied Timestamp, with no effect authority."
+  - "Appliers receive qualified source by reference and exact caller-supplied Timestamp, with no effect authority."
 patterns-established:
   - "Semantic edit boundary: actor, exact coordinate, format, change, and inverse cross core as bounded opaque data."
-  - "Generation attribution: MaterializationId changes independently of stable WriteId and ReceiptId."
+  - "Generation attribution: RevisionId changes independently of stable WriteId and ReceiptId."
 requirements-completed: [CAP-01, CAP-02, CAP-03]
 coverage:
   - id: D1
@@ -51,7 +51,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D2
-    description: "ReplaceableEventEdit is bounded, persistable, reversible, and refused structurally before custody."
+    description: "EventEdit is bounded, persistable, reversible, and refused structurally before custody."
     requirement: CAP-01
     verification:
       - kind: integration
@@ -62,7 +62,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D3
-    description: "The pure selected materializer receives no prior source for first value and uses the exact injected timestamp and actor."
+    description: "The pure selected applier receives no prior source for first value and uses the exact injected timestamp and actor."
     requirement: CAP-03
     verification:
       - kind: integration
@@ -70,11 +70,11 @@ coverage:
         status: pass
     human_judgment: false
   - id: D4
-    description: "Materialization identity changes while write and receipt identities remain stable and retired evidence stays attributable."
+    description: "Revision identity changes while write and receipt identities remain stable and retired evidence stays attributable."
     requirement: CAP-02
     verification:
       - kind: integration
-        ref: "crates/fava/tests/semantic_write_contract.rs#materialization_identity_changes_but_receipt_identity_does_not"
+        ref: "crates/fava/tests/semantic_write_contract.rs#revision_identity_changes_but_receipt_identity_does_not"
         status: pass
     human_judgment: false
 duration: 11min
@@ -84,7 +84,7 @@ status: complete
 
 # Phase 07 Plan 01: Semantic Write Contract Summary
 
-**Mapped semantic-write behavior plus bounded opaque edits, pure materialization, and exact generation identity without protocol meaning in core.**
+**Mapped semantic-write behavior plus bounded opaque edits, pure revision, and exact generation identity without protocol meaning in core.**
 
 ## Performance
 
@@ -97,17 +97,17 @@ status: complete
 ## Accomplishments
 
 - Mapped all seven M7 promises to stable Rust package/target/test destinations and made malformed mappings executable failures.
-- Added the approved neutral edit, materializer, and generation contracts with bounded opaque bytes, inverse round-trip, exact coordinate validation, and injected time.
+- Added the approved neutral edit, applier, and generation contracts with bounded opaque bytes, inverse round-trip, exact coordinate validation, and injected time.
 - Extended publication evidence with exact current/source/retired generation attribution while preserving ordinary raw event paths.
 
 ## RED Evidence
 
-`python3 -m unittest tools.tests.test_semantic_write_feature` passed 3 tests. Before production changes, `cargo test -p fava --test semantic_write_contract` failed only with unresolved imports for `MaterializationId`, `ReplaceableEventEdit`, and `ReplaceableEventMaterializer`. Commit: `e9c50a5`.
+`python3 -m unittest tools.tests.test_semantic_write_feature` passed 3 tests. Before production changes, `cargo test -p fava --test semantic_write_contract` failed only with unresolved imports for `RevisionId`, `EventEdit`, and `EditApplier`. Commit: `e9c50a5`.
 
 ## Task Commits
 
 1. **Task 1: Write the mapped semantic-write behavior before production** — `e9c50a5` (test)
-2. **Task 2: Implement the bounded neutral edit and materialization contract** — `627f03f` (feat)
+2. **Task 2: Implement the bounded neutral edit and revision contract** — `627f03f` (feat)
 
 **Plan metadata:** this commit
 
@@ -117,7 +117,7 @@ status: complete
 - `tools/tests/test_semantic_write_feature.py` — strict mapping, uniqueness, and placeholder checks.
 - `crates/fava/tests/semantic_write_contract.rs` — four positively enumerated public contract tests.
 - `crates/fava-write/src/edit.rs` — bounded opaque edit, inverse, durable codec, and intent validation.
-- `crates/fava-write/src/materialization.rs` — exact generation id and pure materializer contract.
+- `crates/fava-write/src/revision.rs` — exact generation id and pure applier contract.
 - `crates/fava-write/src/lib.rs` — third write payload and publication attribution fields.
 - `crates/fava/BUILD.bazel` — Bazel contract-test target.
 - `docs/internals/vocabulary.toml` — implementation symbols attached to the three pre-approved terms.
@@ -135,7 +135,7 @@ status: complete
 **1. [Rule 3 - Blocking] Propagated the third payload and evidence fields through current exhaustive owners**
 - **Found during:** Task 2
 - **Issue:** Adding `WritePayload::Edit` and generation fields made current facade/store matches and evidence literals non-exhaustive.
-- **Fix:** Added explicit pre-materialization refusal arms and generation-one ordinary-event evidence in the existing facade, memory/redb stores, and query test fixture. Plans 02-03 replace the refusal arms with owned semantic custody and selected materialization.
+- **Fix:** Added explicit pre-revision refusal arms and generation-one ordinary-event evidence in the existing facade, memory/redb stores, and query test fixture. Plans 02-03 replace the refusal arms with owned semantic custody and selected revision.
 - **Files modified:** `crates/fava/src/lib.rs`, `crates/fava-write-store-memory/src/lib.rs`, `crates/fava-write-store-redb/src/ops.rs`, `crates/fava-query-standard/tests/source_merge.rs`
 - **Verification:** `cargo test --workspace --all-targets` and the affected Bazel packages passed.
 - **Committed in:** `627f03f`
@@ -171,7 +171,7 @@ None.
 
 ## Next Phase Readiness
 
-Plan 02 can replace the explicit pre-materialization store refusals with atomic edit custody, generation compare-and-set, bounded failure evidence, and memory recovery.
+Plan 02 can replace the explicit pre-revision store refusals with atomic edit custody, generation compare-and-set, bounded failure evidence, and memory recovery.
 
 ## Self-Check: PASSED
 

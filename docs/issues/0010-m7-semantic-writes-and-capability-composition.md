@@ -8,19 +8,19 @@
 
 The completed M6 publication lifecycle accepts only finalized unsigned or
 pre-signed events. It cannot durably retain a protocol-owned replaceable-event
-edit, materialize it against current qualified source state, or replace that
-materialization when newer source state arrives. Protocol crates therefore
+edit, apply it against current qualified source state, or replace that
+revision when newer source state arrives. Protocol crates therefore
 cannot yet express edits such as follow/unfollow without applications manually
 rebuilding whole events.
 
 ## Scope
 
 - Add a neutral, bounded, persistable replaceable-event-edit value and public
-  materializer contract without teaching universal owners event-kind meaning.
+  applier contract without teaching universal owners event-kind meaning.
 - Extend memory and redb write-store custody with stable operation, receipt, and
-  materialization-generation identity.
-- Extend publication with first-value materialization, source-driven
-  rematerialization, and exact stale-generation rejection across signing,
+  revision-generation identity.
+- Extend publication with first-value edit application, source-driven
+  reapplication, and exact stale-generation rejection across signing,
   routing, publishing, and delivery.
 - Add two unrelated protocol crates: NIP-02 follows and a bookmarks capability.
 - Prove the complete behavior through the public `fava` API, a shared
@@ -41,7 +41,7 @@ rebuilding whole events.
 - Every CAP-01 through CAP-09 behavior has direct falsifiable evidence.
 - A first-value follow operation is accepted and visible through the ordinary
   write-store query source and receipt before relay acknowledgement.
-- A newer qualified source rematerializes a live edit atomically, preserves
+- A newer qualified source reapplies a live edit atomically, preserves
   unrelated source changes, keeps the same write/receipt identity, and makes
   retired completions inert but attributable.
 - Follow/unfollow and bookmark/unbookmark pass one public conformance corpus.
@@ -52,11 +52,11 @@ rebuilding whole events.
 
 ## Deliberate-break evidence
 
-### Current-materialization identity
+### Current-revision identity
 
 `DELIBERATE_BREAK_M7_STALE_COMPLETION` removed only the sole
-`receipt.current.publication.materialization_id != materialization_id`
-predicate from `fava-write-store::validate_current_materialization`.
+`receipt.current.publication.revision_id != revision_id`
+predicate from `fava-write-store::validate_current_revision`.
 
 - Original SHA-256: `50f73279c139469f03f01247f4e5af692e291f19cc5944fef8e189221d9fb7af`.
 - Baseline discovery named exactly
@@ -67,7 +67,7 @@ predicate from `fava-write-store::validate_current_materialization`.
   compiled and failed at `interleavings.rs:94`: generation-one
   `record_signer_refusal` paired with the successor event identity returned
   success instead of refusing. This is current-state mutation by a retired
-  materialization, not a compile or unrelated failure.
+  revision, not a compile or unrelated failure.
 - A scoped source edit restored the predicate. SHA-256 returned to the original
   value, the source diff was empty, and the complete publication target passed
   12/12.

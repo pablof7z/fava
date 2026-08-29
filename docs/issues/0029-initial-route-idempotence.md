@@ -7,7 +7,7 @@
 
 ## Defect
 
-Reserved semantic admission may repeat after the exact same materialization and
+Reserved semantic admission may repeat after the exact same revision and
 initial automatic route effect are already durable. The replay decision must
 compare the whole persisted effect of that route plan. Comparing only revision,
 settlement, and destination identities can accept a different shortfall or a
@@ -27,7 +27,7 @@ outcome, settlement, shortfalls, desired destinations, attempts, and current
 publication destinations. A different effect at the same revision refuses.
 
 Memory and redb admission retain their own atomic custody transactions and
-exact materialization checks. Both delegate only the route-effect comparison to
+exact revision checks. Both delegate only the route-effect comparison to
 the neutral owner. No state, provider contract, public symbol, persisted field,
 or compatibility path is added.
 

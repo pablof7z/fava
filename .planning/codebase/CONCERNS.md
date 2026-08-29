@@ -446,10 +446,10 @@ specified in `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`.
 These are specified M7-M11 scopes, not defects in the completed M0-M6 slices.
 
 **M7 replaceable-event edits and protocol composition:**
-- Problem: No `ReplaceableEventEdit` payload/store lifecycle, rematerialization
+- Problem: No `EventEdit` payload/store lifecycle, reapplication
   generation, inverse operation, `fava-nip02`, or second protocol crate exists.
 - Blocks: Protocol-owned follow/unfollow, stable receipt across source-driven
-  rematerialization, and stale generation rejection.
+  reapplication, and stale generation rejection.
 - Files: `docs/spec/FAVA_REWRITE_IMPLEMENTATION_PLAN.md`,
   `crates/fava-write/src/lib.rs`, `crates/fava-publication/src/run.rs`,
   `Cargo.toml`

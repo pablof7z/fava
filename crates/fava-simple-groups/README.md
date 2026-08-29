@@ -100,7 +100,7 @@ entry order, repetitions, and entry-local failures.
 
 ```rust,ignore
 use fava_simple_groups::{
-    SavedGroupList, save_simple_group, saved_group_list_materializer,
+    SavedGroupList, save_simple_group, saved_group_list_applier,
     saved_group_lists,
 };
 
@@ -114,7 +114,7 @@ for record in &observation.current().events {
 }
 
 let fava = Fava::builder()
-    .materializers([saved_group_list_materializer()])
+    .appliers([saved_group_list_applier()])
     // configure the ordinary Fava owners
     .build()?;
 let edit = save_simple_group(&photos, Some("Photography"))?;
@@ -122,7 +122,7 @@ let write: Write = fava.by(me).to(photos.relays())?.publish(edit)?;
 ```
 
 Save, remove, and rename edits preserve opaque content, foreign tags, malformed
-entries, unused trailing values, and unrelated order. The materializer is private
+entries, unused trailing values, and unrelated order. The applier is private
 edit-codec plumbing for Fava’s generic semantic-write lifecycle; it does not own
 author selection, routing, storage, signing, or delivery.
 
@@ -157,13 +157,13 @@ Example coverage: [MOD-1](#mod-1).
 | **`join_request`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::join_request","signature":"pub fn fava_simple_groups::join_request(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>","evidence":"docs/issues/0044-simple-group-management-builders.md; crates/fava-simple-groups/src/management.rs; NIP-29 kind 9021"} --> | Builds a self-routed kind-9021 event builder. Emits `h` and, when code is `Some`, the exact invite code tag. Publish via `fava.publish(builder)`. |
 | **`leave_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::leave_group","signature":"pub fn fava_simple_groups::leave_group(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>","evidence":"crates/fava-simple-groups/src/management.rs; NIP-29 kind 9022"} --> | Builds a self-routed kind-9022 event builder carrying the exact group id. Publish via `fava.publish(builder)`. |
 | **`put_user`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::put_user","signature":"pub fn fava_simple_groups::put_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey], &[&str]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>","evidence":"docs/issues/0043-simple-group-management-cardinality.md; crates/fava-simple-groups/src/management.rs; NIP-29 kind 9000"} --> | Builds a self-routed kind-9000 event builder with one `p` tag per supplied user key and the common caller-supplied roles. Empty slices emit no `p` tags. Publish via `fava.publish(builder)`. |
-| **`remove_saved_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_relay","signature":"pub fn fava_simple_groups::remove_saved_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `r` tag for the exact relay. The URL does not acquire routing or publication meaning.<br><br>Example: [MOD-1](#mod-1). |
-| **`remove_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_simple_group","signature":"pub fn fava_simple_groups::remove_saved_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `group` tag whose id and parsed relay match a selected relay. The name states removal from saved state, not deletion of the group.<br><br>Example: [MOD-1](#mod-1). |
+| **`remove_saved_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_relay","signature":"pub fn fava_simple_groups::remove_saved_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `r` tag for the exact relay. The URL does not acquire routing or publication meaning.<br><br>Example: [MOD-1](#mod-1). |
+| **`remove_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_saved_simple_group","signature":"pub fn fava_simple_groups::remove_saved_simple_group(&fava_simple_groups::SimpleGroup) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit removing every semantic `group` tag whose id and parsed relay match a selected relay. The name states removal from saved state, not deletion of the group.<br><br>Example: [MOD-1](#mod-1). |
 | **`remove_user`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::remove_user","signature":"pub fn fava_simple_groups::remove_user(nostr::key::public_key::PublicKey, &fava_simple_groups::SimpleGroup, &[nostr::key::public_key::PublicKey]) -> core::result::Result<fava_write::builder::EventBuilder, fava_write::WriteIntentError>","evidence":"docs/issues/0043-simple-group-management-cardinality.md; crates/fava-simple-groups/src/management.rs; NIP-29 kind 9001"} --> | Builds a self-routed kind-9001 event builder with one `p` tag for every supplied user key. Empty slices emit no `p` tags. Publish via `fava.publish(builder)`. |
-| **`rename_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::rename_saved_simple_group","signature":"pub fn fava_simple_groups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit setting the display name for every selected id/relay entry, retaining first positions, removing later matches, and appending absent selected relays. Preserves unused trailing values on retained tags.<br><br>Example: [MOD-1](#mod-1). |
-| **`save_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_relay","signature":"pub fn fava_simple_groups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `r` tag for the exact inert relay URL, keeping the first match, removing later matches, and appending when absent.<br><br>Example: [MOD-1](#mod-1). |
-| **`save_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_simple_group","signature":"pub fn fava_simple_groups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::ReplaceableEventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `group` tag for every normalized relay. Keeps the first existing match unchanged, removes later matches, and appends missing relays in group order.<br><br>Example: [MOD-1](#mod-1). |
-| **`saved_group_list_materializer`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::saved_group_list_materializer","signature":"pub fn fava_simple_groups::saved_group_list_materializer() -> alloc::sync::Arc<dyn fava_write::materialization::ReplaceableEventMaterializer>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Returns a fresh kind-10009 materializer behind the neutral contract. Its type and edit codec stay private. It verifies a signed or unsigned source, requires matching author/kind and a strictly later output timestamp, preserves opaque content and unrelated tags, and reports refusal as `WriteIntentError`.<br><br>Example: [MOD-1](#mod-1). |
+| **`rename_saved_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::rename_saved_simple_group","signature":"pub fn fava_simple_groups::rename_saved_simple_group(&fava_simple_groups::SimpleGroup, &str) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit setting the display name for every selected id/relay entry, retaining first positions, removing later matches, and appending absent selected relays. Preserves unused trailing values on retained tags.<br><br>Example: [MOD-1](#mod-1). |
+| **`save_relay`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_relay","signature":"pub fn fava_simple_groups::save_relay(nostr::types::url::RelayUrl) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `r` tag for the exact inert relay URL, keeping the first match, removing later matches, and appending when absent.<br><br>Example: [MOD-1](#mod-1). |
+| **`save_simple_group`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::save_simple_group","signature":"pub fn fava_simple_groups::save_simple_group(&fava_simple_groups::SimpleGroup, core::option::Option<&str>) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Produces a kind-10009 edit ensuring one semantic `group` tag for every normalized relay. Keeps the first existing match unchanged, removes later matches, and appends missing relays in group order.<br><br>Example: [MOD-1](#mod-1). |
+| **`saved_group_list_applier`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::saved_group_list_applier","signature":"pub fn fava_simple_groups::saved_group_list_applier() -> alloc::sync::Arc<dyn fava_write::edit_application::EditApplier>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Proposed public shape; crates/fava-simple-groups/src/edit.rs","example":"MOD-1"} --> | Returns a fresh kind-10009 applier behind the neutral contract. Its type and edit codec stay private. It verifies a signed or unsigned source, requires matching author/kind and a strictly later output timestamp, preserves opaque content and unrelated tags, and reports refusal as `WriteIntentError`.<br><br>Example: [MOD-1](#mod-1). |
 | **`saved_group_lists`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_simple_groups::saved_group_lists","signature":"pub fn fava_simple_groups::saved_group_lists(impl core::iter::traits::collect::IntoIterator<Item = nostr::key::public_key::PublicKey>) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"pad:fava/2026-08-simple-groups-api-redesign-proposal#Simple Group List; crates/fava-simple-groups/src/query.rs; NIP-51 kind 10009","example":"MOD-1"} --> | Builds the ordinary kind-10009 query for the exact supplied author set. Empty input intentionally matches nothing; callers own observation. Replaces the current identical saved-group and saved-relay queries.<br><br>Example: [MOD-1](#mod-1). |
 
 <a id="mod-1"></a>
@@ -174,9 +174,9 @@ use std::error::Error;
 use fava_query::{Kind, RelayUrl};
 use fava_simple_groups::{
     SimpleGroup, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
-    save_relay, save_simple_group, saved_group_list_materializer, saved_group_lists,
+    save_relay, save_simple_group, saved_group_list_applier, saved_group_lists,
 };
-use fava_write::{EventValue, ReplaceableEventMaterializer, Tag, Timestamp};
+use fava_write::{EditApplier, EventValue, Tag, Timestamp};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 fn has_tag(tags: &[Tag], expected: &[&str]) -> bool {
@@ -209,11 +209,11 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
         .custom_created_at(Timestamp::from(1))
         .finalize(&keys)?;
     let source = EventValue::Signed(source);
-    let materializer = saved_group_list_materializer();
-    assert_eq!(materializer.kind(), Kind::from_u16(10_009));
+    let applier = saved_group_list_applier();
+    assert_eq!(applier.kind(), Kind::from_u16(10_009));
     let save = save_simple_group(&group, Some("Photos"))?;
-    assert!(materializer.supports(&save));
-    let saved = materializer.materialize(&save, author, None, Timestamp::from(2))?;
+    assert!(applier.supports(&save));
+    let saved = applier.apply(&save, author, None, Timestamp::from(2))?;
     assert!(has_tag(
         &saved.tags,
         &["group", "photos", "wss://a.example", "Photos"]
@@ -223,7 +223,7 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
         &["group", "photos", "wss://b.example", "Photos"]
     ));
     let rename = rename_saved_simple_group(&group, "Renamed")?;
-    let renamed = materializer.materialize(&rename, author, Some(&source), Timestamp::from(2))?;
+    let renamed = applier.apply(&rename, author, Some(&source), Timestamp::from(2))?;
     assert!(has_tag(
         &renamed.tags,
         &["group", "photos", "wss://a.example", "Renamed"]
@@ -236,7 +236,7 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
     assert_eq!(renamed.content, "opaque");
     let remove_group = remove_saved_simple_group(&group)?;
     let without_group =
-        materializer.materialize(&remove_group, author, Some(&source), Timestamp::from(2))?;
+        applier.apply(&remove_group, author, Some(&source), Timestamp::from(2))?;
     assert!(
         !without_group
             .tags
@@ -245,11 +245,11 @@ fn exercise_saved_edits() -> Result<(), Box<dyn Error>> {
     );
     let add_relay = save_relay(relay_b.clone())?;
     let with_relay =
-        materializer.materialize(&add_relay, author, Some(&source), Timestamp::from(2))?;
+        applier.apply(&add_relay, author, Some(&source), Timestamp::from(2))?;
     assert!(has_tag(&with_relay.tags, &["r", "wss://b.example"]));
     let remove_relay = remove_saved_relay(relay_a)?;
     let without_relay =
-        materializer.materialize(&remove_relay, author, Some(&source), Timestamp::from(2))?;
+        applier.apply(&remove_relay, author, Some(&source), Timestamp::from(2))?;
     assert!(!has_tag(&without_relay.tags, &["r", "wss://a.example"]));
     Ok(())
 }

@@ -1,12 +1,12 @@
-use fava_write::{EventValue, ReplaceableEventEdit, Tag, Timestamp, WriteIntentError};
+use fava_write::{EventValue, EventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
-use crate::materializer;
+use crate::applier;
 
 mod contact_list;
 mod edit;
-mod materializer;
+mod applier;
 mod query;
 
 fn tag(values: &[&str]) -> Tag {
@@ -27,14 +27,14 @@ fn source(
         .expect("source signs")
 }
 
-fn materialize(
+fn apply(
     author: PublicKey,
-    edit: &ReplaceableEventEdit,
+    edit: &EventEdit,
     source: Option<&fava_write::Event>,
     created_at: u64,
 ) -> Result<fava_write::UnsignedEvent, WriteIntentError> {
     let source = source.cloned().map(EventValue::Signed);
-    materializer().materialize(edit, author, source.as_ref(), Timestamp::from(created_at))
+    applier().apply(edit, author, source.as_ref(), Timestamp::from(created_at))
 }
 
 fn target_tags(event: &fava_write::UnsignedEvent, target: PublicKey) -> usize {

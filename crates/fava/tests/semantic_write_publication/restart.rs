@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use fava::{EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit, Timestamp};
+use fava::{EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_relay::{RelayAccess, RelaySessionKey};
@@ -22,12 +22,12 @@ use fava_routing::{
 };
 
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_event,
-    relay_occurrence, relay_url, signed_source, wait_for_materialization,
+    BlockingSigner, RecordingPublisher, TestApplier, publication_builder, relay_event,
+    relay_occurrence, relay_url, signed_source, wait_for_revision,
 };
 
-fn edit(change: u8) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
+fn edit(change: u8) -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
 }
 
 fn content(event: &EventValue) -> &str {
@@ -42,7 +42,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let first = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(
                 edit(1),
                 keys.public_key(),
@@ -64,21 +64,21 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
             relay_occurrence(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::new(BlockingSigner::new(keys.public_key())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("memory recovery reconciles before exposing the facade");
 
     let reconciled = fava.receipt(first.receipt_id).unwrap().unwrap();
     assert_eq!(
-        reconciled.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        reconciled.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(content(&reconciled.current.event), "restart source|edit");
 
@@ -95,8 +95,8 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     assert_eq!(second.write_id(), first.write_id);
     assert_eq!(second.receipt_id(), first.receipt_id);
     assert_eq!(
-        composed.current.publication.materialization_id,
-        MaterializationId::try_from(3).expect("nonzero materialization identity")
+        composed.current.publication.revision_id,
+        RevisionId::try_from(3).expect("nonzero revision identity")
     );
     assert_eq!(content(&composed.current.event), "restart source|edit|edit");
 
@@ -106,7 +106,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
             relay_occurrence(),
         ))])
         .unwrap();
-    let replayed = wait_for_materialization(&fava, first.receipt_id, 4).await;
+    let replayed = wait_for_revision(&fava, first.receipt_id, 4).await;
     assert_eq!(content(&replayed.current.event), "late source|edit|edit");
 }
 
@@ -115,7 +115,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let first = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(1), keys.public_key(), fava::WriteRouting::Automatic)
                 .unwrap(),
             EventBuilder::new(keys.public_key(), Kind::ContactList)
@@ -126,7 +126,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
             None,
         )
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let stale = RelayUrl::parse("wss://stale-generation.example").unwrap();
     let current = RelayUrl::parse("wss://current-generation.example").unwrap();
     let router = Arc::new(ComposingRouter::new(
@@ -142,14 +142,14 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .materializer(materializer)
+    .applier(applier)
     .build()
     .unwrap();
 
     let receipt = wait_for_route(&fava, first.receipt_id).await;
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert!(
         receipt
@@ -219,7 +219,7 @@ impl Router for ComposingRouter {
                 .unwrap();
             let reservation = self.store.reserve_active(&edit, self.author).unwrap();
             self.store
-                .accept_reserved_materialized_edit(
+                .accept_reserved_applied_edit(
                     reservation,
                     WriteIntent::edit_as(edit, self.author, fava::WriteRouting::Automatic).unwrap(),
                     event,

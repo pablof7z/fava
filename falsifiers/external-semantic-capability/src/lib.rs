@@ -3,7 +3,7 @@
 mod capability;
 
 pub use capability::{
-    decode_external_event, external_kind, external_query, insert, remove, selected_materializer,
+    decode_external_event, external_kind, external_query, insert, remove, selected_applier,
     validate_external_event,
 };
 
@@ -13,7 +13,7 @@ mod tests {
 
     use super::*;
     use fava::{
-        EventBuildError, EventValue, Kind, Query, ReplaceableEventEdit, Timestamp, WriteIntentError,
+        EventBuildError, EventValue, Kind, Query, EventEdit, Timestamp, WriteIntentError,
     };
     use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent, Tag};
     use nostr::key::Keys;
@@ -38,12 +38,12 @@ mod tests {
     fn external_first_value_opposing_operation_and_preservation() {
         let keys = Keys::generate();
         let actor = keys.public_key();
-        let materializer = selected_materializer();
+        let applier = selected_applier();
         let add_alpha = insert("alpha").expect("bounded external edit");
 
-        let first = materializer
-            .materialize(&add_alpha, actor, None, Timestamp::from(10))
-            .expect("empty state materializes");
+        let first = applier
+            .apply(&add_alpha, actor, None, Timestamp::from(10))
+            .expect("empty state applies");
         assert_eq!(first.pubkey, actor);
         assert_eq!(first.kind, external_kind());
         assert_eq!(first.content, "external-set-v1\nalpha\n");
@@ -70,9 +70,9 @@ mod tests {
                 "unrelated\ncontent".to_owned()
             )
         );
-        let successor = materializer
-            .materialize(&add_alpha, actor, Some(&source_value), Timestamp::from(21))
-            .expect("current state materializes");
+        let successor = applier
+            .apply(&add_alpha, actor, Some(&source_value), Timestamp::from(21))
+            .expect("current state applies");
         assert_eq!(
             successor.content,
             "external-set-v1\nalpha,beta\nunrelated\ncontent"
@@ -82,14 +82,14 @@ mod tests {
         let successor = successor.finalize(&keys).expect("successor signs");
         let successor_value = EventValue::Signed(successor);
         let remove_alpha = remove("alpha").expect("opposing edit");
-        let restored = materializer
-            .materialize(
+        let restored = applier
+            .apply(
                 &remove_alpha,
                 actor,
                 Some(&successor_value),
                 Timestamp::from(22),
             )
-            .expect("opposing edit materializes through the same contract");
+            .expect("opposing edit applies through the same contract");
         assert_eq!(
             restored.content,
             "external-set-v1\nbeta\nunrelated\ncontent"
@@ -100,25 +100,25 @@ mod tests {
     fn external_duplicate_adjacent_and_ordering_are_deterministic() {
         let keys = Keys::generate();
         let actor = keys.public_key();
-        let materializer = selected_materializer();
+        let applier = selected_applier();
         let add_alpha = insert("alpha").expect("alpha edit");
         let add_beta = insert("beta").expect("beta edit");
 
-        let beta = materializer
-            .materialize(&add_beta, actor, None, Timestamp::from(1))
+        let beta = applier
+            .apply(&add_beta, actor, None, Timestamp::from(1))
             .unwrap()
             .finalize(&keys)
             .unwrap();
-        let alpha_then_beta = materializer
-            .materialize(
+        let alpha_then_beta = applier
+            .apply(
                 &add_alpha,
                 actor,
                 Some(&EventValue::Signed(beta)),
                 Timestamp::from(2),
             )
             .unwrap();
-        let duplicate = materializer
-            .materialize(
+        let duplicate = applier
+            .apply(
                 &add_alpha,
                 actor,
                 Some(&EventValue::Signed(
@@ -128,13 +128,13 @@ mod tests {
             )
             .unwrap();
 
-        let alpha = materializer
-            .materialize(&add_alpha, actor, None, Timestamp::from(1))
+        let alpha = applier
+            .apply(&add_alpha, actor, None, Timestamp::from(1))
             .unwrap()
             .finalize(&keys)
             .unwrap();
-        let beta_then_alpha = materializer
-            .materialize(
+        let beta_then_alpha = applier
+            .apply(
                 &add_beta,
                 actor,
                 Some(&EventValue::Signed(alpha)),
@@ -147,8 +147,8 @@ mod tests {
         assert_eq!(beta_then_alpha.content, alpha_then_beta.content);
 
         let remove_beta = remove("beta").expect("remove edit");
-        let adjacent = materializer
-            .materialize(
+        let adjacent = applier
+            .apply(
                 &remove_beta,
                 actor,
                 Some(&EventValue::Signed(
@@ -164,14 +164,14 @@ mod tests {
     fn external_bounds_and_malformed_source_refuse() {
         let keys = Keys::generate();
         let actor = keys.public_key();
-        let materializer = selected_materializer();
+        let applier = selected_applier();
 
         assert!(insert(&"x".repeat(257)).is_err());
         let malformed_edit =
-            ReplaceableEventEdit::new(external_kind(), None, vec![99, 0, 0]).unwrap();
+            EventEdit::new(external_kind(), None, vec![99, 0, 0]).unwrap();
         assert!(
-            materializer
-                .materialize(&malformed_edit, actor, None, Timestamp::from(1))
+            applier
+                .apply(&malformed_edit, actor, None, Timestamp::from(1))
                 .is_err()
         );
 
@@ -180,8 +180,8 @@ mod tests {
                 .finalize(&keys)
                 .unwrap();
         assert!(
-            materializer
-                .materialize(
+            applier
+                .apply(
                     &insert("alpha").unwrap(),
                     actor,
                     Some(&EventValue::Signed(malformed_source)),
@@ -194,8 +194,8 @@ mod tests {
             .finalize(&keys)
             .unwrap();
         assert!(
-            materializer
-                .materialize(
+            applier
+                .apply(
                     &insert("alpha").unwrap(),
                     actor,
                     Some(&EventValue::Signed(oversized_source)),
@@ -211,7 +211,7 @@ mod tests {
         }
         let too_many_tags = too_many_tags_builder.finalize(&keys).expect("source signs");
         assert!(matches!(
-            materializer.materialize(
+            applier.apply(
                 &insert("alpha").unwrap(),
                 actor,
                 Some(&EventValue::Signed(too_many_tags)),
@@ -228,7 +228,7 @@ mod tests {
             .finalize(&keys)
             .expect("source signs");
         assert!(matches!(
-            materializer.materialize(
+            applier.apply(
                 &insert("alpha").unwrap(),
                 actor,
                 Some(&EventValue::Signed(nested_source)),
@@ -243,7 +243,7 @@ mod tests {
             .finalize(&keys)
             .expect("source signs");
         assert!(matches!(
-            materializer.materialize(
+            applier.apply(
                 &insert("alpha").unwrap(),
                 actor,
                 Some(&EventValue::Signed(tag_heavy_source)),

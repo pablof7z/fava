@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fava::{
-    EventBuilder, EventValue, Kind, PublicKey, Query, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventValue, Kind, PublicKey, Query, EventEdit,
+    EditApplier, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const KIND: Kind = Kind::Custom(15_001);
@@ -82,7 +82,7 @@ pub fn decode_external_event(
 ///
 /// Returns an existing write-intent refusal when the item is malformed or
 /// exceeds the capability's private bound.
-pub fn insert(item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn insert(item: &str) -> Result<EventEdit, WriteIntentError> {
     edit(item, INSERT)
 }
 
@@ -92,19 +92,19 @@ pub fn insert(item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
 ///
 /// Returns an existing write-intent refusal when the item is malformed or
 /// exceeds the capability's private bound.
-pub fn remove(item: &str) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn remove(item: &str) -> Result<EventEdit, WriteIntentError> {
     edit(item, REMOVE)
 }
 
 /// Return the capability provider behind the public neutral contract.
 #[must_use]
-pub fn selected_materializer() -> Arc<dyn ReplaceableEventMaterializer> {
-    Arc::new(ExternalSetMaterializer)
+pub fn selected_applier() -> Arc<dyn EditApplier> {
+    Arc::new(ExternalSetApplier)
 }
 
-fn edit(item: &str, operation: u8) -> Result<ReplaceableEventEdit, WriteIntentError> {
+fn edit(item: &str, operation: u8) -> Result<EventEdit, WriteIntentError> {
     let change = encode_action(operation, item)?;
-    ReplaceableEventEdit::new(KIND, None, change)
+    EventEdit::new(KIND, None, change)
 }
 
 fn encode_action(operation: u8, item: &str) -> Result<Vec<u8>, WriteIntentError> {
@@ -131,7 +131,7 @@ fn decode_action(bytes: &[u8]) -> Result<(u8, &str), WriteIntentError> {
     Ok((*operation, item))
 }
 
-fn validate_change(edit: &ReplaceableEventEdit) -> Result<(u8, String), WriteIntentError> {
+fn validate_change(edit: &EventEdit) -> Result<(u8, String), WriteIntentError> {
     let (operation, item) = decode_action(edit.change())?;
     Ok((operation, item.to_owned()))
 }
@@ -159,20 +159,20 @@ fn edit_refusal() -> WriteIntentError {
     WriteIntentError::InvalidEvent("external capability edit encoding is malformed".to_owned())
 }
 
-struct ExternalSetMaterializer;
+struct ExternalSetApplier;
 
-impl ReplaceableEventMaterializer for ExternalSetMaterializer {
+impl EditApplier for ExternalSetApplier {
     fn kind(&self) -> Kind {
         KIND
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         edit.kind() == KIND && edit.identifier().is_none() && validate_change(edit).is_ok()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,

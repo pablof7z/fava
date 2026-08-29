@@ -9,7 +9,7 @@ use nostr::types::RelayUrl;
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
-async fn delayed_route_after_rematerialization_commits_newer_revision() {
+async fn delayed_route_after_reapplication_commits_newer_revision() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
@@ -26,7 +26,7 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
         contribution(initial),
     ));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -34,7 +34,7 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&delayed))
-    .materializer(materializer)
+    .applier(applier)
     .build()
     .unwrap();
     let write = fava
@@ -50,7 +50,7 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
             relay_occurrence(),
         ))])
         .unwrap();
-    wait_for_materialization(&fava, write.receipt_id(), 2).await;
+    wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
     let reopened = wait_for_route_revision(&fava, write.receipt_id(), 3).await;
 

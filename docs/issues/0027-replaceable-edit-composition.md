@@ -9,7 +9,7 @@
 
 The write stores index one live semantic receipt per replaceable coordinate but
 retain only one edit under that receipt. A distinct second edit is therefore
-refused while the first materialization is still unsigned. Publication also
+refused while the first revision is still unsigned. Publication also
 selects only signed events as semantic source state, so it cannot apply the
 second edit to the exact current unsigned body.
 
@@ -21,17 +21,17 @@ publication obligation.
 
 One replaceable coordinate has one active write and receipt. Before signature,
 a distinct same-coordinate edit appends to that operation's durable ordered
-edit sequence, materializes over the exact current unsigned body, advances the
-`MaterializationId`, and returns the same `WriteId` and `ReceiptId`.
+edit sequence, applies over the exact current unsigned body, advances the
+`RevisionId`, and returns the same `WriteId` and `ReceiptId`.
 
-Source-driven rematerialization replays the ordered sequence through the
-selected protocol materializer. The sequence is persisted by every write-store
+Source-driven reapplication replays the ordered sequence through the
+selected protocol applier. The sequence is persisted by every write-store
 provider and recovered before new commands. Its length cannot exceed the
 existing bounded retained-generation evidence: every appended edit retires
-exactly one materialization, and overflow refuses atomically.
+exactly one revision, and overflow refuses atomically.
 
 The write store remains the sole coordinate, custody, operation, receipt, and
-generation owner. Protocol materializers remain pure and receive an ordinary
+generation owner. Protocol appliers remain pure and receive an ordinary
 signed or unsigned event value; no protocol crate owns a queue, batch, receipt,
 or recovery path.
 
@@ -40,7 +40,7 @@ or recovery path.
 - Two distinct pre-signature edits at one author/kind/identifier coordinate
   produce one deterministic current body in acceptance order.
 - Both publish calls address the same exact write and receipt; the second body
-  has the next exact materialization generation.
+  has the next exact revision.
 - A signer completion for the retired generation is inert and attributable to
   its original operation, generation, and event identity.
 - Redb reopen recovers the ordered edit sequence and replays it over a newer
@@ -91,7 +91,7 @@ reservation per coordinate and inactive reserved coordinates counted against
 the global active bound. Mismatched acceptance refuses without consuming the
 owner's reservation; matching post-coordinate failures still consume it.
 
-Durable custody reads now require the exact current `MaterializationId`.
+Durable custody reads now require the exact current `RevisionId`.
 Publication retries failed reads without reopening signing or routing, re-reads
 the receipt if another composition supersedes the failed target generation,
 and advances only after the newest exact sequence is available. Successor
@@ -114,15 +114,15 @@ Commit `fdf5d5ce` makes initial semantic reconciliation part of synchronous
 publication recovery rather than background-runner startup. The facade is not
 returned until every recovered coordinate has considered its complete durable
 sequence against the initial qualified source snapshot. Each runner state also
-carries the exact `MaterializationId` of its loaded sequence; initialization
+carries the exact `RevisionId` of its loaded sequence; initialization
 exact-refreshes custody whenever the receipt advanced before opening signer or
 route work. Both reconciliation loops are bounded by the existing retained
-materialization-evidence capacity.
+revision-evidence capacity.
 
 ## Exact-generation initialization blocker closure
 
 Review r3 identified two remaining windows. Recovery could read generation N,
-then materialize its stale loaded sequence after custody had advanced to N+1;
+then apply its stale loaded sequence after custody had advanced to N+1;
 the store rejected installation, but the stale provider invocation had already
 occurred. Separately, a router session opened for generation N could advance
 custody during `open`, after which initialization paired that stale session
@@ -131,7 +131,7 @@ current.
 
 The behavior-first proof places deterministic barriers at both windows. The
 custody-read barrier composes a second edit after recovery's first receipt read
-and requires exactly two materializer calls for the complete two-edit sequence,
+and requires exactly two applier calls for the complete two-edit sequence,
 with no stale one-edit invocation. The router-open barrier composes while the
 first session opens and requires that session to close, a second session to
 open from the current event, and only its destination to commit. The latter
@@ -139,9 +139,9 @@ runs through memory restart, clean redb restart, and redb SIGKILL recovery.
 
 Publication now uses one bounded generation-activation path for initialization
 and later successors. It exact-refreshes durable custody, re-reads the complete
-receipt, materializes only unchanged custody, opens routing for that exact
+receipt, applies only unchanged custody, opens routing for that exact
 event, re-reads again, and closes/restarts on any mismatch. Route application
-uses the write, receipt, materialization, and event identity accepted by that
+uses the write, receipt, revision, and event identity accepted by that
 activation; signing starts only after it succeeds.
 
 ## Store-owned signer authorization closure

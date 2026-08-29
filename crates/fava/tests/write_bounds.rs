@@ -71,7 +71,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
             .record_signer_refusal(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 "x".repeat(4_097),
             )
@@ -87,7 +87,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .authorize_signing(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
         )
         .unwrap();
@@ -96,7 +96,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
             .install_signed(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 wrong,
             )
@@ -116,7 +116,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .install_signed(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             unsigned.finalize(&keys).unwrap(),
         )
@@ -126,7 +126,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
         .begin_attempt(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &session,
             1,
@@ -137,7 +137,7 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
             .record_outcome(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &session,
                 1,
@@ -186,7 +186,7 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &plan,
         )
@@ -237,7 +237,7 @@ fn automatic_route_shortfall_bound_is_atomic() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &first,
         )
@@ -255,7 +255,7 @@ fn automatic_route_shortfall_bound_is_atomic() {
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &refused,
             )
@@ -298,7 +298,7 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &first,
         )
@@ -307,7 +307,7 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         .begin_attempt(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &session,
             1,
@@ -325,7 +325,7 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &withdrawn,
         )
@@ -339,7 +339,7 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
         .record_outcome(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &session,
             1,
@@ -367,7 +367,7 @@ fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &plan,
         )

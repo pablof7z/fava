@@ -1,6 +1,6 @@
-use fava_write::{Kind, PublicKey, ReplaceableEventEdit, Timestamp, WriteIntentError};
+use fava_write::{Kind, PublicKey, EventEdit, Timestamp, WriteIntentError};
 
-use crate::saved_group_list_materializer;
+use crate::saved_group_list_applier;
 
 const SAVE_SIMPLE_GROUP: u8 = 1;
 const SAVE_RELAY: u8 = 4;
@@ -14,16 +14,16 @@ fn text(value: &[u8]) -> Vec<u8> {
     encoded
 }
 
-fn edit(kind: Kind, identifier: Option<&str>, change: Vec<u8>) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(kind, identifier.map(str::to_owned), change)
+fn edit(kind: Kind, identifier: Option<&str>, change: Vec<u8>) -> EventEdit {
+    EventEdit::new(kind, identifier.map(str::to_owned), change)
         .expect("neutral edit shape")
 }
 
-fn assert_refusal(edit: &ReplaceableEventEdit, expected: &str) {
-    let materializer = saved_group_list_materializer();
-    assert!(!materializer.supports(edit));
+fn assert_refusal(edit: &EventEdit, expected: &str) {
+    let applier = saved_group_list_applier();
+    assert!(!applier.supports(edit));
     assert_eq!(
-        materializer.materialize(
+        applier.apply(
             edit,
             PublicKey::from_slice(&[2; 32]).unwrap(),
             None,

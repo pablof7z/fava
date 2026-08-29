@@ -17,7 +17,7 @@ use fava_session::{Session, SessionError};
 use fava_signer::Signer;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
-use fava_write::ReplaceableEventMaterializer;
+use fava_write::EditApplier;
 use fava_write_store::WriteStore;
 use thiserror::Error;
 
@@ -34,7 +34,7 @@ pub struct FavaBuilder {
     transport: Option<Arc<dyn Transport>>,
     routers: Vec<Arc<dyn Router>>,
     signers: Vec<Arc<dyn Signer>>,
-    materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
+    appliers: Vec<Arc<dyn EditApplier>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
     diagnostics_capacity: Option<NonZeroUsize>,
@@ -142,23 +142,23 @@ impl FavaBuilder {
         self
     }
 
-    /// Select one semantic materializer for its exact replaceable kind.
+    /// Select one semantic applier for its exact replaceable kind.
     #[must_use]
-    pub fn materializer<T>(mut self, materializer: Arc<T>) -> Self
+    pub fn applier<T>(mut self, applier: Arc<T>) -> Self
     where
-        T: ReplaceableEventMaterializer + 'static,
+        T: EditApplier + 'static,
     {
-        self.materializers.push(materializer);
+        self.appliers.push(applier);
         self
     }
 
-    /// Select already-erased semantic materializers.
+    /// Select already-erased semantic appliers.
     #[must_use]
-    pub fn materializers(
+    pub fn appliers(
         mut self,
-        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
+        appliers: impl IntoIterator<Item = Arc<dyn EditApplier>>,
     ) -> Self {
-        self.materializers.extend(materializers);
+        self.appliers.extend(appliers);
         self
     }
 
@@ -209,7 +209,7 @@ impl FavaBuilder {
         let publication_selected = self.publisher.is_some()
             || self.delivery.is_some()
             || !self.signers.is_empty()
-            || !self.materializers.is_empty();
+            || !self.appliers.is_empty();
         let session = Session::new(self.signers)?;
         let publication = if publication_selected {
             let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
@@ -222,7 +222,7 @@ impl FavaBuilder {
                 write_store.clone(),
                 event_source.clone(),
                 evaluator.clone(),
-                self.materializers,
+                self.appliers,
                 session.clone(),
                 publisher,
                 delivery,

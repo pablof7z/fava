@@ -43,11 +43,11 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 ### Pitfall 2: Collapsing event-cache and write-store authority
 
 **Confidence:** HIGH
-**Owning milestone/phase:** M1 for local merge/retraction; M5 for durable publication; M7 for rematerialization; M9 for profile recovery
+**Owning milestone/phase:** M1 for local merge/retraction; M5 for durable publication; M7 for reapplication; M9 for profile recovery
 
 **What goes wrong:** Pending local writes are copied into the event cache, or the cache and write store are hidden behind one storage abstraction with indistinguishable lifecycle. Cancellation then cannot retract only the local contribution, a cached predecessor cannot reappear naturally, and an unpublished or unsigned event can acquire relay provenance it never earned.
 
-**Why it happens:** A single event table appears to simplify queries and persistence. It instead merges two different authorities: the event cache owns reusable admitted relay observations; the write store owns accepted obligations, materializations, receipts, and recovery.
+**Why it happens:** A single event table appears to simplify queries and persistence. It instead merges two different authorities: the event cache owns reusable admitted relay observations; the write store owns accepted obligations, revisions, receipts, and recovery.
 
 **Consequences:** Cache pollution, false relay evidence, destructive cancellation, broken optimistic visibility, duplicate obligations, and recovery paths that cannot determine whether an event was observed externally or exists only because Fava owes publication work.
 
@@ -65,7 +65,7 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 - Merge source contributions only in semantic query evaluation into one current `EventRecord`.
 - Define duplicate submission behavior at the write-store contract before accepting the same event ID twice.
 - Make source removal, cancellation, expiry, and deletion ordinary source revisions that recompute current state; do not invent a parallel removal stream.
-- Run the same state corpus against cache and write-store contributions, including shadow, cancel, echo, duplicate acceptance, and rematerialization.
+- Run the same state corpus against cache and write-store contributions, including shadow, cancel, echo, duplicate acceptance, and reapplication.
 
 **Detection:** The M1 public-facade capstones must prove merged same-event evidence, local replacement shadowing, cancellation revealing the cached predecessor, and zero cache insertion for the local value. Named deliberate break: concatenate source results or insert the local value into the cache; the capstone must detect duplication or false authority.
 
@@ -105,11 +105,11 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 **Confidence:** HIGH
 **Owning milestone/phase:** M2-M3 for request/session generations; M5-M8 for write, route, signer, attempt, handoff, and auth generations; M11 for SDK handle identity
 
-**What goes wrong:** Event ID, relay URL, subscription ID, or receipt ID is treated as sufficient correlation. A completion from an old connection, retired route revision, cancelled signer request, or superseded replaceable-event materialization mutates current work.
+**What goes wrong:** Event ID, relay URL, subscription ID, or receipt ID is treated as sufficient correlation. A completion from an old connection, retired route revision, cancelled signer request, or superseded replaceable-event revision mutates current work.
 
-**Why it happens:** Stable logical identity and physical attempt identity are both necessary, so one is often reused for the other. NIP-01 subscription IDs are only per connection, and NIP-42 challenges/authentication are valid for one connection or until replaced. Write rematerialization makes the same receipt span several materialization/signing generations.
+**Why it happens:** Stable logical identity and physical attempt identity are both necessary, so one is often reused for the other. NIP-01 subscription IDs are only per connection, and NIP-42 challenges/authentication are valid for one connection or until replaced. Write reapplication makes the same receipt span several revision/signing generations.
 
-**Consequences:** Ghost events after cancellation, stale EOSE, delivery credited to the wrong attempt, repeated sends, old signatures applied to newer materializations, and cross-account authentication confusion.
+**Consequences:** Ghost events after cancellation, stale EOSE, delivery credited to the wrong attempt, repeated sends, old signatures applied to newer revisions, and cross-account authentication confusion.
 
 **Warning signs:**
 
@@ -132,9 +132,9 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 ### Pitfall 5: Returning `Accepted` before one durable owner has committed the entire obligation
 
 **Confidence:** HIGH
-**Owning milestone/phase:** M5 establishes durable acceptance and recovery; M7 extends it across rematerialization; M8 qualifies handoff ambiguity and give-up; M9 qualifies storage profiles
+**Owning milestone/phase:** M5 establishes durable acceptance and recovery; M7 extends it across reapplication; M8 qualifies handoff ambiguity and give-up; M9 qualifies storage profiles
 
-**What goes wrong:** The caller receives `Accepted` after allocating an ID, writing only a materialization, or queuing background work, while the receipt and recoverable publication obligation are not committed atomically. A crash loses work that the API promised to own.
+**What goes wrong:** The caller receives `Accepted` after allocating an ID, writing only a revision, or queuing background work, while the receipt and recoverable publication obligation are not committed atomically. A crash loses work that the API promised to own.
 
 **Why it happens:** Storage commit, local visibility, signing, routing, and publication are implemented as one optimistic async pipeline. Database `commit` is also treated as a universal durability claim without pinning journal/sync configuration and the exact crash class being promised.
 
@@ -142,7 +142,7 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 
 **Warning signs:**
 
-- `Accepted` can be emitted before receipt, obligation, and current materialization share a transaction.
+- `Accepted` can be emitted before receipt, obligation, and current revision share a transaction.
 - External signing/routing/publishing starts before the committed fact is observable.
 - Counter/identity mutation happens before all refusal/overflow checks complete.
 - Restart tests open another engine in the same process.
@@ -152,11 +152,11 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 
 - Enforce `command -> owner decision -> durable commit -> committed fact -> external effect -> correlated completion fact`.
 - Precompute checked identities, bounds, and the complete next state before mutating storage.
-- Commit obligation, current materialization, receipt identity, and recovery cursor atomically under the write-store owner.
+- Commit obligation, current revision, receipt identity, and recovery cursor atomically under the write-store owner.
 - Qualify process-crash and power-loss durability separately. SQLite WAL with `synchronous=NORMAL` can preserve consistency yet lose the latest commit after OS/power failure; a profile claiming that stronger durability needs the appropriate settings and tests.
 - Treat the WAL and provider-private persisted files as one provider-owned persistence unit.
 
-**Detection:** SIGKILL the application after each durable/effect boundary, reopen through the supported public construction path, observe the same receipt/materialization, then continue without duplication. Named deliberate break: return `Accepted` immediately before commit; the recovery scenario must fail to find the receipt.
+**Detection:** SIGKILL the application after each durable/effect boundary, reopen through the supported public construction path, observe the same receipt/revision, then continue without duplication. Named deliberate break: return `Accepted` immediately before commit; the recovery scenario must fail to find the receipt.
 
 ### Pitfall 6: Serializing partial progress or conflating routing with wire planning
 
@@ -302,7 +302,7 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 
 - Define the handoff boundary and operation generation at the owning milestone before exposing cancellation.
 - Preserve exact `never handed off`, `ambiguous`, `acknowledged`, `rejected`, `gave up`, and stale-completion distinctions per destination.
-- Keep current receipt identity stable across recovery and rematerialization; make historical facts immutable.
+- Keep current receipt identity stable across recovery and reapplication; make historical facts immutable.
 - Export explicit cancel/close/reattach operations and typed terminal values through FFI, then map native cancellation deliberately.
 - Test cancellation both before and after every meaningful suspension/handoff boundary.
 
@@ -491,9 +491,9 @@ M0-M6 are complete. Semantic edits, hostile-boundary qualification, persistent p
 | M2 — one-relay live read | Crediting unverified/off-filter/stale frames | Cache accepts caller-constructed relay evidence or raw events | Opaque admission value; exact request/session identity; forged/wrong-ID/off-filter/CLOSED corpus; bypass-verification mutation fails |
 | M3 — multi-relay observation | Using latest-state coalescing for causal facts or one task per handle | Receipt transitions disappear; tasks grow linearly; old generation updates current state | Separate snapshot and causal delivery; canonical sharing; bounded mailbox; 1,000-idle-observation envelope; remove-generation-check mutation fails |
 | M4 — routing/planning | Awaiting final route or embedding policy in primitive | One `resolve()` future; routing crate names NIP-65/fallback; planner silently truncates | Immediate/replacement contributions; live downstream reaction; explicit bypass; grouping differential; exact shortfall |
-| M5 — durable explicit publication | `Accepted` precedes complete atomic obligation | Receipt/materialization committed separately; signer/publisher runs first; same-process “restart” | Commit facts before effects; SIGKILL at every boundary; same receipt recovers; early-accept mutation fails |
-| M6 — automatic write routing | New route facts create new receipts or duplicate sends | Destination URL is the only lane key; delayed recipient restarts publication | One receipt with route/materialization/attempt generations; immediate known delivery; later lanes; settle-first mutation fails |
-| M7 — replaceable edits | Protocol crate owns publication or stale generation completes | NIP-02 calls signer/publisher; receipt changes after rematerialization | Edit-only protocol contract plus unrelated protocol N+1; stale signer/delivery corpus; dependency-negative test |
+| M5 — durable explicit publication | `Accepted` precedes complete atomic obligation | Receipt/revision committed separately; signer/publisher runs first; same-process “restart” | Commit facts before effects; SIGKILL at every boundary; same receipt recovers; early-accept mutation fails |
+| M6 — automatic write routing | New route facts create new receipts or duplicate sends | Destination URL is the only lane key; delayed recipient restarts publication | One receipt with route/revision/attempt generations; immediate known delivery; later lanes; settle-first mutation fails |
+| M7 — replaceable edits | Protocol crate owns publication or stale generation completes | NIP-02 calls signer/publisher; receipt changes after reapplication | Edit-only protocol contract plus unrelated protocol N+1; stale signer/delivery corpus; dependency-negative test |
 | M8 — hostile/auth/limits | Hardening is added as generic catch-all wrappers | Panic becomes generic close; NIP-42 state cached by relay URL; bounds silently drop | Per-call isolation, generation-scoped auth, exact typed failure/ambiguity/shortfall, independent adversarial process, failure-isolation mutation |
 | M9 — profiles/services | Baseline trait silently implies persistence/freshness | Memory cache survives restart accidentally; NIP-05/NIP-11 share semantic cache keys | Explicit generated profile guarantees; same app with swapped providers; service-owned freshness; ephemeral-byte-reuse mutation fails |
 | M10 — substitution | Alternative providers are adapters around defaults | External provider needs internal constructor or only tests `open` | Outside-workspace implementations, public conformance matrix, dependency-negative gates, zero private facade doors |

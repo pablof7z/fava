@@ -3,14 +3,14 @@ use std::num::NonZeroUsize;
 
 use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
-    EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome, Timestamp, WriteIntent,
+    EventBuilder, EventValue, Kind, RevisionId, ReceiptOutcome, Timestamp, WriteIntent,
     WriteRouting,
 };
 use fava_write_store::WriteStore;
 use fava_write_store_redb::RedbWriteStore;
 use nostr::key::Keys;
 
-use super::{edit, materialization, source, unique_path};
+use super::{edit, revision, source, unique_path};
 
 #[test]
 fn active_reservation_excludes_unreserved_redb_admission() {
@@ -41,11 +41,11 @@ fn active_reservation_excludes_unreserved_redb_admission() {
         "unreserved raw custody must not steal a held semantic slot"
     );
     let accepted = store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             reservation,
             WriteIntent::edit_as(edit(), semantic_keys.public_key(), WriteRouting::Automatic)
                 .unwrap(),
-            materialization(semantic_keys.public_key(), 1, "reserved"),
+            revision(semantic_keys.public_key(), 1, "reserved"),
             None,
             None,
         )
@@ -107,9 +107,9 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         let keys = Keys::generate();
         let intent =
             || WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap();
-        let event = || materialization(keys.public_key(), 1, "route effect");
+        let event = || revision(keys.public_key(), 1, "route effect");
         let accepted = store
-            .accept_reserved_materialized_edit(
+            .accept_reserved_applied_edit(
                 store.reserve_active(&edit(), keys.public_key()).unwrap(),
                 intent(),
                 event(),
@@ -121,7 +121,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         assert_eq!(retained.route_shortfalls, expected_shortfalls, "{label}");
         let mut changes = store.receipt_changes();
         let replayed = store
-            .accept_reserved_materialized_edit(
+            .accept_reserved_applied_edit(
                 store.reserve_active(&edit(), keys.public_key()).unwrap(),
                 intent(),
                 event(),
@@ -137,7 +137,7 @@ fn redb_initial_route_idempotence_compares_complete_persisted_effect() {
         assert!(changes.try_recv().is_err(), "{label} exact replay notified");
         assert!(
             store
-                .accept_reserved_materialized_edit(
+                .accept_reserved_applied_edit(
                     store.reserve_active(&edit(), keys.public_key()).unwrap(),
                     intent(),
                     event(),
@@ -167,9 +167,9 @@ fn redb_apply_route_replay_compares_complete_persisted_effect() {
     let store = RedbWriteStore::open(&path).unwrap();
     let keys = Keys::generate();
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
-            materialization(keys.public_key(), 1, "apply route"),
+            revision(keys.public_key(), 1, "apply route"),
             None,
         )
         .unwrap();
@@ -185,7 +185,7 @@ fn redb_apply_route_replay_compares_complete_persisted_effect() {
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &first,
         )
@@ -201,7 +201,7 @@ fn redb_apply_route_replay_compares_complete_persisted_effect() {
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &first,
             )
@@ -220,7 +220,7 @@ fn redb_apply_route_replay_compares_complete_persisted_effect() {
             .apply_route(
                 accepted.write_id,
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 accepted.current.id(),
                 &mismatch,
             )
@@ -260,38 +260,38 @@ fn equal_timestamp_lower_id_is_redb_store_successor() {
         (right, left)
     };
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
-            materialization(keys.public_key(), 11, "higher-id generation"),
+            revision(keys.public_key(), 11, "higher-id generation"),
             Some(&EventValue::Signed(higher_id.clone())),
         )
         .unwrap();
 
     let installed = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(higher_id.id),
             std::slice::from_ref(&edit()),
-            materialization(keys.public_key(), 12, "lower-id generation"),
+            revision(keys.public_key(), 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
             None,
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
-        installed.current.publication.materialization_source,
+        installed.current.publication.revision_source,
         Some(lower_id.id)
     );
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity"),
+                RevisionId::try_from(2).expect("nonzero revision identity"),
                 Some(lower_id.id),
                 std::slice::from_ref(&edit()),
-                materialization(keys.public_key(), 13, "higher-id retry"),
+                revision(keys.public_key(), 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
                 None,
             )
@@ -326,10 +326,10 @@ fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
             .reserve_active(&edit(), keys.public_key())
             .expect("terminal slot reserves");
         let accepted = store
-            .accept_reserved_materialized_edit(
+            .accept_reserved_applied_edit(
                 reservation,
                 WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
-                materialization(keys.public_key(), timestamp, "terminal"),
+                revision(keys.public_key(), timestamp, "terminal"),
                 Some(&EventValue::Signed(selected_source.clone())),
                 Some(&route),
             )
@@ -340,11 +340,11 @@ fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
             .expect("terminal receipt remains readable");
         assert_eq!(receipt.outcome, ReceiptOutcome::NoDestination);
         assert_eq!(
-            receipt.current.publication.materialization_source,
+            receipt.current.publication.revision_source,
             Some(selected_source.id)
         );
         assert_eq!(accepted.current, receipt.current);
-        assert!(store.recover_materialized_edits().unwrap().is_empty());
+        assert!(store.recover_applied_edits().unwrap().is_empty());
         identities.push(accepted.receipt_id);
     }
 
@@ -365,10 +365,10 @@ fn terminal_initial_routes_release_semantic_custody_and_obey_retention() {
         .unwrap()
         .expect("terminal receipt remains readable after reopen");
     assert_eq!(
-        retained.current.publication.materialization_source,
+        retained.current.publication.revision_source,
         Some(selected_source.id)
     );
-    assert!(reopened.recover_materialized_edits().unwrap().is_empty());
+    assert!(reopened.recover_applied_edits().unwrap().is_empty());
     drop(reopened);
     std::fs::remove_file(path).ok();
 }

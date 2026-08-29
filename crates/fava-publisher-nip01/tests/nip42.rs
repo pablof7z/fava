@@ -18,7 +18,7 @@ use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDead
 use fava_transport_testkit::FakeTransport;
 use fava_wire::{ClientMessage, RelayMessage};
 use fava_write::{
-    Event, EventBuilder, Kind, MaterializationId, PublicKey, ReceiptId, UnsignedEvent, WriteId,
+    Event, EventBuilder, Kind, RevisionId, PublicKey, ReceiptId, UnsignedEvent, WriteId,
 };
 use nostr::event::FinalizeEvent;
 use nostr::key::{Keys, SecretKey};
@@ -100,7 +100,7 @@ fn attempt(event: Event) -> PublishAttempt {
     PublishAttempt {
         write_id: WriteId::try_from(1).expect("nonzero write identity"),
         receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
-        materialization_id: MaterializationId::FIRST,
+        revision_id: RevisionId::FIRST,
         number: 1,
         session: session_key(),
         event,

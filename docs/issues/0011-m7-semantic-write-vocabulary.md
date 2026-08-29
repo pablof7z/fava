@@ -11,22 +11,22 @@ change uses it. This architecture slice changes no runtime behavior.
 
 ## Approved vocabulary
 
-### `ReplaceableEventEdit`
+### `EventEdit`
 
 - **Closest concept:** Nostr replaceable event plus coordinate.
 - **Observable distinction:** preserves a semantic intention before and across
   immutable event bodies; an ordinary event cannot be reapplied to newer source.
 - **Counterexample:** `follow(Bob)` must preserve a newer unrelated `Carol`
-  contact when rematerialized; replaying the old whole kind-3 event erases it.
+  contact when reapplied; replaying the old whole kind-3 event erases it.
 - **Owner/lifecycle:** `fava-write` value; accepted and retained by `WriteStore`;
-  interpreted only by the selected protocol materializer.
+  interpreted only by the selected protocol applier.
 - **Forcing requirement:** WRITE-002/003/006 and CAP-01 through CAP-05.
 - **Why existing state is insufficient:** `WritePayload` currently carries only
   finalized unsigned or signed immutable events.
 - **Falsifier:** newer qualified source state cannot preserve unrelated changes
-  by resending the predecessor materialization.
+  by resending the predecessor revision.
 
-### `ReplaceableEventMaterializer`
+### `EditApplier`
 
 - **Closest concept:** deterministic construction of a Nostr replacement event.
 - **Observable distinction:** a replaceable protocol provider applies one
@@ -40,12 +40,12 @@ change uses it. This architecture slice changes no runtime behavior.
 - **Why existing state is insufficient:** no public replaceable provider contract
   can interpret durable opaque edit formats after acceptance or restart.
 - **Falsifier:** an external capability implementing only public contracts must
-  materialize current and empty source without editing universal owners.
+  apply current and empty source without editing universal owners.
 
-### `MaterializationId`
+### `RevisionId`
 
 - **Closest concept:** immutable Nostr event id within one accepted write.
-- **Observable distinction:** identifies the exact materialization generation
+- **Observable distinction:** identifies the exact revision generation
   under stable write/receipt identity even before or after its event is signed.
 - **Counterexample:** a late signer, route, publisher, or delivery completion
   correlated only by receipt can mutate a newer generation.
@@ -55,13 +55,13 @@ change uses it. This architecture slice changes no runtime behavior.
 - **Why existing state is insufficient:** `ReceiptId`, route revision, relay
   session, and attempt number do not identify which immutable event generation
   authorized an effect.
-- **Falsifier:** remove one store-side `MaterializationId` currentness check;
+- **Falsifier:** remove one store-side `RevisionId` currentness check;
   releasing the retired completion must corrupt current receipt/query facts.
 
 ## Registry repair
 
 The existing registry had several valid public symbols shifted onto adjacent
-terms (`EventBuilder` under `ReplaceableEventEdit`, publisher under
+terms (`EventBuilder` under `EventEdit`, publisher under
 `UnsignedEvent`, delivery under `EventBuilder`, and signer under `Publisher`).
 This slice restores each symbol and crate to its actual approved noun so the new
 edit symbols do not inherit false ownership.

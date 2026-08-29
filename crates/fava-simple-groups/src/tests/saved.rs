@@ -1,4 +1,4 @@
-use fava_write::{EventValue, Kind, ReplaceableEventMaterializer, Tag, Timestamp};
+use fava_write::{EventValue, Kind, EditApplier, Tag, Timestamp};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
@@ -6,7 +6,7 @@ use nostr::types::RelayUrl;
 use crate::{
     SavedGroupList, SavedGroupListDecodeError, SimpleGroup, remove_saved_relay,
     remove_saved_simple_group, rename_saved_simple_group, save_relay, save_simple_group,
-    saved_group_list_materializer,
+    saved_group_list_applier,
 };
 
 use super::{public_key, tag, value};
@@ -84,16 +84,16 @@ fn source(keys: &Keys) -> fava_write::Event {
         .expect("signed source")
 }
 
-fn materialize(
-    materializer: &dyn ReplaceableEventMaterializer,
-    edit: &fava_write::ReplaceableEventEdit,
+fn apply(
+    applier: &dyn EditApplier,
+    edit: &fava_write::EventEdit,
     source: Option<&fava_write::Event>,
 ) -> fava_write::UnsignedEvent {
     let author = source.map_or_else(public_key, |event| event.pubkey);
     let source = source.cloned().map(EventValue::Signed);
-    materializer
-        .materialize(edit, author, source.as_ref(), Timestamp::from(2))
-        .expect("materialized edit")
+    applier
+        .apply(edit, author, source.as_ref(), Timestamp::from(2))
+        .expect("applied edit")
 }
 
 fn has_tag(tags: &[Tag], expected: &[&str]) -> bool {
@@ -113,10 +113,10 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
     let group = SimpleGroup::new("photos", vec![relay_a.clone(), relay_b.clone()])
         .expect("non-empty group");
-    let materializer = saved_group_list_materializer();
+    let applier = saved_group_list_applier();
 
-    let renamed = materialize(
-        materializer.as_ref(),
+    let renamed = apply(
+        applier.as_ref(),
         &rename_saved_simple_group(&group, "Renamed").unwrap(),
         Some(&source),
     );
@@ -139,8 +139,8 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
         2
     );
 
-    let saved = materialize(
-        materializer.as_ref(),
+    let saved = apply(
+        applier.as_ref(),
         &save_simple_group(&group, Some("Ignored for existing")).unwrap(),
         Some(&source),
     );
@@ -153,8 +153,8 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
         &["group", "photos", "wss://b.example", "Ignored for existing"]
     ));
 
-    let removed = materialize(
-        materializer.as_ref(),
+    let removed = apply(
+        applier.as_ref(),
         &remove_saved_simple_group(&group).unwrap(),
         Some(&source),
     );
@@ -171,10 +171,10 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
     let source = source(&keys);
     let relay_a = RelayUrl::parse("wss://a.example").unwrap();
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
-    let materializer = saved_group_list_materializer();
+    let applier = saved_group_list_applier();
 
-    let saved = materialize(
-        materializer.as_ref(),
+    let saved = apply(
+        applier.as_ref(),
         &save_relay(relay_a.clone()).unwrap(),
         Some(&source),
     );
@@ -192,15 +192,15 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
     );
     assert!(has_tag(&saved.tags, &["r", "wss://a.example", "tail"]));
 
-    let added = materialize(
-        materializer.as_ref(),
+    let added = apply(
+        applier.as_ref(),
         &save_relay(relay_b).unwrap(),
         Some(&source),
     );
     assert!(has_tag(&added.tags, &["r", "wss://b.example"]));
 
-    let removed = materialize(
-        materializer.as_ref(),
+    let removed = apply(
+        applier.as_ref(),
         &remove_saved_relay(relay_a).unwrap(),
         Some(&source),
     );
@@ -211,19 +211,19 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
 }
 
 #[test]
-fn materializer_supports_only_its_private_edits() {
+fn applier_supports_only_its_private_edits() {
     let group = SimpleGroup::new(
         "photos",
         vec![RelayUrl::parse("wss://a.example").expect("relay")],
     )
     .expect("non-empty group");
     let edit = save_simple_group(&group, None).unwrap();
-    let materializer = saved_group_list_materializer();
-    assert_eq!(materializer.kind(), Kind::from_u16(10_009));
-    assert!(materializer.supports(&edit));
+    let applier = saved_group_list_applier();
+    assert_eq!(applier.kind(), Kind::from_u16(10_009));
+    assert!(applier.supports(&edit));
 
-    let decoded = SavedGroupList::from_event(&EventValue::Unsigned(materialize(
-        materializer.as_ref(),
+    let decoded = SavedGroupList::from_event(&EventValue::Unsigned(apply(
+        applier.as_ref(),
         &edit,
         None,
     )))
@@ -232,7 +232,7 @@ fn materializer_supports_only_its_private_edits() {
 }
 
 #[test]
-fn materializer_preserves_the_exact_event_builder_tag_refusal() {
+fn applier_preserves_the_exact_event_builder_tag_refusal() {
     let keys = Keys::generate();
     let source = NostrEventBuilder::new(Kind::from_u16(10_009), "opaque")
         .tags((0..2_001).map(|index| Tag::parse(["x", &index.to_string()]).expect("ordinary tag")))
@@ -243,7 +243,7 @@ fn materializer_preserves_the_exact_event_builder_tag_refusal() {
     let edit = remove_saved_relay(relay).expect("remove relay edit");
 
     assert_eq!(
-        saved_group_list_materializer().materialize(
+        saved_group_list_applier().apply(
             &edit,
             keys.public_key(),
             Some(&EventValue::Signed(source)),
@@ -257,16 +257,16 @@ fn materializer_preserves_the_exact_event_builder_tag_refusal() {
 }
 
 #[test]
-fn materializer_accepts_only_verified_coordinate_exact_source() {
+fn applier_accepts_only_verified_coordinate_exact_source() {
     let keys = Keys::generate();
-    let materializer = saved_group_list_materializer();
+    let applier = saved_group_list_applier();
     let relay = RelayUrl::parse("wss://accepted.example").expect("relay");
     let edit = save_relay(relay).expect("edit");
     let signed = EventValue::Signed(source(&keys));
 
     assert!(
-        materializer
-            .materialize(
+        applier
+            .apply(
                 &edit,
                 Keys::generate().public_key(),
                 Some(&signed),
@@ -276,18 +276,18 @@ fn materializer_accepts_only_verified_coordinate_exact_source() {
         "source author must equal the accepted write author",
     );
     assert!(
-        materializer
-            .materialize(&edit, keys.public_key(), Some(&signed), Timestamp::from(1),)
+        applier
+            .apply(&edit, keys.public_key(), Some(&signed), Timestamp::from(1),)
             .is_err(),
-        "materialization must strictly succeed its source",
+        "revision must strictly succeed its source",
     );
 
-    let first = materializer
-        .materialize(&edit, keys.public_key(), Some(&signed), Timestamp::from(2))
+    let first = applier
+        .apply(&edit, keys.public_key(), Some(&signed), Timestamp::from(2))
         .expect("verified signed source");
     let unsigned = EventValue::Unsigned(first);
-    materializer
-        .materialize(
+    applier
+        .apply(
             &edit,
             keys.public_key(),
             Some(&unsigned),

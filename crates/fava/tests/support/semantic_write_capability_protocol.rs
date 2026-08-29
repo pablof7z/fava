@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use fava::{
     Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError, PublishError,
-    Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Write,
+    Receipt, ReceiptOutcome, EventEdit, EditApplier, Write,
     WriteIntentError, WriteStoreError, all_terminal,
 };
 use fava_event_cache::EventCache;
@@ -18,7 +18,7 @@ use nostr::key::Keys;
 
 use super::support::{
     BlockingSigner, CountingSigner, RecordingPublisher, publication_builder, relay_event,
-    relay_occurrence, wait_for_materialization, wait_for_signer,
+    relay_occurrence, wait_for_revision, wait_for_signer,
 };
 use super::{EditResult, explicit_intent, signed, target_count};
 
@@ -32,16 +32,16 @@ pub fn assert_source_removal(
     target: (&str, &str),
 ) {
     assert_eq!(
-        accepted_receipt.current.publication.materialization_source,
+        accepted_receipt.current.publication.revision_source,
         Some(selected_source)
     );
     assert_eq!(removed.write_id, accepted.write_id());
     assert_eq!(removed.receipt_id, accepted.receipt_id());
     assert_ne!(removed.current.id(), accepted_receipt.current.id());
     assert!(removed.current.event.created_at() > accepted_receipt.current.event.created_at());
-    assert!(removed.current.publication.materialization_source.is_none());
+    assert!(removed.current.publication.revision_source.is_none());
     assert_eq!(
-        removed.current.publication.retired_materializations.len(),
+        removed.current.publication.retired_revisions.len(),
         1
     );
     assert_eq!(removed.current.event.kind(), kind);
@@ -57,7 +57,7 @@ pub fn assert_source_removal(
 
 pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: Add,
     remove: Remove,
     adjacent: Adjacent,
@@ -67,23 +67,23 @@ pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     Remove: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_first_value(kind, Arc::clone(&materializer), &add, tags.0, tags.1).await;
+    prove_first_value(kind, Arc::clone(&applier), &add, tags.0, tags.1).await;
     prove_composed_writes(
         kind,
-        Arc::clone(&materializer),
+        Arc::clone(&applier),
         &add,
         &remove,
         &adjacent,
         tags,
     )
     .await;
-    prove_pre_signature_composition(kind, Arc::clone(&materializer), &add, &adjacent, tags).await;
-    prove_public_refusals(kind, materializer, add);
+    prove_pre_signature_composition(kind, Arc::clone(&applier), &add, &adjacent, tags).await;
+    prove_public_refusals(kind, applier, add);
 }
 
 async fn prove_pre_signature_composition<Add, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: &Add,
     adjacent: &Adjacent,
     tags: (&str, &str, &str),
@@ -111,7 +111,7 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
+    .appliers([applier])
     .build()
     .unwrap();
 
@@ -130,14 +130,14 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
     assert_eq!(second.write_id(), first.write_id());
     assert_eq!(second.receipt_id(), first.receipt_id());
 
-    let receipt = wait_for_materialization(&fava, first.receipt_id(), 2).await;
+    let receipt = wait_for_revision(&fava, first.receipt_id(), 2).await;
     wait_for_signer(&signer, 1).await;
     assert_eq!(
-        receipt.current.publication.materialization_source,
+        receipt.current.publication.revision_source,
         Some(base.id)
     );
     assert_eq!(
-        receipt.current.publication.retired_materializations.len(),
+        receipt.current.publication.retired_revisions.len(),
         1
     );
     assert_eq!(
@@ -167,7 +167,7 @@ fn target_count_value(event: &EventValue, tag_name: &str, target: &str) -> usize
 
 async fn prove_first_value<Add>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: &Add,
     tag_name: &str,
     target: &str,
@@ -177,7 +177,7 @@ async fn prove_first_value<Add>(
     let keys = Keys::generate();
     let actor = keys.public_key();
     let (empty, empty_cache, empty_store, empty_signer, empty_publisher) =
-        assembly(keys.clone(), Arc::clone(&materializer));
+        assembly(keys.clone(), Arc::clone(&applier));
     let mut observation = empty
         .observe(
             fava::Query::events()
@@ -201,7 +201,7 @@ async fn prove_first_value<Add>(
             .expect("accepted receipt remains readable")
             .current
             .publication
-            .materialization_source
+            .revision_source
             .is_none()
     );
     assert_eq!(target_count(&event, tag_name, target), 1);
@@ -214,7 +214,7 @@ async fn prove_first_value<Add>(
 
 async fn prove_composed_writes<Add, Remove, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: &Add,
     remove: &Remove,
     adjacent: &Adjacent,
@@ -250,14 +250,14 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
+    .appliers([Arc::clone(&applier)])
     .build()
     .unwrap();
 
     let (added_write, added_receipt, added) = publish_terminal(&fava, add().unwrap(), actor).await;
     assert_stable(&added_write, &added_receipt);
     assert_eq!(
-        added_receipt.current.publication.materialization_source,
+        added_receipt.current.publication.revision_source,
         Some(base.id)
     );
     assert_eq!(target_count(&added, tag_name, target), 1);
@@ -267,7 +267,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
         publish_terminal(&fava, add().unwrap(), actor).await;
     assert_stable(&duplicate_write, &duplicate_receipt);
     assert_eq!(
-        duplicate_receipt.current.publication.materialization_source,
+        duplicate_receipt.current.publication.revision_source,
         Some(added.id)
     );
     assert_eq!(duplicate.content, added.content);
@@ -278,7 +278,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
         publish_terminal(&fava, adjacent().unwrap(), actor).await;
     assert_stable(&adjacent_write, &adjacent_receipt);
     assert_eq!(
-        adjacent_receipt.current.publication.materialization_source,
+        adjacent_receipt.current.publication.revision_source,
         Some(duplicate.id)
     );
     assert_eq!(target_count(&adjacent_event, tag_name, target), 1);
@@ -289,7 +289,7 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
         publish_terminal(&fava, remove().unwrap(), actor).await;
     assert_stable(&removed_write, &removed_receipt);
     assert_eq!(
-        removed_receipt.current.publication.materialization_source,
+        removed_receipt.current.publication.revision_source,
         Some(adjacent_event.id)
     );
     assert_eq!(target_count(&removed, tag_name, target), 0);
@@ -298,14 +298,14 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_eq!(signer.calls(), 4);
     assert_eq!(publisher.attempts().len(), 4);
 
-    let (inverse_empty, _, _, _, _) = assembly(keys, materializer);
+    let (inverse_empty, _, _, _, _) = assembly(keys, applier);
     let (_, _, empty_event) = publish_terminal(&inverse_empty, remove().unwrap(), actor).await;
     assert!(empty_event.tags.is_empty());
 }
 
 fn prove_public_refusals<Add>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: Add,
 ) where
     Add: Fn() -> EditResult,
@@ -313,8 +313,8 @@ fn prove_public_refusals<Add>(
     let keys = Keys::generate();
     let actor = keys.public_key();
     let edit = add().unwrap();
-    let malformed = ReplaceableEventEdit::new(edit.kind(), None, Vec::new()).unwrap();
-    let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&materializer));
+    let malformed = EventEdit::new(edit.kind(), None, Vec::new()).unwrap();
+    let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&applier));
     assert!(matches!(
         fava.by(actor)
             .to([super::support::relay_url()])
@@ -349,7 +349,7 @@ fn prove_public_refusals<Add>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
+    .appliers([Arc::clone(&applier)])
     .build()
     .unwrap();
     assert!(matches!(
@@ -369,11 +369,11 @@ fn prove_public_refusals<Add>(
         Arc::new(CountingSigner::new(keys)),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers([materializer])
+    .appliers([applier])
     .build()
     .unwrap();
     capacity_store
-        .accept_materialized(EventValue::Unsigned(
+        .accept_applied(EventValue::Unsigned(
             EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
         ))
         .unwrap();
@@ -398,14 +398,14 @@ fn prove_public_refusals<Add>(
         WriteRouting::Explicit(relays) if relays.as_slice() == [super::support::relay_url()]
     ));
     assert!(matches!(
-        ReplaceableEventEdit::new(kind, Some("addressable".to_owned()), vec![1]),
+        EventEdit::new(kind, Some("addressable".to_owned()), vec![1]),
         Err(WriteIntentError::InvalidEvent(_))
     ));
 }
 
 fn assembly(
     keys: Keys,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
 ) -> (
     Fava,
     Arc<MemoryEventCache>,
@@ -423,7 +423,7 @@ fn assembly(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
+    .appliers([applier])
     .build()
     .unwrap();
     (fava, cache, store, signer, publisher)
@@ -431,7 +431,7 @@ fn assembly(
 
 async fn publish_terminal(
     fava: &Fava,
-    edit: ReplaceableEventEdit,
+    edit: EventEdit,
     author: PublicKey,
 ) -> (Write, Receipt, Event) {
     let accepted = fava

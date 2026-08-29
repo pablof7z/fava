@@ -503,10 +503,10 @@ transferable thing in the whole comparison.
 (`crates/nmp-router/src/plan.rs:151-181`):
 
 > every narrow demand atom's window-erased `CoverageKey` this (possibly coalesced) wire
-> filter supersets — populated at materialization (one key per pre-coalesce atom entry) and
+> filter supersets — populated at revision (one key per pre-coalesce atom entry) and
 > concatenated through every `coalesce_with` merge exactly as `provenance` already is.
 > Because every merge in this crate is widen-only-proven, `wide ⊇ atom` holds for every key
-> in `coverage_claims` BY CONSTRUCTION at the moment of materialization — this is the
+> in `coverage_claims` BY CONSTRUCTION at the moment of revision — this is the
 > containment rule the ruling requires, **discharged once, here, never re-derived at read
 > time by subset-testing filters (banned by the ruling).**
 

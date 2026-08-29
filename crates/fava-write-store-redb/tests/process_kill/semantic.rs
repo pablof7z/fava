@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, MaterializationId,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent,
+    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, RevisionId,
+    EventEdit, EditApplier, Tag, Timestamp, UnsignedEvent,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -59,9 +59,9 @@ fn semantic_boundary_child() {
         edit_intent()
     };
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             intent,
-            materialization(11, "generation one"),
+            revision(11, "generation one"),
             matches!(boundary.as_str(), "successor" | "failed" | "retired")
                 .then_some(&EventValue::Signed(base.clone())),
         )
@@ -72,13 +72,13 @@ fn semantic_boundary_child() {
             let successor = signed_source(20, "successor source");
             let created_at = if boundary == "successor" { 100 } else { 21 };
             store
-                .install_materialization(
+                .install_revision(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     Some(base.id),
                     std::slice::from_ref(&edit()),
-                    materialization(created_at, "generation two"),
+                    revision(created_at, "generation two"),
                     Some(&EventValue::Signed(successor.clone())),
                     None,
                 )
@@ -87,35 +87,35 @@ fn semantic_boundary_child() {
         "failed" => {
             let failed = signed_source(20, "failed source");
             store
-                .record_materialization_failure(
+                .record_revision_failure(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     Some(base.id),
                     Some(&EventValue::Signed(failed.clone())),
-                    "child materializer failure".to_owned(),
+                    "child applier failure".to_owned(),
                 )
                 .expect("semantic failure commits");
         }
         "composed" | "composed-auto" => {
-            let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let second_edit = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
             let routing = if boundary == "composed-auto" {
                 WriteRouting::Automatic
             } else {
                 WriteRouting::explicit([relay()]).unwrap()
             };
             let composed = store
-                .accept_materialized_edit(
+                .accept_applied_edit(
                     WriteIntent::edit_as(second_edit, keys().public_key(), routing).unwrap(),
-                    materialization(12, "generation one|two"),
+                    revision(12, "generation one|two"),
                     Some(&accepted.current.event),
                 )
                 .expect("composed semantic sequence commits");
             assert_eq!(composed.write_id, accepted.write_id);
             assert_eq!(composed.receipt_id, accepted.receipt_id);
             assert_eq!(
-                composed.current.publication.materialization_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity")
+                composed.current.publication.revision_id,
+                RevisionId::try_from(2).expect("nonzero revision identity")
             );
         }
         "authorized-successor" => {
@@ -123,14 +123,14 @@ fn semantic_boundary_child() {
                 .authorize_signing(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     accepted.current.id(),
                 )
                 .expect("pre-kill signer authorization commits");
-            let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let second = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
             let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
             store
-                .accept_reserved_materialized_edit(
+                .accept_reserved_applied_edit(
                     reservation,
                     WriteIntent::edit_as(
                         second,
@@ -138,7 +138,7 @@ fn semantic_boundary_child() {
                         WriteRouting::explicit([relay()]).unwrap(),
                     )
                     .unwrap(),
-                    materialization(12, "generation one|two"),
+                    revision(12, "generation one|two"),
                     Some(&accepted.current.event),
                     None,
                 )
@@ -149,7 +149,7 @@ fn semantic_boundary_child() {
                 .authorize_signing(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     accepted.current.id(),
                 )
                 .expect("pre-kill signer authorization commits");
@@ -157,7 +157,7 @@ fn semantic_boundary_child() {
                 .record_signer_retryable(
                     accepted.write_id,
                     accepted.receipt_id,
-                    MaterializationId::FIRST,
+                    RevisionId::FIRST,
                     accepted.current.id(),
                     "authorized signer invocation cancelled before effect; retry is permitted"
                         .to_owned(),
@@ -169,7 +169,7 @@ fn semantic_boundary_child() {
                 .apply_route(
                     accepted.write_id,
                     accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
+                    accepted.current.publication.revision_id,
                     accepted.current.id(),
                     &fava::RoutePlan {
                         revision: 2,
@@ -205,12 +205,12 @@ fn semantic_first_generation_survives_sigkill() {
     assert_eq!(receipt.write_id.as_u64(), 1);
     assert_eq!(receipt.receipt_id.as_u64(), 1);
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::FIRST
+        receipt.current.publication.revision_id,
+        RevisionId::FIRST
     );
-    assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
+    assert_eq!(store.recover_applied_edits().unwrap().len(), 1);
     assert_eq!(
-        store.recover_materialized_edits().unwrap()[0].2,
+        store.recover_applied_edits().unwrap()[0].2,
         keys().public_key()
     );
 }
@@ -225,8 +225,8 @@ async fn semantic_successor_and_failed_source_resume_once() {
         Arc::new(RedbWriteStore::open(successor_path).expect("successor store reopens"));
     let successor = receipt_one(&successor_store);
     assert_eq!(
-        successor.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        successor.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(successor.write_id.as_u64(), 1);
     assert_eq!(successor.receipt_id.as_u64(), 1);
@@ -239,36 +239,36 @@ async fn semantic_successor_and_failed_source_resume_once() {
             session(),
         ))])
         .expect("newer source enters canonical cache");
-    let successor_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let successor_applier = Arc::new(TestApplier::new(Kind::ContactList));
     let successor_fava = publication_builder(
         Arc::clone(&successor_cache),
         Arc::clone(&successor_store),
-        Arc::clone(&successor_materializer),
+        Arc::clone(&successor_applier),
     )
     .build()
-    .expect("successor recovery assembles after materializer validation");
+    .expect("successor recovery assembles after applier validation");
     let resumed = wait_for_generation(&successor_fava, receipt_id(1), 3).await;
     assert_eq!(
-        resumed.current.publication.materialization_source,
+        resumed.current.publication.revision_source,
         Some(newer_source_id)
     );
     wait_terminal(&successor_fava, receipt_id(1)).await;
-    assert_eq!(successor_materializer.calls(), 1);
-    let inert_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    assert_eq!(successor_applier.calls(), 1);
+    let inert_applier = Arc::new(TestApplier::new(Kind::ContactList));
     let _inert = publication_builder(
         successor_cache,
         successor_store,
-        Arc::clone(&inert_materializer),
+        Arc::clone(&inert_applier),
     )
     .build()
     .expect("settled successor store reassembles");
     tokio::task::yield_now().await;
-    assert_eq!(inert_materializer.calls(), 0);
+    assert_eq!(inert_applier.calls(), 0);
 
     let failed_path = kill_at("failed");
     let store = Arc::new(RedbWriteStore::open(failed_path).expect("failed store reopens"));
     let failed = receipt_one(&store);
-    assert!(failed.current.publication.materialization_failure.is_some());
+    assert!(failed.current.publication.revision_failure.is_some());
     let failed_source = signed_source(20, "failed source");
     let cache = Arc::new(MemoryEventCache::default());
     cache
@@ -281,36 +281,36 @@ async fn semantic_successor_and_failed_source_resume_once() {
     let unsupported = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::MuteList)),
+        Arc::new(TestApplier::new(Kind::MuteList)),
     )
     .build();
     assert!(unsupported.is_err(), "unsupported durable edit assembled");
 
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
-        Arc::clone(&materializer),
+        Arc::clone(&applier),
     )
     .build()
-    .expect("selected materializer assembles before recovery");
+    .expect("selected applier assembles before recovery");
     let recovered = wait_for_generation(&fava, receipt_id(1), 2).await;
     assert!(
         recovered
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .is_none()
     );
     wait_terminal(&fava, receipt_id(1)).await;
-    assert_eq!(materializer.calls(), 1);
+    assert_eq!(applier.calls(), 1);
 
-    let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
-    let _second = publication_builder(cache, store, Arc::clone(&second_materializer))
+    let second_applier = Arc::new(TestApplier::new(Kind::ContactList));
+    let _second = publication_builder(cache, store, Arc::clone(&second_applier))
         .build()
         .expect("settled store reassembles");
     tokio::task::yield_now().await;
-    assert_eq!(second_materializer.calls(), 0);
+    assert_eq!(second_applier.calls(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -320,19 +320,19 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     }
     let path = kill_at("composed");
     let store = Arc::new(RedbWriteStore::open(path).expect("composed store reopens"));
-    let recovered = store.recover_materialized_edits().unwrap();
+    let recovered = store.recover_applied_edits().unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].0.write_id.as_u64(), 1);
     assert_eq!(recovered[0].0.receipt_id.as_u64(), 1);
     assert_eq!(
-        recovered[0].0.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        recovered[0].0.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
         recovered[0]
             .1
             .iter()
-            .map(ReplaceableEventEdit::change)
+            .map(EventEdit::change)
             .collect::<Vec<_>>(),
         vec![&[1][..], &[2][..]]
     );
@@ -341,13 +341,13 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
     let incomplete_source = signed_source(20, "incomplete replay source");
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 recovered[0].0.write_id,
                 recovered[0].0.receipt_id,
-                recovered[0].0.current.publication.materialization_id,
-                recovered[0].0.current.publication.materialization_source,
+                recovered[0].0.current.publication.revision_id,
+                recovered[0].0.current.publication.revision_source,
                 std::slice::from_ref(&recovered[0].1[1]),
-                materialization(21, "incomplete replay source|2"),
+                revision(21, "incomplete replay source|2"),
                 Some(&EventValue::Signed(incomplete_source)),
                 None,
             )
@@ -365,15 +365,15 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
             session(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
-    let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&materializer))
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
+    let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&applier))
         .build()
         .expect("composed recovery assembles");
     let replayed = wait_for_generation(&fava, receipt_id(1), 3).await;
     assert_eq!(replayed.write_id.as_u64(), 1);
     assert_eq!(replayed.receipt_id.as_u64(), 1);
     assert_eq!(
-        replayed.current.publication.materialization_source,
+        replayed.current.publication.revision_source,
         Some(newer_source_id)
     );
     let content = match &replayed.current.event {
@@ -381,7 +381,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
         EventValue::Signed(event) => &event.content,
     };
     assert_eq!(content, "newer post-kill source|1|2");
-    assert_eq!(materializer.calls(), 2);
+    assert_eq!(applier.calls(), 2);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -393,20 +393,20 @@ async fn authorized_signer_window_and_successor_resume_after_sigkill() {
     let store = Arc::new(RedbWriteStore::open(path).expect("authorized store reopens"));
     let recovered = receipt_one(&store);
     assert_eq!(
-        recovered.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        recovered.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
         recovered.current.publication.signature,
         SignatureState::Unsigned
     );
     let successor_id = recovered.current.id();
-    assert_eq!(store.recover_materialized_edits().unwrap()[0].1.len(), 2);
+    assert_eq!(store.recover_applied_edits().unwrap()[0].1.len(), 2);
 
     let fava = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestApplier::new(Kind::ContactList)),
     )
     .build()
     .expect("post-kill authorization recovery assembles");
@@ -431,20 +431,20 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     {
         let store = RedbWriteStore::open(&path).unwrap();
         let accepted = store
-            .accept_materialized_edit(edit_intent(), materialization(11, "generation one"), None)
+            .accept_applied_edit(edit_intent(), revision(11, "generation one"), None)
             .unwrap();
         store
             .authorize_signing(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 accepted.current.id(),
             )
             .unwrap();
-        let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+        let second = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
         let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
         store
-            .accept_reserved_materialized_edit(
+            .accept_reserved_applied_edit(
                 reservation,
                 WriteIntent::edit_as(
                     second,
@@ -452,7 +452,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
                     WriteRouting::explicit([relay()]).unwrap(),
                 )
                 .unwrap(),
-                materialization(12, "generation one|two"),
+                revision(12, "generation one|two"),
                 Some(&accepted.current.event),
                 None,
             )
@@ -462,25 +462,25 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     let store = Arc::new(RedbWriteStore::open(&path).unwrap());
     let recovered = receipt_one(&store);
     assert_eq!(
-        recovered.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        recovered.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
         recovered.current.publication.signature,
         SignatureState::Unsigned
     );
     let successor_id = recovered.current.id();
-    assert_eq!(store.recover_materialized_edits().unwrap()[0].1.len(), 2);
+    assert_eq!(store.recover_applied_edits().unwrap()[0].1.len(), 2);
     let fava = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestApplier::new(Kind::ContactList)),
     )
     .build()
     .unwrap();
     let successor = wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(
-        successor.current.publication.retired_materializations.len(),
+        successor.current.publication.retired_revisions.len(),
         1
     );
     assert_eq!(successor.current.id(), successor_id);
@@ -501,8 +501,8 @@ fn authorized_cancellation_without_successor_survives_sigkill_exactly() {
     assert_eq!(recovered.write_id.as_u64(), 1);
     assert_eq!(recovered.receipt_id.as_u64(), 1);
     assert_eq!(
-        recovered.current.publication.materialization_id,
-        MaterializationId::FIRST
+        recovered.current.publication.revision_id,
+        RevisionId::FIRST
     );
     let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
         panic!("cancelled authorization reopened without retry disposition")
@@ -527,7 +527,7 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
             session(),
         ))])
         .expect("post-kill source enters canonical cache");
-    let materializer = Arc::new(TestMaterializer::with_tag_count(Kind::ContactList, 2_001));
+    let applier = Arc::new(TestApplier::with_tag_count(Kind::ContactList, 2_001));
     let fava = Fava::builder()
         .event_cache(cache)
         .write_store(Arc::clone(&store))
@@ -536,20 +536,20 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
         .signer(Arc::new(LocalSigner::new(keys())))
         .publisher(Arc::new(PendingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(Arc::clone(&materializer))
+        .applier(Arc::clone(&applier))
         .build()
-        .expect("recovery assembles with the selected materializer mode");
+        .expect("recovery assembles with the selected applier mode");
 
     let observed = tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            if let Some(error) = materializer.observed_error() {
+            if let Some(error) = applier.observed_error() {
                 return error;
             }
             tokio::task::yield_now().await;
         }
     })
     .await
-    .expect("recovery invokes the materializer");
+    .expect("recovery invokes the applier");
     assert_eq!(
         observed,
         WriteIntentError::TooManyTags {
@@ -563,7 +563,7 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
             if receipt
                 .current
                 .publication
-                .materialization_failure
+                .revision_failure
                 .is_some()
             {
                 return receipt;
@@ -578,21 +578,21 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
     assert_eq!(after.receipt_id, before.receipt_id);
     assert_eq!(after.current.id(), before.current.id());
     assert_eq!(
-        after.current.publication.materialization_id,
-        before.current.publication.materialization_id
+        after.current.publication.revision_id,
+        before.current.publication.revision_id
     );
     assert_eq!(
-        after.current.publication.materialization_source,
-        before.current.publication.materialization_source
+        after.current.publication.revision_source,
+        before.current.publication.revision_source
     );
     assert_eq!(
-        after.current.publication.retired_materializations,
-        before.current.publication.retired_materializations
+        after.current.publication.retired_revisions,
+        before.current.publication.retired_revisions
     );
     assert_eq!(
-        after.current.publication.materialization_id,
-        MaterializationId::FIRST,
-        "failed rematerialization installed a successor generation"
+        after.current.publication.revision_id,
+        RevisionId::FIRST,
+        "failed reapplication installed a successor generation"
     );
     drop(fava);
 }
@@ -608,13 +608,13 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
     let late_source = signed_source(30, "late retired source");
     assert!(
         retired_store
-            .install_materialization(
+            .install_revision(
                 before.write_id,
                 before.receipt_id,
-                MaterializationId::FIRST,
-                before.current.publication.materialization_source,
+                RevisionId::FIRST,
+                before.current.publication.revision_source,
                 std::slice::from_ref(&edit()),
-                materialization(31, "late retired completion"),
+                revision(31, "late retired completion"),
                 Some(&EventValue::Signed(late_source.clone())),
                 None,
             )
@@ -627,14 +627,14 @@ fn semantic_retired_and_terminal_work_stays_inert_after_sigkill() {
         let store = RedbWriteStore::open(path).expect("terminal store reopens");
         let receipt = receipt_one(&store);
         assert!(receipt.is_terminal());
-        assert!(store.recover_materialized_edits().unwrap().is_empty());
+        assert!(store.recover_applied_edits().unwrap().is_empty());
         assert!(
             store
-                .record_materialization_failure(
+                .record_revision_failure(
                     receipt.write_id,
                     receipt.receipt_id,
-                    receipt.current.publication.materialization_id,
-                    receipt.current.publication.materialization_source,
+                    receipt.current.publication.revision_id,
+                    receipt.current.publication.revision_source,
                     None,
                     "late after process death".to_owned(),
                 )
@@ -677,8 +677,8 @@ fn receipt_one(store: &RedbWriteStore) -> Receipt {
         .expect("receipt one survives")
 }
 
-fn edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("semantic edit")
+fn edit() -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![1]).expect("semantic edit")
 }
 
 fn edit_intent() -> WriteIntent {
@@ -690,16 +690,16 @@ fn edit_intent() -> WriteIntent {
     .expect("semantic intent")
 }
 
-fn materialization(created_at: u64, body: &str) -> UnsignedEvent {
+fn revision(created_at: u64, body: &str) -> UnsignedEvent {
     EventBuilder::new(keys().public_key(), Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(body)
         .build()
-        .expect("semantic materialization")
+        .expect("semantic revision")
 }
 
 fn signed_source(created_at: u64, body: &str) -> Event {
-    materialization(created_at, body)
+    revision(created_at, body)
         .finalize(&keys())
         .expect("semantic source signs")
 }
@@ -713,14 +713,14 @@ fn relay_event(event: Event, _session: RelaySessionKey) -> RelayEvent {
     RelayEvent::new(event, session(), Timestamp::from(1))
 }
 
-struct TestMaterializer {
+struct TestApplier {
     kind: Kind,
     calls: AtomicU64,
     tag_count: usize,
     observed_error: Mutex<Option<WriteIntentError>>,
 }
 
-impl TestMaterializer {
+impl TestApplier {
     fn new(kind: Kind) -> Self {
         Self {
             kind,
@@ -748,18 +748,18 @@ impl TestMaterializer {
     }
 }
 
-impl ReplaceableEventMaterializer for TestMaterializer {
+impl EditApplier for TestApplier {
     fn kind(&self) -> Kind {
         self.kind
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         self.kind == edit.kind()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: fava::PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -779,7 +779,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
             .created_at(created_at)
             .content(content)
             .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
             .build()
             .map_err(WriteIntentError::from);
@@ -793,7 +793,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
 fn publication_builder(
     cache: Arc<MemoryEventCache>,
     store: Arc<RedbWriteStore>,
-    materializer: Arc<TestMaterializer>,
+    applier: Arc<TestApplier>,
 ) -> FavaBuilder {
     Fava::builder()
         .event_cache(cache)
@@ -803,7 +803,7 @@ fn publication_builder(
         .signer(Arc::new(LocalSigner::new(keys())))
         .publisher(Arc::new(AcknowledgingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(materializer)
+        .applier(applier)
 }
 
 struct AcknowledgingPublisher;
@@ -864,9 +864,9 @@ async fn wait_for_generation(fava: &Fava, receipt_id: ReceiptId, generation: u64
                 .receipt(receipt_id)
                 .expect("receipt read")
                 .expect("receipt retained");
-            if receipt.current.publication.materialization_id
-                == MaterializationId::try_from(generation)
-                    .expect("nonzero materialization identity")
+            if receipt.current.publication.revision_id
+                == RevisionId::try_from(generation)
+                    .expect("nonzero revision identity")
             {
                 return receipt;
             }

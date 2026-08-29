@@ -324,7 +324,7 @@ impl App {
         &self,
         session: &E2eSession,
         relay_alias: &str,
-        edit: fava::ReplaceableEventEdit,
+        edit: fava::EventEdit,
         kind: &'static str,
         group: &str,
     ) -> Result<CommandResult, ShellError> {

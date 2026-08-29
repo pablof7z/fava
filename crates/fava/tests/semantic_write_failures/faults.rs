@@ -10,8 +10,8 @@ use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, MaterializationId, Receipt, ReceiptId,
-    RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent,
+    Event, EventId, EventValue, LocalWriteEvent, RevisionId, Receipt, ReceiptId,
+    RelayDeliveryOutcome, EventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
@@ -102,9 +102,9 @@ pub(super) struct FaultingWriteStore {
     closed: broadcast::Sender<()>,
     drop_receipt_changes: Arc<AtomicBool>,
     failing_reads: AtomicUsize,
-    fail_materialized_reads: AtomicBool,
-    materialized_read_failures: AtomicU64,
-    materialized_read_barrier: watch::Sender<u64>,
+    fail_applied_reads: AtomicBool,
+    applied_read_failures: AtomicU64,
+    applied_read_barrier: watch::Sender<u64>,
     receipt_changes: broadcast::Sender<(ReceiptId, Option<Receipt>)>,
     reads_after_route: AtomicUsize,
     reads_after_signature: AtomicUsize,
@@ -122,7 +122,7 @@ impl FaultingWriteStore {
         let inner = MemoryWriteStore::default();
         let mut inner_changes = inner.receipt_changes();
         let (receipt_changes, _) = broadcast::channel(64);
-        let (materialized_read_barrier, _) = watch::channel(0);
+        let (applied_read_barrier, _) = watch::channel(0);
         let forwarded_changes = receipt_changes.clone();
         let drop_receipt_changes = Arc::new(AtomicBool::new(false));
         let drop_changes = Arc::clone(&drop_receipt_changes);
@@ -138,9 +138,9 @@ impl FaultingWriteStore {
             closed,
             drop_receipt_changes,
             failing_reads: AtomicUsize::new(0),
-            fail_materialized_reads: AtomicBool::new(false),
-            materialized_read_failures: AtomicU64::new(0),
-            materialized_read_barrier,
+            fail_applied_reads: AtomicBool::new(false),
+            applied_read_failures: AtomicU64::new(0),
+            applied_read_barrier,
             receipt_changes,
             reads_after_route: AtomicUsize::new(0),
             reads_after_signature: AtomicUsize::new(0),
@@ -165,16 +165,16 @@ impl FaultingWriteStore {
         self.failing_reads.load(Ordering::SeqCst)
     }
 
-    pub(super) fn fail_materialized_reads(&self, fail: bool) {
-        self.fail_materialized_reads.store(fail, Ordering::SeqCst);
+    pub(super) fn fail_applied_reads(&self, fail: bool) {
+        self.fail_applied_reads.store(fail, Ordering::SeqCst);
     }
 
-    pub(super) fn materialized_read_failures(&self) -> u64 {
-        self.materialized_read_failures.load(Ordering::SeqCst)
+    pub(super) fn applied_read_failures(&self) -> u64 {
+        self.applied_read_failures.load(Ordering::SeqCst)
     }
 
-    pub(super) fn materialized_read_barrier(&self) -> watch::Receiver<u64> {
-        self.materialized_read_barrier.subscribe()
+    pub(super) fn applied_read_barrier(&self) -> watch::Receiver<u64> {
+        self.applied_read_barrier.subscribe()
     }
 
     pub(super) fn fail_receipt_reads_after_signature(&self, count: usize) {
@@ -245,7 +245,7 @@ impl WriteStore for FaultingWriteStore {
     }
     fn reserve_active(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: fava::PublicKey,
     ) -> Result<u64, WriteStoreError> {
         self.inner.reserve_active(edit, author)
@@ -266,15 +266,15 @@ impl WriteStore for FaultingWriteStore {
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept(intent)
     }
-    fn accept_materialized_edit(
+    fn accept_applied_edit(
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_materialized_edit(intent, event, source)
+        self.inner.accept_applied_edit(intent, event, source)
     }
-    fn accept_reserved_materialized_edit(
+    fn accept_reserved_applied_edit(
         &self,
         reservation: u64,
         intent: WriteIntent,
@@ -288,7 +288,7 @@ impl WriteStore for FaultingWriteStore {
                 "injected atomic initial-route acceptance failure".to_owned(),
             ));
         }
-        self.inner.accept_reserved_materialized_edit(
+        self.inner.accept_reserved_applied_edit(
             reservation,
             intent,
             event,
@@ -296,18 +296,18 @@ impl WriteStore for FaultingWriteStore {
             initial_route,
         )
     }
-    fn install_materialization(
+    fn install_revision(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
-        applied_edits: &[ReplaceableEventEdit],
+        applied_edits: &[EventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
-        let installed = self.inner.install_materialization(
+        let installed = self.inner.install_revision(
             write_id,
             receipt_id,
             expected,
@@ -322,16 +322,16 @@ impl WriteStore for FaultingWriteStore {
         }
         installed
     }
-    fn record_materialization_failure(
+    fn record_revision_failure(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
         source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.record_materialization_failure(
+        self.inner.record_revision_failure(
             write_id,
             receipt_id,
             expected,
@@ -341,57 +341,57 @@ impl WriteStore for FaultingWriteStore {
         )
     }
     #[allow(clippy::type_complexity)]
-    fn recover_materialized_edits(
+    fn recover_applied_edits(
         &self,
     ) -> Result<
         Vec<(
             Receipt,
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             fava::PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,
     > {
-        self.inner.recover_materialized_edits()
+        self.inner.recover_applied_edits()
     }
     #[allow(clippy::type_complexity)]
-    fn materialized_edits(
+    fn applied_edits(
         &self,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
     ) -> Result<
         Option<(
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             fava::PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,
     > {
-        if self.fail_materialized_reads.load(Ordering::SeqCst) {
+        if self.fail_applied_reads.load(Ordering::SeqCst) {
             let failures = self
-                .materialized_read_failures
+                .applied_read_failures
                 .fetch_add(1, Ordering::SeqCst)
                 .saturating_add(1);
-            self.materialized_read_barrier.send_replace(failures);
+            self.applied_read_barrier.send_replace(failures);
             return Err(WriteStoreError::Refused(
                 "injected durable semantic custody read failure".to_owned(),
             ));
         }
-        self.inner.materialized_edits(receipt_id, expected)
+        self.inner.applied_edits(receipt_id, expected)
     }
     fn install_signed(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
         let installed =
             self.inner
-                .install_signed(write_id, receipt_id, materialization_id, event_id, event);
+                .install_signed(write_id, receipt_id, revision_id, event_id, event);
         if installed.is_ok() {
             let failures = self.reads_after_signature.swap(0, Ordering::SeqCst);
             self.failing_reads.store(failures, Ordering::SeqCst);
@@ -402,24 +402,24 @@ impl WriteStore for FaultingWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner
-            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+            .authorize_signing(write_id, receipt_id, revision_id, event_id)
     }
     fn record_signer_retryable(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.record_signer_retryable(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             reason,
         )
@@ -428,28 +428,28 @@ impl WriteStore for FaultingWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError> {
         self.inner
-            .signing_successor(write_id, receipt_id, materialization_id, event_id)
+            .signing_successor(write_id, receipt_id, revision_id, event_id)
     }
     fn record_signer_refusal(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner
-            .record_signer_refusal(write_id, receipt_id, materialization_id, event_id, reason)
+            .record_signer_refusal(write_id, receipt_id, revision_id, event_id, reason)
     }
     fn apply_route(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
@@ -460,7 +460,7 @@ impl WriteStore for FaultingWriteStore {
         }
         let applied =
             self.inner
-                .apply_route(write_id, receipt_id, materialization_id, event_id, plan);
+                .apply_route(write_id, receipt_id, revision_id, event_id, plan);
         if applied.is_ok() {
             self.after_route_commit();
         }
@@ -470,7 +470,7 @@ impl WriteStore for FaultingWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -478,7 +478,7 @@ impl WriteStore for FaultingWriteStore {
         self.inner.begin_attempt(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt,
@@ -488,7 +488,7 @@ impl WriteStore for FaultingWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -497,7 +497,7 @@ impl WriteStore for FaultingWriteStore {
         self.inner.record_outcome(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt,
@@ -537,7 +537,7 @@ impl WriteStore for FaultingWriteStore {
     fn len(&self) -> Result<usize, WriteStoreError> {
         self.inner.len()
     }
-    fn accept_materialized(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_materialized(event)
+    fn accept_applied(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
+        self.inner.accept_applied(event)
     }
 }

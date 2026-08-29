@@ -43,19 +43,19 @@ key-files:
 key-decisions:
   - "Feature mappings name the actual Cargo package and integration target, then require exactly one listed test rather than trusting a source path."
   - "The detailed M7 section owns four canaries, including replaceable-edit-inverse, despite the global roster omission."
-  - "Raw EventBuilder values retain caller-owned created_at, kind, tags, content, author, and identity; semantic edits retain engine-owned monotonic rematerialization time."
+  - "Raw EventBuilder values retain caller-owned created_at, kind, tags, content, author, and identity; semantic edits retain engine-owned monotonic reapplication time."
   - "Exact raw parts and bulk tags extend the existing EventBuilder; they do not introduce another nominal value, owner, validation path, or protocol switch."
 requirements-completed: [CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08, CAP-09]
 coverage:
   - id: D1
-    description: "The exact current-MaterializationId guard detects a retired completion that would otherwise mutate successor state."
+    description: "The exact current-RevisionId guard detects a retired completion that would otherwise mutate successor state."
     requirement: CAP-06
     verification:
       - kind: integration
         ref: "crates/fava/tests/semantic_write_publication/interleavings.rs#retired_completion_is_attributable_and_inert"
         status: pass
       - kind: other
-        ref: "docs/issues/0010-m7-semantic-writes-and-capability-composition.md#current-materialization-identity"
+        ref: "docs/issues/0010-m7-semantic-writes-and-capability-composition.md#current-revision-identity"
         status: pass
     human_judgment: false
   - id: D2
@@ -121,7 +121,7 @@ status: complete
 
 ## Accomplishments
 
-- Removed only the authoritative current-`MaterializationId` predicate: first-value remained green, while the exact retired-completion test compiled and failed on accepted generation-one mutation. The source returned byte-identically and the publication target passed 12/12.
+- Removed only the authoritative current-`RevisionId` predicate: first-value remained green, while the exact retired-completion test compiled and failed on accepted generation-one mutation. The source returned byte-identically and the publication target passed 12/12.
 - Added module-qualified mapping grammar and Cargo metadata plus exact `--list` resolution. Eight mapper tests now also refuse two pending mapping comments before one scenario instead of silently selecting the latter.
 - Added `EventBuilder::from_parts(PublicKey, Kind, Timestamp, Vec<Tag>, String)` and ordered bulk `tags` input to the existing public builder. `new`, `tag`, and raw construction retain one state and one bounded `build()` validation path.
 - Proved three arbitrary tags, exact `created_at`, kind, content, order, and event ID through public-Fava accepted unsigned state, query visibility, signed terminal evidence, published transport evidence, and a clean CLI canary bundle.
@@ -157,7 +157,7 @@ status: complete
 
 - The mapping package for the external falsifier is its real Cargo name, `external-semantic-capability-proof`; conceptual directory names cannot substitute for executable package identity.
 - The detailed M7 canary section is the focused authority, so all four scenarios run even though the global roster omits the inverse row.
-- Caller-selected raw event time and engine-selected semantic rematerialization time remain separate authorities; final evidence asserts both without a hidden clock override.
+- Caller-selected raw event time and engine-selected semantic reapplication time remain separate authorities; final evidence asserts both without a hidden clock override.
 - Exact raw construction stays on `EventBuilder`: existing Nostr values enter one builder state, ordered tag iterators append without interpretation, and `build()` remains the only bounds/identity authority.
 
 ## Deviations from Plan

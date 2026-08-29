@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EventBuilder, EventValue, Kind, RevisionId, EventEdit,
+    EditApplier, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use fava_event_cache_memory::MemoryEventCache;
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -46,14 +46,14 @@ const OVERSIZE: u8 = 4;
 const WRONG_TIMESTAMP: u8 = 5;
 const WRONG_KIND: u8 = 6;
 
-struct ControlledMaterializer {
+struct ControlledApplier {
     kind: Kind,
     mode: AtomicU8,
     calls: AtomicU64,
     tag_count: usize,
 }
 
-impl ControlledMaterializer {
+impl ControlledApplier {
     fn new(kind: Kind) -> Self {
         Self {
             kind,
@@ -81,18 +81,18 @@ impl ControlledMaterializer {
     }
 }
 
-impl ReplaceableEventMaterializer for ControlledMaterializer {
+impl EditApplier for ControlledApplier {
     fn kind(&self) -> Kind {
         self.kind
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         edit.kind() == self.kind
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        _edit: &ReplaceableEventEdit,
+        _edit: &EventEdit,
         author: fava::PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -100,7 +100,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
         self.calls.fetch_add(1, Ordering::SeqCst);
         match self.mode.load(Ordering::SeqCst) {
             ERROR => return Err(WriteIntentError::InvalidEvent("x".repeat(8_192))),
-            PANIC => panic!("hostile materializer panic with unbounded details"),
+            PANIC => panic!("hostile applier panic with unbounded details"),
             _ => {}
         }
         let actor = if self.mode.load(Ordering::SeqCst) == WRONG_ACTOR {
@@ -133,7 +133,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
             .created_at(returned_at)
             .content(content)
             .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
             .build()
             .map_err(WriteIntentError::from)
@@ -141,14 +141,14 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
 }
 
 #[test]
-fn controlled_materializer_preserves_the_event_builder_tag_refusal() {
+fn controlled_applier_preserves_the_event_builder_tag_refusal() {
     let actor = Keys::generate().public_key();
     let kind = Kind::ContactList;
-    let materializer = ControlledMaterializer::with_tag_count(kind, 2_001);
-    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+    let applier = ControlledApplier::with_tag_count(kind, 2_001);
+    let edit = EventEdit::new(kind, None, vec![1]).expect("bounded edit");
 
     assert_eq!(
-        materializer.materialize(&edit, actor, None, Timestamp::from(42)),
+        applier.apply(&edit, actor, None, Timestamp::from(42)),
         Err(WriteIntentError::TooManyTags {
             actual: 2_001,
             maximum: 2_000,
@@ -157,16 +157,16 @@ fn controlled_materializer_preserves_the_event_builder_tag_refusal() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn materializer_error_is_bounded_and_preserves_current() {
+async fn applier_error_is_bounded_and_preserves_current() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         store,
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
     let mut observation = fava
         .observe(
@@ -185,7 +185,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
         .changed()
         .await
         .expect("accepted value is public");
-    materializer.set(ERROR);
+    applier.set(ERROR);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
@@ -193,27 +193,27 @@ async fn materializer_error_is_bounded_and_preserves_current() {
 
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
     assert_eq!(failed.current.id(), accepted_event_id);
-    let evidence = failed.current.publication.materialization_failure.unwrap();
+    let evidence = failed.current.publication.revision_failure.unwrap();
     assert!(evidence.len() <= 4_096);
-    assert!(evidence.contains("materialization 1"));
+    assert!(evidence.contains("revision 1"));
     assert_eq!(wait_public_failure(&mut observation).await, evidence);
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn materializer_panic_is_scoped_and_attributed() {
+async fn applier_panic_is_scoped_and_attributed() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
-    let healthy = Arc::new(ControlledMaterializer::new(Kind::MuteList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
+    let healthy = Arc::new(ControlledApplier::new(Kind::MuteList));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::new(MemoryWriteStore::default()),
-        vec![Arc::clone(&materializer), Arc::clone(&healthy)],
+        vec![Arc::clone(&applier), Arc::clone(&healthy)],
     );
     let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
     let accepted_event_id = accepted.receipt().unwrap().current.id();
-    materializer.set(PANIC);
+    applier.set(PANIC);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
@@ -225,7 +225,7 @@ async fn materializer_panic_is_scoped_and_attributed() {
         failed
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .unwrap()
             .contains("panicked")
     );
@@ -235,10 +235,10 @@ async fn materializer_panic_is_scoped_and_attributed() {
         &cache,
         signed_source(&keys, Kind::MuteList, 20, "healthy source", &[]),
     );
-    let progressed = support::wait_for_materialization(&fava, unaffected.receipt_id(), 2).await;
+    let progressed = support::wait_for_revision(&fava, unaffected.receipt_id(), 2).await;
     assert_eq!(
-        progressed.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        progressed.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
 }
 
@@ -247,16 +247,16 @@ async fn malformed_and_oversize_outputs_preserve_current() {
     for mode in [WRONG_ACTOR, WRONG_KIND, OVERSIZE] {
         let keys = Keys::generate();
         let cache = Arc::new(MemoryEventCache::default());
-        let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+        let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
         let fava = assembly(
             &keys,
             Arc::clone(&cache),
             Arc::new(MemoryWriteStore::default()),
-            vec![Arc::clone(&materializer)],
+            vec![Arc::clone(&applier)],
         );
         let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
         let accepted_event_id = accepted.receipt().unwrap().current.id();
-        materializer.set(mode);
+        applier.set(mode);
         save_source(
             &cache,
             signed_source(&keys, Kind::ContactList, 10, "source", &[]),
@@ -281,12 +281,12 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
             &[],
         ),
     );
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::new(MemoryWriteStore::default()),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
     let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
     let accepted_event_id = accepted.receipt().unwrap().current.id();
@@ -300,7 +300,7 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
         failed
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .as_deref()
             .is_some_and(|reason| reason.contains("timestamp exhausted"))
     );
@@ -316,13 +316,13 @@ fn prove_evidence_exhaustion(keys: &Keys) {
         .build()
         .unwrap();
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             edit_intent(keys.public_key(), Kind::ContactList),
             first,
             None,
         )
         .unwrap();
-    let mut expected = MaterializationId::FIRST;
+    let mut expected = RevisionId::FIRST;
     let mut expected_source = None;
     for generation in 0..destination_evidence_capacity() {
         let source_time = 2 + generation as u64 * 2;
@@ -334,7 +334,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
             &[],
         );
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
                 expected,
@@ -351,14 +351,14 @@ fn prove_evidence_exhaustion(keys: &Keys) {
             .unwrap();
         expected = expected
             .checked_next()
-            .expect("next materialization identity");
+            .expect("next revision identity");
         expected_source = Some(source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
     let overflow_source = signed_source(keys, Kind::ContactList, 1_000, "overflow source", &[]);
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
                 expected,
@@ -375,13 +375,13 @@ fn prove_evidence_exhaustion(keys: &Keys) {
             .is_err()
     );
     store
-        .record_materialization_failure(
+        .record_revision_failure(
             accepted.write_id,
             accepted.receipt_id,
             expected,
             expected_source,
             Some(&EventValue::Signed(overflow_source.clone())),
-            "retired materialization evidence capacity reached".to_owned(),
+            "retired revision evidence capacity reached".to_owned(),
         )
         .unwrap();
     let exhausted = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -390,7 +390,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
         exhausted
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .as_deref()
             .is_some_and(|reason| reason.contains("evidence capacity reached"))
     );
@@ -401,52 +401,52 @@ async fn recovery_retries_failed_source_once() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let first = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
     let accepted = publish_edit(&first, keys.public_key(), Kind::ContactList);
-    materializer.set(ERROR);
+    applier.set(ERROR);
     save_source(
         &cache,
         signed_source(&keys, Kind::ContactList, 10, "source", &[]),
     );
     wait_failure(&first, accepted.receipt_id()).await;
-    materializer.set(VALID);
+    applier.set(VALID);
 
-    let calls_before_recovery = materializer.calls();
+    let calls_before_recovery = applier.calls();
     let recovered = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
-    let receipt = support::wait_for_materialization(&recovered, accepted.receipt_id(), 2).await;
+    let receipt = support::wait_for_revision(&recovered, accepted.receipt_id(), 2).await;
     assert!(
         receipt
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .is_none()
     );
     tokio::task::yield_now().await;
-    assert_eq!(materializer.calls(), calls_before_recovery + 1);
+    assert_eq!(applier.calls(), calls_before_recovery + 1);
     assert_eq!(
-        store.recover_materialized_edits().unwrap()[0]
+        store.recover_applied_edits().unwrap()[0]
             .0
             .current
             .publication
-            .materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+            .revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
 
-    let calls_after_success = materializer.calls();
-    let _second_recovery = assembly(&keys, cache, store, vec![Arc::clone(&materializer)]);
+    let calls_after_success = applier.calls();
+    let _second_recovery = assembly(&keys, cache, store, vec![Arc::clone(&applier)]);
     tokio::task::yield_now().await;
-    assert_eq!(materializer.calls(), calls_after_success);
+    assert_eq!(applier.calls(), calls_after_success);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -454,27 +454,27 @@ async fn successful_retry_clears_failure_without_duplicate_effect() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
     let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
-    materializer.set(ERROR);
+    applier.set(ERROR);
     let failed_source = signed_source(&keys, Kind::ContactList, 10, "failed", &[]);
     save_source(&cache, failed_source);
     wait_failure(&fava, accepted.receipt_id()).await;
-    materializer.set(VALID);
+    applier.set(VALID);
     let changed = signed_source(&keys, Kind::ContactList, 20, "changed", &[]);
     save_source(&cache, changed);
-    let receipt = support::wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
+    let receipt = support::wait_for_revision(&fava, accepted.receipt_id(), 2).await;
     assert!(
         receipt
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .is_none()
     );
     let id = receipt.current.id();
