@@ -270,32 +270,32 @@ completion carries no operation, attachment, or generation identity, so stalenes
 inferred by the caller.
 `crates/fava-publication/src/run.rs:440-465` — both store calls are discarded:
 ```rust
-if publication.store.install_signed(write_id, receipt_id, materialization_id, event_id, event).is_err() {
+if publication.store.install_signed(write_id, receipt_id, revision_id, event_id, event).is_err() {
     let _ = publication.store.record_signer_refusal(
-        write_id, receipt_id, materialization_id, event_id,
+        write_id, receipt_id, revision_id, event_id,
         "signer returned an event that did not match the accepted body".to_owned());
 }
 ```
-`crates/fava-write-store-memory/src/lifecycle.rs:33/71` — `validate_current_materialization` rejects
+`crates/fava-write-store-memory/src/lifecycle.rs:33/71` — `validate_current_revision` rejects
 *both* calls for a retired generation, so a late completion produces **no fact at all**. Worse, the
 hard-coded reason string is applied to every `install_signed` failure regardless of cause, discarding
 the store's actual `WriteStoreError` text (e.g. "event is already signed differently").
 
 **observable distinction**
-Force a rematerialization while generation 1 is signing, then let a provider that ignores the `cancel`
+Force a reapplication while generation 1 is signing, then let a provider that ignores the `cancel`
 receiver answer for generation 1. From the public API this is indistinguishable from a signer that
 never answered: no receipt change, no diagnostic, no counter. The mutation named at
-`FAVA_REWRITE_IMPLEMENTATION_PLAN.md:1239` ("allow stale signer completion after rematerialization")
+`FAVA_REWRITE_IMPLEMENTATION_PLAN.md:1239` ("allow stale signer completion after reapplication")
 cannot be detected by any current test, because the correct behavior is also silent.
 
 **proposed falsifier**
 ```rust
 #[tokio::test]
-async fn late_signer_completion_for_a_retired_materialization_is_an_attributable_stale_fact() {
+async fn late_signer_completion_for_a_retired_revision_is_an_attributable_stale_fact() {
     let signer = Arc::new(GatedSigner::ignoring_cancel(alice));   // answers generation 1 late
     let (fava, diag) = harness_with_signer(signer.clone());
     let write = fava.publish(edit_from(alice))?;
-    force_rematerialization(&fava, &write);            // generation 2 becomes current
+    force_reapplication(&fava, &write);            // generation 2 becomes current
     signer.release_generation_one();
     assert_eq!(diag.snapshot().stale_signer_completions.len(), 1);   // zero today
 }
@@ -330,7 +330,7 @@ if !matches!(signer.availability(), SignerAvailability::Available) {
     return;
 }
 ```
-The materialization is abandoned silently and nothing ever re-polls. `crates/fava-diagnostics/src/lib.rs:17-40`
+The revision is abandoned silently and nothing ever re-polls. `crates/fava-diagnostics/src/lib.rs:17-40`
 exposes no signer/provider availability field at all.
 `grep -rn "Unavailable" --include='*.rs' crates/ apps/` shows `SignerAvailability::Unavailable`
 is never constructed in the workspace — the branch has zero evidence of any kind.
@@ -459,7 +459,7 @@ bech32 `npub1…` **and** `nostr:npub1…` NIP-21 URIs.
 owned hex strings."
 
 **observable distinction**
-`fava_nip02::follow("npub1…")` returns `Ok(ReplaceableEventEdit)` identical to the raw-key edit,
+`fava_nip02::follow("npub1…")` returns `Ok(EventEdit)` identical to the raw-key edit,
 instead of `Err(WriteIntentError::InvalidEvent)`. A presentation-form string that the application was
 supposed to decode at its own boundary is silently reinterpreted inside Fava, and the same acceptance
 extends to `nostr:` URIs and any `Display` type whose rendering happens to parse.
@@ -558,12 +558,12 @@ async fn group_content_query_asks_exactly_the_selected_hosts_over_real_sessions(
   No crate calls `observe`, spawns a task, or holds an `Arc<Mutex<…>>`.
 - **No private lifecycle-owner nouns in scope** (the `check_vocabulary.py` blind spot the brief
   flags). The complete set of non-`pub` types across the five crates is:
-  `fava-nip02`: `sealed::Sealed`, `Operation`, `Change`, `BoundedTargetText`, `Nip02Materializer`;
-  `fava-simple-groups`: `Change`, `Input<'a>`, `SavedListMaterializer`, `GroupOperation<'a>`,
+  `fava-nip02`: `sealed::Sealed`, `Operation`, `Change`, `BoundedTargetText`, `Nip02Applier`;
+  `fava-simple-groups`: `Change`, `Input<'a>`, `SavedListApplier`, `GroupOperation<'a>`,
   `RecordBoundary<'a>`, `HostRecords`, `Selected<T>`, `ParsedRecord`, `IntoRelayUrl`, `PreparePayload`;
-  `fava-bookmarks`: `Operation`, `Target`, `Change`, `BookmarkMaterializer`.
+  `fava-bookmarks`: `Operation`, `Target`, `Change`, `BookmarkApplier`.
   Every one is a pure value, a sealed input-conversion trait, or a private implementation of the
-  already-approved `ReplaceableEventMaterializer` contract. None owns mutable state, a task, a
+  already-approved `EditApplier` contract. None owns mutable state, a task, a
   channel, or a cancellation scope. `fava-simple-groups/tests/architecture.rs:191-213` independently
   confirms there is no `static`/`OnceLock`/`Mutex`/`Atomic*` in that crate's sources; I verified the
   same by hand for `fava-nip02` and `fava-bookmarks`.
@@ -571,8 +571,8 @@ async fn group_content_query_asks_exactly_the_selected_hosts_over_real_sessions(
   (`edit.rs:104-107`), `SimpleGroups::{save_group, remove_group, rename_saved_group, save_relay,
   remove_relay}` (`edit.rs:112-114`), and `fava_bookmarks::{bookmark_event, unbookmark_event,
   bookmark_coordinate, unbookmark_coordinate}` (`lib.rs:119-122`) all construct
-  `ReplaceableEventEdit::new(kind, identifier, change)` and each crate supplies an
-  `Arc<dyn ReplaceableEventMaterializer>` via `materializer()`. Nothing bypasses `fava-publication`.
+  `EventEdit::new(kind, identifier, change)` and each crate supplies an
+  `Arc<dyn EditApplier>` via `applier()`. Nothing bypasses `fava-publication`.
 - **NIP-29 management events stay author-bearing.** `Group::edit_metadata`/`set_pins`
   (`management.rs:11-36`) produce `UnsignedEvent`, not edits, matching
   `docs/spec/ARCHITECTURE.md:2013-2018`; `Group::prepare` is idempotent and never mutates a
@@ -588,8 +588,8 @@ async fn group_content_query_asks_exactly_the_selected_hosts_over_real_sessions(
   deduplication (`snapshot.rs:90-96`), exactly as `docs/spec/ARCHITECTURE.md:1993-1995` requires.
   `MAX_TAGS=2000` plus byte-accurate `encoded_len` in both `fava-nip02/src/bounds.rs` and
   `fava-bookmarks/src/bounds.rs`.
-- **Stale materialization guards do exist at the store.** `install_signed` and
-  `record_signer_refusal` both call `validate_current_materialization`
+- **Stale revision guards do exist at the store.** `install_signed` and
+  `record_signer_refusal` both call `validate_current_revision`
   (`crates/fava-write-store-memory/src/lifecycle.rs:33, 71`) and `install_signed` verifies the
   signature and exact unsigned body before installing — a stale signer completion cannot *install*
   stale state. The defect (`stale-signer-completion-is-silent`) is that the rejection is unattributed,

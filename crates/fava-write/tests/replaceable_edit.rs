@@ -1,6 +1,6 @@
 //! Public replaceable-edit coordinate, authorship, serialization, and bound proofs.
 
-use fava_write::{Kind, PublicKey, ReplaceableEventEdit, WriteIntent, WritePayload, WriteRouting};
+use fava_write::{Kind, PublicKey, EventEdit, WriteIntent, WritePayload, WriteRouting};
 use serde_json::json;
 
 fn author() -> PublicKey {
@@ -8,8 +8,8 @@ fn author() -> PublicKey {
         .expect("fixed public key")
 }
 
-fn plain_edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1, 2, 3])
+fn plain_edit() -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![1, 2, 3])
         .expect("plain replaceable edit")
 }
 
@@ -28,22 +28,22 @@ fn edit_is_exact_coordinate_minus_author_plus_change() {
 #[test]
 fn addressable_edit_shape_is_validated() {
     let edit =
-        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("article".to_owned()), vec![1])
+        EventEdit::new(Kind::from_u16(30_023), Some("article".to_owned()), vec![1])
             .expect("addressable coordinate");
     assert_eq!(edit.identifier(), Some("article"));
     assert!(
-        ReplaceableEventEdit::new(Kind::from_u16(30_023), Some("x".repeat(4_097)), vec![1]).is_ok(),
+        EventEdit::new(Kind::from_u16(30_023), Some("x".repeat(4_097)), vec![1]).is_ok(),
         "identifier size is caller data; no write-domain cap"
     );
     assert!(
-        ReplaceableEventEdit::new(
+        EventEdit::new(
             Kind::ContactList,
             Some("not-addressable".to_owned()),
             vec![1],
         )
         .is_err()
     );
-    assert!(ReplaceableEventEdit::new(Kind::from_u16(30_023), None, vec![1]).is_err());
+    assert!(EventEdit::new(Kind::from_u16(30_023), None, vec![1]).is_err());
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn accepted_edit_payload_carries_the_resolved_author() {
 #[test]
 fn superseded_edit_json_fields_are_refused() {
     assert!(
-        serde_json::from_value::<ReplaceableEventEdit>(json!({
+        serde_json::from_value::<EventEdit>(json!({
             "kind": 3,
             "change": [1]
         }))
@@ -81,7 +81,7 @@ fn superseded_edit_json_fields_are_refused() {
             .expect("object")
             .insert(obsolete.to_owned(), json!(1));
         assert!(
-            serde_json::from_value::<ReplaceableEventEdit>(value).is_err(),
+            serde_json::from_value::<EventEdit>(value).is_err(),
             "obsolete {obsolete} must be refused"
         );
     }

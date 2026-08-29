@@ -1,11 +1,11 @@
-//! Public-facade evidence for semantic materialization and publication.
+//! Public-facade evidence for semantic revision and publication.
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, ReceiptOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Tag, Timestamp, all_terminal,
+    EventBuilder, EventValue, Kind, RevisionId, ReceiptOutcome, EventEdit,
+    EditApplier, Tag, Timestamp, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -33,12 +33,12 @@ mod winner_order;
 
 use support::*;
 
-fn edit(kind: Kind) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit")
+fn edit(kind: Kind) -> EventEdit {
+    EventEdit::new(kind, None, vec![1]).expect("bounded edit")
 }
 
 #[test]
-fn support_materializer_preserves_the_event_builder_tag_refusal() {
+fn support_applier_preserves_the_event_builder_tag_refusal() {
     let keys = Keys::generate();
     let source = NostrEventBuilder::new(Kind::ContactList, "source")
         .tags(
@@ -48,10 +48,10 @@ fn support_materializer_preserves_the_event_builder_tag_refusal() {
         .custom_created_at(Timestamp::from(1))
         .finalize(&keys)
         .expect("source signs");
-    let materializer = TestMaterializer::new(Kind::ContactList);
+    let applier = TestApplier::new(Kind::ContactList);
 
     assert_eq!(
-        materializer.materialize(
+        applier.apply(
             &edit(Kind::ContactList),
             keys.public_key(),
             Some(&EventValue::Signed(source.clone())),
@@ -67,11 +67,11 @@ fn support_materializer_preserves_the_event_builder_tag_refusal() {
 #[tokio::test(flavor = "current_thread")]
 async fn first_value_edit_publishes_through_public_fava() {
     let keys = Keys::generate();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let (fava, cache, store, signer, publisher) = assembly(
         Arc::new(MemoryWriteStore::default()),
         keys.clone(),
-        vec![materializer.clone()],
+        vec![applier.clone()],
     );
     let mut observation = fava
         .observe(
@@ -93,7 +93,7 @@ async fn first_value_edit_publishes_through_public_fava() {
         .expect("first semantic value accepts");
     let visible = tokio::time::timeout(Duration::from_secs(1), observation.changed())
         .await
-        .expect("local materialization arrives")
+        .expect("local revision arrives")
         .expect("observation stays open");
     let receipt = write
         .settled(all_terminal())
@@ -104,20 +104,20 @@ async fn first_value_edit_publishes_through_public_fava() {
     assert_eq!(write.receipt_id(), receipt.receipt_id);
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::FIRST
+        receipt.current.publication.revision_id,
+        RevisionId::FIRST
     );
     assert_eq!(visible.events.len(), 1);
     assert_eq!(visible.events[0].event().author(), keys.public_key());
     assert_eq!(visible.events[0].event().kind(), Kind::ContactList);
-    assert_eq!(materializer.calls().len(), 1);
-    assert!(materializer.calls()[0].source.is_none());
+    assert_eq!(applier.calls().len(), 1);
+    assert!(applier.calls()[0].source.is_none());
     assert_eq!(signer.calls(), 1);
     assert_eq!(publisher.attempts().len(), 1);
     assert_eq!(publisher.attempts()[0].receipt_id, write.receipt_id());
     assert_eq!(
-        publisher.attempts()[0].materialization_id,
-        receipt.current.publication.materialization_id
+        publisher.attempts()[0].revision_id,
+        receipt.current.publication.revision_id
     );
     assert!(cache.is_empty().expect("cache remains readable"));
     assert_eq!(store.len().expect("store remains readable"), 1);
@@ -129,7 +129,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let cache = Arc::new(MemoryEventCache::default());
     let fava = publication_builder(
         Arc::clone(&cache),
@@ -137,14 +137,14 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
 
     let first_edit =
-        ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("first bounded edit");
+        EventEdit::new(Kind::ContactList, None, vec![1]).expect("first bounded edit");
     let second_edit =
-        ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).expect("distinct bounded edit");
+        EventEdit::new(Kind::ContactList, None, vec![2]).expect("distinct bounded edit");
     let first = fava
         .by(keys.public_key())
         .to([relay_url()])
@@ -159,7 +159,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         .expect("second route validates")
         .publish(second_edit)
         .expect("second edit composes at the occupied coordinate");
-    let generation_two = wait_for_materialization(&fava, second.receipt_id(), 2).await;
+    let generation_two = wait_for_revision(&fava, second.receipt_id(), 2).await;
     wait_for_signer(&signer, 1).await;
     assert_eq!(
         signer.calls(),
@@ -178,14 +178,14 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         generation_two
             .current
             .publication
-            .retired_materializations
+            .retired_revisions
             .len(),
         1
     );
     assert_eq!(
-        generation_two.current.publication.retired_materializations[0],
+        generation_two.current.publication.retired_revisions[0],
         (
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             generation_one.current.id(),
             None,
             None,
@@ -196,7 +196,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
             .record_signer_refusal(
                 first.write_id(),
                 first.receipt_id(),
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 generation_one.current.id(),
                 "late generation-one refusal".to_owned(),
             )
@@ -208,8 +208,8 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
         .expect("current receipt after stale completion");
     assert_eq!(after_stale.current.id(), generation_two.current.id());
     assert_eq!(
-        after_stale.current.publication.materialization_id,
-        generation_two.current.publication.materialization_id
+        after_stale.current.publication.revision_id,
+        generation_two.current.publication.revision_id
     );
 
     let newer = signed_source(&keys, Kind::ContactList, u64::MAX - 1, "newer", &[]);
@@ -219,14 +219,14 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
             relay_occurrence(),
         ))])
         .expect("newer source enters the canonical cache");
-    let generation_three = wait_for_materialization(&fava, first.receipt_id(), 3).await;
+    let generation_three = wait_for_revision(&fava, first.receipt_id(), 3).await;
     wait_for_signer(&signer, 2).await;
     let EventValue::Unsigned(replayed) = &generation_three.current.event else {
         panic!("blocking signer keeps replayed composition unsigned");
     };
     assert_eq!(replayed.content, "newer|edit|edit");
     assert_eq!(
-        generation_three.current.publication.materialization_source,
+        generation_three.current.publication.revision_source,
         Some(newer.id)
     );
     assert_eq!(generation_three.write_id, first.write_id());
@@ -246,13 +246,13 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(router)
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .unwrap();
 
     let first = fava
         .by(keys.public_key())
-        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap())
+        .publish(EventEdit::new(Kind::ContactList, None, vec![1]).unwrap())
         .unwrap();
     tokio::time::timeout(Duration::from_secs(1), async {
         while signer.calls().len() != 1 {
@@ -265,7 +265,7 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
 
     let second = fava
         .by(keys.public_key())
-        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap())
+        .publish(EventEdit::new(Kind::ContactList, None, vec![2]).unwrap())
         .unwrap();
     assert_eq!(second.write_id(), first.write_id());
     assert_eq!(second.receipt_id(), first.receipt_id());
@@ -274,14 +274,14 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
     assert!(
         store
             .reserve_active(
-                &ReplaceableEventEdit::new(Kind::ContactList, None, vec![3]).unwrap(),
+                &EventEdit::new(Kind::ContactList, None, vec![3]).unwrap(),
                 keys.public_key(),
             )
             .is_err()
     );
 
     signer.release_one();
-    let successor = wait_for_materialization(&fava, first.receipt_id(), 2).await;
+    let successor = wait_for_revision(&fava, first.receipt_id(), 2).await;
     tokio::time::timeout(Duration::from_secs(1), async {
         while signer.calls().len() != 2 {
             tokio::task::yield_now().await;
@@ -297,7 +297,7 @@ async fn signer_authorization_holds_one_successor_until_exact_completion() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn materializer_selection_bounds_refuse_before_custody() {
+async fn applier_selection_bounds_refuse_before_custody() {
     let keys = Keys::generate();
 
     let (empty, _, empty_store, empty_signer, empty_publisher) = assembly(
@@ -315,7 +315,7 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     );
     assert_no_effects(&empty_store, &empty_signer, &empty_publisher, 0);
 
-    let selected = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let selected = Arc::new(TestApplier::new(Kind::ContactList));
     let (unsupported, _, unsupported_store, unsupported_signer, unsupported_publisher) = assembly(
         Arc::new(MemoryWriteStore::default()),
         keys.clone(),
@@ -342,9 +342,9 @@ async fn materializer_selection_bounds_refuse_before_custody() {
         Arc::new(CountingSigner::new(keys.clone())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers([
-        Arc::new(TestMaterializer::new(Kind::ContactList)) as Arc<dyn ReplaceableEventMaterializer>,
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+    .appliers([
+        Arc::new(TestApplier::new(Kind::ContactList)) as Arc<dyn EditApplier>,
+        Arc::new(TestApplier::new(Kind::ContactList)),
     ])
     .build();
     assert!(duplicate.is_err());
@@ -355,22 +355,22 @@ async fn materializer_selection_bounds_refuse_before_custody() {
         Arc::new(CountingSigner::new(keys.clone())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers((0..65).map(|offset| {
-        Arc::new(TestMaterializer::new(Kind::Custom(10_000 + offset)))
-            as Arc<dyn ReplaceableEventMaterializer>
+    .appliers((0..65).map(|offset| {
+        Arc::new(TestApplier::new(Kind::Custom(10_000 + offset)))
+            as Arc<dyn EditApplier>
     }))
     .build();
     assert!(overflow.is_err());
 
     let bounded_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
-    let bounded_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let bounded_applier = Arc::new(TestApplier::new(Kind::ContactList));
     let (bounded, _, bounded_store, bounded_signer, bounded_publisher) = assembly(
         bounded_store,
         keys.clone(),
-        vec![Arc::clone(&bounded_materializer)],
+        vec![Arc::clone(&bounded_applier)],
     );
     bounded_store
-        .accept_materialized(EventValue::Unsigned(
+        .accept_applied(EventValue::Unsigned(
             EventBuilder::new(keys.public_key(), Kind::TextNote)
                 .created_at(Timestamp::from(1))
                 .build()
@@ -387,9 +387,9 @@ async fn materializer_selection_bounds_refuse_before_custody() {
     );
     assert_no_effects(&bounded_store, &bounded_signer, &bounded_publisher, 1);
     assert_eq!(
-        bounded_materializer.calls().len(),
+        bounded_applier.calls().len(),
         0,
-        "capacity refusal precedes arbitrary materializer code"
+        "capacity refusal precedes arbitrary applier code"
     );
 }
 
@@ -410,12 +410,12 @@ async fn first_value_receives_exact_injected_timestamp() {
             relay_occurrence(),
         ))])
         .expect("source enters canonical cache");
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let (fava, _, _, _, publisher) = assembly_with_cache(
         cache,
         Arc::new(MemoryWriteStore::default()),
         keys,
-        vec![materializer.clone()],
+        vec![applier.clone()],
     );
 
     let write = fava
@@ -428,7 +428,7 @@ async fn first_value_receives_exact_injected_timestamp() {
         .settled(all_terminal())
         .await
         .expect("publication settles");
-    let calls = materializer.calls();
+    let calls = applier.calls();
 
     assert_eq!(calls.len(), 1);
     assert_eq!(
@@ -441,7 +441,7 @@ async fn first_value_receives_exact_injected_timestamp() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
+async fn newer_source_reapplies_once_and_preserves_unrelated_fields() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
@@ -458,7 +458,7 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
             relay_occurrence(),
         ))])
         .expect("first source enters cache");
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
     let fava = publication_builder(
         Arc::clone(&cache),
@@ -466,7 +466,7 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
 
@@ -491,17 +491,17 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
         ))])
         .expect("newer source enters cache");
 
-    let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
+    let receipt = wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
     let EventValue::Unsigned(current) = receipt.current.event else {
-        panic!("blocked signer keeps current materialization unsigned");
+        panic!("blocked signer keeps current revision unsigned");
     };
     assert_eq!(current.content, "newer source|edit");
     assert_eq!(current.tags.as_slice(), newer.tags.as_slice());
     assert_eq!(current.created_at, Timestamp::max());
-    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(applier.calls().len(), 2);
     assert_eq!(
-        materializer.calls()[1]
+        applier.calls()[1]
             .source
             .as_ref()
             .and_then(EventValue::id),
@@ -510,19 +510,19 @@ async fn newer_source_rematerializes_once_and_preserves_unrelated_fields() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn own_local_materialization_does_not_create_a_second_generation() {
+async fn own_local_revision_does_not_create_a_second_generation() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         cache,
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
 
@@ -537,10 +537,10 @@ async fn own_local_materialization_does_not_create_a_second_generation() {
 
     let receipt = write.receipt().expect("receipt exists");
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::FIRST
+        receipt.current.publication.revision_id,
+        RevisionId::FIRST
     );
-    assert_eq!(materializer.calls().len(), 1);
+    assert_eq!(applier.calls().len(), 1);
     assert_eq!(signer.calls(), 1);
 }
 
@@ -558,14 +558,14 @@ async fn source_removal_selects_next_or_empty_once() {
         ])
         .expect("source history enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
     let write = fava
@@ -583,10 +583,10 @@ async fn source_removal_selects_next_or_empty_once() {
             cause: RetractionCause::Evicted,
         }])
         .expect("current source retracts");
-    let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
+    let receipt = wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
-    assert!(receipt.current.publication.materialization_source.is_none());
-    assert!(materializer.calls()[1].source.is_none());
+    assert!(receipt.current.publication.revision_source.is_none());
+    assert!(applier.calls()[1].source.is_none());
 
     cache
         .commit(vec![EventStateMutation::Retract {
@@ -596,7 +596,7 @@ async fn source_removal_selects_next_or_empty_once() {
         }])
         .expect("duplicate removal is accepted");
     assert_no_receipt_change(&store).await;
-    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(applier.calls().len(), 2);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -619,14 +619,14 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         .expect("preview source enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
     let publisher = Arc::new(RecordingPublisher::default());
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let router = Arc::new(CountingRouter::new(relay_url()));
     let owner = publication_owner(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-        vec![materializer.clone()],
+        vec![applier.clone()],
         vec![router.clone()],
     );
     let fava = publication_builder(
@@ -636,7 +636,7 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         Arc::clone(&publisher),
     )
     .router(Arc::clone(&router))
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
     let intent = automatic_intent(keys.public_key(), Kind::ContactList);
@@ -650,7 +650,7 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
     assert!(publisher.attempts().is_empty());
     assert_eq!(router.previews(), 1);
     assert_eq!(router.opens(), 0);
-    assert_eq!(materializer.calls()[0].author, keys.public_key());
+    assert_eq!(applier.calls()[0].author, keys.public_key());
     assert!(matches!(
         receipt_changes.try_recv(),
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
@@ -660,7 +660,7 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
             .preview_semantic_routes(&automatic_intent(keys.public_key(), Kind::MuteList))
             .is_err()
     );
-    let addressable = ReplaceableEventEdit::new(
+    let addressable = EventEdit::new(
         Kind::Custom(30_001),
         Some("addressable".to_owned()),
         vec![1],
@@ -673,14 +673,14 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         .by(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect("same edit accepts");
-    let receipt = wait_for_materialization(&fava, write.receipt_id(), 1).await;
+    let receipt = wait_for_revision(&fava, write.receipt_id(), 1).await;
     assert_eq!(
         receipt.desired_destinations,
         preview.destinations.keys().cloned().collect()
     );
-    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(applier.calls().len(), 2);
     assert_eq!(
-        materializer.calls()[0].created_at,
-        materializer.calls()[1].created_at
+        applier.calls()[0].created_at,
+        applier.calls()[1].created_at
     );
 }

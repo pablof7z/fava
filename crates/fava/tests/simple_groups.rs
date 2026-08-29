@@ -13,7 +13,7 @@ use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
     SavedGroupList, SimpleGroup, SimpleGroupEventBuilder, SimpleGroupMetadata,
-    SimpleGroupStateEventKind, save_simple_group, saved_group_list_materializer,
+    SimpleGroupStateEventKind, save_simple_group, saved_group_list_applier,
 };
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write_store_memory::MemoryWriteStore;
@@ -119,7 +119,7 @@ async fn state_query_returns_generic_records_for_event_local_decoding() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifecycle() {
+async fn saved_group_edit_applies_through_the_ordinary_semantic_write_lifecycle() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
@@ -130,7 +130,7 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
         Arc::new(LocalSigner::new(keys.clone())),
         publisher,
     )
-    .materializers([saved_group_list_materializer()])
+    .appliers([saved_group_list_applier()])
     .build()
     .expect("facade assembly");
     let group = group();
@@ -145,7 +145,7 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
 
     assert!(matches!(receipt.current.event, EventValue::Signed(_)));
     let list =
-        SavedGroupList::from_event(&receipt.current.event).expect("materialized list decodes");
+        SavedGroupList::from_event(&receipt.current.event).expect("applied list decodes");
     assert_eq!(list.author(), keys.public_key());
     assert_eq!(list.simple_groups().len(), group.relays().count());
     for (entry, relay) in list.simple_groups().iter().zip(group.relays()) {

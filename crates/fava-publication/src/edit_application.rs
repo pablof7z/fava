@@ -6,14 +6,14 @@ use fava_relay::RelayAccess;
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
-    EventValue, Kind, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
+    EventValue, Kind, RevisionId, PublicKey, ReceiptId, EventEdit,
+    EditApplier, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
     WriteRouting,
 };
 
 use super::{Publication, PublicationError};
 
-pub(super) const MAX_MATERIALIZERS: usize = 64;
+pub(super) const MAX_APPLIERS: usize = 64;
 
 pub(super) struct OpenedSemanticSources {
     pub(super) cache: OpenedQuerySource,
@@ -61,7 +61,7 @@ impl OpenedSemanticSources {
             Err(closed) => {
                 self.live[index] = false;
                 // Keep the reported cause: a provider that failed and one that
-                // finished are different facts about this materialization.
+                // finished are different facts about this revision.
                 self.snapshots[index].status = closed.status();
                 Some(Err(kind))
             }
@@ -96,12 +96,12 @@ pub(super) struct PreparedSemantic {
     pub(super) sources: OpenedSemanticSources,
 }
 
-/// Live tracking for one open receipt's replaceable-event materialization: the
+/// Live tracking for one open receipt's replaceable-event revision: the
 /// queued edits, the source it selected, and the source that last failed.
 pub(super) struct SemanticState {
-    pub(super) edits: Vec<ReplaceableEventEdit>,
+    pub(super) edits: Vec<EventEdit>,
     pub(super) author: PublicKey,
-    pub(super) materialization_id: MaterializationId,
+    pub(super) revision_id: RevisionId,
     pub(super) selected_id: Option<fava_write::EventId>,
     pub(super) source_floor: Option<Timestamp>,
     pub(super) failed_id: Option<fava_write::EventId>,
@@ -110,9 +110,9 @@ pub(super) struct SemanticState {
 
 impl SemanticState {
     pub(super) fn recovered(
-        edits: Vec<ReplaceableEventEdit>,
+        edits: Vec<EventEdit>,
         author: PublicKey,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         selected_id: Option<fava_write::EventId>,
         source_floor: Option<Timestamp>,
         _failed_id: Option<fava_write::EventId>,
@@ -121,7 +121,7 @@ impl SemanticState {
         Self {
             edits,
             author,
-            materialization_id,
+            revision_id,
             selected_id,
             source_floor,
             // Recovery authorizes exactly one retry of the persisted failed
@@ -137,15 +137,15 @@ impl SemanticState {
 
     pub(super) fn refresh_custody(
         &mut self,
-        materialization_id: MaterializationId,
-        edits: Vec<ReplaceableEventEdit>,
+        revision_id: RevisionId,
+        edits: Vec<EventEdit>,
         author: PublicKey,
         selected: Option<(fava_write::EventId, Timestamp)>,
         failed_id: Option<fava_write::EventId>,
     ) {
         self.edits = edits;
         self.author = author;
-        self.materialization_id = materialization_id;
+        self.revision_id = revision_id;
         self.selected_id = selected.map(|(id, _)| id);
         if let Some((_, timestamp)) = selected {
             self.source_floor = Some(timestamp);
@@ -155,21 +155,21 @@ impl SemanticState {
 }
 
 impl Publication {
-    pub(super) fn index_materializers(
-        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
-    ) -> Result<BTreeMap<Kind, Arc<dyn ReplaceableEventMaterializer>>, PublicationError> {
+    pub(super) fn index_appliers(
+        appliers: impl IntoIterator<Item = Arc<dyn EditApplier>>,
+    ) -> Result<BTreeMap<Kind, Arc<dyn EditApplier>>, PublicationError> {
         let mut indexed = BTreeMap::new();
-        for materializer in materializers {
-            if indexed.len() == MAX_MATERIALIZERS {
+        for applier in appliers {
+            if indexed.len() == MAX_APPLIERS {
                 return Err(PublicationError::Routing(format!(
-                    "materializer selection exceeds bound: {} > {MAX_MATERIALIZERS}",
+                    "applier selection exceeds bound: {} > {MAX_APPLIERS}",
                     indexed.len() + 1
                 )));
             }
-            let kind = materializer.kind();
-            if indexed.insert(kind, materializer).is_some() {
+            let kind = applier.kind();
+            if indexed.insert(kind, applier).is_some() {
                 return Err(PublicationError::Routing(format!(
-                    "duplicate materializer for kind {}",
+                    "duplicate applier for kind {}",
                     kind.as_u16()
                 )));
             }
@@ -187,7 +187,7 @@ impl Publication {
                 "semantic preparation requires a replaceable-event edit".to_owned(),
             ));
         };
-        self.materializer(edit)?;
+        self.applier(edit)?;
         let mut sources = self.open_semantic_sources(edit, *author)?;
         let source = match self.select_source(edit, *author, sources.snapshots(), None) {
             Ok(source) => source,
@@ -196,7 +196,7 @@ impl Publication {
                 return Err(error);
             }
         };
-        let (event, route) = match self.materialize_and_route(intent, source.as_ref(), current) {
+        let (event, route) = match self.apply_and_route(intent, source.as_ref(), current) {
             Ok(prepared) => prepared,
             Err(error) => {
                 sources.close();
@@ -211,7 +211,7 @@ impl Publication {
         })
     }
 
-    pub(super) fn materialize_and_route(
+    pub(super) fn apply_and_route(
         &self,
         intent: &WriteIntent,
         source: Option<&EventValue>,
@@ -222,7 +222,7 @@ impl Publication {
                 "semantic preparation requires a replaceable-event edit".to_owned(),
             ));
         };
-        self.materialize_sequence_and_route(
+        self.apply_sequence_and_route(
             std::slice::from_ref(edit),
             *author,
             source,
@@ -231,9 +231,9 @@ impl Publication {
         )
     }
 
-    pub(super) fn materialize_sequence_and_route(
+    pub(super) fn apply_sequence_and_route(
         &self,
-        edits: &[ReplaceableEventEdit],
+        edits: &[EventEdit],
         author: PublicKey,
         source: Option<&EventValue>,
         current: Option<&EventValue>,
@@ -248,28 +248,28 @@ impl Publication {
         let mut input = source.cloned();
         let mut output = None;
         for (index, edit) in edits.iter().enumerate() {
-            let materializer = self.materializer(edit)?;
+            let applier = self.applier(edit)?;
             let invocation = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                materializer.materialize(edit, author, input.as_ref(), created_at)
+                applier.apply(edit, author, input.as_ref(), created_at)
             }));
             let event = match invocation {
                 Ok(Ok(event)) => event,
                 Ok(Err(error)) => {
                     return Err(PublicationError::Routing(format!(
-                        "semantic edit {} of {} materialization refused: {error}",
+                        "semantic edit {} of {} revision refused: {error}",
                         index + 1,
                         edits.len()
                     )));
                 }
                 Err(_) => {
                     return Err(PublicationError::Routing(format!(
-                        "semantic edit {} of {} materializer panicked",
+                        "semantic edit {} of {} applier panicked",
                         index + 1,
                         edits.len()
                     )));
                 }
             };
-            validate_materialization(edit, author, &event, created_at)?;
+            validate_revision(edit, author, &event, created_at)?;
             input = Some(EventValue::Unsigned(event.clone()));
             output = Some(event);
         }
@@ -278,29 +278,29 @@ impl Publication {
         Ok((event, route))
     }
 
-    pub(super) fn materializer(
+    pub(super) fn applier(
         &self,
-        edit: &ReplaceableEventEdit,
-    ) -> Result<Arc<dyn ReplaceableEventMaterializer>, PublicationError> {
+        edit: &EventEdit,
+    ) -> Result<Arc<dyn EditApplier>, PublicationError> {
         let kind = edit_kind(edit);
-        let materializer = self.materializers.get(&kind).ok_or_else(|| {
+        let applier = self.appliers.get(&kind).ok_or_else(|| {
             PublicationError::Routing(format!(
-                "no selected materializer for kind {}",
+                "no selected applier for kind {}",
                 kind.as_u16()
             ))
         })?;
-        if !materializer.supports(edit) {
+        if !applier.supports(edit) {
             return Err(PublicationError::Routing(format!(
-                "selected materializer does not support kind {} edit",
+                "selected applier does not support kind {} edit",
                 kind.as_u16()
             )));
         }
-        Ok(Arc::clone(materializer))
+        Ok(Arc::clone(applier))
     }
 
     pub(super) fn open_semantic_sources(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
     ) -> Result<OpenedSemanticSources, PublicationError> {
         let query = exact_query(edit, author);
@@ -321,7 +321,7 @@ impl Publication {
 
     pub(super) fn select_source(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         sources: &[SourceSnapshot],
         exclude_receipt: Option<ReceiptId>,
@@ -424,20 +424,20 @@ fn source_is_present(sources: &[SourceSnapshot], selected_id: fava_write::EventI
     })
 }
 
-pub(super) const fn edit_kind(edit: &ReplaceableEventEdit) -> Kind {
+pub(super) const fn edit_kind(edit: &EventEdit) -> Kind {
     edit.kind()
 }
 
-fn exact_query(edit: &ReplaceableEventEdit, author: PublicKey) -> Query {
+fn exact_query(edit: &EventEdit, author: PublicKey) -> Query {
     Query::events()
         .kinds([edit_kind(edit)])
-        .expect("one materialization kind is within the query bound")
+        .expect("one revision kind is within the query bound")
         .authors([author])
-        .expect("one materialization author is within the query bound")
+        .expect("one revision author is within the query bound")
         .cache_only()
 }
 
-fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+fn edit_coordinate(edit: &EventEdit, author: PublicKey) -> EventCoordinate {
     EventCoordinate::Replaceable {
         author,
         kind: edit.kind(),
@@ -456,31 +456,31 @@ pub(super) fn injected_timestamp(
         .max();
     let minimum = match newest {
         Some(timestamp) => timestamp.checked_add(1).ok_or_else(|| {
-            PublicationError::Routing("materialization timestamp exhausted".to_owned())
+            PublicationError::Routing("revision timestamp exhausted".to_owned())
         })?,
         None => 0,
     };
     Ok(Timestamp::from(Timestamp::now().as_secs().max(minimum)))
 }
 
-pub(super) fn validate_materialization(
-    edit: &ReplaceableEventEdit,
+pub(super) fn validate_revision(
+    edit: &EventEdit,
     author: PublicKey,
     event: &UnsignedEvent,
     injected_created_at: Timestamp,
 ) -> Result<(), PublicationError> {
     let id = event.id.ok_or_else(|| {
-        PublicationError::Routing("semantic materialization has no event id".to_owned())
+        PublicationError::Routing("semantic revision has no event id".to_owned())
     })?;
     let coordinate = event_coordinate(id, event.pubkey, event.kind, event.tags.as_slice());
     if event.created_at != injected_created_at {
         return Err(PublicationError::Routing(
-            "semantic materialization ignored the injected timestamp".to_owned(),
+            "semantic revision ignored the injected timestamp".to_owned(),
         ));
     }
     if event.pubkey != author || coordinate != edit_coordinate(edit, author) {
         return Err(PublicationError::Routing(
-            "semantic materialization author or coordinate does not match accepted write"
+            "semantic revision author or coordinate does not match accepted write"
                 .to_owned(),
         ));
     }

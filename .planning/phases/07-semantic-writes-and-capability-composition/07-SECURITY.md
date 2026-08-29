@@ -15,8 +15,8 @@ verified_head: f97ecd8c0f8fd3793860cce95380ddcae9521aa3
 | Boundary | Data crossing | Security rule |
 |----------|---------------|---------------|
 | Application → write intent | raw event or authorless `{ kind, identifier, change }` edit plus accepted author | validate bounds and freeze author before custody |
-| Protocol materializer → publication | unsigned event derived from selected source and injected timestamp | exact author, coordinate, timestamp, identity, and size validation before effects |
-| Publication → write store | receipt and generation mutations | exact operation, materialization, event, session, attempt, and revision compare-and-set |
+| Protocol applier → publication | unsigned event derived from selected source and injected timestamp | exact author, coordinate, timestamp, identity, and size validation before effects |
+| Publication → write store | receipt and generation mutations | exact operation, revision, event, session, attempt, and revision compare-and-set |
 | Cache/write-store observations → semantic runner | changing qualified source state | independent bounded observations; failures and closure remain source-scoped |
 | Publisher/transport → delivery evidence | external attempts and outcomes | bounded queues and exact generation/destination attribution |
 | Durable redb bytes → recovery | schema-v2 semantic custody | strict version/invariant validation; no fallback decoder or migration |
@@ -28,16 +28,16 @@ verified_head: f97ecd8c0f8fd3793860cce95380ddcae9521aa3
 |-----------|----------|-----------|----------|-------------|---------------------|--------|
 | T-07-01 | Tampering | edit decode | high | mitigate | exact authorless edit shape, bounded change, superseded actor/format/inverse fields refused | closed |
 | T-07-02 | Denial of Service | edit/evidence bounds | high | mitigate | edit, receipt text, destination, retained generation, and evidence caps refuse atomically | closed |
-| T-07-03 | Elevation of Privilege | materializer contract | high | mitigate | pure public contract has no signer, router, publisher, cache mutation, or receipt ownership | closed |
-| T-07-04 | Repudiation | generation attribution | medium | mitigate | stable write/receipt with exact materialization, event, source, and retired evidence | closed |
+| T-07-03 | Elevation of Privilege | applier contract | high | mitigate | pure public contract has no signer, router, publisher, cache mutation, or receipt ownership | closed |
+| T-07-04 | Repudiation | generation attribution | medium | mitigate | stable write/receipt with exact revision, event, source, and retired evidence | closed |
 | T-07-05 | Tampering | generation mutation | high | mitigate | exact current identity and source compare-and-set in memory and redb | closed |
 | T-07-06 | Denial of Service | active custody | high | mitigate | store-owned global reservations and atomic capacity/evidence refusal | closed |
 | T-07-07 | Repudiation | retired/failed work | medium | mitigate | bounded generation/source/event failure and retired-completion attribution | closed |
 | T-07-08 | Elevation of Privilege | observer visibility | high | mitigate | notify after commit; unpublished events remain in the independent write-store source | closed |
 | T-07-09 | Spoofing | source selection | high | mitigate | exact author/kind/identifier qualification and canonical timestamp/event-id winner | closed |
-| T-07-10 | Denial of Service | provider/task admission | high | mitigate | bounded selection and store reservation occur before materializer/provider effects | closed |
-| T-07-11 | Tampering | preview/live parity | high | mitigate | shared materialize-and-route path with zero-effect preview proof | closed |
-| T-07-12 | Elevation of Privilege | materializer output | high | mitigate | exact author, coordinate, timestamp, identity, and size validation before custody | closed |
+| T-07-10 | Denial of Service | provider/task admission | high | mitigate | bounded selection and store reservation occur before applier/provider effects | closed |
+| T-07-11 | Tampering | preview/live parity | high | mitigate | shared apply-and-route path with zero-effect preview proof | closed |
+| T-07-12 | Elevation of Privilege | applier output | high | mitigate | exact author, coordinate, timestamp, identity, and size validation before custody | closed |
 | T-07-13 | Tampering | late completion | critical | mitigate | exact generation/session/attempt/revision CAS; stale work cannot mutate current state | closed |
 | T-07-14 | Denial of Service | tasks/queues/route progress | high | mitigate | bounded channels plus committed mutation results advance route revision despite transient reads | closed |
 | T-07-15 | Repudiation | provider failure/panic | high | mitigate | panic/error isolation and bounded source/generation evidence | closed |
@@ -53,7 +53,7 @@ verified_head: f97ecd8c0f8fd3793860cce95380ddcae9521aa3
 | T-07-25 | Elevation of Privilege | external capability | high | mitigate | public-Fava-only compilation and universal output validation | closed |
 | T-07-26 | Tampering | future raw events | high | mitigate | arbitrary kind/created-at/tags/content and event identity publish unchanged | closed |
 | T-07-27 | Denial of Service | external input/output | high | mitigate | shared edit/source/output/admission/evidence bounds and typed refusal | closed |
-| T-07-28 | Repudiation | external late work | medium | mitigate | public receipt proves stable identity and exact retired materialization behavior | closed |
+| T-07-28 | Repudiation | external late work | medium | mitigate | public receipt proves stable identity and exact retired revision behavior | closed |
 | T-07-29 | Tampering | shared corpus | high | mitigate | both capabilities run the same parameterized lifecycle; core kind-switch scan is empty | closed |
 | T-07-30 | Repudiation | canary evidence | high | mitigate | exact source/current/retired/route/attempt IDs plus injected transient-route fault proof | closed |
 | T-07-31 | Denial of Service | canary process/artifacts | medium | mitigate | bounded output, one absolute deadline, process-group cleanup, fixed seven-file bundles | closed |

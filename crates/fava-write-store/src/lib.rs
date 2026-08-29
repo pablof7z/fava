@@ -1,11 +1,11 @@
-//! Neutral contract for accepted local event materializations.
+//! Neutral contract for accepted local event revisions.
 
 use fava_query::QuerySource;
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventId, EventValue, InvalidEventValue, LocalWriteEvent, MaterializationId, PublicKey, Receipt,
-    ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteId,
+    EventId, EventValue, InvalidEventValue, LocalWriteEvent, RevisionId, PublicKey, Receipt,
+    ReceiptId, RelayDeliveryOutcome, EventEdit, Timestamp, UnsignedEvent, WriteId,
     WriteIntent, WriteIntentError, WriteRouting,
 };
 use thiserror::Error;
@@ -14,7 +14,7 @@ use tokio::sync::broadcast;
 mod receipt;
 
 pub use receipt::{
-    apply_route_to_receipt, destination_evidence_capacity, validate_current_materialization,
+    apply_route_to_receipt, destination_evidence_capacity, validate_current_revision,
     validate_delivery_outcome, validate_receipt_text,
 };
 
@@ -43,7 +43,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// The primitive identity is store-local, bound to the edit's exact
     /// author/kind/identifier coordinate, and has no meaning after it is
     /// released or consumed by matching
-    /// [`WriteStore::accept_reserved_materialized_edit`].
+    /// [`WriteStore::accept_reserved_applied_edit`].
     ///
     /// # Errors
     ///
@@ -54,7 +54,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// and must still pass composition bounds.
     fn reserve_active(
         &self,
-        _edit: &ReplaceableEventEdit,
+        _edit: &EventEdit,
         _author: PublicKey,
     ) -> Result<u64, WriteStoreError> {
         Err(WriteStoreError::Refused(
@@ -87,15 +87,15 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// acceptance mutation cannot commit.
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError>;
 
-    /// Atomically accept one edit and its already-validated materialization.
+    /// Atomically accept one edit and its already-validated revision.
     /// A distinct same-coordinate edit may append to the exact active unsigned
     /// operation and returns that operation's stable write and receipt identity.
     ///
     /// # Errors
     ///
     /// Returns [`WriteStoreError`] when semantic custody is unsupported or the
-    /// complete edit, receipt, materialization, and query-source commit refuses.
-    fn accept_materialized_edit(
+    /// complete edit, receipt, revision, and query-source commit refuses.
+    fn accept_applied_edit(
         &self,
         _intent: WriteIntent,
         _event: UnsignedEvent,
@@ -116,7 +116,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     ///
     /// Returns [`WriteStoreError`] when the reservation is stale, belongs to a
     /// different coordinate, or the complete acceptance mutation refuses.
-    fn accept_reserved_materialized_edit(
+    fn accept_reserved_applied_edit(
         &self,
         _reservation: u64,
         _intent: WriteIntent,
@@ -129,7 +129,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         ))
     }
 
-    /// Atomically replace the exact current semantic materialization after
+    /// Atomically replace the exact current semantic revision after
     /// proving the caller applied the complete durable edit sequence.
     ///
     /// Repeating an already-committed exact update is idempotent. Every other
@@ -140,23 +140,23 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] without mutation when any currentness or
     /// boundedness check fails.
     #[allow(clippy::too_many_arguments)]
-    fn install_materialization(
+    fn install_revision(
         &self,
         _write_id: WriteId,
         _receipt_id: ReceiptId,
-        _expected: MaterializationId,
+        _expected: RevisionId,
         _expected_source: Option<EventId>,
-        _applied_edits: &[ReplaceableEventEdit],
+        _applied_edits: &[EventEdit],
         _event: UnsignedEvent,
         _source: Option<&EventValue>,
         _initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
         Err(WriteStoreError::Refused(
-            "write store does not support materialization replacement".to_owned(),
+            "write store does not support revision replacement".to_owned(),
         ))
     }
 
-    /// Attribute one post-accept materialization failure to the exact current
+    /// Attribute one post-accept revision failure to the exact current
     /// write, generation, and selected source.
     ///
     /// # Errors
@@ -164,17 +164,17 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// Returns [`WriteStoreError`] without mutation for stale, terminal,
     /// unqualified, unsupported, or otherwise invalid completion facts.
     #[allow(clippy::too_many_arguments)]
-    fn record_materialization_failure(
+    fn record_revision_failure(
         &self,
         _write_id: WriteId,
         _receipt_id: ReceiptId,
-        _expected: MaterializationId,
+        _expected: RevisionId,
         _expected_source: Option<EventId>,
         _source: Option<&EventValue>,
         _reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         Err(WriteStoreError::Refused(
-            "write store does not support materialization failure evidence".to_owned(),
+            "write store does not support revision failure evidence".to_owned(),
         ))
     }
 
@@ -188,12 +188,12 @@ pub trait WriteStore: QuerySource + Send + Sync {
     ///
     /// Returns [`WriteStoreError`] when coherent current custody cannot be read.
     #[allow(clippy::type_complexity)] // Existing values deliberately avoid a recovery wrapper.
-    fn recover_materialized_edits(
+    fn recover_applied_edits(
         &self,
     ) -> Result<
         Vec<(
             Receipt,
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -205,20 +205,20 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
     /// Read one exact live semantic custody record by receipt identity.
     ///
-    /// The ordered edit sequence is bounded by retained materialization
+    /// The ordered edit sequence is bounded by retained revision
     /// evidence and is empty only for an incoherent provider implementation.
     ///
     /// # Errors
     ///
     /// Returns [`WriteStoreError`] when current custody cannot be read.
     #[allow(clippy::type_complexity)]
-    fn materialized_edits(
+    fn applied_edits(
         &self,
         _receipt_id: ReceiptId,
-        _expected: MaterializationId,
+        _expected: RevisionId,
     ) -> Result<
         Option<(
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
@@ -236,7 +236,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
     /// # Errors
     ///
     /// Returns [`WriteStoreError`] when validation or the complete commit fails.
-    fn accept_materialized(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
+    fn accept_applied(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
         let intent = match event {
             EventValue::Unsigned(event) => WriteIntent::event(event, WriteRouting::Automatic),
             EventValue::Signed(event) => WriteIntent::presigned(event, WriteRouting::Automatic),
@@ -253,7 +253,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: fava_write::Event,
     ) -> Result<Receipt, WriteStoreError>;
@@ -272,7 +272,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError>;
 
@@ -285,7 +285,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError>;
@@ -299,7 +299,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError>;
 
@@ -312,7 +312,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError>;
@@ -330,7 +330,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError>;
@@ -344,7 +344,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -360,7 +360,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,

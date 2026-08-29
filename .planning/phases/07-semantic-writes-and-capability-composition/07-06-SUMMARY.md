@@ -6,13 +6,13 @@ tags: [rust, nostr, nip-02, nip-51, semantic-writes, replaceable-events, tdd]
 requires:
   - phase: 07-semantic-writes-and-capability-composition
     plan: 01
-    provides: bounded opaque ReplaceableEventEdit values and replaceable-event materializer contract
+    provides: bounded opaque EventEdit values and replaceable-event applier contract
   - phase: 07-semantic-writes-and-capability-composition
     plan: 04
-    provides: exact source validation and isolated semantic materialization lifecycle
+    provides: exact source validation and isolated semantic revision lifecycle
 provides:
-  - pure NIP-02 follow and unfollow edit construction and selected materializer
-  - pure public NIP-51 event and coordinate bookmark editing and selected materializer
+  - pure NIP-02 follow and unfollow edit construction and selected applier
+  - pure public NIP-51 event and coordinate bookmark editing and selected applier
   - private bounded codecs that preserve opaque content and unmanaged tags exactly
   - exact structural source bounds applied before cryptographic verification
   - closed protocol vocabulary and negative lifecycle-provider dependency proofs
@@ -24,7 +24,7 @@ actuals:
 tech-stack:
   added: []
   patterns:
-    - protocol helpers return opaque edits and expose selected materializers only through the neutral trait
+    - protocol helpers return opaque edits and expose selected appliers only through the neutral trait
     - protocol codecs retain one full exact target tag, remove target duplicates, and preserve all unmanaged bytes and order
     - public bookmark duplicates choose the richest full tag then lexical minimum so permutations converge without global sorting
     - public bookmark edits treat encrypted content as opaque data and never parse or mutate it
@@ -44,10 +44,10 @@ key-files:
     - MODULE.bazel.lock
     - docs/internals/vocabulary.toml
 key-decisions:
-  - "NIP-02 and public NIP-51 expose functions plus the existing materializer trait object; decoded lists, codecs, targets, and materializer implementations remain private."
+  - "NIP-02 and public NIP-51 expose functions plus the existing applier trait object; decoded lists, codecs, targets, and applier implementations remain private."
   - "A matching existing full tag is retained with relay hint or petname intact, exact duplicates are removed, and a missing target appends one canonical tag without globally sorting unrelated state."
   - "Public bookmarks never interpret encrypted private content; source content is copied exactly for both add and remove edits."
-  - "Protocol materializers bound tag count, nested tag-value count, and exact JSON bytes before verifying the exact signed source event, then validate actor, kind, successor timestamp, format, and output."
+  - "Protocol appliers bound tag count, nested tag-value count, and exact JSON bytes before verifying the exact signed source event, then validate actor, kind, successor timestamp, format, and output."
   - "An addressable EventCoordinate with Some(empty string) is valid because the ordinary event-coordinate helper emits that value when an addressable event has no d tag."
 patterns-established:
   - "Private versioned codec: the edit payload owns bounded operation data while all decoded protocol state remains crate-private."
@@ -103,7 +103,7 @@ status: complete
 
 # Phase 07 Plan 06: NIP-02 and Public Bookmark Protocols Summary
 
-**Pure NIP-02 and public NIP-51 helpers now produce bounded semantic edits and selected materializers without exposing decoded protocol state or acquiring lifecycle dependencies.**
+**Pure NIP-02 and public NIP-51 helpers now produce bounded semantic edits and selected appliers without exposing decoded protocol state or acquiring lifecycle dependencies.**
 
 ## Performance
 
@@ -115,8 +115,8 @@ status: complete
 
 ## Accomplishments
 
-- Added `fava-nip02` with public `follow`, `unfollow`, and `materializer` functions over existing public values; all contact-list decoding and materialization machinery is private.
-- Added `fava-bookmarks` with event-id and address-coordinate add/remove helpers plus `materializer`; private encrypted bookmark content is never decoded or changed.
+- Added `fava-nip02` with public `follow`, `unfollow`, and `applier` functions over existing public values; all contact-list decoding and revision machinery is private.
+- Added `fava-bookmarks` with event-id and address-coordinate add/remove helpers plus `applier`; private encrypted bookmark content is never decoded or changed.
 - Preserved content and every unmanaged, unknown, or malformed tag exactly and in order, retained one existing full target tag including hints or petname, removed exact target duplicates, and appended only a missing canonical target.
 - Accepted ordinary-helper addressable coordinates with an empty identifier and made duplicate public-bookmark permutations converge on one deterministic existing full tag.
 - Bounded tag count, total nested tag-value cardinality, and exact escaped JSON size before signature verification; computed exact output cardinality before allocating or appending.
@@ -126,9 +126,9 @@ status: complete
 
 ## RED and Causal Evidence
 
-- **Task 1 RED:** the four required NIP-02 tests failed to compile because `follow`, `unfollow`, and `materializer` did not exist. Commit: `84b2957`.
+- **Task 1 RED:** the four required NIP-02 tests failed to compile because `follow`, `unfollow`, and `applier` did not exist. Commit: `84b2957`.
 - **Task 1 deliberate break:** replacing retention of the existing full target tag made `follow_preserves_unrelated_state_and_orders_deterministically` fail on relay-hint and petname preservation. Restoring target-local retention returned the suite green.
-- **Task 2 RED:** the four required public-bookmark tests failed to compile because event/coordinate add/remove helpers and `materializer` did not exist. Commit: `a259c24`.
+- **Task 2 RED:** the four required public-bookmark tests failed to compile because event/coordinate add/remove helpers and `applier` did not exist. Commit: `a259c24`.
 - **Task 2 deliberate break:** replacing opaque source content with empty content made `bookmark_preserves_unrelated_state_and_orders_deterministically` fail. Restoring exact content copying returned the suite green.
 - **Review RED:** tampered oversized sources returned signature errors before structural refusal in both crates; empty addressable identifiers were refused; and two equivalent duplicate-bookmark permutations produced different unsigned events. Commit: `3f97303`.
 - **Review GREEN:** the same hostile, empty-coordinate, and duplicate-permutation tests passed after pre-verification exact bounds, ordinary-coordinate acceptance, and deterministic target-local canonicalization. Commit: `991e050`.
@@ -143,14 +143,14 @@ status: complete
 6. **Build metadata: Refresh Bazel dependency lock** — `1ad9030` (chore)
 7. **Initial plan metadata** — `422a8d4` (docs)
 8. **Review RED: Expose protocol review gaps** — `3f97303` (test)
-9. **Review GREEN: Harden protocol materialization** — `991e050` (fix)
+9. **Review GREEN: Harden protocol revision** — `991e050` (fix)
 
 **Plan metadata:** this commit
 
 ## Files Created/Modified
 
-- `crates/fava-nip02/src/lib.rs`, `bounds.rs`, and `tests.rs` — private kind-3 codec/materializer, exact pre-verification structural bounds, and seven unit tests.
-- `crates/fava-bookmarks/src/lib.rs`, `bounds.rs`, and `tests.rs` — private kind-10003 codec/materializer, empty-addressable support, canonical duplicate selection, exact structural bounds, and nine unit tests.
+- `crates/fava-nip02/src/lib.rs`, `bounds.rs`, and `tests.rs` — private kind-3 codec/applier, exact pre-verification structural bounds, and seven unit tests.
+- `crates/fava-bookmarks/src/lib.rs`, `bounds.rs`, and `tests.rs` — private kind-10003 codec/applier, empty-addressable support, canonical duplicate selection, exact structural bounds, and nine unit tests.
 - Both protocol `tests/public_api.rs` files — external-crate exact signature proof over existing public values only.
 - Both protocol `Cargo.toml` and `BUILD.bazel` files — libraries plus local unit and external API targets with neutral/domain normal dependencies only.
 - `Cargo.toml` and `Cargo.lock` — workspace membership and locked local package metadata.
@@ -159,7 +159,7 @@ status: complete
 
 ## Decisions Made
 
-- The only public capability selection point is `materializer() -> Arc<dyn ReplaceableEventMaterializer>`; no protocol descriptor, registry, factory, target enum, decoded list, or error noun was added.
+- The only public capability selection point is `applier() -> Arc<dyn EditApplier>`; no protocol descriptor, registry, factory, target enum, decoded list, or error noun was added.
 - Duplicate normalization is target-local. NIP-02 retains the first full match; public bookmarks choose greatest arity then lexical minimum, place it at the first target slot, remove all other matches, and never reorder unmanaged tags.
 - NIP-51 address bookmarks accept the existing `EventCoordinate` for addressable kinds even when its identifier is `Some("")`, matching `event_coordinate` output, and encode its canonical coordinate into an `a` tag.
 - Source structure is bounded before cryptographic work using exact Nostr JSON string escaping and a total nested-value ceiling derived from the event-byte ceiling.
@@ -220,7 +220,7 @@ status: complete
 - Both named deliberate breaks failed their intended preservation test before restoration.
 - Review RED reproduced typed-bound, empty-coordinate, and permutation-determinism failures before `991e050` made them green.
 - `cargo test --doc -p fava-nip02 -p fava-bookmarks` — 7/7 external privacy compile-fail checks passed.
-- Exact rustdoc item allowlists — only `follow`, `unfollow`, `materializer` and the five approved bookmark functions were public.
+- Exact rustdoc item allowlists — only `follow`, `unfollow`, `applier` and the five approved bookmark functions were public.
 - `cargo check --workspace --all-targets` and `cargo test --workspace --all-targets` — passed.
 - `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all -- --check` — passed.
 - `python3 tools/check_vocabulary.py` and `python3 -m unittest tools.tests.test_vocabulary_check` — passed (4 tests).

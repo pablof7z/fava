@@ -123,9 +123,9 @@ representation / adjective-qualified variant of an existing vocabulary noun
 |---|---|---|---|
 | `crates/fava/src/relay.rs:17` | `pub(super)` | `OpenedRelay` | owns relay session, subscription ids, generation counter (known baseline) |
 | `crates/fava/src/query_source.rs:57` | private | `FavaChanges` | owns `cancel: watch::Sender<bool>` for a `tokio::spawn`ed task (`:22-25`), `close()` at `:73`, `Drop` at `:81` |
-| `crates/fava-publication/src/materialization.rs:17` | `pub(super)` | `OpenedSemanticSources` | owns two `OpenedQuerySource`, releases both in `close()` at `:81-84` |
-| `crates/fava-publication/src/materialization.rs:87` | `pub(super)` | `PreparedSemantic` | holds `sources: OpenedSemanticSources`; transitively owns the release |
-| `crates/fava-publication/src/materialization.rs:94` | `pub(super)` | `SemanticState` | holds `sources: OpenedSemanticSources`; `close()` at `:142` |
+| `crates/fava-publication/src/revision.rs:17` | `pub(super)` | `OpenedSemanticSources` | owns two `OpenedQuerySource`, releases both in `close()` at `:81-84` |
+| `crates/fava-publication/src/revision.rs:87` | `pub(super)` | `PreparedSemantic` | holds `sources: OpenedSemanticSources`; transitively owns the release |
+| `crates/fava-publication/src/revision.rs:94` | `pub(super)` | `SemanticState` | holds `sources: OpenedSemanticSources`; `close()` at `:142` |
 | `crates/fava-routing/src/chain.rs:110` | private | `OpenedChain` | owns `cancel` for two `tokio::spawn`ed tasks (`:86`, `:95`), `close()` `:132`, `Drop` `:141` |
 | `crates/fava-router-outbox/src/lib.rs:180` | private | `OutboxSession` | owns `changes: Option<Box<dyn SourceChanges>>` and releases it in `close()` `:233` |
 | `crates/fava-router-outbox/src/lib.rs:31` | private | `KnownLists` | sole authority for a shared mutable relay-list map plus its revision channel, handed around as `Arc<KnownLists>` |
@@ -140,7 +140,7 @@ representation / adjective-qualified variant of an existing vocabulary noun
 | `crates/fava-bookmarks/src/lib.rs:93` | private | `Operation` |
 | `crates/fava-bookmarks/src/lib.rs:108` | private | `Target` |
 | `crates/fava-bookmarks/src/lib.rs:114` | private | `Change` |
-| `crates/fava-bookmarks/src/lib.rs:259` | private | `BookmarkMaterializer` |
+| `crates/fava-bookmarks/src/lib.rs:259` | private | `BookmarkApplier` |
 | `crates/fava-diagnostics/src/lib.rs:10` | private | `SessionFact` |
 | `crates/fava-diagnostics/src/lib.rs:11` | private | `SubscriptionFact` |
 | `crates/fava-diagnostics/src/lib.rs:12` | private | `MessageFact` |
@@ -148,7 +148,7 @@ representation / adjective-qualified variant of an existing vocabulary noun
 | `crates/fava-event-cache-memory/src/lib.rs:148` | private | `WatchChanges` |
 | `crates/fava-nip02/src/edit.rs:79` | private | `Operation` |
 | `crates/fava-nip02/src/edit.rs:99` | private | `Change` |
-| `crates/fava-nip02/src/edit.rs:284` | private | `Nip02Materializer` |
+| `crates/fava-nip02/src/edit.rs:284` | private | `Nip02Applier` |
 | `crates/fava-observe/src/lib.rs:286` | private | `TrackingSource` |
 | `crates/fava-observe/src/lib.rs:307` | private | `TrackingChanges` |
 | `crates/fava-observe/src/lib.rs:321` | private | `RefusingSource` |
@@ -160,7 +160,7 @@ representation / adjective-qualified variant of an existing vocabulary noun
 | `crates/fava-router-testkit/src/lib.rs:69` | private | `DelayedSession` |
 | `crates/fava-routing/src/chain.rs:146` | private | `RouterUpdate` |
 | `crates/fava-simple-groups/src/edit.rs:20` | private | `Change` |
-| `crates/fava-simple-groups/src/edit.rs:298` | private | `SavedListMaterializer` |
+| `crates/fava-simple-groups/src/edit.rs:298` | private | `SavedListApplier` |
 | `crates/fava-simple-groups/src/edit.rs:370` | private | `GroupOperation` |
 | `crates/fava-simple-groups/src/group.rs:376` | private | `IntoRelayUrl` |
 | `crates/fava-simple-groups/src/group.rs:404` | private | `PreparePayload` |
@@ -233,10 +233,10 @@ entry — it needs to stop existing; the relay-session lifecycle belongs to
 `fava-transport` + `fava-observe` per the architecture spec. It is the strongest
 example of `:55` being violated with a green gate.
 
-**3.5 The publication materialization triple (`fava-publication:17,87,94`).**
+**3.5 The publication revision triple (`fava-publication:17,87,94`).**
 `OpenedSemanticSources`, `PreparedSemantic`, `SemanticState` are three
 `pub(super)` lifecycle owners for one thing: the pair of query sources kept open
-while a semantic (replaceable-event) write is materialized. Closest existing
+while a semantic (replaceable-event) write is applied. Closest existing
 concept: `Publication` (registered, owner `fava-publication`). Either they
 collapse into `Publication`'s own state, or one real entry is needed — the
 forcing requirement is that a semantic write must hold two open sources across
@@ -247,20 +247,20 @@ particular is the same shape as `OpenedRelay` in a different crate.
 (`fava-bookmarks:114`, `fava-nip02:99`, `fava-simple-groups:20`), `Operation`
 twice (`fava-bookmarks:93`, `fava-nip02:79`), plus `Target`
 (`fava-bookmarks:108`) and `GroupOperation` (`fava-simple-groups:370`). All are
-the decoded body of the registered `fava_write::ReplaceableEventEdit.change`
-byte field. Collapse into `ReplaceableEventEdit` — the concept is already
+the decoded body of the registered `fava_write::EventEdit.change`
+byte field. Collapse into `EventEdit` — the concept is already
 approved; what is missing is one noun for its decoded form. Today the same
 architectural concept has three private homonyms across three crates, which is
 precisely what `:56` exists to prevent.
 
-**3.7 The three `ReplaceableEventMaterializer` implementations.**
-`BookmarkMaterializer`, `Nip02Materializer`, `SavedListMaterializer`. The trait
+**3.7 The three `EditApplier` implementations.**
+`BookmarkApplier`, `Nip02Applier`, `SavedListApplier`. The trait
 is a registered symbol and a registered spec symbol; every one of its
 implementations is unregistered because each crate exposes only
-`pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer>`. This is a
+`pub fn applier() -> Arc<dyn EditApplier>`. This is a
 deliberate-looking gate evasion pattern: return the contract, keep the noun
 private. Collapse: register the three under the
-`ReplaceableEventMaterializer` term, consistent with `Nip01Publisher` /
+`EditApplier` term, consistent with `Nip01Publisher` /
 `StandardDeliveryPolicy` / `LocalSigner` all being registered.
 
 **3.8 `OnePerDemand` (`fava-subscriptions-no-grouping:11`).** Same pattern as
@@ -323,8 +323,8 @@ Collapse into named `RelayEvidence` variants, or register four entries under
 `Diagnostics`.
 
 **3.16 `EncodedEdit` (`fava-write/src/edit.rs:117`).** The serde wire form of
-the registered `ReplaceableEventEdit`. Textbook "alternate representation".
-Collapse into `ReplaceableEventEdit`'s own serde impl.
+the registered `EventEdit`. Textbook "alternate representation".
+Collapse into `EventEdit`'s own serde impl.
 
 **3.17 The simple-groups projection internals.** `HostRecords` (`snapshot.rs:14`),
 `ParsedRecord` (`:59`), `RecordBoundary` (`records.rs:10`, `pub(crate)`) are
@@ -521,9 +521,9 @@ tests can only ever regress-protect the narrow slice the regex already sees.
 
 ### vocab-openedrelay-and-eight-siblings — critical — vocabulary
 - **authority** — `AGENTS.md:55` (lifecycle owner is a vocabulary change); `AGENTS.md:58`: "Vocabulary changes use a separate focused architecture change approved by Pablo. A feature change cannot approve its own new vocabulary."
-- **implementation** — `crates/fava/src/relay.rs:17` (`OpenedRelay`, known baseline) is not unique. Eight further unapproved lifecycle owners exist: `crates/fava/src/query_source.rs:57`, `crates/fava-publication/src/materialization.rs:17,87,94`, `crates/fava-routing/src/chain.rs:110`, `crates/fava-router-outbox/src/lib.rs:31,180`, `crates/fava-transport-websocket/src/lib.rs:82`. Each owns a cancel channel, a spawned task, an opened source, or a socket, and each is absent from `docs/internals/vocabulary.toml`.
-- **observable distinction** — `OpenedSemanticSources` (`materialization.rs:17`) owns two `OpenedQuerySource` handles and is the only thing that closes them (`:81-84`). An application that cancels a semantic publication mid-materialization depends on a lifecycle whose owner has no name, no registered owner crate, and no falsifier obligation — the same shape as the confirmed partial-open session leak in the baseline.
-- **proposed falsifier** — `crates/fava-publication/tests/semantic_cancellation.rs::cancelled_materialization_closes_both_opened_sources`: open a `Publication` for a replaceable edit against two counting `QuerySource`s, drop the publication future before the signer resolves, assert both sources recorded exactly one `close()`. Names the lifecycle at the owning component instead of leaving it anonymous.
+- **implementation** — `crates/fava/src/relay.rs:17` (`OpenedRelay`, known baseline) is not unique. Eight further unapproved lifecycle owners exist: `crates/fava/src/query_source.rs:57`, `crates/fava-publication/src/revision.rs:17,87,94`, `crates/fava-routing/src/chain.rs:110`, `crates/fava-router-outbox/src/lib.rs:31,180`, `crates/fava-transport-websocket/src/lib.rs:82`. Each owns a cancel channel, a spawned task, an opened source, or a socket, and each is absent from `docs/internals/vocabulary.toml`.
+- **observable distinction** — `OpenedSemanticSources` (`revision.rs:17`) owns two `OpenedQuerySource` handles and is the only thing that closes them (`:81-84`). An application that cancels a semantic publication mid-revision depends on a lifecycle whose owner has no name, no registered owner crate, and no falsifier obligation — the same shape as the confirmed partial-open session leak in the baseline.
+- **proposed falsifier** — `crates/fava-publication/tests/semantic_cancellation.rs::cancelled_revision_closes_both_opened_sources`: open a `Publication` for a replaceable edit against two counting `QuerySource`s, drop the publication future before the signer resolves, assert both sources recorded exactly one `close()`. Names the lifecycle at the owning component instead of leaving it anonymous.
 - **confidence** — confirmed.
 
 ### vocab-provider-impls-hidden-behind-arc-dyn — major — vocabulary

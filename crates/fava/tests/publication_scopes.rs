@@ -276,7 +276,7 @@ fn assembly(
             Arc::clone(&signer) as Arc<dyn Signer>,
             second_signer as Arc<dyn Signer>,
         ])
-        .materializers([fava_nip02::materializer()])
+        .appliers([fava_nip02::applier()])
         .publisher(Arc::clone(&publisher))
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),

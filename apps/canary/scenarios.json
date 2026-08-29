@@ -32,7 +32,7 @@
         "M1 local replaceable event shadow and cancellation"
       ],
       "status": "blocked",
-      "wall": "no public door for local state: EventCache::admit and WriteStore::accept_materialized"
+      "wall": "no public door for local state: EventCache::admit and WriteStore::accept_applied"
     },
     {
       "id": "local-source-removal",
@@ -90,7 +90,7 @@
         "M3 bounded coalesced latest-state observation"
       ],
       "status": "blocked",
-      "wall": "no public door for local state: WriteStore::accept_materialized"
+      "wall": "no public door for local state: WriteStore::accept_applied"
     },
     {
       "id": "async-route-partial-read",
@@ -203,7 +203,7 @@
       "wall": "no deterministic publication path without a stub transport and publisher"
     },
     {
-      "id": "replaceable-edit-rematerialization",
+      "id": "replaceable-edit-reapplication",
       "milestone": "M7",
       "requirements": [
         "M7 qualified successor and retired completion isolation"

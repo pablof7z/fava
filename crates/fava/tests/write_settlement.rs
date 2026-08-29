@@ -22,7 +22,7 @@ use fava_transport::{
     TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{
-    EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, ReceiptOutcome,
+    EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, ReceiptId, ReceiptOutcome,
     SignatureState, WriteId, WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStore;
@@ -420,10 +420,10 @@ fn mixed_receipt() -> Receipt {
         PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: MaterializationId::FIRST,
-            materialization_source: None,
-            materialization_failure: None,
-            retired_materializations: Vec::new(),
+            revision_id: RevisionId::FIRST,
+            revision_source: None,
+            revision_failure: None,
+            retired_revisions: Vec::new(),
             signature: SignatureState::Signed,
             destinations,
         },

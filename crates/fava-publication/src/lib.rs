@@ -11,8 +11,8 @@ use fava_routing::Router;
 use fava_session::Session;
 use fava_transport::Transport;
 use fava_write::{
-    EventId, Kind, MaterializationId, Receipt, ReceiptId, ReceiptOutcome,
-    ReplaceableEventMaterializer, WriteId, WriteIntent, WritePayload, WriteRouting,
+    EventId, Kind, RevisionId, Receipt, ReceiptId, ReceiptOutcome,
+    EditApplier, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
@@ -20,13 +20,13 @@ use tokio::sync::watch;
 
 mod delivery;
 mod generation;
-mod materialization;
+mod edit_application;
 mod recovery;
 mod run;
 mod semantic_refresh;
 mod sign;
 
-use materialization::{PreparedSemantic, SemanticState};
+use edit_application::{PreparedSemantic, SemanticState};
 
 const STORE_READ_RETRY_DELAY: Duration = Duration::from_millis(10);
 
@@ -36,7 +36,7 @@ pub struct Publication {
     store: Arc<dyn WriteStore>,
     event_source: Arc<dyn QuerySource>,
     evaluator: Arc<dyn QueryEvaluator>,
-    materializers: Arc<BTreeMap<Kind, Arc<dyn ReplaceableEventMaterializer>>>,
+    appliers: Arc<BTreeMap<Kind, Arc<dyn EditApplier>>>,
     session: Session,
     publisher: Arc<dyn Publisher>,
     delivery: Arc<dyn DeliveryPolicy>,
@@ -47,7 +47,7 @@ pub struct Publication {
     // Deliberately existing identity values rather than a new architectural noun.
     #[allow(clippy::type_complexity)]
     stale_signer_completions:
-        Arc<Mutex<VecDeque<(ReceiptId, WriteId, MaterializationId, EventId, String)>>>,
+        Arc<Mutex<VecDeque<(ReceiptId, WriteId, RevisionId, EventId, String)>>>,
 }
 
 impl Publication {
@@ -55,25 +55,25 @@ impl Publication {
     ///
     /// # Errors
     ///
-    /// Returns [`PublicationError`] for invalid materializer selection.
+    /// Returns [`PublicationError`] for invalid applier selection.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: Arc<dyn WriteStore>,
         event_source: Arc<dyn QuerySource>,
         evaluator: Arc<dyn QueryEvaluator>,
-        materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
+        appliers: impl IntoIterator<Item = Arc<dyn EditApplier>>,
         session: Session,
         publisher: Arc<dyn Publisher>,
         delivery: Arc<dyn DeliveryPolicy>,
         transport: Arc<dyn Transport>,
         routers: Vec<Arc<dyn Router>>,
     ) -> Result<Self, PublicationError> {
-        let materializers = Self::index_materializers(materializers)?;
+        let appliers = Self::index_appliers(appliers)?;
         Ok(Self {
             store,
             event_source,
             evaluator,
-            materializers: Arc::new(materializers),
+            appliers: Arc::new(appliers),
             session,
             publisher,
             delivery,
@@ -112,7 +112,7 @@ impl Publication {
             };
             let initial_route =
                 matches!(intent.routing(), WriteRouting::Automatic).then_some(&route);
-            let accepted = match self.store.accept_reserved_materialized_edit(
+            let accepted = match self.store.accept_reserved_applied_edit(
                 reservation,
                 intent.clone(),
                 event,
@@ -125,9 +125,9 @@ impl Publication {
                     return Err(error.into());
                 }
             };
-            let Some((edits, author, selected, failed_id)) = self.store.materialized_edits(
+            let Some((edits, author, selected, failed_id)) = self.store.applied_edits(
                 accepted.receipt_id,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
             )?
             else {
                 let terminal = self
@@ -145,7 +145,7 @@ impl Publication {
             let semantic = SemanticState::recovered(
                 edits,
                 author,
-                accepted.current.publication.materialization_id,
+                accepted.current.publication.revision_id,
                 selected.map(|(id, _)| id),
                 selected.map(|(_, timestamp)| timestamp),
                 failed_id,
@@ -173,10 +173,10 @@ impl Publication {
         tokio::runtime::Handle::try_current().map_err(|_| PublicationError::RuntimeUnavailable)?;
         let receipts = self.store.recover_open()?;
         let count = receipts.len();
-        let semantic = self.store.recover_materialized_edits()?;
+        let semantic = self.store.recover_applied_edits()?;
         for (_, edits, _, _, _) in &semantic {
             for edit in edits {
-                self.materializer(edit)?;
+                self.applier(edit)?;
             }
         }
         let mut prepared: Vec<(ReceiptId, SemanticState)> = Vec::with_capacity(semantic.len());
@@ -202,7 +202,7 @@ impl Publication {
                 SemanticState::recovered(
                     edits,
                     author,
-                    receipt.current.publication.materialization_id,
+                    receipt.current.publication.revision_id,
                     selected_id,
                     source_floor,
                     failed_id,
@@ -232,11 +232,11 @@ impl Publication {
         Ok(count)
     }
 
-    /// Preview the exact current semantic materialization route without custody.
+    /// Preview the exact current semantic revision route without custody.
     ///
     /// # Errors
     ///
-    /// Returns [`PublicationError`] when selection, materialization, or routing refuses.
+    /// Returns [`PublicationError`] when selection, revision, or routing refuses.
     pub fn preview_semantic_routes(
         &self,
         intent: &WriteIntent,

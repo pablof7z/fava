@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use fava_routing::RoutePlan;
 use fava_state::event_is_newer;
 use fava_write::{
-    EventId, EventValue, LocalWriteEvent, MaterializationId, PublicKey, PublicationEvidence,
-    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, ReplaceableEventEdit, SignatureState,
+    EventId, EventValue, LocalWriteEvent, RevisionId, PublicKey, PublicationEvidence,
+    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit, SignatureState,
     UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
@@ -16,7 +16,7 @@ use crate::lifecycle::{
 };
 use crate::semantic_acceptance::{
     attributed_failure, require_current, require_failure_source, require_qualified_source,
-    validate_materialization, validate_source,
+    validate_revision, validate_source,
 };
 use crate::{RedbWriteStore, SemanticCustody};
 
@@ -79,7 +79,7 @@ impl RedbWriteStore {
         } else {
             false
         };
-        let selected_source = validate_materialization(&edit, author, &event, source, &routing)?;
+        let selected_source = validate_revision(&edit, author, &event, source, &routing)?;
         if let Some(receipt_id) = state.coordinates.get(&coordinate).copied() {
             let receipt = state.receipts.get(&receipt_id).ok_or_else(|| {
                 WriteStoreError::Refused("coordinate owner is missing".to_owned())
@@ -127,10 +127,10 @@ impl RedbWriteStore {
         let publication = PublicationEvidence {
             receipt_id,
             write_id,
-            materialization_id: MaterializationId::FIRST,
-            materialization_source: selected_source.map(|(id, _)| id),
-            materialization_failure: None,
-            retired_materializations: Vec::new(),
+            revision_id: RevisionId::FIRST,
+            revision_source: selected_source.map(|(id, _)| id),
+            revision_failure: None,
+            retired_revisions: Vec::new(),
             signature: SignatureState::Unsigned,
             destinations: destinations(&routing),
         };
@@ -182,7 +182,7 @@ impl RedbWriteStore {
 
     pub(super) fn reserve_active_slot(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
     ) -> Result<u64, WriteStoreError> {
         let mut state = self.lock()?;
@@ -243,9 +243,9 @@ impl RedbWriteStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
-        applied_edits: &[ReplaceableEventEdit],
+        applied_edits: &[EventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
@@ -276,31 +276,31 @@ impl RedbWriteStore {
             WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
         })?;
         let selected_source =
-            validate_materialization(edit, author, &event, source, &receipt.routing)?;
+            validate_revision(edit, author, &event, source, &receipt.routing)?;
         if receipt.write_id == write_id
             && receipt.current.event == EventValue::Unsigned(event.clone())
-            && receipt.current.publication.materialization_source
+            && receipt.current.publication.revision_source
                 == selected_source.map(|(id, _)| id)
         {
             return Ok(receipt);
         }
         require_qualified_source(current_source, selected_source)?;
         let event_id = event.id.ok_or_else(|| {
-            WriteStoreError::Refused("successor materialization has no stable id".to_owned())
+            WriteStoreError::Refused("successor revision has no stable id".to_owned())
         })?;
         if !event_is_newer(
             (event.created_at, event_id),
             (receipt.current.event.created_at(), receipt.current.id()),
         ) {
             return Err(WriteStoreError::Refused(
-                "successor materialization is not newer than current event".to_owned(),
+                "successor revision is not newer than current event".to_owned(),
             ));
         }
-        if receipt.current.publication.retired_materializations.len()
+        if receipt.current.publication.retired_revisions.len()
             >= destination_evidence_capacity()
         {
             return Err(WriteStoreError::Refused(
-                "retired materialization evidence capacity reached".to_owned(),
+                "retired revision evidence capacity reached".to_owned(),
             ));
         }
         if let Some(plan) = initial_route {
@@ -331,12 +331,12 @@ impl RedbWriteStore {
             self.publish_receipt(Some(receipt.clone()), receipt_id);
             return Ok(receipt);
         }
-        let mut retired = receipt.current.publication.retired_materializations.clone();
+        let mut retired = receipt.current.publication.retired_revisions.clone();
         retired.push((
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
-            receipt.current.publication.materialization_source,
-            receipt.current.publication.materialization_failure.clone(),
+            receipt.current.publication.revision_source,
+            receipt.current.publication.revision_failure.clone(),
         ));
         let mut correction_destinations: BTreeSet<_> = receipt.desired_destinations.clone();
         correction_destinations.extend(receipt.current.publication.destinations.keys().cloned());
@@ -350,18 +350,18 @@ impl RedbWriteStore {
             .cloned()
             .map(|session| (session, RelayDeliveryOutcome::Pending))
             .collect();
-        let materialization_id = expected.checked_next().ok_or_else(|| {
-            WriteStoreError::Refused("materialization identity exhausted".to_owned())
+        let revision_id = expected.checked_next().ok_or_else(|| {
+            WriteStoreError::Refused("revision identity exhausted".to_owned())
         })?;
         let current = LocalWriteEvent::new(
             EventValue::Unsigned(event),
             PublicationEvidence {
                 receipt_id,
                 write_id,
-                materialization_id,
-                materialization_source: selected_source.map(|(id, _)| id),
-                materialization_failure: None,
-                retired_materializations: retired,
+                revision_id,
+                revision_source: selected_source.map(|(id, _)| id),
+                revision_failure: None,
+                retired_revisions: retired,
                 signature: SignatureState::Unsigned,
                 destinations,
             },
@@ -386,13 +386,13 @@ impl RedbWriteStore {
     }
 
     #[allow(clippy::too_many_arguments)]
-    /// Attribute one materialization failure to the exact generation and source
+    /// Attribute one revision failure to the exact generation and source
     /// that produced it.
     pub(super) fn record_semantic_failure(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
         source: Option<&EventValue>,
         reason: String,
@@ -425,14 +425,14 @@ impl RedbWriteStore {
             && receipt
                 .current
                 .publication
-                .materialization_failure
+                .revision_failure
                 .as_deref()
                 == Some(failure.as_str())
         {
             return Ok(receipt);
         }
         let mut updated = receipt;
-        updated.current.publication.materialization_failure = Some(failure);
+        updated.current.publication.revision_failure = Some(failure);
         let custody: SemanticCustody = (edits, author, current_source, failed_source_id, successor);
         let next_revision = next_revision(&state)?;
         self.commit_update(Some(&updated), Some(&custody), &[])?;

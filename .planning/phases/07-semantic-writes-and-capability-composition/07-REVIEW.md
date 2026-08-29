@@ -42,7 +42,7 @@ remains.
 | CR-08 equal-time source winner | closed — lower event ID wins across publication, memory, and redb |
 | CR-09 route revision/currentness | closed — durable receipt reads reconcile dropped notifications; successful mutations return revision authority |
 | CR-10 bounded-output cleanup | closed — oversized output cannot leak redirected descendants |
-| WR-01 rematerialization canary | closed — a real retired generation is processed and proven inert |
+| WR-01 reapplication canary | closed — a real retired generation is processed and proven inert |
 | WR-02 feature mapping lock discipline | closed — locked exact discovery fails closed on malformed or ambiguous mappings |
 
 ## Final Evidence

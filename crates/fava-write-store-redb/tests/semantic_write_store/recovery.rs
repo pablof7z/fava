@@ -5,7 +5,7 @@ use fava_query::{Query, QuerySource, SourceEvent};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    EventValue, RevisionId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -15,7 +15,7 @@ use nostr::types::RelayUrl;
 use redb::{Database, Durability, ReadableDatabase, ReadableTable};
 use serde_json::{Value, json};
 
-use super::{META, RECEIPTS, accept, edit, materialization, source, unique_path};
+use super::{META, RECEIPTS, accept, edit, revision, source, unique_path};
 
 #[test]
 fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
@@ -27,9 +27,9 @@ fn ordered_explicit_route_survives_reopen_with_one_lane_per_identity() {
         .expect("route normalizes");
     let store = RedbWriteStore::open(&path).unwrap();
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(), keys.public_key(), routing).unwrap(),
-            materialization(keys.public_key(), 10, "ordered"),
+            revision(keys.public_key(), 10, "ordered"),
             None,
         )
         .expect("semantic write accepts");
@@ -156,15 +156,15 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "generation one"),
+        revision(keys.public_key(), 11, "generation one"),
         Some(&EventValue::Signed(base.clone())),
     );
-    let successor_event = materialization(keys.public_key(), 21, "generation two");
+    let successor_event = revision(keys.public_key(), 21, "generation two");
     let successor = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -176,10 +176,10 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
 
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 Some(base.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -193,10 +193,10 @@ fn exact_current_guard_precedes_idempotent_semantic_success() {
     assert!(changes.try_recv().is_err(), "stale success notified");
 
     store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::try_from(2).expect("nonzero materialization identity"),
+            RevisionId::try_from(2).expect("nonzero revision identity"),
             Some(successor_source.id),
             std::slice::from_ref(&edit()),
             successor_event,
@@ -221,14 +221,14 @@ fn terminal_eviction_retains_terminalizing_receipt_across_reopen() {
         &store,
         edit(),
         first_keys.public_key(),
-        materialization(first_keys.public_key(), 10, "first"),
+        revision(first_keys.public_key(), 10, "first"),
         None,
     );
     let second = accept(
         &store,
         edit(),
         second_keys.public_key(),
-        materialization(second_keys.public_key(), 10, "second"),
+        revision(second_keys.public_key(), 10, "second"),
         None,
     );
     let mut changes = store.receipt_changes();
@@ -269,7 +269,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
             &active,
             edit(),
             actor,
-            materialization(actor, 10, "active"),
+            revision(actor, 10, "active"),
             None,
         );
     }
@@ -309,7 +309,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
             &terminal,
             edit(),
             actor,
-            materialization(actor, 10, "terminal"),
+            revision(actor, 10, "terminal"),
             None,
         );
         settle_no_destination(&terminal, &accepted);
@@ -349,7 +349,7 @@ fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
         set(row, "/receipt/current/publication/receipt_id", json!(99));
     });
     assert_row_mutation_refused("event-identity", |row| {
-        let other = materialization(Keys::generate().public_key(), 99, "other")
+        let other = revision(Keys::generate().public_key(), 99, "other")
             .id
             .unwrap();
         set(
@@ -414,14 +414,14 @@ fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         Some(&EventValue::Signed(base.clone())),
     );
     store
-        .record_materialization_failure(
+        .record_revision_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             Some(&EventValue::Signed(failed.clone())),
             "failed".to_owned(),
@@ -431,7 +431,7 @@ fn schema_v4_reconstruction_refuses_every_malformed_invariant() {
     mutate_row(&failed_path, |row| {
         set(
             row,
-            "/receipt/current/publication/materialization_failure",
+            "/receipt/current/publication/revision_failure",
             json!("wrong attribution"),
         );
     });
@@ -466,9 +466,9 @@ fn exhausted_durable_identity_refuses_acceptance_atomically() {
     let mut changes = store.receipt_changes();
     let keys = Keys::generate();
     let error = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(edit(), keys.public_key(), WriteRouting::Automatic).unwrap(),
-            materialization(keys.public_key(), 20, "exhausted"),
+            revision(keys.public_key(), 20, "exhausted"),
             None,
         )
         .expect_err("exhausted identity refuses");
@@ -532,14 +532,14 @@ fn schema_v4_accepts_attributed_empty_source_failure() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         Some(&EventValue::Signed(base.clone())),
     );
     store
-        .record_materialization_failure(
+        .record_revision_failure(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             None,
             "empty source failed".to_owned(),
@@ -548,13 +548,13 @@ fn schema_v4_accepts_attributed_empty_source_failure() {
     drop(store);
 
     let reopened = RedbWriteStore::open(path).expect("attributed empty-source failure reopens");
-    let recovered = reopened.recover_materialized_edits().unwrap();
+    let recovered = reopened.recover_applied_edits().unwrap();
     assert!(
         recovered[0]
             .0
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .as_deref()
             .is_some_and(|reason| reason.contains("source empty state failed"))
     );
@@ -567,7 +567,7 @@ fn settle_no_destination(store: &RedbWriteStore, accepted: &fava_write_store::Ac
         .apply_route(
             accepted.write_id,
             accepted.receipt_id,
-            accepted.current.publication.materialization_id,
+            accepted.current.publication.revision_id,
             accepted.current.id(),
             &RoutePlan {
                 revision: 1,
@@ -597,7 +597,7 @@ fn valid_path(label: &str) -> std::path::PathBuf {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         None,
     );
     drop(store);
@@ -611,14 +611,14 @@ fn explicit_path(label: &str) -> (std::path::PathBuf, RelayUrl, RelayUrl) {
     let second = RelayUrl::parse("wss://second.example").unwrap();
     let store = RedbWriteStore::open(&path).unwrap();
     store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             WriteIntent::edit_as(
                 edit(),
                 keys.public_key(),
                 WriteRouting::explicit([first.clone(), second.clone()]).unwrap(),
             )
             .unwrap(),
-            materialization(keys.public_key(), 10, "explicit"),
+            revision(keys.public_key(), 10, "explicit"),
             None,
         )
         .unwrap();
@@ -655,7 +655,7 @@ fn valid_source_path(label: &str) -> std::path::PathBuf {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "current"),
+        revision(keys.public_key(), 11, "current"),
         Some(&EventValue::Signed(base.clone())),
     );
     drop(store);
@@ -670,7 +670,7 @@ fn terminal_no_destination_path(label: &str) -> std::path::PathBuf {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 10, "terminal"),
+        revision(keys.public_key(), 10, "terminal"),
         None,
     );
     settle_no_destination(&store, &accepted);

@@ -1213,11 +1213,11 @@ fn reachable(root: &Function, corpus: &Corpus) -> (ComparatorUse, BTreeSet<Funct
 fn expected_manifest() -> BTreeSet<FunctionId> {
     [
         ("crates/fava-query-standard/src/lib.rs", "insert_newest", None, "fninsert_newest<K:Ord>(records:&mutBTreeMap<K,EventRecord>,key:K,incoming:EventRecord)"),
-        ("crates/fava-publication/src/materialization.rs", "semantic_successor", Some("Publication"), "fnsemantic_successor(&self,state:&SemanticState,receipt_id:ReceiptId,)->Result<(bool,Option<EventValue>),PublicationError>"),
-        ("crates/fava-write-store-memory/src/semantic.rs", "install_semantic", Some("MemoryWriteStore"), "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:MaterializationId,expected_source:Option<EventId>,applied_edits:&[ReplaceableEventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>"),
-        ("crates/fava-write-store-memory/src/semantic_acceptance.rs", "validate_materialization", None, "fnvalidate_materialization(edit:&ReplaceableEventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>"),
-        ("crates/fava-write-store-redb/src/semantic.rs", "install_semantic", Some("RedbWriteStore"), "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:MaterializationId,expected_source:Option<EventId>,applied_edits:&[ReplaceableEventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>"),
-        ("crates/fava-write-store-redb/src/semantic_acceptance.rs", "validate_materialization", None, "fnvalidate_materialization(edit:&ReplaceableEventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>"),
+        ("crates/fava-publication/src/edit_application.rs", "semantic_successor", Some("Publication"), "fnsemantic_successor(&self,state:&SemanticState,receipt_id:ReceiptId,)->Result<(bool,Option<EventValue>),PublicationError>"),
+        ("crates/fava-write-store-memory/src/semantic.rs", "install_semantic", Some("MemoryWriteStore"), "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:RevisionId,expected_source:Option<EventId>,applied_edits:&[EventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>"),
+        ("crates/fava-write-store-memory/src/semantic_acceptance.rs", "validate_revision", None, "fnvalidate_revision(edit:&EventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>"),
+        ("crates/fava-write-store-redb/src/semantic.rs", "install_semantic", Some("RedbWriteStore"), "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:RevisionId,expected_source:Option<EventId>,applied_edits:&[EventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>"),
+        ("crates/fava-write-store-redb/src/semantic_acceptance.rs", "validate_revision", None, "fnvalidate_revision(edit:&EventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>"),
         ("crates/fava-write-store-redb/src/validation.rs", "validate_semantic", None, "fnvalidate_semantic(receipt:&Receipt,(edits,author,current_source,failed_source,successor):&SemanticCustody,)->Result<(),WriteStoreError>"),
         ("apps/canary/src/croissant_simple_groups_evidence_semantics/value_support.rs", "select_current", None, "fnselect_current(current:&mutOption<Event>,candidate:Event)"),
     ]
@@ -1235,7 +1235,7 @@ fn expected_manifest() -> BTreeSet<FunctionId> {
 fn expected_non_winner_ordering_manifest() -> BTreeMap<FunctionId, BTreeSet<String>> {
     // These are the complete arbitrary Timestamp/EventId-shaped comparisons
     // outside fava-state that do not select same-coordinate event state:
-    // protocol edits require a strictly later unsigned materialization time;
+    // protocol edits require a strictly later unsigned revision time;
     // query evaluation orders already-selected output; subscription code orders
     // subscription/demand identities whose accessor happens to be named `id`.
     [
@@ -1302,7 +1302,7 @@ fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>>
         ),
         (
             (
-                "crates/fava-publication/src/materialization.rs",
+                "crates/fava-publication/src/edit_application.rs",
                 "semantic_successor",
                 Some("Publication"),
                 "fnsemantic_successor(&self,state:&SemanticState,receipt_id:ReceiptId,)->Result<(bool,Option<EventValue>),PublicationError>",
@@ -1321,20 +1321,20 @@ fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>>
         (
             (
                 "crates/fava-write-store-memory/src/semantic_acceptance.rs",
-                "validate_materialization",
+                "validate_revision",
                 None,
-                "fnvalidate_materialization(edit:&ReplaceableEventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>",
+                "fnvalidate_revision(edit:&EventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>",
             ),
-            &[r#"!event_is_newer((event.created_at,event_id),(source_time,source_id)):then:Err(WriteStoreError::Refused("materializationisnotnewerthanitsselectedsource".to_owned(),))"#][..],
+            &[r#"!event_is_newer((event.created_at,event_id),(source_time,source_id)):then:Err(WriteStoreError::Refused("revisionisnotnewerthanitsselectedsource".to_owned(),))"#][..],
         ),
         (
             (
                 "crates/fava-write-store-memory/src/semantic.rs",
                 "install_semantic",
                 Some("MemoryWriteStore"),
-                "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:MaterializationId,expected_source:Option<EventId>,applied_edits:&[ReplaceableEventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>",
+                "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:RevisionId,expected_source:Option<EventId>,applied_edits:&[EventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>",
             ),
-            &[r#"!event_is_newer((event.created_at,event_id),(receipt.current.event.created_at(),receipt.current.id()),):then:Err(WriteStoreError::Refused("successormaterializationisnotnewerthancurrentevent".to_owned(),))"#][..],
+            &[r#"!event_is_newer((event.created_at,event_id),(receipt.current.event.created_at(),receipt.current.id()),):then:Err(WriteStoreError::Refused("successorrevisionisnotnewerthancurrentevent".to_owned(),))"#][..],
         ),
         (
             (
@@ -1353,9 +1353,9 @@ fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>>
                 "crates/fava-write-store-redb/src/semantic.rs",
                 "install_semantic",
                 Some("RedbWriteStore"),
-                "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:MaterializationId,expected_source:Option<EventId>,applied_edits:&[ReplaceableEventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>",
+                "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:RevisionId,expected_source:Option<EventId>,applied_edits:&[EventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>",
             ),
-            &[r#"!event_is_newer((event.created_at,event_id),(receipt.current.event.created_at(),receipt.current.id()),):then:Err(WriteStoreError::Refused("successormaterializationisnotnewerthancurrentevent".to_owned(),))"#][..],
+            &[r#"!event_is_newer((event.created_at,event_id),(receipt.current.event.created_at(),receipt.current.id()),):then:Err(WriteStoreError::Refused("successorrevisionisnotnewerthancurrentevent".to_owned(),))"#][..],
         ),
         (
             (
@@ -1372,11 +1372,11 @@ fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>>
         (
             (
                 "crates/fava-write-store-redb/src/semantic_acceptance.rs",
-                "validate_materialization",
+                "validate_revision",
                 None,
-                "fnvalidate_materialization(edit:&ReplaceableEventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>",
+                "fnvalidate_revision(edit:&EventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>",
             ),
-            &[r#"selected.is_some_and(|(source_id,source_time)|{!event_is_newer((event.created_at,event_id),(source_time,source_id))}):then:Err(WriteStoreError::Refused("materializationisnotnewerthanitsselectedsource".to_owned(),))"#][..],
+            &[r#"selected.is_some_and(|(source_id,source_time)|{!event_is_newer((event.created_at,event_id),(source_time,source_id))}):then:Err(WriteStoreError::Refused("revisionisnotnewerthanitsselectedsource".to_owned(),))"#][..],
         ),
         (
             (
@@ -1385,7 +1385,7 @@ fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>>
                 None,
                 "fnvalidate_semantic(receipt:&Receipt,(edits,author,current_source,failed_source,successor):&SemanticCustody,)->Result<(),WriteStoreError>",
             ),
-            &[r#"receipt.current.event.author()!=*author||receipt.current.event.coordinate().map_err(|error|WriteStoreError::Refused(error.to_string()))?!=crate::semantic::edit_coordinate(edit,*author)||receipt.current.publication.materialization_source!=current_source.map(|(id,_)|id)||current_source.is_some_and(|(id,time)|{!event_is_newer((receipt.current.event.created_at(),receipt.current.id()),(time,id),)}):then:incoherent("durablesemanticcustodyisincoherent")"#][..],
+            &[r#"receipt.current.event.author()!=*author||receipt.current.event.coordinate().map_err(|error|WriteStoreError::Refused(error.to_string()))?!=crate::semantic::edit_coordinate(edit,*author)||receipt.current.publication.revision_source!=current_source.map(|(id,_)|id)||current_source.is_some_and(|(id,time)|{!event_is_newer((receipt.current.event.created_at(),receipt.current.id()),(time,id),)}):then:incoherent("durablesemanticcustodyisincoherent")"#][..],
         ),
     ]
     .into_iter()

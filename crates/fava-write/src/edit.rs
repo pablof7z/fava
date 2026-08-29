@@ -6,13 +6,13 @@ use crate::{
 
 /// A protocol-owned change to one exact replaceable event.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReplaceableEventEdit {
+pub struct EventEdit {
     kind: Kind,
     identifier: Option<String>,
     change: Vec<u8>,
 }
 
-impl ReplaceableEventEdit {
+impl EventEdit {
     /// Construct one persistable opaque change to a replaceable coordinate.
     ///
     /// # Arguments
@@ -30,8 +30,8 @@ impl ReplaceableEventEdit {
     /// # Examples
     ///
     /// ```
-    /// # use fava_write::{Kind, ReplaceableEventEdit};
-    /// let edit = ReplaceableEventEdit::new(
+    /// # use fava_write::{Kind, EventEdit};
+    /// let edit = EventEdit::new(
     ///     Kind::from_u16(30_023),
     ///     Some("article".to_owned()),
     ///     b"opaque change".to_vec(),
@@ -85,7 +85,7 @@ impl WriteIntent {
     /// Returns [`WriteIntentError`] for malformed, oversized, or unroutable
     /// edit structure. Provider selection remains outside this neutral owner.
     pub fn edit_as(
-        edit: ReplaceableEventEdit,
+        edit: EventEdit,
         author: PublicKey,
         routing: WriteRouting,
     ) -> Result<Self, WriteIntentError> {
@@ -137,7 +137,7 @@ where
     Option::<String>::deserialize(deserializer)
 }
 
-impl Serialize for ReplaceableEventEdit {
+impl Serialize for EventEdit {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -151,7 +151,7 @@ impl Serialize for ReplaceableEventEdit {
     }
 }
 
-impl<'de> Deserialize<'de> for ReplaceableEventEdit {
+impl<'de> Deserialize<'de> for EventEdit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

@@ -30,7 +30,7 @@ transport, or relay acknowledgement. Delivery sufficiency is the separate
 asynchronous `Write::settled` operation.
 
 An edit requires `by(author)`. `PublishAs::publish` accepts only
-`ReplaceableEventEdit`, making a signer scope on an unsigned or pre-signed event
+`EventEdit`, making a signer scope on an unsigned or pre-signed event
 unwritable. `to(...)` accepts every payload form, validates and normalizes the
 route before custody, preserves first-occurrence order, and refuses empty or
 over-bound routes.
@@ -52,7 +52,7 @@ impl PublishAs<'_> {
         self,
         relays: impl IntoIterator<Item = RelayUrl>,
     ) -> Result<Self, PublishError>;
-    pub fn publish(self, edit: ReplaceableEventEdit)
+    pub fn publish(self, edit: EventEdit)
         -> Result<Write, PublishError>;
 }
 

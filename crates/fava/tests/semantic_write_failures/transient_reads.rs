@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventValue, Kind, MaterializationId, Receipt, ReceiptOutcome, ReplaceableEventEdit,
-    ReplaceableEventMaterializer, Timestamp, WriteRouting, all_terminal,
+    EventValue, Kind, RevisionId, Receipt, ReceiptOutcome, EventEdit,
+    EditApplier, Timestamp, WriteRouting, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -15,18 +15,18 @@ use nostr::key::Keys;
 use super::failure_support::publish_edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    CountingSigner, RecordingPublisher, TestMaterializer, UnavailableSigner, WindowSigner,
-    publication_builder, relay_event, relay_occurrence, signed_source, wait_for_materialization,
+    CountingSigner, RecordingPublisher, TestApplier, UnavailableSigner, WindowSigner,
+    publication_builder, relay_event, relay_occurrence, signed_source, wait_for_revision,
 };
 
 fn compose_direct(
     store: &FaultingWriteStore,
-    materializer: &TestMaterializer,
+    applier: &TestApplier,
     author: fava::PublicKey,
     current: &Receipt,
     change: u8,
 ) -> AcceptedWrite {
-    let edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap();
+    let edit = EventEdit::new(Kind::ContactList, None, vec![change]).unwrap();
     let created_at = Timestamp::from(
         current
             .current
@@ -36,14 +36,14 @@ fn compose_direct(
             .checked_add(1)
             .unwrap(),
     );
-    let event = materializer
-        .materialize(&edit, author, Some(&current.current.event), created_at)
+    let event = applier
+        .apply(&edit, author, Some(&current.current.event), created_at)
         .unwrap();
     let reservation = store
         .reserve_active(&edit, author)
         .expect("same coordinate reserves bounded composition");
     store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             reservation,
             WriteIntent::edit_as(
                 edit,
@@ -64,14 +64,14 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
     let signer = Arc::new(UnavailableSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(materializer)
+    .applier(applier)
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads(1);
@@ -92,8 +92,8 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
             relay_occurrence(),
         ))])
         .expect("source change commits");
-    let rematerialized = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
-    assert_eq!(rematerialized.receipt_id, accepted.receipt_id());
+    let reapplied = wait_for_revision(&fava, accepted.receipt_id(), 2).await;
+    assert_eq!(reapplied.receipt_id, accepted.receipt_id());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -102,39 +102,39 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
     let signer = Arc::new(WindowSigner::new(keys.clone()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("faulting-store assembly");
     let first = publish_edit(&fava, keys.public_key(), Kind::ContactList);
     let generation_one = first.receipt().expect("first generation remains live");
 
-    store.fail_materialized_reads(true);
-    let mut custody_reads = store.materialized_read_barrier();
-    let composed = compose_direct(&store, &materializer, keys.public_key(), &generation_one, 2);
+    store.fail_applied_reads(true);
+    let mut custody_reads = store.applied_read_barrier();
+    let composed = compose_direct(&store, &applier, keys.public_key(), &generation_one, 2);
     assert_eq!(
-        composed.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        composed.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     let third = compose_direct(
         &store,
-        &materializer,
+        &applier,
         keys.public_key(),
         &store.receipt(composed.receipt_id).unwrap().unwrap(),
         3,
     );
     assert_eq!(
-        third.current.publication.materialization_id,
-        MaterializationId::try_from(3).expect("nonzero materialization identity")
+        third.current.publication.revision_id,
+        RevisionId::try_from(3).expect("nonzero revision identity")
     );
     tokio::time::timeout(Duration::from_secs(1), async {
-        while store.materialized_read_failures() == 0 {
+        while store.applied_read_failures() == 0 {
             tokio::task::yield_now().await;
         }
     })
@@ -166,12 +166,12 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
             .unwrap()
             .current
             .publication
-            .materialization_id,
-        MaterializationId::try_from(3).expect("nonzero materialization identity"),
+            .revision_id,
+        RevisionId::try_from(3).expect("nonzero revision identity"),
         "stale replay installed while durable sequence refresh was unavailable"
     );
 
-    store.fail_materialized_reads(false);
+    store.fail_applied_reads(false);
     tokio::time::timeout(Duration::from_secs(1), async {
         while signer.calls().len() != 2 {
             tokio::task::yield_now().await;
@@ -184,7 +184,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     assert_eq!(calls.len(), 2);
     assert_eq!(calls[1], current.current.id());
     signer.release_one();
-    let replayed = wait_for_materialization(&fava, first.receipt_id(), 4).await;
+    let replayed = wait_for_revision(&fava, first.receipt_id(), 4).await;
     assert_eq!(signer.calls(), calls);
     let EventValue::Unsigned(event) = replayed.current.event else {
         panic!("blocking signer keeps replay unsigned");
@@ -204,7 +204,7 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads_after_signature(4);

@@ -113,7 +113,7 @@ fn memory_write_store_runs_the_source_corpus() {
         SourceKind::WriteStore,
         || {
             writes
-                .accept_materialized(EventValue::Unsigned(event))
+                .accept_applied(EventValue::Unsigned(event))
                 .expect("event accepts")
                 .receipt_id
         },

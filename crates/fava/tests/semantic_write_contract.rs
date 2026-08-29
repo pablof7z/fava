@@ -3,14 +3,14 @@
 use std::collections::BTreeMap;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, MaterializationId, PublicationEvidence, ReceiptId,
-    ReplaceableEventEdit, ReplaceableEventMaterializer, SignatureState, Tag, Timestamp,
+    EventBuilder, EventValue, Kind, RevisionId, PublicationEvidence, ReceiptId,
+    EventEdit, EditApplier, SignatureState, Tag, Timestamp,
     UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
 };
 use nostr::key::Keys;
 
-fn edit(kind: Kind, identifier: Option<String>) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(kind, identifier, vec![1, 2, 3]).expect("bounded edit")
+fn edit(kind: Kind, identifier: Option<String>) -> EventEdit {
+    EventEdit::new(kind, identifier, vec![1, 2, 3]).expect("bounded edit")
 }
 
 #[test]
@@ -29,17 +29,17 @@ fn edit_contract_is_bounded_and_round_trips() {
     ));
 
     let encoded = serde_json::to_string(&original).expect("edit serializes");
-    let decoded: ReplaceableEventEdit = serde_json::from_str(&encoded).expect("edit round-trips");
+    let decoded: EventEdit = serde_json::from_str(&encoded).expect("edit round-trips");
     assert_eq!(decoded, original);
 
     for foreign in ["actor", "format", "inverse"] {
         let encoded = encoded.replacen('{', &format!("{{\"{foreign}\":0,"), 1);
-        assert!(serde_json::from_str::<ReplaceableEventEdit>(&encoded).is_err());
+        assert!(serde_json::from_str::<EventEdit>(&encoded).is_err());
     }
-    assert!(serde_json::from_str::<ReplaceableEventEdit>("{malformed").is_err());
+    assert!(serde_json::from_str::<EventEdit>("{malformed").is_err());
 
     assert_eq!(
-        ReplaceableEventEdit::new(Kind::ContactList, None, vec![0; 131_073]),
+        EventEdit::new(Kind::ContactList, None, vec![0; 131_073]),
         Err(WriteIntentError::TooLarge {
             bytes: 131_073,
             maximum: 131_072,
@@ -47,22 +47,22 @@ fn edit_contract_is_bounded_and_round_trips() {
     );
 }
 
-struct ExactMaterializer {
+struct ExactApplier {
     tag_count: usize,
 }
 
-impl ReplaceableEventMaterializer for ExactMaterializer {
+impl EditApplier for ExactApplier {
     fn kind(&self) -> Kind {
         Kind::ContactList
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         edit.kind() == Kind::ContactList && edit.identifier().is_none()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        _edit: &ReplaceableEventEdit,
+        _edit: &EventEdit,
         author: fava_write::PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -72,7 +72,7 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
             .created_at(created_at)
             .content("first value")
             .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary materializer tag")
+                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
             .build()
             .map_err(WriteIntentError::from)
@@ -84,23 +84,23 @@ fn first_value_receives_no_prior_and_exact_timestamp() {
     let actor = Keys::generate().public_key();
     let edit = edit(Kind::ContactList, None);
     let timestamp = Timestamp::from(42);
-    let materializer = ExactMaterializer { tag_count: 0 };
+    let applier = ExactApplier { tag_count: 0 };
 
-    assert!(materializer.supports(&edit));
-    let event = materializer
-        .materialize(&edit, actor, None, timestamp)
-        .expect("first value materializes");
+    assert!(applier.supports(&edit));
+    let event = applier
+        .apply(&edit, actor, None, timestamp)
+        .expect("first value applies");
     assert_eq!(event.pubkey, actor);
     assert_eq!(event.created_at, timestamp);
 }
 
 #[test]
-fn exact_materializer_preserves_the_event_builder_tag_refusal() {
+fn exact_applier_preserves_the_event_builder_tag_refusal() {
     let actor = Keys::generate().public_key();
-    let materializer = ExactMaterializer { tag_count: 2_001 };
+    let applier = ExactApplier { tag_count: 2_001 };
 
     assert_eq!(
-        materializer.materialize(
+        applier.apply(
             &edit(Kind::ContactList, None),
             actor,
             None,
@@ -125,12 +125,12 @@ fn addressable_edit_accepts_an_explicit_author_before_custody() {
 }
 
 #[test]
-fn materialization_identity_changes_but_receipt_identity_does_not() {
+fn revision_identity_changes_but_receipt_identity_does_not() {
     let actor = Keys::generate().public_key();
     let write_id = WriteId::try_from(9).expect("nonzero write identity");
     let receipt_id = ReceiptId::try_from(11).expect("nonzero receipt identity");
-    let first = MaterializationId::FIRST;
-    let successor = MaterializationId::try_from(2).expect("nonzero materialization identity");
+    let first = RevisionId::FIRST;
+    let successor = RevisionId::try_from(2).expect("nonzero revision identity");
     let first_event = EventBuilder::new(actor, Kind::ContactList)
         .created_at(Timestamp::from(1))
         .build()
@@ -144,10 +144,10 @@ fn materialization_identity_changes_but_receipt_identity_does_not() {
     let evidence = PublicationEvidence {
         receipt_id,
         write_id,
-        materialization_id: successor,
-        materialization_source: Some(first_event_id),
-        materialization_failure: Some("bounded materializer refusal".to_owned()),
-        retired_materializations: vec![(first, first_event_id, None, None)],
+        revision_id: successor,
+        revision_source: Some(first_event_id),
+        revision_failure: Some("bounded applier refusal".to_owned()),
+        retired_revisions: vec![(first, first_event_id, None, None)],
         signature: SignatureState::Unsigned,
         destinations: BTreeMap::new(),
     };
@@ -158,8 +158,8 @@ fn materialization_identity_changes_but_receipt_identity_does_not() {
     assert_eq!((write_id.as_u64(), receipt_id.as_u64()), (9, 11));
     assert_eq!(evidence.write_id, write_id);
     assert_eq!(evidence.receipt_id, receipt_id);
-    assert_eq!(evidence.materialization_id, successor);
-    assert_eq!(evidence.materialization_source, Some(first_event_id));
-    assert_eq!(evidence.retired_materializations[0].0, first);
+    assert_eq!(evidence.revision_id, successor);
+    assert_eq!(evidence.revision_source, Some(first_event_id));
+    assert_eq!(evidence.retired_revisions[0].0, first);
     assert_ne!(first_event_id, successor_event_id);
 }

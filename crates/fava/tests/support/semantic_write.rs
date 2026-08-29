@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, MaterializationId, PublicKey,
-    Receipt, ReceiptId, RelayUrl, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
+    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, RevisionId, PublicKey,
+    Receipt, ReceiptId, RelayUrl, EventEdit, EditApplier, Timestamp,
     UnsignedEvent, WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
@@ -38,7 +38,7 @@ use nostr::key::Keys;
 use tokio::sync::watch;
 
 pub fn intent(author: PublicKey, kind: Kind) -> WriteIntent {
-    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+    let edit = EventEdit::new(kind, None, vec![1]).expect("bounded edit");
     WriteIntent::edit_as(
         edit,
         author,
@@ -48,14 +48,14 @@ pub fn intent(author: PublicKey, kind: Kind) -> WriteIntent {
 }
 
 pub fn automatic_intent(author: PublicKey, kind: Kind) -> WriteIntent {
-    let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
+    let edit = EventEdit::new(kind, None, vec![1]).expect("bounded edit");
     WriteIntent::edit_as(edit, author, WriteRouting::Automatic).expect("semantic intent validates")
 }
 
 pub fn assembly(
     store: Arc<MemoryWriteStore>,
     keys: Keys,
-    materializers: Vec<Arc<TestMaterializer>>,
+    appliers: Vec<Arc<TestApplier>>,
 ) -> (
     Fava,
     Arc<MemoryEventCache>,
@@ -67,7 +67,7 @@ pub fn assembly(
         Arc::new(MemoryEventCache::default()),
         store,
         keys,
-        materializers,
+        appliers,
     )
 }
 
@@ -75,7 +75,7 @@ pub fn assembly_with_cache(
     cache: Arc<MemoryEventCache>,
     store: Arc<MemoryWriteStore>,
     keys: Keys,
-    materializers: Vec<Arc<TestMaterializer>>,
+    appliers: Vec<Arc<TestApplier>>,
 ) -> (
     Fava,
     Arc<MemoryEventCache>,
@@ -85,16 +85,16 @@ pub fn assembly_with_cache(
 ) {
     let signer = Arc::new(CountingSigner::new(keys));
     let publisher = Arc::new(RecordingPublisher::default());
-    let erased = materializers
+    let erased = appliers
         .into_iter()
-        .map(|materializer| materializer as Arc<dyn ReplaceableEventMaterializer>);
+        .map(|applier| applier as Arc<dyn EditApplier>);
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers(erased)
+    .appliers(erased)
     .build()
     .expect("semantic publication assembly");
     (fava, cache, store, signer, publisher)
@@ -125,7 +125,7 @@ pub fn publication_owner<S>(
     store: Arc<MemoryWriteStore>,
     signer: Arc<S>,
     publisher: Arc<RecordingPublisher>,
-    materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
+    appliers: Vec<Arc<dyn EditApplier>>,
     routers: Vec<Arc<dyn Router>>,
 ) -> Publication
 where
@@ -139,7 +139,7 @@ where
         store,
         event_source,
         evaluator,
-        materializers,
+        appliers,
         session,
         publisher,
         Arc::new(StandardDeliveryPolicy::default()),
@@ -166,19 +166,19 @@ pub fn assert_no_effects(
 }
 
 #[derive(Clone)]
-pub struct MaterializerCall {
+pub struct ApplierCall {
     pub author: PublicKey,
     pub identifier: Option<String>,
     pub source: Option<EventValue>,
     pub created_at: Timestamp,
 }
 
-pub struct TestMaterializer {
+pub struct TestApplier {
     kind: Kind,
-    calls: Mutex<Vec<MaterializerCall>>,
+    calls: Mutex<Vec<ApplierCall>>,
 }
 
-impl TestMaterializer {
+impl TestApplier {
     pub fn new(kind: Kind) -> Self {
         Self {
             kind,
@@ -186,28 +186,28 @@ impl TestMaterializer {
         }
     }
 
-    pub fn calls(&self) -> Vec<MaterializerCall> {
+    pub fn calls(&self) -> Vec<ApplierCall> {
         self.calls.lock().unwrap().clone()
     }
 }
 
-impl ReplaceableEventMaterializer for TestMaterializer {
+impl EditApplier for TestApplier {
     fn kind(&self) -> Kind {
         self.kind
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         edit.kind() == self.kind
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
-        self.calls.lock().unwrap().push(MaterializerCall {
+        self.calls.lock().unwrap().push(ApplierCall {
             author,
             identifier: edit.identifier().map(ToOwned::to_owned),
             source: source.cloned(),
@@ -349,7 +349,7 @@ impl Signer for WindowSigner {
         self.calls
             .lock()
             .unwrap()
-            .push(event.id.expect("materialized event id"));
+            .push(event.id.expect("applied event id"));
         Box::pin(async move {
             let permit = self
                 .permits
@@ -562,7 +562,7 @@ pub fn relay_url() -> RelayUrl {
     RelayUrl::parse("wss://semantic.example").expect("relay url")
 }
 
-pub async fn wait_for_materialization(
+pub async fn wait_for_revision(
     fava: &Fava,
     receipt_id: ReceiptId,
     generation: u64,
@@ -574,9 +574,9 @@ pub async fn wait_for_materialization(
                 .receipt(receipt_id)
                 .expect("receipt read")
                 .expect("receipt exists");
-            if receipt.current.publication.materialization_id
-                == MaterializationId::try_from(generation)
-                    .expect("nonzero materialization identity")
+            if receipt.current.publication.revision_id
+                == RevisionId::try_from(generation)
+                    .expect("nonzero revision identity")
             {
                 return receipt;
             }
@@ -586,7 +586,7 @@ pub async fn wait_for_materialization(
     .await
     .unwrap_or_else(|_| {
         panic!(
-            "materialization {generation} did not advance: {:?}",
+            "revision {generation} did not advance: {:?}",
             fava.receipt(receipt_id)
         )
     })

@@ -76,7 +76,7 @@ Static application composition selects one provider per semantic role and an ord
 | `fava-query` + evaluator contract | Query identity, source protocol, merge, ordering, limits, and evidence vocabulary | observe, query sources, planners/routers through services | M1 |
 | `fava-write` / capability values | Event construction, write identity, receipt and publication facts; protocol-owned edits carry actor and format | publication, write store, capability crates | M1 values; M5 lifecycle; M7 edits |
 | `EventCache` contract/provider | Retained admitted signed relay state and declared cache guarantees | ingest, observe as `QuerySource` | M1 baseline; M9 persistence |
-| `WriteStore` contract/provider | Accepted obligations, current materializations, route revisions, delivery facts, receipts, recovery | publication, observe as `QuerySource` | M1 baseline; M5 durability |
+| `WriteStore` contract/provider | Accepted obligations, current revisions, route revisions, delivery facts, receipts, recovery | publication, observe as `QuerySource` | M1 baseline; M5 durability |
 | `FetchCache` contract/provider | Opaque namespaced bytes only | NIP-05/NIP-11 service owners | M9 |
 | `fava-observe` | One observation lifecycle, source coherence, current projection, route demand, bounded app delivery, teardown | query sources, routing, planner, transport, facade | M1 local; M2-M4 relay work |
 | `fava-routing` session | Ordered reactive composition and one current attributed route plan | routers, observe, publication | M4 |
@@ -84,7 +84,7 @@ Static application composition selects one provider per semantic role and an ord
 | Subscription planner | Pure logical-demand-to-wire-plan calculation and exact shortfall | observe, transport | M2 no-grouping; M4 standard |
 | Relay transport | Physical socket/session generation, bounded byte queues, handoff truth, reconnect, close/join | wire, ingest, publisher, auth | M2-M3 |
 | `fava-ingest` | Attribution, bounds, event id/signature/filter verification, serialized admission order | transport, wire, state, event cache | M2 |
-| `fava-publication` | One accepted write from commit through materialization, signing, route revisions, attempts, cancellation, settlement, and recovery | write store and all publication contracts | M5-M7 |
+| `fava-publication` | One accepted write from commit through revision, signing, route revisions, attempts, cancellation, settlement, and recovery | write store and all publication contracts | M5-M7 |
 | Publisher | One protocol attempt for one exact event/session/attempt | transport, publication owner | M5 |
 | Delivery policy | Pure attempt/wait/park/give-up decision over committed lane facts | publication owner | M5-M6 |
 | Session/signer/auth owners | Account attachment, exact signing operation, access-context and challenge lifecycles | publication, transport, facade | M5/M8 |
@@ -105,8 +105,8 @@ Exact identity should be opaque, allocated by the owner, persisted when it guard
 | Route session | owner operation + `RouteSessionId` + `RouteRevision` | A replacement contribution supersedes only that router instance's previous snapshot |
 | Relay connection | normalized relay + access context + `SessionGeneration` | Frames/handoffs from a retired generation remain evidence but cannot mutate current work |
 | Wire subscription | session generation + wire subscription id + planner generation | Attribute only to installed logical demand for that exact plan |
-| Materialization | `WriteId` + `ReceiptId` + materialization generation + event id | Signer/router/publisher results for a retired generation cannot advance the current write |
-| Delivery attempt | materialization identity + relay session + `AttemptId` | Commit the result only if the lane and attempt remain current; retain historical facts separately |
+| Revision | `WriteId` + `ReceiptId` + revision generation + event id | Signer/router/publisher results for a retired generation cannot advance the current write |
+| Delivery attempt | revision identity + relay session + `AttemptId` | Commit the result only if the lane and attempt remain current; retain historical facts separately |
 | Authentication | access context + session generation + challenge identity | A challenge or authenticated state dies with its connection or a replacement challenge |
 | Native handle | engine + object handle + Rust lifecycle state | Native deallocation/cancellation requests close the Rust owner idempotently; they do not create new truth |
 
@@ -159,7 +159,7 @@ NIP-01 subscription identifiers are scoped to one WebSocket connection. `EOSE` m
 ```text
 validate write intent
         ↓
-WriteStore transaction commits identity, receipt, payload/materialization,
+WriteStore transaction commits identity, receipt, payload/revision,
 and query-source contribution
         ↓
 committed local fact becomes observable
@@ -177,11 +177,11 @@ commit correlated handoff/protocol outcome
 project receipt and query evidence
 ```
 
-The write store owns durable facts; the publication owner owns live orchestration. Cancellation is a durable owner decision based on current signature and handoff facts, not merely dropping a future. A relay echo is admitted into the event cache and merges with the existing write-source record; unpublished materialization is never copied into the event cache.
+The write store owns durable facts; the publication owner owns live orchestration. Cancellation is a durable owner decision based on current signature and handoff facts, not merely dropping a future. A relay echo is admitted into the event cache and merges with the existing write-source record; unpublished revision is never copied into the event cache.
 
 #### 4. Restart and Shutdown
 
-Startup opens and validates provider-owned formats, recovers write obligations, reconstructs exact materialization generations, reconciles query-source truth, then enters `Running`. Open writes reopen current signer/router/delivery work once; applications reopen desired queries.
+Startup opens and validates provider-owned formats, recovers write obligations, reconstructs exact revision generations, reconciles query-source truth, then enters `Running`. Open writes reopen current signer/router/delivery work once; applications reopen desired queries.
 
 Shutdown changes coordinator state before resource teardown:
 
@@ -376,7 +376,7 @@ The numbered milestone gates remain the safest roadmap. Preparatory pure-value o
 | M4 | Add ordered async routing primitive, app/fallback policies, `RouterServices`, and standard planner | Routing decides relays; planner decides wire shape. Prove immediate partial progress and explicit bypass before write routing | Phase-specific research for planner equivalence and relay-limit behavior |
 | M5 | Add durable explicit publication, signer, publisher, delivery, recovery, receipts | Explicit routes isolate the durability/signing/handoff lifecycle from automatic routing complexity | Mandatory backend/version/durability research and crash harness before provider selection |
 | M6 | Integrate outbox/hints/app/fallback routing with publication route revisions and partial delivery | Reuses M4 routing and M5 durable lanes; later destinations remain under one receipt/generation | Phase-specific NIP-65/hint and route-retirement research |
-| M7 | Add capability contract, NIP-02, second unrelated capability, rematerialization | Challenges semantic edit format and stale-generation rules only after source state and durable publication exist | Research each chosen capability's current NIP semantics |
+| M7 | Add capability contract, NIP-02, second unrelated capability, reapplication | Challenges semantic edit format and stale-generation rules only after source state and durable publication exist | Research each chosen capability's current NIP semantics |
 | M8 | Add auth, hostile input, NIP-11 limits, provider isolation, ambiguity, ceilings, resource bounds | Hardens every existing boundary under failure; requires the real concurrency graph to exist | High research need: NIP-42 interoperability, runtime blocking/panic isolation, resource budgets |
 | M9 | Qualify persistent/ephemeral cache profiles, fetch cache, NIP-05/NIP-11, reset/restart guarantees | Separates durable write custody from cache reuse and service-owned data after failure model is hardened | Mandatory provider persistence/migration and HTTP cache-policy research |
 | M10 | External-provider matrix, negative dependency tests, change-amplification audit | Stabilize contracts only after materially different providers pass the same public corpus | High research need per alternative provider and toolchain |

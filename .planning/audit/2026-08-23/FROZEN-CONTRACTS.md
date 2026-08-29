@@ -132,7 +132,7 @@ lists no identity symbol. Whoever lands §0 also appends
 `fava_query::QueryBounds`, `fava_query::OperationGeneration` to the
 `Observation` and `Query` term `symbols` arrays. `OperationGeneration` belongs
 to the `Observation` term (it is read-side operation identity; the write-side
-analogue `MaterializationId` is already at `VOCAB:552`).
+analogue `RevisionId` is already at `VOCAB:552`).
 
 ---
 
@@ -1368,7 +1368,7 @@ use crate::SourceRevision;
 pub enum SourceKind {
     /// Signed relay-observed cache state.
     EventCache,
-    /// Current accepted local materializations.
+    /// Current accepted local revisions.
     WriteStore,
     /// Verified live occurrences admitted from one relay session, retained by
     /// no store.

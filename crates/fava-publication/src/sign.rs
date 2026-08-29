@@ -2,7 +2,7 @@
 
 use fava_signer::{SignerAvailability, SignerError};
 use fava_write::{
-    Event, EventId, EventValue, MaterializationId, Receipt, ReceiptId, SignatureState, WriteId,
+    Event, EventId, EventValue, RevisionId, Receipt, ReceiptId, SignatureState, WriteId,
 };
 use tokio::sync::watch;
 
@@ -14,16 +14,16 @@ const STALE_COMPLETION_CAPACITY: usize = 256;
 impl Publication {
     /// Bounded late signer completions this owner rejected, newest last.
     ///
-    /// Each fact names the receipt, write, materialization generation, event,
+    /// Each fact names the receipt, write, revision generation, event,
     /// and exact reason. A completion is stale when the signer attachment that
     /// produced it is no longer current, or when the write store no longer
-    /// treats that materialization generation as current. Without this evidence
+    /// treats that revision generation as current. Without this evidence
     /// a late completion is indistinguishable from a signer that never answered.
     #[must_use]
     #[allow(clippy::type_complexity)] // Existing identity values, not a new noun.
     pub fn stale_signer_completions(
         &self,
-    ) -> Vec<(ReceiptId, WriteId, MaterializationId, EventId, String)> {
+    ) -> Vec<(ReceiptId, WriteId, RevisionId, EventId, String)> {
         self.stale_signer_completions
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -36,7 +36,7 @@ impl Publication {
         &self,
         receipt_id: ReceiptId,
         write_id: WriteId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) {
@@ -47,7 +47,7 @@ impl Publication {
         if retained.len() == STALE_COMPLETION_CAPACITY {
             retained.pop_front();
         }
-        retained.push_back((receipt_id, write_id, materialization_id, event_id, reason));
+        retained.push_back((receipt_id, write_id, revision_id, event_id, reason));
     }
 
     pub(super) fn signer_generation(&self, receipt: &Receipt) -> Option<u64> {
@@ -74,11 +74,11 @@ impl Publication {
         }
         let write_id = receipt.write_id;
         let receipt_id = receipt.receipt_id;
-        let materialization_id = receipt.current.publication.materialization_id;
+        let revision_id = receipt.current.publication.revision_id;
         let event_id = receipt.current.id();
         let authorized = self
             .store
-            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+            .authorize_signing(write_id, receipt_id, revision_id, event_id)
             .ok()?;
         if !matches!(
             authorized.current.publication.signature,
@@ -93,7 +93,7 @@ impl Publication {
             if let Err(error) = self.store.record_signer_retryable(
                 authorized.write_id,
                 authorized.receipt_id,
-                authorized.current.publication.materialization_id,
+                authorized.current.publication.revision_id,
                 authorized.current.id(),
                 format!(
                     "authorized signer attachment generation {signer_generation} for {public_key} was retired before provider invocation; retry is permitted"
@@ -102,7 +102,7 @@ impl Publication {
                 self.reject_stale_completion(
                     authorized.receipt_id,
                     authorized.write_id,
-                    authorized.current.publication.materialization_id,
+                    authorized.current.publication.revision_id,
                     authorized.current.id(),
                     format!("retired pre-invocation transition was rejected: {error}"),
                 );
@@ -130,28 +130,28 @@ impl Publication {
         ) {
             let write_id = receipt.write_id;
             let receipt_id = receipt.receipt_id;
-            let materialization_id = receipt.current.publication.materialization_id;
+            let revision_id = receipt.current.publication.revision_id;
             let event_id = receipt.current.id();
             let generation = signer_generation
                 .map_or_else(|| "unknown".to_owned(), |generation| generation.to_string());
             let reason = format!(
-                "authorized signer operation for write {} receipt {} materialization {} event {} attachment generation {generation} cancelled before effect because {cause}; retry is permitted",
+                "authorized signer operation for write {} receipt {} revision {} event {} attachment generation {generation} cancelled before effect because {cause}; retry is permitted",
                 write_id.as_u64(),
                 receipt_id.as_u64(),
-                materialization_id.as_u64(),
+                revision_id.as_u64(),
                 event_id,
             );
             if let Err(error) = self.store.record_signer_retryable(
                 write_id,
                 receipt_id,
-                materialization_id,
+                revision_id,
                 event_id,
                 reason,
             ) {
                 self.reject_stale_completion(
                     receipt_id,
                     write_id,
-                    materialization_id,
+                    revision_id,
                     event_id,
                     format!("authorized cancellation transition was rejected: {error}"),
                 );
@@ -169,13 +169,13 @@ impl Publication {
     ) {
         let write_id = receipt.write_id;
         let receipt_id = receipt.receipt_id;
-        let materialization_id = receipt.current.publication.materialization_id;
+        let revision_id = receipt.current.publication.revision_id;
         let event_id = receipt.current.id();
         if !self.session.is_current(public_key, signer_generation) {
             self.reject_stale_completion(
                 receipt_id,
                 write_id,
-                materialization_id,
+                revision_id,
                 event_id,
                 format!(
                     "signer attachment generation {signer_generation} for {public_key} \
@@ -188,7 +188,7 @@ impl Publication {
             Ok(event) => match self.store.install_signed(
                 write_id,
                 receipt_id,
-                materialization_id,
+                revision_id,
                 event_id,
                 event,
             ) {
@@ -201,13 +201,13 @@ impl Publication {
                 let _ = self.store.record_signer_retryable(
                     write_id,
                     receipt_id,
-                    materialization_id,
+                    revision_id,
                     event_id,
                     format!(
-                        "authorized signer operation for write {} receipt {} materialization {} event {} attachment generation {signer_generation} cancelled before effect; retry is permitted",
+                        "authorized signer operation for write {} receipt {} revision {} event {} attachment generation {signer_generation} cancelled before effect; retry is permitted",
                         write_id.as_u64(),
                         receipt_id.as_u64(),
-                        materialization_id.as_u64(),
+                        revision_id.as_u64(),
                         event_id,
                     ),
                 );
@@ -217,7 +217,7 @@ impl Publication {
                 let _ = self.store.record_signer_retryable(
                     write_id,
                     receipt_id,
-                    materialization_id,
+                    revision_id,
                     event_id,
                     format!("signer unavailable before effect: {reason}; retry is permitted"),
                 );
@@ -228,14 +228,14 @@ impl Publication {
         if let Err(stale) = self.store.record_signer_refusal(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             refusal.clone(),
         ) {
             self.reject_stale_completion(
                 receipt_id,
                 write_id,
-                materialization_id,
+                revision_id,
                 event_id,
                 format!("signer completion rejected ({refusal}); evidence refused ({stale})"),
             );

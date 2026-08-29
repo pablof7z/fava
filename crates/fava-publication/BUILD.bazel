@@ -1,7 +1,7 @@
 load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-exports_files(["src/materialization.rs"], visibility = ["//visibility:public"])
+exports_files(["src/edit_application.rs"], visibility = ["//visibility:public"])
 
 # Source set exported for the cross-crate architecture gates that assert the
 # universal owners stay kind-blind.

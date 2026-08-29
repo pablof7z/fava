@@ -70,7 +70,7 @@ These were pleasant and needed no tricks:
   populated local snapshot.
 - **NIP-02 is genuinely good.** `fava_nip02::follow(pk)` /
   `unfollow(pk)` produce edits, `fava.by(author).publish(edit)` accepts them,
-  the materializer merges against the current list, and
+  the applier merges against the current list, and
   `fava_nip02::contact_list(pk)` + `follows_of(&snapshot)` read them back. The
   full follow → read → unfollow → read cycle passed against a real relay
   without a single internal import. Profile publish and read-back likewise.
@@ -120,7 +120,7 @@ mutator on `Fava`. The only registration sites are `FavaBuilder::signer` and
 `Publication::new`, with no interior mutability.
 
 Worse: `FavaBuilder::build` only constructs a `Publication` at all if a signer,
-materializer, publisher, or delivery policy was selected. An app that honestly
+applier, publisher, or delivery policy was selected. An app that honestly
 starts with no account gets `publication: None` — not just "no signer", but no
 publication subsystem, forever.
 
@@ -330,7 +330,7 @@ exist.
 ### WALL-8 — No publication lifecycle signal · major
 
 `Fava::receipt_changes()` broadcasts committed receipts. It does not report
-materialization installed, signer refused, route applied, or attempt started.
+revision installed, signer refused, route applied, or attempt started.
 An application that wants to show "waiting for your hardware wallet" versus
 "sending" versus "1 of 3 relays acked" cannot distinguish them.
 
@@ -418,14 +418,14 @@ wall text; the ledger lives in `apps/canary/src/blocked.rs`.
 | `route-preview-parity` | direct `fava_routing::preview` call | WALL-7 |
 | `app-relay-versus-fallback-profile` | direct `fava_routing::preview` call | WALL-7 |
 | `replaceable-edit-first-value` | `NoopTransport` that refuses every connection + canary `Publisher` returning `Acknowledged` without sending | no deterministic publication path; advertised as a real Fava execution |
-| `replaceable-edit-rematerialization` | `NoopTransport` + gate `Publisher` + `CompletionStore` (23 forwarding `WriteStore` methods) | WALL-8 |
+| `replaceable-edit-reapplication` | `NoopTransport` + gate `Publisher` + `CompletionStore` (23 forwarding `WriteStore` methods) | WALL-8 |
 | `replaceable-edit-opposing-operations` | same | WALL-8 |
 | `protocol-crate-n-plus-one` | same, plus hand-built `RelayEvidence` for `wss://m7-semantic.example` | provenance can only be fabricated |
 | `subscription-grouping-equivalence` | hand-driven planner + transport + `fava_wire` + `fava_ingest`, bypassing `observe`; `result_equivalence: true` and `relay_source_evidence_equivalence: true` written as literals | WALL-6 |
 | `local-source-merge` | `EventCache::admit` with fabricated `RelayEvidence` for `wss://m1.local` | WALL-4 |
-| `local-replaceable-shadow-and-cancel` | same, plus `WriteStore::accept_materialized` | WALL-4 |
+| `local-replaceable-shadow-and-cancel` | same, plus `WriteStore::accept_applied` | WALL-4 |
 | `local-source-removal` | same, plus `EventCache::expire` | WALL-4 |
-| `slow-consumer-latest-state` | 256 × `WriteStore::accept_materialized` | WALL-4 |
+| `slow-consumer-latest-state` | 256 × `WriteStore::accept_applied` | WALL-4 |
 
 Also removed, without losing a scenario:
 

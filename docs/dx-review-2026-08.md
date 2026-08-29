@@ -24,7 +24,7 @@ Fava::builder()
     .signer(Arc::new(LocalSigner::new(alice.clone())))
     .signer(Arc::new(LocalSigner::new(bob.clone())))
     .signer(Arc::new(LocalSigner::new(carol.clone())))
-    .materializers([saved_group_list_materializer()])
+    .appliers([saved_group_list_applier()])
     .build()?
 ```
 
@@ -254,7 +254,7 @@ support::wait_next_second().await;
 support::publish_edit(&fava, &saved_relay, alice.public_key(), "save_relay...", ...).await?;
 ```
 
-This is because replaceable events require strictly increasing `created_at` timestamps, and the relay enforces it. The demo sleeps to guarantee the next timestamp is strictly larger. If `EventBuilder` (or the `ReplaceableEventEdit` path) automatically advanced the timestamp to at least `previous + 1`, this workaround would disappear. Fava owns the signing path and could enforce this invariant.
+This is because replaceable events require strictly increasing `created_at` timestamps, and the relay enforces it. The demo sleeps to guarantee the next timestamp is strictly larger. If `EventBuilder` (or the `EventEdit` path) automatically advanced the timestamp to at least `previous + 1`, this workaround would disappear. Fava owns the signing path and could enforce this invariant.
 
 ---
 

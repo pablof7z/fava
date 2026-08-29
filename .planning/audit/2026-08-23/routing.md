@@ -763,7 +763,7 @@ async fn settled_absent_only_fallback_does_not_connect_while_upstream_is_unresol
 >
 > ```rust
 > pub struct WriteRouteRequest { pub event: EventValue, pub receipt_id: ReceiptId,
->                                pub generation: MaterializationId }
+>                                pub generation: RevisionId }
 > ```
 > — `docs/spec/ARCHITECTURE.md:1141-1145`
 
@@ -778,7 +778,7 @@ async fn settled_absent_only_fallback_does_not_connect_while_upstream_is_unresol
   referenced event, **coordinate**, or whole request"), so the coordinate variant is a recorded,
   unimplemented obligation.
 - `crates/fava-routing/src/lib.rs:24` — `Write(EventValue)`. No `receipt_id`, no `generation`. A router
-  therefore cannot correlate a contribution to a receipt or a materialization generation, which is
+  therefore cannot correlate a contribution to a receipt or a revision generation, which is
   precisely what `ARCHITECTURE.md:2153` ("stale signing and route completions are rejected") requires.
 - `crates/fava-router-hints/src/lib.rs:84-104` — the hint router only ever emits
   `RouteTarget::ReferencedEvent`; addresses and authors are impossible.

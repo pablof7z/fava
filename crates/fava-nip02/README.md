@@ -1,7 +1,7 @@
 # fava-nip02
 
 Typed NIP-02 contact-list reads and lossless follow edits for Fava. The crate
-returns ordinary `Query` and `ReplaceableEventEdit` values; `Fava` owns
+returns ordinary `Query` and `EventEdit` values; `Fava` owns
 observation and publication.
 
 ## Follow and unfollow
@@ -24,7 +24,7 @@ let receipt = write.settled(all_acknowledged()).await?;
 `publish` returns a `Write` after local acceptance. It does not wait for relay
 delivery. `all_acknowledged()` requires every currently desired destination to
 acknowledge; use `all_terminal()` when complete rejection, ambiguity, and
-exhaustion evidence is the intended result. The accepted materialization is
+exhaustion evidence is the intended result. The accepted revision is
 immediately visible through ordinary queries, including while offline.
 
 Add an optional relay hint and exact petname with `follow_with`:
@@ -47,7 +47,7 @@ let second = fava.to([relay])?.by(me).publish(follow(bob)?)?;
 ```
 
 Unsigned and pre-signed events already carry their author, so `by(...)` accepts
-only a `ReplaceableEventEdit`.
+only an `EventEdit`.
 
 ## Read a contact list
 
@@ -142,8 +142,8 @@ validation; it makes no relay-global completeness claim.
 
 ## Lossless shared-document edits
 
-Kind 3 is shared with clients and extensions Fava may not understand. Every
-materialization therefore begins from the newest qualified source and changes
+Kind 3 is shared with clients and extensions Fava may not understand. Applying
+an edit therefore always begins from the newest qualified source and changes
 only rows whose lowercase `p` target parses as the requested public key.
 
 - `follow` keeps the first matching target row byte-for-byte and removes later
@@ -158,17 +158,17 @@ only rows whose lowercase `p` target parses as the requested public key.
   unrelated valid follows.
 
 The accepted author and receipt stay fixed while the publication owner may
-rematerialize the edit over newer qualified source state. Stale signing or
-delivery work from an older materialization cannot advance the current one.
+reapply the edit over newer qualified source state. Stale signing or
+delivery work from an older revision cannot advance the current one.
 
 ## API surface
 
 ```text
-follow(target) -> Result<ReplaceableEventEdit, WriteIntentError>
-unfollow(target) -> Result<ReplaceableEventEdit, WriteIntentError>
+follow(target) -> Result<EventEdit, WriteIntentError>
+unfollow(target) -> Result<EventEdit, WriteIntentError>
 follow_with(target, Option<RelayUrl>, Option<&str>)
-    -> Result<ReplaceableEventEdit, WriteIntentError>
-materializer() -> Arc<dyn ReplaceableEventMaterializer>
+    -> Result<EventEdit, WriteIntentError>
+applier() -> Arc<dyn EditApplier>
 
 contact_list(authors) -> Result<Query, QueryError>
 followers_of(subject) -> Result<Query, QueryError>

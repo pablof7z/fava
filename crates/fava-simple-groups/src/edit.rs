@@ -1,15 +1,15 @@
-//! Kind-10009 Simple Group List edits: encode, decode, and materialize.
+//! Kind-10009 Simple Group List edits: encode, decode, and apply.
 //!
 //! The five saved-list operations (save/remove/rename a group, save/remove a
 //! bare relay) are packed into the private binary format read and written by
 //! [`encode`]/[`decode_edit`], then folded onto the previous kind-10009 tag
-//! set by [`apply`]. [`saved_group_list_materializer`] is the only way a
+//! set by [`apply`]. [`saved_group_list_applier`] is the only way a
 //! caller outside this module reaches that logic.
 
 use std::sync::Arc;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
+    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier,
     Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
@@ -44,7 +44,7 @@ const REMOVE_RELAY: u8 = 5;
 pub fn save_simple_group(
     group: &SimpleGroup,
     display_name: Option<&str>,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     edit(
         SAVE_SIMPLE_GROUP,
         group.id(),
@@ -72,7 +72,7 @@ pub fn save_simple_group(
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
 pub fn remove_saved_simple_group(
     group: &SimpleGroup,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     edit(
         REMOVE_SIMPLE_GROUP,
         group.id(),
@@ -101,7 +101,7 @@ pub fn remove_saved_simple_group(
 pub fn rename_saved_simple_group(
     group: &SimpleGroup,
     display_name: &str,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
+) -> Result<EventEdit, WriteIntentError> {
     edit(
         RENAME_SIMPLE_GROUP,
         group.id(),
@@ -125,7 +125,7 @@ pub fn rename_saved_simple_group(
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
-pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn save_relay(relay: RelayUrl) -> Result<EventEdit, WriteIntentError> {
     edit(SAVE_RELAY, "", &[relay], None)
 }
 
@@ -144,11 +144,11 @@ pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentEr
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
-pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentError> {
+pub fn remove_saved_relay(relay: RelayUrl) -> Result<EventEdit, WriteIntentError> {
     edit(REMOVE_RELAY, "", &[relay], None)
 }
 
-/// Return a fresh kind-10009 materializer behind the neutral contract.
+/// Return a fresh kind-10009 applier behind the neutral contract.
 ///
 /// Register this with the Fava builder to enable semantic write lifecycle
 /// support for kind-10009 Simple Group List events.
@@ -156,9 +156,9 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
 /// # Examples
 ///
 /// ```
-/// # use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_materializer};
+/// # use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_applier};
 /// # use nostr::types::RelayUrl;
-/// let materializer = saved_group_list_materializer();
+/// let applier = saved_group_list_applier();
 ///
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("photos", vec![relay])?;
@@ -166,8 +166,8 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[must_use]
-pub fn saved_group_list_materializer() -> Arc<dyn ReplaceableEventMaterializer> {
-    Arc::new(SavedGroupListMaterializer)
+pub fn saved_group_list_applier() -> Arc<dyn EditApplier> {
+    Arc::new(SavedGroupListApplier)
 }
 
 /// Wraps one encoded changeset as a non-addressable kind-10009 edit.
@@ -176,8 +176,8 @@ fn edit(
     id: &str,
     relays: &[RelayUrl],
     display_name: Option<&str>,
-) -> Result<ReplaceableEventEdit, WriteIntentError> {
-    ReplaceableEventEdit::new(
+) -> Result<EventEdit, WriteIntentError> {
+    EventEdit::new(
         saved_kind(),
         None,
         encode(operation, id, relays, display_name)?,
@@ -259,7 +259,7 @@ fn encode_text(bytes: &mut Vec<u8>, value: &str) -> Result<(), WriteIntentError>
 
 /// Reverses `encode`, requiring an exact non-addressable kind-10009 coordinate and no trailing bytes.
 fn decode_edit(
-    edit: &ReplaceableEventEdit,
+    edit: &EventEdit,
 ) -> Result<(u8, String, Vec<RelayUrl>, Option<String>), WriteIntentError> {
     if edit.kind() != saved_kind() || edit.identifier().is_some() {
         return Err(codec_refusal(
@@ -362,25 +362,25 @@ fn take_simple_group(input: &mut &[u8]) -> Result<(String, Vec<RelayUrl>), Write
     Ok((id, relays))
 }
 
-/// The kind-10009 [`ReplaceableEventMaterializer`] returned by [`saved_group_list_materializer`].
+/// The kind-10009 [`EditApplier`] returned by [`saved_group_list_applier`].
 ///
 /// Turns a decoded saved-list edit back into tags by replaying it against the
 /// prior kind-10009 event, so a save/remove/rename only ever touches the
 /// entries it names.
-struct SavedGroupListMaterializer;
+struct SavedGroupListApplier;
 
-impl ReplaceableEventMaterializer for SavedGroupListMaterializer {
+impl EditApplier for SavedGroupListApplier {
     fn kind(&self) -> Kind {
         saved_kind()
     }
 
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
+    fn supports(&self, edit: &EventEdit) -> bool {
         decode_edit(edit).is_ok()
     }
 
-    fn materialize(
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,
@@ -405,7 +405,7 @@ impl ReplaceableEventMaterializer for SavedGroupListMaterializer {
     }
 }
 
-/// Verifies and unpacks the event this materialization supersedes.
+/// Verifies and unpacks the event this revision supersedes.
 ///
 /// Requires the same author and kind as `source`, and a strictly later
 /// `created_at`; returns empty content and tags when there is no prior event.
@@ -432,7 +432,7 @@ fn qualified_source(
     }
     if created_at <= source.created_at() {
         return Err(WriteIntentError::InvalidEvent(
-            "saved-list materialization timestamp must succeed its source".to_owned(),
+            "saved-list revision timestamp must succeed its source".to_owned(),
         ));
     }
     let content = match source {

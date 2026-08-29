@@ -3,14 +3,14 @@
 
 use fava_state::{EventCoordinate, event_is_newer};
 use fava_write::{
-    EventId, MaterializationId, PublicKey, ReceiptId, ReplaceableEventEdit, Timestamp,
+    EventId, RevisionId, PublicKey, ReceiptId, EventEdit, Timestamp,
 };
 use fava_write_store::WriteStoreError;
 use std::num::NonZeroU64;
 
 use crate::semantic::WriteState;
 
-pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) -> EventCoordinate {
+pub(super) fn edit_coordinate(edit: &EventEdit, author: PublicKey) -> EventCoordinate {
     EventCoordinate::Replaceable {
         author,
         kind: edit.kind(),
@@ -19,14 +19,14 @@ pub(super) fn edit_coordinate(edit: &ReplaceableEventEdit, author: PublicKey) ->
 }
 
 pub(super) fn attributed_failure(
-    materialization_id: MaterializationId,
+    revision_id: RevisionId,
     source: Option<EventId>,
     reason: String,
 ) -> String {
     let source = source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
     let prefix = format!(
-        "materialization {} from source {source} failed",
-        materialization_id.as_u64()
+        "revision {} from source {source} failed",
+        revision_id.as_u64()
     );
     let attributed = format!("{prefix}: {reason}");
     drop(reason);

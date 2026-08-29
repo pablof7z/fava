@@ -9,7 +9,7 @@ use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
 use fava_write::{
-    Event, EventBuilder, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, ReplaceableEventEdit,
+    Event, EventBuilder, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, EventEdit,
     UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use nostr::types::RelayUrl;
@@ -130,7 +130,7 @@ impl PublishAs<'_> {
     /// # Errors
     ///
     /// Returns [`PublishError`] when the edit or publication is refused.
-    pub fn publish(self, edit: ReplaceableEventEdit) -> Result<Write, PublishError> {
+    pub fn publish(self, edit: EventEdit) -> Result<Write, PublishError> {
         publish_scoped(
             self.fava.publication.as_ref(),
             edit,
@@ -298,7 +298,7 @@ impl PublishPayload for Event {
     }
 }
 
-impl PublishPayload for ReplaceableEventEdit {
+impl PublishPayload for EventEdit {
     fn into_intent(
         self,
         author: Option<PublicKey>,

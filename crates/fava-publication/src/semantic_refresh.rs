@@ -4,7 +4,7 @@ use fava_write::Receipt;
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::watch;
 
-use super::materialization::SemanticState;
+use super::edit_application::SemanticState;
 use super::{Publication, STORE_READ_RETRY_DELAY};
 
 impl Publication {
@@ -18,13 +18,13 @@ impl Publication {
             if *cancel.borrow() {
                 return None;
             }
-            match self.store.materialized_edits(
+            match self.store.applied_edits(
                 receipt.receipt_id,
-                receipt.current.publication.materialization_id,
+                receipt.current.publication.revision_id,
             ) {
                 Ok(Some((edits, author, selected, failed_id))) if !edits.is_empty() => {
                     state.refresh_custody(
-                        receipt.current.publication.materialization_id,
+                        receipt.current.publication.revision_id,
                         edits,
                         author,
                         selected,

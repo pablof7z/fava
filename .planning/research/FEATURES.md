@@ -51,7 +51,7 @@ These are not optional enhancements. They are normative Fava requirements that d
 | Exact source-scoped evidence without global completeness | Lets applications explain what each relay/request actually proved without false “synced” or authoritative-empty claims | High | EOSE, silence, timeout, CLOSED, auth, retry exhaustion, cancellation, and shortfall remain distinct; M2-M3, M8 |
 | Durable write identity and reattachable receipts | Turns publication into a recoverable obligation rather than a transient send call | Very High | `Accepted` follows atomic durable commit and local visibility; same write/receipt survives kill/restart; generations, lanes, and outcomes remain correlated; M5-M6 |
 | Partial progress as a first-class outcome | Avoids delaying useful work behind unresolved routing, signing, relay, or recipient knowledge | Very High | Known relays start immediately; later contributions expand the same query/receipt; unresolved never becomes absent through elapsed time; M4, M6 |
-| Semantic write rematerialization | Preserves user intent when newer replaceable source state appears after an offline edit | Very High | Same receipt across corrected event generations; unrelated source changes preserved; stale signing/delivery completions rejected; M7 |
+| Semantic write reapplication | Preserves user intent when newer replaceable source state appears after an offline edit | Very High | Same receipt across corrected event generations; unrelated source changes preserved; stale signing/delivery completions rejected; M7 |
 | Loss-honest bounded observation | Supports slow mobile/UI consumers without unbounded memory or false state | High | Current-state streams may coalesce but next state is exactly rebased; causal receipt/lifecycle facts cannot disappear silently; M1, M3, M8 |
 | Exact operation and generation identity | Prevents late reconnect, signer, provider, cancellation, and delivery completions from mutating current work | High | Every late completion is attributable and stale results are inert; cross-cutting M2-M11 |
 | Static provider composition with no privileged defaults | Lets applications select storage, routing, planning, transport, publisher, delivery, signer, and service implementations without core forks | Very High | Contracts and implementations remain separate from their first real slice; external implementations use the same public contracts and conformance kits; M4-M10 |
@@ -74,7 +74,7 @@ Features and shortcuts to explicitly not build.
 | Runtime plugin discovery, hot swapping, or dynamic provider registries | Adds lifecycle/migration complexity without serving the static product assembly model | Select providers explicitly at build/application composition; fix the implementation set for an engine instance |
 | Collapsing contract and implementation crates because only one provider exists | Shapes the public seam around the first mechanism and creates a privileged default | Split the neutral contract from the implementation when its first real vertical slice lands; challenge it with conformance and substitution |
 | Generic “common” bucket or duplicate semantic values | Blurs ownership and permits the same fact to acquire different meanings | Put shared values in their semantic-owner crate and use them across neutral contracts |
-| Copying unsigned or unpublished local events into the event cache | Couples independent authorities and requires compensating cache writes on cancel/rematerialization | Let the durable write store remain a local query source; cache only admitted signed relay observations per cache contract |
+| Copying unsigned or unpublished local events into the event cache | Couples independent authorities and requires compensating cache writes on cancel/reapplication | Let the durable write store remain a local query source; cache only admitted signed relay observations per cache contract |
 | Deletion as local cancellation | A kind:5 event is a new public protocol write and cannot unsend local work | Keep deletion publication, event-state application, write cancellation, and receipt removal separate |
 | Invented “unsend” after possible handoff | Bytes may already have left Fava and cannot be recalled | Permit proven pre-handoff cancellation; retain exact ambiguous/completed history after possible handoff; resolve partial-handoff policy explicitly |
 | Silent truncation, clamping, drops, or unbounded queues | Hides missing work and makes resource exhaustion indistinguishable from success | Use explicit bounds with typed refusal, backpressure, loss facts, or source-scoped shortfall |
@@ -145,7 +145,7 @@ Bounded owner delivery -> deterministic close -> mobile lifecycle/resource quali
 
 For the next validated increment, prioritize:
 
-1. Deliver M7 semantic edits through the ordinary durable write lifecycle with stable write/receipt identity and exact materialization generations.
+1. Deliver M7 semantic edits through the ordinary durable write lifecycle with stable write/receipt identity and exact revision generations.
 2. Prove two unrelated capability crates and narrow N+1 change amplification without universal-core event-kind switches.
 3. Prepare M8 hostile-boundary qualification from the bounds and failure identities already established in M1-M7.
 

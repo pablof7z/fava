@@ -93,7 +93,7 @@ pub(crate) async fn next_sign(
 ) -> CanaryResult<PendingSign> {
     tokio::time::timeout(Duration::from_secs(5), requests.recv())
         .await
-        .map_err(|_| CanaryError::new("timed out awaiting materialization signing"))?
+        .map_err(|_| CanaryError::new("timed out awaiting revision signing"))?
         .ok_or_else(|| CanaryError::new("signing request channel closed"))
 }
 

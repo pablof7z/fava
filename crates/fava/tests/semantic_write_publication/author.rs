@@ -8,7 +8,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
     let store = Arc::new(MemoryWriteStore::default());
     let alice_signer = Arc::new(BlockingSigner::new(alice.public_key()));
     let bob_signer = Arc::new(CountingSigner::new(bob.clone()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -16,7 +16,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
         Arc::new(RecordingPublisher::default()),
     )
     .signer(Arc::clone(&bob_signer))
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("two-signer semantic assembly");
 
@@ -31,7 +31,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
         write.receipt().unwrap().current.event.author(),
         alice.public_key()
     );
-    assert_eq!(materializer.calls()[0].author, alice.public_key());
+    assert_eq!(applier.calls()[0].author, alice.public_key());
     assert_eq!(bob_signer.calls(), 0);
 
     cache
@@ -41,7 +41,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
         ))])
         .expect("Bob's unrelated coordinate enters cache");
     assert_no_receipt_change(&store).await;
-    assert_eq!(materializer.calls().len(), 1);
+    assert_eq!(applier.calls().len(), 1);
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
@@ -49,11 +49,11 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
             relay_occurrence(),
         ))])
         .expect("Alice's successor enters cache");
-    let successor = wait_for_materialization(&fava, write.receipt_id(), 2).await;
+    let successor = wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&alice_signer, 2).await;
     assert_eq!(successor.current.event.author(), alice.public_key());
     assert!(
-        materializer
+        applier
             .calls()
             .iter()
             .all(|call| call.author == alice.public_key())
@@ -68,7 +68,7 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             intent(alice.public_key(), Kind::ContactList),
             EventBuilder::new(alice.public_key(), Kind::ContactList)
                 .created_at(Timestamp::from(1))
@@ -79,14 +79,14 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
         )
         .expect("Alice's accepted edit is durable");
     let bob_signer = Arc::new(CountingSigner::new(bob));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&bob_signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("recovery starts with only Bob's signer selected");
 
@@ -96,11 +96,11 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
             relay_occurrence(),
         ))])
         .expect("Alice's source enters after recovery");
-    let recovered = wait_for_materialization(&fava, accepted.receipt_id, 2).await;
+    let recovered = wait_for_revision(&fava, accepted.receipt_id, 2).await;
 
     assert_eq!(recovered.current.event.author(), alice.public_key());
-    assert_eq!(materializer.calls().len(), 1);
-    assert_eq!(materializer.calls()[0].author, alice.public_key());
+    assert_eq!(applier.calls().len(), 1);
+    assert_eq!(applier.calls()[0].author, alice.public_key());
     assert_eq!(bob_signer.calls(), 0);
 }
 
@@ -125,14 +125,14 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
             EventStateMutation::Upsert(relay_event(unrelated, relay_occurrence())),
         ])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(kind));
+    let applier = Arc::new(TestApplier::new(kind));
     let (fava, _, _, signer, _) = assembly_with_cache(
         cache,
         Arc::new(MemoryWriteStore::default()),
         keys.clone(),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
-    let edit = ReplaceableEventEdit::new(kind, Some("wanted".to_owned()), vec![1]).unwrap();
+    let edit = EventEdit::new(kind, Some("wanted".to_owned()), vec![1]).unwrap();
     let write = fava
         .by(keys.public_key())
         .to([relay_url()])
@@ -142,13 +142,13 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
     let receipt = write.settled(all_terminal()).await.unwrap();
 
     assert_eq!(receipt.current.event.author(), keys.public_key());
-    assert_eq!(materializer.calls().len(), 1);
+    assert_eq!(applier.calls().len(), 1);
     assert_eq!(
-        materializer.calls()[0].identifier.as_deref(),
+        applier.calls()[0].identifier.as_deref(),
         Some("wanted")
     );
     assert_eq!(
-        materializer.calls()[0]
+        applier.calls()[0]
             .source
             .as_ref()
             .and_then(EventValue::id),

@@ -9,8 +9,8 @@ requires:
     provides: exact generation completion guards and bounded semantic failure evidence
 provides:
   - independent out-of-workspace semantic capability using fava as its sole normal dependency
-  - public live-query rematerialization and retired-completion proof with a scripted transport witness
-  - unchanged raw future-kind publication and query evidence without materializer selection
+  - public live-query reapplication and retired-completion proof with a scripted transport witness
+  - unchanged raw future-kind publication and query evidence without applier selection
 affects: [phase-07-verification, capability-composition, public-facade]
 actuals:
   tokens: 19114
@@ -35,7 +35,7 @@ key-files:
 key-decisions:
   - "The unrelated capability uses private deterministic set semantics over non-addressable replaceable kind 15001 and exports only functions plus approved Fava values and contracts."
   - "fava-subscriptions-standard is a dev-only dependency because a genuine outside-consumer source successor must cross Fava.observe(from_relays), not mutate the event cache directly."
-  - "Raw custom kind 50001 follows WriteIntent::event unchanged even while an unrelated semantic materializer is selected."
+  - "Raw custom kind 50001 follows WriteIntent::event unchanged even while an unrelated semantic applier is selected."
 patterns-established:
   - "External N+1 proof: separate workspace, fava as the sole normal dependency, providers under dev-dependencies, no root member or product selection."
   - "Controlled completion proof: hold generation-one relay OK, install source-driven generation two, then release and observe exact currentness."
@@ -54,7 +54,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D2
-    description: "Public Fava preview and live publication preserve one write and receipt across a qualified source successor while a released retired completion is inert and bounded materializer failure preserves current state."
+    description: "Public Fava preview and live publication preserve one write and receipt across a qualified source successor while a released retired completion is inert and bounded applier failure preserves current state."
     requirement: CAP-08
     verification:
       - kind: e2e
@@ -65,7 +65,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D3
-    description: "Raw arbitrary future kind 50001 publishes and remains query-visible with exact unknown tags and content without a matching materializer or core switch."
+    description: "Raw arbitrary future kind 50001 publishes and remains query-visible with exact unknown tags and content without a matching applier or core switch."
     requirement: CAP-09
     verification:
       - kind: e2e
@@ -79,7 +79,7 @@ status: complete
 
 # Phase 07 Plan 07: External Semantic Capability Falsifier Summary
 
-**An independent capability using only the public Fava facade now rematerializes under one stable receipt, rejects bounded hostile source state, and leaves raw future event kinds untouched.**
+**An independent capability using only the public Fava facade now reapplies under one stable receipt, rejects bounded hostile source state, and leaves raw future event kinds untouched.**
 
 ## Performance
 
@@ -92,17 +92,17 @@ status: complete
 ## Accomplishments
 
 - Added a separate Cargo workspace whose sole normal dependency is `fava`; every concrete provider, standard implementation, Nostr fixture, and Tokio runtime edge is test-only.
-- Implemented a private external materializer for unrelated kind 15001 with bounded opaque edits, inverses, deterministic set composition, duplicate idempotence, unrelated content/tag preservation, and typed malformed/oversized refusal.
+- Implemented a private external applier for unrelated kind 15001 with bounded opaque edits, inverses, deterministic set composition, duplicate idempotence, unrelated content/tag preservation, and typed malformed/oversized refusal.
 - Exported the required query fragment plus typed validation/decode functions using only existing Fava and standard-library values; the outside-consumer tests use those functions directly.
 - Bounded source content, tag count, nested tag values, and combined content/tag bytes before cloning externally supplied state.
-- Proved preview/live parity, zero preview custody or effects, public relay-ingested source replacement, stable write/receipt identity, changing `MaterializationId`, retired completion inertness, duplicate-source inertness, and bounded failure preservation.
+- Proved preview/live parity, zero preview custody or effects, public relay-ingested source replacement, stable write/receipt identity, changing `RevisionId`, retired completion inertness, duplicate-source inertness, and bounded failure preservation.
 - Proved exact preview/live destination and attempt keys, successor openness after the stale generation-one ACK, and barrier-controlled concurrent duplicate ingress.
-- Published and queried raw custom kind 50001 unchanged through `WriteIntent::event` while only the unrelated materializer was selected.
+- Published and queried raw custom kind 50001 unchanged through `WriteIntent::event` while only the unrelated applier was selected.
 - Kept the external capability and kind absent from root members, selected products, vocabulary, and universal owner source/manifests.
 
 ## RED and Causal Evidence
 
-- **Task 1 RED:** the external library target failed with 16 unresolved capability helper/materializer references before implementation. Commit: `b378321`.
+- **Task 1 RED:** the external library target failed with 16 unresolved capability helper/applier references before implementation. Commit: `b378321`.
 - **Task 2 RED:** all three named public tests compiled and failed at their explicit RED assertions before the scripted outside-consumer witness existed. Commit: `58bd1c5`.
 - **Review RED:** the repaired targets failed to compile on the absent public query/decode/validation functions before production changes. Commit: `ddd851e`.
 - **Named deliberate break:** replacing qualified-source decoding with empty-source decoding made `external_capability_composes_through_public_fava` fail on exact preserved content (`alpha` instead of `alpha,omega` plus unrelated source body). Restoring the source application returned the named test green.
@@ -125,7 +125,7 @@ status: complete
 - `falsifiers/external-semantic-capability/Cargo.toml` — isolated workspace with one normal facade dependency and explicit test-only assembly dependencies.
 - `falsifiers/external-semantic-capability/Cargo.lock` — independent reproducible dependency lock.
 - `falsifiers/external-semantic-capability/src/lib.rs` — public function re-exports plus three pure public-contract tests.
-- `falsifiers/external-semantic-capability/src/capability.rs` — public function surface and private bounded materializer/codec implementation.
+- `falsifiers/external-semantic-capability/src/capability.rs` — public function surface and private bounded applier/codec implementation.
 - `falsifiers/external-semantic-capability/tests/public_capability.rs` — three public lifecycle, failure, and raw-future behavioral proofs.
 - `falsifiers/external-semantic-capability/tests/support/mod.rs` — private under-500-line scripted transport and public assembly harness.
 - `falsifiers/external-semantic-capability/tests/support/waits.rs` — deadline-owned receipt, observation, EOSE, and terminal-state wait helpers with last-state diagnostics.
@@ -146,7 +146,7 @@ status: complete
 - **Issue:** Current public `Fava` exposes canonical relay ingestion only through a live query, which requires a selected subscription planner.
 - **Fix:** Added `fava-subscriptions-standard` only under dev-dependencies and drove source v2 through `Fava::observe(Query::from_relays(...))`.
 - **Files modified:** `falsifiers/external-semantic-capability/Cargo.toml`, lockfile, public integration test
-- **Verification:** Metadata still reports exactly one normal dependency (`fava`); the public rematerialization test passes.
+- **Verification:** Metadata still reports exactly one normal dependency (`fava`); the public reapplication test passes.
 - **Committed in:** `b378321`, `25da31d`
 
 **2. [Rule 3 - Cohesion] Extracted private scripted support below the soft line limit**

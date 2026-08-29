@@ -206,7 +206,7 @@ fn publishing_engine(relays: &[RelayUrl], accounts: &[Keys]) -> CanaryResult<Fav
         .transport(Arc::new(WebSocketTransport::default()))
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializers([fava_nip02::materializer()]);
+        .appliers([fava_nip02::applier()]);
     if !relays.is_empty() {
         builder = builder.router(Arc::new(AppRelayRouter::new(
             "app-relays",
@@ -602,7 +602,7 @@ async fn flow_05_profile_and_contacts(live: &RelayUrl, seed: &str) -> FlowRecord
             ID,
             INTENT,
             "show-stopper",
-            "the followed key is absent from the materialized contact list",
+            "the followed key is absent from the applied contact list",
             detail,
         );
     }
@@ -640,7 +640,7 @@ async fn flow_05_profile_and_contacts(live: &RelayUrl, seed: &str) -> FlowRecord
             ID,
             INTENT,
             "show-stopper",
-            "the unfollowed key is still present in the materialized contact list",
+            "the unfollowed key is still present in the applied contact list",
             detail,
         );
     }

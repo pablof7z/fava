@@ -10,7 +10,7 @@
 Deliver M7's replaceable-event-edit lifecycle and protocol-crate composition
 through the public Rust `fava` facade. Protocol crates own event-kind meaning and
 edit application; the write store owns durable custody and current
-materialization; publication owns generations, signing, routing, delivery, and
+revision; publication owns generations, signing, routing, delivery, and
 receipts. Native projections, profiles, and M8 hardening remain later phases.
 
 </domain>
@@ -21,18 +21,18 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 ### Authoritative behavior
 - `WriteIntent` gains the third authoritative accepted form: a bounded,
   persistable replaceable-event edit whose accepted custody freezes the author
-  before materialization; the edit itself carries no author.
+  before revision; the edit itself carries no author.
 - The edit's protocol crate owns its kind, optional addressable identifier,
   opaque change encoding, empty-state behavior, opposing operations, and
   application to qualified source state. The edit carries no version or stored
   inverse.
-- First-value edits materialize without a predecessor. Newer qualified source
-  state rematerializes every still-live edit while preserving unrelated source
+- First-value edits apply without a predecessor. Newer qualified source
+  state reapplies every still-live edit while preserving unrelated source
   changes.
 - One accepted operation, `WriteId`, and `ReceiptId` survive every
-  materialization generation. Exact generation, event, signer, route, relay
+  revision generation. Exact generation, event, signer, route, relay
   session, and attempt identity make retired completions attributable and inert.
-- The event cache never receives unpublished local materializations. Atomic
+- The event cache never receives unpublished local revisions. Atomic
   replacement and retraction remain write-store query-source mutations.
 - Protocol crates cannot sign, route, publish, deliver, own receipts, or depend
   on runtime, transport, store implementations, or standard routers.
@@ -49,16 +49,16 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 ### Behavioral evidence
 - Write observable public behavior first, confirm it fails before production
   implementation, and preserve a named deliberate-break failure for the
-  generation or rematerialization invariant.
+  generation or reapplication invariant.
 - Include memory-store state-machine coverage, redb crash/reopen coverage,
   public-facade integration, dependency-negative compilation, and the external
   N+1 falsifier.
 - Compilation is structural evidence only; completion requires behavioral
-  materialization, rematerialization, stale-completion, query, receipt, and
+  revision, reapplication, stale-completion, query, receipt, and
   restart proof.
 
 ### the agent's Discretion
-- Exact neutral value and materializer trait names, internal module boundaries,
+- Exact neutral value and applier trait names, internal module boundaries,
   observation wiring, generation token representation, and plan decomposition,
   provided all six architecture gates and the authoritative ownership split hold.
 
@@ -73,7 +73,7 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 - `fava-write-store` already owns atomic acceptance, exact signer/route/attempt
   mutations, recovery, and the independent query-source contract.
 - Memory and redb providers already implement the same write-store contract and
-  expose current materializations to ordinary queries.
+  expose current revisions to ordinary queries.
 - `fava-publication` already keeps signing and routing independent and correlates
   durable destination work through the ordinary receipt lifecycle.
 - `fava-nip65` and the independent router crates demonstrate narrow
@@ -101,7 +101,7 @@ receipts. Native projections, profiles, and M8 hardening remain later phases.
 ## Specific Ideas
 
 Use the implementation-plan canaries `replaceable-edit-first-value`,
-`replaceable-edit-rematerialization`, `replaceable-edit-opposing-operations`, and
+`replaceable-edit-reapplication`, `replaceable-edit-opposing-operations`, and
 `protocol-crate-n-plus-one` as the externally observable spine.
 
 </specifics>

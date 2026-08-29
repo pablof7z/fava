@@ -4,7 +4,7 @@ use fava_write::{Receipt, ReceiptId};
 use fava_write_store::{WriteStoreError, destination_evidence_capacity};
 use tokio::sync::watch;
 
-use super::materialization::SemanticState;
+use super::edit_application::SemanticState;
 use super::{Publication, PublicationError};
 
 impl Publication {
@@ -16,9 +16,9 @@ impl Publication {
     ) -> Option<Receipt> {
         for _ in 0..=destination_evidence_capacity() {
             receipt = self.refresh_semantic(receipt, state, cancel).await?;
-            self.rematerialize(&receipt, state);
+            self.reapply(&receipt, state);
             let current = self.read_receipt(receipt.receipt_id, cancel).await?;
-            if current.current.publication.materialization_id == state.materialization_id {
+            if current.current.publication.revision_id == state.revision_id {
                 return Some(current);
             }
             receipt = current;
@@ -54,11 +54,11 @@ impl Publication {
             if current != receipt {
                 continue;
             }
-            self.rematerialize(&current, state);
+            self.reapply(&current, state);
             let applied = self.store.receipt(receipt_id)?.ok_or_else(|| {
                 WriteStoreError::Refused("reconciled semantic receipt is missing".to_owned())
             })?;
-            if applied.current.publication.materialization_id == state.materialization_id {
+            if applied.current.publication.revision_id == state.revision_id {
                 return Ok(());
             }
         }
@@ -74,12 +74,12 @@ impl Publication {
         receipt: &Receipt,
         state: &mut SemanticState,
     ) -> Result<(), PublicationError> {
-        let retry_persisted_failure = receipt.current.publication.materialization_id
-            == state.materialization_id
+        let retry_persisted_failure = receipt.current.publication.revision_id
+            == state.revision_id
             && state.failed_id.is_none();
-        let Some((edits, author, selected, failed_id)) = self.store.materialized_edits(
+        let Some((edits, author, selected, failed_id)) = self.store.applied_edits(
             receipt.receipt_id,
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
         )?
         else {
             return Err(WriteStoreError::Refused(
@@ -94,7 +94,7 @@ impl Publication {
             .into());
         }
         state.refresh_custody(
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             edits,
             author,
             selected,

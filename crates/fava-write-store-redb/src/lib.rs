@@ -12,7 +12,7 @@ use fava_query::{
 use fava_state::EventCoordinate;
 use fava_write::{
     EventId, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    ReplaceableEventEdit, Timestamp, UnsignedEvent,
+    EventEdit, Timestamp, UnsignedEvent,
 };
 use fava_write_store::WriteStoreError;
 use redb::Database;
@@ -31,12 +31,12 @@ mod validation;
 const RECEIPT_CHANGE_CAPACITY: usize = 256;
 
 type SemanticCustody = (
-    Vec<ReplaceableEventEdit>,
+    Vec<EventEdit>,
     PublicKey,
     Option<(EventId, Timestamp)>,
     Option<EventId>,
     Option<(
-        Option<ReplaceableEventEdit>,
+        Option<EventEdit>,
         UnsignedEvent,
         Option<(EventId, Timestamp)>,
         Option<fava_routing::RoutePlan>,

@@ -186,7 +186,7 @@ The milestones advance six parallel workstreams.
 | M4 | Ordered asynchronous routing and exact subscription planning | Known relays are used immediately; delayed routers add work later; explicit routing bypasses routers; wire grouping preserves meaning. |
 | M5 | Durable explicit-route publication | Accepted writes appear locally, sign, publish to real relays, return exact receipts, cancel pre-handoff, and survive process death. |
 | M6 | Automatic routing and partial delivery | Outbox, hints, app-relay, and fallback routers compose; partial recipient routes deliver now and expand under one receipt. |
-| M7 | Replaceable-event edits and protocol-crate composition | Follow/unfollow rematerializes over newer source state; protocol crate N+1 changes only its crate and assembly. |
+| M7 | Replaceable-event edits and protocol-crate composition | Follow/unfollow reapplies its edit over newer source state; protocol crate N+1 changes only its crate and assembly. |
 | M7.1.1 | `fava-simple-groups` multi-relay NIP-29 capability | One public app combines relay-local forks without losing per-host truth and publishes arbitrary kinds through the exact selected host set. |
 | M8 | Authentication, hostile relays, limits, and boundedness | NIP-42, malformed/off-filter input, silence, CLOSED, limits, ambiguous handoff, give-up, and resource bounds are exact. |
 | M9 | Cache/service profiles and restart guarantees | Persistent and ephemeral event-cache profiles, durable write recovery, NIP-05, and NIP-11 cache semantics are truthful. |
@@ -314,7 +314,7 @@ Prove the central local-state model before networking: live query state is the d
 
 - Event identity, replaceable-event winner rules, deletion, expiry, and evidence merge are deterministic.
 - Event cache accepts only admitted signed relay events.
-- Write store exposes current local unsigned/signed materializations as a query source.
+- Write store exposes current local unsigned/signed revisions as a query source.
 - Same-event source contributions merge into one `EventRecord`.
 - A query-matching local pending replacement can shadow a matching cached predecessor without deleting it; an out-of-selection candidate cannot displace a selected event.
 - Cancelling the local write retracts its source contribution and naturally reveals the cached predecessor.
@@ -327,7 +327,7 @@ Prove the central local-state model before networking: live query state is the d
 `local-source-merge`
 
 - Seed a signed event into the memory event cache.
-- Accept a local materialization of the exact event into the memory write store.
+- Accept a local revision of the exact event into the memory write store.
 - Open one query and observe one `EventRecord` containing merged relay/local evidence.
 
 `local-replaceable-shadow-and-cancel`
@@ -579,14 +579,14 @@ Build one complete durable publication path before automatic write routing: acce
 
 ### Required behavior
 
-- M5 accepts unsigned and verified pre-signed events; `ReplaceableEventEdit` acceptance begins in M7 through the same write lifecycle.
+- M5 accepts unsigned and verified pre-signed events; `EventEdit` acceptance begins in M7 through the same write lifecycle.
 - Applications call synchronous `publish(payload)`, optionally after inert
   `by(author)` and/or `to(relays)` scopes, and receive `Write` only after the
   write-store acceptance transaction commits. Receipt settlement is
   `write.settled(all_terminal())`, `write.settled(all_acknowledged())`, or
   `write.settled(at_least(n))`; terminal completion is not delivery success.
 - An unsigned event's `pubkey` selects the signer.
-- `Accepted` occurs only after write obligation, current materialization, and receipt are durably committed.
+- `Accepted` occurs only after write obligation, current revision, and receipt are durably committed.
 - The write store supplies the unpublished event directly to matching queries.
 - No unsigned event is inserted into the event cache.
 - Explicit routes are exact and bypass routers.
@@ -626,7 +626,7 @@ Build one complete durable publication path before automatic write routing: acce
 - Call `publish(payload)` and receive `Write`.
 - Supervisor SIGKILLs the canary child before delivery.
 - Restart against the same write store.
-- Same receipt and event materialization reappear; delivery resumes without app resubmission.
+- Same receipt and event revision reappear; delivery resumes without app resubmission.
 
 ### Exit gates
 
@@ -725,7 +725,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 - `fava-nip02`
 - `fava-bookmarks` as the second unrelated protocol crate
 - replaceable-event-edit storage in write store
-- materialization/rematerialization lifecycle in publication
+- edit application/reapplication lifecycle in publication
 - replaceable-event-edit conformance corpus
 
 ### Required behavior
@@ -742,14 +742,14 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 - Follow-list edits preserve content, unknown and extension tags, malformed
   unrelated rows, unrelated valid rows, and first-occurrence order while
   changing only the targeted relationship.
-- The author is resolved when the write is accepted, before materialization; the resulting unsigned event carries it in `pubkey`.
-- First-value operation materializes against no prior event.
-- A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
-- One receipt remains stable across materialization generations.
+- The author is resolved when the write is accepted, before the edit is applied; the resulting unsigned event carries it in `pubkey`.
+- First-value operation applies its edit against no prior event.
+- A newer qualified source event triggers edit reapplication for still-live operations while preserving unrelated source changes.
+- One receipt remains stable across revision generations.
 - Signer, route, and delivery completions for retired generations are rejected as stale.
 - Deterministic memory and durable-restart barriers advance the receipt during
   custody loading and router-session opening; stale custody is never
-  materialized, stale sessions close, and only the complete current generation
+  applied, stale sessions close, and only the complete current generation
   reaches signing and route effects, including after process kill.
 - A second protocol crate proves the edit contract is not secretly NIP-02-shaped.
 - Adding protocol crate N+1 edits only its crate and selected assembly/artifact metadata.
@@ -759,16 +759,16 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 `replaceable-edit-first-value`
 
 - Alice has no kind-3 event.
-- `follow(Bob)` accepts one `ReplaceableEventEdit`.
-- Matching queries immediately show the local materialized kind-3.
+- `follow(Bob)` accepts one `EventEdit`.
+- Matching queries immediately show the local kind-3 revision.
 - Publication uses the ordinary write receipt.
 
-`replaceable-edit-rematerialization`
+`replaceable-edit-reapplication`
 
 - Accept offline `follow(Bob)` over source v1.
 - Later ingest source v2 containing unrelated Carol changes.
-- Local current materialization preserves Carol and Bob.
-- Receipt remains the same; stale signature/delivery for old materialization is inert.
+- Local current revision preserves Carol and Bob.
+- Receipt remains the same; stale signature/delivery for the old revision is inert.
 
 `replaceable-edit-opposing-operations`
 
@@ -808,7 +808,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 - event-local kinds 39000 through 39005 decoders
 - one-event `SavedGroupList` decoding
 - ordinary query combinators over literal tag-value filters
-- kind-10009 replaceable-edit materializer
+- kind-10009 replaceable-edit applier
 - compiler-derived complete README public catalog
 - controlled two-relay canary flow
 
@@ -845,7 +845,7 @@ kind-10009 list without creating a second query/publication lifecycle.
   `SavedGroupList` whose group and relay entries retain order, repetitions, and
   entry-local failures.
 - Saved-group and relay changes use crate-root pure edit functions and one
-  materializer through the ordinary durable write lifecycle, preserving
+  applier through the ordinary durable write lifecycle, preserving
   unrelated source material.
 - The crate owns no observation, store, signer, routing session, publisher,
   delivery, retry, receipt, runtime, transport, verification, generic bound,
@@ -881,7 +881,7 @@ kind-10009 list without creating a second query/publication lifecycle.
   event.
 - Preserve the event author, relay identity, repetitions, malformed siblings,
   unused extra values, and source order.
-- Materialize save, rename, remove, and relay edits through ordinary Fava.
+- Apply save, rename, remove, and relay edits through ordinary Fava.
 
 `simple-group-context-preparation`
 
@@ -1220,7 +1220,7 @@ Minimum diagnostic dimensions:
 - relay session URL/access/generation/reason;
 - logical demand to wire-subscription mapping;
 - router contributions, unresolved needs, and route revisions;
-- write receipt and current materialization identity;
+- write receipt and current revision identity;
 - per-destination delivery state;
 - signer/provider availability;
 - cache/write-store profile and bounded counts;
@@ -1255,7 +1255,7 @@ Every milestone names at least one mechanism-disable mutation. Examples:
 - insert local unsigned events into event cache;
 - return Accepted before write-store commit;
 - ignore later route contributions;
-- allow stale signer completion after rematerialization;
+- allow stale signer completion after edit reapplication;
 - silently drop planner overflow;
 - map ambiguous handoff to failure;
 - share NIP-05 and NIP-11 freshness policy;
@@ -1441,7 +1441,7 @@ An enabled scenario may never silently skip.
 | `hint-routing` | M6 | ROUTER-002, PROTO-005 |
 | `route-preview-parity` | M6 | WRITE-016 |
 | `replaceable-edit-first-value` | M7 | PROTO-002/003, WRITE-002/006 |
-| `replaceable-edit-rematerialization` | M7 | WRITE-006/007, PROTO-003 |
+| `replaceable-edit-reapplication` | M7 | WRITE-006/007, PROTO-003 |
 | `same-coordinate-edit-composition` | M7 | WRITE-006/007/029, PROTO-003 |
 | `protocol-crate-n-plus-one` | M7 | GOAL-006, PROTO-001/002 |
 | `nip42-write-and-reconnect` | M8 | RELAY-006/007, ID-006/007 |

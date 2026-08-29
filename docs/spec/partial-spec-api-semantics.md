@@ -17,7 +17,7 @@ The core concepts are approximately:
 Query               // a declarative set of events
 ValueSet<T>         // reactive values derived from queries or other value sets
 Observation         // one opened Query
-QuerySnapshot       // the current materialized result
+QuerySnapshot       // the query's current result
 EventRecord         // an event plus Fava's evidence about it
 ```
 
@@ -272,7 +272,7 @@ live admitted relay events
 
 The application sees one merged result.
 
-An accepted unpublished event does not need to be inserted into the event cache. The write store can independently supply its current materialized event to matching queries.
+An accepted unpublished event does not need to be inserted into the event cache. The write store can independently supply its current revision of that event to matching queries.
 
 When the same signed event later arrives from a relay:
 
@@ -643,8 +643,8 @@ SavedGroupList::from_event(event) -> Result<SavedGroupList, SavedGroupListDecode
 ```
 
 The list exposes ordered saved-group and relay entry results. Crate-root save,
-rename, remove, and relay functions return pure `ReplaceableEventEdit` values;
-the materializer joins Fava's ordinary semantic-write lifecycle.
+rename, remove, and relay functions return pure `EventEdit` values;
+`saved_group_list_applier()` joins Fava's ordinary semantic-write lifecycle.
 
 Simple-group composition extends `EventBuilder` without changing its concrete
 type. Each `.simple_group(&group)` call appends one exact two-cell `h` tag for

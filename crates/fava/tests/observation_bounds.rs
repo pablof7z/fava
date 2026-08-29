@@ -68,7 +68,7 @@ async fn cancelled_pulls_and_large_burst_deliver_one_exact_latest_state() {
             .finalize(&keys)
             .expect("event signs");
         writes
-            .accept_materialized(EventValue::Signed(event))
+            .accept_applied(EventValue::Signed(event))
             .expect("event accepts");
     }
 
@@ -111,7 +111,7 @@ async fn bounded_predicate_wait_preserves_timeout_closure_and_later_delivery() {
         .finalize(&Keys::generate())
         .expect("event signs");
     writes
-        .accept_materialized(EventValue::Signed(event))
+        .accept_applied(EventValue::Signed(event))
         .expect("event accepts");
 
     let delivered = observation

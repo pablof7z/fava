@@ -6,7 +6,7 @@ use fava_write_store::destination_evidence_capacity;
 use tokio::sync::watch;
 
 use super::Publication;
-use super::materialization::SemanticState;
+use super::edit_application::SemanticState;
 
 impl Publication {
     pub(super) async fn open_generation(
@@ -52,7 +52,7 @@ impl Publication {
                     match self.store.apply_route(
                         receipt.write_id,
                         receipt.receipt_id,
-                        receipt.current.publication.materialization_id,
+                        receipt.current.publication.revision_id,
                         receipt.current.id(),
                         &plan,
                     ) {
@@ -66,7 +66,7 @@ impl Publication {
                     if let Ok(committed) = self.store.apply_route(
                         receipt.write_id,
                         receipt.receipt_id,
-                        receipt.current.publication.materialization_id,
+                        receipt.current.publication.revision_id,
                         receipt.current.id(),
                         &plan,
                     ) {
@@ -89,14 +89,14 @@ impl Publication {
         let _ = self.store.record_signer_retryable(
             receipt.write_id,
             receipt.receipt_id,
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
             format!(
-                "generation activation retry bound {} exhausted for write {} receipt {} materialization {} event {}; retry is permitted after a receipt or provider change",
+                "generation activation retry bound {} exhausted for write {} receipt {} revision {} event {}; retry is permitted after a receipt or provider change",
                 destination_evidence_capacity() + 1,
                 receipt.write_id.as_u64(),
                 receipt.receipt_id.as_u64(),
-                receipt.current.publication.materialization_id.as_u64(),
+                receipt.current.publication.revision_id.as_u64(),
                 receipt.current.id(),
             ),
         );

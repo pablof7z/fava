@@ -5,7 +5,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::RelayEvent;
 use fava_write::{
-    EventValue, LocalWriteEvent, MaterializationId, PublicationEvidence, ReceiptId, SignatureState,
+    EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, ReceiptId, SignatureState,
     WriteId,
 };
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};
@@ -19,10 +19,10 @@ fn local(event: Event) -> Result<LocalWriteEvent, fava_write::InvalidEventValue>
         PublicationEvidence {
             receipt_id: ReceiptId::try_from(1).expect("nonzero receipt identity"),
             write_id: WriteId::try_from(1).expect("nonzero write identity"),
-            materialization_id: MaterializationId::FIRST,
-            materialization_source: None,
-            materialization_failure: None,
-            retired_materializations: Vec::new(),
+            revision_id: RevisionId::FIRST,
+            revision_source: None,
+            revision_failure: None,
+            retired_revisions: Vec::new(),
             signature: SignatureState::Signed,
             destinations: BTreeMap::new(),
         },

@@ -22,12 +22,12 @@ use tokio::sync::{broadcast, watch};
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, WindowSigner, publication_builder,
+    BlockingSigner, RecordingPublisher, TestApplier, WindowSigner, publication_builder,
     relay_event, relay_occurrence, signed_source,
 };
 
 #[tokio::test(flavor = "current_thread")]
-async fn successful_reads_reconcile_dropped_materialization_and_route_changes() {
+async fn successful_reads_reconcile_dropped_revision_and_route_changes() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
@@ -41,7 +41,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
@@ -76,8 +76,8 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         .unwrap();
     signer.release_one();
     wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id
-            == fava::MaterializationId::try_from(2).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id
+            == fava::RevisionId::try_from(2).expect("nonzero revision identity")
     })
     .await;
     release.join().unwrap();
@@ -87,7 +87,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         relay: later,
         access: RelayAccess::Public,
     };
-    let rematerialized = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
+    let reapplied = wait_for_receipt(&fava, accepted.receipt_id(), |receipt| {
         receipt.destinations().contains_key(&later_session)
     })
     .await;
@@ -105,7 +105,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         receipt.destinations().contains_key(&second_session)
     })
     .await;
-    assert!(updated.route_revision > rematerialized.route_revision);
+    assert!(updated.route_revision > reapplied.route_revision);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -124,7 +124,7 @@ async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(router)
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .applier(Arc::new(TestApplier::new(Kind::ContactList)))
     .build()
     .unwrap();
     let accepted = fava
@@ -265,7 +265,7 @@ async fn wait_for_opens(router: &QueuedRouter, count: u64) {
         }
     })
     .await
-    .expect("router did not reopen for successor materialization");
+    .expect("router did not reopen for successor revision");
 }
 
 async fn wait_for_route_commits(store: &FaultingWriteStore, count: u64) {

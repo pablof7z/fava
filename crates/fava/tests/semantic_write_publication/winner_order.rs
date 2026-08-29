@@ -20,14 +20,14 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
         ))])
         .expect("base source enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .applier(Arc::clone(&applier))
     .build()
     .expect("semantic publication assembly");
     let write = fava
@@ -51,13 +51,13 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
             EventStateMutation::Upsert(relay_event(base.clone(), relay_occurrence())),
         ])
         .expect("winner and inert source facts enter cache");
-    let receipt = wait_for_materialization(&fava, write.receipt_id(), 2).await;
+    let receipt = wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
     assert_eq!(
-        receipt.current.publication.materialization_source,
+        receipt.current.publication.revision_source,
         Some(equal_id)
     );
-    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(applier.calls().len(), 2);
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
@@ -68,8 +68,8 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     assert_no_receipt_change(&store).await;
     let receipt = write.receipt().unwrap();
     assert_eq!(
-        receipt.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
-    assert_eq!(materializer.calls().len(), 2);
+    assert_eq!(applier.calls().len(), 2);
 }

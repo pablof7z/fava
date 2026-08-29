@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, Query, ReceiptOutcome, RelayDeliveryOutcome,
+    EventBuilder, EventValue, Kind, RevisionId, Query, ReceiptOutcome, RelayDeliveryOutcome,
     Tag, Timestamp,
 };
 use fava_external_semantic_capability_proof::{
@@ -40,7 +40,7 @@ async fn external_capability_composes_through_public_fava() {
         .expect("external edit accepts");
     let first = harness.transport.published(0).await;
     let generation_one = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id == MaterializationId::FIRST
+        receipt.current.publication.revision_id == RevisionId::FIRST
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
     .await;
@@ -75,22 +75,22 @@ async fn external_capability_composes_through_public_fava() {
     harness.transport.deliver(&subscription, &source);
 
     let generation_two = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id
-            == MaterializationId::try_from(2).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id
+            == RevisionId::try_from(2).expect("nonzero revision identity")
     })
     .await;
     assert_eq!(generation_two.write_id, accepted.write_id());
     assert_eq!(generation_two.receipt_id, accepted.receipt_id());
     assert_eq!(
-        generation_two.current.publication.materialization_source,
+        generation_two.current.publication.revision_source,
         Some(source.id)
     );
     assert_eq!(
-        generation_two.current.publication.retired_materializations[0].0,
-        MaterializationId::FIRST
+        generation_two.current.publication.retired_revisions[0].0,
+        RevisionId::FIRST
     );
     assert_eq!(
-        generation_two.current.publication.retired_materializations[0].1,
+        generation_two.current.publication.retired_revisions[0].1,
         first.id
     );
     let record = wait_generation_record(&mut observation, 2).await;
@@ -138,22 +138,22 @@ async fn external_capability_composes_through_public_fava() {
             .unwrap()
             .current
             .publication
-            .materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+            .revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
 
     let retired = harness.transport.acknowledge(0);
     harness.transport.wait_closed(retired).await;
     let after_retired = accepted.receipt().unwrap();
     assert_eq!(
-        after_retired.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        after_retired.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     let second = harness.transport.published(1).await;
     assert_ne!(second.id, retired);
     let before_successor_ack = wait_receipt(&harness.fava, accepted.receipt_id(), |receipt| {
-        receipt.current.publication.materialization_id
-            == MaterializationId::try_from(2).expect("nonzero materialization identity")
+        receipt.current.publication.revision_id
+            == RevisionId::try_from(2).expect("nonzero revision identity")
             && receipt.attempts.values().copied().sum::<u32>() == 1
     })
     .await;
@@ -178,7 +178,7 @@ async fn external_capability_composes_through_public_fava() {
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.write_id, accepted.write_id());
     assert_eq!(terminal.receipt_id, accepted.receipt_id());
-    assert_eq!(terminal.current.publication.materialization_id.as_u64(), 2);
+    assert_eq!(terminal.current.publication.revision_id.as_u64(), 2);
     assert_eq!(harness.transport.publication_count(), 2);
     observation.close();
 }
@@ -208,21 +208,21 @@ async fn external_retired_completion_and_failure_preserve_current() {
         receipt
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .is_some()
     })
     .await;
     assert_eq!(
-        failed.current.publication.materialization_id,
-        MaterializationId::FIRST
+        failed.current.publication.revision_id,
+        RevisionId::FIRST
     );
-    assert_eq!(failed.current.publication.materialization_source, None);
+    assert_eq!(failed.current.publication.revision_source, None);
     assert_eq!(failed.current.id(), first.id);
     assert!(
         failed
             .current
             .publication
-            .materialization_failure
+            .revision_failure
             .as_deref()
             .is_some_and(|failure| failure.contains("4096"))
     );
@@ -233,7 +233,7 @@ async fn external_retired_completion_and_failure_preserve_current() {
     let terminal = wait_terminal(&accepted, "preserved generation terminal receipt").await;
     assert_eq!(terminal.outcome, ReceiptOutcome::Complete);
     assert_eq!(terminal.current.id(), first.id);
-    assert_eq!(terminal.current.publication.materialization_id.as_u64(), 1);
+    assert_eq!(terminal.current.publication.revision_id.as_u64(), 1);
     observation.close();
 }
 
@@ -273,7 +273,7 @@ async fn raw_future_event_kind_publishes_unchanged() {
         .to([harness.relay.clone()])
         .expect("future-kind relay scope validates")
         .publish(event.clone())
-        .expect("raw future event accepts without matching materializer");
+        .expect("raw future event accepts without matching applier");
     assert_eq!(
         accepted.receipt().unwrap().current.event,
         EventValue::Unsigned(event.clone())

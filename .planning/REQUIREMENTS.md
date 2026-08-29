@@ -90,8 +90,8 @@ a feature.
 ### Local Semantic State
 
 - [ ] **LOCAL-01**: Applications observe deterministic event identity, replaceable/addressable winner selection, deletion, expiry, ordering, and evidence merge semantics.
-- [ ] **LOCAL-02**: An event-cache provider accepts only admitted signed relay events and cannot retain unpublished local materializations.
-- [ ] **LOCAL-03**: A write-store provider exposes current local unsigned and signed materializations as an independent query source.
+- [ ] **LOCAL-02**: An event-cache provider accepts only admitted signed relay events and cannot retain unpublished local revisions.
+- [ ] **LOCAL-03**: A write-store provider exposes current local unsigned and signed revisions as an independent query source.
 - [ ] **LOCAL-04**: Contributions for the same event from event cache and write store merge into one `EventRecord` with source-specific evidence.
 - [ ] **LOCAL-05**: A query-matching pending local replaceable event can shadow a matching cached predecessor without mutating or deleting that predecessor in the event cache; candidates are filtered before coordinate selection.
 - [ ] **LOCAL-06**: Cancelling a local write retracts only its write-store contribution and naturally reveals any still-qualified cached predecessor.
@@ -215,17 +215,17 @@ owner moving is a test failure, not a review opinion.**
 
 - [ ] **WRITE-01**: Applications can accept unsigned events and verified pre-signed events through one durable write-intent lifecycle, and pre-signed bytes and identity are preserved verbatim through routing and delivery.
 - [ ] **WRITE-02**: An unsigned event's author identity selects the signer without conflating authorship with relay authentication identity.
-- [ ] **WRITE-03**: `Accepted` is returned only after the write obligation, current materialization, receipt identity, and recovery cursor are durably committed.
-- [ ] **WRITE-04** *(rewritten 2026-08-23 - restores the WRITE-004 deadline)*: Matching queries expose the accepted local materialization directly from the write store **before the application `Write` is returned** - not merely before relay acknowledgement.
-  **Falsifier (named):** `accepted_materialization_is_query_visible_at_the_instant_write_returns` - open a matching observation, then publish; the observation must already contain the event on the first poll after `publish` returns, with no intervening await.
-  **Why it was weakened before:** `GOALS.md:761` says *"The accepted local materialization MUST be visible through the write-store query source **before `Accepted` is returned**."* The old WRITE-04 said *"before relay acknowledgement"*. That is an arbitrarily later deadline, and it permits a window in which the application holds a `Write` while the event is invisible to its own queries. A strict boundary was replaced with a loose one.
+- [ ] **WRITE-03**: `Accepted` is returned only after the write obligation, current revision, receipt identity, and recovery cursor are durably committed.
+- [ ] **WRITE-04** *(rewritten 2026-08-23 - restores the WRITE-004 deadline)*: Matching queries expose the accepted local revision directly from the write store **before the application `Write` is returned** - not merely before relay acknowledgement.
+  **Falsifier (named):** `accepted_revision_is_query_visible_at_the_instant_write_returns` - open a matching observation, then publish; the observation must already contain the event on the first poll after `publish` returns, with no intervening await.
+  **Why it was weakened before:** `GOALS.md:761` says *"The accepted local revision MUST be visible through the write-store query source **before `Accepted` is returned**."* The old WRITE-04 said *"before relay acknowledgement"*. That is an arbitrarily later deadline, and it permits a window in which the application holds a `Write` while the event is invisible to its own queries. A strict boundary was replaced with a loose one.
 - [ ] **WRITE-05**: No unsigned or unpublished local event is copied into the event cache; only an admitted signed relay echo may enter it.
 - [ ] **WRITE-06**: Exact explicit publication routes bypass automatic routers, and an empty explicit route is refused before signing or relay work.
 - [ ] **WRITE-07**: A publisher owns one transport handoff attempt while delivery policy alone decides retry, scheduling, and give-up.
 - [ ] **WRITE-08**: Every destination outcome preserves exact relay text, attempt identity, generation, acknowledgement, rejection, ambiguity, cancellation, and terminal reason; the application can await one terminal result for the whole write without writing its own reducer, and the receipt exposes derived counts.
 - [ ] **WRITE-09**: Proven pre-handoff cancellation produces zero `EVENT` frames, retracts the local query contribution, and records an exact idempotent terminal receipt state.
 - [ ] **WRITE-10**: Receipt removal is separate from write cancellation and obeys explicit retention and lifecycle rules, applying one bounded oldest-first terminal-retention policy that never evicts active work.
-- [ ] **WRITE-11**: A hard process kill after acceptance recovers one obligation, the same write and receipt identities, and the current materialization without application resubmission, and recovery completes before the engine admits new conflicting commands.
+- [ ] **WRITE-11**: A hard process kill after acceptance recovers one obligation, the same write and receipt identities, and the current revision without application resubmission, and recovery completes before the engine admits new conflicting commands.
 - [ ] **WRITE-12**: The application-selected router chain is the only automatic write-routing policy.
 - [ ] **WRITE-13**: Outbox routing acquires kind:10002 facts through explicit indexer queries owned by its router crate.
 - [ ] **WRITE-14**: Hint routing uses pointer-like hints and admitted relay evidence through its own independently selectable crate.
@@ -249,11 +249,11 @@ authority. Its evidence is contemporaneous and partly independent. These nine ch
 therefore retained - and they are the only phase-level retention in this file.
 
 - [x] **CAP-01**: Protocol capability crates expose ordinary event values or semantic replaceable-event edits, including opposing operations, without signing, routing, publishing, or owning receipts.
-- [x] **CAP-02**: The accepted write resolves and persists the author before materialization, and every resulting event generation uses that frozen author while the edit itself carries none.
-- [x] **CAP-03**: A first-value semantic operation can materialize when no prior replaceable event exists.
-- [x] **CAP-04**: A newer qualified source event rematerializes still-live operations while preserving unrelated source changes.
-- [x] **CAP-05**: One write and receipt identity remains stable across materialization generations.
-- [x] **CAP-06**: Signer, route, publisher, and delivery completions for retired materialization generations are attributable and inert.
+- [x] **CAP-02**: The accepted write resolves and persists the author before revision, and every resulting event generation uses that frozen author while the edit itself carries none.
+- [x] **CAP-03**: A first-value semantic operation can apply when no prior replaceable event exists.
+- [x] **CAP-04**: A newer qualified source event reapplies still-live operations while preserving unrelated source changes.
+- [x] **CAP-05**: One write and receipt identity remains stable across revision generations.
+- [x] **CAP-06**: Signer, route, publisher, and delivery completions for retired revision generations are attributable and inert.
 - [x] **CAP-07**: At least two unrelated protocol capability crates prove the semantic-edit contract is not shaped around one NIP.
 - [x] **CAP-08**: Adding capability N+1 changes only its crate and selected assembly/artifact metadata, with zero universal-core behavior changes.
 - [x] **CAP-09**: Raw arbitrary and future Nostr event kinds remain usable without adding universal-core switches over event-kind meaning.
@@ -269,10 +269,10 @@ IDs, and they are **unchecked**: the sole external witness for all nine verdicts
 version control, and the pair was produced by the phase's own Plan 12 rather than replayed by the
 verifier. The identifiers `R1`-`R9` are void and must not be used again.
 
-- [ ] **NIP02-01** *(was R1)*: One universal synchronous publication door accepts every sealed payload form and returns the application `Write`; acceptance validates, reserves, materializes, applies the initial route, and durably commits before any asynchronous publication starts.
+- [ ] **NIP02-01** *(was R1)*: One universal synchronous publication door accepts every sealed payload form and returns the application `Write`; acceptance validates, reserves, applies, applies the initial route, and durably commits before any asynchronous publication starts.
 - [ ] **NIP02-02** *(was R2)*: Typed signer and relay scopes are borrowed, must-use, and inert until publish; both composition orders work, selections are frozen at publish, and an invalid or abandoned scope has no effect.
 - [ ] **NIP02-03** *(was R3)*: Settlement is awaitable through stable write and receipt identity with all-of and at-least-n predicates, returning the exact first satisfying revision and a terminal not-reached outcome carrying the complete receipt.
-- [ ] **NIP02-04** *(was R4)*: The NIP-02 crate owns pure values, parsing, queries, projections, edits, and materializer selection only; no universal owner branches on NIP-02 event-kind meaning.
+- [ ] **NIP02-04** *(was R4)*: The NIP-02 crate owns pure values, parsing, queries, projections, edits, and applier selection only; no universal owner branches on NIP-02 event-kind meaning.
 - [ ] **NIP02-05** *(was R5)*: Contact-list decoding accounts for every `p` row in source order, exposing typed pubkey, relay-hint, and petname fields for valid rows and exact typed row evidence for malformed, duplicate, or uninterpreted rows; empty lists are valid and an invalid event is refused at event level.
 - [ ] **NIP02-06** *(was R6)*: Contact-list, follows-of, and followers-of reads are ordinary query and snapshot values with newest-per-author replacement, exact canonical `p` matching, and deterministic repeated projection.
 - [ ] **NIP02-07** *(was R7)*: Follow and unfollow edits are lossless - preserving first-occurrence order, malformed rows, unknown rows, and foreign extensions - are idempotent, and rebase onto a newer source.
@@ -321,7 +321,7 @@ constraint.
 - [ ] **SESSION-02**: Adding a signer wakes already accepted unsigned writes for that exact event pubkey and no other author.
 - [ ] **SESSION-03**: Adding a second signer for an attached pubkey refuses without mutation; replacement is an explicit separate operation.
 - [ ] **SESSION-04**: Removing a signer preserves accepted writes and receipts, cancels its current signer operation, and leaves matching unsigned work awaiting a signer until an exact signer is re-added.
-- [ ] **SESSION-05**: Signer completions from replaced, removed, or retired materialization generations are attributable and cannot install signed state or start delivery.
+- [ ] **SESSION-05**: Signer completions from replaced, removed, or retired revision generations are attributable and cannot install signed state or start delivery.
 - [ ] **SESSION-06**: Runtime signer attachment is bounded and capacity overflow returns typed refusal without partial mutation.
 - [ ] **SESSION-07**: `fava-session` exclusively owns mutable signer attachment; publication loads current exact attachments and invokes providers outside session/publication locks and write-store transactions.
 
@@ -483,7 +483,7 @@ Line numbers are the requirement's heading line in that file.
 | WRITE-001 | 697 | WRITE-01, CAP-01 | WEAKENED | Spec acceptance: *"removing protocol-specific methods from the event builder does not prevent any of them from constructing valid events."* No planning requirement asserts the builder is kind-blind by construction; CAP-08 asserts the inverse direction (adding a capability). |
 | WRITE-002 | 711 | WRITE-01, NIP02-01, NIP02-02, NIP02-03 | WEAKENED | Spec fixes the facade shape - `fava.publish`, `fava.by(author)`, `fava.to(relays)?` - and states *"Applications do not construct `WriteIntent`, receive `AcceptedWrite`, or call a separate facade wait function."* That prohibition lived only in Phase 07.1's unregistered R1/R2; it is now NIP02-01/02, and unchecked. |
 | WRITE-003 | 737 | WRITE-02, CAP-02 | MAPPED | |
-| WRITE-004 | 749 | WRITE-03, WRITE-04 | WEAKENED, **restored 2026-08-23** | Spec `:761` *"The accepted local materialization MUST be visible through the write-store query source **before `Accepted` is returned**."* Old WRITE-04: *"Matching queries expose the accepted local materialization directly from the write store **before relay acknowledgement**."* "Before relay acknowledgement" is an arbitrarily later deadline that permits a window in which the application holds a `Write` while the event is invisible to its own queries. A strict boundary was replaced with a loose one. WRITE-04 now states the spec deadline. Separately, the crash-recovery acceptance is currently asserted against a hard-coded `ReceiptId::from_u64(1)` rather than the id the killed child returned, and every kill lands strictly post-commit, so no torn-commit boundary is exercised. |
+| WRITE-004 | 749 | WRITE-03, WRITE-04 | WEAKENED, **restored 2026-08-23** | Spec `:761` *"The accepted local revision MUST be visible through the write-store query source **before `Accepted` is returned**."* Old WRITE-04: *"Matching queries expose the accepted local revision directly from the write store **before relay acknowledgement**."* "Before relay acknowledgement" is an arbitrarily later deadline that permits a window in which the application holds a `Write` while the event is invisible to its own queries. A strict boundary was replaced with a loose one. WRITE-04 now states the spec deadline. Separately, the crash-recovery acceptance is currently asserted against a hard-coded `ReceiptId::from_u64(1)` rather than the id the killed child returned, and every kill lands strictly post-commit, so no torn-commit boundary is exercised. |
 | WRITE-005 | 772 | WRITE-04, LOCAL-03 | MAPPED | |
 | WRITE-006 | 782 | CAP-03, CAP-04, CAP-05, CAP-06 | MAPPED | |
 | WRITE-007 | 799 | SESSION-05, WRITE-02 | WEAKENED | Spec lists five conditions a signer completion must satisfy and requires unavailable, rejected, invalid-output, cancelled, timed-out, and stale results to remain distinct. SESSION-05 carries staleness only. |
@@ -907,7 +907,7 @@ Every one of the 131 has a row. Before 2026-08-23, 113 of them appeared nowhere 
 **Independent evidence coverage, from the 2026-08-23 evidence audit:** of 131 spec requirements,
 56 proven, 39 weak or non-distinguishing, 36 with no evidence at all. `OPS` is 0 of 11 proven, `ID`
 is 1 of 8, `PROFILE` is 1 of 8. Zero coverage workspace-wide for shutdown join, shared-work refcount,
-slow-peer backpressure, blocked-provider isolation, and provider panic outside a single materializer.
+slow-peer backpressure, blocked-provider isolation, and provider panic outside a single applier.
 And because continuous integration runs no Rust tests, **none of the 56 proven requirements is
 protected against regression by anything except a person remembering to run them.**
 

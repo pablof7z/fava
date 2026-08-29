@@ -68,7 +68,7 @@ The exact Rust mechanism may use generics, trait objects, generated assembly cod
 Fava distinguishes responsibilities even when one physical implementation serves several of them.
 
 - The **event cache** owns cached relay-observed event state.
-- The **write store** owns accepted local write obligations, current materializations, receipts, routes, and delivery facts.
+- The **write store** owns accepted local write obligations, current revisions, receipts, routes, and delivery facts.
 - A **fetch cache** stores opaque cached service payloads for owners such as NIP-05 or NIP-11.
 - The **query owner** merges query sources and owns observation continuity.
 - The **routing chain** owns the current desired relay plan.
@@ -167,38 +167,38 @@ An unsigned or signed event carries its author in the event's `pubkey` field. Si
 Before an event exists, a replaceable-event edit carries the coordinate it changes apart from the author, and the protocol-owned change itself. It carries no author; the author is resolved once when the write is accepted and is committed with it. The identifier distinguishes addressable coordinates and is absent for plain replaceable kinds:
 
 ```rust
-pub struct ReplaceableEventEdit {
+pub struct EventEdit {
     pub kind: Kind,
     pub identifier: Option<String>,
     pub change: Bytes,
 }
 
-pub struct MaterializationId(u64);
+pub struct RevisionId(u64);
 
-pub trait ReplaceableEventMaterializer: Send + Sync {
+pub trait EditApplier: Send + Sync {
     // The protocol-owned implementation validates and applies its durable edit
     // format to qualified signed or unsigned source state, or its defined empty
     // state.
 }
 ```
 
-Materialization creates an unsigned event whose `pubkey` is the accepted write's resolved author. Current-account convenience APIs resolve the account before the write enters the accepted write lifecycle.
+Applying an edit creates an unsigned event whose `pubkey` is the accepted write's resolved author. Current-account convenience APIs resolve the account before the write enters the accepted write lifecycle.
 
-`MaterializationId` names one exact immutable event generation under the stable
+`RevisionId` names one exact immutable event generation under the stable
 write and receipt identity. The write store allocates and persists it; signer,
 route, publisher, and delivery effects carry it back to the store, which accepts
-a completion only while that materialization remains current.
+a completion only while that revision remains current.
 
-`WriteId`, `ReceiptId`, and `MaterializationId` are nonzero opaque values.
+`WriteId`, `ReceiptId`, and `RevisionId` are nonzero opaque values.
 Public fallible reconstruction supports durable import, provider replacement,
 and receipt reattachment; constructing a value does not mint custody or grant
 mutation authority. The write store mints `WriteId` and `ReceiptId` only in the
-atomic acceptance commit. It creates the first `MaterializationId` internally
+atomic acceptance commit. It creates the first `RevisionId` internally
 and advances it only with checked arithmetic during an exact-current mutation.
 Numeric exhaustion is a typed store refusal and never wraps or partially
-commits. No caller supplies an initial materialization generation.
+commits. No caller supplies an initial revision generation.
 
-`ReplaceableEventMaterializer` is the neutral protocol-provider contract. It
+`EditApplier` is the neutral protocol-provider contract. It
 owns no store, signer, route, delivery, or receipt lifecycle. Application
 assembly selects implementations before write recovery so accepted edit formats
 can be interpreted without a universal event-kind switch.
@@ -206,7 +206,7 @@ can be interpreted without a universal event-kind switch.
 One active semantic write owns one durable ordered edit sequence for its exact
 author/kind/identifier coordinate. A distinct edit accepted while that write's
 current generation is unsigned appends to the sequence, replays the complete
-sequence in acceptance order, advances `MaterializationId`, and keeps the same
+sequence in acceptance order, advances `RevisionId`, and keeps the same
 `WriteId` and `ReceiptId`. The write store commits the sequence and successor
 atomically, retains bounded retired-generation evidence, and refuses stale
 completions by exact operation and generation identity. Recovery restores the
@@ -222,8 +222,8 @@ edit sequence with durable custody before accepting the new event.
 During assembly, publication synchronously reconciles every recovered semantic
 coordinate against its initial source snapshots before the facade is returned;
 spawning its runner is not the admission boundary. Runner state carries the
-exact `MaterializationId` of its loaded sequence and refreshes custody before
-initial materialization, signing, or routing whenever the receipt is newer.
+exact `RevisionId` of its loaded sequence and refreshes custody before
+the initial edit application, signing, or routing whenever the receipt is newer.
 One bounded generation-activation path couples that refreshed complete
 sequence with the exact receipt, router session, signing request, and route
 effects. It re-reads the receipt after custody loading and after router-session
@@ -243,7 +243,7 @@ an invoked generation may be cancelled or detached and any late completion is
 inert. Cancellation without a successor durably changes `Authorized` into an
 exact attributable `Retryable` fact instead of orphaning authorization. The
 same bounded successor slot covers a
-source-driven rematerialization, so recovery and live materialization cannot
+source-driven edit reapplication, so recovery and live edit application cannot
 retire custody whose signer invocation remains authorized. Restart rewrites an
 interrupted authorization without a successor as exact retryable evidence. If
 the same durable row already contains a successor, restart promotes that
@@ -255,7 +255,7 @@ signer attachment exists; the authorized predecessor is never invoked again.
 A live query's local result is the deterministic merge of several query sources, primarily:
 
 - the event cache, containing signed relay-observed events and relay evidence; and
-- the write store, containing current local materializations and publication evidence.
+- the write store, containing current local revisions and publication evidence.
 
 The write store supplies unpublished events directly to queries, while the event cache remains the source of relay-observed signed events.
 
@@ -563,7 +563,7 @@ builder boundary recomputes the id and reapplies generic bounds.
 ```rust
 pub enum WritePayload {
     Event(UnsignedEvent),
-    Edit(ReplaceableEventEdit),
+    Edit(EventEdit),
     Presigned(Event),
 }
 
@@ -788,8 +788,8 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 ### Source merge rules
 
 1. **Same event id:** one `EventRecord`; relay and publication evidence merge.
-2. **Pending local replacement over cached predecessor:** the local materialization participates in ordinary deterministic winner selection and is visible while current.
-3. **Local cancellation or rematerialization:** removal of the local source contribution causes the cached candidate to become visible naturally when it is the next winner.
+2. **Pending local replacement over cached predecessor:** the local revision participates in ordinary deterministic winner selection and is visible while current.
+3. **Local cancellation or edit reapplication:** removal of the local source contribution causes the cached candidate to become visible naturally when it is the next winner.
 4. **Relay echo:** the event cache adds relay evidence to the same event id while the write store retains receipt and delivery evidence.
 5. **Source failure:** one source's failure becomes scoped evidence; it does not erase the other source's valid state.
 
@@ -797,7 +797,7 @@ The implementation may use snapshots, deltas, or both. Every change is defined r
 
 ## Replaceable-event edits
 
-`ReplaceableEventEdit` is a durable change to a replaceable Nostr event. It
+`EventEdit` is a durable change to a replaceable Nostr event. It
 identifies the coordinate it changes apart from the author — the replaceable
 kind, and the identifier when that coordinate is addressable — and carries the
 protocol-owned edit value needed to apply that change again. It carries no
@@ -811,11 +811,11 @@ same write and receipt identity.
 Concrete protocol APIs produce these values:
 
 ```rust
-fava_nip02::follow(bob) -> ReplaceableEventEdit
-fava_nip02::unfollow(bob) -> ReplaceableEventEdit
+fava_nip02::follow(bob) -> EventEdit
+fava_nip02::unfollow(bob) -> EventEdit
 
-fava_bookmarks::add(target) -> ReplaceableEventEdit
-fava_bookmarks::remove(target) -> ReplaceableEventEdit
+fava_bookmarks::add(target) -> EventEdit
+fava_bookmarks::remove(target) -> EventEdit
 ```
 
 Each protocol crate owns the meaning and encoding of its edit values. An edit
@@ -823,7 +823,7 @@ carries no encoding version: a protocol crate that cannot read an edit refuses
 it rather than interpreting it under an older encoding.
 The application assembly supplies the protocol crates required to recover its
 accepted edits. The write store owns durable custody, generations, receipts,
-and current materializations.
+and current revisions.
 
 
 ---
@@ -839,7 +839,7 @@ EventCache
     cached signed events observed from relays
 
 WriteStore
-    accepted local edits/events, current materializations,
+    accepted local edits/events, current revisions,
     receipts, routes, attempts, and outcomes
 
 FetchCache
@@ -933,7 +933,7 @@ A later implementation may use Fjall, SQLite, LMDB, a remote event service, or a
 
 ## `fava-write-store`
 
-**Responsibility:** commit and recover accepted local publication obligations and expose their current event materializations as a query source.
+**Responsibility:** commit and recover accepted local publication obligations and expose their current event revisions as a query source.
 
 ### Contract
 
@@ -944,9 +944,9 @@ pub trait WriteStore: QuerySource + Send + Sync {
         request: WriteAcceptance,
     ) -> Result<AcceptedWrite, WriteStoreError>;
 
-    fn install_materialization(
+    fn install_revision(
         &self,
-        update: MaterializationUpdate,
+        update: RevisionUpdate,
     ) -> Result<CommittedWriteChange, WriteStoreError>;
 
     fn install_signature(
@@ -990,7 +990,7 @@ pub trait WriteStore: QuerySource + Send + Sync {
 - write and receipt identity allocation;
 - accepted unsigned-event, replaceable-event-edit, and pre-signed-event payloads;
 - resolved author for replaceable-event edits before an event exists;
-- current materialization and materialization generation;
+- current revision and revision generation;
 - exact unsigned or signed event bytes;
 - signature request and completion state;
 - live route-plan revisions;
@@ -1002,10 +1002,10 @@ pub trait WriteStore: QuerySource + Send + Sync {
 
 ### Query-source role
 
-The store exposes each current materialized event as `SourceEvent::Local` together with publication evidence.
+The store exposes each event's current revision as `SourceEvent::Local` together with publication evidence.
 
 ```text
-accept or rematerialize write
+accept write or reapply edit
         ↓
 WriteStore commits
         ↓
@@ -1018,14 +1018,14 @@ Unsigned events are visible through this source. They are not inserted into `Eve
 
 ### Acceptance boundary
 
-For a materialized write, one acceptance transaction commits at least:
+For a write whose edit has been applied, one acceptance transaction commits at least:
 
 - write identity;
 - receipt identity;
 - event or replaceable-event edit;
-- current materialization generation;
+- current revision generation;
 - current unsigned/signed event, when available; and
-- the query-source state needed to expose that materialization.
+- the query-source state needed to expose that revision.
 
 The resulting committed source change becomes observable before the application receives the accepted result.
 
@@ -1160,19 +1160,19 @@ Merged query:
     publication evidence: receipt 42
 ```
 
-### Example: replaceable-event rematerialization
+### Example: reapplying a replaceable-event edit
 
 ```text
 EventCache receives newer source base v3
         ↓
 publication owner applies the accepted replaceable-event edit again
         ↓
-WriteStore installs local materialization v4
+WriteStore installs local revision v4
         ↓
 query merge selects v4
 ```
 
-The event cache retains v3 as the best observed relay source. The write store retains v4 as the current local desired materialization.
+The event cache retains v3 as the best observed relay source. The write store retains v4 as the current local desired revision.
 
 ---
 
@@ -1214,7 +1214,7 @@ pub struct ReadRouteRequest {
 pub struct WriteRouteRequest {
     pub event: EventValue,
     pub receipt_id: ReceiptId,
-    pub generation: MaterializationId,
+    pub generation: RevisionId,
 }
 ```
 
@@ -1737,7 +1737,7 @@ pub trait Publisher: Send + Sync {
 pub struct PublishAttempt {
     pub write_id: WriteId,
     pub receipt_id: ReceiptId,
-    pub generation: MaterializationId,
+    pub generation: RevisionId,
     pub session: RelaySessionKey,
     pub event: Event,
     pub deadline: Deadline,
@@ -1754,7 +1754,7 @@ pub enum PublishOutcome {
 
 ### Attempt identity
 
-A publication outcome is valid only for the exact write, materialization generation, event id, relay session, and attempt that caused it.
+A publication outcome is valid only for the exact write, revision generation, event id, relay session, and attempt that caused it.
 
 ### Relationship to other owners
 
@@ -1977,14 +1977,14 @@ pub fn compose(...)
     -> Result<UnsignedEvent, ComposeError>;
 
 pub fn edit(...)
-    -> ReplaceableEventEdit;
+    -> EventEdit;
 ```
 
 Protocol crates use:
 
 - `fava-query` for local and remote state acquisition;
 - `fava-write::EventBuilder` for event construction;
-- `fava-write::ReplaceableEventEdit` for durable edits to replaceable events;
+- `fava-write::EventEdit` for durable edits to replaceable events;
 - the one publication lifecycle for acceptance, signing, routing, delivery, and receipts.
 
 A new protocol crate is selected by the application profile and contributes through these ordinary contracts. The facade and universal owners remain unchanged.
@@ -2007,7 +2007,7 @@ UTF-8 petname. `ContactListRowEvidence` preserves invalid pubkey or relay-hint
 rows and also accounts for duplicates and uninterpreted extra columns. Empty
 contact lists are valid. Follow and unfollow edits change only the
 targeted `p` relationship: unrelated valid rows, malformed rows, unknown tags,
-extensions, content, and first-occurrence order survive rematerialization.
+extensions, content, and first-occurrence order survive edit reapplication.
 
 The application composes the result through the universal facade:
 
@@ -2021,7 +2021,7 @@ let write = fava.by(alice).to([relay])?.publish(edit)?;
 let receipt = write.settled(fava::all_acknowledged()).await?;
 ```
 
-The crate constructs `ReplaceableEventEdit` values. It does not accept writes,
+The crate constructs `EventEdit` values. It does not accept writes,
 resolve application authors, construct route sessions, or own receipts.
 
 ### `fava-simple-groups`
@@ -2111,8 +2111,8 @@ wrapper exists.
 the neutral query owner's bounded author-input constructor and preserves its
 typed `QueryError`. `SavedGroupList::from_event` represents one event and decodes group and
 relay entries exactly once, retaining order, repetitions, and entry-local errors.
-Crate-root save, remove, and rename functions return `ReplaceableEventEdit`;
-`saved_group_list_materializer()` integrates their private codec with Fava's
+Crate-root save, remove, and rename functions return `EventEdit`;
+`saved_group_list_applier()` integrates their private codec with Fava's
 generic semantic-write lifecycle. Edits preserve opaque content, foreign tags,
 malformed entries, unused trailing values, and unrelated order.
 
@@ -2215,7 +2215,7 @@ close.rs            cancellation and teardown
 
 ## `fava-publication`
 
-**Responsibility:** own each accepted write from intent through materialization, signature, live routing, delivery, receipt settlement, cancellation, and recovery.
+**Responsibility:** own each accepted write from intent through edit application, signature, live routing, delivery, receipt settlement, cancellation, and recovery.
 
 ### Owned state
 
@@ -2224,7 +2224,7 @@ The durable state is in `WriteStore`. The publication owner owns the live orches
 - accepted write identity and receipt;
 - current exact event and, for semantic custody, a generation-qualified live
   copy of the durable ordered edit sequence;
-- current materialization generation;
+- current revision generation;
 - current unsigned or signed event;
 - current signer operation;
 - current route session and route revision;
@@ -2240,22 +2240,22 @@ The event already contains its pubkey. `WriteStore` commits the event and receip
 
 #### Replaceable-event edit
 
-The edit contains the coordinate it changes apart from the author and its durable protocol-owned change; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current materialization together. If materialization is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
+The edit contains the coordinate it changes apart from the author and its durable protocol-owned change; the accepted write carries the author resolved for it. Its protocol crate applies it to the current source event or defined empty state. The write store commits the edit, receipt, and current revision together. If applying the edit is temporarily unavailable, the accepted edit remains content-pending according to the selected publication profile.
 
 #### Pre-signed event
 
 The event is verified before acceptance, committed verbatim, exposed through the write-store query source, and routed without a signing step.
 
-### Materialization changes
+### Reapplying edits
 
 When a newer relevant source event arrives:
 
 1. the publication owner refreshes the complete durable edit sequence for the
-   exact current materialization generation;
+   exact current revision generation;
 2. the owning protocol crates apply every accepted edit again in order;
-3. a new unsigned event and materialization generation are produced;
+3. a new unsigned event and revision generation are produced;
 4. `WriteStore` proves the applied sequence equals durable custody and
-   atomically replaces the current local materialization;
+   atomically replaces the current local revision;
 5. query observations receive the write-source change;
 6. stale signing and route completions are rejected;
 7. a new route session is opened for the current event when event-dependent routing changed; and
@@ -2284,7 +2284,7 @@ For each due lane:
 
 ### Cancellation
 
-Cancellation is decided from current materialization, signature, and handoff facts. A successful cancellation commits the cancelled state and retracts the local write-source contribution. Cached relay events remain untouched.
+Cancellation is decided from the current revision, signature, and handoff facts. A successful cancellation commits the cancelled state and retracts the local write-source contribution. Cached relay events remain untouched.
 
 ### Recovery
 
@@ -2294,7 +2294,7 @@ At engine start, the owner loads open writes, reconstructs current edit or event
 
 ```text
 accept.rs           write acceptance paths
-edits.rs            replaceable-event edit application and rematerialization
+edits.rs            replaceable-event edit application and reapplication
 sign.rs             signer selection and exact completion validation
 route.rs            live RoutePlan binding and lane creation
 lanes.rs            current delivery-lane state
@@ -2404,7 +2404,7 @@ Accepted write state remains owned by the selected write store. An unsigned writ
 no exact signer attachment remains parked under the same write and receipt identity.
 Adding that public key wakes it; adding another key does not. Removal cancels or detaches
 the current provider operation and returns matching work to awaiting-signer state. A
-later exact re-add resumes the current materialization without recreating the engine or
+later exact re-add resumes the current revision without recreating the engine or
 accepted write.
 
 ---
@@ -2598,9 +2598,9 @@ let engine = Engine::builder()
     .transport(WebSocketTransport::new())
     .publisher(Nip01Publisher::new())
     .delivery_policy(StandardDeliveryPolicy::new())
-    .materializers([
-        Box::new(nip02.materializer()),
-        Box::new(bookmarks.materializer()),
+    .appliers([
+        Box::new(nip02.applier()),
+        Box::new(bookmarks.applier()),
     ])
     .build()?;
 ```
@@ -2917,7 +2917,7 @@ The event cache is not part of acceptance. A later relay echo enters the cache a
 ```text
 application calls follow(target=bob)
         ↓
-fava-nip02 creates ReplaceableEventEdit
+fava-nip02 creates EventEdit
         ↓
 application calls fava.by(alice).publish(edit)
         ↓
@@ -2925,11 +2925,11 @@ publication owner resolves and commits the author (alice) at acceptance
         ↓
 publication owner reads current relevant EventRecord
         ↓
-fava-nip02 materializes UnsignedEvent(kind:3, pubkey:alice)
+fava-nip02 applies the edit, producing UnsignedEvent(kind:3, pubkey:alice)
         ↓
-WriteStore commits operation, receipt, resolved author, and materialization
+WriteStore commits operation, receipt, resolved author, and revision
         ↓
-materialization appears through WriteStore QuerySource
+revision appears through WriteStore QuerySource
         ↓
 normal signing, routing, and delivery continue
         ↓
@@ -2945,11 +2945,11 @@ publication owner reloads current source record
         ↓
 publication owner refreshes exact-generation durable edit custody
         ↓
-protocol materializers apply the complete sequence in order
+protocol appliers apply the complete sequence in order
         ↓
 WriteStore verifies the applied sequence and installs successor generation
         ↓
-query result changes directly from old local materialization to new
+query result changes directly from old local revision to new
         ↓
 stale signer/route/attempt completions cannot affect current generation
 ```
@@ -2974,7 +2974,7 @@ router, signer, and delivery sessions for the write close
 receipt reports Cancelled
 ```
 
-The event cache requires no compensation because it never stored the local unpublished materialization.
+The event cache requires no compensation because it never stored the local unpublished revision.
 
 ---
 
@@ -3057,7 +3057,7 @@ if admission advanced the receipt generation in the meantime.
 The runner then opens routing against that exact event and re-reads the receipt
 before route or signer effects begin. A changed receipt closes the candidate
 router session and repeats custody refresh plus route opening for the new
-generation. Later materialization generations use the same activation path.
+generation. Later revision generations use the same activation path.
 
 A memory event cache starts empty after restart. A persistent event cache may serve cached relay events immediately. The durable standard write store still supplies open local writes through queries once the application reopens them.
 
@@ -3104,7 +3104,7 @@ Each resource is closed by its owner. The facade owns shutdown ordering.
 | Nostr event-state rules | `fava-state` | evaluator, cache implementations, conformance suites |
 | Retained relay-observed events | selected `EventCache` | query evaluator, routers using local event reader |
 | Accepted replaceable-event edit | selected `WriteStore` | publication owner, owning protocol crate |
-| Current local event materialization | selected `WriteStore` | query evaluator, signer, routing, publication |
+| Current local event revision | selected `WriteStore` | query evaluator, signer, routing, publication |
 | Receipt identity and durable receipt facts | selected `WriteStore` | publication owner, receipt observers, diagnostics |
 | Open live-query handle | `fava-observe` | facade/SDK handle |
 | Current merged query snapshot | `fava-observe` | application observer, diagnostics |
@@ -3351,7 +3351,7 @@ Scenario:
 2. The write-store source makes it visible to a matching live query.
 3. The event cache contains no unsigned/incomplete record.
 4. Cancel the write; the local event retracts and any cached predecessor naturally reappears.
-5. Rematerialize the write; the query swaps to the successor without cache compensation.
+5. Reapply the write's edit; the query swaps to the successor without cache compensation.
 6. Sign it; the same event record updates signature state.
 7. Receive a relay echo; cache/live ingress adds provenance to one merged event record.
 8. Restart with a persistent write store and empty event cache; the accepted local event still appears when the query is reopened.
@@ -3387,18 +3387,18 @@ For the standard durable write store, crash after each boundary:
 
 - before acceptance commit;
 - after acceptance commit before `Accepted` reaches the application;
-- after materialization install;
+- after revision install;
 - after signature install;
 - after route revision commit;
 - after transport handoff before attempt outcome commit;
 - during cancellation;
-- during rematerialization.
+- during edit reapplication.
 
 After restart:
 
 - accepted writes have the same receipt identity;
 - no unaccepted write exists;
-- current materialization is exact;
+- current revision is exact;
 - stale signer/router/publisher operations do not apply;
 - open lanes are reconstructed once;
 - query-source visibility matches write-store truth.
@@ -3680,7 +3680,7 @@ Add one protocol crate such as NIP-02:
 
 - typed edit;
 - edit application;
-- source-state change and rematerialization;
+- source-state change and edit reapplication;
 - stale signer/delivery result rejection;
 - same receipt across generations.
 
@@ -3722,7 +3722,7 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 | `fava-event-cache` | Contract for retaining and querying admitted signed relay events. |
 | `fava-event-cache-memory` | Bounded current-process event cache. |
 | `fava-event-cache-redb` | Persistent indexed event-cache implementation. |
-| `fava-write-store` | Contract for accepted writes, receipts, current materializations, and recovery. |
+| `fava-write-store` | Contract for accepted writes, receipts, current revisions, and recovery. |
 | `fava-write-store-redb` | Standard durable write-store implementation. |
 | `fava-write-store-memory` | Volatile reference/test write store. |
 | `fava-fetch-cache` | Opaque partitioned cache contract for service-owned fetched data. |
@@ -3761,7 +3761,7 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 |---|---|
 | `fava-ingest` | Admission of attributed, verified relay events. |
 | `fava-observe` | Live-query lifecycle, source merge, routing, relay demand, and bounded result delivery. |
-| `fava-publication` | Accepted-write lifecycle across materialization, signing, routing, delivery, and receipts. |
+| `fava-publication` | Accepted-write lifecycle across edit application, signing, routing, delivery, and receipts. |
 | `fava-session` | Bounded runtime signer attachment for exact account public keys. |
 | `fava-auth` | NIP-42 challenge and authentication lifecycle. |
 | `fava-diagnostics` | Bounded current diagnostic facts and explanations. |
@@ -3805,7 +3805,7 @@ Each conformance kit is versioned with its contract and can be used by external 
 
 ## One-paragraph north star
 
-Fava is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, and signer responsibilities. Live queries merge relay-event cache state, accepted-write materializations, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Protocol crates own event-kind meaning and compose ordinary query, event-building, and write values. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by an external implementation and an adversarial falsifier.
+Fava is a thin facade over independently owned query, publication, session, auth, cache, routing, subscription, transport, publisher, delivery, and signer responsibilities. Live queries merge relay-event cache state, accepted-write revisions, reactive dependencies, and admitted live events into one `EventRecord` view. Automatic routing is an ordered asynchronous chain of independent router crates whose immediately known destinations are useful before every route need settles. Accepted local writes remain authoritative in a dedicated write store and become visible through that store's query source rather than by inserting incomplete events into the event cache. Fetched NIP-05, NIP-11, and similar data use service-owned caches. Protocol crates own event-kind meaning and compose ordinary query, event-building, and write values. Applications select providers at build/construction time, defaults receive no privileged authority, and every claimed boundary is validated by an external implementation and an adversarial falsifier.
 
 ## Test for every architectural decision
 

@@ -10,22 +10,22 @@ use nostr::key::Keys;
 use super::failure_support::{assembly, edit, publish_edit};
 use super::faults::FaultingWriteStore;
 use super::support::relay_url;
-use super::{ControlledMaterializer, ERROR, PANIC, VALID, WRONG_TIMESTAMP};
+use super::{ControlledApplier, ERROR, PANIC, VALID, WRONG_TIMESTAMP};
 
 #[tokio::test(flavor = "current_thread")]
 async fn every_pre_custody_provider_failure_releases_active_reservation() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::new(MemoryEventCache::default()),
         store,
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
 
     for failure in [ERROR, PANIC, WRONG_TIMESTAMP] {
-        materializer.set(failure);
+        applier.set(failure);
         assert!(
             fava.by(keys.public_key())
                 .to([relay_url()])
@@ -33,7 +33,7 @@ async fn every_pre_custody_provider_failure_releases_active_reservation() {
                 .publish(edit(Kind::ContactList))
                 .is_err()
         );
-        materializer.set(VALID);
+        applier.set(VALID);
         let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
         assert!(
             fava.cancel_write(accepted.receipt_id())
@@ -46,14 +46,14 @@ async fn every_pre_custody_provider_failure_releases_active_reservation() {
 async fn release_failure_preserves_preparation_context_and_does_not_hide_capacity_state() {
     let keys = Keys::generate();
     let store = Arc::new(FaultingWriteStore::new());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        vec![Arc::clone(&materializer)],
+        vec![Arc::clone(&applier)],
     );
-    materializer.set(ERROR);
+    applier.set(ERROR);
     store.fail_reservation_release(true);
 
     let error = fava
@@ -68,7 +68,7 @@ async fn release_failure_preserves_preparation_context_and_does_not_hide_capacit
     assert!(message.contains("reservation release"));
 
     store.fail_reservation_release(false);
-    materializer.set(VALID);
+    applier.set(VALID);
     fava.by(keys.public_key())
         .publish(edit(Kind::ContactList))
         .expect("released capacity remains reusable");
@@ -78,12 +78,12 @@ async fn release_failure_preserves_preparation_context_and_does_not_hide_capacit
 async fn initial_automatic_route_commits_with_acceptance_or_returns_without_custody() {
     let keys = Keys::generate();
     let store = Arc::new(FaultingWriteStore::new());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
     let fava = assembly(
         &keys,
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        vec![materializer],
+        vec![applier],
     );
     store.fail_initial_route_acceptance(true);
 

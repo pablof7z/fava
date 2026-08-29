@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, RelayDeliveryOutcome, ReplaceableEventEdit,
+    EventBuilder, EventValue, Kind, RevisionId, RelayDeliveryOutcome, EventEdit,
     Timestamp,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
@@ -16,23 +16,23 @@ use nostr::key::Keys;
 
 use super::support::{intent, relay_url};
 
-fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::UnsignedEvent {
+fn revision(keys: &Keys, created_at: u64, content: &str) -> fava::UnsignedEvent {
     EventBuilder::new(keys.public_key(), Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
         .build()
-        .expect("materialization builds")
+        .expect("revision builds")
 }
 
-fn edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
+fn edit() -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
 }
 
 fn accepted(store: &MemoryWriteStore, keys: &Keys) -> fava_write_store::AcceptedWrite {
     store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             intent(keys.public_key(), Kind::ContactList),
-            materialization(keys, 1, "generation one"),
+            revision(keys, 1, "generation one"),
             None,
         )
         .expect("first generation accepts")
@@ -61,25 +61,25 @@ fn retired_completion_is_attributable_and_inert() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
     let accepted = accepted(&store, &keys);
-    let generation_one = MaterializationId::FIRST;
+    let generation_one = RevisionId::FIRST;
     let event_one = accepted.current.id();
-    let source = materialization(&keys, 2, "qualified source")
+    let source = revision(&keys, 2, "qualified source")
         .finalize(&keys)
         .expect("source signs");
     let generation_two = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
             generation_one,
             None,
             std::slice::from_ref(&edit()),
-            materialization(&keys, 3, "generation two"),
+            revision(&keys, 3, "generation two"),
             Some(&EventValue::Signed(source.clone())),
             None,
         )
         .expect("successor installs");
     let session = public_session();
-    let signed_one = materialization(&keys, 1, "generation one")
+    let signed_one = revision(&keys, 1, "generation one")
         .finalize(&keys)
         .expect("retired event signs");
 
@@ -158,7 +158,7 @@ fn retired_completion_is_attributable_and_inert() {
     let current = store.receipt(accepted.receipt_id).unwrap().unwrap();
     assert_eq!(current, generation_two);
     assert_eq!(
-        current.current.publication.retired_materializations,
+        current.current.publication.retired_revisions,
         vec![(generation_one, event_one, None, None)]
     );
 }
@@ -168,7 +168,7 @@ fn simultaneous_source_and_completion_converge_once() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let accepted = accepted(&store, &keys);
-    let source = materialization(&keys, 2, "qualified source")
+    let source = revision(&keys, 2, "qualified source")
         .finalize(&keys)
         .expect("source signs");
     let barrier = Arc::new(Barrier::new(3));
@@ -180,13 +180,13 @@ fn simultaneous_source_and_completion_converge_once() {
         let keys = keys.clone();
         std::thread::spawn(move || {
             barrier.wait();
-            store.install_materialization(
+            store.install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 None,
                 std::slice::from_ref(&edit()),
-                materialization(&keys, 3, "generation two"),
+                revision(&keys, 3, "generation two"),
                 Some(&EventValue::Signed(source.clone())),
                 None,
             )
@@ -200,7 +200,7 @@ fn simultaneous_source_and_completion_converge_once() {
             store.record_signer_refusal(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 accepted.current.id(),
                 "simultaneous refusal".to_owned(),
             )
@@ -212,11 +212,11 @@ fn simultaneous_source_and_completion_converge_once() {
 
     let current = store.receipt(accepted.receipt_id).unwrap().unwrap();
     assert_eq!(
-        current.current.publication.materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        current.current.publication.revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(
-        current.current.publication.retired_materializations.len(),
+        current.current.publication.retired_revisions.len(),
         1
     );
 }
@@ -228,10 +228,10 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
     let store = MemoryWriteStore::default();
     let a = accepted(&store, &keys_a);
     let b = accepted(&store, &keys_b);
-    let signed_a = materialization(&keys_a, 1, "generation one")
+    let signed_a = revision(&keys_a, 1, "generation one")
         .finalize(&keys_a)
         .expect("event signs");
-    let signed_b = materialization(&keys_b, 1, "generation one")
+    let signed_b = revision(&keys_b, 1, "generation one")
         .finalize(&keys_b)
         .expect("event signs");
 
@@ -241,7 +241,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             .install_signed(
                 a.write_id,
                 a.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 a.current.id(),
                 signed_a,
             )
@@ -251,7 +251,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
         .authorize_signing(
             b.write_id,
             b.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             b.current.id(),
         )
         .expect("B signing authorizes independently");
@@ -260,7 +260,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             .install_signed(
                 b.write_id,
                 b.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 b.current.id(),
                 signed_b,
             )
@@ -279,7 +279,7 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
     let first = Keys::generate();
     let second = Keys::generate();
     accepted(&store, &first);
-    let refusal = store.accept_materialized_edit(
+    let refusal = store.accept_applied_edit(
         match intent(second.public_key(), Kind::ContactList)
             .into_parts()
             .0
@@ -290,11 +290,11 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
             _ => unreachable!(),
         }
         .unwrap(),
-        materialization(&second, 1, "refused"),
+        revision(&second, 1, "refused"),
         None,
     );
     assert!(refusal.is_err());
-    assert_eq!(store.recover_materialized_edits().unwrap().len(), 1);
+    assert_eq!(store.recover_applied_edits().unwrap().len(), 1);
 }
 
 #[test]
@@ -304,7 +304,7 @@ fn active_reservation_excludes_unreserved_memory_admission() {
     let raw_keys = Keys::generate();
     let reservation = store
         .reserve_active(
-            &fava::ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap(),
+            &fava::EventEdit::new(Kind::ContactList, None, vec![1]).unwrap(),
             semantic_keys.public_key(),
         )
         .expect("semantic slot reserves");
@@ -323,10 +323,10 @@ fn active_reservation_excludes_unreserved_memory_admission() {
         "unreserved raw custody must not steal a held semantic slot"
     );
     let accepted = store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             reservation,
             intent(semantic_keys.public_key(), Kind::ContactList),
-            materialization(&semantic_keys, 1, "reserved"),
+            revision(&semantic_keys, 1, "reserved"),
             None,
             None,
         )
@@ -345,46 +345,46 @@ fn active_reservation_excludes_unreserved_memory_admission() {
 fn equal_timestamp_lower_id_is_memory_store_successor() {
     let keys = Keys::generate();
     let store = MemoryWriteStore::default();
-    let left = materialization(&keys, 10, "left").finalize(&keys).unwrap();
-    let right = materialization(&keys, 10, "right").finalize(&keys).unwrap();
+    let left = revision(&keys, 10, "left").finalize(&keys).unwrap();
+    let right = revision(&keys, 10, "right").finalize(&keys).unwrap();
     let (higher_id, lower_id) = if left.id > right.id {
         (left, right)
     } else {
         (right, left)
     };
     let accepted = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             intent(keys.public_key(), Kind::ContactList),
-            materialization(&keys, 11, "higher-id generation"),
+            revision(&keys, 11, "higher-id generation"),
             Some(&EventValue::Signed(higher_id.clone())),
         )
         .unwrap();
 
     let installed = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(higher_id.id),
             std::slice::from_ref(&edit()),
-            materialization(&keys, 12, "lower-id generation"),
+            revision(&keys, 12, "lower-id generation"),
             Some(&EventValue::Signed(lower_id.clone())),
             None,
         )
         .expect("equal-time lower event id is authoritative");
     assert_eq!(
-        installed.current.publication.materialization_source,
+        installed.current.publication.revision_source,
         Some(lower_id.id)
     );
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity"),
+                RevisionId::try_from(2).expect("nonzero revision identity"),
                 Some(lower_id.id),
                 std::slice::from_ref(&edit()),
-                materialization(&keys, 13, "higher-id retry"),
+                revision(&keys, 13, "higher-id retry"),
                 Some(&EventValue::Signed(higher_id.clone())),
                 None,
             )

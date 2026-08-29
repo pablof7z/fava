@@ -26,7 +26,7 @@ use crate::identity::{ObservationId, OperationGeneration, QueryBranchId};
 pub enum SourceKind {
     /// Signed relay-observed cache state.
     EventCache,
-    /// Current accepted local materializations.
+    /// Current accepted local revisions.
     WriteStore,
     /// Verified live occurrences admitted from one relay session, retained by
     /// no store.

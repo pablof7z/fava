@@ -3,7 +3,7 @@
 ## Defect
 
 `EventBuilder` distinguishes tag cardinality, serialized event bytes, and
-encoding failures, but shipped and test materializers independently erase
+encoding failures, but shipped and test appliers independently erase
 `EventBuildError::TooManyTags` into either byte overflow or invalid-event text.
 NIP-02 and bookmarks also duplicate the generic 2,000-tag construction bound
 before calling the neutral builder. Bookmarks additionally duplicated the
@@ -12,9 +12,9 @@ builder's serialized-event byte calculation at its source boundary.
 ## Required outcome
 
 `fava-write` owns one exhaustive, field-preserving
-`EventBuildError -> WriteIntentError` conversion. Every shipped materializer,
+`EventBuildError -> WriteIntentError` conversion. Every shipped applier,
 the internal fixtures, the Redb restart fixture, and the standalone external
-capability use it. A materializer that asks `EventBuilder` to build 2,001 tags
+capability use it. An applier that asks `EventBuilder` to build 2,001 tags
 returns exactly `WriteIntentError::TooManyTags { actual: 2001, maximum: 2000 }`
 at its own return boundary.
 
@@ -23,18 +23,18 @@ Do not change routing behavior or import bookmark/simple-group domain changes.
 
 ## Boundary
 
-This issue owns only the neutral refusal algebra and its callers. Materializers
-can return `WriteIntentError` during initial or post-custody materialization,
+This issue owns only the neutral refusal algebra and its callers. Appliers
+can return `WriteIntentError` during initial or post-custody edit application,
 but current `fava-publication` immediately erases that typed value to
 `PublicationError::Routing(error.to_string())`. The typed value does not
-survive the publication boundary. [Issue 0025](0025-publication-materializer-error-attribution.md)
+survive the publication boundary. [Issue 0025](0025-publication-applier-error-attribution.md)
 owns structured lifecycle attribution. This slice must not change
 `fava-publication`, receipt persistence, or routing behavior.
 
 ## Falsifier
 
 Deliberately map only `EventBuildError::TooManyTags` to
-`WriteIntentError::TooLarge`, then run the owner, three shipped materializer,
+`WriteIntentError::TooLarge`, then run the owner, three shipped applier,
 four internal fixture including Redb restart, and external capability tests.
 Every exact tag-refusal assertion must fail while byte and encoding conversion
 assertions remain green.
@@ -50,7 +50,7 @@ of these exact assertions failed with `TooLarge { bytes: 2001, maximum: 2000 }`
 instead of the required `TooManyTags { actual: 2001, maximum: 2000 }`:
 
 - `fava-write` owner conversion;
-- NIP-02, bookmarks, and simple-groups shipped materializers;
+- NIP-02, bookmarks, and simple-groups shipped appliers;
 - exact, controlled, semantic-write support, and Redb restart fixtures; and
 - the standalone external semantic-capability consumer.
 
@@ -68,7 +68,7 @@ verification.
 
 The owner assertions also freeze exact `Display` output for `TooManyTags`,
 `TooLarge`, and `Encoding`. The Redb restart fixture observes the exact typed
-value at the materializer boundary, then separately observes only string
+value at the applier boundary, then separately observes only string
 failure evidence on the retained receipt; it makes no typed-survival claim.
 
 ## Closure inventory

@@ -97,10 +97,10 @@ fn publication() -> PublicationEvidence {
     PublicationEvidence {
         receipt_id: ReceiptId::try_from(7).expect("nonzero receipt identity"),
         write_id: WriteId::try_from(11).expect("nonzero write identity"),
-        materialization_id: fava_write::MaterializationId::FIRST,
-        materialization_source: None,
-        materialization_failure: None,
-        retired_materializations: Vec::new(),
+        revision_id: fava_write::RevisionId::FIRST,
+        revision_source: None,
+        revision_failure: None,
+        retired_revisions: Vec::new(),
         signature: SignatureState::Signed,
         destinations: BTreeMap::new(),
     }

@@ -6,7 +6,7 @@ use fava_write::{EventValue, Receipt, ReceiptId, SignatureState, WriteRouting};
 use fava_write_store::destination_evidence_capacity;
 use tokio::sync::{mpsc, watch};
 
-use super::materialization::SemanticState;
+use super::edit_application::SemanticState;
 use super::{Publication, STORE_READ_RETRY_DELAY};
 
 impl Publication {
@@ -62,7 +62,7 @@ impl Publication {
         let mut signer_changes = self.session.subscribe();
         let (mut signing_cancel, signing_cancel_rx) = watch::channel(false);
         let mut signing_generation = self.start_signing(&receipt, signing_cancel_rx);
-        let mut materialization_id = receipt.current.publication.materialization_id;
+        let mut revision_id = receipt.current.publication.revision_id;
 
         let mut receipt_changes = self.store.receipt_changes();
         let (lane_finished, mut finished_lanes) = mpsc::channel(destination_evidence_capacity());
@@ -76,8 +76,8 @@ impl Publication {
             if current.is_terminal() {
                 break;
             }
-            let current_materialization = current.current.publication.materialization_id;
-            if current_materialization > materialization_id {
+            let current_revision = current.current.publication.revision_id;
+            if current_revision > revision_id {
                 signing_cancel.send_replace(true);
                 if let Some(open) = &mut routes {
                     open.close();
@@ -100,9 +100,9 @@ impl Publication {
                 let (next_cancel, next_cancel_rx) = watch::channel(false);
                 signing_cancel = next_cancel;
                 signing_generation = self.start_signing(&current, next_cancel_rx);
-                materialization_id = current.current.publication.materialization_id;
+                revision_id = current.current.publication.revision_id;
                 route_revision = current.route_revision;
-            } else if current_materialization == materialization_id {
+            } else if current_revision == revision_id {
                 route_revision = route_revision.max(current.route_revision);
             }
             if !matches!(current.current.event, EventValue::Unsigned(_)) {
@@ -124,7 +124,7 @@ impl Publication {
                     let Some(revalidated) = self.read_receipt(receipt_id, &mut cancel).await else {
                         break;
                     };
-                    if revalidated.current.publication.materialization_id != materialization_id
+                    if revalidated.current.publication.revision_id != revision_id
                         || revalidated.current.id() != current.current.id()
                     {
                         continue;
@@ -148,7 +148,7 @@ impl Publication {
                     let Some(revalidated) = self.read_receipt(receipt_id, &mut cancel).await else {
                         break;
                     };
-                    if revalidated.current.publication.materialization_id != materialization_id
+                    if revalidated.current.publication.revision_id != revision_id
                         || revalidated.current.id() != current.current.id()
                     {
                         continue;
@@ -168,7 +168,7 @@ impl Publication {
                                     break;
                                 };
                                 current = revalidated;
-                                self.rematerialize(&current, state);
+                                self.reapply(&current, state);
                             }
                         }
                         Some(Err(kind)) => {
@@ -190,9 +190,9 @@ impl Publication {
                             if latest.is_terminal() {
                                 break;
                             }
-                            let next_materialization =
-                                latest.current.publication.materialization_id;
-                            if next_materialization == materialization_id {
+                            let next_revision =
+                                latest.current.publication.revision_id;
+                            if next_revision == revision_id {
                                 route_revision = route_revision.max(latest.route_revision);
                                 if matches!(
                                     latest.current.publication.signature,
@@ -202,7 +202,7 @@ impl Publication {
                                     .signing_successor(
                                         latest.write_id,
                                         latest.receipt_id,
-                                        next_materialization,
+                                        next_revision,
                                         latest.current.id(),
                                     )
                                     .unwrap_or(false)
@@ -235,11 +235,11 @@ impl Publication {
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Some((session, write_id, completed_receipt, completed_materialization, completed_event, completed_route)) = finished_lanes.recv() => {
+                Some((session, write_id, completed_receipt, completed_revision, completed_event, completed_route)) = finished_lanes.recv() => {
                     let completed = (
                         write_id,
                         completed_receipt,
-                        completed_materialization,
+                        completed_revision,
                         completed_event,
                         completed_route,
                     );
@@ -307,7 +307,7 @@ impl Publication {
         }
     }
 
-    /// Attribute a materialization failure to the source observation that closed.
+    /// Attribute a revision failure to the source observation that closed.
     fn record_source_failure(&self, receipt: &Receipt, state: &SemanticState, kind: &SourceKind) {
         let source = state.sources.selected(state.selected_id);
         let label = match kind {
@@ -315,32 +315,32 @@ impl Publication {
             SourceKind::WriteStore => "write-store",
             SourceKind::LiveRelay { .. } => "live-relay",
         };
-        let _ = self.store.record_materialization_failure(
+        let _ = self.store.record_revision_failure(
             receipt.write_id,
             receipt.receipt_id,
-            receipt.current.publication.materialization_id,
-            receipt.current.publication.materialization_source,
+            receipt.current.publication.revision_id,
+            receipt.current.publication.revision_source,
             source.as_ref(),
             format!("{label} source observation closed"),
         );
     }
 
-    pub(super) fn rematerialize(&self, receipt: &Receipt, state: &mut SemanticState) {
-        let expected = receipt.current.publication.materialization_id;
-        let expected_source = receipt.current.publication.materialization_source;
+    pub(super) fn reapply(&self, receipt: &Receipt, state: &mut SemanticState) {
+        let expected = receipt.current.publication.revision_id;
+        let expected_source = receipt.current.publication.revision_source;
         let Ok((true, successor)) = self.semantic_successor(state, receipt.receipt_id) else {
             return;
         };
-        let (event, mut route) = match self.materialize_sequence_and_route(
+        let (event, mut route) = match self.apply_sequence_and_route(
             &state.edits,
             state.author,
             successor.as_ref(),
             Some(&receipt.current.event),
             &receipt.routing,
         ) {
-            Ok(materialized) => materialized,
+            Ok(applied) => applied,
             Err(error) => {
-                let _ = self.store.record_materialization_failure(
+                let _ = self.store.record_revision_failure(
                     receipt.write_id,
                     receipt.receipt_id,
                     expected,
@@ -361,7 +361,7 @@ impl Publication {
         } else {
             None
         };
-        let installed = self.store.install_materialization(
+        let installed = self.store.install_revision(
             receipt.write_id,
             receipt.receipt_id,
             expected,
@@ -374,7 +374,7 @@ impl Publication {
         let installed = match installed {
             Ok(installed) => installed,
             Err(error) => {
-                let _ = self.store.record_materialization_failure(
+                let _ = self.store.record_revision_failure(
                     receipt.write_id,
                     receipt.receipt_id,
                     expected,
@@ -387,7 +387,7 @@ impl Publication {
             }
         };
         state.selected_id = successor.as_ref().and_then(EventValue::id);
-        state.materialization_id = installed.current.publication.materialization_id;
+        state.revision_id = installed.current.publication.revision_id;
         if let Some(source) = &successor {
             state.source_floor = Some(source.created_at());
         }
@@ -408,7 +408,7 @@ impl Publication {
         match self.store.apply_route(
             receipt.write_id,
             receipt.receipt_id,
-            receipt.current.publication.materialization_id,
+            receipt.current.publication.revision_id,
             receipt.current.id(),
             &plan,
         ) {
@@ -419,7 +419,7 @@ impl Publication {
                     .apply_route(
                         receipt.write_id,
                         receipt.receipt_id,
-                        receipt.current.publication.materialization_id,
+                        receipt.current.publication.revision_id,
                         receipt.current.id(),
                         &shortfall,
                     )
@@ -444,8 +444,8 @@ impl Publication {
     fn committed_route_revision(&self, receipt: &Receipt) -> u64 {
         match self.store.receipt(receipt.receipt_id) {
             Ok(Some(current))
-                if current.current.publication.materialization_id
-                    == receipt.current.publication.materialization_id =>
+                if current.current.publication.revision_id
+                    == receipt.current.publication.revision_id =>
             {
                 current.route_revision
             }

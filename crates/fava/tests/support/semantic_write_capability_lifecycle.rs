@@ -2,8 +2,8 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventValue, Kind, MaterializationId, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Timestamp,
+    Event, EventValue, Kind, RevisionId, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
+    RelayDeliveryOutcome, EventEdit, EditApplier, Timestamp,
     UnsignedEvent, Write, WriteId, WriteIntentError, all_terminal,
 };
 use fava_event_cache::EventCache;
@@ -23,14 +23,14 @@ use super::capability_protocol::assert_source_removal;
 use super::capability_signer::GatedSigner;
 use super::support::{
     RecordingPublisher, UnavailableSigner, publication_builder, relay_event, relay_occurrence,
-    relay_session, relay_url, wait_for_materialization,
+    relay_session, relay_url, wait_for_revision,
 };
 
-type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
+type EditResult = Result<EventEdit, WriteIntentError>;
 
 pub async fn exercise<Add, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: Add,
     adjacent: Adjacent,
     target: (&str, &str),
@@ -38,13 +38,13 @@ pub async fn exercise<Add, Adjacent>(
     Add: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_source_removal(kind, Arc::clone(&materializer), &add, target).await;
-    prove_processed_stale_success(kind, materializer, add, adjacent).await;
+    prove_source_removal(kind, Arc::clone(&applier), &add, target).await;
+    prove_processed_stale_success(kind, applier, add, adjacent).await;
 }
 
 async fn prove_source_removal<Add>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: &Add,
     target: (&str, &str),
 ) where
@@ -76,7 +76,7 @@ async fn prove_source_removal<Add>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
+    .appliers([applier])
     .build()
     .unwrap();
     let accepted = publish_edit(&fava, add().unwrap(), actor);
@@ -90,7 +90,7 @@ async fn prove_source_removal<Add>(
             cause: RetractionCause::Evicted,
         }])
         .unwrap();
-    let removed = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
+    let removed = wait_for_revision(&fava, accepted.receipt_id(), 2).await;
     assert_source_removal(
         &accepted,
         &accepted_receipt,
@@ -106,7 +106,7 @@ async fn prove_source_removal<Add>(
 #[allow(clippy::too_many_lines)]
 async fn prove_processed_stale_success<Add, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
+    applier: Arc<dyn EditApplier>,
     add: Add,
     adjacent: Adjacent,
 ) where
@@ -115,8 +115,8 @@ async fn prove_processed_stale_success<Add, Adjacent>(
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
-    let initial = materializer
-        .materialize(
+    let initial = applier
+        .apply(
             &add().unwrap(),
             actor,
             None,
@@ -141,13 +141,13 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         Arc::new(signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
+    .appliers([Arc::clone(&applier)])
     .build()
     .unwrap();
     let accepted = publish_edit(&fava, add().unwrap(), actor);
     let (first, first_completion) = signatures.recv().await.unwrap();
-    let successor = materializer
-        .materialize(
+    let successor = applier
+        .apply(
             &adjacent().unwrap(),
             actor,
             Some(&EventValue::Signed(initial.clone())),
@@ -159,8 +159,8 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     admit_twice(&cache, &successor);
     let authorized = accepted.receipt().unwrap();
     assert_eq!(
-        authorized.current.publication.materialization_id,
-        MaterializationId::FIRST,
+        authorized.current.publication.revision_id,
+        RevisionId::FIRST,
         "source-driven successor superseded an authorized generation"
     );
     let first = first.finalize(&keys).unwrap();
@@ -169,16 +169,16 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     assert_completion(
         &completions.recv().await.unwrap(),
         &accepted,
-        MaterializationId::FIRST,
+        RevisionId::FIRST,
         first_id,
         true,
     );
-    let current = wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
+    let current = wait_for_revision(&fava, accepted.receipt_id(), 2).await;
     let (second, second_completion) = signatures.recv().await.unwrap();
     let after_predecessor = accepted.receipt().unwrap();
     assert_eq!(after_predecessor.current.id(), current.current.id());
     assert_eq!(
-        after_predecessor.current.publication.materialization_source,
+        after_predecessor.current.publication.revision_source,
         Some(successor.id)
     );
     assert!(matches!(
@@ -192,7 +192,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     assert_completion(
         &completions.recv().await.unwrap(),
         &accepted,
-        MaterializationId::try_from(2).expect("nonzero materialization identity"),
+        RevisionId::try_from(2).expect("nonzero revision identity"),
         second_id,
         true,
     );
@@ -207,8 +207,8 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     let attempts = publisher.attempts();
     assert_eq!(attempts.len(), 1);
     assert_eq!(
-        attempts[0].materialization_id,
-        MaterializationId::try_from(2).expect("nonzero materialization identity")
+        attempts[0].revision_id,
+        RevisionId::try_from(2).expect("nonzero revision identity")
     );
     assert_eq!(attempts[0].event.id, second_id);
     assert!(terminal.destinations().values().all(|outcome| {
@@ -219,7 +219,7 @@ async fn prove_processed_stale_success<Add, Adjacent>(
     }));
 }
 
-fn publish_edit(fava: &fava::Fava, edit: ReplaceableEventEdit, actor: PublicKey) -> Write {
+fn publish_edit(fava: &fava::Fava, edit: EventEdit, actor: PublicKey) -> Write {
     fava.by(actor)
         .to([relay_url()])
         .expect("route validates")
@@ -258,7 +258,7 @@ fn admit_twice(cache: &Arc<MemoryEventCache>, successor: &Event) {
 struct CompletionAck {
     write_id: WriteId,
     receipt_id: ReceiptId,
-    materialization_id: MaterializationId,
+    revision_id: RevisionId,
     event_id: EventId,
     installed: bool,
 }
@@ -266,13 +266,13 @@ struct CompletionAck {
 fn assert_completion(
     ack: &CompletionAck,
     accepted: &Write,
-    materialization_id: MaterializationId,
+    revision_id: RevisionId,
     event_id: EventId,
     installed: bool,
 ) {
     assert_eq!(ack.write_id, accepted.write_id());
     assert_eq!(ack.receipt_id, accepted.receipt_id());
-    assert_eq!(ack.materialization_id, materialization_id);
+    assert_eq!(ack.revision_id, revision_id);
     assert_eq!(ack.event_id, event_id);
     assert_eq!(ack.installed, installed);
 }
@@ -307,7 +307,7 @@ impl WriteStore for CompletionStore {
     }
     fn reserve_active(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
     ) -> Result<u64, WriteStoreError> {
         self.inner.reserve_active(edit, author)
@@ -321,15 +321,15 @@ impl WriteStore for CompletionStore {
     fn accept(&self, intent: WriteIntent) -> Result<AcceptedWrite, WriteStoreError> {
         self.inner.accept(intent)
     }
-    fn accept_materialized_edit(
+    fn accept_applied_edit(
         &self,
         intent: WriteIntent,
         event: UnsignedEvent,
         source: Option<&EventValue>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_materialized_edit(intent, event, source)
+        self.inner.accept_applied_edit(intent, event, source)
     }
-    fn accept_reserved_materialized_edit(
+    fn accept_reserved_applied_edit(
         &self,
         reservation: u64,
         intent: WriteIntent,
@@ -337,7 +337,7 @@ impl WriteStore for CompletionStore {
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_reserved_materialized_edit(
+        self.inner.accept_reserved_applied_edit(
             reservation,
             intent,
             event,
@@ -345,18 +345,18 @@ impl WriteStore for CompletionStore {
             initial_route,
         )
     }
-    fn install_materialization(
+    fn install_revision(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
-        applied_edits: &[ReplaceableEventEdit],
+        applied_edits: &[EventEdit],
         event: UnsignedEvent,
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.install_materialization(
+        self.inner.install_revision(
             write_id,
             receipt_id,
             expected,
@@ -367,16 +367,16 @@ impl WriteStore for CompletionStore {
             initial_route,
         )
     }
-    fn record_materialization_failure(
+    fn record_revision_failure(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
         expected_source: Option<EventId>,
         source: Option<&EventValue>,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.record_materialization_failure(
+        self.inner.record_revision_failure(
             write_id,
             receipt_id,
             expected,
@@ -386,51 +386,51 @@ impl WriteStore for CompletionStore {
         )
     }
     #[allow(clippy::type_complexity)]
-    fn recover_materialized_edits(
+    fn recover_applied_edits(
         &self,
     ) -> Result<
         Vec<(
             Receipt,
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,
     > {
-        self.inner.recover_materialized_edits()
+        self.inner.recover_applied_edits()
     }
     #[allow(clippy::type_complexity)]
-    fn materialized_edits(
+    fn applied_edits(
         &self,
         receipt_id: ReceiptId,
-        expected: MaterializationId,
+        expected: RevisionId,
     ) -> Result<
         Option<(
-            Vec<ReplaceableEventEdit>,
+            Vec<EventEdit>,
             PublicKey,
             Option<(EventId, Timestamp)>,
             Option<EventId>,
         )>,
         WriteStoreError,
     > {
-        self.inner.materialized_edits(receipt_id, expected)
+        self.inner.applied_edits(receipt_id, expected)
     }
     fn install_signed(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
         let result =
             self.inner
-                .install_signed(write_id, receipt_id, materialization_id, event_id, event);
+                .install_signed(write_id, receipt_id, revision_id, event_id, event);
         let _ = self.completions.send(CompletionAck {
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             installed: result.is_ok(),
         });
@@ -440,24 +440,24 @@ impl WriteStore for CompletionStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner
-            .authorize_signing(write_id, receipt_id, materialization_id, event_id)
+            .authorize_signing(write_id, receipt_id, revision_id, event_id)
     }
     fn record_signer_retryable(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner.record_signer_retryable(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             reason,
         )
@@ -466,39 +466,39 @@ impl WriteStore for CompletionStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
     ) -> Result<bool, WriteStoreError> {
         self.inner
-            .signing_successor(write_id, receipt_id, materialization_id, event_id)
+            .signing_successor(write_id, receipt_id, revision_id, event_id)
     }
     fn record_signer_refusal(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner
-            .record_signer_refusal(write_id, receipt_id, materialization_id, event_id, reason)
+            .record_signer_refusal(write_id, receipt_id, revision_id, event_id, reason)
     }
     fn apply_route(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         plan: &RoutePlan,
     ) -> Result<Receipt, WriteStoreError> {
         self.inner
-            .apply_route(write_id, receipt_id, materialization_id, event_id, plan)
+            .apply_route(write_id, receipt_id, revision_id, event_id, plan)
     }
     fn begin_attempt(
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -506,7 +506,7 @@ impl WriteStore for CompletionStore {
         self.inner.begin_attempt(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt,
@@ -516,7 +516,7 @@ impl WriteStore for CompletionStore {
         &self,
         write_id: WriteId,
         receipt_id: ReceiptId,
-        materialization_id: MaterializationId,
+        revision_id: RevisionId,
         event_id: EventId,
         session: &RelaySessionKey,
         attempt: u32,
@@ -525,7 +525,7 @@ impl WriteStore for CompletionStore {
         self.inner.record_outcome(
             write_id,
             receipt_id,
-            materialization_id,
+            revision_id,
             event_id,
             session,
             attempt,
@@ -553,7 +553,7 @@ impl WriteStore for CompletionStore {
     fn len(&self) -> Result<usize, WriteStoreError> {
         self.inner.len()
     }
-    fn accept_materialized(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_materialized(event)
+    fn accept_applied(&self, event: EventValue) -> Result<AcceptedWrite, WriteStoreError> {
+        self.inner.accept_applied(event)
     }
 }

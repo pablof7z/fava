@@ -1,15 +1,15 @@
 use crate::{
-    EventValue, Kind, PublicKey, ReplaceableEventEdit, Timestamp, UnsignedEvent, WriteIntentError,
+    EventValue, Kind, PublicKey, EventEdit, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use serde::{Deserialize, Serialize};
 use std::num::{NonZeroU64, TryFromIntError};
 
-/// Exact identity of one immutable event materialization generation.
+/// Exact identity of one immutable event revision generation.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct MaterializationId(NonZeroU64);
+pub struct RevisionId(NonZeroU64);
 
-impl MaterializationId {
-    /// First materialization generation of an accepted write.
+impl RevisionId {
+    /// First revision generation of an accepted write.
     pub const FIRST: Self = Self(NonZeroU64::MIN);
 
     /// Reconstruct a nonzero generation value.
@@ -40,7 +40,7 @@ impl MaterializationId {
     }
 }
 
-impl TryFrom<u64> for MaterializationId {
+impl TryFrom<u64> for RevisionId {
     type Error = TryFromIntError;
 
     fn try_from(value: u64) -> Result<Self, Self::Error> {
@@ -49,12 +49,12 @@ impl TryFrom<u64> for MaterializationId {
 }
 
 /// Pure protocol-provider contract for one replaceable-event change encoding.
-pub trait ReplaceableEventMaterializer: Send + Sync {
+pub trait EditApplier: Send + Sync {
     /// Exact replaceable or addressable event kind owned by this provider.
     fn kind(&self) -> Kind;
 
     /// Whether this provider owns the edit's coordinate and change encoding.
-    fn supports(&self, edit: &ReplaceableEventEdit) -> bool;
+    fn supports(&self, edit: &EventEdit) -> bool;
 
     /// Apply the edit to qualified signed or unsigned source, or protocol-defined empty state.
     ///
@@ -73,10 +73,10 @@ pub trait ReplaceableEventMaterializer: Send + Sync {
     /// # Errors
     ///
     /// Returns an existing typed write refusal when the opaque change or
-    /// resulting event cannot be materialized.
-    fn materialize(
+    /// resulting event cannot be applied.
+    fn apply(
         &self,
-        edit: &ReplaceableEventEdit,
+        edit: &EventEdit,
         author: PublicKey,
         source: Option<&EventValue>,
         created_at: Timestamp,

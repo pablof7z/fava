@@ -42,7 +42,7 @@ fn boundary_child() {
                 .authorize_signing(
                     accepted.write_id,
                     accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
+                    accepted.current.publication.revision_id,
                     accepted.current.id(),
                 )
                 .expect("child signing authorization commits");
@@ -53,7 +53,7 @@ fn boundary_child() {
                 .install_signed(
                     accepted.write_id,
                     accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
+                    accepted.current.publication.revision_id,
                     accepted.current.id(),
                     signed,
                 )
@@ -64,7 +64,7 @@ fn boundary_child() {
                 .begin_attempt(
                     accepted.write_id,
                     accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
+                    accepted.current.publication.revision_id,
                     accepted.current.id(),
                     &session(),
                     1,
@@ -76,7 +76,7 @@ fn boundary_child() {
                 .record_outcome(
                     accepted.write_id,
                     accepted.receipt_id,
-                    accepted.current.publication.materialization_id,
+                    accepted.current.publication.revision_id,
                     accepted.current.id(),
                     &session(),
                     1,

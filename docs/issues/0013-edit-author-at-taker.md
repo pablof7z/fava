@@ -1,7 +1,7 @@
 # Edit author at the taker, not the edit
 
 **Status:** accepted and completed
-**Implementation:** `495ca42` (`ReplaceableEventEdit` final shape), `8239393`
+**Implementation:** `495ca42` (`EventEdit` final shape), `8239393`
 (acceptance and recovery freeze the author), `ee38b6d` (application `by` scope)
 **Authority:** WRITE-002, WRITE-003, WRITE-006; `docs/spec/ARCHITECTURE.md`
 publication and write-store ownership
@@ -10,7 +10,7 @@ scope-handle nouns.
 
 ## Adopted result
 
-`ReplaceableEventEdit` carries the replaceable kind, optional identifier, and
+`EventEdit` carries the replaceable kind, optional identifier, and
 opaque protocol change. It carries no author, inverse, or format field. The
 application supplies the author to the publication taker:
 
@@ -21,7 +21,7 @@ let write = fava.by(alice).publish(edit)?;
 
 The facade constructs the neutral internal form with
 `WriteIntent::edit_as(edit, alice, routing)`. Acceptance persists Alice beside
-the edit. Every initial or successor materialization uses that persisted key;
+the edit. Every initial or successor revision uses that persisted key;
 recovery never consults the current session to derive another author.
 
 An unscoped edit call is a typed pre-custody refusal:
@@ -36,10 +36,10 @@ through `PublishAs::publish`.
 
 ## Ownership
 
-- `fava-nip02` owns the semantic change and pure materializer.
+- `fava-nip02` owns the semantic change and pure applier.
 - `fava` owns the inert application author scope.
 - `fava-publication` resolves the scope once and orders acceptance.
-- `WriteStore` owns the accepted author, edit, materialization generations, and
+- `WriteStore` owns the accepted author, edit, revision generations, and
   recovery facts.
 - The signer signs the exact event produced for the persisted author; it does
   not choose that author.
@@ -71,4 +71,4 @@ fail.
 The author is mutable application/session context before acceptance and a
 durable fact after acceptance. Putting it in both the edit and accepted write
 would create two authorities and a contradiction check. Keeping only the
-accepted owner makes account switches, rematerialization, and restart exact.
+accepted owner makes account switches, edit reapplication, and restart exact.

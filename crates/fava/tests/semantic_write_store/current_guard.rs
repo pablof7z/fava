@@ -10,16 +10,16 @@ fn memory_exact_current_guard_precedes_idempotence() {
         &store,
         edit(),
         keys.public_key(),
-        materialization(keys.public_key(), 11, "generation one"),
+        revision(keys.public_key(), 11, "generation one"),
         Some(&EventValue::Signed(base.clone())),
     );
     let successor_source = source(&keys, 20, "successor source");
-    let successor_event = materialization(keys.public_key(), 21, "generation two");
+    let successor_event = revision(keys.public_key(), 21, "generation two");
     let successor = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::FIRST,
+            RevisionId::FIRST,
             Some(base.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -31,10 +31,10 @@ fn memory_exact_current_guard_precedes_idempotence() {
 
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::FIRST,
+                RevisionId::FIRST,
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -46,10 +46,10 @@ fn memory_exact_current_guard_precedes_idempotence() {
     );
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity"),
+                RevisionId::try_from(2).expect("nonzero revision identity"),
                 Some(base.id),
                 std::slice::from_ref(&edit()),
                 successor_event.clone(),
@@ -69,10 +69,10 @@ fn memory_exact_current_guard_precedes_idempotence() {
     ));
 
     let replay = store
-        .install_materialization(
+        .install_revision(
             accepted.write_id,
             accepted.receipt_id,
-            MaterializationId::try_from(2).expect("nonzero materialization identity"),
+            RevisionId::try_from(2).expect("nonzero revision identity"),
             Some(successor_source.id),
             std::slice::from_ref(&edit()),
             successor_event.clone(),
@@ -90,10 +90,10 @@ fn memory_exact_current_guard_precedes_idempotence() {
     let mut changes = store.receipt_changes();
     assert!(
         store
-            .install_materialization(
+            .install_revision(
                 accepted.write_id,
                 accepted.receipt_id,
-                MaterializationId::try_from(2).expect("nonzero materialization identity"),
+                RevisionId::try_from(2).expect("nonzero revision identity"),
                 Some(successor_source.id),
                 std::slice::from_ref(&edit()),
                 successor_event,

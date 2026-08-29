@@ -10,10 +10,10 @@ use fava_simple_groups::{
     SimpleGroupEventBuilder, SimpleGroupLivekitParticipants, SimpleGroupMembers,
     SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles, SimpleGroupStateEventKind,
     edit_metadata, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
-    save_relay, save_simple_group, saved_group_list_materializer, saved_group_lists,
+    save_relay, save_simple_group, saved_group_list_applier, saved_group_lists,
 };
 use fava_write::{
-    EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
+    EventBuilder, EventValue, EventEdit, EditApplier, Tag,
     WriteIntentError, WriteRouting,
 };
 
@@ -120,13 +120,13 @@ fn all_decoder_signatures_and_return_types_are_public() {
 fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
     let _: Result<Query, fava_query::QueryError> = saved_group_lists([key()]);
     let group = SimpleGroup::new("photos", vec![relay()]).expect("valid group");
-    let _: Result<ReplaceableEventEdit, WriteIntentError> = save_simple_group(&group, None);
-    let _: Result<ReplaceableEventEdit, WriteIntentError> = remove_saved_simple_group(&group);
-    let _: Result<ReplaceableEventEdit, WriteIntentError> =
+    let _: Result<EventEdit, WriteIntentError> = save_simple_group(&group, None);
+    let _: Result<EventEdit, WriteIntentError> = remove_saved_simple_group(&group);
+    let _: Result<EventEdit, WriteIntentError> =
         rename_saved_simple_group(&group, "Photos");
-    let _: Result<ReplaceableEventEdit, WriteIntentError> = save_relay(relay());
-    let _: Result<ReplaceableEventEdit, WriteIntentError> = remove_saved_relay(relay());
-    let _: Arc<dyn ReplaceableEventMaterializer> = saved_group_list_materializer();
+    let _: Result<EventEdit, WriteIntentError> = save_relay(relay());
+    let _: Result<EventEdit, WriteIntentError> = remove_saved_relay(relay());
+    let _: Arc<dyn EditApplier> = saved_group_list_applier();
 }
 
 #[test]

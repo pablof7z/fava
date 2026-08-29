@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 
 use fava_state::EventCoordinate;
-use fava_write::{EventId, PublicKey, Receipt, ReceiptId, ReplaceableEventEdit, Timestamp};
+use fava_write::{EventId, PublicKey, Receipt, ReceiptId, EventEdit, Timestamp};
 use fava_write_store::WriteStoreError;
 use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
@@ -24,13 +24,13 @@ struct PersistedReceipt {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PersistedSemantic {
-    edits: Vec<ReplaceableEventEdit>,
+    edits: Vec<EventEdit>,
     author: PublicKey,
     current_source: Option<(EventId, Timestamp)>,
     failed_source: Option<EventId>,
     #[allow(clippy::type_complexity)] // Mirrors universal custody without a second persisted noun.
     successor: Option<(
-        Option<ReplaceableEventEdit>,
+        Option<EventEdit>,
         fava_write::UnsignedEvent,
         Option<(EventId, Timestamp)>,
         Option<fava_routing::RoutePlan>,
@@ -126,7 +126,7 @@ pub(super) fn load(
             ));
         }
         if let Some(semantic) = row.semantic {
-            if row.receipt.current.publication.materialization_source
+            if row.receipt.current.publication.revision_source
                 != semantic.current_source.map(|(id, _)| id)
             {
                 return Err(WriteStoreError::Refused(

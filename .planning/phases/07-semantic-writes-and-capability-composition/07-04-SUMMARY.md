@@ -9,11 +9,11 @@ requires:
     provides: atomic semantic custody, bounded retained evidence, and generation compare-and-set
   - phase: 07-semantic-writes-and-capability-composition
     plan: 03
-    provides: live semantic materialization, source observation, signing, routing, and publication
+    provides: live semantic revision, source observation, signing, routing, and publication
 provides:
-  - exact write, receipt, materialization, event, route, session, and attempt correlation across asynchronous publication work
+  - exact write, receipt, revision, event, route, session, and attempt correlation across asynchronous publication work
   - bounded receipt-scoped lane completion with exact stale-completion retirement
-  - bounded public materialization-failure attribution for error, panic, malformed output, timestamp, and evidence exhaustion
+  - bounded public revision-failure attribution for error, panic, malformed output, timestamp, and evidence exhaustion
   - one recovery retry for a failed source and atomic failure clearing on successful successor installation
 affects: [07-05, 07-06, write-store-redb, publication, publisher, recovery]
 actuals:
@@ -36,7 +36,7 @@ key-files:
     - crates/fava/tests/semantic_write_failures/support.rs
   modified:
     - crates/fava-publication/src/lib.rs
-    - crates/fava-publication/src/materialization.rs
+    - crates/fava-publication/src/revision.rs
     - crates/fava-publication/src/run.rs
     - crates/fava-publisher/src/lib.rs
     - crates/fava-write-store/src/lib.rs
@@ -47,9 +47,9 @@ key-decisions:
   - "The store mutation itself is the exact-current authority; publication performs no read-before-write admission or completion check."
   - "Existing write-store active capacity bounds semantic runners because every runner owns one admitted active receipt; recovery starts retained receipts before admitting any capacity not already reserved by the store."
   - "Lane completion carries an exact private tuple rather than introducing a public completion or configuration noun."
-  - "Materializer panic and controlled failure text use the existing PublicationEvidence.materialization_failure field; no failure wrapper was added."
+  - "Applier panic and controlled failure text use the existing PublicationEvidence.revision_failure field; no failure wrapper was added."
 patterns-established:
-  - "Exact completion CAS: WriteId plus ReceiptId plus MaterializationId plus EventId, extended by RelaySessionKey and exact attempt number for delivery."
+  - "Exact completion CAS: WriteId plus ReceiptId plus RevisionId plus EventId, extended by RelaySessionKey and exact attempt number for delivery."
   - "Failure retry: suppress the same failed source during one live run, retry a changed source immediately, and retry the persisted failed source once on recovery."
 requirements-completed: [CAP-02, CAP-03, CAP-05]
 coverage:
@@ -79,7 +79,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D3
-    description: "Materializer errors, panic, malformed or oversized output, timestamp overflow, evidence exhaustion, and recovery retry preserve the prior generation with bounded public evidence."
+    description: "Applier errors, panic, malformed or oversized output, timestamp overflow, evidence exhaustion, and recovery retry preserve the prior generation with bounded public evidence."
     requirement: CAP-05
     verification:
       - kind: integration
@@ -96,7 +96,7 @@ status: complete
 
 # Phase 07 Plan 04: Exact Semantic Completion and Failure Isolation Summary
 
-**Semantic publication now rejects every stale asynchronous completion at the store boundary and exposes hostile materialization failures as bounded, receipt-scoped public evidence.**
+**Semantic publication now rejects every stale asynchronous completion at the store boundary and exposes hostile revision failures as bounded, receipt-scoped public evidence.**
 
 ## Performance
 
@@ -108,25 +108,25 @@ status: complete
 
 ## Accomplishments
 
-- Propagated exact `WriteId`, `ReceiptId`, `MaterializationId`, event identity, route revision, relay session, and attempt number through signer, router, lane, publisher, and delivery completions.
+- Propagated exact `WriteId`, `ReceiptId`, `RevisionId`, event identity, route revision, relay session, and attempt number through signer, router, lane, publisher, and delivery completions.
 - Made memory and redb store mutation compare-and-set authoritative and idempotent, eliminating publication read-before-write windows while preserving existing explicit-write behavior and redb process-kill durability.
 - Replaced unbounded lane completion with a cancellation-aware bounded channel using `destination_evidence_capacity()`, and correlated each completion with the exact active lane tuple.
-- Contained materializer panics outside store locks, bounded all materializer-controlled text, validated returned event identity and bounds before installation, and exposed failure through ordinary `Receipt` and query `EventRecord` publication evidence.
+- Contained applier panics outside store locks, bounded all applier-controlled text, validated returned event identity and bounds before installation, and exposed failure through ordinary `Receipt` and query `EventRecord` publication evidence.
 - Suppressed same-source live failure spin, retried a changed source immediately, retried one persisted failed source once on recovery, and cleared failure evidence atomically with successful successor installation.
 - Kept every touched code file at or below 500 lines by extracting cohesive private delivery, lifecycle, and failure-support modules.
 
 ## RED and Causal Evidence
 
-- **Task 1 RED:** the four guarded interleaving tests failed to compile because store mutations did not accept exact write, materialization, event, and attempt identity. Commit: `6574cfb`.
-- **Task 2 RED:** the six guarded failure tests compiled; materializer panic escaped containment and recovery of the persisted failed source timed out. Commit: `9feb693`.
-- **Required deliberate break:** removing only the store-side `MaterializationId` comparison made `retired_completion_is_attributable_and_inert` accept a retired generation paired with the current event identity. Restoring the comparison returned the named test green.
+- **Task 1 RED:** the four guarded interleaving tests failed to compile because store mutations did not accept exact write, revision, event, and attempt identity. Commit: `6574cfb`.
+- **Task 2 RED:** the six guarded failure tests compiled; applier panic escaped containment and recovery of the persisted failed source timed out. Commit: `9feb693`.
+- **Required deliberate break:** removing only the store-side `RevisionId` comparison made `retired_completion_is_attributable_and_inert` accept a retired generation paired with the current event identity. Restoring the comparison returned the named test green.
 
 ## Task Commits
 
 1. **Task 1 RED: Specify exact generation completion guards** — `6574cfb` (test)
 2. **Task 2 RED: Specify semantic failure isolation** — `9feb693` (test)
 3. **Task 1 GREEN: Guard exact semantic completions** — `8cd702b` (feat)
-4. **Task 2 GREEN: Isolate semantic materialization failures** — `15dbf6d` (feat)
+4. **Task 2 GREEN: Isolate semantic revision failures** — `15dbf6d` (feat)
 5. **Strict lint refactor: Satisfy workspace lint gates** — `aa847ff` (refactor)
 6. **Line-gate cleanup: Keep touched store proof within limit** — `8c88b14` (style)
 7. **Exact lane identity: Correlate bounded lane completions** — `57ae157` (fix)
@@ -139,8 +139,8 @@ status: complete
 - `crates/fava-write-store-memory/src/lifecycle.rs` — atomic in-memory signing, routing, attempt, and outcome compare-and-set.
 - `crates/fava-write-store-redb/src/ops.rs` — matching redb contract behavior and notification-free idempotency; durable semantic persistence remains Plan 07-05.
 - `crates/fava-publication/src/run.rs` and `delivery.rs` — exact completion capture, bounded lanes, cancellation selection, and generation-scoped delivery.
-- `crates/fava-publication/src/materialization.rs` — panic isolation, bounded static panic evidence, and one recovery retry.
-- `crates/fava-publisher/src/lib.rs` — approved `MaterializationId` carried by `PublishAttempt`; NIP-01 transport remains independent.
+- `crates/fava-publication/src/revision.rs` — panic isolation, bounded static panic evidence, and one recovery retry.
+- `crates/fava-publisher/src/lib.rs` — approved `RevisionId` carried by `PublishAttempt`; NIP-01 transport remains independent.
 - `crates/fava/tests/semantic_write_publication/interleavings.rs` — four required stale, simultaneous, cancellation, and bound proofs.
 - `crates/fava/tests/semantic_write_failures.rs` — six public error, panic, malformed, oversized, overflow, isolation, and retry proofs.
 - Existing store, bound, process-kill, publisher, NIP-01, Cargo, and Bazel call sites — exact contract propagation without compatibility overloads.
@@ -159,21 +159,21 @@ status: complete
 **1. [Rule 3 - Blocking contract propagation] Extended exact identity through both store providers and publisher contract**
 - **Found during:** Task 1 RED
 - **Issue:** Publication could not make stale completion safety authoritative while `WriteStore` mutations accepted only receipt-local inputs and `PublishAttempt` omitted generation identity.
-- **Fix:** Expanded the existing methods across contract, memory, redb, callers, fixtures, and tests; added the already-approved `MaterializationId` field to `PublishAttempt`. No new public nominal type or compatibility path was added, and redb semantic persistence remains Plan 07-05.
+- **Fix:** Expanded the existing methods across contract, memory, redb, callers, fixtures, and tests; added the already-approved `RevisionId` field to `PublishAttempt`. No new public nominal type or compatibility path was added, and redb semantic persistence remains Plan 07-05.
 - **Files modified:** `crates/fava-write-store*`, `crates/fava-publisher/src/lib.rs`, publication and affected tests
 - **Commits:** `8cd702b`, `aa847ff`
 
 **2. [Rule 1 - Atomicity bug] Removed publication pre-read authority and made provider duplicates notification-free**
 - **Found during:** Task 1 implementation
 - **Issue:** Checking current receipt or capacity before mutation could race the authoritative store commit; redb also committed and notified on unchanged duplicate results.
-- **Fix:** Sent captured identity directly to store compare-and-set, retained materialization-before-accept with atomic custody refusal, and skipped redb durable commit/notification when the receipt is unchanged.
+- **Fix:** Sent captured identity directly to store compare-and-set, retained revision-before-accept with atomic custody refusal, and skipped redb durable commit/notification when the receipt is unchanged.
 - **Files modified:** `crates/fava-publication/src/lib.rs`, `crates/fava-publication/src/run.rs`, both store providers, capacity tests
 - **Commit:** `8cd702b`
 
 **3. [Rule 2 - Missing completion correlation] Correlated the bounded lane cleanup signal**
 - **Found during:** Final exact-identity audit
 - **Issue:** The bounded lane signal initially carried only `RelaySessionKey`, which was insufficient to prove that delayed cleanup belonged to the active generation and route.
-- **Fix:** Carried write, receipt, materialization, event, route, and session identity in a private tuple and removed an active lane only when the tuple matches. No channel noun or public configuration was introduced.
+- **Fix:** Carried write, receipt, revision, event, route, and session identity in a private tuple and removed an active lane only when the tuple matches. No channel noun or public configuration was introduced.
 - **Files modified:** `crates/fava-publication/src/run.rs`, `crates/fava-publication/src/delivery.rs`
 - **Commit:** `57ae157`
 

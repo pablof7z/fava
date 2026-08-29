@@ -14,17 +14,17 @@ phase_base: 6fe21f745297b4af414e52269c3ae1c813cbf28f
 M7 passes its complete deterministic validation set. Raw `EventBuilder` input
 preserves caller-owned `created_at`, kind, tags, content, author, and resulting
 identity. Replaceable semantic edits separately use publication-engine-owned
-monotonic materialization time when reapplied to changing qualified source
+monotonic revision time when reapplied to changing qualified source
 state.
 
 ## Sensitivity experiments
 
 | Experiment | Broken behavior | Restoration | Result |
 |---|---|---|---|
-| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | Removing the sole current `MaterializationId` predicate left the first-value tracer green but made the exact retired-completion test accept generation-one mutation against the successor event identity. | `fava-write-store/src/lib.rs` returned byte-identically; current publication target 19/19. | PASS |
+| `DELIBERATE_BREAK_M7_STALE_COMPLETION` | Removing the sole current `RevisionId` predicate left the first-value tracer green but made the exact retired-completion test accept generation-one mutation against the successor event identity. | `fava-write-store/src/lib.rs` returned byte-identically; current publication target 19/19. | PASS |
 | `DELIBERATE_BREAK_M7_PROTOCOL_DEPENDENCY` | Adding one `fava_signer` import to NIP-02 failed `cargo check -p fava-nip02 --lib` with E0432, `no external crate fava_signer`. | `fava-nip02/src/lib.rs` returned to SHA-256 `deefde7b77a75f8981c855c6dc46cae008dfeff79d5d527de56bbbda6156c0f2`; NIP-02 7+1. | PASS |
 | `DELIBERATE_BREAK_M7_EVENT_BUILDER_BOUND` | Raising only `MAX_TAGS` from 2000 to 2001 made the exact hostile test accept 2001 raw tags instead of the typed refusal. | `fava-write/src/builder.rs` returned to SHA-256 `abaa77068de484d6b6b0cca7677414aaa263a35a0280af8288fb24533b0409e9`; raw builder target 2/2. | PASS |
-| `DELIBERATE_BREAK_M7_ROUTE_READ_REVISION` | Disabling durable read reconciliation while dropping receipt notifications stranded generation two at the exact rematerialization route boundary. | Causal RED `2b53b62`; GREEN `f97ecd8`; timing-free barrier test passed 95 repeated runs across executor and final verification. | PASS |
+| `DELIBERATE_BREAK_M7_ROUTE_READ_REVISION` | Disabling durable read reconciliation while dropping receipt notifications stranded generation two at the exact reapplication route boundary. | Causal RED `2b53b62`; GREEN `f97ecd8`; timing-free barrier test passed 95 repeated runs across executor and final verification. | PASS |
 
 No broken source state was committed. All three restored source files have
 zero diff from their pre-experiment bytes. Full transcripts and counterexamples are
@@ -72,8 +72,8 @@ module-qualified fixtures refuse.
 | Feature scenario | Exact executable destination |
 |---|---|
 | first value | `fava/semantic_write_contract#first_value_receives_no_prior_and_exact_timestamp` |
-| source-v2 rematerialization | `fava/semantic_write_publication#newer_source_rematerializes_once_and_preserves_unrelated_fields` |
-| stable receipt/new materialization | `fava/semantic_write_store#memory_generation_swap_is_compare_and_set` |
+| source-v2 reapplication | `fava/semantic_write_publication#newer_source_reapplies_once_and_preserves_unrelated_fields` |
+| stable receipt/new revision | `fava/semantic_write_store#memory_generation_swap_is_compare_and_set` |
 | retired completion | `fava/semantic_write_publication#interleavings::retired_completion_is_attributable_and_inert` |
 | opposing operations | `fava/semantic_write_capabilities#nip02_passes_public_semantic_write_corpus` |
 | external N+1 | `external-semantic-capability-proof/public_capability#external_capability_composes_through_public_fava` |
@@ -90,7 +90,7 @@ one 64-character seed hash, bounded JSON shape, no raw caller seed, and at most
 | Scenario | Evidence directory | Files | Bytes |
 |---|---|---:|---:|
 | `replaceable-edit-first-value` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-first-value-8b6b97e0f0e78651` | 7 | 3,569 |
-| `replaceable-edit-rematerialization` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-rematerialization-3f7d41f70a7b0894` | 7 | 5,570 |
+| `replaceable-edit-reapplication` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-reapplication-3f7d41f70a7b0894` | 7 | 5,570 |
 | `replaceable-edit-opposing-operations` | `/tmp/m7-f97ecd8.35TrgP/replaceable-edit-opposing-operations-f290e2f2217ae709` | 7 | 9,430 |
 | `protocol-crate-n-plus-one` | `/tmp/m7-f97ecd8.35TrgP/protocol-crate-n-plus-one-66d296b8a85b5516` | 7 | 4,113 |
 
@@ -116,8 +116,8 @@ bookmark/unbookmark are distinct opposing edits.
 Rustdoc JSON produced these exact consumer-visible allowlists:
 
 ```text
-fava_nip02:module,follow:function,materializer:function,unfollow:function
-bookmark_coordinate:function,bookmark_event:function,fava_bookmarks:module,materializer:function,unbookmark_coordinate:function,unbookmark_event:function
+fava_nip02:module,follow:function,applier:function,unfollow:function
+bookmark_coordinate:function,bookmark_event:function,fava_bookmarks:module,applier:function,unbookmark_coordinate:function,unbookmark_event:function
 EventBuilder methods: build,content,created_at,from_parts,new,tag,tags
 ```
 
@@ -156,7 +156,7 @@ outside the repository. Restored deliberate-break files have zero diff.
 | CAP-01 | pure protocol edits/opposing operations; two-row shared corpus; opposing-operation CLI | PASS |
 | CAP-02 | author resolved and persisted by accepted custody; authorless edit; exact public event pubkey across generations | PASS |
 | CAP-03 | no-source first value; write-store visibility; first-value CLI | PASS |
-| CAP-04 | qualified source successor; unrelated state preserved; equal-time lower-ID winner; rematerialization CLI | PASS |
+| CAP-04 | qualified source successor; unrelated state preserved; equal-time lower-ID winner; reapplication CLI | PASS |
 | CAP-05 | stable write/receipt; redb recovery and 3 semantic SIGKILL cases | PASS |
 | CAP-06 | exact stale signer/route/delivery refusal; durable custody reconciles dropped notifications and transient reads | PASS |
 | CAP-07 | NIP-02 and bookmarks share one neutral public-Fava corpus | PASS |

@@ -230,7 +230,7 @@ The strongest scenarios distinguish two nearby cases that a broken implementatio
 - event returned versus EOSE received;
 - pre-handoff cancellation versus post-handoff uncertainty;
 - app relay always included versus fallback used only when coverage is insufficient;
-- cached event versus unpublished local materialization;
+- cached event versus unpublished local revision;
 - current request completion versus stale previous-generation completion.
 - two independent lifecycle owners minting their first operation generation or
   plan revision without aliasing;
@@ -289,7 +289,7 @@ Use conformance tests for the baseline cache contract. Each implementation adds 
 
 ### `fava-write-store`
 
-Use crash/reopen and state-machine tests for acceptance, receipt identity, current materialization, cancellation, rematerialization, lanes, outcomes, and bounded terminal retention.
+Use crash/reopen and state-machine tests for acceptance, receipt identity, current revision, cancellation, re-applying edits, lanes, outcomes, and bounded terminal retention.
 
 ### `fava-routing`
 

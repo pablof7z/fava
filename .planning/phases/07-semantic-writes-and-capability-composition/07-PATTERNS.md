@@ -16,13 +16,13 @@
 
 The architecture slice already approved exactly these new public nouns:
 
-- `ReplaceableEventEdit`
-- `ReplaceableEventMaterializer`
-- `MaterializationId`
+- `EventEdit`
+- `EditApplier`
+- `RevisionId`
 
 Use those names verbatim. Internal module names below are proposed cohesion boundaries, not additional vocabulary. Do not introduce another public generation token, edit wrapper, registry noun, signer-operation noun, route-operation noun, or durable-record noun without a separate vocabulary approval.
 
-The durable/live ownership split is fixed: `WriteStore` owns accepted edit custody, stable `WriteId`/`ReceiptId`, current `MaterializationId`, current event, receipt, query-source contribution, and every final currentness check. `fava-publication` owns live tasks and requests correlated effects. Protocol crates own event-kind meaning and edit application only.
+The durable/live ownership split is fixed: `WriteStore` owns accepted edit custody, stable `WriteId`/`ReceiptId`, current `RevisionId`, current event, receipt, query-source contribution, and every final currentness check. `fava-publication` owns live tasks and requests correlated effects. Protocol crates own event-kind meaning and edit application only.
 
 ## File Classification
 
@@ -30,18 +30,18 @@ The durable/live ownership split is fixed: `WriteStore` owns accepted edit custo
 |---|---|---|---|---|
 | `crates/fava-write/src/lib.rs` | model facade | transform | same file, especially IDs, `WritePayload`, receipt values | exact role |
 | `crates/fava-write/src/replaceable_event_edit.rs` (new) | model | transform / durable bytes | `crates/fava-write/src/builder.rs` plus `crates/fava-nip65/src/lib.rs` | partial; no semantic-edit value exists |
-| `crates/fava-write/src/materialization.rs` (new) | model + provider contract | request-response / transform | `crates/fava-signer/src/lib.rs` plus `WriteId` in `fava-write` | partial; no materializer/generation contract exists |
+| `crates/fava-write/src/revision.rs` (new) | model + provider contract | request-response / transform | `crates/fava-signer/src/lib.rs` plus `WriteId` in `fava-write` | partial; no applier/generation contract exists |
 | `crates/fava-write/BUILD.bazel` | config/test target | batch | `crates/fava-nip65/BUILD.bazel` | role-match |
 | `crates/fava-write-store/src/lib.rs` | provider contract | CRUD + event-driven | same `WriteStore` trait | exact role |
 | `crates/fava-write-store-memory/src/lib.rs`, `src/model.rs`, `src/semantic.rs` (new), `BUILD.bazel` | store/model/test | CRUD + event-driven + transform | current memory acceptance/currentness implementation and `crates/fava/tests/write_bounds.rs` | exact role; semantic state is new |
 | `crates/fava-write-store-redb/src/lib.rs`, `src/ops.rs`, `src/schema.rs` (new) | durable store/model | CRUD + file-I/O | current redb immediate transactions, load, and update helper | exact role; versioned semantic schema is new |
 | `crates/fava-write-store-redb/tests/process_kill.rs` | durability test | file-I/O + process-driven | same M5 SIGKILL harness | exact |
-| `crates/fava-publication/src/lib.rs`, `src/run.rs`, `src/materialization.rs` (new) | service/orchestrator | event-driven + streaming | current receipt runner, signer/route/lane orchestration | exact role; source-driven rematerialization is new |
+| `crates/fava-publication/src/lib.rs`, `src/run.rs`, `src/revision.rs` (new) | service/orchestrator | event-driven + streaming | current receipt runner, signer/route/lane orchestration | exact role; source-driven reapplication is new |
 | `crates/fava-signer/src/lib.rs`, `crates/fava-routing/src/lib.rs`, `crates/fava-publisher/src/lib.rs` | provider contracts/models | request-response + streaming | current exact event/session/attempt values | exact role |
 | `crates/fava-query/src/lib.rs` (conditional) | query contract | streaming | current `FilterSelection` and `QuerySource` snapshot stream | exact role; modify only if bounded exact-coordinate observation cannot be composed privately |
 | `crates/fava/src/lib.rs`, `crates/fava/tests/semantic_writes.rs` (new), `crates/fava/Cargo.toml`, `crates/fava/BUILD.bazel` | facade/builder/integration test/config | request-response + event-driven | `FavaBuilder` and `tests/explicit_publication.rs` | exact role / test role-match |
-| `crates/fava-nip02/{src/lib.rs,Cargo.toml,BUILD.bazel}` (new) | protocol model/materializer/config | transform | `crates/fava-nip65/*` | role-match |
-| `crates/fava-bookmarks/{src/lib.rs,Cargo.toml,BUILD.bazel}` (new) | protocol model/materializer/config | transform | `crates/fava-nip65/*` | role-match |
+| `crates/fava-nip02/{src/lib.rs,Cargo.toml,BUILD.bazel}` (new) | protocol model/applier/config | transform | `crates/fava-nip65/*` | role-match |
+| `crates/fava-bookmarks/{src/lib.rs,Cargo.toml,BUILD.bazel}` (new) | protocol model/applier/config | transform | `crates/fava-nip65/*` | role-match |
 | `Cargo.toml`, `Cargo.lock` | workspace config/generated lock | batch | current `fava-nip65` membership/dependency entries | exact role |
 | `apps/canary/src/semantic_writes.rs` (new), `src/lib.rs`, `src/main.rs`, `scenarios.json`, `Cargo.toml`, `Cargo.lock` | canary/selected assembly/config | event-driven + process/file evidence | `automatic_publication.rs`, current registry/dispatcher | role-match |
 | `falsifiers/external-protocol-capability/{Cargo.toml,src/lib.rs,Cargo.lock}` (new) | external provider/test workspace | request-response + transform | `falsifiers/external-null-cache/*` | role-match |
@@ -52,7 +52,7 @@ Generated `Cargo.lock` files follow manifest changes; do not hand-edit their pac
 
 ## Pattern Assignments
 
-### `fava-write`: values, opaque edit, materializer contract, and generation identity
+### `fava-write`: values, opaque edit, applier contract, and generation identity
 
 **Analogs:** `crates/fava-write/src/lib.rs`, `crates/fava-write/src/builder.rs`, `crates/fava-signer/src/lib.rs`
 
@@ -67,7 +67,7 @@ mod session_set;
 pub use builder::{EventBuildError, EventBuilder};
 ```
 
-Keep the already 467-line `lib.rs` as the public facade. Put the new cohesive value and provider code in `replaceable_event_edit.rs` and `materialization.rs`, then re-export the three approved symbols from `lib.rs`.
+Keep the already 467-line `lib.rs` as the public facade. Put the new cohesive value and provider code in `replaceable_event_edit.rs` and `revision.rs`, then re-export the three approved symbols from `lib.rs`.
 
 **Provider-independent identity pattern** (`crates/fava-write/src/lib.rs:22-38`):
 
@@ -88,7 +88,7 @@ impl WriteId {
 }
 ```
 
-`MaterializationId` should copy this opaque, serializable, ordered newtype pattern. The store allocates/persists it; publication and providers only carry it.
+`RevisionId` should copy this opaque, serializable, ordered newtype pattern. The store allocates/persists it; publication and providers only carry it.
 
 **Third payload form seam** (`crates/fava-write/src/lib.rs:44-67`):
 
@@ -106,7 +106,7 @@ pub struct WriteIntent {
 }
 ```
 
-Add `ReplaceableEventEdit` as the third authoritative accepted payload. The edit must contain its actor before materialization, exact coordinate, protocol-owned format/version discriminator, and bounded opaque bytes. Do not add follow/bookmark variants here.
+Add `EventEdit` as the third authoritative accepted payload. The edit must contain its actor before revision, exact coordinate, protocol-owned format/version discriminator, and bounded opaque bytes. Do not add follow/bookmark variants here.
 
 **Validate before custody pattern** (`crates/fava-write/src/lib.rs:69-120`, `189-200`):
 
@@ -124,7 +124,7 @@ Ok(Self {
 })
 ```
 
-Copy the typed constructor/refusal pattern for semantic edits: reject byte, coordinate, and routing bounds before store mutation. After materialization, repeat ordinary event-id/body, author, coordinate, size/tag, and expiry validation before atomic install.
+Copy the typed constructor/refusal pattern for semantic edits: reject byte, coordinate, and routing bounds before store mutation. After revision, repeat ordinary event-id/body, author, coordinate, size/tag, and expiry validation before atomic install.
 
 **Kind-agnostic event construction** (`crates/fava-write/src/builder.rs:19-37`, `53-83`):
 
@@ -151,7 +151,7 @@ pub fn build(self) -> Result<UnsignedEvent, EventBuildError> {
 }
 ```
 
-Protocol materializers must use this general builder. Keep timestamp an injected exact input; protocol crates must not call wall-clock time internally. CAP-09's raw future-kind proof should construct an arbitrary `Kind` through this unchanged path.
+Protocol appliers must use this general builder. Keep timestamp an injected exact input; protocol crates must not call wall-clock time internally. CAP-09's raw future-kind proof should construct an arbitrary `Kind` through this unchanged path.
 
 **Replaceable provider shape** (`crates/fava-signer/src/lib.rs:19-32`):
 
@@ -167,7 +167,7 @@ pub trait Signer: Send + Sync {
 }
 ```
 
-`ReplaceableEventMaterializer` should follow the small object-safe `Send + Sync` contract style and return a typed result. Its semantic input is `ReplaceableEventEdit` plus qualified signed source or `None` and exact materialization context. It returns an unsigned event value only; it cannot receive store, signer, router, publisher, transport, delivery, or receipt authority.
+`EditApplier` should follow the small object-safe `Send + Sync` contract style and return a typed result. Its semantic input is `EventEdit` plus qualified signed source or `None` and exact revision context. It returns an unsigned event value only; it cannot receive store, signer, router, publisher, transport, delivery, or receipt authority.
 
 ### `WriteStore`: durable authority and exact currentness
 
@@ -208,7 +208,7 @@ fn record_outcome(
 ) -> Result<Receipt, WriteStoreError>;
 ```
 
-These signatures are the delta, not the final M7 pattern. Every signer/refusal/route/attempt/outcome mutation must additionally carry and validate the exact current `MaterializationId`, exact event body/id, and operation-specific route revision, relay session, and durable attempt number as applicable. A mismatch returns typed stale/refused and mutates nothing. Cancellation remains advisory; store equality is authoritative.
+These signatures are the delta, not the final M7 pattern. Every signer/refusal/route/attempt/outcome mutation must additionally carry and validate the exact current `RevisionId`, exact event body/id, and operation-specific route revision, relay session, and durable attempt number as applicable. A mismatch returns typed stale/refused and mutates nothing. Cancellation remains advisory; store equality is authoritative.
 
 **Shared bounded mutation helper pattern** (`crates/fava-write-store/src/lib.rs:229-323`):
 
@@ -268,7 +268,7 @@ let _ = self.receipt_changes.send((receipt_id, Some(receipt)));
 Ok(AcceptedWrite { write_id, receipt_id, current })
 ```
 
-For rematerialization, compute the candidate outside the mutex, then lock, recheck expected current `MaterializationId` and source-basis id, install the successor and direct old-local-to-new-local snapshot atomically, unlock, and only then notify.
+For reapplication, compute the candidate outside the mutex, then lock, recheck expected current `RevisionId` and source-basis id, install the successor and direct old-local-to-new-local snapshot atomically, unlock, and only then notify.
 
 **Exact immutable-body comparison pattern** (`crates/fava-write-store-memory/src/lib.rs:158-196`):
 
@@ -284,7 +284,7 @@ if UnsignedEventView::from(unsigned) != UnsignedEventView::from(&event) {
 receipt.current.event = EventValue::Signed(event);
 ```
 
-Retain the whole-body equality check and add `MaterializationId` currentness before it.
+Retain the whole-body equality check and add `RevisionId` currentness before it.
 
 **Atomic refusal test pattern** (`crates/fava/tests/write_bounds.rs:157-197`):
 
@@ -295,7 +295,7 @@ assert!(store.apply_route(accepted.receipt_id, &refused).is_err());
 assert_eq!(store.receipt(accepted.receipt_id).unwrap(), Some(before));
 ```
 
-The memory semantic corpus should assert both the typed result and complete state equality after wrong generation, wrong event/body, wrong signer operation, wrong route revision, wrong session, wrong attempt, materializer refusal/panic, capacity refusal, and unrelated-coordinate source change.
+The memory semantic corpus should assert both the typed result and complete state equality after wrong generation, wrong event/body, wrong signer operation, wrong route revision, wrong session, wrong attempt, applier refusal/panic, capacity refusal, and unrelated-coordinate source change.
 
 ### Redb persistence, recovery, and process-kill proof
 
@@ -318,7 +318,7 @@ transaction.set_durability(Durability::Immediate).map_err(refused)?;
 transaction.commit().map_err(refused)
 ```
 
-The M7 acceptance/successor transaction must include the versioned durable write record, opaque edit bytes, stable IDs, `MaterializationId`, exact current event, source basis, receipt, current/correction destinations, attempt facts, and the query-visible replacement. Do not split those facts across commits.
+The M7 acceptance/successor transaction must include the versioned durable write record, opaque edit bytes, stable IDs, `RevisionId`, exact current event, source basis, receipt, current/correction destinations, attempt facts, and the query-visible replacement. Do not split those facts across commits.
 
 **Persist, then publish pattern** (`crates/fava-write-store-redb/src/ops.rs:290-312`):
 
@@ -334,7 +334,7 @@ self.publish_snapshot(&state);
 self.publish_receipt(Some(receipt.clone()), receipt_id);
 ```
 
-Copy this ordering exactly for generation install. Never call `ReplaceableEventMaterializer` while holding the mutex or a redb transaction.
+Copy this ordering exactly for generation install. Never call `EditApplier` while holding the mutex or a redb transaction.
 
 **Current schema gap and hard-refusal seam** (`crates/fava-write-store-redb/src/lib.rs:193-214`):
 
@@ -350,7 +350,7 @@ for entry in table.iter().map_err(refused)? {
 }
 ```
 
-This unversioned whole-`Receipt` JSON is not an M7 pattern to copy. Add an explicit hard-cut schema envelope in `schema.rs`; preserve protocol bytes exactly; reject unknown durable/edit versions and missing selected materializers on open/build. Do not use `#[serde(default)]` to invent generation facts.
+This unversioned whole-`Receipt` JSON is not an M7 pattern to copy. Add an explicit hard-cut schema envelope in `schema.rs`; preserve protocol bytes exactly; reject unknown durable/edit versions and missing selected appliers on open/build. Do not use `#[serde(default)]` to invent generation facts.
 
 **SIGKILL harness pattern** (`crates/fava-write-store-redb/tests/process_kill.rs:71-108`):
 
@@ -370,7 +370,7 @@ for boundary in ["before-accept", "acceptance", "signature", "attempt", "outcome
 }
 ```
 
-Extend this file with M7 boundaries: before semantic accept; after generation 1; source v2 before successor commit; after generation 2 before effects; predecessor attempt before successor correction; delayed retired completion; unknown edit version/missing materializer; bounded reopen after many supersessions.
+Extend this file with M7 boundaries: before semantic accept; after generation 1; source v2 before successor commit; after generation 2 before effects; predecessor attempt before successor correction; delayed retired completion; unknown edit version/missing applier; bounded reopen after many supersessions.
 
 ### Publication orchestration and exact signer/route/publisher identity
 
@@ -388,7 +388,7 @@ for signer in signers {
 }
 ```
 
-Index selected `ReplaceableEventMaterializer` implementations by their neutral claimed format/coordinate domain using the same duplicate-refusal pattern. Do not branch on NIP-02, bookmarks, kind 3, or kind 10003.
+Index selected `EditApplier` implementations by their neutral claimed format/coordinate domain using the same duplicate-refusal pattern. Do not branch on NIP-02, bookmarks, kind 3, or kind 10003.
 
 **Commit before effect and recover-current pattern** (`crates/fava-publication/src/lib.rs:62-87`):
 
@@ -403,7 +403,7 @@ for receipt in receipts {
 }
 ```
 
-For semantic writes, resolve materializer and compute the first candidate before the short atomic acceptance commit; start signer/route work only from the committed current `MaterializationId`. On recovery, selected materializers must already exist before `recover_open`/reconciliation begins and before the builder admits new commands.
+For semantic writes, resolve applier and compute the first candidate before the short atomic acceptance commit; start signer/route work only from the committed current `RevisionId`. On recovery, selected appliers must already exist before `recover_open`/reconciliation begins and before the builder admits new commands.
 
 **Current task-key gap** (`crates/fava-publication/src/run.rs:17-30`):
 
@@ -415,7 +415,7 @@ pub(super) fn start(&self, receipt_id: ReceiptId) {
 }
 ```
 
-M7 live work must be keyed by stable receipt plus current `MaterializationId`; starting a successor retires/cancels predecessor tasks, but delayed predecessor results still flow to store mutations carrying their old identity and are rejected there.
+M7 live work must be keyed by stable receipt plus current `RevisionId`; starting a successor retires/cancels predecessor tasks, but delayed predecessor results still flow to store mutations carrying their old identity and are rejected there.
 
 **Current signer correlation gap** (`crates/fava-publication/src/run.rs:134-164`):
 
@@ -433,7 +433,7 @@ tokio::spawn(async move {
 });
 ```
 
-Capture the current `MaterializationId` and exact unsigned body before spawning. Pass both back to `install_signed`/refusal so a generation-1 signer result cannot sign or refuse generation 2.
+Capture the current `RevisionId` and exact unsigned body before spawning. Pass both back to `install_signed`/refusal so a generation-1 signer result cannot sign or refuse generation 2.
 
 **Route value seam** (`crates/fava-routing/src/lib.rs:18-25`, `197-212`):
 
@@ -451,7 +451,7 @@ pub struct RoutePlan {
 }
 ```
 
-Keep routers ignorant of semantic meaning. Thread `MaterializationId` and exact event through write-route acquisition/application without adding protocol variants. Successor destinations must union the current route with bounded predecessor destinations that may require correction; outcomes remain generation-scoped.
+Keep routers ignorant of semantic meaning. Thread `RevisionId` and exact event through write-route acquisition/application without adding protocol variants. Successor destinations must union the current route with bounded predecessor destinations that may require correction; outcomes remain generation-scoped.
 
 **Exact attempt value seam** (`crates/fava-publisher/src/lib.rs:11-25`):
 
@@ -466,7 +466,7 @@ pub struct PublishAttempt {
 }
 ```
 
-Add `MaterializationId`; retain exact signed event, relay session, and one-based durable attempt number. Store-side `record_outcome` must compare all of them, not trust the publisher task's currentness.
+Add `RevisionId`; retain exact signed event, relay session, and one-based durable attempt number. Store-side `record_outcome` must compare all of them, not trust the publisher task's currentness.
 
 **Effect construction pattern** (`crates/fava-publication/src/run.rs:227-248`):
 
@@ -484,7 +484,7 @@ let attempt = PublishAttempt {
 let outcome = self.publisher.publish(attempt, self.transport.as_ref()).await;
 ```
 
-Continue deriving effects from the receipt returned by the durable authorization mutation. In M7, that returned receipt provides the exact current `MaterializationId`, event, session, and attempt identity to echo on completion.
+Continue deriving effects from the receipt returned by the durable authorization mutation. In M7, that returned receipt provides the exact current `RevisionId`, event, session, and attempt identity to echo on completion.
 
 ### Qualified source observation without self-feedback
 
@@ -534,7 +534,7 @@ for source in sources {
 let mut by_coordinate = BTreeMap::<EventCoordinate, EventRecord>::new();
 
 SourceEvent::Local(local) => {
-    // local write-store materialization participates in the same merged record set
+    // local write-store revision participates in the same merged record set
     record.publication = Some(local.publication.clone());
 }
 ```
@@ -566,7 +566,7 @@ where
 }
 ```
 
-Add generic and erased `ReplaceableEventMaterializer` registration methods following `signer`/`signers`. The `fava` production dependency list must remain free of `fava-nip02` and `fava-bookmarks`; selected applications/tests may depend on them.
+Add generic and erased `EditApplier` registration methods following `signer`/`signers`. The `fava` production dependency list must remain free of `fava-nip02` and `fava-bookmarks`; selected applications/tests may depend on them.
 
 **Build and recovery ordering** (`crates/fava/src/lib.rs:355-400`):
 
@@ -580,7 +580,7 @@ publication.recover()?;
 // only then return Fava
 ```
 
-Validate duplicate materializer claims and missing recovery materializers before constructing a usable `Fava`. Assemble the registry before publication recovery; fail the build rather than silently parking an undecodable accepted edit.
+Validate duplicate applier claims and missing recovery appliers before constructing a usable `Fava`. Assemble the registry before publication recovery; fail the build rather than silently parking an undecodable accepted edit.
 
 **Public optimistic/query/cache proof** (`crates/fava/tests/explicit_publication.rs:29-76`):
 
@@ -597,7 +597,7 @@ assert!(visible.events[0].relay_evidence.is_empty());
 assert!(cache.event(event_id).expect("cache readable").is_none());
 ```
 
-`tests/semantic_writes.rs` should copy this public-facade arrangement: first value visible before relay effect, cache remains free of unpublished local materializations, source v2 enters through the real cache/ingest boundary, query swaps generation atomically, same write/receipt remains, inverse is ordinary publication, and raw future kind still works.
+`tests/semantic_writes.rs` should copy this public-facade arrangement: first value visible before relay effect, cache remains free of unpublished local revisions, source v2 enters through the real cache/ingest boundary, query swaps generation atomically, same write/receipt remains, inverse is ordinary publication, and raw future kind still works.
 
 **Controlled delayed completion pattern** (`crates/fava/tests/explicit_publication.rs:302-341`):
 
@@ -619,7 +619,7 @@ impl Publisher for GatedPublisher {
 }
 ```
 
-Use gates/channels, not sleeps, to hold generation-1 materializer/signer/route/publisher/delivery completions, install generation 2, release old completions, and assert unchanged current receipt/query state plus attributable predecessor evidence.
+Use gates/channels, not sleeps, to hold generation-1 applier/signer/route/publisher/delivery completions, install generation 2, release old completions, and assert unchanged current receipt/query state plus attributable predecessor evidence.
 
 **Integration BUILD target pattern** (`crates/fava/BUILD.bazel:36-60`):
 
@@ -663,7 +663,7 @@ pub fn from_event(event: &EventValue) -> Result<Self, RelayListError> {
 }
 ```
 
-Copy the narrow semantic-owner shape for NIP-02 and public NIP-51 bookmarks: protocol-specific kind/tag/codec logic, explicit bounds, typed errors, deterministic apply, `None` empty state, inverse, and unrelated-field preservation. Unlike NIP-65, implement the public neutral `ReplaceableEventMaterializer` contract and return `ReplaceableEventEdit` values. Do not import runtime, transport, store implementations, standard routers, signer, publisher, delivery, or receipts.
+Copy the narrow semantic-owner shape for NIP-02 and public NIP-51 bookmarks: protocol-specific kind/tag/codec logic, explicit bounds, typed errors, deterministic apply, `None` empty state, inverse, and unrelated-field preservation. Unlike NIP-65, implement the public neutral `EditApplier` contract and return `EventEdit` values. Do not import runtime, transport, store implementations, standard routers, signer, publisher, delivery, or receipts.
 
 **Unit test placement** (`crates/fava-nip65/src/lib.rs:135-155`):
 
@@ -699,7 +699,7 @@ thiserror.workspace = true
 workspace = true
 ```
 
-Use only the dependencies actually needed by the pure codec/materializer. Add serde/serde_json only for the protocol-owned durable format if used; no universal owner or concrete provider dependency.
+Use only the dependencies actually needed by the pure codec/applier. Add serde/serde_json only for the protocol-owned durable format if used; no universal owner or concrete provider dependency.
 
 **Bazel target pattern** (`crates/fava-nip65/BUILD.bazel:1-31`):
 
@@ -763,7 +763,7 @@ Add `semantic_writes.rs` and route these exact identifiers through it:
 
 ```text
 replaceable-edit-first-value
-replaceable-edit-rematerialization
+replaceable-edit-reapplication
 replaceable-edit-inverse
 protocol-crate-n-plus-one
 ```
@@ -781,7 +781,7 @@ if receipt.receipt_id != accepted.receipt_id || receipt.outcome != ReceiptOutcom
 }
 ```
 
-M7 adds equality of stable `WriteId`/`ReceiptId` across differing `MaterializationId` values and asserts no stale completion changes generation 2.
+M7 adds equality of stable `WriteId`/`ReceiptId` across differing `RevisionId` values and asserts no stale completion changes generation 2.
 
 **Registry and dispatcher pattern** (`apps/canary/src/lib.rs:112-136`, `461-475`; `apps/canary/src/main.rs:87-130`):
 
@@ -816,7 +816,7 @@ important falsifier is that public contracts suffice for external assembly;
 the analog's concrete type name and declaration syntax are not vocabulary for
 M7.
 
-The N+1 falsifier should define an unrelated external edit codec/materializer, cover empty/current/inverse, register it through `FavaBuilder`, and verify ordinary query/receipt behavior without crate-private access or core edits.
+The N+1 falsifier should define an unrelated external edit codec/applier, cover empty/current/inverse, register it through `FavaBuilder`, and verify ordinary query/receipt behavior without crate-private access or core edits.
 
 **Source/manifest dependency-negative pattern** (`crates/fava-routing/src/chain.rs:445-461`):
 
@@ -872,11 +872,11 @@ The existing behavior test already proves the approved specification noun is acc
 
 **Sources:** `fava-publication/src/lib.rs:62-72`, `fava-write-store-redb/src/ops.rs:290-312`, `fava-write-store-memory/src/lib.rs:144-155`
 
-All mutable provider facts commit before receipt/query notifications and before signer/router/publisher effects. Materializer work is candidate computation, not authority: run it outside the store lock/transaction, then compare-and-install under exact current generation/source basis.
+All mutable provider facts commit before receipt/query notifications and before signer/router/publisher effects. Applier work is candidate computation, not authority: run it outside the store lock/transaction, then compare-and-install under exact current generation/source basis.
 
-### Stable Operation, Changing Materialization
+### Stable Operation, Changing Revision
 
-`WriteId` and `ReceiptId` are allocated once at acceptance. `MaterializationId` changes for each immutable materialization. Every downstream effect carries all three stable/current layers plus exact event and provider-specific identity. Only the store decides whether a completion is current.
+`WriteId` and `ReceiptId` are allocated once at acceptance. `RevisionId` changes for each immutable revision. Every downstream effect carries all three stable/current layers plus exact event and provider-specific identity. Only the store decides whether a completion is current.
 
 ### Typed, Bounded Refusal
 
@@ -886,13 +886,13 @@ Use `thiserror` typed enums and validate external/provider text, bytes, tags, fa
 
 ### Protocol Purity
 
-Protocol crates may parse/preserve/apply protocol state and return neutral values. They may not allocate receipts, insert cache rows, sign, route, publish, deliver, recover stores, or depend on concrete implementations. Inverses are ordinary `ReplaceableEventEdit` values through the same lifecycle.
+Protocol crates may parse/preserve/apply protocol state and return neutral values. They may not allocate receipts, insert cache rows, sign, route, publish, deliver, recover stores, or depend on concrete implementations. Inverses are ordinary `EventEdit` values through the same lifecycle.
 
 ### Query-Source Separation
 
 **Sources:** `fava-query/src/lib.rs:272-304`, `fava-query-standard/src/lib.rs:69-112`
 
-Relay-observed signed state remains `SourceKind::EventCache`; unpublished local materializations remain `SourceKind::WriteStore`. Atomic successor install replaces only the write-store contribution. Never copy it into the event cache.
+Relay-observed signed state remains `SourceKind::EventCache`; unpublished local revisions remain `SourceKind::WriteStore`. Atomic successor install replaces only the write-store contribution. Never copy it into the event cache.
 
 ### Test Layering
 
@@ -903,7 +903,7 @@ Relay-observed signed state remains `SourceKind::EventCache`; unpublished local 
 - Canary: four named public scenarios with independently witnessed evidence.
 - External workspace: N+1 public-contract assembly and universal-core allowlist.
 
-Compilation is structural evidence only; phase completion requires the behavioral materialization, rematerialization, stale-completion, receipt, query, restart, canary, and external-falsifier results.
+Compilation is structural evidence only; phase completion requires the behavioral revision, reapplication, stale-completion, receipt, query, restart, canary, and external-falsifier results.
 
 ## No Complete Analog Found
 
@@ -912,16 +912,16 @@ These files have structural analogs above but no current code implements their M
 | File | Role | Data Flow | Missing Precedent |
 |---|---|---|---|
 | `crates/fava-write/src/replaceable_event_edit.rs` | model | transform/durable bytes | No accepted opaque edit exists; `WritePayload` has only finalized event forms. |
-| `crates/fava-write/src/materialization.rs` | provider contract/model | request-response/transform | No public materializer contract or `MaterializationId` exists. |
+| `crates/fava-write/src/revision.rs` | provider contract/model | request-response/transform | No public applier contract or `RevisionId` exists. |
 | `crates/fava-write-store-memory/src/semantic.rs` | state model | CRUD/event-driven | No coordinate-local retained edit composition or generation/source-basis CAS exists. |
 | `crates/fava-write-store-redb/src/schema.rs` | durable model | file-I/O | Current redb rows are unversioned whole-receipt JSON; no supported-version envelope exists. |
-| `crates/fava-publication/src/materialization.rs` | orchestrator | streaming/event-driven | Publication currently observes receipts/routes only; no qualified-source reconciliation loop exists. |
+| `crates/fava-publication/src/revision.rs` | orchestrator | streaming/event-driven | Publication currently observes receipts/routes only; no qualified-source reconciliation loop exists. |
 
 ## Planner Warnings
 
-1. Lock the remaining authority decisions before schema implementation: multiple live edits at one coordinate, earlier-receipt observable state, deterministic materialization timestamp/winner rule, and public-only NIP-51 scope.
-2. Do not treat cancellation as stale-completion safety. Preserve the named deliberate break: removing one store-side `MaterializationId` equality guard must make `retired_generation_completions_are_inert` fail through public receipt/query state.
-3. Do not use the ordinary merged `AnyLocal` winner as rematerialization source; it contains the operation's own local output.
+1. Lock the remaining authority decisions before schema implementation: multiple live edits at one coordinate, earlier-receipt observable state, deterministic revision timestamp/winner rule, and public-only NIP-51 scope.
+2. Do not treat cancellation as stale-completion safety. Preserve the named deliberate break: removing one store-side `RevisionId` equality guard must make `retired_generation_completions_are_inert` fail through public receipt/query state.
+3. Do not use the ordinary merged `AnyLocal` winner as reapplication source; it contains the operation's own local output.
 4. Do not add protocol crates to `fava` production dependencies. They belong to selected assembly/test/canary metadata.
 5. Keep every code file below 800 lines and justify any file over 500. Split the currently 467-line `fava-write/src/lib.rs`, 482-line memory store, and growing publication/facade logic by cohesion.
 6. Record failing-first and deliberate-break evidence in `docs/issues/0010-m7-semantic-writes-and-capability-composition.md`; do not claim M7 from compilation alone.

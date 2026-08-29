@@ -13,15 +13,15 @@ mod attempt_map;
 mod builder;
 mod delivery_map;
 mod edit;
-mod materialization;
+mod edit_application;
 mod receipt;
 mod relay_session_serde;
 mod routing;
 mod session_set;
 
 pub use builder::{EventBuildError, EventBuilder};
-pub use edit::ReplaceableEventEdit;
-pub use materialization::{MaterializationId, ReplaceableEventMaterializer};
+pub use edit::EventEdit;
+pub use edit_application::{RevisionId, EditApplier};
 pub use receipt::{
     LocalWriteEvent, PublicationEvidence, Receipt, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState,
@@ -69,10 +69,10 @@ pub struct ReceiptId(NonZeroU64);
 pub enum WritePayload {
     /// Complete unsigned event body.
     Event(UnsignedEvent),
-    /// Persistable protocol-owned change awaiting or surviving materialization.
+    /// Persistable protocol-owned change awaiting or surviving revision.
     Edit {
         /// Durable protocol-owned change.
-        edit: ReplaceableEventEdit,
+        edit: EventEdit,
         /// Author resolved exactly once before custody.
         author: PublicKey,
     },
@@ -179,11 +179,11 @@ impl WriteIntent {
     }
 }
 
-/// Refusal while validating or materializing a write intent.
+/// Refusal while validating or applying a write intent.
 ///
 /// Intent validation can return this typed value directly before durable
-/// custody. Materializers can return it during initial or post-custody
-/// materialization, but current publication converts either result to
+/// custody. Appliers can return it during initial or post-custody
+/// revision, but current publication converts either result to
 /// `PublicationError::Routing(error.to_string())`; this typed value does not
 /// survive that boundary. Issue 0025 owns structured lifecycle attribution.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
@@ -302,7 +302,7 @@ impl TryFrom<u64> for ReceiptId {
 /// still waiting for one.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum EventValue {
-    /// Materialized event awaiting a valid signature.
+    /// Applied event awaiting a valid signature.
     Unsigned(UnsignedEvent),
     /// Exact signed event.
     Signed(Event),

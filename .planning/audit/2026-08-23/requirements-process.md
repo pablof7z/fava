@@ -167,8 +167,8 @@ Authority `GOALS.md:461` — *"Cache-only queries contribute no relay work. Reit
 Planning `READ-02` (`:38`) keeps only the first sentence of `QUERY-013` and drops both clauses of line 461. The second clause is the same shared-work property lost in (a) — so it was dropped **twice, independently**, from the two requirements that could each have carried it.
 
 **(f) WRITE-004 acceptance visibility deadline — a straight weakening.**
-Authority `GOALS.md:761` — *"The accepted local materialization MUST be visible through the write-store query source **before `Accepted` is returned**."*
-Planning `.planning/REQUIREMENTS.md:77` — *"**WRITE-04**: Matching queries expose the accepted local materialization directly from the write store **before relay acknowledgement**."*
+Authority `GOALS.md:761` — *"The accepted local revision MUST be visible through the write-store query source **before `Accepted` is returned**."*
+Planning `.planning/REQUIREMENTS.md:77` — *"**WRITE-04**: Matching queries expose the accepted local revision directly from the write store **before relay acknowledgement**."*
 "Before relay acknowledgement" is an arbitrarily later deadline than "before `Accepted` returns" — it permits a window in which the application holds a `Write` but the event is invisible to its own queries. The strict boundary was replaced with a loose one.
 
 **Observable distinction (whole finding).** For each pair, an application can construct the conjunction and observe a violation that no `.planning` requirement forbids: two handles → two sockets (a); failed open → orphan session (b); double `next()` → data consumed (c); slow consumer burst → unbounded growth (d); publish → query gap before ack (f).

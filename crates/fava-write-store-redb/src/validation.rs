@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::event_is_newer;
 use fava_write::{
-    EventValue, MaterializationId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    EventValue, RevisionId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState, WriteRouting,
 };
 use fava_write_store::{
@@ -51,7 +51,7 @@ fn validate_receipt(
     validate_routing(receipt)?;
     validate_bounds_and_text(receipt)?;
     validate_outcome(receipt)?;
-    validate_materializations(receipt, semantic)
+    validate_revisions(receipt, semantic)
 }
 
 fn validate_routing(receipt: &Receipt) -> Result<(), WriteStoreError> {
@@ -123,7 +123,7 @@ fn validate_bounds_and_text(receipt: &Receipt) -> Result<(), WriteStoreError> {
     let publication = &receipt.current.publication;
     let capacity = destination_evidence_capacity();
     if publication.destinations.len() > capacity
-        || publication.retired_materializations.len() > capacity
+        || publication.retired_revisions.len() > capacity
         || receipt.desired_destinations.len() > capacity
         || receipt.attempts.len() > capacity
         || receipt.route_shortfalls.len() > capacity
@@ -147,7 +147,7 @@ fn validate_bounds_and_text(receipt: &Receipt) -> Result<(), WriteStoreError> {
     for shortfall in &receipt.route_shortfalls {
         validate_receipt_text(shortfall)?;
     }
-    if let Some(failure) = &publication.materialization_failure {
+    if let Some(failure) = &publication.revision_failure {
         validate_receipt_text(failure)?;
     }
     Ok(())
@@ -175,32 +175,32 @@ fn validate_outcome(receipt: &Receipt) -> Result<(), WriteStoreError> {
     }
 }
 
-fn validate_materializations(
+fn validate_revisions(
     receipt: &Receipt,
     semantic: Option<&SemanticCustody>,
 ) -> Result<(), WriteStoreError> {
     let publication = &receipt.current.publication;
-    let current_id = publication.materialization_id.as_u64();
+    let current_id = publication.revision_id.as_u64();
     if current_id == 0
-        || usize::try_from(current_id - 1).ok() != Some(publication.retired_materializations.len())
+        || usize::try_from(current_id - 1).ok() != Some(publication.retired_revisions.len())
     {
-        return incoherent("durable materialization generations are not contiguous");
+        return incoherent("durable revision generations are not contiguous");
     }
     let mut event_ids = BTreeSet::new();
     event_ids.insert(receipt.current.id());
     for (index, (id, event_id, _, failure)) in
-        publication.retired_materializations.iter().enumerate()
+        publication.retired_revisions.iter().enumerate()
     {
         let expected = u64::try_from(index)
             .ok()
             .and_then(|value| value.checked_add(1))
-            .and_then(|value| MaterializationId::try_from(value).ok());
+            .and_then(|value| RevisionId::try_from(value).ok());
         if Some(*id) != expected || !event_ids.insert(*event_id) {
-            return incoherent("durable retired materialization identity is incoherent");
+            return incoherent("durable retired revision identity is incoherent");
         }
         if let Some(failure) = failure {
             validate_receipt_text(failure)?;
-            let prefix = format!("materialization {} from source ", id.as_u64());
+            let prefix = format!("revision {} from source ", id.as_u64());
             if !failure.starts_with(&prefix) {
                 return incoherent("durable retired failure attribution is incoherent");
             }
@@ -208,8 +208,8 @@ fn validate_materializations(
     }
     match semantic {
         Some(semantic) => validate_semantic(receipt, semantic),
-        None if publication.materialization_source.is_some()
-            || publication.materialization_failure.is_some()
+        None if publication.revision_source.is_some()
+            || publication.revision_failure.is_some()
             || current_id != 1 =>
         {
             incoherent("durable publication evidence has no semantic custody")
@@ -223,7 +223,7 @@ fn validate_semantic(
     (edits, author, current_source, failed_source, successor): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
     if edits.is_empty()
-        || edits.len() > receipt.current.publication.retired_materializations.len() + 1
+        || edits.len() > receipt.current.publication.retired_revisions.len() + 1
     {
         return incoherent("durable semantic edit sequence and generations disagree");
     }
@@ -253,7 +253,7 @@ fn validate_semantic(
             .coordinate()
             .map_err(|error| WriteStoreError::Refused(error.to_string()))?
             != crate::semantic::edit_coordinate(edit, *author)
-        || receipt.current.publication.materialization_source != current_source.map(|(id, _)| id)
+        || receipt.current.publication.revision_source != current_source.map(|(id, _)| id)
         || current_source.is_some_and(|(id, time)| {
             !event_is_newer(
                 (receipt.current.event.created_at(), receipt.current.id()),
@@ -266,7 +266,7 @@ fn validate_semantic(
     let failure = receipt
         .current
         .publication
-        .materialization_failure
+        .revision_failure
         .as_deref();
     if failure.is_none() && failed_source.is_some() {
         return incoherent("durable failed source and failure evidence disagree");
@@ -274,8 +274,8 @@ fn validate_semantic(
     if let Some(reason) = failure {
         let source = failed_source.map_or_else(|| "empty state".to_owned(), |id| id.to_string());
         let prefix = format!(
-            "materialization {} from source {source} failed",
-            receipt.current.publication.materialization_id.as_u64()
+            "revision {} from source {source} failed",
+            receipt.current.publication.revision_id.as_u64()
         );
         if reason != prefix && !reason.starts_with(&format!("{prefix}: ")) {
             return incoherent("durable failed-source attribution is incoherent");

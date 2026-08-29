@@ -1,7 +1,7 @@
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, MaterializationId, ReplaceableEventEdit, Timestamp,
+    EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp,
     WriteRouting,
 };
 use fava_event_cache::EventCache;
@@ -13,12 +13,12 @@ use nostr::key::Keys;
 
 use super::faults::FaultingWriteStore;
 use super::support::{
-    BlockingSigner, RecordingPublisher, TestMaterializer, publication_builder, relay_event,
+    BlockingSigner, RecordingPublisher, TestApplier, publication_builder, relay_event,
     relay_occurrence, relay_url, signed_source,
 };
 
-fn edit(change: u8) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
+fn edit(change: u8) -> EventEdit {
+    EventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
 }
 
 fn intent(author: fava::PublicKey, change: u8) -> WriteIntent {
@@ -31,11 +31,11 @@ fn intent(author: fava::PublicKey, change: u8) -> WriteIntent {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn recovery_revalidates_generation_and_complete_custody_before_materializing() {
+async fn recovery_revalidates_generation_and_complete_custody_before_applying() {
     let keys = Keys::generate();
     let store = Arc::new(FaultingWriteStore::new());
     let first = store
-        .accept_materialized_edit(
+        .accept_applied_edit(
             intent(keys.public_key(), 1),
             EventBuilder::new(keys.public_key(), Kind::ContactList)
                 .created_at(Timestamp::from(1))
@@ -52,7 +52,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
             relay_occurrence(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
     let barrier = Arc::new(Barrier::new(2));
     store.pause_after_next_receipt_read(Arc::clone(&barrier));
     let builder = publication_builder(
@@ -61,7 +61,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
         Arc::new(BlockingSigner::new(keys.public_key())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer));
+    .applier(Arc::clone(&applier));
     let runtime = tokio::runtime::Handle::current();
     let build = std::thread::spawn(move || {
         let _entered = runtime.enter();
@@ -80,7 +80,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
         .unwrap();
     let reservation = store.reserve_active(&edit(2), keys.public_key()).unwrap();
     store
-        .accept_reserved_materialized_edit(
+        .accept_reserved_applied_edit(
             reservation,
             intent(keys.public_key(), 2),
             second_event,
@@ -93,15 +93,15 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
     let fava = build.join().unwrap().expect("recovery assembles");
     let recovered = fava.receipt(first.receipt_id).unwrap().unwrap();
     assert_eq!(
-        recovered.current.publication.materialization_id,
-        MaterializationId::try_from(3).expect("nonzero materialization identity")
+        recovered.current.publication.revision_id,
+        RevisionId::try_from(3).expect("nonzero revision identity")
     );
     let EventValue::Unsigned(recovered) = recovered.current.event else {
         panic!("blocking signer keeps recovery unsigned");
     };
     assert_eq!(recovered.content, "recovery source|edit|edit");
     assert_eq!(
-        materializer.calls().len(),
+        applier.calls().len(),
         2,
         "recovery invoked a stale one-edit sequence before exact revalidation"
     );
