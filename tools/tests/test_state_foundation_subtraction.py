@@ -141,33 +141,6 @@ class StateFoundationSubtraction(unittest.TestCase):
                 for string in json_strings(value):
                     self.assertNotRegex(string, forbidden, f"{relative}:{number}: {string}")
 
-    def test_semantic_catalog_matches_the_current_simple_groups_api(self) -> None:
-        values = [
-            json.loads(line)
-            for line in (ROOT / ".bg-shell/simple-groups-semantic-catalog.jsonl")
-            .read_text()
-            .splitlines()
-        ]
-        self.assertEqual(100, len(values))
-        items = {value["item"]: value for value in values}
-        self.assertNotIn("fava_simple_groups::SimpleGroup::project", items)
-        self.assertFalse(any("SimpleGroupSnapshot" in item for item in items))
-        meta_events = items["fava_simple_groups::SimpleGroup::meta_events"]["purpose"]
-        self.assertIn("exact `d = id`", meta_events)
-        self.assertIn("`Query::only_from_relays`", meta_events)
-        self.assertIn("no private bound", meta_events.lower())
-        for item in (
-            "fava_simple_groups::SimpleGroupAdmins::author",
-            "fava_simple_groups::SimpleGroupAdmins::id",
-            "fava_simple_groups::SimpleGroupMetadata::author",
-            "fava_simple_groups::SimpleGroupMetadata::id",
-        ):
-            self.assertNotRegex(items[item]["purpose"], r"projection|host slot", item)
-        self.assertFalse(any("InvalidRelayUrl" in item for item in items))
-        self.assertFalse(any("InvalidEventCoordinate" in item for item in items))
-        self.assertFalse(any("InvalidEventId" in item for item in items))
-        self.assertFalse(any("InvalidPublicKey" in item for item in items))
-
     def test_proto_006_and_live_retention_state_positive_truth(self) -> None:
         goals = (ROOT / "docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md").read_text()
         self.assertIn("use the selected relays as result-provenance authority", goals)

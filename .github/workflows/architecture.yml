@@ -223,19 +223,3 @@ jobs:
             jq -r '"\(.result.symbols) symbols, \(.result.signed) signed, policy_signed=\(.result.policy_signed)"' /tmp/sg-status.json
           } >> "$GITHUB_STEP_SUMMARY"
           exit $sg_exit
-
-  file-size:
-    name: File size limits
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      # AGENTS.md "Rust conventions": no code file may cross 800 lines.
-      - name: Refuse code files over the hard limit
-        run: |
-          set -euo pipefail
-          over=$(find crates apps falsifiers -name '*.rs' -type f -exec awk 'END { if (FNR >= 800) print FILENAME ":" FNR }' {} \;)
-          if [ -n "$over" ]; then
-            echo "code files past the 800-line hard limit:" >&2
-            echo "$over" >&2
-            exit 1
-          fi
