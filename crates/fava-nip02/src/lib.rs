@@ -14,6 +14,10 @@
 //! ```
 //!
 //! ```compile_fail
+//! use fava_nip02::materializer;
+//! ```
+//!
+//! ```compile_fail
 //! use fava_nip02::IntoContactAuthors;
 //!
 //! struct ForeignAuthors;
@@ -33,8 +37,23 @@ mod edit;
 mod query;
 
 pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
-pub use edit::{follow, follow_with, materializer, unfollow};
+#[cfg(test)]
+pub(crate) use edit::materializer;
+pub use edit::{follow, follow_with, unfollow};
 pub use query::{IntoContactAuthors, contact_list, followers_of, follows_of};
+
+/// Doc-hidden Fava facade integration; not application API.
+#[doc(hidden)]
+pub mod __fava {
+    use std::sync::Arc;
+
+    use fava_write::ReplaceableEventMaterializer;
+
+    #[must_use]
+    pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
+        super::edit::materializer()
+    }
+}
 
 #[cfg(test)]
 mod tests;

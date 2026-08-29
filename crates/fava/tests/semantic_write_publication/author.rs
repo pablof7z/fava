@@ -8,7 +8,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
     let store = Arc::new(MemoryWriteStore::default());
     let alice_signer = Arc::new(BlockingSigner::new(alice.public_key()));
     let bob_signer = Arc::new(CountingSigner::new(bob.clone()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -16,7 +16,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
         Arc::new(RecordingPublisher::default()),
     )
     .signer(Arc::clone(&bob_signer))
-    .materializer(Arc::clone(&materializer))
+    .application_materializer(Arc::clone(&materializer))
     .build()
     .expect("two-signer semantic assembly");
 
@@ -24,7 +24,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
         .by(alice.public_key())
         .to([relay_url()])
         .expect("route validates")
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .expect("Alice's edit accepts");
     wait_for_signer(&alice_signer, 1).await;
     assert_eq!(
@@ -36,7 +36,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&bob, Kind::ContactList, 50, "Bob", &[]),
+            signed_source(&bob, Kind::Custom(10_004), 50, "Bob", &[]),
             relay_occurrence(),
         ))])
         .expect("Bob's unrelated coordinate enters cache");
@@ -45,7 +45,7 @@ async fn accepted_author_scopes_sources_signing_and_every_generation() {
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&alice, Kind::ContactList, 10, "Alice", &[]),
+            signed_source(&alice, Kind::Custom(10_004), 10, "Alice", &[]),
             relay_occurrence(),
         ))])
         .expect("Alice's successor enters cache");
@@ -69,8 +69,8 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
     let store = Arc::new(MemoryWriteStore::default());
     let accepted = store
         .accept_materialized_edit(
-            intent(alice.public_key(), Kind::ContactList),
-            EventBuilder::new(alice.public_key(), Kind::ContactList)
+            intent(alice.public_key(), Kind::Custom(10_004)),
+            EventBuilder::new(alice.public_key(), Kind::Custom(10_004))
                 .created_at(Timestamp::from(1))
                 .content("accepted as Alice")
                 .build()
@@ -79,20 +79,20 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
         )
         .expect("Alice's accepted edit is durable");
     let bob_signer = Arc::new(CountingSigner::new(bob));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&bob_signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .application_materializer(Arc::clone(&materializer))
     .build()
     .expect("recovery starts with only Bob's signer selected");
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&alice, Kind::ContactList, 10, "Alice source", &[]),
+            signed_source(&alice, Kind::Custom(10_004), 10, "Alice source", &[]),
             relay_occurrence(),
         ))])
         .expect("Alice's source enters after recovery");

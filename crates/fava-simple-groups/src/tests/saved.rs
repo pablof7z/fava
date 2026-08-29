@@ -4,9 +4,8 @@ use nostr::key::Keys;
 use nostr::types::RelayUrl;
 
 use crate::{
-    SavedGroupList, SavedGroupListDecodeError, SimpleGroup, remove_saved_relay,
+    SavedGroupList, SavedGroupListDecodeError, SimpleGroup, materializer, remove_saved_relay,
     remove_saved_simple_group, rename_saved_simple_group, save_relay, save_simple_group,
-    saved_group_list_materializer,
 };
 
 use super::{public_key, tag, value};
@@ -113,7 +112,7 @@ fn saved_edits_preserve_unrelated_and_unused_values() {
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
     let group = SimpleGroup::new("photos", vec![relay_a.clone(), relay_b.clone()])
         .expect("non-empty group");
-    let materializer = saved_group_list_materializer();
+    let materializer = materializer();
 
     let renamed = materialize(
         materializer.as_ref(),
@@ -171,7 +170,7 @@ fn relay_edits_match_semantic_first_values_and_keep_one() {
     let source = source(&keys);
     let relay_a = RelayUrl::parse("wss://a.example").unwrap();
     let relay_b = RelayUrl::parse("wss://b.example").unwrap();
-    let materializer = saved_group_list_materializer();
+    let materializer = materializer();
 
     let saved = materialize(
         materializer.as_ref(),
@@ -218,7 +217,7 @@ fn materializer_supports_only_its_private_edits() {
     )
     .expect("non-empty group");
     let edit = save_simple_group(&group, None).unwrap();
-    let materializer = saved_group_list_materializer();
+    let materializer = materializer();
     assert_eq!(materializer.kind(), Kind::from_u16(10_009));
     assert!(materializer.supports(&edit));
 
@@ -243,7 +242,7 @@ fn materializer_preserves_the_exact_event_builder_tag_refusal() {
     let edit = remove_saved_relay(relay).expect("remove relay edit");
 
     assert_eq!(
-        saved_group_list_materializer().materialize(
+        materializer().materialize(
             &edit,
             keys.public_key(),
             Some(&EventValue::Signed(source)),
@@ -259,7 +258,7 @@ fn materializer_preserves_the_exact_event_builder_tag_refusal() {
 #[test]
 fn materializer_accepts_only_verified_coordinate_exact_source() {
     let keys = Keys::generate();
-    let materializer = saved_group_list_materializer();
+    let materializer = materializer();
     let relay = RelayUrl::parse("wss://accepted.example").expect("relay");
     let edit = save_relay(relay).expect("edit");
     let signed = EventValue::Signed(source(&keys));

@@ -26,7 +26,7 @@ fn restart_builder(
         .transport(Arc::new(NoopTransport))
         .publisher(Arc::new(PendingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(materializer)
+        .application_materializer(materializer)
 }
 
 fn content(receipt: &Receipt) -> &str {
@@ -40,7 +40,7 @@ fn publish_change(fava: &Fava, change: u8) -> fava::Write {
     fava.by(keys().public_key())
         .to([relay()])
         .unwrap()
-        .publish(ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap())
+        .publish(ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![change]).unwrap())
         .expect("immediate same-coordinate edit accepts after recovery reconciliation")
 }
 
@@ -57,7 +57,7 @@ async fn assert_restart_then_immediate_edit(
             session(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = restart_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -159,8 +159,8 @@ impl Router for ComposingRouter {
             let RouteRequest::Write(source) = &request else {
                 panic!("semantic router receives a write request");
             };
-            let next_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![9]).unwrap();
-            let event = EventBuilder::new(keys().public_key(), Kind::ContactList)
+            let next_edit = ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![9]).unwrap();
+            let event = EventBuilder::new(keys().public_key(), Kind::Custom(10_004))
                 .created_at(Timestamp::from(source.created_at().as_secs() + 1))
                 .content(format!("{}|9", event_content(source)))
                 .build()
@@ -249,7 +249,7 @@ async fn assert_router_reopens_for_current_generation(path: PathBuf, generation:
     let fava = restart_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestMaterializer::new(Kind::Custom(10_004))),
     )
     .router(Arc::clone(&router))
     .build()

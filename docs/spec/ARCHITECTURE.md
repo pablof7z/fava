@@ -199,9 +199,10 @@ Numeric exhaustion is a typed store refusal and never wraps or partially
 commits. No caller supplies an initial materialization generation.
 
 `ReplaceableEventMaterializer` is the neutral protocol-provider contract. It
-owns no store, signer, route, delivery, or receipt lifecycle. Application
-assembly selects implementations before write recovery so accepted edit formats
-can be interpreted without a universal event-kind switch.
+owns no store, signer, route, delivery, or receipt lifecycle. The Fava facade
+installs its shipped protocol implementations before write recovery;
+applications register this contract only for application-defined edit formats.
+Neither path needs a universal event-kind switch.
 
 One active semantic write owns one durable ordered edit sequence for its exact
 author/kind/identifier coordinate. A distinct edit accepted while that write's
@@ -2111,10 +2112,10 @@ wrapper exists.
 the neutral query owner's bounded author-input constructor and preserves its
 typed `QueryError`. `SavedGroupList::from_event` represents one event and decodes group and
 relay entries exactly once, retaining order, repetitions, and entry-local errors.
-Crate-root save, remove, and rename functions return `ReplaceableEventEdit`;
-`saved_group_list_materializer()` integrates their private codec with Fava's
-generic semantic-write lifecycle. Edits preserve opaque content, foreign tags,
-malformed entries, unused trailing values, and unrelated order.
+Crate-root save, remove, and rename functions return `ReplaceableEventEdit`.
+The Fava facade integrates their private codec with its generic semantic-write
+lifecycle. Edits preserve opaque content, foreign tags, malformed entries,
+unused trailing values, and unrelated order.
 
 The crate depends on `fava-query`, `fava-state`, `fava-write`, and `nostr` for
 typed query, event-builder, and relay-parser failures. It owns no verification, generic bounds,
@@ -2598,14 +2599,11 @@ let engine = Engine::builder()
     .transport(WebSocketTransport::new())
     .publisher(Nip01Publisher::new())
     .delivery_policy(StandardDeliveryPolicy::new())
-    .materializers([
-        Box::new(nip02.materializer()),
-        Box::new(bookmarks.materializer()),
-    ])
+    .application_materializer(Arc::new(MyApplicationListMaterializer::new()))
     .build()?;
 ```
 
-The application may use a different provider for any named responsibility without editing Fava or unrelated providers.
+The application may use a different provider for any named responsibility without editing Fava or unrelated providers. Fava-owned protocol edits need no registration; an application-defined edit format uses `application_materializer` before recovery.
 
 ---
 

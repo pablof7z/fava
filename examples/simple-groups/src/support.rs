@@ -7,7 +7,6 @@ use fava::{Fava, PublishError, Receipt, Write, all_acknowledged, all_terminal};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
-use fava_simple_groups::saved_group_list_materializer;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport_websocket::WebSocketTransport;
 use fava_write_store_memory::MemoryWriteStore;
@@ -23,7 +22,6 @@ pub(crate) fn assemble() -> Result<Fava, fava::BuildError> {
         .transport(Arc::new(WebSocketTransport::new()))
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializers([saved_group_list_materializer()])
         .build()
 }
 

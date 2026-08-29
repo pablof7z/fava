@@ -38,16 +38,12 @@ pub async fn exercise<Add, Adjacent>(
     Add: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_source_removal(kind, Arc::clone(&materializer), &add, target).await;
+    prove_source_removal(kind, &add, target).await;
     prove_processed_stale_success(kind, materializer, add, adjacent).await;
 }
 
-async fn prove_source_removal<Add>(
-    kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
-    add: &Add,
-    target: (&str, &str),
-) where
+async fn prove_source_removal<Add>(kind: Kind, add: &Add, target: (&str, &str))
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
@@ -76,7 +72,6 @@ async fn prove_source_removal<Add>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
     .build()
     .unwrap();
     let accepted = publish_edit(&fava, add().unwrap(), actor);
@@ -141,7 +136,6 @@ async fn prove_processed_stale_success<Add, Adjacent>(
         Arc::new(signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
     .build()
     .unwrap();
     let accepted = publish_edit(&fava, add().unwrap(), actor);

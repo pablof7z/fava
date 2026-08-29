@@ -18,7 +18,7 @@ use super::support::{
 };
 
 fn edit(change: u8) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
+    ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![change]).unwrap()
 }
 
 fn intent(author: fava::PublicKey, change: u8) -> WriteIntent {
@@ -37,7 +37,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
     let first = store
         .accept_materialized_edit(
             intent(keys.public_key(), 1),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
                 .created_at(Timestamp::from(1))
                 .content("edit")
                 .build()
@@ -48,11 +48,11 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&keys, Kind::ContactList, 10, "recovery source", &[]),
+            signed_source(&keys, Kind::Custom(10_004), 10, "recovery source", &[]),
             relay_occurrence(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let barrier = Arc::new(Barrier::new(2));
     store.pause_after_next_receipt_read(Arc::clone(&barrier));
     let builder = publication_builder(
@@ -61,7 +61,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
         Arc::new(BlockingSigner::new(keys.public_key())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer));
+    .application_materializer(Arc::clone(&materializer));
     let runtime = tokio::runtime::Handle::current();
     let build = std::thread::spawn(move || {
         let _entered = runtime.enter();
@@ -73,7 +73,7 @@ async fn recovery_revalidates_generation_and_complete_custody_before_materializi
     let EventValue::Unsigned(current_event) = current.current.event.clone() else {
         panic!("pre-signature recovery custody remains unsigned");
     };
-    let second_event = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let second_event = EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
         .created_at(Timestamp::from(current_event.created_at.as_secs() + 1))
         .content(format!("{}|edit", current_event.content))
         .build()

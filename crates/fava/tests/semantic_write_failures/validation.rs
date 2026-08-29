@@ -4,7 +4,7 @@ use super::*;
 async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current() {
     let first_keys = Keys::generate();
     let first_store = Arc::new(MemoryWriteStore::default());
-    let first_materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let first_materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     first_materializer.set(WRONG_TIMESTAMP);
     let first = assembly(
         &first_keys,
@@ -17,7 +17,7 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
             .by(first_keys.public_key())
             .to([support::relay_url()])
             .expect("explicit route validates")
-            .publish(failure_support::edit(Kind::ContactList))
+            .publish(failure_support::edit(Kind::Custom(10_004)))
             .is_err()
     );
     assert_eq!(first_materializer.calls(), 1);
@@ -26,14 +26,14 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     let accepted_event_id = accepted
         .receipt()
         .expect("accepted receipt reads")
@@ -42,7 +42,7 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     materializer.set(WRONG_TIMESTAMP);
     save_source(
         &cache,
-        signed_source(&keys, Kind::ContactList, 10, "new source", &[]),
+        signed_source(&keys, Kind::Custom(10_004), 10, "new source", &[]),
     );
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
 
@@ -66,7 +66,7 @@ async fn wrong_author_or_kind_refuses_before_custody() {
     for mode in [WRONG_ACTOR, WRONG_KIND] {
         let keys = Keys::generate();
         let store = Arc::new(MemoryWriteStore::default());
-        let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+        let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
         materializer.set(mode);
         let fava = assembly(
             &keys,
@@ -79,7 +79,7 @@ async fn wrong_author_or_kind_refuses_before_custody() {
             fava.by(keys.public_key())
                 .to([support::relay_url()])
                 .expect("explicit route validates")
-                .publish(failure_support::edit(Kind::ContactList))
+                .publish(failure_support::edit(Kind::Custom(10_004)))
                 .is_err()
         );
         assert_eq!(materializer.calls(), 1);

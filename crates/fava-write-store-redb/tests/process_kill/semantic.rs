@@ -98,7 +98,8 @@ fn semantic_boundary_child() {
                 .expect("semantic failure commits");
         }
         "composed" | "composed-auto" => {
-            let second_edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let second_edit =
+                ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![2]).unwrap();
             let routing = if boundary == "composed-auto" {
                 WriteRouting::Automatic
             } else {
@@ -127,7 +128,7 @@ fn semantic_boundary_child() {
                     accepted.current.id(),
                 )
                 .expect("pre-kill signer authorization commits");
-            let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+            let second = ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![2]).unwrap();
             let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
             store
                 .accept_reserved_materialized_edit(
@@ -239,7 +240,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
             session(),
         ))])
         .expect("newer source enters canonical cache");
-    let successor_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let successor_materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let successor_fava = publication_builder(
         Arc::clone(&successor_cache),
         Arc::clone(&successor_store),
@@ -254,7 +255,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
     );
     wait_terminal(&successor_fava, receipt_id(1)).await;
     assert_eq!(successor_materializer.calls(), 1);
-    let inert_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let inert_materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let _inert = publication_builder(
         successor_cache,
         successor_store,
@@ -286,7 +287,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
     .build();
     assert!(unsupported.is_err(), "unsupported durable edit assembled");
 
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -305,7 +306,7 @@ async fn semantic_successor_and_failed_source_resume_once() {
     wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(materializer.calls(), 1);
 
-    let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let second_materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let _second = publication_builder(cache, store, Arc::clone(&second_materializer))
         .build()
         .expect("settled store reassembles");
@@ -365,7 +366,7 @@ async fn semantic_composed_sequence_replays_after_sigkill() {
             session(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&materializer))
         .build()
         .expect("composed recovery assembles");
@@ -406,7 +407,7 @@ async fn authorized_signer_window_and_successor_resume_after_sigkill() {
     let fava = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestMaterializer::new(Kind::Custom(10_004))),
     )
     .build()
     .expect("post-kill authorization recovery assembles");
@@ -441,7 +442,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
                 accepted.current.id(),
             )
             .unwrap();
-        let second = ReplaceableEventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
+        let second = ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![2]).unwrap();
         let reservation = store.reserve_active(&second, keys().public_key()).unwrap();
         store
             .accept_reserved_materialized_edit(
@@ -474,7 +475,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     let fava = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&store),
-        Arc::new(TestMaterializer::new(Kind::ContactList)),
+        Arc::new(TestMaterializer::new(Kind::Custom(10_004))),
     )
     .build()
     .unwrap();
@@ -527,7 +528,10 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
             session(),
         ))])
         .expect("post-kill source enters canonical cache");
-    let materializer = Arc::new(TestMaterializer::with_tag_count(Kind::ContactList, 2_001));
+    let materializer = Arc::new(TestMaterializer::with_tag_count(
+        Kind::Custom(10_004),
+        2_001,
+    ));
     let fava = Fava::builder()
         .event_cache(cache)
         .write_store(Arc::clone(&store))
@@ -536,7 +540,7 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
         .signer(Arc::new(LocalSigner::new(keys())))
         .publisher(Arc::new(PendingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(Arc::clone(&materializer))
+        .application_materializer(Arc::clone(&materializer))
         .build()
         .expect("recovery assembles with the selected materializer mode");
 
@@ -678,7 +682,7 @@ fn receipt_one(store: &RedbWriteStore) -> Receipt {
 }
 
 fn edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("semantic edit")
+    ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![1]).expect("semantic edit")
 }
 
 fn edit_intent() -> WriteIntent {
@@ -691,7 +695,7 @@ fn edit_intent() -> WriteIntent {
 }
 
 fn materialization(created_at: u64, body: &str) -> UnsignedEvent {
-    EventBuilder::new(keys().public_key(), Kind::ContactList)
+    EventBuilder::new(keys().public_key(), Kind::Custom(10_004))
         .created_at(Timestamp::from(created_at))
         .content(body)
         .build()
@@ -775,7 +779,7 @@ impl ReplaceableEventMaterializer for TestMaterializer {
         } else {
             format!("{source_content}|{change}")
         };
-        let result = EventBuilder::new(author, Kind::ContactList)
+        let result = EventBuilder::new(author, Kind::Custom(10_004))
             .created_at(created_at)
             .content(content)
             .tags((0..self.tag_count).map(|index| {
@@ -803,7 +807,7 @@ fn publication_builder(
         .signer(Arc::new(LocalSigner::new(keys())))
         .publisher(Arc::new(AcknowledgingPublisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(materializer)
+        .application_materializer(materializer)
 }
 
 struct AcknowledgingPublisher;

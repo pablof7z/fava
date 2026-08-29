@@ -205,8 +205,7 @@ fn publishing_engine(relays: &[RelayUrl], accounts: &[Keys]) -> CanaryResult<Fav
         .subscription_planner(Arc::new(StandardSubscriptionPlanner))
         .transport(Arc::new(WebSocketTransport::default()))
         .publisher(Arc::new(Nip01Publisher))
-        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializers([fava_nip02::materializer()]);
+        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()));
     if !relays.is_empty() {
         builder = builder.router(Arc::new(AppRelayRouter::new(
             "app-relays",

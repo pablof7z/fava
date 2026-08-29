@@ -1,11 +1,9 @@
 //! External compile-surface proof for the NIP-02 capability crate.
 
-use std::sync::Arc;
-
 use fava_query::{Query, QueryError, QuerySnapshot};
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, ReplaceableEventMaterializer,
-    Tag, Timestamp, WriteIntentError,
+    EventBuilder, EventValue, Kind, PublicKey, ReplaceableEventEdit, Tag, Timestamp,
+    WriteIntentError,
 };
 use nostr::types::RelayUrl;
 
@@ -14,9 +12,6 @@ use fava_nip02::{
 };
 
 type EditResult = Result<ReplaceableEventEdit, WriteIntentError>;
-type Selection = fn() -> Arc<dyn ReplaceableEventMaterializer>;
-
-const MATERIALIZER: Selection = fava_nip02::materializer;
 const FOLLOWS_OF: fn(&QuerySnapshot) -> Vec<PublicKey> = fava_nip02::follows_of;
 const FOLLOWERS_OF: fn(PublicKey) -> Result<Query, QueryError> = fava_nip02::followers_of;
 
@@ -39,8 +34,6 @@ fn inspect_row(row: &ContactListRowEvidence) -> (usize, &[String]) {
 
 #[test]
 fn external_surface_uses_only_approved_functions_and_types() {
-    assert_eq!(MATERIALIZER().kind(), Kind::ContactList);
-
     let author =
         PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
             .expect("generator public key");

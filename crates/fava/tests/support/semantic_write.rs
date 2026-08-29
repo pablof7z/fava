@@ -94,7 +94,7 @@ pub fn assembly_with_cache(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers(erased)
+    .application_materializers(erased)
     .build()
     .expect("semantic publication assembly");
     (fava, cache, store, signer, publisher)

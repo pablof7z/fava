@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use fava::{
     Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError, PublishError,
-    Receipt, ReceiptOutcome, ReplaceableEventEdit, ReplaceableEventMaterializer, Write,
-    WriteIntentError, WriteStoreError, all_terminal,
+    Receipt, ReceiptOutcome, ReplaceableEventEdit, Write, WriteIntentError, WriteStoreError,
+    all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -57,7 +57,6 @@ pub fn assert_source_removal(
 
 pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: Add,
     remove: Remove,
     adjacent: Adjacent,
@@ -67,23 +66,14 @@ pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     Remove: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_first_value(kind, Arc::clone(&materializer), &add, tags.0, tags.1).await;
-    prove_composed_writes(
-        kind,
-        Arc::clone(&materializer),
-        &add,
-        &remove,
-        &adjacent,
-        tags,
-    )
-    .await;
-    prove_pre_signature_composition(kind, Arc::clone(&materializer), &add, &adjacent, tags).await;
-    prove_public_refusals(kind, materializer, add);
+    prove_first_value(kind, &add, tags.0, tags.1).await;
+    prove_composed_writes(kind, &add, &remove, &adjacent, tags).await;
+    prove_pre_signature_composition(kind, &add, &adjacent, tags).await;
+    prove_public_refusals(kind, add);
 }
 
 async fn prove_pre_signature_composition<Add, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: &Add,
     adjacent: &Adjacent,
     tags: (&str, &str, &str),
@@ -111,7 +101,6 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
     .build()
     .unwrap();
 
@@ -165,19 +154,13 @@ fn target_count_value(event: &EventValue, tag_name: &str, target: &str) -> usize
         .count()
 }
 
-async fn prove_first_value<Add>(
-    kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
-    add: &Add,
-    tag_name: &str,
-    target: &str,
-) where
+async fn prove_first_value<Add>(kind: Kind, add: &Add, tag_name: &str, target: &str)
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
-    let (empty, empty_cache, empty_store, empty_signer, empty_publisher) =
-        assembly(keys.clone(), Arc::clone(&materializer));
+    let (empty, empty_cache, empty_store, empty_signer, empty_publisher) = assembly(keys.clone());
     let mut observation = empty
         .observe(
             fava::Query::events()
@@ -214,7 +197,6 @@ async fn prove_first_value<Add>(
 
 async fn prove_composed_writes<Add, Remove, Adjacent>(
     kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
     add: &Add,
     remove: &Remove,
     adjacent: &Adjacent,
@@ -250,7 +232,6 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
     .build()
     .unwrap();
 
@@ -298,23 +279,20 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_eq!(signer.calls(), 4);
     assert_eq!(publisher.attempts().len(), 4);
 
-    let (inverse_empty, _, _, _, _) = assembly(keys, materializer);
+    let (inverse_empty, _, _, _, _) = assembly(keys);
     let (_, _, empty_event) = publish_terminal(&inverse_empty, remove().unwrap(), actor).await;
     assert!(empty_event.tags.is_empty());
 }
 
-fn prove_public_refusals<Add>(
-    kind: Kind,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
-    add: Add,
-) where
+fn prove_public_refusals<Add>(kind: Kind, add: Add)
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let edit = add().unwrap();
     let malformed = ReplaceableEventEdit::new(edit.kind(), None, Vec::new()).unwrap();
-    let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&materializer));
+    let (fava, _, store, signer, publisher) = assembly(keys.clone());
     assert!(matches!(
         fava.by(actor)
             .to([super::support::relay_url()])
@@ -349,7 +327,6 @@ fn prove_public_refusals<Add>(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([Arc::clone(&materializer)])
     .build()
     .unwrap();
     assert!(matches!(
@@ -369,7 +346,6 @@ fn prove_public_refusals<Add>(
         Arc::new(CountingSigner::new(keys)),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers([materializer])
     .build()
     .unwrap();
     capacity_store
@@ -405,7 +381,6 @@ fn prove_public_refusals<Add>(
 
 fn assembly(
     keys: Keys,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
 ) -> (
     Fava,
     Arc<MemoryEventCache>,
@@ -423,7 +398,6 @@ fn assembly(
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializers([materializer])
     .build()
     .unwrap();
     (fava, cache, store, signer, publisher)

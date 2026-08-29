@@ -86,7 +86,6 @@ async fn shared_preview_bounds_and_failure<Add>(
     );
     let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&signer), publisher)
         .router(Arc::clone(&router))
-        .materializers([Arc::clone(&materializer)])
         .build()
         .expect("preview assembly");
     let intent = automatic_intent(edit.clone(), actor);
@@ -105,14 +104,13 @@ async fn shared_preview_bounds_and_failure<Add>(
         receipt.desired_destinations,
         preview.destinations.keys().cloned().collect()
     );
-    assert_selection_and_capacity_refusals(keys, actor, edit, materializer);
+    assert_selection_and_capacity_refusals(keys, actor, edit);
 }
 
 fn assert_selection_and_capacity_refusals(
     keys: Keys,
     actor: PublicKey,
     edit: ReplaceableEventEdit,
-    materializer: Arc<dyn ReplaceableEventMaterializer>,
 ) {
     let empty = publication_builder(
         Arc::new(MemoryEventCache::default()),
@@ -122,21 +120,19 @@ fn assert_selection_and_capacity_refusals(
     )
     .build()
     .expect("publication without materializers is valid");
-    assert!(matches!(
-        empty
-            .by(actor)
-            .to([relay_url()])
-            .expect("route validates")
-            .publish(edit.clone()),
-        Err(PublishError::Publication(PublicationError::Routing(_)))
-    ));
+    empty
+        .by(actor)
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit.clone())
+        .expect("Fava owns its shipped materializer");
     let duplicate = publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::new(MemoryWriteStore::default()),
         Arc::new(CountingSigner::new(keys.clone())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers([Arc::clone(&materializer), Arc::clone(&materializer)])
+    .application_materializer(Arc::new(TestMaterializer::new(edit.kind())))
     .build();
     assert!(matches!(duplicate, Err(BuildError::Publication(_))));
     let overflow = publication_builder(
@@ -145,12 +141,24 @@ fn assert_selection_and_capacity_refusals(
         Arc::new(CountingSigner::new(keys.clone())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializers((0..65).map(|offset| {
+    .application_materializers((0..62).map(|offset| {
         Arc::new(TestMaterializer::new(Kind::Custom(20_000 + offset)))
             as Arc<dyn ReplaceableEventMaterializer>
     }))
     .build();
     assert!(matches!(overflow, Err(BuildError::Publication(_))));
+    let maximum_application_kinds = publication_builder(
+        Arc::new(MemoryEventCache::default()),
+        Arc::new(MemoryWriteStore::default()),
+        Arc::new(CountingSigner::new(keys.clone())),
+        Arc::new(RecordingPublisher::default()),
+    )
+    .application_materializers((0..61).map(|offset| {
+        Arc::new(TestMaterializer::new(Kind::Custom(20_000 + offset)))
+            as Arc<dyn ReplaceableEventMaterializer>
+    }))
+    .build();
+    assert!(maximum_application_kinds.is_ok());
 
     let bounded_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let bounded = Fava::builder()
@@ -163,7 +171,6 @@ fn assert_selection_and_capacity_refusals(
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),
         ))
-        .materializers([materializer])
         .build()
         .expect("bounded assembly");
     bounded_store
@@ -191,7 +198,6 @@ async fn nip02_passes_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::ContactList,
-        fava_nip02::materializer(),
         || fava_nip02::follow(target),
         || fava_nip02::unfollow(target),
         || fava_nip02::follow(adjacent),
@@ -208,7 +214,6 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::Custom(10_003),
-        fava_bookmarks::materializer(),
         || fava_bookmarks::bookmark_event(target),
         || fava_bookmarks::unbookmark_event(target),
         || fava_bookmarks::bookmark_event(adjacent),
@@ -220,12 +225,12 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
 #[tokio::test(flavor = "current_thread")]
 async fn capabilities_share_preview_bounds_and_failure_behavior() {
     let follow_target = Keys::generate().public_key();
-    shared_preview_bounds_and_failure(fava_nip02::materializer(), || {
+    shared_preview_bounds_and_failure(fava_nip02::__fava::materializer(), || {
         fava_nip02::follow(follow_target)
     })
     .await;
     let bookmark_target = EventId::from_byte_array([10; 32]);
-    shared_preview_bounds_and_failure(fava_bookmarks::materializer(), || {
+    shared_preview_bounds_and_failure(fava_bookmarks::__fava::materializer(), || {
         fava_bookmarks::bookmark_event(bookmark_target)
     })
     .await;
@@ -237,7 +242,7 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let follow_adjacent = Keys::generate().public_key();
     capability_lifecycle::exercise(
         Kind::ContactList,
-        fava_nip02::materializer(),
+        fava_nip02::__fava::materializer(),
         || fava_nip02::follow(follow_target),
         || fava_nip02::follow(follow_adjacent),
         ("p", &follow_target.to_hex()),
@@ -247,7 +252,7 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let bookmark_adjacent = EventId::from_byte_array([12; 32]);
     capability_lifecycle::exercise(
         Kind::Custom(10_003),
-        fava_bookmarks::materializer(),
+        fava_bookmarks::__fava::materializer(),
         || fava_bookmarks::bookmark_event(bookmark_target),
         || fava_bookmarks::bookmark_event(bookmark_adjacent),
         ("e", &bookmark_target.to_hex()),

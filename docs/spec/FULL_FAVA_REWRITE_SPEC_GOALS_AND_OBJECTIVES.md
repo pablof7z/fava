@@ -1337,7 +1337,7 @@ Each secret owner defines its exact lifetime and cleanup boundary. A stale compl
 
 The universal query, event-state, routing, publication, and runtime owners MUST NOT branch on event-kind meaning owned by protocol crates.
 
-Adding protocol crate N+1 requires only that crate and a product assembly change, not edits to the Fava facade or universal owners.
+Adding an application-defined protocol crate N+1 requires only that crate and a product assembly change, not edits to universal owners. The Fava facade installs its shipped protocol capabilities; their materializer plumbing is not application assembly.
 
 ## PROTO-002 — Protocol crates compose universal primitives
 
@@ -1443,9 +1443,10 @@ management-event wrapper.
 
 The capability MUST build the ordinary kind-10009 query for exact authors,
 decode one `SavedGroupList` per event, and provide pure saved-group and relay
-edits plus their materializer. Valid entries, repetitions, malformed siblings,
-unknown tags, opaque content, unused trailing values, and unrelated order MUST
-survive according to the edit's exact target semantics.
+edits. The Fava facade integrates its private materializer. Valid entries,
+repetitions, malformed siblings, unknown tags, opaque content, unused trailing
+values, and unrelated order MUST survive according to the edit's exact target
+semantics.
 
 `SimpleGroup::new` MUST accept a finite owned `Vec<RelayUrl>` and return
 a public typed construction error for exactly an empty id or empty relay

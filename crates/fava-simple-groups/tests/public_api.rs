@@ -1,7 +1,6 @@
 //! External public-surface and behavior canary.
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use fava_query::{Kind, PublicKey, Query, RelayUrl};
 use fava_simple_groups::{
@@ -10,11 +9,10 @@ use fava_simple_groups::{
     SimpleGroupEventBuilder, SimpleGroupLivekitParticipants, SimpleGroupMembers,
     SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles, SimpleGroupStateEventKind,
     edit_metadata, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
-    save_relay, save_simple_group, saved_group_list_materializer, saved_group_lists,
+    save_relay, save_simple_group, saved_group_lists,
 };
 use fava_write::{
-    EventBuilder, EventValue, ReplaceableEventEdit, ReplaceableEventMaterializer, Tag,
-    WriteIntentError, WriteRouting,
+    EventBuilder, EventValue, ReplaceableEventEdit, Tag, WriteIntentError, WriteRouting,
 };
 
 fn key() -> PublicKey {
@@ -126,7 +124,6 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
         rename_saved_simple_group(&group, "Photos");
     let _: Result<ReplaceableEventEdit, WriteIntentError> = save_relay(relay());
     let _: Result<ReplaceableEventEdit, WriteIntentError> = remove_saved_relay(relay());
-    let _: Arc<dyn ReplaceableEventMaterializer> = saved_group_list_materializer();
 }
 
 #[test]

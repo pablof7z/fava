@@ -250,7 +250,16 @@ def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | Non
             continue
         if external_implementation:
             if FUNCTION.match(line) or line.startswith(("pub const ", "pub type ")):
-                continue
+                declaration = (
+                    re.match(rf"^pub\s+.*\bfn\s+{re.escape(crate_name)}(?:\b|::)", line)
+                    if FUNCTION.match(line)
+                    else re.match(
+                        rf"^pub\s+(?:const|type)\s+{re.escape(crate_name)}(?:\b|::)",
+                        line,
+                    )
+                )
+                if declaration is None:
+                    continue
             external_implementation = False
         path = exported_path(line, crate_name)
         parent = path.removesuffix("!").rpartition("::")[0]

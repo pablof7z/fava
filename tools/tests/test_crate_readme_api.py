@@ -191,6 +191,28 @@ class PublicApiParsingTest(unittest.TestCase):
             ],
         )
 
+    def test_keeps_root_exports_after_an_external_trait_implementation(self) -> None:
+        output = textwrap.dedent(
+            """\
+            pub mod sample
+            pub trait sample::Extension
+            impl sample::Extension for external::Value
+            pub fn external::Value::extend() -> Self
+            pub fn sample::constructor() -> sample::Value
+            pub struct sample::Value
+            """
+        )
+
+        self.assertEqual(
+            api.parse_public_api(output, "sample"),
+            [
+                api.ApiItem("sample", "Module"),
+                api.ApiItem("sample::Extension", "Trait"),
+                api.ApiItem("sample::Value", "Struct"),
+                api.ApiItem("sample::constructor", "Function"),
+            ],
+        )
+
 
 class ReadmeManagementTest(unittest.TestCase):
     def test_adds_grouped_h3_inventory_without_changing_existing_prose(self) -> None:

@@ -299,11 +299,13 @@ dependencies = [
 name = "fava"
 version = "0.1.0"
 dependencies = [
+ "fava-bookmarks",
  "fava-delivery",
  "fava-diagnostics",
  "fava-event-cache",
  "fava-event-cache-memory",
  "fava-fetch-cache",
+ "fava-nip02",
  "fava-observe",
  "fava-publication",
  "fava-publisher",
@@ -313,6 +315,7 @@ dependencies = [
  "fava-runtime",
  "fava-session",
  "fava-signer",
+ "fava-simple-groups",
  "fava-state",
  "fava-subscriptions",
  "fava-transport",
@@ -321,6 +324,15 @@ dependencies = [
  "nostr",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "fava-bookmarks"
+version = "0.1.0"
+dependencies = [
+ "fava-state",
+ "fava-write",
+ "nostr",
 ]
 
 [[package]]
@@ -388,6 +400,17 @@ dependencies = [
  "fava-state",
  "nostr",
  "thiserror",
+]
+
+[[package]]
+name = "fava-nip02"
+version = "0.1.0"
+dependencies = [
+ "fava-query",
+ "fava-relay",
+ "fava-state",
+ "fava-write",
+ "nostr",
 ]
 
 [[package]]

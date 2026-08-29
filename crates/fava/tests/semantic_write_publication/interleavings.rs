@@ -17,7 +17,7 @@ use nostr::key::Keys;
 use super::support::{intent, relay_url};
 
 fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::UnsignedEvent {
-    EventBuilder::new(keys.public_key(), Kind::ContactList)
+    EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
         .created_at(Timestamp::from(created_at))
         .content(content)
         .build()
@@ -25,13 +25,13 @@ fn materialization(keys: &Keys, created_at: u64, content: &str) -> fava::Unsigne
 }
 
 fn edit() -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).expect("bounded edit")
+    ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![1]).expect("bounded edit")
 }
 
 fn accepted(store: &MemoryWriteStore, keys: &Keys) -> fava_write_store::AcceptedWrite {
     store
         .accept_materialized_edit(
-            intent(keys.public_key(), Kind::ContactList),
+            intent(keys.public_key(), Kind::Custom(10_004)),
             materialization(keys, 1, "generation one"),
             None,
         )
@@ -280,7 +280,7 @@ fn semantic_task_and_completion_bounds_refuse_cleanly() {
     let second = Keys::generate();
     accepted(&store, &first);
     let refusal = store.accept_materialized_edit(
-        match intent(second.public_key(), Kind::ContactList)
+        match intent(second.public_key(), Kind::Custom(10_004))
             .into_parts()
             .0
         {
@@ -304,7 +304,7 @@ fn active_reservation_excludes_unreserved_memory_admission() {
     let raw_keys = Keys::generate();
     let reservation = store
         .reserve_active(
-            &fava::ReplaceableEventEdit::new(Kind::ContactList, None, vec![1]).unwrap(),
+            &fava::ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![1]).unwrap(),
             semantic_keys.public_key(),
         )
         .expect("semantic slot reserves");
@@ -325,7 +325,7 @@ fn active_reservation_excludes_unreserved_memory_admission() {
     let accepted = store
         .accept_reserved_materialized_edit(
             reservation,
-            intent(semantic_keys.public_key(), Kind::ContactList),
+            intent(semantic_keys.public_key(), Kind::Custom(10_004)),
             materialization(&semantic_keys, 1, "reserved"),
             None,
             None,
@@ -354,7 +354,7 @@ fn equal_timestamp_lower_id_is_memory_store_successor() {
     };
     let accepted = store
         .accept_materialized_edit(
-            intent(keys.public_key(), Kind::ContactList),
+            intent(keys.public_key(), Kind::Custom(10_004)),
             materialization(&keys, 11, "higher-id generation"),
             Some(&EventValue::Signed(higher_id.clone())),
         )

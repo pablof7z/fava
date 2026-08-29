@@ -61,8 +61,8 @@ saved-group and relay entry results. Repetitions survive and malformed siblings
 do not erase valid entries.
 
 Crate-root save, rename, remove, and relay functions return pure
-`ReplaceableEventEdit` values. `saved_group_list_materializer()` integrates the
-private edit codec with Fava's ordinary semantic-write lifecycle. Edits
+`ReplaceableEventEdit` values. Fava integrates the private edit codec with its
+ordinary semantic-write lifecycle. Edits
 preserve opaque content, foreign tags, malformed entries, unused trailing
 values, repetitions according to the exact operation, and unrelated order.
 
@@ -73,14 +73,12 @@ values, repetitions according to the exact operation, and unrelated order.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
   `SimpleGroupDecodeError`.
-- `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListMaterializer`, and
-  `SavedGroupListDecodeError`.
+- `SavedSimpleGroup`, `SavedGroupList`, and `SavedGroupListDecodeError`.
 - Crate/function identities `fava_simple_groups`, `save_simple_group`,
   `remove_saved_simple_group`, `rename_saved_simple_group`, `save_relay`,
-  `remove_saved_relay`, `saved_group_list_materializer`, and
-  `saved_group_lists`.
+  `remove_saved_relay`, and `saved_group_lists`.
 
-These 22 owner-scoped packets have zero review problems and zero public-API
+These 21 owner-scoped packets have zero review problems and zero public-API
 retains 354 inherited unique findings, and terminal-name plus external
 owner-signature gates remain independently red.
 

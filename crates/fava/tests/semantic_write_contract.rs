@@ -16,9 +16,9 @@ fn edit(kind: Kind, identifier: Option<String>) -> ReplaceableEventEdit {
 #[test]
 fn edit_contract_is_bounded_and_round_trips() {
     let actor = Keys::generate().public_key();
-    let original = edit(Kind::ContactList, None);
+    let original = edit(Kind::Custom(10_004), None);
 
-    assert_eq!(original.kind(), Kind::ContactList);
+    assert_eq!(original.kind(), Kind::Custom(10_004));
     assert_eq!(original.identifier(), None);
     assert_eq!(original.change(), &[1, 2, 3]);
     let intent = WriteIntent::edit_as(original.clone(), actor, WriteRouting::Automatic)
@@ -39,7 +39,7 @@ fn edit_contract_is_bounded_and_round_trips() {
     assert!(serde_json::from_str::<ReplaceableEventEdit>("{malformed").is_err());
 
     assert_eq!(
-        ReplaceableEventEdit::new(Kind::ContactList, None, vec![0; 131_073]),
+        ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![0; 131_073]),
         Err(WriteIntentError::TooLarge {
             bytes: 131_073,
             maximum: 131_072,
@@ -53,11 +53,11 @@ struct ExactMaterializer {
 
 impl ReplaceableEventMaterializer for ExactMaterializer {
     fn kind(&self) -> Kind {
-        Kind::ContactList
+        Kind::Custom(10_004)
     }
 
     fn supports(&self, edit: &ReplaceableEventEdit) -> bool {
-        edit.kind() == Kind::ContactList && edit.identifier().is_none()
+        edit.kind() == Kind::Custom(10_004) && edit.identifier().is_none()
     }
 
     fn materialize(
@@ -68,7 +68,7 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         assert!(source.is_none());
-        EventBuilder::new(author, Kind::ContactList)
+        EventBuilder::new(author, Kind::Custom(10_004))
             .created_at(created_at)
             .content("first value")
             .tags((0..self.tag_count).map(|index| {
@@ -82,7 +82,7 @@ impl ReplaceableEventMaterializer for ExactMaterializer {
 #[test]
 fn first_value_receives_no_prior_and_exact_timestamp() {
     let actor = Keys::generate().public_key();
-    let edit = edit(Kind::ContactList, None);
+    let edit = edit(Kind::Custom(10_004), None);
     let timestamp = Timestamp::from(42);
     let materializer = ExactMaterializer { tag_count: 0 };
 
@@ -101,7 +101,7 @@ fn exact_materializer_preserves_the_event_builder_tag_refusal() {
 
     assert_eq!(
         materializer.materialize(
-            &edit(Kind::ContactList, None),
+            &edit(Kind::Custom(10_004), None),
             actor,
             None,
             Timestamp::from(42),
@@ -131,11 +131,11 @@ fn materialization_identity_changes_but_receipt_identity_does_not() {
     let receipt_id = ReceiptId::try_from(11).expect("nonzero receipt identity");
     let first = MaterializationId::FIRST;
     let successor = MaterializationId::try_from(2).expect("nonzero materialization identity");
-    let first_event = EventBuilder::new(actor, Kind::ContactList)
+    let first_event = EventBuilder::new(actor, Kind::Custom(10_004))
         .created_at(Timestamp::from(1))
         .build()
         .expect("first event");
-    let successor_event = EventBuilder::new(actor, Kind::ContactList)
+    let successor_event = EventBuilder::new(actor, Kind::Custom(10_004))
         .created_at(Timestamp::from(2))
         .build()
         .expect("successor event");

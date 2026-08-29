@@ -3,8 +3,7 @@
 //! The five saved-list operations (save/remove/rename a group, save/remove a
 //! bare relay) are packed into the private binary format read and written by
 //! [`encode`]/[`decode_edit`], then folded onto the previous kind-10009 tag
-//! set by [`apply`]. [`saved_group_list_materializer`] is the only way a
-//! caller outside this module reaches that logic.
+//! set by [`apply`]. Fava installs the materializer that reaches that logic.
 
 use std::sync::Arc;
 
@@ -148,25 +147,8 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, Write
     edit(REMOVE_RELAY, "", &[relay], None)
 }
 
-/// Return a fresh kind-10009 materializer behind the neutral contract.
-///
-/// Register this with the Fava builder to enable semantic write lifecycle
-/// support for kind-10009 Simple Group List events.
-///
-/// # Examples
-///
-/// ```
-/// # use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_materializer};
-/// # use nostr::types::RelayUrl;
-/// let materializer = saved_group_list_materializer();
-///
-/// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::new("photos", vec![relay])?;
-/// let edit = save_simple_group(&group, None)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
 #[must_use]
-pub fn saved_group_list_materializer() -> Arc<dyn ReplaceableEventMaterializer> {
+pub(crate) fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
     Arc::new(SavedGroupListMaterializer)
 }
 
@@ -362,7 +344,7 @@ fn take_simple_group(input: &mut &[u8]) -> Result<(String, Vec<RelayUrl>), Write
     Ok((id, relays))
 }
 
-/// The kind-10009 [`ReplaceableEventMaterializer`] returned by [`saved_group_list_materializer`].
+/// The kind-10009 [`ReplaceableEventMaterializer`] used by Fava.
 ///
 /// Turns a decoded saved-list edit back into tags by replaying it against the
 /// prior kind-10009 event, so a save/remove/rename only ever touches the

@@ -70,9 +70,8 @@ pub fn follow_with(
     )
 }
 
-/// Select the pure NIP-02 materializer for application assembly.
 #[must_use]
-pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
+pub(crate) fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
     Arc::new(Nip02Materializer)
 }
 

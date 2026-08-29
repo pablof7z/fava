@@ -13,7 +13,7 @@ use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_signer_local::LocalSigner;
 use fava_simple_groups::{
     SavedGroupList, SimpleGroup, SimpleGroupEventBuilder, SimpleGroupMetadata,
-    SimpleGroupStateEventKind, save_simple_group, saved_group_list_materializer,
+    SimpleGroupStateEventKind, save_simple_group,
 };
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write_store_memory::MemoryWriteStore;
@@ -130,7 +130,6 @@ async fn saved_group_edit_materializes_through_the_ordinary_semantic_write_lifec
         Arc::new(LocalSigner::new(keys.clone())),
         publisher,
     )
-    .materializers([saved_group_list_materializer()])
     .build()
     .expect("facade assembly");
     let group = group();

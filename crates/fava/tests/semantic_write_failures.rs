@@ -143,7 +143,7 @@ impl ReplaceableEventMaterializer for ControlledMaterializer {
 #[test]
 fn controlled_materializer_preserves_the_event_builder_tag_refusal() {
     let actor = Keys::generate().public_key();
-    let kind = Kind::ContactList;
+    let kind = Kind::Custom(10_004);
     let materializer = ControlledMaterializer::with_tag_count(kind, 2_001);
     let edit = ReplaceableEventEdit::new(kind, None, vec![1]).expect("bounded edit");
 
@@ -161,7 +161,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
@@ -171,7 +171,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
     let mut observation = fava
         .observe(
             fava::Query::events()
-                .kinds([Kind::ContactList])
+                .kinds([Kind::Custom(10_004)])
                 .expect("one kind is bounded")
                 .authors([keys.public_key()])
                 .expect("one author is bounded")
@@ -179,7 +179,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
         )
         .await
         .expect("semantic query opens");
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     let accepted_event_id = accepted.receipt().unwrap().current.id();
     observation
         .changed()
@@ -188,7 +188,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
     materializer.set(ERROR);
     save_source(
         &cache,
-        signed_source(&keys, Kind::ContactList, 10, "source", &[]),
+        signed_source(&keys, Kind::Custom(10_004), 10, "source", &[]),
     );
 
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
@@ -203,7 +203,7 @@ async fn materializer_error_is_bounded_and_preserves_current() {
 async fn materializer_panic_is_scoped_and_attributed() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let healthy = Arc::new(ControlledMaterializer::new(Kind::MuteList));
     let fava = assembly(
         &keys,
@@ -211,12 +211,12 @@ async fn materializer_panic_is_scoped_and_attributed() {
         Arc::new(MemoryWriteStore::default()),
         vec![Arc::clone(&materializer), Arc::clone(&healthy)],
     );
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     let accepted_event_id = accepted.receipt().unwrap().current.id();
     materializer.set(PANIC);
     save_source(
         &cache,
-        signed_source(&keys, Kind::ContactList, 10, "source", &[]),
+        signed_source(&keys, Kind::Custom(10_004), 10, "source", &[]),
     );
 
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
@@ -247,19 +247,19 @@ async fn malformed_and_oversize_outputs_preserve_current() {
     for mode in [WRONG_ACTOR, WRONG_KIND, OVERSIZE] {
         let keys = Keys::generate();
         let cache = Arc::new(MemoryEventCache::default());
-        let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+        let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
         let fava = assembly(
             &keys,
             Arc::clone(&cache),
             Arc::new(MemoryWriteStore::default()),
             vec![Arc::clone(&materializer)],
         );
-        let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+        let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
         let accepted_event_id = accepted.receipt().unwrap().current.id();
         materializer.set(mode);
         save_source(
             &cache,
-            signed_source(&keys, Kind::ContactList, 10, "source", &[]),
+            signed_source(&keys, Kind::Custom(10_004), 10, "source", &[]),
         );
         let failed = wait_failure(&fava, accepted.receipt_id()).await;
         assert_eq!(failed.current.id(), accepted_event_id);
@@ -275,24 +275,24 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
         &cache,
         signed_source(
             &keys,
-            Kind::ContactList,
+            Kind::Custom(10_004),
             u64::MAX - 1,
             "penultimate source",
             &[],
         ),
     );
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::new(MemoryWriteStore::default()),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     let accepted_event_id = accepted.receipt().unwrap().current.id();
     save_source(
         &cache,
-        signed_source(&keys, Kind::ContactList, u64::MAX, "last source", &[]),
+        signed_source(&keys, Kind::Custom(10_004), u64::MAX, "last source", &[]),
     );
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
     assert_eq!(failed.current.id(), accepted_event_id);
@@ -310,14 +310,14 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
 
 fn prove_evidence_exhaustion(keys: &Keys) {
     let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
-    let first = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let first = EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
         .created_at(Timestamp::from(1))
         .content("generation zero")
         .build()
         .unwrap();
     let accepted = store
         .accept_materialized_edit(
-            edit_intent(keys.public_key(), Kind::ContactList),
+            edit_intent(keys.public_key(), Kind::Custom(10_004)),
             first,
             None,
         )
@@ -328,7 +328,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
         let source_time = 2 + generation as u64 * 2;
         let source = signed_source(
             keys,
-            Kind::ContactList,
+            Kind::Custom(10_004),
             source_time,
             &format!("source {generation}"),
             &[],
@@ -339,8 +339,8 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 accepted.receipt_id,
                 expected,
                 expected_source,
-                std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
-                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                std::slice::from_ref(&failure_support::edit(Kind::Custom(10_004))),
+                EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
                     .created_at(Timestamp::from(source_time + 1))
                     .content(format!("generation {generation}"))
                     .build()
@@ -355,7 +355,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
         expected_source = Some(source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
-    let overflow_source = signed_source(keys, Kind::ContactList, 1_000, "overflow source", &[]);
+    let overflow_source = signed_source(keys, Kind::Custom(10_004), 1_000, "overflow source", &[]);
     assert!(
         store
             .install_materialization(
@@ -363,8 +363,8 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 accepted.receipt_id,
                 expected,
                 expected_source,
-                std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
-                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                std::slice::from_ref(&failure_support::edit(Kind::Custom(10_004))),
+                EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
                     .created_at(Timestamp::from(1_001))
                     .content("overflow generation")
                     .build()
@@ -401,18 +401,18 @@ async fn recovery_retries_failed_source_once() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let first = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = publish_edit(&first, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&first, keys.public_key(), Kind::Custom(10_004));
     materializer.set(ERROR);
     save_source(
         &cache,
-        signed_source(&keys, Kind::ContactList, 10, "source", &[]),
+        signed_source(&keys, Kind::Custom(10_004), 10, "source", &[]),
     );
     wait_failure(&first, accepted.receipt_id()).await;
     materializer.set(VALID);
@@ -454,20 +454,20 @@ async fn successful_retry_clears_failure_without_duplicate_effect() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = assembly(
         &keys,
         Arc::clone(&cache),
         Arc::clone(&store),
         vec![Arc::clone(&materializer)],
     );
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     materializer.set(ERROR);
-    let failed_source = signed_source(&keys, Kind::ContactList, 10, "failed", &[]);
+    let failed_source = signed_source(&keys, Kind::Custom(10_004), 10, "failed", &[]);
     save_source(&cache, failed_source);
     wait_failure(&fava, accepted.receipt_id()).await;
     materializer.set(VALID);
-    let changed = signed_source(&keys, Kind::ContactList, 20, "changed", &[]);
+    let changed = signed_source(&keys, Kind::Custom(10_004), 20, "changed", &[]);
     save_source(&cache, changed);
     let receipt = support::wait_for_materialization(&fava, accepted.receipt_id(), 2).await;
     assert!(

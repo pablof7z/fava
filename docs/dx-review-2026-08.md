@@ -24,7 +24,6 @@ Fava::builder()
     .signer(Arc::new(LocalSigner::new(alice.clone())))
     .signer(Arc::new(LocalSigner::new(bob.clone())))
     .signer(Arc::new(LocalSigner::new(carol.clone())))
-    .materializers([saved_group_list_materializer()])
     .build()?
 ```
 

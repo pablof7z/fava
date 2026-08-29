@@ -13,7 +13,7 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let first = signed_source(&keys, Kind::ContactList, 10, "first", &[]);
+    let first = signed_source(&keys, Kind::Custom(10_004), 10, "first", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             first,
@@ -26,7 +26,7 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
         contribution(initial),
     ));
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
@@ -34,16 +34,16 @@ async fn delayed_route_after_rematerialization_commits_newer_revision() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&delayed))
-    .materializer(materializer)
+    .application_materializer(materializer)
     .build()
     .unwrap();
     let write = fava
         .by(keys.public_key())
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .unwrap();
     wait_for_signer(&signer, 1).await;
 
-    let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
+    let successor = signed_source(&keys, Kind::Custom(10_004), 20, "successor", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             successor,

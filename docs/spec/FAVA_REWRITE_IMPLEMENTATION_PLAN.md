@@ -752,7 +752,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
   materialized, stale sessions close, and only the complete current generation
   reaches signing and route effects, including after process kill.
 - A second protocol crate proves the edit contract is not secretly NIP-02-shaped.
-- Adding protocol crate N+1 edits only its crate and selected assembly/artifact metadata.
+- Adding an application-defined protocol crate N+1 edits only its crate and selected assembly/artifact metadata.
 
 ### Canary scenarios
 
@@ -844,9 +844,9 @@ kind-10009 list without creating a second query/publication lifecycle.
 - Kind-10009 queries are ordinary exact-author queries. One event decodes to one
   `SavedGroupList` whose group and relay entries retain order, repetitions, and
   entry-local failures.
-- Saved-group and relay changes use crate-root pure edit functions and one
-  materializer through the ordinary durable write lifecycle, preserving
-  unrelated source material.
+- Saved-group and relay changes use crate-root pure edit functions through
+  Fava-owned materialization in the ordinary durable write lifecycle,
+  preserving unrelated source material.
 - The crate owns no observation, store, signer, routing session, publisher,
   delivery, retry, receipt, runtime, transport, verification, generic bound,
   projection, disagreement, management, or discovery policy.

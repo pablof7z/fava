@@ -5,8 +5,8 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let first_keys = Keys::generate();
     let second_keys = Keys::generate();
-    let first_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
-    let second_materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let first_materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
+    let second_materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let (first, _, _, _, _) = assembly(
         Arc::clone(&store),
         first_keys.clone(),
@@ -22,14 +22,14 @@ async fn shared_store_capacity_refuses_before_second_publication_provider_effect
         .by(first_keys.public_key())
         .to([relay_url()])
         .expect("first route validates")
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .expect("first publication owns the only slot");
     assert!(
         second
             .by(second_keys.public_key())
             .to([relay_url()])
             .expect("second route validates")
-            .publish(edit(Kind::ContactList))
+            .publish(edit(Kind::Custom(10_004)))
             .is_err()
     );
 

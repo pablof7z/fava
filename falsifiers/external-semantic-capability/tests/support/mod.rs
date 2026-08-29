@@ -50,7 +50,7 @@ pub fn harness(keys: Keys) -> Harness {
         .subscription_planner(Arc::new(StandardSubscriptionPlanner))
         .transport(Arc::clone(&transport))
         .signer(Arc::new(LocalSigner::new(keys)))
-        .materializers([selected_materializer()])
+        .application_materializers([selected_materializer()])
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()

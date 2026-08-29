@@ -1,6 +1,6 @@
 use fava_write::{Kind, PublicKey, ReplaceableEventEdit, Timestamp, WriteIntentError};
 
-use crate::saved_group_list_materializer;
+use crate::materializer;
 
 const SAVE_SIMPLE_GROUP: u8 = 1;
 const SAVE_RELAY: u8 = 4;
@@ -20,7 +20,7 @@ fn edit(kind: Kind, identifier: Option<&str>, change: Vec<u8>) -> ReplaceableEve
 }
 
 fn assert_refusal(edit: &ReplaceableEventEdit, expected: &str) {
-    let materializer = saved_group_list_materializer();
+    let materializer = materializer();
     assert!(!materializer.supports(edit));
     assert_eq!(
         materializer.materialize(

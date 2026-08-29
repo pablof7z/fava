@@ -23,7 +23,10 @@ use thiserror::Error;
 
 use crate::Fava;
 
-/// Static assembly builder. No provider is silently selected.
+/// Static assembly builder.
+///
+/// Fava installs its shipped protocol materializers when publication is
+/// configured. Applications select only providers and edit semantics they own.
 #[derive(Default)]
 pub struct FavaBuilder {
     event_cache: Option<Arc<dyn EventCache>>,
@@ -34,7 +37,7 @@ pub struct FavaBuilder {
     transport: Option<Arc<dyn Transport>>,
     routers: Vec<Arc<dyn Router>>,
     signers: Vec<Arc<dyn Signer>>,
-    materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
+    application_materializers: Vec<Arc<dyn ReplaceableEventMaterializer>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
     diagnostics_capacity: Option<NonZeroUsize>,
@@ -142,23 +145,31 @@ impl FavaBuilder {
         self
     }
 
-    /// Select one semantic materializer for its exact replaceable kind.
+    /// Register one application-defined semantic materializer.
+    ///
+    /// Fava already owns materialization for its shipped protocol crates. Use
+    /// this only when the application defines the edit semantics for a new
+    /// replaceable-event kind. Shipped materializers consume three of Fava's
+    /// 64 total materializer slots, leaving 61 application-defined kinds.
     #[must_use]
-    pub fn materializer<T>(mut self, materializer: Arc<T>) -> Self
+    pub fn application_materializer<T>(mut self, materializer: Arc<T>) -> Self
     where
         T: ReplaceableEventMaterializer + 'static,
     {
-        self.materializers.push(materializer);
+        self.application_materializers.push(materializer);
         self
     }
 
-    /// Select already-erased semantic materializers.
+    /// Register application-defined semantic materializers.
+    ///
+    /// Shipped materializers consume three of Fava's 64 total materializer
+    /// slots, leaving 61 application-defined kinds.
     #[must_use]
-    pub fn materializers(
+    pub fn application_materializers(
         mut self,
         materializers: impl IntoIterator<Item = Arc<dyn ReplaceableEventMaterializer>>,
     ) -> Self {
-        self.materializers.extend(materializers);
+        self.application_materializers.extend(materializers);
         self
     }
 
@@ -209,7 +220,7 @@ impl FavaBuilder {
         let publication_selected = self.publisher.is_some()
             || self.delivery.is_some()
             || !self.signers.is_empty()
-            || !self.materializers.is_empty();
+            || !self.application_materializers.is_empty();
         let session = Session::new(self.signers)?;
         let publication = if publication_selected {
             let publisher = self.publisher.ok_or(BuildError::MissingPublisher)?;
@@ -222,7 +233,9 @@ impl FavaBuilder {
                 write_store.clone(),
                 event_source.clone(),
                 evaluator.clone(),
-                self.materializers,
+                shipped_materializers()
+                    .into_iter()
+                    .chain(self.application_materializers),
                 session.clone(),
                 publisher,
                 delivery,
@@ -257,6 +270,14 @@ impl FavaBuilder {
             publication,
         })
     }
+}
+
+fn shipped_materializers() -> [Arc<dyn ReplaceableEventMaterializer>; 3] {
+    [
+        fava_nip02::__fava::materializer(),
+        fava_bookmarks::__fava::materializer(),
+        fava_simple_groups::__fava::materializer(),
+    ]
 }
 
 /// The execution owner an assembly gets when it selects none.

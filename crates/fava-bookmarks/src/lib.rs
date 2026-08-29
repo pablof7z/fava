@@ -17,6 +17,10 @@
 //! ```compile_fail
 //! use fava_bookmarks::BookmarkMaterializer;
 //! ```
+//!
+//! ```compile_fail
+//! use fava_bookmarks::materializer;
+//! ```
 
 use std::sync::Arc;
 
@@ -78,10 +82,22 @@ pub fn unbookmark_coordinate(
     edit(Target::Coordinate(target), Operation::Remove)
 }
 
-/// Select the pure public-bookmark materializer for application assembly.
 #[must_use]
-pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
+pub(crate) fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
     Arc::new(BookmarkMaterializer)
+}
+
+/// Doc-hidden Fava facade integration; not application API.
+#[doc(hidden)]
+pub mod __fava {
+    use std::sync::Arc;
+
+    use fava_write::ReplaceableEventMaterializer;
+
+    #[must_use]
+    pub fn materializer() -> Arc<dyn ReplaceableEventMaterializer> {
+        super::materializer()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

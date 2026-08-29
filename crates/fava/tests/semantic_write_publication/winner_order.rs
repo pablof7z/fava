@@ -6,8 +6,8 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
     let other = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
-    let left = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "left", &[]);
-    let right = signed_source(&keys, Kind::ContactList, u64::MAX - 2, "right", &[]);
+    let left = signed_source(&keys, Kind::Custom(10_004), u64::MAX - 2, "left", &[]);
+    let right = signed_source(&keys, Kind::Custom(10_004), u64::MAX - 2, "right", &[]);
     let (base, equal) = if left.id > right.id {
         (left, right)
     } else {
@@ -20,26 +20,32 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
         ))])
         .expect("base source enters cache");
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .application_materializer(Arc::clone(&materializer))
     .build()
     .expect("semantic publication assembly");
     let write = fava
         .by(keys.public_key())
         .to([relay_url()])
         .expect("route validates")
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .expect("edit accepts");
     wait_for_signer(&signer, 1).await;
 
-    let older = signed_source(&keys, Kind::ContactList, u64::MAX - 3, "older", &[]);
-    let wrong_actor = signed_source(&other, Kind::ContactList, u64::MAX - 1, "wrong actor", &[]);
+    let older = signed_source(&keys, Kind::Custom(10_004), u64::MAX - 3, "older", &[]);
+    let wrong_actor = signed_source(
+        &other,
+        Kind::Custom(10_004),
+        u64::MAX - 1,
+        "wrong actor",
+        &[],
+    );
     let wrong_kind = signed_source(&keys, Kind::TextNote, u64::MAX - 1, "wrong kind", &[]);
     let equal_id = equal.id;
     cache

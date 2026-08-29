@@ -41,12 +41,12 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .application_materializer(Arc::new(TestMaterializer::new(Kind::Custom(10_004))))
     .build()
     .unwrap();
     let accepted = fava
         .by(keys.public_key())
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .unwrap();
     wait_for_signer_calls(&signer, 1).await;
     wait_for_opens(&router, 1).await;
@@ -67,7 +67,7 @@ async fn successful_reads_reconcile_dropped_materialization_and_route_changes() 
         queued_router.send(later_contribution);
         barrier.wait();
     });
-    let successor = signed_source(&keys, Kind::ContactList, 20, "successor", &[]);
+    let successor = signed_source(&keys, Kind::Custom(10_004), 20, "successor", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             successor,
@@ -124,12 +124,12 @@ async fn activation_retry_exhaustion_is_durable_attributable_and_retryable() {
         Arc::new(RecordingPublisher::default()),
     )
     .router(router)
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .application_materializer(Arc::new(TestMaterializer::new(Kind::Custom(10_004))))
     .build()
     .unwrap();
     let accepted = fava
         .by(keys.public_key())
-        .publish(edit(Kind::ContactList))
+        .publish(edit(Kind::Custom(10_004)))
         .unwrap();
 
     let receipt = tokio::time::timeout(Duration::from_secs(5), async {

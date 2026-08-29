@@ -35,7 +35,7 @@ where
         .signer(Arc::new(UnavailableSigner::new(keys.public_key())))
         .publisher(Arc::new(RecordingPublisher::default()))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .materializer(materializer)
+        .application_materializer(materializer)
         .build()
         .expect("controlled source assembly")
 }
@@ -45,9 +45,9 @@ async fn cache_source_closure_keeps_write_store_source_live() {
     let keys = Keys::generate();
     let cache = Arc::new(ClosingEventCache::new());
     let store = Arc::new(MemoryWriteStore::default());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = build(&keys, Arc::clone(&cache), Arc::clone(&store), materializer);
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
 
     cache.close_observations();
     let failure = wait_failure(&fava, accepted.receipt_id()).await;
@@ -59,7 +59,7 @@ async fn cache_source_closure_keeps_write_store_source_live() {
             .as_deref()
             .is_some_and(|reason| reason.contains("event-cache"))
     );
-    let source = signed_source(&keys, Kind::ContactList, 10, "write-store source", &[]);
+    let source = signed_source(&keys, Kind::Custom(10_004), 10, "write-store source", &[]);
     store
         .accept_materialized(EventValue::Signed(source.clone()))
         .expect("independent signed local source commits");
@@ -86,9 +86,9 @@ async fn write_store_source_closure_keeps_cache_source_live() {
     let keys = Keys::generate();
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
-    let materializer = Arc::new(ControlledMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(ControlledMaterializer::new(Kind::Custom(10_004)));
     let fava = build(&keys, Arc::clone(&cache), Arc::clone(&store), materializer);
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
 
     store.close_observations();
     let failure = wait_failure(&fava, accepted.receipt_id()).await;
@@ -100,7 +100,7 @@ async fn write_store_source_closure_keeps_cache_source_live() {
             .as_deref()
             .is_some_and(|reason| reason.contains("write-store"))
     );
-    let source = signed_source(&keys, Kind::ContactList, 10, "cache source", &[]);
+    let source = signed_source(&keys, Kind::Custom(10_004), 10, "cache source", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             source.clone(),

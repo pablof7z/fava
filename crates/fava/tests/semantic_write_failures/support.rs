@@ -56,7 +56,7 @@ where
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),
         ))
-        .materializers(
+        .application_materializers(
             materializers
                 .into_iter()
                 .map(|value| value as Arc<dyn ReplaceableEventMaterializer>),

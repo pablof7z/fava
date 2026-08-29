@@ -27,7 +27,7 @@ use super::support::{
 };
 
 fn edit(change: u8) -> ReplaceableEventEdit {
-    ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap()
+    ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![change]).unwrap()
 }
 
 fn content(event: &EventValue) -> &str {
@@ -49,7 +49,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
                 fava::WriteRouting::explicit([relay_url()]).unwrap(),
             )
             .unwrap(),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
                 .created_at(Timestamp::from(1))
                 .content("edit")
                 .build()
@@ -60,18 +60,18 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
     let cache = Arc::new(MemoryEventCache::default());
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&keys, Kind::ContactList, 10, "restart source", &[]),
+            signed_source(&keys, Kind::Custom(10_004), 10, "restart source", &[]),
             relay_occurrence(),
         ))])
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::new(BlockingSigner::new(keys.public_key())),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .application_materializer(Arc::clone(&materializer))
     .build()
     .expect("memory recovery reconciles before exposing the facade");
 
@@ -102,7 +102,7 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
 
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
-            signed_source(&keys, Kind::ContactList, 20, "late source", &[]),
+            signed_source(&keys, Kind::Custom(10_004), 20, "late source", &[]),
             relay_occurrence(),
         ))])
         .unwrap();
@@ -118,7 +118,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
         .accept_materialized_edit(
             WriteIntent::edit_as(edit(1), keys.public_key(), fava::WriteRouting::Automatic)
                 .unwrap(),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(keys.public_key(), Kind::Custom(10_004))
                 .created_at(Timestamp::from(1))
                 .content("edit")
                 .build()
@@ -126,7 +126,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
             None,
         )
         .unwrap();
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let stale = RelayUrl::parse("wss://stale-generation.example").unwrap();
     let current = RelayUrl::parse("wss://current-generation.example").unwrap();
     let router = Arc::new(ComposingRouter::new(
@@ -142,7 +142,7 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
         Arc::new(RecordingPublisher::default()),
     )
     .router(Arc::clone(&router))
-    .materializer(materializer)
+    .application_materializer(materializer)
     .build()
     .unwrap();
 
@@ -212,7 +212,7 @@ impl Router for ComposingRouter {
                 panic!("semantic router receives a write request");
             };
             let edit = edit(2);
-            let event = EventBuilder::new(self.author, Kind::ContactList)
+            let event = EventBuilder::new(self.author, Kind::Custom(10_004))
                 .created_at(Timestamp::from(source.created_at().as_secs() + 1))
                 .content(format!("{}|edit", content(source)))
                 .build()

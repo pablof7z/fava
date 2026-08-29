@@ -327,7 +327,6 @@ fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .signers([signer])
-        .materializers([fava_nip02::materializer()])
         .build()
         .map_err(error)
 }

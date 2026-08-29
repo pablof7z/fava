@@ -26,7 +26,7 @@ fn compose_direct(
     current: &Receipt,
     change: u8,
 ) -> AcceptedWrite {
-    let edit = ReplaceableEventEdit::new(Kind::ContactList, None, vec![change]).unwrap();
+    let edit = ReplaceableEventEdit::new(Kind::Custom(10_004), None, vec![change]).unwrap();
     let created_at = Timestamp::from(
         current
             .current
@@ -64,18 +64,18 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
     let signer = Arc::new(UnavailableSigner::new(keys.public_key()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(materializer)
+    .application_materializer(materializer)
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads(1);
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
 
     tokio::time::timeout(Duration::from_secs(1), async {
         while store.remaining_receipt_read_failures() != 0 {
@@ -85,7 +85,7 @@ async fn transient_initial_read_resumes_semantic_runner_without_restart() {
     .await
     .expect("runner consumes the injected initial read failure");
 
-    let source = signed_source(&keys, Kind::ContactList, 10, "new source", &[]);
+    let source = signed_source(&keys, Kind::Custom(10_004), 10, "new source", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
@@ -102,17 +102,17 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(FaultingWriteStore::new());
     let signer = Arc::new(WindowSigner::new(keys.clone()));
-    let materializer = Arc::new(TestMaterializer::new(Kind::ContactList));
+    let materializer = Arc::new(TestMaterializer::new(Kind::Custom(10_004)));
     let fava = publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::new(RecordingPublisher::default()),
     )
-    .materializer(Arc::clone(&materializer))
+    .application_materializer(Arc::clone(&materializer))
     .build()
     .expect("faulting-store assembly");
-    let first = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let first = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
     let generation_one = first.receipt().expect("first generation remains live");
 
     store.fail_materialized_reads(true);
@@ -140,7 +140,7 @@ async fn durable_sequence_refresh_failure_fences_local_generation_and_stale_repl
     })
     .await
     .expect("runner observes the injected durable custody failure");
-    let source = signed_source(&keys, Kind::ContactList, 20, "new source", &[]);
+    let source = signed_source(&keys, Kind::Custom(10_004), 20, "new source", &[]);
     cache
         .commit(vec![EventStateMutation::Upsert(relay_event(
             source,
@@ -204,11 +204,11 @@ async fn transient_signed_read_errors_do_not_strand_delivery_lane() {
         Arc::clone(&signer),
         Arc::clone(&publisher),
     )
-    .materializer(Arc::new(TestMaterializer::new(Kind::ContactList)))
+    .application_materializer(Arc::new(TestMaterializer::new(Kind::Custom(10_004))))
     .build()
     .expect("faulting-store assembly");
     store.fail_receipt_reads_after_signature(4);
-    let accepted = publish_edit(&fava, keys.public_key(), Kind::ContactList);
+    let accepted = publish_edit(&fava, keys.public_key(), Kind::Custom(10_004));
 
     tokio::time::timeout(Duration::from_secs(1), async {
         while publisher.attempts().is_empty() {

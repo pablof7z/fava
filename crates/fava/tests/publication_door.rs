@@ -28,7 +28,6 @@ async fn publish_payload_forms_share_one_door_and_unscoped_edit_refuses() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
-        [fava_nip02::materializer()],
     );
 
     let unsigned = EventBuilder::new(keys.public_key(), Kind::TextNote)
@@ -55,11 +54,7 @@ async fn publish_returns_after_local_acceptance() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(BlockingSigner::new(keys.public_key()));
-    let fava = assembly(
-        Arc::clone(&store),
-        [Arc::clone(&signer) as Arc<dyn Signer>],
-        std::iter::empty(),
-    );
+    let fava = assembly(Arc::clone(&store), [Arc::clone(&signer) as Arc<dyn Signer>]);
     let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
         .content("accepted before downstream progress")
         .build()
@@ -108,7 +103,7 @@ async fn publish_returns_after_local_acceptance() {
 async fn equivalent_publications_have_distinct_custody_identities() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
-    let fava = assembly(Arc::clone(&store), std::iter::empty(), std::iter::empty());
+    let fava = assembly(Arc::clone(&store), std::iter::empty());
     let event = NostrEventBuilder::new(Kind::TextNote, "same signed event")
         .finalize(&keys)
         .expect("event signs");
@@ -128,7 +123,6 @@ async fn invalid_payload_refuses_without_custody() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
-        std::iter::empty(),
     );
     let expired = EventBuilder::new(keys.public_key(), Kind::TextNote)
         .created_at(Timestamp::from(1))
@@ -158,7 +152,6 @@ async fn invalid_payload_refuses_without_custody() {
 fn assembly(
     store: Arc<MemoryWriteStore>,
     signers: impl IntoIterator<Item = Arc<dyn Signer>>,
-    materializers: impl IntoIterator<Item = Arc<dyn fava::ReplaceableEventMaterializer>>,
 ) -> Fava {
     let cache = Arc::new(MemoryEventCache::default());
     let publisher = Arc::new(RecordingPublisher::default());
@@ -168,7 +161,6 @@ fn assembly(
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
         .signers(signers)
-        .materializers(materializers)
         .publisher(publisher)
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
