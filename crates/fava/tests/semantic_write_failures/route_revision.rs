@@ -1,12 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{Fava, Kind, Receipt, ReceiptId};
-use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySnapshot};
 use fava_relay::{RelayAccess, RelaySessionKey};
@@ -14,17 +11,14 @@ use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
     RouterSession,
 };
-use fava_state::EventStateMutation;
 use fava_write::SignatureState;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
-use tokio::sync::{broadcast, watch};
 
 use super::failure_support::edit;
 use super::faults::FaultingWriteStore;
 use super::support::{
     BlockingSigner, RecordingPublisher, TestApplier, WindowSigner, publication_builder,
-    relay_event, relay_occurrence, signed_source,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -115,24 +109,16 @@ async fn wait_for_signer_calls(signer: &WindowSigner, count: usize) {
 }
 
 struct QueuedRouter {
-    changes: broadcast::Sender<RouteContribution>,
     current: Mutex<RouteContribution>,
     opens: AtomicU64,
 }
 
 impl QueuedRouter {
     fn new(initial: RouteContribution) -> Self {
-        let (changes, _) = broadcast::channel(8);
         Self {
-            changes,
             current: Mutex::new(initial),
             opens: AtomicU64::new(0),
         }
-    }
-
-    fn send(&self, contribution: RouteContribution) {
-        *self.current.lock().unwrap() = contribution.clone();
-        let _ = self.changes.send(contribution);
     }
 }
 
@@ -163,14 +149,12 @@ impl Router for QueuedRouter {
         self.opens.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(QueuedSession {
             current: self.current.lock().unwrap().clone(),
-            changes: self.changes.subscribe(),
         }))
     }
 }
 
 struct QueuedSession {
     current: RouteContribution,
-    changes: broadcast::Receiver<RouteContribution>,
 }
 
 impl RouterSession for QueuedSession {
@@ -227,16 +211,6 @@ async fn wait_for_opens(router: &QueuedRouter, count: u64) {
     })
     .await
     .expect("router did not reopen for successor revision");
-}
-
-async fn wait_for_route_commits(store: &FaultingWriteStore, count: u64) {
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while store.route_commits() < count {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("route plan did not commit");
 }
 
 async fn wait_for_receipt(

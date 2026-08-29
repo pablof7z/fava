@@ -110,7 +110,6 @@ impl EventCache for ClosingEventCache {
 pub(super) struct FaultingWriteStore {
     inner: MemoryWriteStore,
     closed: broadcast::Sender<()>,
-    drop_receipt_changes: Arc<AtomicBool>,
     failing_reads: AtomicUsize,
     fail_applied_reads: AtomicBool,
     applied_read_failures: AtomicU64,
@@ -120,7 +119,6 @@ pub(super) struct FaultingWriteStore {
     reads_after_signature: AtomicUsize,
     receipt_barrier: Mutex<Option<Arc<Barrier>>>,
     route_barrier: Mutex<Option<Arc<Barrier>>>,
-    route_commits: AtomicU64,
     fail_release: AtomicBool,
     fail_initial_route_accept: AtomicBool,
     refuse_routes: AtomicBool,
@@ -134,19 +132,14 @@ impl FaultingWriteStore {
         let (receipt_changes, _) = broadcast::channel(64);
         let (applied_read_barrier, _) = watch::channel(0);
         let forwarded_changes = receipt_changes.clone();
-        let drop_receipt_changes = Arc::new(AtomicBool::new(false));
-        let drop_changes = Arc::clone(&drop_receipt_changes);
         tokio::spawn(async move {
             while let Ok(change) = inner_changes.recv().await {
-                if !drop_changes.load(Ordering::SeqCst) {
-                    let _ = forwarded_changes.send(change);
-                }
+                let _ = forwarded_changes.send(change);
             }
         });
         Self {
             inner,
             closed,
-            drop_receipt_changes,
             failing_reads: AtomicUsize::new(0),
             fail_applied_reads: AtomicBool::new(false),
             applied_read_failures: AtomicU64::new(0),
@@ -156,7 +149,6 @@ impl FaultingWriteStore {
             reads_after_signature: AtomicUsize::new(0),
             receipt_barrier: Mutex::new(None),
             route_barrier: Mutex::new(None),
-            route_commits: AtomicU64::new(0),
             fail_release: AtomicBool::new(false),
             fail_initial_route_accept: AtomicBool::new(false),
             refuse_routes: AtomicBool::new(false),
@@ -191,24 +183,8 @@ impl FaultingWriteStore {
         self.reads_after_signature.store(count, Ordering::SeqCst);
     }
 
-    pub(super) fn fail_receipt_reads_after_route(&self, count: usize) {
-        self.reads_after_route.store(count, Ordering::SeqCst);
-    }
-
-    pub(super) fn drop_receipt_changes(&self) {
-        self.drop_receipt_changes.store(true, Ordering::SeqCst);
-    }
-
-    pub(super) fn pause_after_next_route(&self, barrier: Arc<Barrier>) {
-        *self.route_barrier.lock().unwrap() = Some(barrier);
-    }
-
     pub(super) fn pause_after_next_receipt_read(&self, barrier: Arc<Barrier>) {
         *self.receipt_barrier.lock().unwrap() = Some(barrier);
-    }
-
-    pub(super) fn route_commits(&self) -> u64 {
-        self.route_commits.load(Ordering::SeqCst)
     }
 
     pub(super) fn fail_reservation_release(&self, fail: bool) {
@@ -234,7 +210,6 @@ impl FaultingWriteStore {
     fn after_route_commit(&self) {
         let failures = self.reads_after_route.swap(0, Ordering::SeqCst);
         self.failing_reads.store(failures, Ordering::SeqCst);
-        self.route_commits.fetch_add(1, Ordering::SeqCst);
         let barrier = self.route_barrier.lock().unwrap().take();
         if let Some(barrier) = barrier {
             barrier.wait();

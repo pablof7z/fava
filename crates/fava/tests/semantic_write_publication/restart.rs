@@ -1,6 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -15,7 +13,6 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
-use tokio::sync::watch;
 
 use fava_routing::{
     RouteContribution, RouteDestination, RoutePlan, RouteRequest, Router, RouterError,
@@ -240,7 +237,6 @@ impl Router for ComposingRouter {
         };
         Ok(Box::new(ImmediateSession {
             current: contribution(relay),
-            emitted: false,
             closes: Arc::clone(&self.closes),
         }))
     }
@@ -248,7 +244,6 @@ impl Router for ComposingRouter {
 
 struct ImmediateSession {
     current: RouteContribution,
-    emitted: bool,
     closes: Arc<AtomicU64>,
 }
 

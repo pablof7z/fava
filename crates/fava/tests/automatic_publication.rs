@@ -7,7 +7,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fava::{EventBuilder, EventValue, Fava, ReceiptId, ReceiptOutcome, all_terminal};
+use fava::{EventBuilder, EventValue, Fava, ReceiptOutcome};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
@@ -30,7 +30,6 @@ use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
-use tokio::sync::watch;
 
 #[tokio::test(flavor = "current_thread")]
 async fn known_destinations_deliver_immediately() {
@@ -38,7 +37,6 @@ async fn known_destinations_deliver_immediately() {
     let recipients = [Keys::generate(), Keys::generate(), Keys::generate()];
     let known_a = relay("known-a");
     let known_b = relay("known-b");
-    let later = relay("later");
     let app = relay("app");
     let initial = contribution(
         &[
@@ -256,19 +254,6 @@ struct RecordingPublisher {
 impl RecordingPublisher {
     fn count(&self) -> usize {
         self.attempts.lock().expect("attempt lock").len()
-    }
-
-    fn all_once_under(&self, receipt_id: ReceiptId) -> bool {
-        let attempts = self.attempts.lock().expect("attempt lock");
-        attempts
-            .iter()
-            .all(|attempt| attempt.receipt_id == receipt_id)
-            && attempts
-                .iter()
-                .map(|attempt| attempt.session.clone())
-                .collect::<BTreeSet<_>>()
-                .len()
-                == attempts.len()
     }
 }
 

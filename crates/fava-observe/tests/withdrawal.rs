@@ -5,7 +5,7 @@ mod support;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use fava_query::{Query, RelaySourceState, RelayWithdrawal, RouteOrigin};
+use fava_query::{Query, RelaySourceState, RouteOrigin};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget, Router};
@@ -31,8 +31,6 @@ async fn automatic_route_keeps_its_initial_attributed_evidence() {
         .open(automatic(alice))
         .expect("the automatic query opens");
     wait_until(|| requests(assembly.peer(&dropped)).len() == 1).await;
-    let peer = assembly.established(&dropped);
-    let installed = requests(Some(peer.clone()))[0].0.clone();
     let bound = relay_evidence(&observation, &dropped);
     assert!(matches!(
         bound.route,
