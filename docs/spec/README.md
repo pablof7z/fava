@@ -13,5 +13,5 @@ Implementation status belongs in focused issues, the canary registry, and
 feature evidence, not in these source documents.
 
 Architectural concepts, public Rust symbols, and crate names used by these
-documents are defined in `../internals/vocabulary.toml` and checked by
-`tools/check_vocabulary.py`.
+documents are defined where they are implemented. Symbol Gate signs the public
+declarations themselves; see `.symbol-gate/`.

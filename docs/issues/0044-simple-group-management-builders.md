@@ -74,6 +74,5 @@ still returned `UnsignedEvent`, producing type mismatches at every call site.
 ## Scope
 
 Carry only the management API, its tests and public callers, README/API
-catalogue, vocabulary.toml management term meanings, and this decision. Exclude
 main checkout changes to signing, query/edit/saved/people doctests, lockfiles,
 skills, and all unrelated test work.

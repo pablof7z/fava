@@ -8,9 +8,7 @@ composition boundaries. It is not an approval source. The approved constructor
 boundary is recorded in
 `docs/issues/0027-simple-group-relay-input-boundary.md`.
 
-The current nominal model is recorded in `docs/internals/vocabulary.toml` and
 its exact compiler-derived per-term records are pinned in
-`docs/internals/vocabulary-structure.json`. All 22 simple-group approval
 identities bind 113 public API records and require current structurally bound
 owner signatures. Nineteen are `unapproved`; three are `stale`. The append-only
 approval history contains earlier text-only events for `SimpleGroupMetadata`,
@@ -83,7 +81,6 @@ values, repetitions according to the exact operation, and unrelated order.
   `saved_group_lists`.
 
 These 22 owner-scoped packets have zero review problems and zero public-API
-gaps. This is not repository-wide governance success: `check_vocabulary.py`
 retains 354 inherited unique findings, and terminal-name plus external
 owner-signature gates remain independently red.
 
@@ -124,7 +121,6 @@ compiler-derived from the current surface and does not constrain architecture.
 - `cargo test -p fava --test simple_groups`
 - `cargo check --manifest-path apps/canary/Cargo.toml --all-targets`
 - `python3 tools/crate_readme_api.py check fava-simple-groups`
-- `python3 tools/check_vocabulary.py`
 
 The architecture target fails when a removed nominal surface, duplicate
 generic owner, private bound, verification path, or lifecycle value appears.

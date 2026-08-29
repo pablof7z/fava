@@ -54,9 +54,5 @@ serde_json.workspace = true
 tokio.workspace = true
 toml = "=0.8.23"
 
-[[bin]]
-name = "vocab-verify"
-path = "src/bin/vocab_verify.rs"
-
 [lints]
 workspace = true

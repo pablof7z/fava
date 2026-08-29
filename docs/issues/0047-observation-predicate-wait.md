@@ -46,10 +46,8 @@ initial test, consuming or closing the handle at timeout, mapping closure to
 
 - `cargo fmt --check`
 - `cargo test -p fava-observe --all-targets`
-- `cargo test -p fava --all-targets -- --skip vocabulary_gate_requires_all_terms_approved --skip vocabulary_terminal_names_match_term_names`
 - `cargo check` in `apps/canary` and `examples/simple-groups`
 - `python3 tools/crate_readme_api.py check fava-observe fava`
-- `python3 -m unittest tools.tests.test_vocabulary_structure`
 
 The repository-wide vocabulary gate and strict Clippy remain inherited-red on
 unrelated existing findings.

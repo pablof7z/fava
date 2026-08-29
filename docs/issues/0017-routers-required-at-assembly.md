@@ -87,4 +87,3 @@ belongs on the query side is out of scope and is not assumed either way here.
 - `ReceiptOutcome::NoDestination` remains reachable only through a configured
   chain that settles empty, and the receipt names the route reasons (WRITE-027).
 - The three assemblies above build and pass with an explicit `AppRelayRouter`.
-- `python3 tools/check_vocabulary.py` passes.

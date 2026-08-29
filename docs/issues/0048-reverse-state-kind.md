@@ -23,7 +23,6 @@ The canary semantic evidence uses the same public conversion, so replacing it wi
 ## Validation
 
 - `cargo test -p fava-simple-groups --locked`
-- `python3 -m unittest tools/tests/test_vocabulary_check.py tools/tests/test_vocabulary_structure.py` — 63 passed
 - `git diff --check`
 
 ## Scope

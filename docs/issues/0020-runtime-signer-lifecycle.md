@@ -116,6 +116,5 @@ returns to awaiting-signer state. Adding Bob's signer cannot wake Alice's work.
 - A deliberate missing wakeup fails add-after-acceptance evidence.
 - A deliberate pubkey-agnostic wakeup fails Alice/Bob isolation evidence.
 - Signer capacity overflow returns a typed refusal with no partial mutation.
-- `python3 tools/check_vocabulary.py`
 - `python3 -m unittest tools.tests.test_vocabulary_check`
 - `git diff --check`

@@ -71,9 +71,7 @@ The GREEN evidence is:
   `cargo check --manifest-path examples/simple-groups/Cargo.toml`, and
   `cargo check --manifest-path apps/canary/Cargo.toml` — public callers compile;
 - `python3 -m unittest tools/tests/test_vocabulary_check.py
-  tools/tests/test_vocabulary_structure.py` — 63 passed.
 
-`python3 tools/check_vocabulary.py` remains inherited-red on the repository
 backlog of unrelated nominal and specified vocabulary. Croissant source is
 present but no external binary was available; no Croissant or NIP-29 relay
 claim is made here.

@@ -50,12 +50,10 @@ validation passed:
 
 - `cargo test -p fava-write` — 21 tests and 4 doctests passed;
 - `cargo fmt --check` and `git diff --check` passed;
-- `python3 -m unittest tools/tests/test_vocabulary_check.py tools/tests/test_vocabulary_structure.py` — 63 tests passed.
 
 As a deliberate falsifier, reversing the consumed tag iterator made
 `reopening_an_unsigned_event_preserves_its_body_recomputes_identity_and_resets_routing`
 fail with the original tags in reverse order. The mutation was reverted.
 
-`python3 tools/check_vocabulary.py` remains inherited-red on unrelated
 repository vocabulary and specified-but-unimplemented items; this slice adds
 no new vocabulary diagnostic.

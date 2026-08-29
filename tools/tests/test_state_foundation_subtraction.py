@@ -135,10 +135,7 @@ class StateFoundationSubtraction(unittest.TestCase):
             r"selected independently per host",
             re.I,
         )
-        for relative in (
-            ".bg-shell/simple-groups-semantic-catalog.jsonl",
-            "docs/internals/vocabulary-candidates.jsonl",
-        ):
+        for relative in (".bg-shell/simple-groups-semantic-catalog.jsonl",):
             for number, line in enumerate((ROOT / relative).read_text().splitlines(), 1):
                 value = json.loads(line)
                 for string in json_strings(value):

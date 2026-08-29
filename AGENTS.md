@@ -14,7 +14,7 @@ Where names or signatures differ, preserve behavior and ownership. Record a real
 
 ## Stage and interface posture
 
-Early design, no public consumers. Break interfaces, architecture, design, expectations freely; never hold back for compatibility. No compat paths, deprecations, shims, aliases. Public API breaks are routine — run `python3 tools/check_vocabulary.py` and update `docs/internals/vocabulary.toml` to the new truth. Vocabulary changes still need a focused architecture change approved by Pablo; the bar is the design decision, not compatibility.
+Early design, no public consumers. Break interfaces, architecture, design, expectations freely; never hold back for compatibility. No compat paths, deprecations, shims, aliases. Public API breaks are routine. A changed public declaration drops its Symbol Gate signature and has to be reviewed and signed again; the bar is the design decision, not compatibility.
 
 ## Communication
 
@@ -41,11 +41,11 @@ Higher-level crates compose owning primitives and implement only their named dom
 
 ## Architectural vocabulary
 
-Closed by default. `docs/internals/vocabulary.toml` is the source of truth for concepts, public Rust symbols, specified public Rust symbols, crate names. Prefer established Nostr vocabulary; a Fava term identifies the nearest Nostr concept and the exact Fava-owned distinction.
+Closed by default. Prefer established Nostr vocabulary; a Fava term identifies the nearest Nostr concept and the exact Fava-owned distinction.
 
-A new crate, public or cross-crate nominal type, provider contract, persisted entity, configuration concept, or lifecycle owner is a vocabulary change. A synonym, wrapper, alternate representation, or adjective-qualified variant of an existing noun is also a vocabulary change. Approval requires: closest existing concept, observable distinction, counterexample, owner and lifecycle, forcing requirement, reason existing state is insufficient, executable falsifier. Vocabulary changes use a separate focused architecture change approved by Pablo; a feature change cannot approve its own new vocabulary.
+A new crate, public or cross-crate nominal type, provider contract, persisted entity, configuration concept, or lifecycle owner is an architecture change, and so is a synonym, wrapper, alternate representation, or adjective-qualified variant of an existing noun. Justifying one means naming the closest existing concept, the observable distinction, a counterexample, the owner and lifecycle, the forcing requirement, why existing state is insufficient, and an executable falsifier. These use a separate focused architecture change approved by Pablo; a feature change cannot approve its own.
 
-Documentation describes the current model only. Replace superseded concepts completely; no migration narration, aliases, or rejected-design commentary in authoritative docs or code. Run `python3 tools/check_vocabulary.py` and its unit tests for every architectural or public-API change.
+Documentation describes the current model only. Replace superseded concepts completely; no migration narration, aliases, or rejected-design commentary in authoritative docs or code.
 
 ## Rust conventions
 

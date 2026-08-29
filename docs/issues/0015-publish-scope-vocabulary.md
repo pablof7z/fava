@@ -71,7 +71,6 @@ cargo test -p fava --test publication_scopes
 cargo test -p fava --doc
 cargo test -p fava-write routing
 cargo test -p fava-write-store-redb semantic_write_store::recovery
-python3 tools/check_vocabulary.py
 python3 -m unittest tools.tests.test_vocabulary_check
 ```
 

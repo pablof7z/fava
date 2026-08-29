@@ -119,7 +119,6 @@ Green revision-9 gates:
 Repository-wide gates still red on unchanged `main` debt: the two vocabulary
 governance tests and two corresponding vocabulary-tool unit tests fail on the
 existing simple-groups candidate mismatch and wider vocabulary backlog;
-`check_vocabulary.py` reports that backlog but no `EventBuildError` or
 `WriteIntentError` defect. Repository-wide rustfmt reports pre-existing
 simple-groups formatting drift. The Redb Bazel target is blocked by missing
 first-party dependencies in `fava-observe/BUILD.bazel`, while the Cargo Redb

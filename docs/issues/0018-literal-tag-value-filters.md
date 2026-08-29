@@ -105,7 +105,6 @@ Post-restoration source SHA-256: afd96ad4b09b8f124aadf06c076b4466d47dd90df99e32e
 - `cargo clippy --manifest-path apps/canary/Cargo.toml --all-targets -- -D warnings` — exit 0.
 - `cargo fmt --manifest-path apps/canary/Cargo.toml -- --check` — exit 0.
 - `bazel test //...` — exit 0; 25/25 tests passed.
-- `python3 tools/check_vocabulary.py` — exit 0.
 - `python3 -m unittest tools/tests/test_vocabulary_check.py` — exit 0; 5/5 tests passed.
 - Final fresh controlled-relay scenario — exit 0 with the latest artifact above.
 - Boundary diff: `Cargo.toml`, `Cargo.lock`, `crates/fava-ingest/src/lib.rs`, and `crates/fava/src/relay.rs` are unchanged.

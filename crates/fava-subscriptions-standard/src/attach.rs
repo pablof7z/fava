@@ -29,7 +29,7 @@ use fava_wire::SubscriptionId;
 /// that turns out not to be equivalent is silent data loss.
 #[allow(
     clippy::type_complexity,
-    reason = "naming this pair would add a nominal the vocabulary registry does not carry"
+    reason = "naming this pair would add a public type for a shape used in one place"
 )]
 pub(crate) fn admit(
     demand: &[RelayDemand],
