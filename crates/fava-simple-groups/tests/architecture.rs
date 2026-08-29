@@ -6,10 +6,6 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const PUBLIC_ROOT: &str = include_str!("../src/lib.rs");
 const README: &str = include_str!("../README.md");
 const CATALOG: &str = include_str!("../../../.bg-shell/simple-groups-semantic-catalog.jsonl");
-const CONSTRUCTOR_DECISION: &str =
-    include_str!("../../../docs/issues/0027-simple-group-relay-input-boundary.md");
-const API_SPELLING_DECISION: &str =
-    include_str!("../../../docs/issues/0032-simple-group-public-api-spelling.md");
 fn sources() -> [(&'static str, &'static str); 10] {
     [
         ("edit.rs", include_str!("../src/edit.rs")),
