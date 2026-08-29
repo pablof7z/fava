@@ -80,5 +80,4 @@ through `FavaBuilder` would be one at the application boundary.
   receipts, zero provider work.
 - The requirement is stated in `docs/spec/ARCHITECTURE.md` under the `fava`
   facade or `fava-runtime`, so it is no longer hidden.
-- `python3 tools/check_vocabulary.py` passes if `BuildError`'s variant set changes
   in a way the registry tracks.

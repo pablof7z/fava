@@ -32,7 +32,6 @@ distinct-identity routing test fail.
 - `cargo test -p fava-write --doc`
 - `cargo check --workspace --all-targets`
 - `cargo clippy -p fava-write --all-targets -- -D warnings`
-- `python3 tools/check_vocabulary.py`
 
 The focused tests, doctests, workspace check, and owning-crate Clippy gate pass.
 The global vocabulary checker still reports the repository's pre-existing

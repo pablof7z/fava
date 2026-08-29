@@ -87,7 +87,6 @@ cargo test -p fava --test publication_door
 cargo test -p fava --test publication_scopes
 cargo test -p fava --test write_settlement
 cargo test -p fava --doc
-python3 tools/check_vocabulary.py
 python3 -m unittest tools.tests.test_vocabulary_check
 ```
 

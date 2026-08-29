@@ -68,6 +68,5 @@ edit symbols do not inherit false ownership.
 
 ## Validation
 
-- `python3 tools/check_vocabulary.py`
 - `python3 -m unittest tools.tests.test_vocabulary_check`
 - `git diff --check`

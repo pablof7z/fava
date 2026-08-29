@@ -55,7 +55,6 @@ cargo test -p fava --test publication_door
 cargo test -p fava --test publication_scopes
 cargo test -p fava --test semantic_write_publication author::
 cargo test -p fava-write --test replaceable_edit
-python3 tools/check_vocabulary.py
 python3 -m unittest tools.tests.test_vocabulary_check
 ```
 

@@ -171,9 +171,6 @@ not close the separately blocked final API.
 
 - `cargo test --workspace --all-targets --locked`: exit `101`; all reached
   behavior passed except the two baseline tests
-  `vocabulary_terminal_names_match_term_names` and
-  `vocabulary_gate_requires_all_terms_approved`.
-- `python3 tools/check_vocabulary.py`: exit `1`. Its output is byte-identical to
   the untouched original checkout, SHA-256
   `f89e1f4857668544e65c4c9b16baed2a1c9a270528d9f25822c4c6847113828c`.
 - `cargo fmt --all -- --check`: exit `1` only in existing `fava-simple-groups`

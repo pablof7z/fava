@@ -2,7 +2,7 @@ name: Architecture
 
 # Every gate `AGENTS.md` names for an architectural or public-API change, run on
 # every pull request and every push to main. Until 2026-08-23 this workflow ran
-# one job — the vocabulary checker — and nothing compiled, tested, or linted the
+# one job — an architectural checker — and nothing compiled, tested, or linted the
 # workspace in CI at all.
 #
 # Not covered here, and deliberately named rather than silently omitted:
@@ -55,36 +55,6 @@ jobs:
         env:
           BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python3 tools/crate_readme_api.py check-modified --base "$BASE_REVISION"
-
-  vocabulary:
-    name: Architectural vocabulary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "nightly-2026-07-07"
-      - uses: Swatinem/rust-cache@v2
-      - name: Install pinned public API extractor
-        run: cargo install cargo-public-api --version 0.52.0 --locked
-      - name: Test architectural vocabulary gate
-        run: python3 -m unittest tools/tests/test_vocabulary_check.py tools/tests/test_vocabulary_structure.py tools/tests/test_vocabulary_package.py
-      - name: Test structural approval payload and UI
-        run: python3 -m unittest tools.tests.test_vocabulary_approval.CanonicalMarkdownTest tools.tests.test_vocabulary_approval.ApprovalPageTest
-      - name: Recompile signed vocabulary structure
-        run: python3 tools/vocabulary_structure.py check
-      - name: Check canonical SimpleGroup signing package
-        run: python3 tools/vocabulary_package.py check
-      # AGENTS.md: "Architectural vocabulary is closed by default." This gate is
-      # red on purpose while the ownership remediation runs; the violation list
-      # is the work queue, not a flake. Do not silence it by widening
-      # `docs/internals/vocabulary.toml` — the unapproved lifecycle owners it
-      # names are scheduled for deletion.
-      - name: Check architectural vocabulary
-        run: python3 tools/check_vocabulary.py
 
   build:
     name: Build

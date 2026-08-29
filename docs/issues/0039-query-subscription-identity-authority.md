@@ -43,5 +43,4 @@ generation comparison admits the stale event.
 - `cargo test -p fava-diagnostics --test ownership_graph`
 - strict Clippy for the owning and implementation crates
 - `cargo check --workspace --all-targets`
-- `python3 tools/check_vocabulary.py`
 

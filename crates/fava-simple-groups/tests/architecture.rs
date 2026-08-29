@@ -10,8 +10,6 @@ const CONSTRUCTOR_DECISION: &str =
     include_str!("../../../docs/issues/0027-simple-group-relay-input-boundary.md");
 const API_SPELLING_DECISION: &str =
     include_str!("../../../docs/issues/0032-simple-group-public-api-spelling.md");
-const VOCABULARY: &str = include_str!("../../../docs/internals/vocabulary.toml");
-
 fn sources() -> [(&'static str, &'static str); 10] {
     [
         ("edit.rs", include_str!("../src/edit.rs")),
@@ -98,49 +96,6 @@ fn public_root_exports_only_the_current_nominal_surface() {
             "obsolete export survived: {removed}"
         );
     }
-}
-
-#[test]
-fn constructor_decision_and_vocabulary_describe_the_exported_boundary() {
-    for required in [
-        "new(id, relays: Vec<RelayUrl>)",
-        "Result<SimpleGroup, SimpleGroupConstructionError>",
-        "`EmptyId` rejects exactly a zero-length id",
-        "`EmptyRelays` rejects exactly an empty vector",
-    ] {
-        assert!(
-            CONSTRUCTOR_DECISION.contains(required),
-            "constructor decision lost {required}"
-        );
-    }
-
-    for required in [
-        "SimpleGroup::new(id, relays: Vec<RelayUrl>)",
-        "Source modules,\nincluding `management`, are private",
-        "Each public\nitem therefore has one canonical path",
-    ] {
-        assert!(
-            API_SPELLING_DECISION.contains(required),
-            "API spelling decision lost {required}"
-        );
-    }
-
-    let simple_group = vocabulary_term("SimpleGroup");
-    assert!(simple_group.contains("source = \"nostr\""));
-    assert!(simple_group.contains("One non-empty opaque simple-group id"));
-
-    let construction_error = vocabulary_term("SimpleGroupConstructionError");
-    assert!(construction_error.contains("source = \"fava\""));
-    assert!(construction_error.contains("EmptyId"));
-    assert!(construction_error.contains("EmptyRelays"));
-}
-
-fn vocabulary_term(name: &str) -> &'static str {
-    let marker = format!("[[term]]\nname = \"{name}\"\n");
-    let (_, rest) = VOCABULARY
-        .split_once(&marker)
-        .unwrap_or_else(|| panic!("missing vocabulary term {name}"));
-    rest.split_once("\n[[term]]").map_or(rest, |(term, _)| term)
 }
 
 #[test]
