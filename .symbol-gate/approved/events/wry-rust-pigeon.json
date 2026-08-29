@@ -1,0 +1,14 @@
+{
+  "id": "8513d958a0fd107d82d351a2d7198c89db3575cdc17262876311336fa97558ac",
+  "pubkey": "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "created_at": 1788021315,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava_simple_groups::edit::remove_saved_simple_group"
+    ]
+  ],
+  "content": "pub fn remove_saved_simple_group(group: &SimpleGroup) -> Result<ReplaceableEventEdit, WriteIntentError>",
+  "sig": "918e9c8e8416e97a9e966307ff8f53060b943f9adad66d3d6ea79c6adaee78a8940e82d72c5609baa232845433a75f1175413d66fe64c055254d69d0b14d58a7"
+}

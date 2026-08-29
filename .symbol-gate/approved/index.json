@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
   "approvals": {
+    "fava_simple_groups::edit::remove_saved_relay": [
+      "quiet-olive-meadow.json"
+    ],
+    "fava_simple_groups::edit::remove_saved_simple_group": [
+      "wry-rust-pigeon.json"
+    ],
+    "fava_simple_groups::edit::save_relay": [
+      "eager-flint-orchard.json"
+    ],
     "fava_simple_groups::management::GroupAccess": [
       "keen-coral-garden.json"
     ],

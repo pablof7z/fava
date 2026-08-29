@@ -1,0 +1,14 @@
+{
+  "id": "df07f0ebe1f78642e0725c4303cd967a61d94c26b1fc0a12c7b0c8c47bd771b1",
+  "pubkey": "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "created_at": 1788021264,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava_simple_groups::edit::remove_saved_relay"
+    ]
+  ],
+  "content": "pub fn remove_saved_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentError>",
+  "sig": "219358c703b36f99cb1dc1669e6b2298f49df1a5ef50f9edcae147639e82f01030cce2ac750401c457d9170fae15fe9def620612467792b3b10e2f51a98c2b6b"
+}

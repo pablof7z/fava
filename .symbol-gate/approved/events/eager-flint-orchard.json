@@ -1,0 +1,14 @@
+{
+  "id": "d8790752f9d7563f9c85ac1a4aa2455e4e84745e94b2de08e8fecf050e7fb55c",
+  "pubkey": "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52",
+  "created_at": 1788021546,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava_simple_groups::edit::save_relay"
+    ]
+  ],
+  "content": "pub fn save_relay(relay: RelayUrl) -> Result<ReplaceableEventEdit, WriteIntentError>",
+  "sig": "f0a3c3d7e79cb56b3143c4839a6bdf9e43791a8a21bba95fb2a36eba46a6bdcad2c7919a028da29859ae2c049a11fb54e1b3efed7d0aacc911550eae402bbb8d"
+}
