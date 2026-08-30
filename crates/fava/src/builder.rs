@@ -149,6 +149,34 @@ impl FavaBuilder {
     /// this workspace is enabled through its own `with_*` call instead
     /// (for example `fava_simple_groups::SimpleGroups::with_simple_groups`),
     /// not through this method.
+    ///
+    /// # Arguments
+    ///
+    /// * `applier` - the application's own edit applier for its kind
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # use fava::FavaBuilder;
+    /// # use fava_write::{EditApplier, EventEdit, EventValue, Kind, PublicKey, Timestamp,
+    /// #     UnsignedEvent, WriteIntentError};
+    /// # struct MyApplier;
+    /// # impl EditApplier for MyApplier {
+    /// #     fn kind(&self) -> Kind { Kind::TextNote }
+    /// #     fn supports(&self, _edit: &EventEdit) -> bool { true }
+    /// #     fn apply(
+    /// #         &self,
+    /// #         _edit: &EventEdit,
+    /// #         _author: PublicKey,
+    /// #         _source: Option<&EventValue>,
+    /// #         _created_at: Timestamp,
+    /// #     ) -> Result<UnsignedEvent, WriteIntentError> {
+    /// #         unimplemented!()
+    /// #     }
+    /// # }
+    /// let builder = FavaBuilder::default().applier(Arc::new(MyApplier));
+    /// ```
     #[must_use]
     pub fn applier<T>(mut self, applier: Arc<T>) -> Self
     where
@@ -165,6 +193,18 @@ impl FavaBuilder {
     /// `with_*` call instead (for example
     /// `fava_simple_groups::SimpleGroups::with_simple_groups`), not through
     /// this method.
+    ///
+    /// # Arguments
+    ///
+    /// * `appliers` - the application's own edit appliers, already erased
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::FavaBuilder;
+    /// # use fava_write::EditApplier;
+    /// let builder = FavaBuilder::default().appliers(Vec::<std::sync::Arc<dyn EditApplier>>::new());
+    /// ```
     #[must_use]
     pub fn appliers(
         mut self,
@@ -273,6 +313,10 @@ impl FavaBuilder {
 impl EditApplierSink for FavaBuilder {
     /// Register an applier obtained through a protocol crate's own
     /// enabling call, indexed exactly as one supplied through `applier`.
+    ///
+    /// # Arguments
+    ///
+    /// * `applier` - the edit applier to register
     fn accept(mut self, applier: Arc<dyn EditApplier>) -> Self {
         self.appliers.push(applier);
         self

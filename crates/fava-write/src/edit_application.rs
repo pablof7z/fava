@@ -87,8 +87,28 @@ pub trait EditApplier: Send + Sync {
 /// Neutral acceptor for an edit applier, owned by the crate that owns the
 /// edit-applier contract so that a protocol crate's enabling call does not
 /// require it to depend on the facade that assembles handlers.
+///
+/// # Examples
+///
+/// ```
+/// # use std::sync::Arc;
+/// # use fava_write::{EditApplier, EditApplierSink};
+/// #[derive(Default)]
+/// struct Sink(Vec<Arc<dyn EditApplier>>);
+///
+/// impl EditApplierSink for Sink {
+///     fn accept(mut self, applier: Arc<dyn EditApplier>) -> Self {
+///         self.0.push(applier);
+///         self
+///     }
+/// }
+/// ```
 pub trait EditApplierSink {
     /// Register the applier and return the sink for further configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `applier` - the edit applier to register
     #[must_use]
     fn accept(self, applier: Arc<dyn EditApplier>) -> Self;
 }

@@ -91,6 +91,25 @@ fn applier() -> Arc<dyn EditApplier> {
 /// Blanket-implemented for anything that accepts an edit applier, so an
 /// application enables public bookmarks by naming the protocol, never by
 /// obtaining or passing its applier.
+///
+/// # Examples
+///
+/// ```
+/// use fava_bookmarks::Bookmarks;
+/// use fava_write::EditApplierSink;
+///
+/// #[derive(Default)]
+/// struct Sink(Vec<std::sync::Arc<dyn fava_write::EditApplier>>);
+///
+/// impl EditApplierSink for Sink {
+///     fn accept(mut self, applier: std::sync::Arc<dyn fava_write::EditApplier>) -> Self {
+///         self.0.push(applier);
+///         self
+///     }
+/// }
+///
+/// let _sink = Sink::default().with_bookmarks();
+/// ```
 pub trait Bookmarks: Sized {
     /// Register the private kind-10003 applier and return the sink for
     /// further configuration.

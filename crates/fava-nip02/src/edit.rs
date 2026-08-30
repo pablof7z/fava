@@ -83,6 +83,25 @@ pub(crate) fn applier() -> Arc<dyn EditApplier> {
 /// Blanket-implemented for anything that accepts an edit applier, so an
 /// application enables NIP-02 by naming the protocol, never by obtaining or
 /// passing its applier.
+///
+/// # Examples
+///
+/// ```
+/// use fava_nip02::Nip02;
+/// use fava_write::EditApplierSink;
+///
+/// #[derive(Default)]
+/// struct Sink(Vec<std::sync::Arc<dyn fava_write::EditApplier>>);
+///
+/// impl EditApplierSink for Sink {
+///     fn accept(mut self, applier: std::sync::Arc<dyn fava_write::EditApplier>) -> Self {
+///         self.0.push(applier);
+///         self
+///     }
+/// }
+///
+/// let _sink = Sink::default().with_nip02();
+/// ```
 pub trait Nip02: Sized {
     /// Register the private kind-3 applier and return the sink for further
     /// configuration.

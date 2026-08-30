@@ -145,9 +145,25 @@ impl Fava {
 
     /// Durably accept one checked payload and begin its publication lifecycle.
     ///
+    /// # Arguments
+    ///
+    /// * `payload` - the event, edit, or builder to accept
+    ///
     /// # Errors
     ///
     /// Returns [`PublishError`] when this assembly cannot validate or accept it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm").by(author);
+    /// let write = fava.publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(
         clippy::result_large_err,
         reason = "PublishError intentionally carries the complete terminal Receipt as evidence"
@@ -161,16 +177,49 @@ impl Fava {
     }
 
     /// Narrow one edit publication to this exact author.
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the key that signs the authorless payload
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
+    /// let write = fava.by(author).publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn by(&self, author: PublicKey) -> PublishAs<'_> {
         publication::by(self, author)
     }
 
     /// Narrow one publication to an exact bounded finite owned relay sequence.
     ///
+    /// # Arguments
+    ///
+    /// * `relays` - the exact relay sequence to publish to
+    ///
     /// # Errors
     ///
     /// Returns [`PublishError`] when raw input exceeds its bound or the
     /// normalized route is empty or exceeds its distinct-destination bound.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey, RelayUrl};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm").by(author);
+    /// let write = fava.to(vec![relay])?.publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(
         clippy::result_large_err,
         reason = "PublishError intentionally carries the complete terminal Receipt as evidence"

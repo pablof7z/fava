@@ -130,10 +130,27 @@ pub struct PublishAs<'a> {
 impl PublishAs<'_> {
     /// Narrow this edit publication to an exact bounded relay sequence.
     ///
+    /// # Arguments
+    ///
+    /// * `relays` - the exact relay sequence to publish to
+    ///
     /// # Errors
     ///
     /// Returns [`PublishError`] when raw input exceeds its bound or the
     /// normalized route is empty or exceeds its distinct-destination bound.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey, RelayUrl};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
+    /// let write = fava.by(author).to(vec![relay])?.publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn to(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, PublishError> {
         self.routing = explicit_routing(relays)?;
         Ok(self)
@@ -142,9 +159,25 @@ impl PublishAs<'_> {
     /// Durably accept one authorless payload with this exact author and
     /// routing scope.
     ///
+    /// # Arguments
+    ///
+    /// * `payload` - the authorless event builder or edit to accept
+    ///
     /// # Errors
     ///
     /// Returns [`PublishError`] when the payload or publication is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
+    /// let write = fava.by(author).publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(private_bounds)]
     pub fn publish<P>(self, payload: P) -> Result<Write, PublishError>
     where
@@ -168,6 +201,23 @@ pub struct PublishTo<'a> {
 
 impl<'a> PublishTo<'a> {
     /// Add an exact edit author while preserving this explicit route.
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the key that signs the authorless payload
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey, RelayUrl};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
+    /// let write = fava.to(vec![relay])?.by(author).publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn by(self, author: PublicKey) -> PublishAs<'a> {
         PublishAs {
             fava: self.fava,
@@ -178,9 +228,26 @@ impl<'a> PublishTo<'a> {
 
     /// Durably accept one checked payload through this explicit route.
     ///
+    /// # Arguments
+    ///
+    /// * `payload` - the event, edit, or authored builder to accept
+    ///
     /// # Errors
     ///
     /// Returns [`PublishError`] when the payload or publication is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava::{EventBuilder, Fava, Kind, PublicKey, RelayUrl};
+    /// # fn publish_gm(fava: &Fava, author: PublicKey) -> Result<(), Box<dyn std::error::Error>> {
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm").by(author);
+    /// let write = fava.to(vec![relay])?.publish(builder)?;
+    /// # let _ = write;
+    /// # Ok(())
+    /// # }
+    /// ```
     #[allow(private_bounds)]
     pub fn publish<P>(self, payload: P) -> Result<Write, PublishError>
     where

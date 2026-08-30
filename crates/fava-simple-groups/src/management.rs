@@ -102,10 +102,13 @@ pub enum GroupAccess {
 
 /// Build a kind-9007 create-group event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. The event carries a single
-/// `h` tag with the group id. The relay creates the group when it accepts
-/// this event from an authorized pubkey.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays. The
+/// event carries a single `h` tag with the group id, and the relay creates
+/// the group when it accepts this event from an authorized pubkey.
+///
+/// # Arguments
+///
+/// * `group` - the group to create
 ///
 /// # Examples
 ///
@@ -114,7 +117,6 @@ pub enum GroupAccess {
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
-///
 /// let builder = create_group(&group)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -129,27 +131,25 @@ pub fn create_group(group: &SimpleGroup) -> Result<EventBuilder, WriteIntentErro
 
 /// Build a kind-9002 edit-metadata event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Tags for `None` fields in
-/// `edit` are omitted; the relay resets absent fields to their default
-/// values.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Tags for `None` fields in `edit` are omitted; the relay resets absent
+/// fields to their default values.
+///
+/// # Arguments
+///
+/// * `group` - the group whose metadata is edited
+/// * `edit` - the fields to change; `None` fields are reset to default
 ///
 /// # Examples
 ///
 /// ```
-/// # use fava_simple_groups::{GroupVisibility, MetadataEdit, SimpleGroup, edit_metadata};
+/// # use fava_simple_groups::{MetadataEdit, SimpleGroup, edit_metadata};
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 ///
-/// let builder = edit_metadata(
-///     &group,
-///     &MetadataEdit {
-///         name: Some("Cats".to_owned()),
-///         visibility: Some(GroupVisibility::Private),
-///         ..Default::default()
-///     },
-/// )?;
+/// let name = MetadataEdit { name: Some("Cats".to_owned()), ..Default::default() };
+/// let builder = edit_metadata(&group, &name)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -189,9 +189,14 @@ pub fn edit_metadata(
 
 /// Build a kind-9009 invite event for `group` with the exact invite code.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Emits `h` and the exact
-/// `code` tag only. An empty code string is valid and emits `["code", ""]`.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Emits `h` and the exact `code` tag only. An empty code string is valid
+/// and emits `["code", ""]`.
+///
+/// # Arguments
+///
+/// * `group` - the group the invite is routed to
+/// * `code` - the exact invite code embedded in the `code` tag
 ///
 /// # Examples
 ///
@@ -200,7 +205,6 @@ pub fn edit_metadata(
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
-///
 /// let builder = invite(&group, "my-invite-code")?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -216,10 +220,14 @@ pub fn invite(group: &SimpleGroup, code: &str) -> Result<EventBuilder, WriteInte
 
 /// Build a kind-9021 join-request event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Emits `h` and, when `code`
-/// is `Some`, the exact invite code tag. The optional reason field stays
-/// ordinary builder `.content(...)` on the returned builder.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Emits `h` and, when `code` is `Some`, the exact invite code tag. The
+/// optional reason stays ordinary builder `.content(...)` on the result.
+///
+/// # Arguments
+///
+/// * `group` - the group to request to join
+/// * `code` - the invite code to present, or `None` for an uninvited request
 ///
 /// # Examples
 ///
@@ -228,7 +236,6 @@ pub fn invite(group: &SimpleGroup, code: &str) -> Result<EventBuilder, WriteInte
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
-///
 /// let builder = join_request(&group, None)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -251,10 +258,15 @@ pub fn join_request(
 
 /// Build a kind-9000 put-user event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Emits `h` and one `p` tag
-/// for every supplied user. `roles` are appended as additional values on each
-/// `p` tag: `["p", "<pubkey>", "role1", ...]`. Empty slices emit no `p` tags.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Emits `h` and one `p` tag per user, with `roles` appended as extra values:
+/// `["p", "<pubkey>", "role1", ...]`. Empty slices emit no `p` tags.
+///
+/// # Arguments
+///
+/// * `group` - the group the users are added to
+/// * `users` - the exact users to add, in supplied order
+/// * `roles` - role names appended to every emitted `p` tag
 ///
 /// # Examples
 ///
@@ -265,8 +277,6 @@ pub fn join_request(
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
 /// let members = [Keys::generate().public_key(), Keys::generate().public_key()];
-///
-/// // Grant both users the member role in one event.
 /// let builder = put_user(&group, &members, &["member"])?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -293,9 +303,14 @@ pub fn put_user(
 
 /// Build a kind-9001 remove-user event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Emits `h` and one `p` tag
-/// for every user pubkey to remove. Empty slices emit no `p` tags.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Emits `h` and one `p` tag per user pubkey to remove. Empty slices emit
+/// no `p` tags.
+///
+/// # Arguments
+///
+/// * `group` - the group the users are removed from
+/// * `users` - the exact users to remove, in supplied order
 ///
 /// # Examples
 ///
@@ -328,9 +343,13 @@ pub fn remove_user(
 
 /// Build a kind-9005 delete-event event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. Emits `h` and `e` (id of
-/// the event to delete).
+/// Returns an authorless [`EventBuilder`] routed to the group's relays.
+/// Emits `h` and `e` (id of the event to delete).
+///
+/// # Arguments
+///
+/// * `group` - the group the target event belongs to
+/// * `event_id` - the id of the event to delete
 ///
 /// # Examples
 ///
@@ -360,10 +379,13 @@ pub fn delete_event(
 
 /// Build a kind-9008 delete-group event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. The relay removes the
-/// group when it accepts this event from an authorized pubkey. Only the `h`
-/// tag is emitted.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays. The
+/// relay removes the group when it accepts this event from an authorized
+/// pubkey. Only the `h` tag is emitted.
+///
+/// # Arguments
+///
+/// * `group` - the group to delete
 ///
 /// # Examples
 ///
@@ -387,10 +409,13 @@ pub fn delete_group(group: &SimpleGroup) -> Result<EventBuilder, WriteIntentErro
 
 /// Build a kind-9022 leave-group event for `group`.
 ///
-/// Returns an authorless [`EventBuilder`] routed to the group's relays;
-/// publish via `fava.by(author).publish(builder)`. The relay removes the
-/// author from the group when it accepts this event. Only the `h` tag is
-/// emitted.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays. The
+/// relay removes the author from the group when it accepts this event.
+/// Only the `h` tag is emitted.
+///
+/// # Arguments
+///
+/// * `group` - the group to leave
 ///
 /// # Examples
 ///

@@ -65,6 +65,17 @@ pub struct EventBuilder {
 
 impl EventBuilder {
     /// Begin one event body without interpreting its kind, and without an author.
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - the event kind
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind};
+    /// let builder = EventBuilder::new(Kind::TextNote);
+    /// ```
     #[must_use]
     pub fn new(kind: Kind) -> Self {
         Self {
@@ -78,6 +89,17 @@ impl EventBuilder {
     }
 
     /// Set the exact event timestamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `created_at` - the exact timestamp to record on the event
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, Timestamp};
+    /// let builder = EventBuilder::new(Kind::TextNote).created_at(Timestamp::from(1_700_000_000));
+    /// ```
     #[must_use]
     pub const fn created_at(mut self, created_at: Timestamp) -> Self {
         self.created_at = created_at;
@@ -85,6 +107,17 @@ impl EventBuilder {
     }
 
     /// Set opaque event content.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - the opaque event content
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind};
+    /// let builder = EventBuilder::new(Kind::TextNote).content("gm");
+    /// ```
     #[must_use]
     pub fn content(mut self, content: impl Into<String>) -> Self {
         self.content = content.into();
@@ -92,6 +125,18 @@ impl EventBuilder {
     }
 
     /// Append already-validated Nostr tags in their exact input order.
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - already-validated tags to append, in the supplied order
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, Tag};
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).tags(vec![client_tag]);
+    /// ```
     #[must_use]
     pub fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
         self.tags.extend(tags);
@@ -99,12 +144,33 @@ impl EventBuilder {
     }
 
     /// Append one already-validated Nostr tag.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - the already-validated tag to append
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, Tag};
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).tag(client_tag);
+    /// ```
     #[must_use]
     pub fn tag(self, tag: Tag) -> Self {
         self.tags([tag])
     }
 
     /// Borrow every exact event tag in insertion order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, Tag};
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).tag(client_tag);
+    /// let tags = builder.event_tags();
+    /// ```
     #[must_use]
     pub fn event_tags(&self) -> &[Tag] {
         &self.tags
@@ -115,11 +181,25 @@ impl EventBuilder {
     /// The route is not serialized or signed. Duplicate relay identities
     /// collapse in first-occurrence order under the write owner's bound.
     ///
+    /// # Arguments
+    ///
+    /// * `relays` - relays to add to the local explicit publication route
+    ///
     /// # Errors
     ///
     /// Returns the owning [`WriteIntentError`] when route accumulation is
     /// empty, cumulative raw input exceeds 1,024 occurrences, or the normalized
     /// route exceeds 256 distinct destinations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind};
+    /// # use nostr::types::RelayUrl;
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).to_relays(vec![relay])?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn to_relays(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, WriteIntentError> {
         let relays = relays.into();
         let raw_routing_inputs = self.raw_routing_inputs.checked_add(relays.len()).ok_or(
@@ -139,6 +219,21 @@ impl EventBuilder {
     ///
     /// Every field accumulated so far — kind, timestamp, content, tag order,
     /// and local publication route — carries over unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `author` - the key that signs the finished event
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey};
+    /// let author = PublicKey::from_hex(
+    ///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// )
+    /// .expect("valid hex public key");
+    /// let authored = EventBuilder::new(Kind::TextNote).content("gm").by(author);
+    /// ```
     #[must_use]
     pub fn by(self, author: PublicKey) -> AuthoredEventBuilder {
         AuthoredEventBuilder {
@@ -183,6 +278,23 @@ impl AuthoredEventBuilder {
     /// * `created_at` - the exact event timestamp, taken as-is
     /// * `tags` - the exact event tags, taken in the supplied order
     /// * `content` - the opaque event content
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{AuthoredEventBuilder, Kind, PublicKey, Timestamp};
+    /// let author = PublicKey::from_hex(
+    ///     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// )
+    /// .expect("valid hex public key");
+    /// let builder = AuthoredEventBuilder::from_parts(
+    ///     author,
+    ///     Kind::TextNote,
+    ///     Timestamp::from(1_700_000_000),
+    ///     vec![],
+    ///     "gm".to_owned(),
+    /// );
+    /// ```
     #[must_use]
     pub fn from_parts(
         author: PublicKey,
@@ -203,6 +315,22 @@ impl AuthoredEventBuilder {
     }
 
     /// Set the exact event timestamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `created_at` - the exact timestamp to record on the event
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey, Timestamp};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let builder = EventBuilder::new(Kind::TextNote)
+    ///     .by(author)
+    ///     .created_at(Timestamp::from(1_700_000_000));
+    /// ```
     #[must_use]
     pub const fn created_at(mut self, created_at: Timestamp) -> Self {
         self.created_at = created_at;
@@ -210,6 +338,20 @@ impl AuthoredEventBuilder {
     }
 
     /// Set opaque event content.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - the opaque event content
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let builder = EventBuilder::new(Kind::TextNote).by(author).content("gm");
+    /// ```
     #[must_use]
     pub fn content(mut self, content: impl Into<String>) -> Self {
         self.content = content.into();
@@ -217,6 +359,21 @@ impl AuthoredEventBuilder {
     }
 
     /// Append already-validated Nostr tags in their exact input order.
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - already-validated tags to append, in the supplied order
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey, Tag};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).by(author).tags(vec![client_tag]);
+    /// ```
     #[must_use]
     pub fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
         self.tags.extend(tags);
@@ -224,12 +381,39 @@ impl AuthoredEventBuilder {
     }
 
     /// Append one already-validated Nostr tag.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - the already-validated tag to append
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey, Tag};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).by(author).tag(client_tag);
+    /// ```
     #[must_use]
     pub fn tag(self, tag: Tag) -> Self {
         self.tags([tag])
     }
 
     /// Borrow every exact event tag in insertion order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey, Tag};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let client_tag = Tag::parse(["client", "example"]).expect("valid tag");
+    /// let builder = EventBuilder::new(Kind::TextNote).by(author).tag(client_tag);
+    /// let tags = builder.event_tags();
+    /// ```
     #[must_use]
     pub fn event_tags(&self) -> &[Tag] {
         &self.tags
@@ -240,11 +424,28 @@ impl AuthoredEventBuilder {
     /// The route is not serialized or signed. Duplicate relay identities
     /// collapse in first-occurrence order under the write owner's bound.
     ///
+    /// # Arguments
+    ///
+    /// * `relays` - relays to add to the local explicit publication route
+    ///
     /// # Errors
     ///
     /// Returns the owning [`WriteIntentError`] when route accumulation is
     /// empty, cumulative raw input exceeds 1,024 occurrences, or the normalized
     /// route exceeds 256 distinct destinations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey};
+    /// # use nostr::types::RelayUrl;
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let relay = RelayUrl::parse("wss://relay.example")?;
+    /// let builder = EventBuilder::new(Kind::TextNote).by(author).to_relays(vec![relay])?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn to_relays(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, WriteIntentError> {
         let relays = relays.into();
         let raw_routing_inputs = self.raw_routing_inputs.checked_add(relays.len()).ok_or(
@@ -264,6 +465,20 @@ impl AuthoredEventBuilder {
     /// # Errors
     ///
     /// Returns [`EventBuildError`] when event structure exceeds declared bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let event = EventBuilder::new(Kind::TextNote)
+    ///     .content("gm")
+    ///     .by(author)
+    ///     .build()
+    ///     .expect("event stays within declared bounds");
+    /// ```
     pub fn build(self) -> Result<UnsignedEvent, EventBuildError> {
         if matches!(self.routing, WriteRouting::Explicit(_)) {
             return Err(EventBuildError::ExplicitRoutingAttached);
@@ -276,6 +491,20 @@ impl AuthoredEventBuilder {
     /// # Errors
     ///
     /// Returns [`EventBuildError`] when event structure exceeds declared bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{EventBuilder, Kind, PublicKey};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let (event, routing) = EventBuilder::new(Kind::TextNote)
+    ///     .content("gm")
+    ///     .by(author)
+    ///     .into_event_and_routing()
+    ///     .expect("event stays within declared bounds");
+    /// ```
     pub fn into_event_and_routing(self) -> Result<(UnsignedEvent, WriteRouting), EventBuildError> {
         let routing = self.routing.clone();
         Ok((self.build_event()?, routing))
@@ -315,6 +544,25 @@ impl From<UnsignedEvent> for AuthoredEventBuilder {
     /// This consumes every serialized body field in its original tag order,
     /// starts with automatic routing, and deliberately discards the derived
     /// id. [`AuthoredEventBuilder::build`] computes one id from the final body.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - the finalized event body to reopen
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use fava_write::{AuthoredEventBuilder, EventBuilder, Kind, PublicKey};
+    /// # let author = PublicKey::from_hex(
+    /// #     "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    /// # ).expect("valid hex public key");
+    /// let event = EventBuilder::new(Kind::TextNote)
+    ///     .content("gm")
+    ///     .by(author)
+    ///     .build()
+    ///     .expect("event stays within declared bounds");
+    /// let reopened = AuthoredEventBuilder::from(event);
+    /// ```
     fn from(event: UnsignedEvent) -> Self {
         Self::from_parts(
             event.pubkey,

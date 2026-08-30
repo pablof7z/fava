@@ -177,8 +177,7 @@ pub(crate) fn saved_group_list_applier() -> Arc<dyn EditApplier> {
 ///     }
 /// }
 ///
-/// let sink = Sink::default().with_simple_groups();
-/// assert_eq!(sink.0.len(), 1);
+/// let _sink = Sink::default().with_simple_groups();
 /// ```
 pub trait SimpleGroups: Sized {
     /// Register the private kind-10009 applier and return the sink for

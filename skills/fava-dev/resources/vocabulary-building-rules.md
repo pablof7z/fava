@@ -49,11 +49,11 @@ argument; that entry is the single form symbol-gate attaches to a parameter.
 ~~~~rust
 /// Build a kind-9009 invite event for `group` with the exact invite code.
 ///
-/// Returns an [`EventBuilder`] routed to the group's relays.
+/// Returns an authorless [`EventBuilder`] routed to the group's relays;
+/// publish via `fava.by(author).publish(builder)`.
 ///
 /// # Arguments
 ///
-/// * `author` - the key that signs the invite event
 /// * `group` - the group the invite is routed to
 /// * `code` - the exact invite code embedded in the `code` tag
 ///
@@ -65,15 +65,13 @@ argument; that entry is the single form symbol-gate attaches to a parameter.
 ///
 /// ```
 /// # use fava_simple_groups::{SimpleGroup, invite};
-/// # use nostr::key::Keys;
 /// # use nostr::types::RelayUrl;
 /// let relay = RelayUrl::parse("wss://relay.example")?;
 /// let group = SimpleGroup::new("cats", vec![relay])?;
-/// let admin = Keys::generate();
-/// let builder = invite(admin.public_key(), &group, "my-invite-code")?;
+/// let builder = invite(&group, "my-invite-code")?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub fn invite(author: PublicKey, group: &SimpleGroup, code: &str)
+pub fn invite(group: &SimpleGroup, code: &str)
     -> Result<EventBuilder, WriteIntentError>
 ~~~~
 
@@ -99,9 +97,8 @@ Show the calls. Nothing else:
 ```rust
 let relay = RelayUrl::parse("wss://relay.example")?;
 let group = SimpleGroup::new("cats", vec![relay])?;
-let keys = Keys::generate();
 
-let event = create_group(keys.public_key(), &group)?;
+let builder = create_group(&group)?;
 ```
 
 Not this — the imports, the assertion and the helper are scaffolding for the
@@ -109,17 +106,15 @@ compiler, not information for the reader:
 
 ```rust
 use fava_simple_groups::{SimpleGroup, create_group};
-use nostr::key::Keys;
 use nostr::types::RelayUrl;
 
 let relay = RelayUrl::parse("wss://relay.example")?;
 let group = SimpleGroup::new("cats", vec![relay])?;
-let keys = Keys::generate();
 
-let event = create_group(keys.public_key(), &group)?;
+let builder = create_group(&group)?;
 
-assert!(has_h_tag(&event, "cats"));
-# fn has_h_tag(e: &fava_write::UnsignedEvent, id: &str) -> bool { … }
+assert!(has_h_tag(&builder, "cats"));
+# fn has_h_tag(b: &fava_write::EventBuilder, id: &str) -> bool { … }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
