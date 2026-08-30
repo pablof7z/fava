@@ -33,7 +33,7 @@ mod edit;
 mod query;
 
 pub use contact_list::{ContactList, ContactListError, ContactListRowEvidence, Follow};
-pub use edit::{follow, follow_with, applier, unfollow};
+pub use edit::{Nip02, follow, follow_with, unfollow};
 pub use query::{IntoContactAuthors, contact_list, followers_of, follows_of};
 
 #[cfg(test)]

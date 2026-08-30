@@ -3,10 +3,10 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
 
+use crate::edit::saved_group_list_applier;
 use crate::{
     SavedGroupList, SavedGroupListDecodeError, SimpleGroup, remove_saved_relay,
     remove_saved_simple_group, rename_saved_simple_group, save_relay, save_simple_group,
-    saved_group_list_applier,
 };
 
 use super::{public_key, tag, value};

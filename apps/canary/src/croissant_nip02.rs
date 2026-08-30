@@ -14,7 +14,7 @@ use fava::ReceiptOutcome;
 use fava::{EventBuilder, EventValue, Fava, Kind, Observation, Receipt, RelayUrl, Tag};
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
-use fava_nip02::ContactList;
+use fava_nip02::{ContactList, Nip02};
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
@@ -329,7 +329,7 @@ fn assembly(database: PathBuf, signer: Arc<dyn Signer>) -> CanaryResult<Fava> {
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .signers([signer])
-        .appliers([fava_nip02::applier()])
+        .with_nip02()
         .build()
         .map_err(error)
 }

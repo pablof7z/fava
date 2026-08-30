@@ -8,7 +8,9 @@ use fava::{
     PublishError, EventEdit, EditApplier, Timestamp, WriteIntentError,
     WriteStoreError,
 };
+use fava_bookmarks::Bookmarks;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_nip02::Nip02;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_write::{WriteIntent, WriteRouting};
 use fava_write_store::WriteStore;
@@ -26,9 +28,11 @@ mod capability_signer;
 #[path = "support/semantic_write.rs"]
 mod support;
 
+use capability_protocol::Enable;
 use support::{
-    BlockingSigner, CountingRouter, CountingSigner, NoopTransport, RecordingPublisher,
-    TestApplier, publication_builder, publication_owner, relay_url, wait_for_revision,
+    BlockingSigner, Capture, CountingRouter, CountingSigner, NoopTransport, RecordingPublisher,
+    TestApplier, captured_applier, publication_builder, publication_owner, relay_url,
+    wait_for_revision,
 };
 
 type EditResult = Result<EventEdit, WriteIntentError>;
@@ -63,7 +67,8 @@ fn target_count(event: &Event, tag_name: &str, target: &str) -> usize {
 }
 
 async fn shared_preview_bounds_and_failure<Add>(
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
+    capture: Capture,
     add: Add,
 ) where
     Add: Fn() -> EditResult,
@@ -76,19 +81,25 @@ async fn shared_preview_bounds_and_failure<Add>(
     let signer = Arc::new(BlockingSigner::new(actor));
     let publisher = Arc::new(RecordingPublisher::default());
     let router = Arc::new(CountingRouter::new(relay_url()));
+    // `Publication::new` (below `publication_owner`) is fava-publication's
+    // own door, not the sink: it takes a concrete `Arc<dyn EditApplier>`
+    // directly and has no notion of a protocol's enabling call.
+    // `captured_applier(capture)` recovers the real protocol applier through
+    // its own enabling call, so this still exercises the shipped applier.
     let owner = publication_owner(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-        vec![Arc::clone(&applier)],
+        vec![captured_applier(capture)],
         vec![router.clone()],
     );
-    let fava = publication_builder(cache, Arc::clone(&store), Arc::clone(&signer), publisher)
-        .router(Arc::clone(&router))
-        .appliers([Arc::clone(&applier)])
-        .build()
-        .expect("preview assembly");
+    let fava = enable(
+        publication_builder(cache, Arc::clone(&store), Arc::clone(&signer), publisher)
+            .router(Arc::clone(&router)),
+    )
+    .build()
+    .expect("preview assembly");
     let intent = automatic_intent(edit.clone(), actor);
     let preview = owner
         .preview_semantic_routes(&intent)
@@ -105,14 +116,14 @@ async fn shared_preview_bounds_and_failure<Add>(
         receipt.desired_destinations,
         preview.destinations.keys().cloned().collect()
     );
-    assert_selection_and_capacity_refusals(keys, actor, edit, applier);
+    assert_selection_and_capacity_refusals(keys, actor, edit, enable);
 }
 
 fn assert_selection_and_capacity_refusals(
     keys: Keys,
     actor: PublicKey,
     edit: EventEdit,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
 ) {
     let empty = publication_builder(
         Arc::new(MemoryEventCache::default()),
@@ -130,13 +141,12 @@ fn assert_selection_and_capacity_refusals(
             .publish(edit.clone()),
         Err(PublishError::Publication(PublicationError::Routing(_)))
     ));
-    let duplicate = publication_builder(
+    let duplicate = enable(enable(publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::new(MemoryWriteStore::default()),
         Arc::new(CountingSigner::new(keys.clone())),
         Arc::new(RecordingPublisher::default()),
-    )
-    .appliers([Arc::clone(&applier), Arc::clone(&applier)])
+    )))
     .build();
     assert!(matches!(duplicate, Err(BuildError::Publication(_))));
     let overflow = publication_builder(
@@ -153,19 +163,20 @@ fn assert_selection_and_capacity_refusals(
     assert!(matches!(overflow, Err(BuildError::Publication(_))));
 
     let bounded_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
-    let bounded = Fava::builder()
-        .event_cache(Arc::new(MemoryEventCache::default()))
-        .write_store(Arc::clone(&bounded_store))
-        .query_evaluator(Arc::new(StandardQueryEvaluator))
-        .transport(Arc::new(NoopTransport))
-        .signer(Arc::new(CountingSigner::new(keys)))
-        .publisher(Arc::new(RecordingPublisher::default()))
-        .delivery_policy(Arc::new(
-            fava_delivery_standard::StandardDeliveryPolicy::default(),
-        ))
-        .appliers([applier])
-        .build()
-        .expect("bounded assembly");
+    let bounded = enable(
+        Fava::builder()
+            .event_cache(Arc::new(MemoryEventCache::default()))
+            .write_store(Arc::clone(&bounded_store))
+            .query_evaluator(Arc::new(StandardQueryEvaluator))
+            .transport(Arc::new(NoopTransport))
+            .signer(Arc::new(CountingSigner::new(keys)))
+            .publisher(Arc::new(RecordingPublisher::default()))
+            .delivery_policy(Arc::new(
+                fava_delivery_standard::StandardDeliveryPolicy::default(),
+            )),
+    )
+    .build()
+    .expect("bounded assembly");
     bounded_store
         .accept_applied(EventValue::Unsigned(
             EventBuilder::new(Kind::TextNote).by(actor).build().unwrap(),
@@ -191,7 +202,7 @@ async fn nip02_passes_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::ContactList,
-        fava_nip02::applier(),
+        |builder| builder.with_nip02(),
         || fava_nip02::follow(target),
         || fava_nip02::unfollow(target),
         || fava_nip02::follow(adjacent),
@@ -208,7 +219,7 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::Custom(10_003),
-        fava_bookmarks::applier(),
+        |builder| builder.with_bookmarks(),
         || fava_bookmarks::bookmark_event(target),
         || fava_bookmarks::unbookmark_event(target),
         || fava_bookmarks::bookmark_event(adjacent),
@@ -220,14 +231,18 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
 #[tokio::test(flavor = "current_thread")]
 async fn capabilities_share_preview_bounds_and_failure_behavior() {
     let follow_target = Keys::generate().public_key();
-    shared_preview_bounds_and_failure(fava_nip02::applier(), || {
-        fava_nip02::follow(follow_target)
-    })
+    shared_preview_bounds_and_failure(
+        |builder| builder.with_nip02(),
+        |sink| sink.with_nip02(),
+        || fava_nip02::follow(follow_target),
+    )
     .await;
     let bookmark_target = EventId::from_byte_array([10; 32]);
-    shared_preview_bounds_and_failure(fava_bookmarks::applier(), || {
-        fava_bookmarks::bookmark_event(bookmark_target)
-    })
+    shared_preview_bounds_and_failure(
+        |builder| builder.with_bookmarks(),
+        |sink| sink.with_bookmarks(),
+        || fava_bookmarks::bookmark_event(bookmark_target),
+    )
     .await;
 }
 
@@ -237,7 +252,8 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let follow_adjacent = Keys::generate().public_key();
     capability_lifecycle::exercise(
         Kind::ContactList,
-        fava_nip02::applier(),
+        |builder| builder.with_nip02(),
+        |sink| sink.with_nip02(),
         || fava_nip02::follow(follow_target),
         || fava_nip02::follow(follow_adjacent),
         ("p", &follow_target.to_hex()),
@@ -247,7 +263,8 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let bookmark_adjacent = EventId::from_byte_array([12; 32]);
     capability_lifecycle::exercise(
         Kind::Custom(10_003),
-        fava_bookmarks::applier(),
+        |builder| builder.with_bookmarks(),
+        |sink| sink.with_bookmarks(),
         || fava_bookmarks::bookmark_event(bookmark_target),
         || fava_bookmarks::bookmark_event(bookmark_adjacent),
         ("e", &bookmark_target.to_hex()),

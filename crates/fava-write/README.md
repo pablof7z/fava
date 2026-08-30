@@ -75,6 +75,15 @@ Compiler-visible trait `fava_write::EditApplier`.
 | **`kind`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EditApplier::kind","signature":"pub fn fava_write::EditApplier::kind(&self) -> nostr::event::kind::Kind","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EditApplier::kind(&self) -> nostr::event::kind::Kind"} --> | Compiler-visible method owned by `fava_write::EditApplier`. |
 | **`supports`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EditApplier::supports","signature":"pub fn fava_write::EditApplier::supports(&self, &fava_write::EventEdit) -> bool","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EditApplier::supports(&self, &fava_write::EventEdit) -> bool"} --> | Compiler-visible method owned by `fava_write::EditApplier`. |
 
+### `EditApplierSink` (Trait)
+
+Compiler-visible trait `fava_write::EditApplierSink`.
+<!-- api-item {"kind":"Trait","item":"fava_write::EditApplierSink","signature":"pub trait fava_write::EditApplierSink","evidence":"cargo-public-api@0.52.0: pub trait fava_write::EditApplierSink"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`accept`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EditApplierSink::accept","signature":"pub fn fava_write::EditApplierSink::accept(self, alloc::sync::Arc<dyn fava_write::EditApplier>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EditApplierSink::accept(self, alloc::sync::Arc<dyn fava_write::EditApplier>) -> Self"} --> | Compiler-visible method owned by `fava_write::EditApplierSink`. |
+
 ### `EventBuildError` (Enum)
 
 Compiler-visible enum `fava_write::EventBuildError`.

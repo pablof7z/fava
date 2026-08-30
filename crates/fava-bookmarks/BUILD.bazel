@@ -47,3 +47,18 @@ rust_test(
         "//crates/fava-write:lib",
     ],
 )
+
+# `tests/architecture.rs` reads this BUILD file and the crate's Cargo.toml and
+# `src/lib.rs` through `include_str!`, so those are compile_data.
+rust_test(
+    name = "architecture",
+    srcs = ["tests/architecture.rs"],
+    crate_name = "fava_bookmarks_architecture",
+    edition = crate_edition(),
+    deps = [],
+    compile_data = [
+        "BUILD.bazel",
+        "Cargo.toml",
+        "src/lib.rs",
+    ],
+)

@@ -168,7 +168,7 @@ follow(target) -> Result<EventEdit, WriteIntentError>
 unfollow(target) -> Result<EventEdit, WriteIntentError>
 follow_with(target, Option<RelayUrl>, Option<&str>)
     -> Result<EventEdit, WriteIntentError>
-applier() -> Arc<dyn EditApplier>
+Nip02::with_nip02(self) -> Self
 
 contact_list(authors) -> Result<Query, QueryError>
 followers_of(subject) -> Result<Query, QueryError>
@@ -223,6 +223,15 @@ path and are classified by the re-exported item's kind.
 Compiler-visible module `fava_nip02`.
 <!-- api-item {"kind":"Module","item":"fava_nip02","signature":"pub mod fava_nip02","evidence":"cargo-public-api@0.52.0: pub mod fava_nip02"} -->
 
+| Item | Purpose |
+| --- | --- |
+| **`contact_list`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::contact_list","signature":"pub fn fava_nip02::contact_list(impl fava_nip02::IntoContactAuthors) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::contact_list(impl fava_nip02::IntoContactAuthors) -> core::result::Result<fava_query::Query, fava_query::QueryError>"} --> | Compiler-visible function owned by `fava_nip02`. |
+| **`follow`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::follow","signature":"pub fn fava_nip02::follow(impl core::fmt::Display) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::follow(impl core::fmt::Display) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>"} --> | Compiler-visible function owned by `fava_nip02`. |
+| **`follow_with`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::follow_with","signature":"pub fn fava_nip02::follow_with(impl core::fmt::Display, core::option::Option<nostr::types::url::RelayUrl>, core::option::Option<&str>) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::follow_with(impl core::fmt::Display, core::option::Option<nostr::types::url::RelayUrl>, core::option::Option<&str>) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>"} --> | Compiler-visible function owned by `fava_nip02`. |
+| **`followers_of`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::followers_of","signature":"pub fn fava_nip02::followers_of(nostr::key::public_key::PublicKey) -> core::result::Result<fava_query::Query, fava_query::QueryError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::followers_of(nostr::key::public_key::PublicKey) -> core::result::Result<fava_query::Query, fava_query::QueryError>"} --> | Compiler-visible function owned by `fava_nip02`. |
+| **`follows_of`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::follows_of","signature":"pub fn fava_nip02::follows_of(&fava_query::QuerySnapshot) -> alloc::vec::Vec<nostr::key::public_key::PublicKey>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::follows_of(&fava_query::QuerySnapshot) -> alloc::vec::Vec<nostr::key::public_key::PublicKey>"} --> | Compiler-visible function owned by `fava_nip02`. |
+| **`unfollow`**<br><sub>Function</sub><!-- api-item {"kind":"Function","item":"fava_nip02::unfollow","signature":"pub fn fava_nip02::unfollow(impl core::fmt::Display) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::unfollow(impl core::fmt::Display) -> core::result::Result<fava_write::edit::EventEdit, fava_write::WriteIntentError>"} --> | Compiler-visible function owned by `fava_nip02`. |
+
 ### `ContactList` (Struct)
 
 Compiler-visible struct `fava_nip02::ContactList`.
@@ -234,7 +243,6 @@ Compiler-visible struct `fava_nip02::ContactList`.
 | **`evidence`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::ContactList::evidence","signature":"pub const fn fava_nip02::ContactList::evidence(&self) -> &[fava_nip02::ContactListRowEvidence]","evidence":"cargo-public-api@0.52.0: pub const fn fava_nip02::ContactList::evidence(&self) -> &[fava_nip02::ContactListRowEvidence]"} --> | Compiler-visible method owned by `fava_nip02::ContactList`. |
 | **`follows`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::ContactList::follows","signature":"pub const fn fava_nip02::ContactList::follows(&self) -> &[fava_nip02::Follow]","evidence":"cargo-public-api@0.52.0: pub const fn fava_nip02::ContactList::follows(&self) -> &[fava_nip02::Follow]"} --> | Compiler-visible method owned by `fava_nip02::ContactList`. |
 | **`from_event`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::ContactList::from_event","signature":"pub fn fava_nip02::ContactList::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_nip02::ContactListError>","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::ContactList::from_event(&fava_write::EventValue) -> core::result::Result<Self, fava_nip02::ContactListError>"} --> | Compiler-visible method owned by `fava_nip02::ContactList`. |
-| **`supersedes`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::ContactList::supersedes","signature":"pub fn fava_nip02::ContactList::supersedes(&self, &Self) -> bool","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::ContactList::supersedes(&self, &Self) -> bool"} --> | Compiler-visible method owned by `fava_nip02::ContactList`. |
 
 ### `ContactListError` (Enum)
 
@@ -309,4 +317,13 @@ Compiler-visible trait `fava_nip02::IntoContactAuthors`.
 | --- | --- |
 | **`IntoIter`**<br><sub>Type alias</sub><!-- api-item {"kind":"Type alias","item":"fava_nip02::IntoContactAuthors::IntoIter","signature":"pub type fava_nip02::IntoContactAuthors::IntoIter: core::iter::traits::iterator::Iterator<Item = nostr::key::public_key::PublicKey>","evidence":"cargo-public-api@0.52.0: pub type fava_nip02::IntoContactAuthors::IntoIter: core::iter::traits::iterator::Iterator<Item = nostr::key::public_key::PublicKey>"} --> | Compiler-visible type alias owned by `fava_nip02::IntoContactAuthors`. |
 | **`into_contact_authors`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::IntoContactAuthors::into_contact_authors","signature":"pub fn fava_nip02::IntoContactAuthors::into_contact_authors(self) -> Self::IntoIter","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::IntoContactAuthors::into_contact_authors(self) -> Self::IntoIter"} --> | Compiler-visible method owned by `fava_nip02::IntoContactAuthors`. |
+
+### `Nip02` (Trait)
+
+Compiler-visible trait `fava_nip02::Nip02`.
+<!-- api-item {"kind":"Trait","item":"fava_nip02::Nip02","signature":"pub trait fava_nip02::Nip02: core::marker::Sized","evidence":"cargo-public-api@0.52.0: pub trait fava_nip02::Nip02: core::marker::Sized"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`with_nip02`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_nip02::Nip02::with_nip02","signature":"pub fn fava_nip02::Nip02::with_nip02(self) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_nip02::Nip02::with_nip02(self) -> Self"} --> | Compiler-visible method owned by `fava_nip02::Nip02`. |
 <!-- END crate-readme-api inventory -->

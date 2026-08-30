@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    EditApplier, Event, EventBuilder, EventEdit, EventValue, Fava, FavaBuilder, Kind, PublicKey,
-    Receipt, ReceiptId, RelayUrl, RevisionId, Timestamp, UnsignedEvent, WriteIntentError,
-    WriteRouting,
+    EditApplier, EditApplierSink, Event, EventBuilder, EventEdit, EventValue, Fava, FavaBuilder,
+    Kind, PublicKey, Receipt, ReceiptId, RelayUrl, RevisionId, Timestamp, UnsignedEvent,
+    WriteIntentError, WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -228,6 +228,35 @@ impl EditApplier for TestApplier {
         }
         builder.build().map_err(WriteIntentError::from)
     }
+}
+
+/// A minimal [`EditApplierSink`] that captures the applier an enabling call
+/// (`with_nip02()`, `with_bookmarks()`, ...) registers, without needing a
+/// full `FavaBuilder`. Lets a test recover the real, otherwise-private
+/// protocol applier through the public enabling call instead of substituting
+/// a `TestApplier` for it.
+#[derive(Default)]
+pub struct CaptureSink {
+    pub captured: Option<Arc<dyn EditApplier>>,
+}
+
+impl EditApplierSink for CaptureSink {
+    fn accept(mut self, applier: Arc<dyn EditApplier>) -> Self {
+        self.captured = Some(applier);
+        self
+    }
+}
+
+/// A plain function pointer mirroring `Enable`, but over [`CaptureSink`]
+/// instead of `FavaBuilder`: every call site is a zero-capture closure like
+/// `|sink| sink.with_nip02()`.
+pub type Capture = fn(CaptureSink) -> CaptureSink;
+
+/// Recover the real applier an enabling call registers.
+pub fn captured_applier(capture: Capture) -> Arc<dyn EditApplier> {
+    capture(CaptureSink::default())
+        .captured
+        .expect("enabling call registers exactly one applier")
 }
 
 pub struct CountingSigner {

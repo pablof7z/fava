@@ -2171,8 +2171,9 @@ the neutral query owner's bounded author-input constructor and preserves its
 typed `QueryError`. `SavedGroupList::from_event` represents one event and decodes group and
 relay entries exactly once, retaining order, repetitions, and entry-local errors.
 Crate-root save, remove, and rename functions return `EventEdit`;
-`saved_group_list_applier()` integrates their private codec with Fava's
-generic semantic-write lifecycle. Edits preserve opaque content, foreign tags,
+`SimpleGroups::with_simple_groups()` enables the private applier that
+integrates their private codec with Fava's generic semantic-write lifecycle.
+Edits preserve opaque content, foreign tags,
 malformed entries, unused trailing values, and unrelated order.
 
 The crate depends on `fava-query`, `fava-state`, `fava-write`, and `nostr` for
@@ -2643,24 +2644,22 @@ An application may use `fava-standard` or assemble `fava` directly.
 A direct Rust application may assemble providers explicitly:
 
 ```rust
-let engine = Engine::builder()
+let engine = Fava::builder()
     .query_evaluator(StandardQueryEvaluator::new())
     .event_cache(MemoryEventCache::bounded(100_000))
     .write_store(RedbWriteStore::open("writes.redb")?)
     .fetch_cache(MemoryFetchCache::bounded(2_000))
     .routers([
-        Box::new(OutboxRouter::new(indexer_relays)),
-        Box::new(HintRouter::new()),
-        Box::new(FallbackRelayRouter::new(fallback_relays)),
+        Arc::new(OutboxRouter::new(indexer_relays)),
+        Arc::new(HintRouter::new()),
+        Arc::new(FallbackRelayRouter::new(fallback_relays)),
     ])
     .subscription_planner(StandardSubscriptionPlanner::new())
     .transport(WebSocketTransport::new())
     .publisher(Nip01Publisher::new())
     .delivery_policy(StandardDeliveryPolicy::new())
-    .appliers([
-        Box::new(nip02.applier()),
-        Box::new(bookmarks.applier()),
-    ])
+    .with_nip02()
+    .with_bookmarks()
     .build()?;
 ```
 

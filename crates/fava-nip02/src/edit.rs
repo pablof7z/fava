@@ -4,7 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier,
+    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier, EditApplierSink,
     Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
@@ -70,10 +70,30 @@ pub fn follow_with(
     )
 }
 
-/// Select the pure NIP-02 applier for application assembly.
+/// Return the pure NIP-02 applier behind the neutral contract.
+///
+/// Private: the only way out of this crate is [`Nip02::with_nip02`].
 #[must_use]
-pub fn applier() -> Arc<dyn EditApplier> {
+pub(crate) fn applier() -> Arc<dyn EditApplier> {
     Arc::new(Nip02Applier)
+}
+
+/// Enable kind-3 NIP-02 contact-list semantic-write support.
+///
+/// Blanket-implemented for anything that accepts an edit applier, so an
+/// application enables NIP-02 by naming the protocol, never by obtaining or
+/// passing its applier.
+pub trait Nip02: Sized {
+    /// Register the private kind-3 applier and return the sink for further
+    /// configuration.
+    #[must_use]
+    fn with_nip02(self) -> Self;
+}
+
+impl<T: EditApplierSink> Nip02 for T {
+    fn with_nip02(self) -> Self {
+        self.accept(applier())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

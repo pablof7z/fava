@@ -1,6 +1,6 @@
 use fava_write::{EventEdit, Kind, PublicKey, Timestamp, WriteIntentError};
 
-use crate::saved_group_list_applier;
+use crate::edit::saved_group_list_applier;
 
 const SAVE_SIMPLE_GROUP: u8 = 1;
 const SAVE_RELAY: u8 = 4;

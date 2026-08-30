@@ -2,7 +2,7 @@ use fava_write::{EventValue, EventEdit, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
-use crate::applier;
+use crate::edit::applier;
 
 mod contact_list;
 mod edit;

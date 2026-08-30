@@ -3,14 +3,14 @@
 //! The five saved-list operations (save/remove/rename a group, save/remove a
 //! bare relay) are packed into the private binary format read and written by
 //! [`encode`]/[`decode_edit`], then folded onto the previous kind-10009 tag
-//! set by [`apply`]. [`saved_group_list_applier`] is the only way a
+//! set by [`apply`]. [`SimpleGroups::with_simple_groups`] is the only way a
 //! caller outside this module reaches that logic.
 
 use std::sync::Arc;
 
 use fava_write::{
-    AuthoredEventBuilder, EditApplier, EventEdit, EventValue, Kind, PublicKey, Tag, Timestamp,
-    UnsignedEvent, WriteIntentError,
+    AuthoredEventBuilder, EditApplier, EditApplierSink, EventEdit, EventValue,
+    Kind, PublicKey, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
 
@@ -148,24 +148,49 @@ pub fn remove_saved_relay(relay: RelayUrl) -> Result<EventEdit, WriteIntentError
 
 /// Return a fresh kind-10009 applier behind the neutral contract.
 ///
-/// Register this with the Fava builder to enable semantic write lifecycle
-/// support for kind-10009 Simple Group List events.
+/// Private: the only way out of this crate is
+/// [`SimpleGroups::with_simple_groups`].
+#[must_use]
+pub(crate) fn saved_group_list_applier() -> Arc<dyn EditApplier> {
+    Arc::new(SavedGroupListApplier)
+}
+
+/// Enable kind-10009 Simple Group List semantic-write support.
+///
+/// Blanket-implemented for anything that accepts an edit applier, so an
+/// application enables simple groups by naming the protocol, never by
+/// obtaining or passing its applier.
 ///
 /// # Examples
 ///
 /// ```
-/// # use fava_simple_groups::{SimpleGroup, save_simple_group, saved_group_list_applier};
-/// # use nostr::types::RelayUrl;
-/// let applier = saved_group_list_applier();
+/// use fava_simple_groups::SimpleGroups;
+/// use fava_write::EditApplierSink;
 ///
-/// let relay = RelayUrl::parse("wss://relay.example")?;
-/// let group = SimpleGroup::new("photos", vec![relay])?;
-/// let edit = save_simple_group(&group, None)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// #[derive(Default)]
+/// struct Sink(Vec<std::sync::Arc<dyn fava_write::EditApplier>>);
+///
+/// impl EditApplierSink for Sink {
+///     fn accept(mut self, applier: std::sync::Arc<dyn fava_write::EditApplier>) -> Self {
+///         self.0.push(applier);
+///         self
+///     }
+/// }
+///
+/// let sink = Sink::default().with_simple_groups();
+/// assert_eq!(sink.0.len(), 1);
 /// ```
-#[must_use]
-pub fn saved_group_list_applier() -> Arc<dyn EditApplier> {
-    Arc::new(SavedGroupListApplier)
+pub trait SimpleGroups: Sized {
+    /// Register the private kind-10009 applier and return the sink for
+    /// further configuration.
+    #[must_use]
+    fn with_simple_groups(self) -> Self;
+}
+
+impl<T: EditApplierSink> SimpleGroups for T {
+    fn with_simple_groups(self) -> Self {
+        self.accept(saved_group_list_applier())
+    }
 }
 
 /// Wraps one encoded changeset as a non-addressable kind-10009 edit.

@@ -6,6 +6,7 @@ use fava::{
     EventBuilder, Fava, Kind, PublishError, Query, RelayUrl, WriteIntentError, WriteRouting,
 };
 use fava_event_cache_memory::MemoryEventCache;
+use fava_nip02::Nip02;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_signer::Signer;
 use fava_signer_local::LocalSigner;
@@ -438,7 +439,7 @@ fn assembly(
             Arc::clone(&signer) as Arc<dyn Signer>,
             second_signer as Arc<dyn Signer>,
         ])
-        .appliers([fava_nip02::applier()])
+        .with_nip02()
         .publisher(Arc::clone(&publisher))
         .delivery_policy(Arc::new(
             fava_delivery_standard::StandardDeliveryPolicy::default(),

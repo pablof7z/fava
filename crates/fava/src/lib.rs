@@ -46,9 +46,9 @@ pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;
 pub use fava_write::{
-    AuthoredEventBuilder, Event, EventBuildError, EventBuilder, EventValue, Kind, RevisionId,
-    PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit,
-    EditApplier, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntentError,
+    AuthoredEventBuilder, EditApplier, EditApplierSink, Event, EventBuildError, EventBuilder,
+    EventEdit, EventValue, Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
+    RelayDeliveryOutcome, RevisionId, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntentError,
     WriteRouting,
 };
 use fava_write_store::WriteStore;

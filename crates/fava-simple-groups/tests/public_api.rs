@@ -9,12 +9,25 @@ use fava_simple_groups::{
     SimpleGroupAdmins, SimpleGroupConstructionError, SimpleGroupDecodeError,
     SimpleGroupEventBuilder, SimpleGroupLivekitParticipants, SimpleGroupMembers,
     SimpleGroupMetadata, SimpleGroupPins, SimpleGroupRoles, SimpleGroupStateEventKind,
-    edit_metadata, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
-    save_relay, save_simple_group, saved_group_list_applier, saved_group_lists,
+    SimpleGroups, edit_metadata, remove_saved_relay, remove_saved_simple_group,
+    rename_saved_simple_group, save_relay, save_simple_group, saved_group_lists,
 };
 use fava_write::{
-    EditApplier, EventBuilder, EventEdit, EventValue, Tag, WriteIntentError, WriteRouting,
+    EditApplier, EditApplierSink, EventBuilder, EventEdit, EventValue, Tag, WriteIntentError,
+    WriteRouting,
 };
+
+#[derive(Default)]
+struct RecordingSink {
+    appliers: Vec<Arc<dyn EditApplier>>,
+}
+
+impl EditApplierSink for RecordingSink {
+    fn accept(mut self, applier: Arc<dyn EditApplier>) -> Self {
+        self.appliers.push(applier);
+        self
+    }
+}
 
 fn key() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
@@ -125,7 +138,10 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
     let _: Result<EventEdit, WriteIntentError> = rename_saved_simple_group(&group, "Photos");
     let _: Result<EventEdit, WriteIntentError> = save_relay(relay());
     let _: Result<EventEdit, WriteIntentError> = remove_saved_relay(relay());
-    let _: Arc<dyn EditApplier> = saved_group_list_applier();
+
+    let sink = RecordingSink::default().with_simple_groups();
+    assert_eq!(sink.appliers.len(), 1);
+    assert_eq!(sink.appliers[0].kind(), Kind::from_u16(10_009));
 }
 
 #[test]

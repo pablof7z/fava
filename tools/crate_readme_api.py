@@ -212,12 +212,33 @@ def exported_path(line: str, crate_name: str) -> str:
     return path
 
 
+EXTERNAL_MEMBER_PREFIX = re.compile(
+    r"^pub\s+(?:(?:const|async|unsafe)\s+)*(?:fn|const|type|static|mut static)\s+(.*)"
+)
+
+
+def external_member_rest(line: str) -> str | None:
+    """The text of a `pub fn`/`const`/`type`/`static` line after its keyword.
+
+    Used only to decide whether such a line is a member of the most recently
+    seen external `impl ... for <owner>` block — cargo-public-api always
+    qualifies an impl's members by the exact, literal `for` type text,
+    including when that type is a reference, slice, array, tuple, or one of
+    the impl's own unconstrained generic parameters (a blanket impl over `T`
+    renders its member as `pub fn T::method(...)`). Matching the owner as a
+    literal string prefix, rather than re-deriving it with an identifier
+    regex, avoids having to parse arbitrary Rust type syntax.
+    """
+    match = EXTERNAL_MEMBER_PREFIX.match(line)
+    return match.group(1) if match else None
+
+
 def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | None]]:
     """Return public lines with paths and any explicit trait implementation."""
     records: list[tuple[str, str, str | None]] = []
     implementation_type: str | None = None
     implementation_qualification: str | None = None
-    external_implementation = False
+    external_owner: str | None = None
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if line.startswith(("impl ", "impl<")):
@@ -226,13 +247,15 @@ def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | Non
             )
             if separator:
                 owner = after.partition(" where ")[0]
-                external_implementation = re.match(
+                external = re.match(
                     rf"^{re.escape(crate_name)}(?:\b|::|<)", owner
                 ) is None
-                if external_implementation:
+                if external:
+                    external_owner = owner
                     implementation_type = None
                     implementation_qualification = None
                     continue
+                external_owner = None
                 try:
                     implementation_type = exported_path(after, crate_name)
                 except InventoryError:
@@ -242,16 +265,19 @@ def public_lines(output: str, crate_name: str) -> list[tuple[str, str, str | Non
                     f"<{owner} as {trait}>" if implementation_type else None
                 )
             else:
-                external_implementation = False
+                external_owner = None
                 implementation_type = None
                 implementation_qualification = None
             continue
         if not line.startswith("pub "):
             continue
-        if external_implementation:
-            if FUNCTION.match(line) or line.startswith(("pub const ", "pub type ")):
+        if external_owner is not None:
+            rest = external_member_rest(line)
+            if rest is not None and (
+                rest == external_owner or rest.startswith(f"{external_owner}::")
+            ):
                 continue
-            external_implementation = False
+            external_owner = None
         path = exported_path(line, crate_name)
         parent = path.removesuffix("!").rpartition("::")[0]
         qualification = (

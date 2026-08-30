@@ -644,7 +644,8 @@ SavedGroupList::from_event(event) -> Result<SavedGroupList, SavedGroupListDecode
 
 The list exposes ordered saved-group and relay entry results. Crate-root save,
 rename, remove, and relay functions return pure `EventEdit` values;
-`saved_group_list_applier()` joins Fava's ordinary semantic-write lifecycle.
+`SimpleGroups::with_simple_groups()` enables the private applier that joins
+Fava's ordinary semantic-write lifecycle.
 
 Simple-group composition extends `EventBuilder` without changing its concrete
 type. Each `.simple_group(&group)` call appends one exact two-cell `h` tag for

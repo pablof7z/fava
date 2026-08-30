@@ -61,8 +61,9 @@ saved-group and relay entry results. Repetitions survive and malformed siblings
 do not erase valid entries.
 
 Crate-root save, rename, remove, and relay functions return pure
-`EventEdit` values. `saved_group_list_applier()` integrates the
-private edit codec with Fava's ordinary semantic-write lifecycle. Edits
+`EventEdit` values. `SimpleGroups::with_simple_groups()` enables the private
+applier that integrates the private edit codec with Fava's ordinary
+semantic-write lifecycle. Edits
 preserve opaque content, foreign tags, malformed entries, unused trailing
 values, repetitions according to the exact operation, and unrelated order.
 
@@ -73,11 +74,11 @@ values, repetitions according to the exact operation, and unrelated order.
 - `SimpleGroupMetadata`, `SimpleGroupAdmins`, `SimpleGroupMembers`,
   `SimpleGroupRoles`, `SimpleGroupLivekitParticipants`, `SimpleGroupPins`, and
   `SimpleGroupDecodeError`.
-- `SavedSimpleGroup`, `SavedGroupList`, `SavedGroupListApplier`, and
+- `SavedSimpleGroup`, `SavedGroupList`, `SimpleGroups`, and
   `SavedGroupListDecodeError`.
 - Crate/function identities `fava_simple_groups`, `save_simple_group`,
   `remove_saved_simple_group`, `rename_saved_simple_group`, `save_relay`,
-  `remove_saved_relay`, `saved_group_list_applier`, and
+  `remove_saved_relay`, `with_simple_groups`, and
   `saved_group_lists`.
 
 These 22 owner-scoped packets have zero review problems and zero public-API

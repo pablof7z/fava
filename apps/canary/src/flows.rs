@@ -21,6 +21,7 @@ use fava::{
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
+use fava_nip02::Nip02;
 use fava_publisher_nip01::Nip01Publisher;
 use fava_query_standard::StandardQueryEvaluator;
 use fava_router_app_relays::AppRelayRouter;
@@ -206,7 +207,7 @@ fn publishing_engine(relays: &[RelayUrl], accounts: &[Keys]) -> CanaryResult<Fav
         .transport(Arc::new(WebSocketTransport::default()))
         .publisher(Arc::new(Nip01Publisher))
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .appliers([fava_nip02::applier()]);
+        .with_nip02();
     if !relays.is_empty() {
         builder = builder.router(Arc::new(AppRelayRouter::new(
             "app-relays",

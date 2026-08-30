@@ -19,18 +19,19 @@ use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use tokio::sync::broadcast;
 
-use super::capability_protocol::assert_source_removal;
+use super::capability_protocol::{Enable, assert_source_removal};
 use super::capability_signer::GatedSigner;
 use super::support::{
-    RecordingPublisher, UnavailableSigner, publication_builder, relay_event, relay_occurrence,
-    relay_session, relay_url, wait_for_revision,
+    Capture, RecordingPublisher, UnavailableSigner, captured_applier, publication_builder,
+    relay_event, relay_occurrence, relay_session, relay_url, wait_for_revision,
 };
 
 type EditResult = Result<EventEdit, WriteIntentError>;
 
 pub async fn exercise<Add, Adjacent>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
+    capture: Capture,
     add: Add,
     adjacent: Adjacent,
     target: (&str, &str),
@@ -38,13 +39,21 @@ pub async fn exercise<Add, Adjacent>(
     Add: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_source_removal(kind, Arc::clone(&applier), &add, target).await;
-    prove_processed_stale_success(kind, applier, add, adjacent).await;
+    prove_source_removal(kind, enable, &add, target).await;
+    // The concurrency and stale-success mechanics this proves are generic to
+    // the write-store lifecycle, not to the protocol's tag semantics (no
+    // assertion below reads tag content), and they need a synchronous,
+    // timestamp-controlled `EditApplier::apply` outside Fava's own publish
+    // pipeline. `captured_applier(capture)` recovers the real applier through
+    // the protocol's own enabling call (`with_nip02()` / `with_bookmarks()`)
+    // via a local `EditApplierSink`, so this still exercises the shipped
+    // applier rather than a stand-in.
+    prove_processed_stale_success(kind, capture, add, adjacent).await;
 }
 
 async fn prove_source_removal<Add>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: &Add,
     target: (&str, &str),
 ) where
@@ -70,13 +79,12 @@ async fn prove_source_removal<Add>(
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(UnavailableSigner::new(actor));
     let publisher = Arc::new(RecordingPublisher::default());
-    let fava = publication_builder(
+    let fava = enable(publication_builder(
         Arc::clone(&cache),
         store,
         Arc::clone(&signer),
         Arc::clone(&publisher),
-    )
-    .appliers([applier])
+    ))
     .build()
     .unwrap();
     let accepted = publish_edit(&fava, add().unwrap(), actor);
@@ -106,13 +114,14 @@ async fn prove_source_removal<Add>(
 #[allow(clippy::too_many_lines)]
 async fn prove_processed_stale_success<Add, Adjacent>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    capture: Capture,
     add: Add,
     adjacent: Adjacent,
 ) where
     Add: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
+    let applier: Arc<dyn EditApplier> = captured_applier(capture);
     let keys = Keys::generate();
     let actor = keys.public_key();
     let initial = applier

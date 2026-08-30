@@ -71,6 +71,7 @@ fn public_root_exports_only_the_current_nominal_surface() {
         "SavedSimpleGroup",
         "SavedGroupList",
         "SavedGroupListDecodeError",
+        "SimpleGroups",
     ] {
         assert!(
             PUBLIC_ROOT.contains(required),
@@ -78,7 +79,6 @@ fn public_root_exports_only_the_current_nominal_surface() {
         );
     }
     for removed in [
-        "SimpleGroups",
         "SimpleGroupRecords",
         "SimpleGroupSnapshot",
         "SimpleGroupParticipants",

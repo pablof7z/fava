@@ -4,7 +4,8 @@ use fava_write::{
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
-use crate::{follow, applier, unfollow};
+use crate::edit::applier;
+use crate::{follow, unfollow};
 
 fn tag(values: &[&str]) -> Tag {
     Tag::parse(values.iter().copied()).expect("nonempty test tag")

@@ -7,7 +7,8 @@ use nostr::nips::nip21::ToNostrUri;
 use nostr::types::RelayUrl;
 
 use super::{apply, source, tag, target_tags};
-use crate::{follow, follow_with, applier, unfollow};
+use crate::edit::applier;
+use crate::{follow, follow_with, unfollow};
 
 #[test]
 fn edit_codec_accepts_keys_and_supported_key_strings() {

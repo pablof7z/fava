@@ -23,7 +23,7 @@ use std::sync::Arc;
 use fava_state::EventCoordinate;
 use fava_write::{
     EventBuilder, EventId, EventValue, Kind, PublicKey, EventEdit,
-    EditApplier, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EditApplier, EditApplierSink, Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const BOOKMARK_KIND: u16 = 10_003;
@@ -78,10 +78,30 @@ pub fn unbookmark_coordinate(
     edit(Target::Coordinate(target), Operation::Remove)
 }
 
-/// Select the pure public-bookmark applier for application assembly.
+/// Return the pure public-bookmark applier behind the neutral contract.
+///
+/// Private: the only way out of this crate is [`Bookmarks::with_bookmarks`].
 #[must_use]
-pub fn applier() -> Arc<dyn EditApplier> {
+fn applier() -> Arc<dyn EditApplier> {
     Arc::new(BookmarkApplier)
+}
+
+/// Enable kind-10003 public-bookmark semantic-write support.
+///
+/// Blanket-implemented for anything that accepts an edit applier, so an
+/// application enables public bookmarks by naming the protocol, never by
+/// obtaining or passing its applier.
+pub trait Bookmarks: Sized {
+    /// Register the private kind-10003 applier and return the sink for
+    /// further configuration.
+    #[must_use]
+    fn with_bookmarks(self) -> Self;
+}
+
+impl<T: EditApplierSink> Bookmarks for T {
+    fn with_bookmarks(self) -> Self {
+        self.accept(applier())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

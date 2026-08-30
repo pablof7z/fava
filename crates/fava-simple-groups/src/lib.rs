@@ -15,8 +15,8 @@ mod simple_group;
 mod tests;
 
 pub use edit::{
-    remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group, save_relay,
-    save_simple_group, saved_group_list_applier,
+    SimpleGroups, remove_saved_relay, remove_saved_simple_group, rename_saved_simple_group,
+    save_relay, save_simple_group,
 };
 pub use management::{
     GroupAccess, GroupVisibility, MetadataEdit, create_group, delete_event, delete_group,

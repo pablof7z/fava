@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError, PublishError,
-    Receipt, ReceiptOutcome, EventEdit, EditApplier, Write,
+    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, PublicKey, PublicationError,
+    PublishError, Receipt, ReceiptOutcome, EventEdit, Write,
     WriteIntentError, WriteStoreError, all_terminal,
 };
 use fava_event_cache::EventCache;
@@ -21,6 +21,13 @@ use super::support::{
     relay_occurrence, wait_for_revision, wait_for_signer,
 };
 use super::{EditResult, explicit_intent, signed, target_count};
+
+/// Enable a protocol's write semantics on a builder in progress.
+///
+/// A plain function pointer (every call site is a zero-capture closure like
+/// `|b| b.with_nip02()`) so it can be threaded through these `async` helpers
+/// without generic-parameter or `Send` ceremony.
+pub type Enable = fn(FavaBuilder) -> FavaBuilder;
 
 pub fn assert_source_removal(
     accepted: &Write,
@@ -57,7 +64,7 @@ pub fn assert_source_removal(
 
 pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: Add,
     remove: Remove,
     adjacent: Adjacent,
@@ -67,23 +74,15 @@ pub async fn exercise_public_lifecycle<Add, Remove, Adjacent>(
     Remove: Fn() -> EditResult,
     Adjacent: Fn() -> EditResult,
 {
-    prove_first_value(kind, Arc::clone(&applier), &add, tags.0, tags.1).await;
-    prove_composed_writes(
-        kind,
-        Arc::clone(&applier),
-        &add,
-        &remove,
-        &adjacent,
-        tags,
-    )
-    .await;
-    prove_pre_signature_composition(kind, Arc::clone(&applier), &add, &adjacent, tags).await;
-    prove_public_refusals(kind, applier, add);
+    prove_first_value(kind, enable, &add, tags.0, tags.1).await;
+    prove_composed_writes(kind, enable, &add, &remove, &adjacent, tags).await;
+    prove_pre_signature_composition(kind, enable, &add, &adjacent, tags).await;
+    prove_public_refusals(kind, enable, add);
 }
 
 async fn prove_pre_signature_composition<Add, Adjacent>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: &Add,
     adjacent: &Adjacent,
     tags: (&str, &str, &str),
@@ -105,13 +104,12 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
     let store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
     let signer = Arc::new(BlockingSigner::new(actor));
     let publisher = Arc::new(RecordingPublisher::default());
-    let fava = publication_builder(
+    let fava = enable(publication_builder(
         cache,
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-    )
-    .appliers([applier])
+    ))
     .build()
     .unwrap();
 
@@ -167,7 +165,7 @@ fn target_count_value(event: &EventValue, tag_name: &str, target: &str) -> usize
 
 async fn prove_first_value<Add>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: &Add,
     tag_name: &str,
     target: &str,
@@ -177,7 +175,7 @@ async fn prove_first_value<Add>(
     let keys = Keys::generate();
     let actor = keys.public_key();
     let (empty, empty_cache, empty_store, empty_signer, empty_publisher) =
-        assembly(keys.clone(), Arc::clone(&applier));
+        assembly(keys.clone(), enable);
     let mut observation = empty
         .observe(
             fava::Query::events()
@@ -214,7 +212,7 @@ async fn prove_first_value<Add>(
 
 async fn prove_composed_writes<Add, Remove, Adjacent>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: &Add,
     remove: &Remove,
     adjacent: &Adjacent,
@@ -244,13 +242,12 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(CountingSigner::new(keys.clone()));
     let publisher = Arc::new(RecordingPublisher::default());
-    let fava = publication_builder(
+    let fava = enable(publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-    )
-    .appliers([Arc::clone(&applier)])
+    ))
     .build()
     .unwrap();
 
@@ -298,14 +295,14 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert_eq!(signer.calls(), 4);
     assert_eq!(publisher.attempts().len(), 4);
 
-    let (inverse_empty, _, _, _, _) = assembly(keys, applier);
+    let (inverse_empty, _, _, _, _) = assembly(keys, enable);
     let (_, _, empty_event) = publish_terminal(&inverse_empty, remove().unwrap(), actor).await;
     assert!(empty_event.tags.is_empty());
 }
 
 fn prove_public_refusals<Add>(
     kind: Kind,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
     add: Add,
 ) where
     Add: Fn() -> EditResult,
@@ -314,7 +311,7 @@ fn prove_public_refusals<Add>(
     let actor = keys.public_key();
     let edit = add().unwrap();
     let malformed = EventEdit::new(edit.kind(), None, Vec::new()).unwrap();
-    let (fava, _, store, signer, publisher) = assembly(keys.clone(), Arc::clone(&applier));
+    let (fava, _, store, signer, publisher) = assembly(keys.clone(), enable);
     assert!(matches!(
         fava.by(actor)
             .to([super::support::relay_url()])
@@ -343,13 +340,12 @@ fn prove_public_refusals<Add>(
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(CountingSigner::new(keys.clone()));
     let publisher = Arc::new(RecordingPublisher::default());
-    let bounded = publication_builder(
+    let bounded = enable(publication_builder(
         cache,
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-    )
-    .appliers([Arc::clone(&applier)])
+    ))
     .build()
     .unwrap();
     assert!(matches!(
@@ -363,13 +359,12 @@ fn prove_public_refusals<Add>(
     assert_no_effects(&store, &signer, &publisher, 0);
 
     let capacity_store = Arc::new(MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap()));
-    let capacity = publication_builder(
+    let capacity = enable(publication_builder(
         Arc::new(MemoryEventCache::default()),
         Arc::clone(&capacity_store),
         Arc::new(CountingSigner::new(keys)),
         Arc::new(RecordingPublisher::default()),
-    )
-    .appliers([applier])
+    ))
     .build()
     .unwrap();
     capacity_store
@@ -405,7 +400,7 @@ fn prove_public_refusals<Add>(
 
 fn assembly(
     keys: Keys,
-    applier: Arc<dyn EditApplier>,
+    enable: Enable,
 ) -> (
     Fava,
     Arc<MemoryEventCache>,
@@ -417,13 +412,12 @@ fn assembly(
     let store = Arc::new(MemoryWriteStore::default());
     let signer = Arc::new(CountingSigner::new(keys));
     let publisher = Arc::new(RecordingPublisher::default());
-    let fava = publication_builder(
+    let fava = enable(publication_builder(
         Arc::clone(&cache),
         Arc::clone(&store),
         Arc::clone(&signer),
         Arc::clone(&publisher),
-    )
-    .appliers([applier])
+    ))
     .build()
     .unwrap();
     (fava, cache, store, signer, publisher)

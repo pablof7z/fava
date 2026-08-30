@@ -17,7 +17,7 @@ use fava_session::{Session, SessionError};
 use fava_signer::Signer;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::Transport;
-use fava_write::EditApplier;
+use fava_write::{EditApplier, EditApplierSink};
 use fava_write_store::WriteStore;
 use thiserror::Error;
 
@@ -143,6 +143,12 @@ impl FavaBuilder {
     }
 
     /// Select one semantic applier for its exact replaceable kind.
+    ///
+    /// For an application defining edit semantics for its own kind — one
+    /// that genuinely holds an `EditApplier`. A protocol crate shipped by
+    /// this workspace is enabled through its own `with_*` call instead
+    /// (for example `fava_simple_groups::SimpleGroups::with_simple_groups`),
+    /// not through this method.
     #[must_use]
     pub fn applier<T>(mut self, applier: Arc<T>) -> Self
     where
@@ -153,6 +159,12 @@ impl FavaBuilder {
     }
 
     /// Select already-erased semantic appliers.
+    ///
+    /// For an application defining edit semantics for its own kinds. A
+    /// protocol crate shipped by this workspace is enabled through its own
+    /// `with_*` call instead (for example
+    /// `fava_simple_groups::SimpleGroups::with_simple_groups`), not through
+    /// this method.
     #[must_use]
     pub fn appliers(
         mut self,
@@ -255,6 +267,15 @@ impl FavaBuilder {
             session,
             publication,
         })
+    }
+}
+
+impl EditApplierSink for FavaBuilder {
+    /// Register an applier obtained through a protocol crate's own
+    /// enabling call, indexed exactly as one supplied through `applier`.
+    fn accept(mut self, applier: Arc<dyn EditApplier>) -> Self {
+        self.appliers.push(applier);
+        self
     }
 }
 

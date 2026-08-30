@@ -26,6 +26,7 @@ mod restart;
 mod route_revision;
 #[path = "semantic_write_publication/shared_capacity.rs"]
 mod shared_capacity;
+#[allow(dead_code)]
 #[path = "support/semantic_write.rs"]
 mod support;
 #[path = "semantic_write_publication/winner_order.rs"]
@@ -121,6 +122,49 @@ async fn first_value_edit_publishes_through_public_fava() {
     );
     assert!(cache.is_empty().expect("cache remains readable"));
     assert_eq!(store.len().expect("store remains readable"), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_applier_registered_through_the_sink_publishes_like_one_registered_through_applier() {
+    use fava::EditApplierSink;
+
+    let keys = Keys::generate();
+    let applier = Arc::new(TestApplier::new(Kind::ContactList));
+    let signer = Arc::new(CountingSigner::new(keys.clone()));
+    let publisher = Arc::new(RecordingPublisher::default());
+    let cache = Arc::new(MemoryEventCache::default());
+    let store = Arc::new(MemoryWriteStore::default());
+
+    // `.accept(...)` is the sink method a protocol crate's `with_*` extension
+    // trait calls on the caller's behalf; exercised here directly, without
+    // `.applier`/`.appliers`, to prove it indexes the handler the same way.
+    let fava = publication_builder(
+        Arc::clone(&cache),
+        Arc::clone(&store),
+        Arc::clone(&signer),
+        Arc::clone(&publisher),
+    )
+    .accept(applier.clone() as Arc<dyn EditApplier>)
+    .build()
+    .expect("semantic publication assembly");
+
+    let write = fava
+        .by(keys.public_key())
+        .to([relay_url()])
+        .expect("route validates")
+        .publish(edit(Kind::ContactList))
+        .expect("edit of the sink-registered kind accepts");
+    let receipt = write
+        .settled(all_terminal())
+        .await
+        .expect("ordinary receipt settles");
+
+    assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
+    assert_eq!(
+        receipt.current.publication.revision_id,
+        RevisionId::FIRST
+    );
+    assert_eq!(applier.calls().len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]

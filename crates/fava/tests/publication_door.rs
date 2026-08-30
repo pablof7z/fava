@@ -28,7 +28,7 @@ async fn publish_payload_forms_share_one_door_and_unscoped_edit_refuses() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
-        [fava_nip02::applier()],
+        true,
     );
 
     let unsigned = EventBuilder::new(Kind::TextNote)
@@ -59,7 +59,7 @@ async fn publish_returns_after_local_acceptance() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::clone(&signer) as Arc<dyn Signer>],
-        std::iter::empty(),
+        false,
     );
     let event = EventBuilder::new(Kind::TextNote)
         .content("accepted before downstream progress")
@@ -110,7 +110,7 @@ async fn publish_returns_after_local_acceptance() {
 async fn equivalent_publications_have_distinct_custody_identities() {
     let keys = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
-    let fava = assembly(Arc::clone(&store), std::iter::empty(), std::iter::empty());
+    let fava = assembly(Arc::clone(&store), std::iter::empty(), false);
     let event = NostrEventBuilder::new(Kind::TextNote, "same signed event")
         .finalize(&keys)
         .expect("event signs");
@@ -130,7 +130,7 @@ async fn invalid_payload_refuses_without_custody() {
     let fava = assembly(
         Arc::clone(&store),
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
-        std::iter::empty(),
+        false,
     );
     let expired = EventBuilder::new(Kind::TextNote)
         .created_at(Timestamp::from(1))
@@ -161,19 +161,22 @@ async fn invalid_payload_refuses_without_custody() {
 fn assembly(
     store: Arc<MemoryWriteStore>,
     signers: impl IntoIterator<Item = Arc<dyn Signer>>,
-    appliers: impl IntoIterator<Item = Arc<dyn fava::EditApplier>>,
+    enable_nip02: bool,
 ) -> Fava {
+    use fava_nip02::Nip02;
+
     let cache = Arc::new(MemoryEventCache::default());
     let publisher = Arc::new(RecordingPublisher::default());
-    Fava::builder()
+    let mut builder = Fava::builder()
         .event_cache(cache)
         .write_store(store)
         .query_evaluator(Arc::new(StandardQueryEvaluator))
         .transport(Arc::new(NoopTransport))
         .signers(signers)
-        .appliers(appliers)
         .publisher(publisher)
-        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
-        .build()
-        .expect("ordinary publication assembly")
+        .delivery_policy(Arc::new(StandardDeliveryPolicy::default()));
+    if enable_nip02 {
+        builder = builder.with_nip02();
+    }
+    builder.build().expect("ordinary publication assembly")
 }

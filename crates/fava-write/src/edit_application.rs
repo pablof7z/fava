@@ -3,6 +3,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::num::{NonZeroU64, TryFromIntError};
+use std::sync::Arc;
 
 /// Exact identity of one immutable event revision generation.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -81,4 +82,13 @@ pub trait EditApplier: Send + Sync {
         source: Option<&EventValue>,
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError>;
+}
+
+/// Neutral acceptor for an edit applier, owned by the crate that owns the
+/// edit-applier contract so that a protocol crate's enabling call does not
+/// require it to depend on the facade that assembles handlers.
+pub trait EditApplierSink {
+    /// Register the applier and return the sink for further configuration.
+    #[must_use]
+    fn accept(self, applier: Arc<dyn EditApplier>) -> Self;
 }

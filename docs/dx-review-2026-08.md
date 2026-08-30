@@ -24,7 +24,7 @@ Fava::builder()
     .signer(Arc::new(LocalSigner::new(alice.clone())))
     .signer(Arc::new(LocalSigner::new(bob.clone())))
     .signer(Arc::new(LocalSigner::new(carol.clone())))
-    .appliers([saved_group_list_applier()])
+    .with_simple_groups()
     .build()?
 ```
 
