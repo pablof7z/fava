@@ -36,26 +36,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  readme-api:
-    name: Modified crate README APIs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "nightly-2026-07-07"
-      - uses: Swatinem/rust-cache@v2
-      - name: Install pinned public API extractor
-        run: cargo install cargo-public-api --version 0.52.0 --locked
-      - name: Test crate README inventory gate
-        run: python3 -m unittest tools/tests/test_crate_readme_api.py
-      - name: Check modified crate README inventories
-        env:
-          BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python3 tools/crate_readme_api.py check-modified --base "$BASE_REVISION"
-
   build:
     name: Build
     runs-on: ubuntu-latest

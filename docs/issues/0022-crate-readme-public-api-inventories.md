@@ -1,6 +1,12 @@
 # 0022 — Crate READMEs can silently drift from their exported Rust APIs
 
-**Status:** implemented, awaiting review of the `fava-simple-groups` seed
+**Status:** removed 2026-08-30
+
+The generated inventories and `tools/crate_readme_api.py` were deleted along
+with the `readme-api` CI job and the architecture test that consumed the
+section. The drift this issue guarded against is now accepted: crate READMEs
+carry prose, and the public surface is described by doc comments that
+Symbol Gate reads directly.
 **Raised:** 2026-08-24, by Pablo
 
 ## Problem
