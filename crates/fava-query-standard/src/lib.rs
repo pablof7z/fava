@@ -22,6 +22,9 @@ impl QueryEvaluator for StandardQueryEvaluator {
         query: &Query,
         sources: &[SourceSnapshot],
     ) -> Result<QuerySnapshot, QueryEvaluationError> {
+        if query.matches_nothing() {
+            return Ok(QuerySnapshot::evaluated(Vec::new(), sources));
+        }
         let mut by_id = BTreeMap::<EventId, Candidate>::new();
         for source in sources {
             for contribution in &source.events {

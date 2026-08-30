@@ -93,6 +93,7 @@ rust_library(
         "//crates/fava-relay:lib",
         "//crates/fava-routing:lib",
         "//crates/fava-runtime:lib",
+        "//crates/fava-session:lib",
         "//crates/fava-state:lib",
         "//crates/fava-subscriptions:lib",
         "//crates/fava-transport:lib",

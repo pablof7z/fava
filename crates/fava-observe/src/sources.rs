@@ -49,6 +49,7 @@ impl OpenSources {
 /// Everything one observation's projection task needs.
 pub(crate) struct Projection {
     pub(crate) id: ObservationId,
+    pub(crate) diagnostic_id: ObservationId,
     pub(crate) registry: Arc<Registry>,
     pub(crate) diagnostics: Arc<Diagnostics>,
     pub(crate) evaluator: Arc<dyn QueryEvaluator>,
@@ -103,6 +104,7 @@ async fn deliver(
     } = sources;
     let Projection {
         id,
+        diagnostic_id,
         registry,
         diagnostics: facts,
         evaluator,
@@ -177,12 +179,14 @@ async fn deliver(
         revision = bumped;
         next.revision = QueryRevision(revision);
         decorate(&registry, id, &mut next.evidence);
-        publish(&facts, &registry, id, &next.evidence);
+        publish(&facts, &registry, id, diagnostic_id, &next.evidence);
         latest_tx.send_replace(Arc::new(next));
     }
     cache.close();
     writes.close();
-    facts.forget_query(id);
+    if diagnostic_id == id {
+        facts.forget_query(id);
+    }
 }
 
 /// Carry the current events and source evidence into a new evidence-only revision.
@@ -221,11 +225,12 @@ pub(crate) fn publish(
     facts: &Diagnostics,
     registry: &Registry,
     id: ObservationId,
+    diagnostic_id: ObservationId,
     evidence: &QueryEvidence,
 ) {
     let owned = registry.evidence(id);
     facts.query(diagnostics::query_fact(
-        id,
+        diagnostic_id,
         owned.route_revision,
         evidence.plan.as_ref().map(|plan| plan.revision),
         &evidence.relays,

@@ -287,6 +287,7 @@ impl FavaBuilder {
             None
         };
         let mut observer = Observer::new(event_source, write_source, evaluator)
+            .with_session(session.clone())
             .with_event_cache(event_cache)
             .with_diagnostics(Arc::clone(&diagnostics))
             .with_routers(self.routers.clone())

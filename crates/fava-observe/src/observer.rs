@@ -10,6 +10,7 @@ use fava_query::{
 };
 use fava_routing::Router;
 use fava_runtime::{Runtime, TaskName};
+use fava_session::Session;
 use fava_subscriptions::SubscriptionPlanner;
 use fava_transport::{Transport, TransportBounds, TransportDeadlines};
 use futures_util::future::select_all;
@@ -46,6 +47,7 @@ pub struct Observer {
     admission_window: std::time::Duration,
     registry: Arc<Registry>,
     engine: Arc<OnceLock<()>>,
+    session: Option<Session>,
 }
 
 impl Observer {
@@ -72,6 +74,7 @@ impl Observer {
             admission_window: ADMISSION_WINDOW,
             registry: Arc::new(Registry::default()),
             engine: Arc::new(OnceLock::new()),
+            session: None,
         }
     }
 
@@ -100,6 +103,13 @@ impl Observer {
     #[must_use]
     pub fn with_event_cache(mut self, events: Arc<dyn EventCache>) -> Self {
         self.events = Some(events);
+        self
+    }
+
+    /// Bind current-account query dependencies to this runtime session.
+    #[must_use]
+    pub fn with_session(mut self, session: Session) -> Self {
+        self.session = Some(session);
         self
     }
 
@@ -159,7 +169,78 @@ impl Observer {
     /// refuses to open, a route plan cannot be produced, or initial evaluation
     /// fails. Every provisionally opened resource is released.
     pub fn open(&self, query: Query) -> Result<Observation, ObserveError> {
-        let live = query.freshness() != Freshness::CacheOnly;
+        if query.depends_on_current_account() {
+            if let Some(session) = &self.session {
+                return self.open_current_account(query, session.clone());
+            }
+            return self.open_concrete(bind_current_account(query, None), None);
+        }
+        self.open_concrete(query, None)
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
+    )]
+    fn open_current_account(
+        &self,
+        query: Query,
+        session: Session,
+    ) -> Result<Observation, ObserveError> {
+        let installation = self.registry.install(self.runtime.cancellation_token());
+        let changes = session.subscribe();
+        let (current, _) = session.current_account_snapshot();
+        let child = match self.open_concrete(
+            bind_current_account(query.clone(), current),
+            Some(installation.id),
+        ) {
+            Ok(child) => child,
+            Err(error) => {
+                self.registry.withdraw(installation.id);
+                return Err(error);
+            }
+        };
+        let child_current = child.current();
+        let (latest_tx, latest) = tokio::sync::watch::channel(revision(child_current.as_ref(), 1));
+        let task = self.runtime.spawn_cancellable(
+            TaskName("observe.current-account"),
+            installation.cancel.clone(),
+            follow_current_account(CurrentAccountFollow {
+                observer: self.clone(),
+                parent: installation.id,
+                query,
+                session,
+                changes,
+                child,
+                current,
+                latest: latest_tx,
+            }),
+        );
+        let Ok(task) = task else {
+            self.registry.withdraw(installation.id);
+            return Err(ObserveError::EngineClosed);
+        };
+        self.registry.attach(installation.id, task);
+        Ok(Observation::new(
+            installation.id,
+            Arc::clone(&self.registry),
+            latest,
+            installation.cancel,
+            self.coalesced.clone(),
+            Some(Arc::clone(&self.diagnostics)),
+        ))
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
+    )]
+    fn open_concrete(
+        &self,
+        query: Query,
+        diagnostic: Option<ObservationId>,
+    ) -> Result<Observation, ObserveError> {
+        let live = query.freshness() != Freshness::CacheOnly && !query.matches_nothing();
 
         let cache = self
             .event_cache
@@ -222,18 +303,21 @@ impl Observer {
                 return Err(error);
             }
         };
+        let diagnostic_id = diagnostic.unwrap_or(installation.id);
         let mut initial = initial;
         decorate(&self.registry, installation.id, &mut initial.evidence);
         publish(
             self.diagnostics.as_ref(),
             &self.registry,
             installation.id,
+            diagnostic_id,
             &initial.evidence,
         );
         let (latest, task) = project(
             &self.runtime,
             Projection {
                 id: installation.id,
+                diagnostic_id,
                 registry: Arc::clone(&self.registry),
                 diagnostics: Arc::clone(&self.diagnostics),
                 evaluator: Arc::clone(&self.evaluator),
@@ -254,6 +338,7 @@ impl Observer {
             latest,
             installation.cancel,
             self.coalesced.clone(),
+            None,
         ))
     }
 
@@ -456,6 +541,84 @@ impl Observer {
             started = Engine::start(Arc::clone(&self.registry), providers, &self.runtime);
         });
         started
+    }
+}
+
+fn bind_current_account(query: Query, current: Option<fava_query::PublicKey>) -> Query {
+    let bound = query.bind_current_account(current);
+    if bound.matches_nothing() {
+        bound.cache_only()
+    } else {
+        bound
+    }
+}
+
+fn revision(snapshot: &QuerySnapshot, revision: u64) -> Arc<QuerySnapshot> {
+    let mut snapshot = snapshot.clone();
+    snapshot.revision = QueryRevision(revision);
+    Arc::new(snapshot)
+}
+
+struct CurrentAccountFollow {
+    observer: Observer,
+    parent: ObservationId,
+    query: Query,
+    session: Session,
+    changes: tokio::sync::watch::Receiver<u64>,
+    child: Observation,
+    current: Option<fava_query::PublicKey>,
+    latest: tokio::sync::watch::Sender<Arc<QuerySnapshot>>,
+}
+
+async fn follow_current_account(follow: CurrentAccountFollow) {
+    let CurrentAccountFollow {
+        observer,
+        parent,
+        query,
+        session,
+        mut changes,
+        mut child,
+        mut current,
+        latest,
+    } = follow;
+    let mut delivered = 1_u64;
+    loop {
+        tokio::select! {
+            biased;
+            signalled = changes.changed() => {
+                if signalled.is_err() {
+                    break;
+                }
+                let (next_account, _) = session.current_account_snapshot();
+                if next_account == current {
+                    continue;
+                }
+                let Ok(next) = observer.open_concrete(
+                    bind_current_account(query.clone(), next_account),
+                    Some(parent),
+                ) else {
+                    break;
+                };
+                let Some(next_revision) = delivered.checked_add(1) else {
+                    break;
+                };
+                delivered = next_revision;
+                current = next_account;
+                child = next;
+                let child_current = child.current();
+                latest.send_replace(revision(child_current.as_ref(), delivered));
+            }
+            delivered_snapshot = child.changed() => {
+                let Ok(snapshot) = delivered_snapshot else {
+                    break;
+                };
+                let Some(next_revision) = delivered.checked_add(1) else {
+                    break;
+                };
+                delivered = next_revision;
+                latest.send_replace(revision(snapshot.as_ref(), delivered));
+            }
+        }
     }
 }
 

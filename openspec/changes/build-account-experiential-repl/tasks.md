@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create one focused architecture issue mapping `ID-001`–`ID-003`, `WRITE-003`, and the partial reactive-query contract to current implementation gaps; verify exact owners and counterexamples for app-owned selection, explicit author threading, and manual query rebuilding.
 - [x] 1.2 Define the minimum public vocabulary for optional current selection, current-account publication convenience, and `$currentPubkey` query binding; obtain Pablo’s explicit approval before code or `vocabulary.toml` changes.
-- [ ] 1.3 Add cross-owner BDD scenarios and deliberate breaks for account switching, accepted-author stability, empty selection, automatic observation rerooting, rapid switches, and stale completions; verify each new scenario fails against current `main` for its named reason.
+- [x] 1.3 Add cross-owner BDD scenarios and deliberate breaks for account switching, accepted-author stability, empty selection, automatic observation rerooting, rapid switches, and stale completions; verify each new scenario fails against current `main` for its named reason.
 
 ## 2. Session current-account owner
 
@@ -20,11 +20,11 @@
 
 ## 4. Reactive `$currentPubkey` queries
 
-- [ ] 4.1 Add query-domain evidence that author and tag-value filters accept the current-account reactive root, empty selection matches nothing, and the declarative query remains inspectable without a concrete app-supplied key.
-- [ ] 4.2 Implement the minimum current-account reactive value binding without generalizing to query-derived `ValueSet` algebra; verify literal query behavior remains unchanged.
-- [ ] 4.3 Add observation evidence that one stable handle recompiles, re-evaluates cache/write-store sources, reroutes, and updates relay subscriptions when session revision changes; verify the app never closes or reopens the observation.
-- [ ] 4.4 Add delayed relay, route, subscription, and local-source completions across A→B→C switches; verify only the exact current session revision and operation generation can update the current snapshot or active demand.
-- [ ] 4.5 Prove removing/clearing current selection retracts account-dependent demand and yields a match-nothing snapshot without deleting cached public events or receipts.
+- [x] 4.1 Add query-domain evidence that author and tag-value filters accept the current-account reactive root, empty selection matches nothing, and the declarative query remains inspectable without a concrete app-supplied key.
+- [x] 4.2 Implement the minimum current-account reactive value binding without generalizing to query-derived `ValueSet` algebra; verify literal query behavior remains unchanged.
+- [x] 4.3 Add observation evidence that one stable handle recompiles, re-evaluates cache/write-store sources, reroutes, and updates relay subscriptions when session revision changes; verify the app never closes or reopens the observation.
+- [x] 4.4 Add delayed relay, route, subscription, and local-source completions across A→B→C switches; verify only the exact current session revision and operation generation can update the current snapshot or active demand.
+- [x] 4.5 Prove removing/clearing current selection retracts account-dependent demand and yields a match-nothing snapshot without deleting cached public events or receipts.
 - [ ] 4.6 Run full query/observe/routing/subscription/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused reactive-query slice to `main`.
 
 ## 5. Focused experiential account app

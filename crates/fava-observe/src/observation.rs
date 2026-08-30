@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use fava_diagnostics::Diagnostics;
 use fava_query::{ObservationId, QueryRevision, QuerySnapshot};
 use tokio::sync::watch;
 
@@ -18,6 +19,7 @@ pub struct Observation {
     cancelled: fava_runtime::CancellationToken,
     delivered_revision: QueryRevision,
     coalesced: Option<Coalesced>,
+    forget_diagnostic: Option<Arc<Diagnostics>>,
 }
 
 impl Observation {
@@ -27,6 +29,7 @@ impl Observation {
         latest: watch::Receiver<Arc<QuerySnapshot>>,
         cancelled: fava_runtime::CancellationToken,
         coalesced: Option<Coalesced>,
+        forget_diagnostic: Option<Arc<Diagnostics>>,
     ) -> Self {
         Self {
             id,
@@ -35,6 +38,7 @@ impl Observation {
             cancelled,
             delivered_revision: QueryRevision(1),
             coalesced,
+            forget_diagnostic,
         }
     }
 
@@ -118,6 +122,9 @@ impl Observation {
     /// are untouched.
     pub fn close(&self) {
         self.registry.withdraw(self.id);
+        if let Some(diagnostics) = &self.forget_diagnostic {
+            diagnostics.forget_query(self.id);
+        }
     }
 }
 

@@ -297,6 +297,47 @@ rust_test(
 )
 
 rust_test(
+    name = "current_account_observation",
+    srcs = ["tests/current_account_observation.rs"],
+    crate_name = "current_account_observation",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache:lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-relay:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-write-store-memory:lib",
+    ], FAVA_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
+    name = "current_account_live",
+    srcs = ["tests/current_account_live.rs"],
+    crate_name = "current_account_live",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-relay:lib",
+        "//crates/fava-state:lib",
+        "//crates/fava-subscriptions:lib",
+        "//crates/fava-subscriptions-no-grouping:lib",
+        "//crates/fava-transport-testkit:lib",
+        "//crates/fava-wire:lib",
+        "//crates/fava-write-store-memory:lib",
+    ], FAVA_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "automatic_publication",
     srcs = ["tests/automatic_publication.rs"],
     crate_name = "automatic_publication",

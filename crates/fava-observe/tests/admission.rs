@@ -16,16 +16,14 @@ use support::{assemble, relay, requests, session_key, settle, wait_until};
 /// mirrors (`crates/fava-observe/src/admission.rs`) is crate-private.
 const ADMISSION_WINDOW: Duration = Duration::from_millis(10);
 
-/// A present-but-empty author list is *unconstrained* on the wire.
+/// An absent author axis is unconstrained and is not covered by a narrow one.
 ///
-/// `nostr::Filter::match_event` short-circuits every value axis on
-/// `is_empty() || contains(..)`, so `authors: []` matches every author exactly
-/// as an absent `authors` does. A request that names one author therefore does
-/// not carry this demand's traffic, and judging it covered is silent
-/// under-fetch: the owner arms no window, the planner is never called, and the
-/// demand never reaches the relay at all.
+/// A request that names one author does not carry this demand's traffic, and
+/// judging it covered is silent under-fetch: the owner arms no window, the
+/// planner is never called, and the demand never reaches the relay at all.
+/// Present-empty query axes are match-nothing and never reach this wire owner.
 #[tokio::test(flavor = "current_thread")]
-async fn an_unconstrained_demand_is_not_covered_by_a_narrow_running_request() {
+async fn an_absent_author_demand_is_not_covered_by_a_narrow_running_request() {
     let shared = relay("coverage");
     let alice = Keys::generate().public_key();
     let assembly = assemble();
@@ -39,7 +37,7 @@ async fn an_unconstrained_demand_is_not_covered_by_a_narrow_running_request() {
 
     let unconstrained = assembly
         .observer
-        .open(metadata_of([], &shared))
+        .open(metadata_any_author(&shared))
         .expect("the unconstrained query opens");
 
     wait_until(|| requests(assembly.peer(&shared)).len() == 2).await;
@@ -63,14 +61,14 @@ async fn an_unconstrained_demand_is_not_covered_by_a_narrow_running_request() {
 ///
 /// The mirror of the case above, so the fix cannot be "never covered".
 #[tokio::test(flavor = "current_thread")]
-async fn a_narrow_demand_attaches_to_an_unconstrained_running_request() {
+async fn a_narrow_demand_attaches_to_an_absent_author_running_request() {
     let shared = relay("coverage");
     let alice = Keys::generate().public_key();
     let assembly = assemble();
 
     let unconstrained = assembly
         .observer
-        .open(metadata_of([], &shared))
+        .open(metadata_any_author(&shared))
         .expect("the unconstrained query opens");
     wait_until(|| requests(assembly.peer(&shared)).len() == 1).await;
     let running = requests(assembly.peer(&shared))[0].clone();
@@ -172,6 +170,14 @@ async fn continuous_arrival_never_postpones_the_admission_window() {
         "a fixed window batches: {ARRIVALS} arrivals produced {calls} planner calls, bound {bound}"
     );
     drop(held);
+}
+
+fn metadata_any_author(relay: &RelayUrl) -> Query {
+    Query::events()
+        .kinds([Kind::Metadata])
+        .expect("one kind is bounded")
+        .only_from_relays([relay.clone()])
+        .expect("one relay is valid")
 }
 
 fn metadata_of(authors: impl IntoIterator<Item = PublicKey>, relay: &RelayUrl) -> Query {
