@@ -22,8 +22,8 @@ use std::sync::Arc;
 
 use fava_state::EventCoordinate;
 use fava_write::{
-    EventBuilder, EventId, EventValue, Kind, PublicKey, EventEdit,
-    EditApplier, EditApplierSink, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EditApplier, EditApplierSink, EventBuilder, EventEdit, EventId, EventValue, Kind, PublicKey,
+    Tag, Timestamp, UnsignedEvent, WriteIntentError,
 };
 
 const BOOKMARK_KIND: u16 = 10_003;
@@ -58,9 +58,7 @@ pub fn unbookmark_event(target: EventId) -> Result<EventEdit, WriteIntentError> 
 ///
 /// Returns an existing write-intent refusal for an ordinary event coordinate
 /// or an invalid replaceable coordinate.
-pub fn bookmark_coordinate(
-    target: EventCoordinate,
-) -> Result<EventEdit, WriteIntentError> {
+pub fn bookmark_coordinate(target: EventCoordinate) -> Result<EventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
     edit(Target::Coordinate(target), Operation::Add)
 }
@@ -71,9 +69,7 @@ pub fn bookmark_coordinate(
 ///
 /// Returns an existing write-intent refusal for an ordinary event coordinate
 /// or an invalid replaceable coordinate.
-pub fn unbookmark_coordinate(
-    target: EventCoordinate,
-) -> Result<EventEdit, WriteIntentError> {
+pub fn unbookmark_coordinate(target: EventCoordinate) -> Result<EventEdit, WriteIntentError> {
     validate_target_coordinate(&target)?;
     edit(Target::Coordinate(target), Operation::Remove)
 }

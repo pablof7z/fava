@@ -331,6 +331,11 @@ pub trait Router: Send + Sync {
     fn name(&self) -> &str;
 
     /// Declare the complete ordinary query set this policy needs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RouterError`] when this policy refuses to declare queries
+    /// for the given request and upstream plan.
     fn queries(
         &self,
         request: &RouteRequest,
@@ -368,6 +373,11 @@ pub trait RouterSession: Send {
     fn current(&self) -> RouteContribution;
 
     /// Atomically replace this router's complete input set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RouterError`] when the replacement inputs cannot be
+    /// evaluated into a coherent contribution.
     fn replace(
         &mut self,
         upstream: Arc<RoutePlan>,

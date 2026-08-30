@@ -17,12 +17,7 @@ use super::support::{
 };
 use super::{ControlledApplier, publish_edit, wait_failure};
 
-fn build<C, W>(
-    keys: &Keys,
-    cache: Arc<C>,
-    store: Arc<W>,
-    applier: Arc<ControlledApplier>,
-) -> Fava
+fn build<C, W>(keys: &Keys, cache: Arc<C>, store: Arc<W>, applier: Arc<ControlledApplier>) -> Fava
 where
     C: EventCache + 'static,
     W: WriteStore + 'static,

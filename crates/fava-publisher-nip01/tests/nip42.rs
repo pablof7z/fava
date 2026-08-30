@@ -18,7 +18,7 @@ use fava_transport::{OpenRelaySession, Transport, TransportBounds, TransportDead
 use fava_transport_testkit::FakeTransport;
 use fava_wire::{ClientMessage, RelayMessage};
 use fava_write::{
-    Event, EventBuilder, Kind, RevisionId, PublicKey, ReceiptId, UnsignedEvent, WriteId,
+    Event, EventBuilder, Kind, PublicKey, ReceiptId, RevisionId, UnsignedEvent, WriteId,
 };
 use nostr::event::FinalizeEvent;
 use nostr::key::{Keys, SecretKey};

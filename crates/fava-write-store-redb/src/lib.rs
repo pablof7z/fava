@@ -11,8 +11,8 @@ use fava_query::{
 };
 use fava_state::EventCoordinate;
 use fava_write::{
-    EventId, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
-    EventEdit, Timestamp, UnsignedEvent,
+    EventEdit, EventId, PublicKey, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    Timestamp, UnsignedEvent,
 };
 use fava_write_store::WriteStoreError;
 use redb::Database;

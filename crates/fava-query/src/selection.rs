@@ -41,7 +41,7 @@ impl Query {
         mut self,
         authors: impl IntoIterator<Item = PublicKey>,
     ) -> Result<Self, QueryError> {
-        self.selection.authors = Some(bounded_authors(authors)?);
+        self.selection.authors = Some(bounded_authors(authors));
         Ok(self)
     }
 
@@ -51,7 +51,7 @@ impl Query {
     ///
     /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn kinds(mut self, kinds: impl IntoIterator<Item = Kind>) -> Result<Self, QueryError> {
-        self.selection.kinds = Some(bounded_kinds(kinds)?);
+        self.selection.kinds = Some(bounded_kinds(kinds));
         Ok(self)
     }
 
@@ -61,7 +61,7 @@ impl Query {
     ///
     /// Returns [`QueryError`] for empty relay sets or zero limits.
     pub fn ids(mut self, ids: impl IntoIterator<Item = EventId>) -> Result<Self, QueryError> {
-        self.selection.ids = Some(bounded_ids(ids)?);
+        self.selection.ids = Some(bounded_ids(ids));
         Ok(self)
     }
 
@@ -96,7 +96,7 @@ impl Query {
         extend_bounded(
             values.into_iter().map(Into::into),
             self.selection.tag_values.entry(key).or_default(),
-        )?;
+        );
         Ok(self)
     }
 
@@ -123,7 +123,7 @@ impl Query {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let supplied = bounded_tag_values(values.into_iter().map(Into::into))?;
+        let supplied = bounded_tag_values(values.into_iter().map(Into::into));
         if let Some(existing) = self.selection.tag_values.get_mut(&key) {
             existing.retain(|value| supplied.contains(value));
         } else {

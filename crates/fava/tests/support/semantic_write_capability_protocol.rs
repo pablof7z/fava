@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, PublicKey, PublicationError,
-    PublishError, Receipt, ReceiptOutcome, EventEdit, Write,
-    WriteIntentError, WriteStoreError, all_terminal,
+    Event, EventBuilder, EventEdit, EventValue, Fava, FavaBuilder, Kind, PublicKey,
+    PublicationError, PublishError, Receipt, ReceiptOutcome, Write, WriteIntentError,
+    WriteStoreError, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -47,10 +47,7 @@ pub fn assert_source_removal(
     assert_ne!(removed.current.id(), accepted_receipt.current.id());
     assert!(removed.current.event.created_at() > accepted_receipt.current.event.created_at());
     assert!(removed.current.publication.revision_source.is_none());
-    assert_eq!(
-        removed.current.publication.retired_revisions.len(),
-        1
-    );
+    assert_eq!(removed.current.publication.retired_revisions.len(), 1);
     assert_eq!(removed.current.event.kind(), kind);
     let EventValue::Unsigned(output) = &removed.current.event else {
         panic!("blocked signer must preserve exact unsigned removal output")
@@ -130,14 +127,8 @@ async fn prove_pre_signature_composition<Add, Adjacent>(
 
     let receipt = wait_for_revision(&fava, first.receipt_id(), 2).await;
     wait_for_signer(&signer, 1).await;
-    assert_eq!(
-        receipt.current.publication.revision_source,
-        Some(base.id)
-    );
-    assert_eq!(
-        receipt.current.publication.retired_revisions.len(),
-        1
-    );
+    assert_eq!(receipt.current.publication.revision_source, Some(base.id));
+    assert_eq!(receipt.current.publication.retired_revisions.len(), 1);
     assert_eq!(
         target_count_value(&receipt.current.event, tag_name, target),
         1
@@ -163,13 +154,8 @@ fn target_count_value(event: &EventValue, tag_name: &str, target: &str) -> usize
         .count()
 }
 
-async fn prove_first_value<Add>(
-    kind: Kind,
-    enable: Enable,
-    add: &Add,
-    tag_name: &str,
-    target: &str,
-) where
+async fn prove_first_value<Add>(kind: Kind, enable: Enable, add: &Add, tag_name: &str, target: &str)
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
@@ -300,11 +286,8 @@ async fn prove_composed_writes<Add, Remove, Adjacent>(
     assert!(empty_event.tags.is_empty());
 }
 
-fn prove_public_refusals<Add>(
-    kind: Kind,
-    enable: Enable,
-    add: Add,
-) where
+fn prove_public_refusals<Add>(kind: Kind, enable: Enable, add: Add)
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();

@@ -74,7 +74,7 @@ pub(crate) fn bind(
                 .map(|queries| queries.iter().map(&mut snapshot).collect())
                 .collect::<Result<Vec<Vec<_>>, _>>()?;
             let input_queries = declared.into_iter().flatten().collect();
-            let session = fava_routing::open(routers, &request, inputs)
+            let session = fava_routing::open(routers, &request, &inputs)
                 .map_err(|error| ObserveError::Relay(error.to_string()))?;
             match RoutePlan::from_contribution(1, &session.current()) {
                 Ok(plan) => Ok(RouteBinding {

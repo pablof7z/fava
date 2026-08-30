@@ -416,16 +416,15 @@ impl Engine {
                 return false;
             }
         };
-        let constraints = self
-            .slots
-            .get_mut(relay)
-            .map(|slot| {
-                // The last revision this slot issued, so a completion for an
-                // earlier one is refused rather than installed.
-                slot.revision = Some(revision);
-                slot.constraints
-            })
-            .unwrap_or_else(RelayReadConstraints::unknown);
+        let constraints =
+            self.slots
+                .get_mut(relay)
+                .map_or_else(RelayReadConstraints::unknown, |slot| {
+                    // The last revision this slot issued, so a completion for an
+                    // earlier one is refused rather than installed.
+                    slot.revision = Some(revision);
+                    slot.constraints
+                });
         let planned = self
             .providers
             .planner

@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp,
-    UnsignedEvent, WriteIntent, WriteRouting,
+    Event, EventBuilder, EventEdit, EventValue, Kind, RevisionId, Timestamp, UnsignedEvent,
+    WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_redb::RedbWriteStore;
@@ -168,8 +168,7 @@ fn redb_same_coordinate_edit_sequence_survives_reopen_with_exact_identity() {
     )
     .expect("bounded redb opens");
     let first_edit = edit();
-    let second_edit =
-        EventEdit::new(Kind::ContactList, None, vec![2]).expect("second edit");
+    let second_edit = EventEdit::new(Kind::ContactList, None, vec![2]).expect("second edit");
     let first = accept(
         &store,
         first_edit.clone(),
@@ -417,9 +416,7 @@ fn redb_stale_and_overflow_mutations_are_atomic_noops() {
                 None,
             )
             .unwrap();
-        expected = expected
-            .checked_next()
-            .expect("next revision identity");
+        expected = expected.checked_next().expect("next revision identity");
         expected_source = Some(next_source.id);
     }
     let before_overflow = store.receipt(accepted.receipt_id).unwrap();
@@ -626,13 +623,7 @@ fn redb_successor_refuses_an_incomplete_accepted_edit_sequence() {
     let actor = keys.public_key();
     let first_edit = EventEdit::new(Kind::ContactList, None, vec![1]).unwrap();
     let second_edit = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
-    let first = accept(
-        &store,
-        first_edit,
-        actor,
-        revision(actor, 1, "first"),
-        None,
-    );
+    let first = accept(&store, first_edit, actor, revision(actor, 1, "first"), None);
     let composed = store
         .accept_applied_edit(
             WriteIntent::edit_as(second_edit.clone(), actor, WriteRouting::Automatic).unwrap(),

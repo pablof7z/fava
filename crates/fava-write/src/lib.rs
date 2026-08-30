@@ -21,7 +21,7 @@ mod session_set;
 
 pub use builder::{AuthoredEventBuilder, EventBuildError, EventBuilder};
 pub use edit::EventEdit;
-pub use edit_application::{RevisionId, EditApplier, EditApplierSink};
+pub use edit_application::{EditApplier, EditApplierSink, RevisionId};
 pub use receipt::{
     LocalWriteEvent, PublicationEvidence, Receipt, ReceiptOutcome, RelayDeliveryOutcome,
     SignatureState,

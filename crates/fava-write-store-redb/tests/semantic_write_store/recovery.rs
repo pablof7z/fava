@@ -5,7 +5,7 @@ use fava_query::{Query, QuerySource, SourceEvent};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventValue, RevisionId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId,
     SignatureState, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -265,13 +265,7 @@ fn reopen_refuses_recovered_counts_beyond_configured_bounds_without_dropping_row
     )
     .unwrap();
     for actor in [Keys::generate().public_key(), Keys::generate().public_key()] {
-        accept(
-            &active,
-            edit(),
-            actor,
-            revision(actor, 10, "active"),
-            None,
-        );
+        accept(&active, edit(), actor, revision(actor, 10, "active"), None);
     }
     drop(active);
     assert!(

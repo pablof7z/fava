@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::fmt;
 
-use fava_write::{Kind, EventEdit, WriteIntentError};
+use fava_write::{EventEdit, Kind, WriteIntentError};
 use nostr::nips::nip19::ToBech32;
 use nostr::nips::nip21::ToNostrUri;
 use nostr::types::RelayUrl;
@@ -103,8 +103,8 @@ fn edit_codec_refuses_malformed_or_over_bound_metadata_without_raw_input() {
     let malformed = EventEdit::new(Kind::ContactList, None, malformed)
         .expect("neutral edit accepts opaque bounded bytes");
     assert!(!applier().supports(&malformed));
-    let error = apply(actor.public_key(), &malformed, None, 1)
-        .expect_err("invalid encoded relay refuses");
+    let error =
+        apply(actor.public_key(), &malformed, None, 1).expect_err("invalid encoded relay refuses");
     assert!(matches!(error, WriteIntentError::Encoding(_)));
     assert!(!error.to_string().contains(raw_relay));
 }

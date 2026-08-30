@@ -1,4 +1,4 @@
-//! Public MaxAge reuse boundaries through the assembled Fava facade.
+//! Public `MaxAge` reuse boundaries through the assembled Fava facade.
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -85,8 +85,8 @@ async fn limited_eose_does_not_create_coverage() {
     wait_until(|| transport.holders(&key(&relay)).is_none()).await;
 
     let second = fava.observe(query.clone()).await.expect("reopen");
-    let replay = established(&transport, &relay).await;
-    let replayed = only_request(&replay).await;
+    let reopened_peer = established(&transport, &relay).await;
+    let replayed = only_request(&reopened_peer).await;
     assert_ne!(
         replayed, request,
         "reopen mints a new relay request identity"

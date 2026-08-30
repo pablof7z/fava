@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use fava::{
-    EventBuilder, EventValue, Kind, RevisionId, EventEdit,
-    EditApplier, Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EditApplier, EventBuilder, EventEdit, EventValue, Kind, RevisionId, Tag, Timestamp,
+    UnsignedEvent, WriteIntentError,
 };
 use fava_event_cache_memory::MemoryEventCache;
 use fava_write_store::{WriteStore, destination_evidence_capacity};
@@ -132,9 +132,11 @@ impl EditApplier for ControlledApplier {
         EventBuilder::new(kind)
             .created_at(returned_at)
             .content(content)
-            .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
-            }))
+            .tags(
+                (0..self.tag_count).map(|index| {
+                    Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
+                }),
+            )
             .by(actor)
             .build()
             .map_err(WriteIntentError::from)
@@ -163,12 +165,7 @@ async fn applier_error_is_bounded_and_preserves_current() {
     let cache = Arc::new(MemoryEventCache::default());
     let store = Arc::new(MemoryWriteStore::default());
     let applier = Arc::new(ControlledApplier::new(Kind::ContactList));
-    let fava = assembly(
-        &keys,
-        Arc::clone(&cache),
-        store,
-        vec![Arc::clone(&applier)],
-    );
+    let fava = assembly(&keys, Arc::clone(&cache), store, vec![Arc::clone(&applier)]);
     let mut observation = fava
         .observe(
             fava::Query::events()
@@ -352,9 +349,7 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 None,
             )
             .unwrap();
-        expected = expected
-            .checked_next()
-            .expect("next revision identity");
+        expected = expected.checked_next().expect("next revision identity");
         expected_source = Some(source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -429,13 +424,7 @@ async fn recovery_retries_failed_source_once() {
         vec![Arc::clone(&applier)],
     );
     let receipt = support::wait_for_revision(&recovered, accepted.receipt_id(), 2).await;
-    assert!(
-        receipt
-            .current
-            .publication
-            .revision_failure
-            .is_none()
-    );
+    assert!(receipt.current.publication.revision_failure.is_none());
     tokio::task::yield_now().await;
     assert_eq!(applier.calls(), calls_before_recovery + 1);
     assert_eq!(
@@ -474,13 +463,7 @@ async fn successful_retry_clears_failure_without_duplicate_effect() {
     let changed = signed_source(&keys, Kind::ContactList, 20, "changed", &[]);
     save_source(&cache, changed);
     let receipt = support::wait_for_revision(&fava, accepted.receipt_id(), 2).await;
-    assert!(
-        receipt
-            .current
-            .publication
-            .revision_failure
-            .is_none()
-    );
+    assert!(receipt.current.publication.revision_failure.is_none());
     let id = receipt.current.id();
     tokio::task::yield_now().await;
     assert_eq!(accepted.receipt().unwrap().current.id(), id);

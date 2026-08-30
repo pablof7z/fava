@@ -85,9 +85,9 @@ pub async fn resolve(
     // Check cache first.
     match cache.get(cache_key, ttl) {
         FetchOutcome::Ok { body, age } if age.is_fresh => {
-            return parse_names_for(&body, name)
-                .map(|hex| Nip05Result::Fresh { pubkey_hex: hex })
-                .unwrap_or(Nip05Result::NotFound);
+            return parse_names_for(&body, name).map_or(Nip05Result::NotFound, |hex| {
+                Nip05Result::Fresh { pubkey_hex: hex }
+            });
         }
         FetchOutcome::Ok { body, age } => {
             // Stale positive result.
@@ -130,9 +130,9 @@ pub async fn resolve(
         }
         Ok(resp) if resp.status == 200 => {
             let body = resp.body;
-            let result = parse_names_for(&body, name)
-                .map(|hex| Nip05Result::Fresh { pubkey_hex: hex })
-                .unwrap_or(Nip05Result::NotFound);
+            let result = parse_names_for(&body, name).map_or(Nip05Result::NotFound, |hex| {
+                Nip05Result::Fresh { pubkey_hex: hex }
+            });
             match &result {
                 Nip05Result::Fresh { .. } => {
                     cache.set_ok(cache_key, body, fetched_at);

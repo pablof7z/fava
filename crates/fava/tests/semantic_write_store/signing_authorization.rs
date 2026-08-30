@@ -1,6 +1,6 @@
 use fava_write::{
-    EventBuilder, EventValue, Kind, RevisionId, PublicKey, EventEdit,
-    SignatureState, Timestamp, UnsignedEvent, WriteIntent, WriteRouting,
+    EventBuilder, EventEdit, EventValue, Kind, PublicKey, RevisionId, SignatureState, Timestamp,
+    UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStore;
 use fava_write_store_memory::MemoryWriteStore;
@@ -172,10 +172,7 @@ fn memory_authorized_cancellation_without_successor_is_exact_retryable_work() {
     assert_eq!(cancelled.write_id, accepted.write_id);
     assert_eq!(cancelled.receipt_id, accepted.receipt_id);
     assert_eq!(cancelled.current.id(), accepted.current.id());
-    assert_eq!(
-        cancelled.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(cancelled.current.publication.revision_id, RevisionId::FIRST);
     assert!(matches!(
         cancelled.current.publication.signature,
         SignatureState::Retryable(reason)

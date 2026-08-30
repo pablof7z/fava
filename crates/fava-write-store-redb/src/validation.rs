@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::event_is_newer;
 use fava_write::{
-    EventValue, RevisionId, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome,
+    EventValue, Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId,
     SignatureState, WriteRouting,
 };
 use fava_write_store::{
@@ -188,9 +188,7 @@ fn validate_revisions(
     }
     let mut event_ids = BTreeSet::new();
     event_ids.insert(receipt.current.id());
-    for (index, (id, event_id, _, failure)) in
-        publication.retired_revisions.iter().enumerate()
-    {
+    for (index, (id, event_id, _, failure)) in publication.retired_revisions.iter().enumerate() {
         let expected = u64::try_from(index)
             .ok()
             .and_then(|value| value.checked_add(1))
@@ -222,9 +220,7 @@ fn validate_semantic(
     receipt: &Receipt,
     (edits, author, current_source, failed_source, successor): &SemanticCustody,
 ) -> Result<(), WriteStoreError> {
-    if edits.is_empty()
-        || edits.len() > receipt.current.publication.retired_revisions.len() + 1
-    {
+    if edits.is_empty() || edits.len() > receipt.current.publication.retired_revisions.len() + 1 {
         return incoherent("durable semantic edit sequence and generations disagree");
     }
     if let Some((_, successor_event, successor_source, successor_route)) = successor {
@@ -263,11 +259,7 @@ fn validate_semantic(
     {
         return incoherent("durable semantic custody is incoherent");
     }
-    let failure = receipt
-        .current
-        .publication
-        .revision_failure
-        .as_deref();
+    let failure = receipt.current.publication.revision_failure.as_deref();
     if failure.is_none() && failed_source.is_some() {
         return incoherent("durable failed source and failure evidence disagree");
     }

@@ -1,8 +1,6 @@
 //! Exact durable semantic custody recovery reads.
 
-use fava_write::{
-    EventId, RevisionId, PublicKey, Receipt, ReceiptId, EventEdit, Timestamp,
-};
+use fava_write::{EventEdit, EventId, PublicKey, Receipt, ReceiptId, RevisionId, Timestamp};
 use fava_write_store::WriteStoreError;
 
 use crate::RedbWriteStore;

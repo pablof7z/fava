@@ -47,10 +47,7 @@ async fn wrong_injected_timestamp_refuses_first_and_preserves_successor_current(
     let failed = wait_failure(&fava, accepted.receipt_id()).await;
 
     assert_eq!(failed.current.id(), accepted_event_id);
-    assert_eq!(
-        failed.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(failed.current.publication.revision_id, RevisionId::FIRST);
     assert!(
         failed
             .current

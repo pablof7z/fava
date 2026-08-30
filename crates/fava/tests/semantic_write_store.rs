@@ -8,8 +8,8 @@ use std::num::NonZeroUsize;
 
 use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
-    Event, EventBuilder, EventValue, Kind, RevisionId, ReceiptId, EventEdit,
-    Timestamp, UnsignedEvent, WriteIntent, WriteRouting,
+    Event, EventBuilder, EventEdit, EventValue, Kind, ReceiptId, RevisionId, Timestamp,
+    UnsignedEvent, WriteIntent, WriteRouting,
 };
 use fava_write_store::{WriteStore, destination_evidence_capacity};
 use fava_write_store_memory::MemoryWriteStore;
@@ -71,18 +71,9 @@ fn memory_first_edit_has_no_prior() {
         .receipt(accepted.receipt_id)
         .expect("store readable")
         .expect("receipt retained");
-    assert_eq!(
-        receipt.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(receipt.current.publication.revision_id, RevisionId::FIRST);
     assert_eq!(receipt.current.publication.revision_source, None);
-    assert!(
-        receipt
-            .current
-            .publication
-            .retired_revisions
-            .is_empty()
-    );
+    assert!(receipt.current.publication.retired_revisions.is_empty());
 }
 
 #[test]
@@ -651,9 +642,7 @@ fn memory_evidence_exhaustion_has_no_partial_effect() {
                 None,
             )
             .unwrap();
-        expected = expected
-            .checked_next()
-            .expect("next revision identity");
+        expected = expected.checked_next().expect("next revision identity");
         expected_source = Some(next_source.id);
     }
     let before = store.receipt(accepted.receipt_id).unwrap().unwrap();
@@ -736,13 +725,7 @@ fn memory_successor_refuses_an_incomplete_accepted_edit_sequence() {
     let actor = keys.public_key();
     let first_edit = EventEdit::new(Kind::ContactList, None, vec![1]).unwrap();
     let second_edit = EventEdit::new(Kind::ContactList, None, vec![2]).unwrap();
-    let first = accept(
-        &store,
-        first_edit,
-        actor,
-        revision(actor, 1, "first"),
-        None,
-    );
+    let first = accept(&store, first_edit, actor, revision(actor, 1, "first"), None);
     let composed = store
         .accept_applied_edit(
             WriteIntent::edit_as(second_edit.clone(), actor, WriteRouting::Automatic).unwrap(),
@@ -777,15 +760,8 @@ fn memory_composed_edit_bound_refuses_atomically() {
     let keys = Keys::generate();
     let actor = keys.public_key();
     let first_edit =
-        EventEdit::new(Kind::ContactList, None, u16::MAX.to_be_bytes().to_vec())
-            .unwrap();
-    let first = accept(
-        &store,
-        first_edit,
-        actor,
-        revision(actor, 1, "0"),
-        None,
-    );
+        EventEdit::new(Kind::ContactList, None, u16::MAX.to_be_bytes().to_vec()).unwrap();
+    let first = accept(&store, first_edit, actor, revision(actor, 1, "0"), None);
     let mut current = first.clone();
 
     for index in 0..destination_evidence_capacity() {
@@ -805,10 +781,7 @@ fn memory_composed_edit_bound_refuses_atomically() {
 
     let before = store.receipt(first.receipt_id).unwrap().unwrap();
     let edits_before = store
-        .applied_edits(
-            first.receipt_id,
-            current.current.publication.revision_id,
-        )
+        .applied_edits(first.receipt_id, current.current.publication.revision_id)
         .unwrap()
         .unwrap();
     let mut changes = store.receipt_changes();
@@ -825,10 +798,7 @@ fn memory_composed_edit_bound_refuses_atomically() {
     assert_eq!(store.receipt(first.receipt_id).unwrap(), Some(before));
     assert_eq!(
         store
-            .applied_edits(
-                first.receipt_id,
-                current.current.publication.revision_id,
-            )
+            .applied_edits(first.receipt_id, current.current.publication.revision_id,)
             .unwrap(),
         Some(edits_before)
     );

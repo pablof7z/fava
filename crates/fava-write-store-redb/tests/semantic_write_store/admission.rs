@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use fava_routing::{CoverageState, RoutePlan, RouteTarget};
 use fava_write::{
-    EventBuilder, EventValue, Kind, RevisionId, ReceiptOutcome, Timestamp, WriteIntent,
+    EventBuilder, EventValue, Kind, ReceiptOutcome, RevisionId, Timestamp, WriteIntent,
     WriteRouting,
 };
 use fava_write_store::WriteStore;

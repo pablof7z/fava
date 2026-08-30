@@ -5,7 +5,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_state::RelayEvent;
 use fava_write::{
-    EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, ReceiptId, SignatureState,
+    EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, RevisionId, SignatureState,
     WriteId,
 };
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind};

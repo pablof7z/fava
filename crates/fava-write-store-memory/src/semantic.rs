@@ -6,9 +6,9 @@ use fava_query::{SourceEvent, SourceKind, SourceRevision, SourceSnapshot, Source
 use fava_routing::RoutePlan;
 use fava_state::{EventCoordinate, event_is_newer};
 use fava_write::{
-    EventId, EventValue, LocalWriteEvent, RevisionId, PublicKey, PublicationEvidence,
-    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit, SignatureState,
-    Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
+    EventEdit, EventId, EventValue, LocalWriteEvent, PublicKey, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId, SignatureState, Timestamp,
+    UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
@@ -281,11 +281,9 @@ impl MemoryWriteStore {
         let edit = edits.last().ok_or_else(|| {
             WriteStoreError::Refused("semantic edit sequence is empty".to_owned())
         })?;
-        let selected_source =
-            validate_revision(edit, author, &event, source, &receipt.routing)?;
+        let selected_source = validate_revision(edit, author, &event, source, &receipt.routing)?;
         if receipt.current.event == EventValue::Unsigned(event.clone())
-            && receipt.current.publication.revision_source
-                == selected_source.map(|(id, _)| id)
+            && receipt.current.publication.revision_source == selected_source.map(|(id, _)| id)
         {
             return Ok(receipt);
         }
@@ -301,9 +299,7 @@ impl MemoryWriteStore {
                 "successor revision is not newer than current event".to_owned(),
             ));
         }
-        if receipt.current.publication.retired_revisions.len()
-            >= destination_evidence_capacity()
-        {
+        if receipt.current.publication.retired_revisions.len() >= destination_evidence_capacity() {
             return Err(WriteStoreError::Refused(
                 "retired revision evidence capacity reached".to_owned(),
             ));
@@ -353,9 +349,7 @@ impl MemoryWriteStore {
             .publication
             .revision_id
             .checked_next()
-            .ok_or_else(|| {
-                WriteStoreError::Refused("revision identity exhausted".to_owned())
-            })?;
+            .ok_or_else(|| WriteStoreError::Refused("revision identity exhausted".to_owned()))?;
         let current = LocalWriteEvent::new(
             EventValue::Unsigned(event),
             PublicationEvidence {
@@ -425,12 +419,7 @@ impl MemoryWriteStore {
         let failed_source_id = failed_source.map(|(id, _)| id);
         let failure = attributed_failure(expected, failed_source_id, reason);
         if current_failed_source == failed_source_id
-            && receipt
-                .current
-                .publication
-                .revision_failure
-                .as_deref()
-                == Some(failure.as_str())
+            && receipt.current.publication.revision_failure.as_deref() == Some(failure.as_str())
         {
             return Ok(receipt);
         }

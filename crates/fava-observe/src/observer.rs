@@ -158,10 +158,6 @@ impl Observer {
     /// Returns [`ObserveError`] when the query is invalid, a local source
     /// refuses to open, a route plan cannot be produced, or initial evaluation
     /// fails. Every provisionally opened resource is released.
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-    )]
     pub fn open(&self, query: Query) -> Result<Observation, ObserveError> {
         let live = query.freshness() != Freshness::CacheOnly;
 
@@ -169,8 +165,8 @@ impl Observer {
             .event_cache
             .open(&query)
             .map_err(|error| ObserveError::SourceOpen {
-                role: SourceKind::EventCache,
-                error,
+                role: Box::new(SourceKind::EventCache),
+                error: Box::new(error),
             })?;
         let writes = match self.write_store.open(&query) {
             Ok(writes) => writes,
@@ -178,8 +174,8 @@ impl Observer {
                 let mut changes = cache.changes;
                 changes.close();
                 return Err(ObserveError::SourceOpen {
-                    role: SourceKind::WriteStore,
-                    error,
+                    role: Box::new(SourceKind::WriteStore),
+                    error: Box::new(error),
                 });
             }
         };
@@ -201,12 +197,12 @@ impl Observer {
         let branch = QueryBranchId::ROOT;
         if let Some(mut binding) = binding {
             self.remove_fresh_sources(&query, installation.id, branch, &mut binding);
-            if !binding.plan.destinations.is_empty() || binding.session.is_some() {
-                if let Err(error) = self.start_engine() {
-                    sources.close();
-                    self.registry.withdraw(installation.id);
-                    return Err(error);
-                }
+            if (!binding.plan.destinations.is_empty() || binding.session.is_some())
+                && let Err(error) = self.start_engine()
+            {
+                sources.close();
+                self.registry.withdraw(installation.id);
+                return Err(error);
             }
             self.retain(
                 installation.id,
@@ -268,10 +264,6 @@ impl Observer {
     ///
     /// Returns [`ObserveError`] when a local source or router refuses its
     /// exact preview input.
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError preserves the refusing local-source role"
-    )]
     pub fn preview_routes(&self, query: &Query) -> Result<fava_routing::RoutePlan, ObserveError> {
         let request = fava_routing::RouteRequest::Read(query.clone());
         match query.source().acquisition() {
@@ -302,7 +294,7 @@ impl Observer {
     /// Remove only sources backed by one still-fresh exact proven completion.
     ///
     /// The decision is made once during open.  No retained timer owns a later
-    /// recheck, so a MaxAge observation keeps local replacements but cannot
+    /// recheck, so a `MaxAge` observation keeps local replacements but cannot
     /// restart relay work merely by becoming old.
     fn remove_fresh_sources(
         &self,
@@ -330,10 +322,6 @@ impl Observer {
         });
     }
 
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-    )]
     fn evaluate_initial(
         &self,
         query: &Query,
@@ -349,8 +337,8 @@ impl Observer {
             .event_cache
             .open(query)
             .map_err(|error| ObserveError::SourceOpen {
-                role: SourceKind::EventCache,
-                error,
+                role: Box::new(SourceKind::EventCache),
+                error: Box::new(error),
             })?;
         let writes = match self.write_store.open(query) {
             Ok(writes) => writes,
@@ -358,8 +346,8 @@ impl Observer {
                 let mut changes = cache.changes;
                 changes.close();
                 return Err(ObserveError::SourceOpen {
-                    role: SourceKind::WriteStore,
-                    error,
+                    role: Box::new(SourceKind::WriteStore),
+                    error: Box::new(error),
                 });
             }
         };
@@ -392,29 +380,30 @@ impl Observer {
         );
         if let Some(session) = session {
             self.follow_routes(
-                id,
-                branch,
-                query.clone(),
-                plan,
-                origin,
-                inputs,
-                session,
+                FollowedRoute {
+                    id,
+                    branch,
+                    request: query.clone(),
+                    plan,
+                    origin,
+                    inputs,
+                    session,
+                },
                 cancel,
             );
         }
     }
 
-    fn follow_routes(
-        &self,
-        id: ObservationId,
-        branch: QueryBranchId,
-        request: Query,
-        plan: fava_routing::RoutePlan,
-        origin: routes::Origin,
-        input_queries: Vec<Query>,
-        session: Box<dyn fava_routing::RouterSession>,
-        cancel: &fava_runtime::CancellationToken,
-    ) {
+    fn follow_routes(&self, route: FollowedRoute<Query>, cancel: &fava_runtime::CancellationToken) {
+        let FollowedRoute {
+            id,
+            branch,
+            request,
+            plan,
+            origin,
+            inputs: input_queries,
+            session,
+        } = route;
         let mut inputs = Vec::with_capacity(input_queries.len());
         for input in input_queries {
             let Ok(observation) = self.open(input) else {
@@ -426,13 +415,15 @@ impl Observer {
             TaskName("observe.router-inputs"),
             cancel.clone(),
             follow_route_inputs(
-                id,
-                branch,
-                request,
-                plan,
-                origin,
-                inputs,
-                session,
+                FollowedRoute {
+                    id,
+                    branch,
+                    request,
+                    plan,
+                    origin,
+                    inputs,
+                    session,
+                },
                 Arc::clone(&self.registry),
             ),
         );
@@ -441,10 +432,6 @@ impl Observer {
         }
     }
 
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-    )]
     fn start_engine(&self) -> Result<(), ObserveError> {
         if self.engine.get().is_some() {
             return Ok(());
@@ -472,16 +459,29 @@ impl Observer {
     }
 }
 
-async fn follow_route_inputs(
+/// One route the engine is following for one observation branch, generic
+/// over whether its declared axes are still bare [`Query`] values or have
+/// already been opened into [`Observation`]s.
+struct FollowedRoute<I> {
     id: ObservationId,
     branch: QueryBranchId,
-    query: Query,
-    mut plan: fava_routing::RoutePlan,
+    request: Query,
+    plan: fava_routing::RoutePlan,
     origin: routes::Origin,
-    mut inputs: Vec<Observation>,
-    mut session: Box<dyn fava_routing::RouterSession>,
-    registry: Arc<Registry>,
-) {
+    inputs: Vec<I>,
+    session: Box<dyn fava_routing::RouterSession>,
+}
+
+async fn follow_route_inputs(route: FollowedRoute<Observation>, registry: Arc<Registry>) {
+    let FollowedRoute {
+        id,
+        branch,
+        request: query,
+        mut plan,
+        origin,
+        mut inputs,
+        mut session,
+    } = route;
     loop {
         let snapshots = inputs
             .iter()
@@ -519,12 +519,12 @@ async fn follow_route_inputs(
             // route session forever.
             tokio::time::sleep(EMPTY_ROUTER_INPUT_POLL).await;
         } else {
-            let changes = inputs
+            let pending = inputs
                 .iter_mut()
                 .map(|input| Box::pin(input.changed()))
                 .collect::<Vec<_>>();
-            let (changed, _, _) = select_all(changes).await;
-            if changed.is_err() {
+            let (outcome, _, _) = select_all(pending).await;
+            if outcome.is_err() {
                 break;
             }
         }

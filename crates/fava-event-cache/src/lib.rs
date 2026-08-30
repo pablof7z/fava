@@ -18,6 +18,10 @@ pub trait EventCache: QuerySource + Send + Sync {
     ///
     /// The provider owns retention and coherence. A miss says only that this
     /// provider has no reusable proof for this exact request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EventCacheError`] when the retained coverage cannot be read.
     fn source_coverage(
         &self,
         session: &RelaySessionKey,
@@ -29,6 +33,11 @@ pub trait EventCache: QuerySource + Send + Sync {
     /// Implementations refuse before mutation when their completion bound
     /// would be exceeded, and invalidate retained coverage whenever their
     /// event state can make that completion window stale.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EventCacheError`] when the completion bound is exceeded or
+    /// the retention cannot be committed.
     fn retain_source_coverage(&self, coverage: SourceCoverage) -> Result<(), EventCacheError>;
 
     /// Atomically read current event state, decide a mutation batch, and commit it.

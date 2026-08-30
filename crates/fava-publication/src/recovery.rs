@@ -74,13 +74,11 @@ impl Publication {
         receipt: &Receipt,
         state: &mut SemanticState,
     ) -> Result<(), PublicationError> {
-        let retry_persisted_failure = receipt.current.publication.revision_id
-            == state.revision_id
+        let retry_persisted_failure = receipt.current.publication.revision_id == state.revision_id
             && state.failed_id.is_none();
-        let Some((edits, author, selected, failed_id)) = self.store.applied_edits(
-            receipt.receipt_id,
-            receipt.current.publication.revision_id,
-        )?
+        let Some((edits, author, selected, failed_id)) = self
+            .store
+            .applied_edits(receipt.receipt_id, receipt.current.publication.revision_id)?
         else {
             return Err(WriteStoreError::Refused(
                 "recovered semantic custody is missing".to_owned(),

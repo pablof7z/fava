@@ -18,6 +18,11 @@ const MAX_SHORTFALLS: usize = 256;
 const MAX_TEXT_BYTES: usize = 4_096;
 
 /// Declare the ordered complete query set required by a router chain.
+///
+/// # Errors
+///
+/// Returns [`RouterError`] when any router in the chain refuses to declare
+/// its queries.
 pub fn queries(
     routers: &[Arc<dyn Router>],
     request: &RouteRequest,
@@ -35,6 +40,11 @@ pub fn queries(
 }
 
 /// Evaluate an ordered router chain from complete local query snapshots.
+///
+/// # Errors
+///
+/// Returns [`RouterError`] when the chain cannot declare or evaluate a
+/// coherent plan from the supplied inputs.
 pub fn preview(
     routers: &[Arc<dyn Router>],
     request: &RouteRequest,
@@ -65,10 +75,15 @@ pub fn preview(
 }
 
 /// Open an ordered router chain from complete engine-owned snapshots.
+///
+/// # Errors
+///
+/// Returns [`RouterError`] when the chain cannot declare a coherent plan or
+/// any router refuses to open its session from the supplied inputs.
 pub fn open(
     routers: &[Arc<dyn Router>],
     request: &RouteRequest,
-    inputs: Vec<Vec<QuerySnapshot>>,
+    inputs: &[Vec<QuerySnapshot>],
 ) -> Result<Box<dyn RouterSession>, RouterError> {
     validate_names(routers)?;
     if inputs.len() != routers.len() {

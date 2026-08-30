@@ -2,9 +2,7 @@
 //! store.
 
 use fava_state::{EventCoordinate, event_is_newer};
-use fava_write::{
-    EventId, RevisionId, PublicKey, ReceiptId, EventEdit, Timestamp,
-};
+use fava_write::{EventEdit, EventId, PublicKey, ReceiptId, RevisionId, Timestamp};
 use fava_write_store::WriteStoreError;
 use std::num::NonZeroU64;
 

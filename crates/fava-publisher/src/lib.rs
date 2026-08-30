@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use fava_relay::RelaySessionKey;
 use fava_transport::Transport;
-use fava_write::{Event, RevisionId, ReceiptId, WriteId};
+use fava_write::{Event, ReceiptId, RevisionId, WriteId};
 
 /// One exact publication attempt at one exact destination.
 #[derive(Clone, Debug, Eq, PartialEq)]

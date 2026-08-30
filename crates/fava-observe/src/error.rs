@@ -7,19 +7,20 @@ use fava_subscriptions::PlanRevisionExhausted;
 use thiserror::Error;
 
 /// Query-open refusal before a usable handle exists.
-///
-/// The value is large because it names the exact source role that refused, and
-/// a live-relay role carries the relay session identity. Collapsing it would
-/// erase the distinction `GOALS:302` requires.
 #[derive(Debug, Error)]
 pub enum ObserveError {
     /// One named local source could not establish its initial boundary.
+    ///
+    /// `role` names the exact source that refused, and a live-relay role
+    /// carries the relay session identity; both fields are boxed because a
+    /// live-relay role and refusal are large, but collapsing the distinction
+    /// itself would erase what `GOALS:302` requires.
     #[error("{role:?} failed to open: {error}")]
     SourceOpen {
         /// Query-source role.
-        role: SourceKind,
+        role: Box<SourceKind>,
         /// Scoped provider refusal.
-        error: QuerySourceError,
+        error: Box<QuerySourceError>,
     },
     /// Initial local evaluation failed.
     #[error(transparent)]

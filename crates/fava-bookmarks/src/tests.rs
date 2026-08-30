@@ -1,12 +1,10 @@
 use fava_state::{EventCoordinate, event_coordinate};
-use fava_write::{
-    EventId, EventValue, Kind, EventEdit, Tag, Timestamp, WriteIntentError,
-};
+use fava_write::{EventEdit, EventId, EventValue, Kind, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 
 use super::{
-    bookmark_coordinate, bookmark_event, applier, unbookmark_coordinate, unbookmark_event,
+    applier, bookmark_coordinate, bookmark_event, unbookmark_coordinate, unbookmark_event,
 };
 
 const BOOKMARK_KIND: u16 = 10_003;
@@ -73,8 +71,7 @@ fn bookmark_and_unbookmark_are_opposing_authorless_edits() {
     assert_ne!(add_event, remove_event);
     assert_eq!(add_event.kind(), Kind::from_u16(BOOKMARK_KIND));
     assert_eq!(add_event.identifier(), None);
-    let first =
-        apply(actor.public_key(), &add_event, None, 4).expect("first public bookmark list");
+    let first = apply(actor.public_key(), &add_event, None, 4).expect("first public bookmark list");
     assert_eq!(first.pubkey, actor.public_key());
     assert_eq!(first.kind, Kind::from_u16(BOOKMARK_KIND));
     assert_eq!(first.tags.as_slice(), &[tag(&["e", &event_id.to_hex()])]);
@@ -114,8 +111,7 @@ fn empty_identifier_addressable_coordinate_round_trips_from_event_helper() {
 
     let add = bookmark_coordinate(coordinate.clone())
         .expect("empty identifier is a valid addressable coordinate");
-    let added =
-        apply(actor.public_key(), &add, None, 1).expect("coordinate codec round trips");
+    let added = apply(actor.public_key(), &add, None, 1).expect("coordinate codec round trips");
     assert_eq!(
         added.tags.as_slice(),
         &[tag(&["a", &coordinate_text(&coordinate)])]
@@ -128,8 +124,8 @@ fn empty_identifier_addressable_coordinate_round_trips_from_event_helper() {
         added.tags.to_vec(),
     );
     let remove = unbookmark_coordinate(coordinate).expect("remove edit");
-    let removed = apply(actor.public_key(), &remove, Some(&signed), 2)
-        .expect("opposing codec round trips");
+    let removed =
+        apply(actor.public_key(), &remove, Some(&signed), 2).expect("opposing codec round trips");
     assert!(removed.tags.is_empty());
     assert_eq!(removed.content, "opaque");
 }
@@ -160,10 +156,8 @@ fn bookmark_preserves_unrelated_state_and_orders_deterministically() {
         tags.clone(),
     );
     let edit = bookmark_event(event_id).expect("bookmark edit");
-    let first =
-        apply(actor.public_key(), &edit, Some(&source), 11).expect("bookmark applies");
-    let second =
-        apply(actor.public_key(), &edit, Some(&source), 11).expect("deterministic repeat");
+    let first = apply(actor.public_key(), &edit, Some(&source), 11).expect("bookmark applies");
+    let second = apply(actor.public_key(), &edit, Some(&source), 11).expect("deterministic repeat");
     assert_eq!(first, second);
     assert_eq!(first.content, encrypted);
     assert_eq!(
@@ -197,8 +191,7 @@ fn bookmark_duplicate_and_adjacent_edits_are_idempotent() {
     ];
     let original = source(&actor, Kind::from_u16(BOOKMARK_KIND), 20, "opaque", tags);
     let add = bookmark_event(event_id).expect("bookmark edit");
-    let once =
-        apply(actor.public_key(), &add, Some(&original), 21).expect("event deduplicates");
+    let once = apply(actor.public_key(), &add, Some(&original), 21).expect("event deduplicates");
     assert_eq!(
         once.tags
             .iter()
@@ -213,8 +206,8 @@ fn bookmark_duplicate_and_adjacent_edits_are_idempotent() {
         "opaque",
         once.tags.clone().to_vec(),
     );
-    let twice = apply(actor.public_key(), &add, Some(&signed_once), 22)
-        .expect("event repeat idempotent");
+    let twice =
+        apply(actor.public_key(), &add, Some(&signed_once), 22).expect("event repeat idempotent");
     assert_eq!(once.tags, twice.tags);
 
     let remove_coordinate = unbookmark_coordinate(coordinate).expect("coordinate removal");

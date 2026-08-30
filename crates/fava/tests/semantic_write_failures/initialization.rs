@@ -1,9 +1,6 @@
 use std::sync::{Arc, Barrier};
 
-use fava::{
-    EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp,
-    WriteRouting,
-};
+use fava::{EventBuilder, EventEdit, EventValue, Kind, RevisionId, Timestamp, WriteRouting};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_state::EventStateMutation;

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 
 use fava_state::EventCoordinate;
-use fava_write::{EventId, PublicKey, Receipt, ReceiptId, EventEdit, Timestamp};
+use fava_write::{EventEdit, EventId, PublicKey, Receipt, ReceiptId, Timestamp};
 use fava_write_store::WriteStoreError;
 use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};

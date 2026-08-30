@@ -3,15 +3,34 @@
 use fava_event_cache::{EventCache, EventCacheError};
 use fava_query::{
     OpenedQuerySource, Query, QuerySource, QuerySourceError, SourceChangeFuture, SourceChanges,
-    SourceKind, SourceSnapshot,
+    SourceCoverage, SourceKind, SourceSnapshot,
 };
+use fava_relay::RelaySessionKey;
 use fava_state::{EventStateMutation, RelayEvent};
 use nostr::event::EventId;
+use nostr::filter::Filter;
 
 /// Deliberately absent event cache implemented outside the Fava workspace.
 pub struct NullEventCache;
 
 impl EventCache for NullEventCache {
+    /// A null cache retains nothing, so it never has a reusable proof.
+    fn source_coverage(
+        &self,
+        _session: &RelaySessionKey,
+        _filter: &Filter,
+    ) -> Result<Option<SourceCoverage>, EventCacheError> {
+        Ok(None)
+    }
+
+    /// Retention is refused honestly, the same way [`Self::commit`] refuses
+    /// any non-empty mutation batch: this cache retains nothing.
+    fn retain_source_coverage(&self, _coverage: SourceCoverage) -> Result<(), EventCacheError> {
+        Err(EventCacheError::Refused(
+            "null cache retains no relay events".to_owned(),
+        ))
+    }
+
     /// The serialized event-state writer, held honestly by a cache that
     /// retains nothing.
     ///

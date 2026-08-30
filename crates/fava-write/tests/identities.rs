@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU64;
 
-use fava_write::{RevisionId, ReceiptId, WriteId};
+use fava_write::{ReceiptId, RevisionId, WriteId};
 
 #[test]
 fn durable_write_identities_are_nonzero_and_round_trip_exactly() {
@@ -13,8 +13,7 @@ fn durable_write_identities_are_nonzero_and_round_trip_exactly() {
     let raw = 17;
     let write = WriteId::try_from(raw).expect("nonzero write identity");
     let receipt = ReceiptId::try_from(raw).expect("nonzero receipt identity");
-    let revision =
-        RevisionId::try_from(raw).expect("nonzero revision identity");
+    let revision = RevisionId::try_from(raw).expect("nonzero revision identity");
 
     assert_eq!(write.as_u64(), raw);
     assert_eq!(receipt.as_u64(), raw);
@@ -28,8 +27,7 @@ fn durable_write_identities_are_nonzero_and_round_trip_exactly() {
         receipt
     );
     assert_eq!(
-        serde_json::from_str::<RevisionId>(&raw.to_string())
-            .expect("revision identity decodes"),
+        serde_json::from_str::<RevisionId>(&raw.to_string()).expect("revision identity decodes"),
         revision
     );
     assert!(serde_json::from_str::<WriteId>("0").is_err());

@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use fava_state::EventCoordinate;
-use fava_write::{
-    EventId, Kind, EventEdit, EditApplier, EditApplierSink, WriteIntentError,
-};
+use fava_write::{EditApplier, EditApplierSink, EventEdit, EventId, Kind, WriteIntentError};
 
 use fava_bookmarks::Bookmarks;
 

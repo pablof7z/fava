@@ -2,9 +2,9 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventValue, Kind, RevisionId, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
-    RelayDeliveryOutcome, EventEdit, EditApplier, Timestamp,
-    UnsignedEvent, Write, WriteId, WriteIntentError, all_terminal,
+    EditApplier, Event, EventEdit, EventValue, Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome,
+    RelayDeliveryOutcome, RevisionId, Timestamp, UnsignedEvent, Write, WriteId, WriteIntentError,
+    all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -51,12 +51,8 @@ pub async fn exercise<Add, Adjacent>(
     prove_processed_stale_success(kind, capture, add, adjacent).await;
 }
 
-async fn prove_source_removal<Add>(
-    kind: Kind,
-    enable: Enable,
-    add: &Add,
-    target: (&str, &str),
-) where
+async fn prove_source_removal<Add>(kind: Kind, enable: Enable, add: &Add, target: (&str, &str))
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
@@ -314,11 +310,7 @@ impl WriteStore for CompletionStore {
     fn active_capacity(&self) -> usize {
         self.inner.active_capacity()
     }
-    fn reserve_active(
-        &self,
-        edit: &EventEdit,
-        author: PublicKey,
-    ) -> Result<u64, WriteStoreError> {
+    fn reserve_active(&self, edit: &EventEdit, author: PublicKey) -> Result<u64, WriteStoreError> {
         self.inner.reserve_active(edit, author)
     }
     fn release_active(&self, reservation: u64) -> Result<(), WriteStoreError> {
@@ -346,13 +338,8 @@ impl WriteStore for CompletionStore {
         source: Option<&EventValue>,
         initial_route: Option<&RoutePlan>,
     ) -> Result<AcceptedWrite, WriteStoreError> {
-        self.inner.accept_reserved_applied_edit(
-            reservation,
-            intent,
-            event,
-            source,
-            initial_route,
-        )
+        self.inner
+            .accept_reserved_applied_edit(reservation, intent, event, source, initial_route)
     }
     fn install_revision(
         &self,
@@ -433,9 +420,9 @@ impl WriteStore for CompletionStore {
         event_id: EventId,
         event: Event,
     ) -> Result<Receipt, WriteStoreError> {
-        let result =
-            self.inner
-                .install_signed(write_id, receipt_id, revision_id, event_id, event);
+        let result = self
+            .inner
+            .install_signed(write_id, receipt_id, revision_id, event_id, event);
         let _ = self.completions.send(CompletionAck {
             write_id,
             receipt_id,
@@ -463,13 +450,8 @@ impl WriteStore for CompletionStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.record_signer_retryable(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.inner
+            .record_signer_retryable(write_id, receipt_id, revision_id, event_id, reason)
     }
     fn signing_successor(
         &self,

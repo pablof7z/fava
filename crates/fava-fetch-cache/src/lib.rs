@@ -249,7 +249,9 @@ mod tests {
     #[test]
     fn stale_ok_after_ttl() {
         let cache = MemoryFetchCache::new();
-        let past = Instant::now() - Duration::from_secs(100);
+        let past = Instant::now()
+            .checked_sub(Duration::from_secs(100))
+            .unwrap();
         cache.set_ok("key", "body".to_owned(), past);
         let outcome = cache.get("key", Duration::from_secs(60));
         assert!(outcome.is_stale(), "should be stale");

@@ -546,6 +546,107 @@ async fn gate3_wrong_authority_relay_rejects() {
 
 // ── Gate 4: all nine constructors produce relay-accepted events ───────────────
 
+/// One gate-4 case: constructor name, built event, signer, and the exact `p` rows expected.
+type ConstructorCase<'a> = (&'a str, UnsignedEvent, &'a Keys, Option<Vec<Vec<String>>>);
+
+/// Constructors that change the group itself, all signed by the admin.
+fn group_lifecycle_cases<'a>(
+    group: &SimpleGroup,
+    admin_keys: &'a Keys,
+    target_id: &EventId,
+) -> Vec<ConstructorCase<'a>> {
+    let admin = admin_keys.public_key();
+    vec![
+        (
+            "create_group",
+            build_event(create_group(group).unwrap(), admin),
+            admin_keys,
+            None,
+        ),
+        (
+            "edit_metadata",
+            build_event(
+                edit_metadata(
+                    group,
+                    &MetadataEdit {
+                        name: Some("Gate4 Cats".to_owned()),
+                        visibility: Some(GroupVisibility::Private),
+                        access: Some(GroupAccess::Closed),
+                        ..Default::default()
+                    },
+                )
+                .unwrap(),
+                admin,
+            ),
+            admin_keys,
+            None,
+        ),
+        (
+            "delete_event",
+            build_event(delete_event(group, target_id).unwrap(), admin),
+            admin_keys,
+            None,
+        ),
+        (
+            "delete_group",
+            build_event(delete_group(group).unwrap(), admin),
+            admin_keys,
+            None,
+        ),
+    ]
+}
+
+/// Constructors that change who is in the group, carrying the exact ordered
+/// `p` rows the relay must preserve for the array-valued ones.
+fn membership_cases<'a>(
+    group: &SimpleGroup,
+    admin_keys: &'a Keys,
+    user_keys: &'a Keys,
+    user_targets: &[PublicKey],
+) -> Vec<ConstructorCase<'a>> {
+    let admin = admin_keys.public_key();
+    let target_p_rows = user_targets
+        .iter()
+        .map(|target| vec!["p".to_owned(), target.to_hex()])
+        .collect::<Vec<_>>();
+    let put_user_p_rows = user_targets
+        .iter()
+        .map(|target| vec!["p".to_owned(), target.to_hex(), "member".to_owned()])
+        .collect::<Vec<_>>();
+    vec![
+        (
+            "invite",
+            build_event(invite(group, "gate4-required-invite-code").unwrap(), admin),
+            admin_keys,
+            None,
+        ),
+        (
+            "join_request",
+            build_event(join_request(group, None).unwrap(), user_keys.public_key()),
+            user_keys,
+            None,
+        ),
+        (
+            "put_user",
+            build_event(put_user(group, user_targets, &["member"]).unwrap(), admin),
+            admin_keys,
+            Some(put_user_p_rows),
+        ),
+        (
+            "remove_user",
+            build_event(remove_user(group, user_targets).unwrap(), admin),
+            admin_keys,
+            Some(target_p_rows),
+        ),
+        (
+            "leave_group",
+            build_event(leave_group(group).unwrap(), user_keys.public_key()),
+            user_keys,
+            None,
+        ),
+    ]
+}
+
 /// Smoke: every typed constructor builds a valid event that a permissive relay accepts.
 /// Management constructors use several targets here, so the real wire path
 /// exercises multiple exact `p` rows in one event body.
@@ -564,119 +665,13 @@ async fn gate4_all_constructors_accepted() {
     let group = SimpleGroup::new("phase-b-gate4", vec![r.clone()]).unwrap();
     let target_id = EventId::from_byte_array([0u8; 32]);
 
-    let target_p_rows = user_targets
-        .iter()
-        .map(|target| vec!["p".to_owned(), target.to_hex()])
-        .collect::<Vec<_>>();
-    let put_user_p_rows = user_targets
-        .iter()
-        .map(|target| vec!["p".to_owned(), target.to_hex(), "member".to_owned()])
-        .collect::<Vec<_>>();
-    let invite_event = invite(&group, "gate4-required-invite-code")
-        .unwrap()
-        .by(admin_keys.public_key())
-        .into_event_and_routing()
-        .unwrap()
-        .0;
-    let cases: Vec<(&str, UnsignedEvent, &Keys, Option<Vec<Vec<String>>>)> = vec![
-        (
-            "create_group",
-            create_group(&group)
-                .unwrap()
-                .by(admin_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &admin_keys,
-            None,
-        ),
-        (
-            "edit_metadata",
-            edit_metadata(
-                &group,
-                &MetadataEdit {
-                    name: Some("Gate4 Cats".to_owned()),
-                    visibility: Some(GroupVisibility::Private),
-                    access: Some(GroupAccess::Closed),
-                    ..Default::default()
-                },
-            )
-            .unwrap()
-            .by(admin_keys.public_key())
-            .into_event_and_routing()
-            .unwrap()
-            .0,
-            &admin_keys,
-            None,
-        ),
-        ("invite", invite_event, &admin_keys, None),
-        (
-            "join_request",
-            join_request(&group, None)
-                .unwrap()
-                .by(user_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &user_keys,
-            None,
-        ),
-        (
-            "put_user",
-            put_user(&group, &user_targets, &["member"])
-                .unwrap()
-                .by(admin_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &admin_keys,
-            Some(put_user_p_rows),
-        ),
-        (
-            "remove_user",
-            remove_user(&group, &user_targets)
-                .unwrap()
-                .by(admin_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &admin_keys,
-            Some(target_p_rows),
-        ),
-        (
-            "delete_event",
-            delete_event(&group, &target_id)
-                .unwrap()
-                .by(admin_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &admin_keys,
-            None,
-        ),
-        (
-            "delete_group",
-            delete_group(&group)
-                .unwrap()
-                .by(admin_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &admin_keys,
-            None,
-        ),
-        (
-            "leave_group",
-            leave_group(&group)
-                .unwrap()
-                .by(user_keys.public_key())
-                .into_event_and_routing()
-                .unwrap()
-                .0,
-            &user_keys,
-            None,
-        ),
-    ];
+    let mut cases = group_lifecycle_cases(&group, &admin_keys, &target_id);
+    cases.extend(membership_cases(
+        &group,
+        &admin_keys,
+        &user_keys,
+        &user_targets,
+    ));
 
     for (index, (name, event, signer, expected_p_rows)) in cases.iter().enumerate() {
         let (event_id, ok, msg) = submit_with_id(&mut ws, event.clone(), signer).await;
@@ -707,6 +702,58 @@ async fn gate4_all_constructors_accepted() {
     relay.child.kill().await.ok();
 }
 
+/// Create the group and close it, so membership changes are admin-only.
+async fn create_closed_group(ws: &mut Ws, group: &SimpleGroup, admin: &Keys) {
+    let (ok, message) = submit(
+        ws,
+        build_event(
+            create_group(group).expect("create group"),
+            admin.public_key(),
+        ),
+        admin,
+    )
+    .await;
+    assert!(ok, "Croissant rejected create-group: {message}");
+
+    let (ok, message) = submit(
+        ws,
+        build_event(
+            edit_metadata(
+                group,
+                &MetadataEdit {
+                    access: Some(GroupAccess::Closed),
+                    ..Default::default()
+                },
+            )
+            .expect("close group"),
+            admin.public_key(),
+        ),
+        admin,
+    )
+    .await;
+    assert!(ok, "Croissant rejected close-group: {message}");
+}
+
+/// An invitation carries its exact code tag and no user targets.
+async fn assert_invite_carries_code_without_targets(
+    ws: &mut Ws,
+    group: &SimpleGroup,
+    admin: &Keys,
+) {
+    let invitation = build_event(
+        invite(group, "array-invite-code").expect("build invite"),
+        admin.public_key(),
+    );
+    let (invitation_id, ok, message) = submit_with_id(ws, invitation, admin).await;
+    assert!(ok, "Croissant rejected invite: {message}");
+    let stored = readback_one(ws, "invite", &invitation_id).await;
+    assert_eq!(p_rows(&stored), Vec::<Vec<String>>::new());
+    assert_eq!(
+        tag_rows(&stored, "code"),
+        vec![vec!["code".to_owned(), "array-invite-code".to_owned()]]
+    );
+}
+
 /// Array-based user-management constructors preserve one, many, and no `p`
 /// tags on a real NIP-29 relay. Croissant refuses empty `put_user` and
 /// `remove_user` targets; an invitation carries a code and no user targets.
@@ -730,34 +777,7 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
     )
     .unwrap();
 
-    let (ok, message) = submit(
-        &mut ws,
-        build_event(
-            create_group(&group).expect("create group"),
-            admin.public_key(),
-        ),
-        &admin,
-    )
-    .await;
-    assert!(ok, "Croissant rejected create-group: {message}");
-
-    let (ok, message) = submit(
-        &mut ws,
-        build_event(
-            edit_metadata(
-                &group,
-                &MetadataEdit {
-                    access: Some(GroupAccess::Closed),
-                    ..Default::default()
-                },
-            )
-            .expect("close group"),
-            admin.public_key(),
-        ),
-        &admin,
-    )
-    .await;
-    assert!(ok, "Croissant rejected close-group: {message}");
+    create_closed_group(&mut ws, &group, &admin).await;
 
     let one_p_tag = vec![vec!["p".to_owned(), one_user.to_hex()]];
     let many_p_tags = many_users
@@ -813,18 +833,7 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
     )
     .await;
 
-    let invitation = build_event(
-        invite(&group, "array-invite-code").expect("build invite"),
-        admin.public_key(),
-    );
-    let (invitation_id, ok, message) = submit_with_id(&mut ws, invitation, &admin).await;
-    assert!(ok, "Croissant rejected invite: {message}");
-    let stored = readback_one(&mut ws, "invite", &invitation_id).await;
-    assert_eq!(p_rows(&stored), Vec::<Vec<String>>::new());
-    assert_eq!(
-        tag_rows(&stored, "code"),
-        vec![vec!["code".to_owned(), "array-invite-code".to_owned()]]
-    );
+    assert_invite_carries_code_without_targets(&mut ws, &group, &admin).await;
 
     for (name, event) in [
         (

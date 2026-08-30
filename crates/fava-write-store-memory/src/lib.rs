@@ -11,8 +11,8 @@ use fava_query::{
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicKey, PublicationEvidence,
-    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit, SignatureState,
+    Event, EventEdit, EventId, EventValue, LocalWriteEvent, PublicKey, PublicationEvidence,
+    Receipt, ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId, SignatureState,
     Timestamp, UnsignedEvent, WriteId, WriteIntent, WritePayload,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
@@ -87,11 +87,7 @@ impl WriteStore for MemoryWriteStore {
         self.capacity.get()
     }
 
-    fn reserve_active(
-        &self,
-        edit: &EventEdit,
-        author: PublicKey,
-    ) -> Result<u64, WriteStoreError> {
+    fn reserve_active(&self, edit: &EventEdit, author: PublicKey) -> Result<u64, WriteStoreError> {
         self.reserve_active_slot(edit, author)
     }
 
@@ -290,13 +286,7 @@ impl WriteStore for MemoryWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.record_signer_retryable_current(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.record_signer_retryable_current(write_id, receipt_id, revision_id, event_id, reason)
     }
 
     fn signing_successor(
@@ -317,13 +307,7 @@ impl WriteStore for MemoryWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.record_signer_refusal_current(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.record_signer_refusal_current(write_id, receipt_id, revision_id, event_id, reason)
     }
 
     fn apply_route(

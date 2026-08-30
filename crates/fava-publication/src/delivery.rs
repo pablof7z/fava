@@ -5,7 +5,7 @@ use fava_delivery::{DeliveryDecision, DeliveryFacts};
 use fava_publisher::{PublishAttempt, PublishOutcome};
 use fava_relay::RelaySessionKey;
 use fava_write::{
-    EventId, EventValue, RevisionId, Receipt, ReceiptId, RelayDeliveryOutcome, WriteId,
+    EventId, EventValue, Receipt, ReceiptId, RelayDeliveryOutcome, RevisionId, WriteId,
 };
 use tokio::sync::{mpsc, watch};
 
@@ -17,10 +17,7 @@ impl Publication {
     pub(super) fn start_lanes(
         &self,
         receipt: &Receipt,
-        active: &mut BTreeMap<
-            RelaySessionKey,
-            (WriteId, ReceiptId, RevisionId, EventId, u64),
-        >,
+        active: &mut BTreeMap<RelaySessionKey, (WriteId, ReceiptId, RevisionId, EventId, u64)>,
         finished: &mpsc::Sender<(
             RelaySessionKey,
             WriteId,
@@ -56,13 +53,7 @@ impl Publication {
             let route_revision = receipt.route_revision;
             active.insert(
                 session.clone(),
-                (
-                    write_id,
-                    receipt_id,
-                    revision_id,
-                    event_id,
-                    route_revision,
-                ),
+                (write_id, receipt_id, revision_id, event_id, route_revision),
             );
             tokio::spawn(async move {
                 let lane_cancel = cancel.clone();

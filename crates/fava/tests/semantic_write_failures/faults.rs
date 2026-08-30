@@ -10,8 +10,8 @@ use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, RevisionId, Receipt, ReceiptId,
-    RelayDeliveryOutcome, EventEdit, Timestamp, UnsignedEvent, WriteId, WriteIntent,
+    Event, EventEdit, EventId, EventValue, LocalWriteEvent, Receipt, ReceiptId,
+    RelayDeliveryOutcome, RevisionId, Timestamp, UnsignedEvent, WriteId, WriteIntent,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use fava_write_store_memory::MemoryWriteStore;
@@ -273,13 +273,8 @@ impl WriteStore for FaultingWriteStore {
                 "injected atomic initial-route acceptance failure".to_owned(),
             ));
         }
-        self.inner.accept_reserved_applied_edit(
-            reservation,
-            intent,
-            event,
-            source,
-            initial_route,
-        )
+        self.inner
+            .accept_reserved_applied_edit(reservation, intent, event, source, initial_route)
     }
     fn install_revision(
         &self,
@@ -401,13 +396,8 @@ impl WriteStore for FaultingWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.inner.record_signer_retryable(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.inner
+            .record_signer_retryable(write_id, receipt_id, revision_id, event_id, reason)
     }
     fn signing_successor(
         &self,
@@ -443,9 +433,9 @@ impl WriteStore for FaultingWriteStore {
                 "injected exact-generation route refusal".to_owned(),
             ));
         }
-        let applied =
-            self.inner
-                .apply_route(write_id, receipt_id, revision_id, event_id, plan);
+        let applied = self
+            .inner
+            .apply_route(write_id, receipt_id, revision_id, event_id, plan);
         if applied.is_ok() {
             self.after_route_commit();
         }

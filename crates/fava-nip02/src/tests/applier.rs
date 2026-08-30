@@ -1,6 +1,4 @@
-use fava_write::{
-    EventId, EventValue, Kind, EventEdit, Tag, Timestamp, WriteIntentError,
-};
+use fava_write::{EventEdit, EventId, EventValue, Kind, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
@@ -68,8 +66,8 @@ fn follow_and_unfollow_are_opposing_authorless_edits() {
     assert_eq!(first.tags.as_slice(), &[tag(&["p", &target.to_hex()])]);
 
     let signed = source(&actor, Kind::ContactList, 7, "opaque", first.tags.to_vec());
-    let empty = apply(actor.public_key(), &unfollow_edit, Some(&signed), 8)
-        .expect("opposing edit applies");
+    let empty =
+        apply(actor.public_key(), &unfollow_edit, Some(&signed), 8).expect("opposing edit applies");
     assert!(empty.tags.is_empty());
     assert_eq!(empty.content, "opaque");
 }
@@ -98,8 +96,8 @@ fn follow_preserves_unrelated_state_and_orders_deterministically() {
     let edit = follow(target).expect("follow edit");
 
     let first = apply(actor.public_key(), &edit, Some(&source), 11).expect("follow applies");
-    let second = apply(actor.public_key(), &edit, Some(&source), 11)
-        .expect("same input is deterministic");
+    let second =
+        apply(actor.public_key(), &edit, Some(&source), 11).expect("same input is deterministic");
     assert_eq!(first, second);
     assert_eq!(first.content, "opaque-content");
     assert_eq!(
@@ -138,8 +136,8 @@ fn follow_duplicate_and_adjacent_edits_are_idempotent() {
         "",
         once.tags.clone().to_vec(),
     );
-    let twice = apply(actor.public_key(), &add, Some(&signed_once), 22)
-        .expect("repeat is idempotent");
+    let twice =
+        apply(actor.public_key(), &add, Some(&signed_once), 22).expect("repeat is idempotent");
     assert_eq!(once.tags, twice.tags);
 
     let remove = unfollow(target).expect("unfollow edit");
@@ -153,8 +151,8 @@ fn follow_duplicate_and_adjacent_edits_are_idempotent() {
         "",
         removed.tags.clone().to_vec(),
     );
-    let removed_twice = apply(actor.public_key(), &remove, Some(&signed_removed), 22)
-        .expect("repeat removal");
+    let removed_twice =
+        apply(actor.public_key(), &remove, Some(&signed_removed), 22).expect("repeat removal");
     assert_eq!(removed.tags, removed_twice.tags);
 }
 
@@ -182,8 +180,8 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
         Err(WriteIntentError::InvalidEvent(_))
     ));
 
-    let malformed = EventEdit::new(Kind::ContactList, None, vec![255])
-        .expect("bounded malformed edit");
+    let malformed =
+        EventEdit::new(Kind::ContactList, None, vec![255]).expect("bounded malformed edit");
     assert!(!applier().supports(&malformed));
     assert!(matches!(
         apply(actor.public_key(), &malformed, None, 1),
@@ -198,8 +196,8 @@ fn follow_bounds_and_invalid_sources_are_typed_refusals() {
     assert!(!applier().supports(&addressable));
     let mut legacy_versioned = vec![1, 1];
     legacy_versioned.extend_from_slice(target.as_bytes());
-    let legacy = EventEdit::new(Kind::ContactList, None, legacy_versioned)
-        .expect("bounded legacy bytes");
+    let legacy =
+        EventEdit::new(Kind::ContactList, None, legacy_versioned).expect("bounded legacy bytes");
     assert!(!applier().supports(&legacy));
     assert!(matches!(
         apply(actor.public_key(), &legacy, None, 1),

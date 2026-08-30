@@ -18,10 +18,10 @@ impl Publication {
             if *cancel.borrow() {
                 return None;
             }
-            match self.store.applied_edits(
-                receipt.receipt_id,
-                receipt.current.publication.revision_id,
-            ) {
+            match self
+                .store
+                .applied_edits(receipt.receipt_id, receipt.current.publication.revision_id)
+            {
                 Ok(Some((edits, author, selected, failed_id))) if !edits.is_empty() => {
                     state.refresh_custody(
                         receipt.current.publication.revision_id,

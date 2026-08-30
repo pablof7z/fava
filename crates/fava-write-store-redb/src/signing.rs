@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, SignatureState, WriteId, WriteRouting,
+    Event, EventId, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId,
+    ReceiptOutcome, RevisionId, SignatureState, WriteId, WriteRouting,
 };
 use fava_write_store::{WriteStoreError, validate_current_revision, validate_receipt_text};
 
@@ -330,9 +330,7 @@ impl RedbWriteStore {
             .publication
             .revision_id
             .checked_next()
-            .ok_or_else(|| {
-                WriteStoreError::Refused("revision identity exhausted".to_owned())
-            })?;
+            .ok_or_else(|| WriteStoreError::Refused("revision identity exhausted".to_owned()))?;
         let source_correction = edit.is_none();
         let successor_destinations = if source_correction {
             let mut sessions = receipt.desired_destinations.clone();

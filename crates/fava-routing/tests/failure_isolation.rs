@@ -16,7 +16,7 @@ struct Refusing;
 struct Surviving;
 
 impl Router for Refusing {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "refusing"
     }
     fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
@@ -41,7 +41,7 @@ impl Router for Refusing {
 }
 
 impl Router for Surviving {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "surviving"
     }
     fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
@@ -88,7 +88,7 @@ impl RouterSession for SurvivingSession {
 async fn one_router_fails_while_another_continues() {
     let request = RouteRequest::Read(Query::events());
     let routers: Vec<Arc<dyn Router>> = vec![Arc::new(Surviving), Arc::new(Refusing)];
-    let session = fava_routing::open(&routers, &request, vec![Vec::new(), Vec::new()]).unwrap();
+    let session = fava_routing::open(&routers, &request, &[Vec::new(), Vec::new()]).unwrap();
     let plan = RoutePlan::from_contribution(1, &session.current()).expect("bounded plan");
     assert!(
         plan.destinations.contains_key(&relay()),

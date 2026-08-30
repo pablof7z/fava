@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fava::{Event, Fava, Kind, EventEdit, EditApplier, Write};
+use fava::{EditApplier, Event, EventEdit, Fava, Kind, Write};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query_standard::StandardQueryEvaluator;
@@ -69,12 +69,7 @@ pub(super) async fn wait_failure(fava: &Fava, receipt_id: fava::ReceiptId) -> fa
     tokio::time::timeout(Duration::from_secs(1), async {
         loop {
             let receipt = fava.receipt(receipt_id).unwrap().unwrap();
-            if receipt
-                .current
-                .publication
-                .revision_failure
-                .is_some()
-            {
+            if receipt.current.publication.revision_failure.is_some() {
                 return receipt;
             }
             tokio::task::yield_now().await;

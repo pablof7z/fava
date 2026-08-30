@@ -9,9 +9,8 @@ use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
 use fava_write::{
-    AuthoredEventBuilder, Event, EventBuilder, PublicKey, Receipt, ReceiptId,
-    RelayDeliveryOutcome, EventEdit, UnsignedEvent, WriteId, WriteIntent, WriteIntentError,
-    WriteRouting,
+    AuthoredEventBuilder, Event, EventBuilder, EventEdit, PublicKey, Receipt, ReceiptId,
+    RelayDeliveryOutcome, UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
 };
 use nostr::types::RelayUrl;
 use thiserror::Error;

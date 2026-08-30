@@ -29,6 +29,9 @@ fn refused(e: impl std::fmt::Display) -> EventCacheError {
     EventCacheError::Refused(e.to_string())
 }
 
+/// Next state plus the exact inserted and removed events from one [`RedbEventCache::apply`] call.
+type AppliedMutations = (CacheState, Vec<RelayEvent>, Vec<(EventId, RelaySessionKey)>);
+
 /// Durable event cache backed by a redb database file.
 ///
 /// Events written through this provider survive SIGKILL and reload on
@@ -59,6 +62,10 @@ impl RedbEventCache {
     ///
     /// Returns [`EventCacheError`] when the database cannot be opened or
     /// the persisted schema is incompatible.
+    ///
+    /// # Panics
+    ///
+    /// Never panics: the default capacity is a fixed non-zero constant.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EventCacheError> {
         let capacity = NonZeroUsize::new(10_000).expect("constant is non-zero");
         Self::open_bounded(path, capacity)
@@ -98,8 +105,7 @@ impl RedbEventCache {
         &self,
         current: &CacheState,
         mutations: Vec<EventStateMutation>,
-    ) -> Result<(CacheState, Vec<RelayEvent>, Vec<(EventId, RelaySessionKey)>), EventCacheError>
-    {
+    ) -> Result<AppliedMutations, EventCacheError> {
         let mut next = current.clone();
         next.retractions = Vec::new();
         let mut inserted: Vec<RelayEvent> = Vec::new();
@@ -174,12 +180,12 @@ impl RedbEventCache {
     fn persist_and_publish(
         guard: &mut CacheState,
         next: CacheState,
-        inserted: Vec<RelayEvent>,
-        removed: Vec<(EventId, RelaySessionKey)>,
+        inserted: &[RelayEvent],
+        removed: &[(EventId, RelaySessionKey)],
         database: &Database,
         sender: &watch::Sender<Arc<SourceSnapshot>>,
     ) -> Result<(), EventCacheError> {
-        schema::apply_diff(database, &inserted, &removed).map_err(refused)?;
+        schema::apply_diff(database, inserted, removed).map_err(refused)?;
         let mut next = next;
         next.revision = next
             .revision
@@ -265,8 +271,8 @@ impl EventCache for RedbEventCache {
         Self::persist_and_publish(
             &mut guard,
             next,
-            inserted,
-            removed,
+            &inserted,
+            &removed,
             &self.database,
             &self.latest,
         )?;
@@ -285,8 +291,8 @@ impl EventCache for RedbEventCache {
         Self::persist_and_publish(
             &mut guard,
             next,
-            inserted,
-            removed,
+            &inserted,
+            &removed,
             &self.database,
             &self.latest,
         )

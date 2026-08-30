@@ -2,7 +2,7 @@
 
 use fava_signer::{SignerAvailability, SignerError};
 use fava_write::{
-    Event, EventId, EventValue, RevisionId, Receipt, ReceiptId, SignatureState, WriteId,
+    Event, EventId, EventValue, Receipt, ReceiptId, RevisionId, SignatureState, WriteId,
 };
 use tokio::sync::watch;
 
@@ -185,18 +185,17 @@ impl Publication {
             return;
         }
         let refusal = match completion {
-            Ok(event) => match self.store.install_signed(
-                write_id,
-                receipt_id,
-                revision_id,
-                event_id,
-                event,
-            ) {
-                Ok(_) => return,
-                // The store owns currentness, so its exact refusal is the only
-                // accurate account of why the signature was rejected.
-                Err(error) => error.to_string(),
-            },
+            Ok(event) => {
+                match self
+                    .store
+                    .install_signed(write_id, receipt_id, revision_id, event_id, event)
+                {
+                    Ok(_) => return,
+                    // The store owns currentness, so its exact refusal is the only
+                    // accurate account of why the signature was rejected.
+                    Err(error) => error.to_string(),
+                }
+            }
             Err(SignerError::Cancelled) => {
                 let _ = self.store.record_signer_retryable(
                     write_id,

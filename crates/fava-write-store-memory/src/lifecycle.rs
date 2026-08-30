@@ -1,12 +1,12 @@
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, SignatureState, WriteId, WriteRouting,
+    Event, EventId, EventValue, LocalWriteEvent, PublicationEvidence, Receipt, ReceiptId,
+    ReceiptOutcome, RelayDeliveryOutcome, RevisionId, SignatureState, WriteId, WriteRouting,
 };
 use fava_write_store::{
-    WriteStoreError, apply_route_to_receipt, validate_current_revision,
-    validate_delivery_outcome, validate_receipt_text,
+    WriteStoreError, apply_route_to_receipt, validate_current_revision, validate_delivery_outcome,
+    validate_receipt_text,
 };
 
 use super::MemoryWriteStore;
@@ -264,9 +264,7 @@ impl MemoryWriteStore {
             .publication
             .revision_id
             .checked_next()
-            .ok_or_else(|| {
-                WriteStoreError::Refused("revision identity exhausted".to_owned())
-            })?;
+            .ok_or_else(|| WriteStoreError::Refused("revision identity exhausted".to_owned()))?;
         let source_correction = edit.is_none();
         let successor_destinations = if source_correction {
             let mut sessions = receipt.desired_destinations.clone();

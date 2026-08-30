@@ -293,36 +293,27 @@ fn non_empty_relays(
     }
 }
 
-pub(crate) fn bounded_authors(
-    values: impl IntoIterator<Item = PublicKey>,
-) -> Result<BTreeSet<PublicKey>, QueryError> {
-    Ok(values.into_iter().collect())
+pub(crate) fn bounded_authors(values: impl IntoIterator<Item = PublicKey>) -> BTreeSet<PublicKey> {
+    values.into_iter().collect()
 }
 
-pub(crate) fn bounded_ids(
-    values: impl IntoIterator<Item = EventId>,
-) -> Result<BTreeSet<EventId>, QueryError> {
-    Ok(values.into_iter().collect())
+pub(crate) fn bounded_ids(values: impl IntoIterator<Item = EventId>) -> BTreeSet<EventId> {
+    values.into_iter().collect()
 }
 
-pub(crate) fn bounded_kinds(
-    values: impl IntoIterator<Item = Kind>,
-) -> Result<BTreeSet<Kind>, QueryError> {
-    Ok(values.into_iter().collect())
+pub(crate) fn bounded_kinds(values: impl IntoIterator<Item = Kind>) -> BTreeSet<Kind> {
+    values.into_iter().collect()
 }
 
-pub(crate) fn bounded_tag_values(
-    values: impl IntoIterator<Item = String>,
-) -> Result<BTreeSet<String>, QueryError> {
-    Ok(values.into_iter().collect())
+pub(crate) fn bounded_tag_values(values: impl IntoIterator<Item = String>) -> BTreeSet<String> {
+    values.into_iter().collect()
 }
 
 pub(crate) fn extend_bounded<T: Ord>(
     values: impl IntoIterator<Item = T>,
     target: &mut BTreeSet<T>,
-) -> Result<(), QueryError> {
+) {
     target.extend(values);
-    Ok(())
 }
 
 /// Query refusal before any source or relay work opens.

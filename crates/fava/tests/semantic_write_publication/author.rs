@@ -144,15 +144,9 @@ async fn addressable_edit_selects_only_its_exact_identifier() {
 
     assert_eq!(receipt.current.event.author(), keys.public_key());
     assert_eq!(applier.calls().len(), 1);
+    assert_eq!(applier.calls()[0].identifier.as_deref(), Some("wanted"));
     assert_eq!(
-        applier.calls()[0].identifier.as_deref(),
-        Some("wanted")
-    );
-    assert_eq!(
-        applier.calls()[0]
-            .source
-            .as_ref()
-            .and_then(EventValue::id),
+        applier.calls()[0].source.as_ref().and_then(EventValue::id),
         Some(wanted.id)
     );
     assert_eq!(signer.calls(), 1);

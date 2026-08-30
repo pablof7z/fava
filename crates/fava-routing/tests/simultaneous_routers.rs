@@ -13,21 +13,21 @@ use nostr::types::RelayUrl;
 
 #[tokio::test(flavor = "current_thread")]
 async fn shared_destination_survives_first_then_second_withdrawal() {
-    assert_withdrawal_order([0, 1]).await;
+    assert_withdrawal_order([0, 1]);
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn shared_destination_survives_second_then_first_withdrawal() {
-    assert_withdrawal_order([1, 0]).await;
+    assert_withdrawal_order([1, 0]);
 }
 
-async fn assert_withdrawal_order(order: [usize; 2]) {
+fn assert_withdrawal_order(order: [usize; 2]) {
     let shared = session("shared");
     let first = Arc::new(ControlledRouter::new("first", covering(shared.clone())));
     let second = Arc::new(ControlledRouter::new("second", covering(shared.clone())));
     let routers: Vec<Arc<dyn Router>> = vec![first.clone(), second.clone()];
     let request = RouteRequest::Read(Query::events());
-    let mut chain = fava_routing::open(&routers, &request, vec![Vec::new(), Vec::new()])
+    let mut chain = fava_routing::open(&routers, &request, &[Vec::new(), Vec::new()])
         .expect("both routers open");
 
     assert!(

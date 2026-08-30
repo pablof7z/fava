@@ -163,7 +163,7 @@ fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
             .tags
             .iter()
             .find(|tag| tag.as_slice().first().map(String::as_str) == Some("supported_kinds"))
-            .map(|tag| tag.as_slice()),
+            .map(fava_write::Tag::as_slice),
         Some(
             ["supported_kinds", "1", "7", "1"]
                 .map(str::to_owned)
@@ -187,7 +187,7 @@ fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
             .tags
             .iter()
             .find(|tag| tag.as_slice().first().map(String::as_str) == Some("supported_kinds"))
-            .map(|tag| tag.as_slice()),
+            .map(fava_write::Tag::as_slice),
         Some(["supported_kinds"].map(str::to_owned).as_slice())
     );
 }

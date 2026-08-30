@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, RevisionId,
-    EventEdit, EditApplier, Tag, Timestamp, UnsignedEvent,
+    EditApplier, Event, EventBuilder, EventEdit, EventValue, Fava, FavaBuilder, Kind, RevisionId,
+    Tag, Timestamp, UnsignedEvent,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache::EventCache;
@@ -204,10 +204,7 @@ fn semantic_first_generation_survives_sigkill() {
     let receipt = receipt_one(&store);
     assert_eq!(receipt.write_id.as_u64(), 1);
     assert_eq!(receipt.receipt_id.as_u64(), 1);
-    assert_eq!(
-        receipt.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(receipt.current.publication.revision_id, RevisionId::FIRST);
     assert_eq!(store.recover_applied_edits().unwrap().len(), 1);
     assert_eq!(
         store.recover_applied_edits().unwrap()[0].2,
@@ -255,13 +252,9 @@ async fn semantic_successor_and_failed_source_resume_once() {
     wait_terminal(&successor_fava, receipt_id(1)).await;
     assert_eq!(successor_applier.calls(), 1);
     let inert_applier = Arc::new(TestApplier::new(Kind::ContactList));
-    let _inert = publication_builder(
-        successor_cache,
-        successor_store,
-        Arc::clone(&inert_applier),
-    )
-    .build()
-    .expect("settled successor store reassembles");
+    let _inert = publication_builder(successor_cache, successor_store, Arc::clone(&inert_applier))
+        .build()
+        .expect("settled successor store reassembles");
     tokio::task::yield_now().await;
     assert_eq!(inert_applier.calls(), 0);
 
@@ -287,21 +280,11 @@ async fn semantic_successor_and_failed_source_resume_once() {
     assert!(unsupported.is_err(), "unsupported durable edit assembled");
 
     let applier = Arc::new(TestApplier::new(Kind::ContactList));
-    let fava = publication_builder(
-        Arc::clone(&cache),
-        Arc::clone(&store),
-        Arc::clone(&applier),
-    )
-    .build()
-    .expect("selected applier assembles before recovery");
+    let fava = publication_builder(Arc::clone(&cache), Arc::clone(&store), Arc::clone(&applier))
+        .build()
+        .expect("selected applier assembles before recovery");
     let recovered = wait_for_generation(&fava, receipt_id(1), 2).await;
-    assert!(
-        recovered
-            .current
-            .publication
-            .revision_failure
-            .is_none()
-    );
+    assert!(recovered.current.publication.revision_failure.is_none());
     wait_terminal(&fava, receipt_id(1)).await;
     assert_eq!(applier.calls(), 1);
 
@@ -479,10 +462,7 @@ async fn authorized_signer_window_and_successor_resume_after_clean_restart() {
     .build()
     .unwrap();
     let successor = wait_terminal(&fava, receipt_id(1)).await;
-    assert_eq!(
-        successor.current.publication.retired_revisions.len(),
-        1
-    );
+    assert_eq!(successor.current.publication.retired_revisions.len(), 1);
     assert_eq!(successor.current.id(), successor_id);
     assert_eq!(
         successor.current.publication.signature,
@@ -500,10 +480,7 @@ fn authorized_cancellation_without_successor_survives_sigkill_exactly() {
     let recovered = receipt_one(&store);
     assert_eq!(recovered.write_id.as_u64(), 1);
     assert_eq!(recovered.receipt_id.as_u64(), 1);
-    assert_eq!(
-        recovered.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(recovered.current.publication.revision_id, RevisionId::FIRST);
     let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
         panic!("cancelled authorization reopened without retry disposition")
     };
@@ -560,12 +537,7 @@ async fn semantic_builder_refusal_after_sigkill_preserves_every_existing_identit
     let after = tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             let receipt = receipt_one(&store);
-            if receipt
-                .current
-                .publication
-                .revision_failure
-                .is_some()
-            {
+            if receipt.current.publication.revision_failure.is_some() {
                 return receipt;
             }
             tokio::task::yield_now().await;
@@ -776,15 +748,16 @@ impl EditApplier for TestApplier {
         } else {
             format!("{source_content}|{change}")
         };
-        let result = EventBuilder::new(Kind::ContactList)
-            .created_at(created_at)
-            .content(content)
-            .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
-            }))
-            .by(author)
-            .build()
-            .map_err(WriteIntentError::from);
+        let result =
+            EventBuilder::new(Kind::ContactList)
+                .created_at(created_at)
+                .content(content)
+                .tags((0..self.tag_count).map(|index| {
+                    Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
+                }))
+                .by(author)
+                .build()
+                .map_err(WriteIntentError::from);
         if let Err(error) = &result {
             *self.observed_error.lock().unwrap() = Some(error.clone());
         }
@@ -867,8 +840,7 @@ async fn wait_for_generation(fava: &Fava, receipt_id: ReceiptId, generation: u64
                 .expect("receipt read")
                 .expect("receipt retained");
             if receipt.current.publication.revision_id
-                == RevisionId::try_from(generation)
-                    .expect("nonzero revision identity")
+                == RevisionId::try_from(generation).expect("nonzero revision identity")
             {
                 return receipt;
             }

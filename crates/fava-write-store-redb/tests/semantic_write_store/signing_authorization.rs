@@ -49,8 +49,7 @@ fn redb_authorized_generation_and_bounded_successor_survive_reopen() {
             )
             .unwrap();
         let second =
-            fava_write::EventEdit::new(fava_write::Kind::ContactList, None, vec![2])
-                .unwrap();
+            fava_write::EventEdit::new(fava_write::Kind::ContactList, None, vec![2]).unwrap();
         let reservation = store.reserve_active(&second, author).unwrap();
         store
             .accept_reserved_applied_edit(
@@ -151,10 +150,7 @@ fn redb_authorized_generation_without_successor_reopens_as_exact_retryable_work(
     let reopened = RedbWriteStore::open(&path).unwrap();
     let recovered = reopened.receipt(accepted.receipt_id).unwrap().unwrap();
     assert_eq!(recovered.current.id(), accepted.current.id());
-    assert_eq!(
-        recovered.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(recovered.current.publication.revision_id, RevisionId::FIRST);
     let SignatureState::Retryable(reason) = recovered.current.publication.signature else {
         panic!("ambiguous authorization remains attributable retryable work")
     };
@@ -204,10 +200,7 @@ fn redb_authorized_cancellation_without_successor_survives_reopen_exactly() {
     assert_eq!(recovered.write_id, accepted.write_id);
     assert_eq!(recovered.receipt_id, accepted.receipt_id);
     assert_eq!(recovered.current.id(), accepted.current.id());
-    assert_eq!(
-        recovered.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(recovered.current.publication.revision_id, RevisionId::FIRST);
     assert!(matches!(
         recovered.current.publication.signature,
         SignatureState::Retryable(reason)

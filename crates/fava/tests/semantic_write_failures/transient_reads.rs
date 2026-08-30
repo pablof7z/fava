@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventValue, Kind, RevisionId, Receipt, ReceiptOutcome, EventEdit,
-    EditApplier, Timestamp, WriteRouting, all_terminal,
+    EditApplier, EventEdit, EventValue, Kind, Receipt, ReceiptOutcome, RevisionId, Timestamp,
+    WriteRouting, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;

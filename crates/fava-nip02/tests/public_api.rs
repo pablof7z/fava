@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use fava_query::{Query, QueryError, QuerySnapshot};
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier, EditApplierSink,
-    Tag, Timestamp, WriteIntentError,
+    EditApplier, EditApplierSink, EventBuilder, EventEdit, EventValue, Kind, PublicKey, Tag,
+    Timestamp, WriteIntentError,
 };
 use nostr::types::RelayUrl;
 

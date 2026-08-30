@@ -332,9 +332,7 @@ async fn nip11_fetch(
 
     let url_str = relay_url.as_str();
     // Only plain-HTTP relays are supported; return unknown for TLS relays.
-    let rest = if let Some(r) = url_str.strip_prefix("ws://") {
-        r
-    } else {
+    let Some(rest) = url_str.strip_prefix("ws://") else {
         return RelayReadConstraints::unknown();
     };
 
@@ -396,11 +394,10 @@ fn parse_nip11(body: &[u8]) -> RelayReadConstraints {
     let declared = |key: &str| -> DeclaredLimit {
         limitation
             .get(key)
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .and_then(|n| usize::try_from(n).ok())
             .and_then(NonZeroUsize::new)
-            .map(DeclaredLimit::Declared)
-            .unwrap_or(DeclaredLimit::Unknown)
+            .map_or(DeclaredLimit::Unknown, DeclaredLimit::Declared)
     };
 
     RelayReadConstraints {

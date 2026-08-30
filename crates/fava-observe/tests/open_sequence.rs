@@ -132,11 +132,8 @@ async fn a_refused_local_source_leaves_no_relay_work_behind() {
     );
 
     assert!(matches!(
-        error,
-        ObserveError::SourceOpen {
-            role: SourceKind::EventCache,
-            ..
-        }
+        &error,
+        ObserveError::SourceOpen { role, .. } if **role == SourceKind::EventCache
     ));
     settle().await;
     assert!(assembly.planner.inputs().is_empty());

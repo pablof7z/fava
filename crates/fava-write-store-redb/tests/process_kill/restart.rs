@@ -56,13 +56,9 @@ async fn assert_restart_then_immediate_edit(
         ))])
         .unwrap();
     let applier = Arc::new(TestApplier::new(Kind::ContactList));
-    let fava = restart_builder(
-        Arc::clone(&cache),
-        Arc::clone(&store),
-        Arc::clone(&applier),
-    )
-    .build()
-    .expect("recovery reconciles before exposing the redb facade");
+    let fava = restart_builder(Arc::clone(&cache), Arc::clone(&store), Arc::clone(&applier))
+        .build()
+        .expect("recovery reconciles before exposing the redb facade");
 
     let reconciled = fava
         .receipt(ReceiptId::try_from(1).expect("nonzero receipt identity"))
@@ -85,12 +81,7 @@ async fn assert_restart_then_immediate_edit(
     assert_eq!(immediate.write_id().as_u64(), 1);
     assert_eq!(immediate.receipt_id().as_u64(), 1);
     assert_eq!(
-        immediate
-            .receipt()
-            .unwrap()
-            .current
-            .publication
-            .revision_id,
+        immediate.receipt().unwrap().current.publication.revision_id,
         RevisionId::try_from(persisted_edits + 2).expect("nonzero revision identity")
     );
 

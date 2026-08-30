@@ -1,13 +1,13 @@
 use fava_relay::RelaySessionKey;
 use fava_routing::RoutePlan;
 use fava_write::{
-    Event, EventId, EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, Receipt,
-    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, EventEdit, SignatureState,
-    UnsignedEvent, WriteId, WriteIntent, WritePayload, WriteRouting,
+    Event, EventEdit, EventId, EventValue, LocalWriteEvent, PublicationEvidence, Receipt,
+    ReceiptId, ReceiptOutcome, RelayDeliveryOutcome, RevisionId, SignatureState, UnsignedEvent,
+    WriteId, WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{
-    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt,
-    validate_current_revision, validate_delivery_outcome,
+    AcceptedWrite, WriteStore, WriteStoreError, apply_route_to_receipt, validate_current_revision,
+    validate_delivery_outcome,
 };
 use tokio::sync::broadcast;
 
@@ -223,13 +223,7 @@ impl WriteStore for RedbWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.record_signer_retryable_current(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.record_signer_retryable_current(write_id, receipt_id, revision_id, event_id, reason)
     }
 
     fn signing_successor(
@@ -250,13 +244,7 @@ impl WriteStore for RedbWriteStore {
         event_id: EventId,
         reason: String,
     ) -> Result<Receipt, WriteStoreError> {
-        self.record_signer_refusal_current(
-            write_id,
-            receipt_id,
-            revision_id,
-            event_id,
-            reason,
-        )
+        self.record_signer_refusal_current(write_id, receipt_id, revision_id, event_id, reason)
     }
 
     fn apply_route(

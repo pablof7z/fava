@@ -1,6 +1,4 @@
-use crate::{
-    EventValue, Kind, PublicKey, EventEdit, Timestamp, UnsignedEvent, WriteIntentError,
-};
+use crate::{EventEdit, EventValue, Kind, PublicKey, Timestamp, UnsignedEvent, WriteIntentError};
 use serde::{Deserialize, Serialize};
 use std::num::{NonZeroU64, TryFromIntError};
 use std::sync::Arc;

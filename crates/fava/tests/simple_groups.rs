@@ -145,8 +145,7 @@ async fn saved_group_edit_applies_through_the_ordinary_semantic_write_lifecycle(
     let receipt = write.settled(all_terminal()).await.expect("write settles");
 
     assert!(matches!(receipt.current.event, EventValue::Signed(_)));
-    let list =
-        SavedGroupList::from_event(&receipt.current.event).expect("applied list decodes");
+    let list = SavedGroupList::from_event(&receipt.current.event).expect("applied list decodes");
     assert_eq!(list.author(), keys.public_key());
     assert_eq!(list.simple_groups().len(), group.relays().count());
     for (entry, relay) in list.simple_groups().iter().zip(group.relays()) {

@@ -6,9 +6,8 @@ use fava_relay::RelayAccess;
 use fava_routing::{RoutePlan, RouteRequest};
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
-    EventValue, Kind, RevisionId, PublicKey, ReceiptId, EventEdit,
-    EditApplier, Timestamp, UnsignedEvent, WriteIntent, WritePayload,
-    WriteRouting,
+    EditApplier, EventEdit, EventValue, Kind, PublicKey, ReceiptId, RevisionId, Timestamp,
+    UnsignedEvent, WriteIntent, WritePayload, WriteRouting,
 };
 
 use super::{Publication, PublicationError};
@@ -284,10 +283,7 @@ impl Publication {
     ) -> Result<Arc<dyn EditApplier>, PublicationError> {
         let kind = edit_kind(edit);
         let applier = self.appliers.get(&kind).ok_or_else(|| {
-            PublicationError::Routing(format!(
-                "no selected applier for kind {}",
-                kind.as_u16()
-            ))
+            PublicationError::Routing(format!("no selected applier for kind {}", kind.as_u16()))
         })?;
         if !applier.supports(edit) {
             return Err(PublicationError::Routing(format!(
@@ -459,9 +455,9 @@ pub(super) fn injected_timestamp(
         .chain(current.map(|event| event.created_at().as_secs()))
         .max();
     let minimum = match newest {
-        Some(timestamp) => timestamp.checked_add(1).ok_or_else(|| {
-            PublicationError::Routing("revision timestamp exhausted".to_owned())
-        })?,
+        Some(timestamp) => timestamp
+            .checked_add(1)
+            .ok_or_else(|| PublicationError::Routing("revision timestamp exhausted".to_owned()))?,
         None => 0,
     };
     Ok(Timestamp::from(Timestamp::now().as_secs().max(minimum)))
@@ -473,9 +469,9 @@ pub(super) fn validate_revision(
     event: &UnsignedEvent,
     injected_created_at: Timestamp,
 ) -> Result<(), PublicationError> {
-    let id = event.id.ok_or_else(|| {
-        PublicationError::Routing("semantic revision has no event id".to_owned())
-    })?;
+    let id = event
+        .id
+        .ok_or_else(|| PublicationError::Routing("semantic revision has no event id".to_owned()))?;
     let coordinate = event_coordinate(id, event.pubkey, event.kind, event.tags.as_slice());
     if event.created_at != injected_created_at {
         return Err(PublicationError::Routing(
@@ -484,8 +480,7 @@ pub(super) fn validate_revision(
     }
     if event.pubkey != author || coordinate != edit_coordinate(edit, author) {
         return Err(PublicationError::Routing(
-            "semantic revision author or coordinate does not match accepted write"
-                .to_owned(),
+            "semantic revision author or coordinate does not match accepted write".to_owned(),
         ));
     }
     Ok(())

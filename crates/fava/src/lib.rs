@@ -124,10 +124,6 @@ impl Fava {
         clippy::unused_async,
         reason = "opening is total and synchronous; the async signature is the public door and never awaits a provider"
     )]
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-    )]
     pub async fn observe(&self, query: Query) -> Result<Observation, ObserveError> {
         self.observer.open(query)
     }
@@ -297,10 +293,6 @@ impl Fava {
     /// # Errors
     ///
     /// Returns [`ObserveError`] when a configured router refuses preview.
-    #[allow(
-        clippy::result_large_err,
-        reason = "ObserveError names the exact source role that refused; a live-relay role carries its session identity"
-    )]
     pub fn preview_routes(&self, query: &Query) -> Result<RoutePlan, ObserveError> {
         self.observer.preview_routes(query)
     }

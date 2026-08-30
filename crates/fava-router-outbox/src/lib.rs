@@ -25,6 +25,10 @@ pub struct OutboxRouter {
 
 impl OutboxRouter {
     /// Configure one NIP-65 policy and its indexer destinations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RouterError`] when this policy cannot be constructed.
     pub fn new(
         name: impl Into<String>,
         indexers: impl IntoIterator<Item = RelayUrl>,
@@ -134,7 +138,7 @@ fn project(
     let settled = inputs
         .first()
         .is_some_and(|snapshot| snapshot.evidence.all_relays_stored_events_complete());
-    contribution(request, &lists, settled, shortfalls)
+    Ok(contribution(request, &lists, settled, shortfalls))
 }
 
 fn decode(snapshot: &QuerySnapshot) -> (BTreeMap<PublicKey, RelayList>, Vec<String>) {
@@ -186,7 +190,7 @@ fn contribution(
     lists: &BTreeMap<PublicKey, RelayList>,
     settled: bool,
     shortfalls: Vec<String>,
-) -> Result<RouteContribution, RouterError> {
+) -> RouteContribution {
     let mut destinations = Vec::new();
     let mut coverage = BTreeMap::new();
     let mut unresolved = BTreeSet::new();
@@ -230,10 +234,10 @@ fn contribution(
             }));
         }
     }
-    Ok(RouteContribution {
+    RouteContribution {
         destinations,
         coverage,
         unresolved,
         shortfalls,
-    })
+    }
 }

@@ -3,9 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use fava_relay::RelaySessionKey;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    EventId, EventValue, InvalidEventValue, RevisionId, ReceiptId, WriteId, WriteRouting,
-};
+use crate::{EventId, EventValue, InvalidEventValue, ReceiptId, RevisionId, WriteId, WriteRouting};
 
 /// How far signing has got for the current revision, and why it stopped
 /// if it did.
@@ -95,8 +93,7 @@ pub struct PublicationEvidence {
     /// Bounded post-accept revision failure attributed to current work.
     pub revision_failure: Option<String>,
     /// Bounded retired generation, event, source, and optional failure facts.
-    pub retired_revisions:
-        Vec<(RevisionId, EventId, Option<EventId>, Option<String>)>,
+    pub retired_revisions: Vec<(RevisionId, EventId, Option<EventId>, Option<String>)>,
     /// Current signing fact.
     pub signature: SignatureState,
     /// Exact current fact for every selected relay session.

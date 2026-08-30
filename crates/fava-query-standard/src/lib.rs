@@ -25,7 +25,7 @@ impl QueryEvaluator for StandardQueryEvaluator {
         let mut by_id = BTreeMap::<EventId, Candidate>::new();
         for source in sources {
             for contribution in &source.events {
-                merge_qualifying_contribution(&mut by_id, query, contribution)?;
+                merge_qualifying_contribution(&mut by_id, query, contribution);
             }
         }
 
@@ -92,11 +92,11 @@ fn merge_qualifying_contribution(
     records: &mut BTreeMap<EventId, Candidate>,
     query: &Query,
     contribution: &SourceEvent,
-) -> Result<(), QueryEvaluationError> {
+) {
     match contribution {
         SourceEvent::Relay(relay_event) => {
             if !relay_qualifies(query, relay_event) {
-                return Ok(());
+                return;
             }
             let event = relay_event.event();
             let candidate = records.entry(event.id).or_insert_with(|| Candidate {
@@ -111,7 +111,7 @@ fn merge_qualifying_contribution(
         }
         SourceEvent::Local(local) => {
             if !matches!(query.source().authority(), ResultAuthority::AnyLocal) {
-                return Ok(());
+                return;
             }
             let candidate = records.entry(local.id()).or_insert_with(|| Candidate {
                 event: local.event.clone(),
@@ -126,7 +126,6 @@ fn merge_qualifying_contribution(
             }
         }
     }
-    Ok(())
 }
 
 /// True when a relay contribution's access and relay both satisfy the query's source policy.
@@ -172,7 +171,7 @@ fn insert_newest<K: Ord>(records: &mut BTreeMap<K, EventRecord>, key: K, incomin
 
 /// True when `record` satisfies every configured axis in `selection`.
 ///
-/// Absent axes are unconstrained; multiple configured tag keys are ANDed
+/// Absent axes are unconstrained; multiple configured tag keys are `ANDed`
 /// together, so a record must match at least one value under each key present.
 fn matches_selection(selection: &FilterSelection, record: &EventRecord) -> bool {
     selection

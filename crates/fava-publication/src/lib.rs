@@ -11,16 +11,16 @@ use fava_routing::Router;
 use fava_session::Session;
 use fava_transport::Transport;
 use fava_write::{
-    EventId, Kind, RevisionId, Receipt, ReceiptId, ReceiptOutcome,
-    EditApplier, WriteId, WriteIntent, WritePayload, WriteRouting,
+    EditApplier, EventId, Kind, Receipt, ReceiptId, ReceiptOutcome, RevisionId, WriteId,
+    WriteIntent, WritePayload, WriteRouting,
 };
 use fava_write_store::{AcceptedWrite, WriteStore, WriteStoreError};
 use thiserror::Error;
 use tokio::sync::watch;
 
 mod delivery;
-mod generation;
 mod edit_application;
+mod generation;
 mod recovery;
 mod run;
 mod semantic_refresh;

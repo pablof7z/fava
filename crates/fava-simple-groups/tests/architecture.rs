@@ -125,4 +125,3 @@ fn production_files_respect_code_line_limits() {
         assert!(lines <= 800, "{path} has {lines} lines");
     }
 }
-

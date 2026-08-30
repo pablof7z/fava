@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use fava::{EventBuilder, EventValue, Kind, RevisionId, EventEdit, Timestamp};
+use fava::{EventBuilder, EventEdit, EventValue, Kind, RevisionId, Timestamp};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{Query, QuerySnapshot};

@@ -35,7 +35,7 @@ impl Publication {
             let opened = fava_routing::open(
                 self.routers.as_slice(),
                 &request,
-                vec![Vec::new(); self.routers.len()],
+                &vec![Vec::new(); self.routers.len()],
             );
             let current = self.read_receipt(receipt.receipt_id, cancel).await?;
             if current != receipt {

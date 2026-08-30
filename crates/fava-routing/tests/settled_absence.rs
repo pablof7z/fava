@@ -12,7 +12,7 @@ struct EmptyRouter;
 struct RefusingRouter;
 
 impl Router for EmptyRouter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "empty"
     }
     fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
@@ -56,7 +56,7 @@ impl RouterSession for EmptySession {
 }
 
 impl Router for RefusingRouter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "refusing"
     }
     fn queries(&self, _: &RouteRequest, _: &RoutePlan) -> Result<Vec<Query>, RouterError> {
@@ -84,7 +84,7 @@ impl Router for RefusingRouter {
 async fn router_that_never_answered_keeps_absence_unsettled() {
     let request = RouteRequest::Read(Query::events());
     let routers: Vec<Arc<dyn Router>> = vec![Arc::new(EmptyRouter), Arc::new(RefusingRouter)];
-    let session = fava_routing::open(&routers, &request, vec![Vec::new(), Vec::new()])
+    let session = fava_routing::open(&routers, &request, &[Vec::new(), Vec::new()])
         .expect("one router refusal is isolated");
     let plan = RoutePlan::from_contribution(1, &session.current()).expect("bounded plan");
 
@@ -114,7 +114,7 @@ async fn empty_chain_settles_absence() {
 async fn answered_empty_router_settles_absence() {
     let request = RouteRequest::Read(Query::events());
     let routers: Vec<Arc<dyn Router>> = vec![Arc::new(EmptyRouter)];
-    let session = fava_routing::open(&routers, &request, vec![Vec::new()]).unwrap();
+    let session = fava_routing::open(&routers, &request, &[Vec::new()]).unwrap();
     assert!(
         RoutePlan::from_contribution(1, &session.current())
             .unwrap()

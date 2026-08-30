@@ -1,12 +1,12 @@
-use fava_write::{EventValue, EventEdit, Tag, Timestamp, WriteIntentError};
+use fava_write::{EventEdit, EventValue, Tag, Timestamp, WriteIntentError};
 use nostr::event::{EventBuilder, FinalizeEvent};
 use nostr::key::{Keys, PublicKey};
 
 use crate::edit::applier;
 
+mod applier;
 mod contact_list;
 mod edit;
-mod applier;
 mod query;
 
 fn tag(values: &[&str]) -> Tag {

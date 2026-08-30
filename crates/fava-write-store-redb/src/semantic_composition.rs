@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use fava_routing::RoutePlan;
 use fava_write::{
-    EventValue, LocalWriteEvent, PublicKey, PublicationEvidence, Receipt, ReceiptId,
-    ReceiptOutcome, EventEdit, SignatureState, UnsignedEvent, WriteRouting,
+    EventEdit, EventValue, LocalWriteEvent, PublicKey, PublicationEvidence, Receipt, ReceiptId,
+    ReceiptOutcome, SignatureState, UnsignedEvent, WriteRouting,
 };
 use fava_write_store::{
     AcceptedWrite, WriteStoreError, apply_route_to_receipt, destination_evidence_capacity,
@@ -56,9 +56,7 @@ impl RedbWriteStore {
                 "same-coordinate edit source is not the exact current generation".to_owned(),
             ));
         }
-        if receipt.current.publication.retired_revisions.len()
-            >= destination_evidence_capacity()
-        {
+        if receipt.current.publication.retired_revisions.len() >= destination_evidence_capacity() {
             return Err(WriteStoreError::Refused(
                 "retired revision evidence capacity reached".to_owned(),
             ));
@@ -114,9 +112,7 @@ impl RedbWriteStore {
             .publication
             .revision_id
             .checked_next()
-            .ok_or_else(|| {
-                WriteStoreError::Refused("revision identity exhausted".to_owned())
-            })?;
+            .ok_or_else(|| WriteStoreError::Refused("revision identity exhausted".to_owned()))?;
         let publication = PublicationEvidence {
             receipt_id,
             write_id: receipt.write_id,

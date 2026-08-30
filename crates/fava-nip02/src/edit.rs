@@ -4,8 +4,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier, EditApplierSink,
-    Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    EditApplier, EditApplierSink, EventBuilder, EventEdit, EventValue, Kind, PublicKey, Tag,
+    Timestamp, UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
 

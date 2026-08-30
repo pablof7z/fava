@@ -3,8 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, RevisionId, RelayDeliveryOutcome, EventEdit,
-    Timestamp,
+    EventBuilder, EventEdit, EventValue, Kind, RelayDeliveryOutcome, RevisionId, Timestamp,
 };
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_routing::RoutePlan;
@@ -216,10 +215,7 @@ fn simultaneous_source_and_completion_converge_once() {
         current.current.publication.revision_id,
         RevisionId::try_from(2).expect("nonzero revision identity")
     );
-    assert_eq!(
-        current.current.publication.retired_revisions.len(),
-        1
-    );
+    assert_eq!(current.current.publication.retired_revisions.len(), 1);
 }
 
 #[test]
@@ -249,12 +245,7 @@ fn semantic_cancellation_is_scoped_and_late_work_is_inert() {
             .is_err()
     );
     store
-        .authorize_signing(
-            b.write_id,
-            b.receipt_id,
-            RevisionId::FIRST,
-            b.current.id(),
-        )
+        .authorize_signing(b.write_id, b.receipt_id, RevisionId::FIRST, b.current.id())
         .expect("B signing authorizes independently");
     assert!(
         store

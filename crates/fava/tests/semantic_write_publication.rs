@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava::{
-    EventBuilder, EventValue, Kind, RevisionId, ReceiptOutcome, EventEdit,
-    EditApplier, Tag, Timestamp, all_terminal,
+    EditApplier, EventBuilder, EventEdit, EventValue, Kind, ReceiptOutcome, RevisionId, Tag,
+    Timestamp, all_terminal,
 };
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
@@ -104,10 +104,7 @@ async fn first_value_edit_publishes_through_public_fava() {
     assert_eq!(write.write_id(), receipt.write_id);
     assert_eq!(write.receipt_id(), receipt.receipt_id);
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
-    assert_eq!(
-        receipt.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(receipt.current.publication.revision_id, RevisionId::FIRST);
     assert_eq!(visible.events.len(), 1);
     assert_eq!(visible.events[0].event().author(), keys.public_key());
     assert_eq!(visible.events[0].event().kind(), Kind::ContactList);
@@ -160,10 +157,7 @@ async fn an_applier_registered_through_the_sink_publishes_like_one_registered_th
         .expect("ordinary receipt settles");
 
     assert_eq!(receipt.outcome, ReceiptOutcome::Complete);
-    assert_eq!(
-        receipt.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(receipt.current.publication.revision_id, RevisionId::FIRST);
     assert_eq!(applier.calls().len(), 1);
 }
 
@@ -185,8 +179,7 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     .build()
     .expect("semantic publication assembly");
 
-    let first_edit =
-        EventEdit::new(Kind::ContactList, None, vec![1]).expect("first bounded edit");
+    let first_edit = EventEdit::new(Kind::ContactList, None, vec![1]).expect("first bounded edit");
     let second_edit =
         EventEdit::new(Kind::ContactList, None, vec![2]).expect("distinct bounded edit");
     let first = fava
@@ -219,21 +212,12 @@ async fn distinct_unsigned_edits_compose_under_one_exact_operation() {
     };
     assert_eq!(composed.content, "edit|edit");
     assert_eq!(
-        generation_two
-            .current
-            .publication
-            .retired_revisions
-            .len(),
+        generation_two.current.publication.retired_revisions.len(),
         1
     );
     assert_eq!(
         generation_two.current.publication.retired_revisions[0],
-        (
-            RevisionId::FIRST,
-            generation_one.current.id(),
-            None,
-            None,
-        )
+        (RevisionId::FIRST, generation_one.current.id(), None, None,)
     );
     assert!(
         store
@@ -400,8 +384,7 @@ async fn applier_selection_bounds_refuse_before_custody() {
         Arc::new(RecordingPublisher::default()),
     )
     .appliers((0..65).map(|offset| {
-        Arc::new(TestApplier::new(Kind::Custom(10_000 + offset)))
-            as Arc<dyn EditApplier>
+        Arc::new(TestApplier::new(Kind::Custom(10_000 + offset))) as Arc<dyn EditApplier>
     }))
     .build();
     assert!(overflow.is_err());
@@ -546,10 +529,7 @@ async fn newer_source_reapplies_once_and_preserves_unrelated_fields() {
     assert_eq!(current.created_at, Timestamp::max());
     assert_eq!(applier.calls().len(), 2);
     assert_eq!(
-        applier.calls()[1]
-            .source
-            .as_ref()
-            .and_then(EventValue::id),
+        applier.calls()[1].source.as_ref().and_then(EventValue::id),
         Some(newer.id)
     );
 }
@@ -581,10 +561,7 @@ async fn own_local_revision_does_not_create_a_second_generation() {
     assert_no_receipt_change(&store).await;
 
     let receipt = write.receipt().expect("receipt exists");
-    assert_eq!(
-        receipt.current.publication.revision_id,
-        RevisionId::FIRST
-    );
+    assert_eq!(receipt.current.publication.revision_id, RevisionId::FIRST);
     assert_eq!(applier.calls().len(), 1);
     assert_eq!(signer.calls(), 1);
 }
@@ -724,8 +701,5 @@ async fn semantic_preview_matches_initial_route_with_zero_effects() {
         preview.destinations.keys().cloned().collect()
     );
     assert_eq!(applier.calls().len(), 2);
-    assert_eq!(
-        applier.calls()[0].created_at,
-        applier.calls()[1].created_at
-    );
+    assert_eq!(applier.calls()[0].created_at, applier.calls()[1].created_at);
 }

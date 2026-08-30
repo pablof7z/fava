@@ -110,7 +110,12 @@ async fn app_defined_applier_and_enabled_protocol_coexist_in_one_index() {
         .publish(EventEdit::new(app_kind, None, vec![1]).expect("bounded app edit"))
         .expect("app-defined kind publishes");
     assert_eq!(
-        app_write.receipt().expect("app receipt readable").current.event.kind(),
+        app_write
+            .receipt()
+            .expect("app receipt readable")
+            .current
+            .event
+            .kind(),
         app_kind
     );
 

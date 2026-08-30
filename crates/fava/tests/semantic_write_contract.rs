@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, RevisionId, PublicationEvidence, ReceiptId,
-    EventEdit, EditApplier, SignatureState, Tag, Timestamp,
-    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WritePayload, WriteRouting,
+    EditApplier, EventBuilder, EventEdit, EventValue, Kind, PublicationEvidence, ReceiptId,
+    RevisionId, SignatureState, Tag, Timestamp, UnsignedEvent, WriteId, WriteIntent,
+    WriteIntentError, WritePayload, WriteRouting,
 };
 use nostr::key::Keys;
 
@@ -71,9 +71,11 @@ impl EditApplier for ExactApplier {
         EventBuilder::new(Kind::ContactList)
             .created_at(created_at)
             .content("first value")
-            .tags((0..self.tag_count).map(|index| {
-                Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
-            }))
+            .tags(
+                (0..self.tag_count).map(|index| {
+                    Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
+                }),
+            )
             .by(author)
             .build()
             .map_err(WriteIntentError::from)

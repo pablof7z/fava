@@ -2,8 +2,8 @@
 
 use fava_state::{EventCoordinate, event_coordinate, event_is_newer};
 use fava_write::{
-    EventId, EventValue, RevisionId, PublicKey, Receipt, EventEdit, Timestamp,
-    UnsignedEvent, WriteId, WriteIntent, WriteRouting,
+    EventEdit, EventId, EventValue, PublicKey, Receipt, RevisionId, Timestamp, UnsignedEvent,
+    WriteId, WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStoreError;
 

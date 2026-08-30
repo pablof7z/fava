@@ -4,9 +4,8 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use fava::{
-    BuildError, Event, EventBuilder, EventValue, Fava, Kind, PublicKey, PublicationError,
-    PublishError, EventEdit, EditApplier, Timestamp, WriteIntentError,
-    WriteStoreError,
+    BuildError, EditApplier, Event, EventBuilder, EventEdit, EventValue, Fava, Kind, PublicKey,
+    PublicationError, PublishError, Timestamp, WriteIntentError, WriteStoreError,
 };
 use fava_bookmarks::Bookmarks;
 use fava_event_cache_memory::MemoryEventCache;
@@ -66,11 +65,8 @@ fn target_count(event: &Event, tag_name: &str, target: &str) -> usize {
         .count()
 }
 
-async fn shared_preview_bounds_and_failure<Add>(
-    enable: Enable,
-    capture: Capture,
-    add: Add,
-) where
+async fn shared_preview_bounds_and_failure<Add>(enable: Enable, capture: Capture, add: Add)
+where
     Add: Fn() -> EditResult,
 {
     let keys = Keys::generate();
@@ -156,8 +152,7 @@ fn assert_selection_and_capacity_refusals(
         Arc::new(RecordingPublisher::default()),
     )
     .appliers((0..65).map(|offset| {
-        Arc::new(TestApplier::new(Kind::Custom(20_000 + offset)))
-            as Arc<dyn EditApplier>
+        Arc::new(TestApplier::new(Kind::Custom(20_000 + offset))) as Arc<dyn EditApplier>
     }))
     .build();
     assert!(matches!(overflow, Err(BuildError::Publication(_))));
@@ -202,7 +197,7 @@ async fn nip02_passes_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::ContactList,
-        |builder| builder.with_nip02(),
+        Nip02::with_nip02,
         || fava_nip02::follow(target),
         || fava_nip02::unfollow(target),
         || fava_nip02::follow(adjacent),
@@ -219,7 +214,7 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
     let adjacent_hex = adjacent.to_hex();
     capability_protocol::exercise_public_lifecycle(
         Kind::Custom(10_003),
-        |builder| builder.with_bookmarks(),
+        Bookmarks::with_bookmarks,
         || fava_bookmarks::bookmark_event(target),
         || fava_bookmarks::unbookmark_event(target),
         || fava_bookmarks::bookmark_event(adjacent),
@@ -231,18 +226,14 @@ async fn bookmarks_pass_public_semantic_write_corpus() {
 #[tokio::test(flavor = "current_thread")]
 async fn capabilities_share_preview_bounds_and_failure_behavior() {
     let follow_target = Keys::generate().public_key();
-    shared_preview_bounds_and_failure(
-        |builder| builder.with_nip02(),
-        |sink| sink.with_nip02(),
-        || fava_nip02::follow(follow_target),
-    )
+    shared_preview_bounds_and_failure(Nip02::with_nip02, Nip02::with_nip02, || {
+        fava_nip02::follow(follow_target)
+    })
     .await;
     let bookmark_target = EventId::from_byte_array([10; 32]);
-    shared_preview_bounds_and_failure(
-        |builder| builder.with_bookmarks(),
-        |sink| sink.with_bookmarks(),
-        || fava_bookmarks::bookmark_event(bookmark_target),
-    )
+    shared_preview_bounds_and_failure(Bookmarks::with_bookmarks, Bookmarks::with_bookmarks, || {
+        fava_bookmarks::bookmark_event(bookmark_target)
+    })
     .await;
 }
 
@@ -252,8 +243,8 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let follow_adjacent = Keys::generate().public_key();
     capability_lifecycle::exercise(
         Kind::ContactList,
-        |builder| builder.with_nip02(),
-        |sink| sink.with_nip02(),
+        Nip02::with_nip02,
+        Nip02::with_nip02,
         || fava_nip02::follow(follow_target),
         || fava_nip02::follow(follow_adjacent),
         ("p", &follow_target.to_hex()),
@@ -263,8 +254,8 @@ async fn capabilities_share_concurrency_and_retired_completion_behavior() {
     let bookmark_adjacent = EventId::from_byte_array([12; 32]);
     capability_lifecycle::exercise(
         Kind::Custom(10_003),
-        |builder| builder.with_bookmarks(),
-        |sink| sink.with_bookmarks(),
+        Bookmarks::with_bookmarks,
+        Bookmarks::with_bookmarks,
         || fava_bookmarks::bookmark_event(bookmark_target),
         || fava_bookmarks::bookmark_event(bookmark_adjacent),
         ("e", &bookmark_target.to_hex()),

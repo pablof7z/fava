@@ -1,6 +1,6 @@
 //! Coordinate-bound bounded reservations for volatile semantic admission.
 
-use fava_write::{PublicKey, EventEdit};
+use fava_write::{EventEdit, PublicKey};
 use fava_write_store::WriteStoreError;
 
 use super::MemoryWriteStore;

@@ -22,7 +22,7 @@ use fava_transport::{
     TransportFailure, TransportShutdownFuture,
 };
 use fava_write::{
-    EventValue, LocalWriteEvent, RevisionId, PublicationEvidence, ReceiptId, ReceiptOutcome,
+    EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, ReceiptOutcome, RevisionId,
     SignatureState, WriteId, WriteIntent, WriteRouting,
 };
 use fava_write_store::WriteStore;

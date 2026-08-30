@@ -157,12 +157,9 @@ impl Publisher for Nip42Publisher {
                         RelayMessage::Auth { challenge } if !authed => {
                             let challenge = challenge.into_owned();
                             // Build and sign a kind-22242 auth event.
-                            let auth_event = match build_auth_event(pubkey, &relay_url, &challenge)
-                            {
-                                Ok(ev) => ev,
-                                Err(_) => {
-                                    return Ok(PublishOutcome::AuthenticationRequired);
-                                }
+                            let Ok(auth_event) = build_auth_event(pubkey, &relay_url, &challenge)
+                            else {
+                                return Ok(PublishOutcome::AuthenticationRequired);
                             };
                             let Some((generation, _)) = session_ref.signer(pubkey) else {
                                 return Ok(PublishOutcome::AuthenticationRequired);
@@ -171,13 +168,14 @@ impl Publisher for Nip42Publisher {
                             let signed = match session_ref
                                 .invoke_signer(pubkey, generation, auth_event, cancel_rx)
                             {
-                                Some(fut) => match fut.await {
-                                    Ok(ev) => ev,
-                                    Err(_) => {
+                                Some(fut) => {
+                                    if let Ok(ev) = fut.await {
+                                        ev
+                                    } else {
                                         drop(cancel_tx);
                                         return Ok(PublishOutcome::AuthenticationRequired);
                                     }
-                                },
+                                }
                                 None => {
                                     return Ok(PublishOutcome::AuthenticationRequired);
                                 }
@@ -191,11 +189,11 @@ impl Publisher for Nip42Publisher {
                             let auth_correlation =
                                 HandoffCorrelation::new(u64::from(attempt.number) | (1 << 32));
                             match session.send(auth_frame, auth_correlation).await {
-                                HandoffOutcome::HandedOff { .. } => {}
                                 HandoffOutcome::NotHandedOff { reason, .. } => {
                                     return Err(format!("AUTH send failed: {reason:?}"));
                                 }
-                                HandoffOutcome::Ambiguous { .. } => {}
+                                HandoffOutcome::HandedOff { .. }
+                                | HandoffOutcome::Ambiguous { .. } => {}
                             }
                             // Resend the original EVENT after authenticating.
                             let resend_correlation =

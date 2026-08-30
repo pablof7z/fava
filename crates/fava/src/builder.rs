@@ -206,10 +206,7 @@ impl FavaBuilder {
     /// let builder = FavaBuilder::default().appliers(Vec::<std::sync::Arc<dyn EditApplier>>::new());
     /// ```
     #[must_use]
-    pub fn appliers(
-        mut self,
-        appliers: impl IntoIterator<Item = Arc<dyn EditApplier>>,
-    ) -> Self {
+    pub fn appliers(mut self, appliers: impl IntoIterator<Item = Arc<dyn EditApplier>>) -> Self {
         self.appliers.extend(appliers);
         self
     }

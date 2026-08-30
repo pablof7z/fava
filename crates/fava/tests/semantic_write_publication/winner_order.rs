@@ -53,10 +53,7 @@ async fn equal_timestamp_lower_id_wins_while_higher_id_and_unqualified_sources_a
         .expect("winner and inert source facts enter cache");
     let receipt = wait_for_revision(&fava, write.receipt_id(), 2).await;
     wait_for_signer(&signer, 2).await;
-    assert_eq!(
-        receipt.current.publication.revision_source,
-        Some(equal_id)
-    );
+    assert_eq!(receipt.current.publication.revision_source, Some(equal_id));
     assert_eq!(applier.calls().len(), 2);
 
     cache

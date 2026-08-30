@@ -1,7 +1,6 @@
 use fava_routing::{CoverageState, RoutePlan};
 use fava_write::{
-    EventId, RevisionId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, WriteId,
-    WriteRouting,
+    EventId, Receipt, ReceiptOutcome, RelayDeliveryOutcome, RevisionId, WriteId, WriteRouting,
 };
 
 use crate::WriteStoreError;

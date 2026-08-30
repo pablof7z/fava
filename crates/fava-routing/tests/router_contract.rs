@@ -10,7 +10,7 @@ use fava_routing::{
 struct ConformingRouter;
 
 impl Router for ConformingRouter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "conforming"
     }
 
