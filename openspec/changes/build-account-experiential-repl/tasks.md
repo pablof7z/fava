@@ -49,6 +49,6 @@
 
 - [x] 7.1 Write a consumer-facing README showing the minimal account workflow and the exact public calls for current-account writes and `$currentPubkey` queries; document any unresolved DX gap honestly.
 - [x] 7.2 Capture actual-binary terminal session and completion screenshots and verify they correspond to the committed UI.
-- [ ] 7.3 Run full account, shared-support, simple-groups regression, session, write, query, observation, routing, subscription, live harness, strict Clippy, formatting, vocabulary, restart, and diff gates.
-- [ ] 7.4 Obtain independent DX, architecture, code, concurrency, harness, and evidence review; repair every concrete blocker and rerun its falsifier.
-- [ ] 7.5 Rebase reviewed slices onto current `main`, resolve conflicts to current public truth, run integrated validation, and fast-forward `main`; verify the main worktree is clean and contains the current-account owner, write convenience, reactive query support, and experiential app.
+- [x] 7.3 Run full account, shared-support, simple-groups regression, session, write, query, observation, routing, subscription, live harness, strict Clippy, formatting, vocabulary, restart, and diff gates.
+- [x] 7.4 Obtain independent DX, architecture, code, concurrency, harness, and evidence review; repair every concrete blocker and rerun its falsifier.
+- [x] 7.5 Rebase reviewed slices onto current `main`, resolve conflicts to current public truth, run integrated validation, and fast-forward `main`; verify no account-change dirt remains, preserve unrelated base-worktree modifications, and confirm `main` contains the current-account owner, write convenience, reactive query support, and experiential app.
