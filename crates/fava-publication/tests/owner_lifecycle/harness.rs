@@ -17,8 +17,8 @@ use fava_routing::{
 use fava_session::Session;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    BoundedText, OpenRelaySession, RelaySessionFuture, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use fava_write::{
     Event, EventBuilder, Kind, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, UnsignedEvent,
@@ -409,7 +409,7 @@ impl Transport for RefusingTransport {
         Box::pin(async move {
             Err(TransportError::ConnectionRefused(
                 TransportFailure::Disconnected {
-                    detail: BoundedReason::new("test transport opens no sessions"),
+                    detail: BoundedText::new("test transport opens no sessions"),
                 },
             ))
         })

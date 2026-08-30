@@ -9,7 +9,7 @@
 
 use std::num::NonZeroUsize;
 
-use fava_relay::RelaySessionKey;
+use fava_relay::{AuthenticationState, BoundedText, RelaySessionKey};
 use fava_state::RetractionCause;
 use nostr::event::EventId;
 use nostr::types::{RelayUrl, Timestamp};
@@ -265,24 +265,6 @@ pub enum RelayDeadline {
     Close,
 }
 
-/// How far NIP-42 authentication has got on one relay session, as seen by a query.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AuthenticationState {
-    /// A challenge arrived; no policy decision yet.
-    ChallengeReceived,
-    /// The application's policy declined to authenticate.
-    Declined,
-    /// AUTH was sent; no relay verdict yet.
-    Attempted,
-    /// The relay accepted AUTH but still refuses the request.
-    AcceptedButStillRefused,
-    /// The relay rejected AUTH.
-    Rejected {
-        /// Verbatim, bounded relay text.
-        message: BoundedText,
-    },
-}
-
 /// Why Fava stopped asking one relay.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RelayWithdrawal {
@@ -417,46 +399,5 @@ impl QueryEvidence {
                 .relays
                 .iter()
                 .all(RelayQueryEvidence::stored_events_complete)
-    }
-}
-
-/// Owner-supplied text retained under a Fava-owned byte bound.
-///
-/// Identical semantics to `fava_transport::BoundedReason`; duplicated here so
-/// `fava-query` keeps zero contract dependencies. `MAX_BYTES` is 512 in both.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct BoundedText {
-    text: String,
-    truncated_bytes: usize,
-}
-
-impl BoundedText {
-    /// Maximum retained bytes.
-    pub const MAX_BYTES: usize = 512;
-
-    /// Retain at most `MAX_BYTES`, recording how many were dropped.
-    #[must_use]
-    pub fn new(text: impl AsRef<str>) -> Self {
-        let text = text.as_ref();
-        let mut end = text.len().min(Self::MAX_BYTES);
-        while end > 0 && !text.is_char_boundary(end) {
-            end -= 1;
-        }
-        Self {
-            text: text[..end].to_owned(),
-            truncated_bytes: text.len() - end,
-        }
-    }
-
-    /// Retained text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.text
-    }
-
-    /// Bytes dropped by the bound.
-    #[must_use]
-    pub const fn truncated_bytes(&self) -> usize {
-        self.truncated_bytes
     }
 }

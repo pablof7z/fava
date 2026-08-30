@@ -434,7 +434,7 @@ impl Engine {
                     .map(|()| plan)
                     .map_err(|error| {
                         fava_subscriptions::SubscriptionPlanError::Encoding(
-                            fava_transport::BoundedReason::new(error.to_string()),
+                            fava_transport::BoundedText::new(error.to_string()),
                         )
                     })
             });

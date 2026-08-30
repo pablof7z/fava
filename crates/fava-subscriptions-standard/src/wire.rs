@@ -15,7 +15,7 @@
 //! move an id that is already live.
 
 use fava_subscriptions::{PlanRevision, SubscriptionPlanError};
-use fava_transport::BoundedReason;
+use fava_transport::BoundedText;
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::filter::Filter;
 
@@ -52,5 +52,5 @@ pub(crate) fn encoded_bytes(
     };
     encode_client(&message)
         .map(|frame| frame.len())
-        .map_err(|error| SubscriptionPlanError::Encoding(BoundedReason::new(error.to_string())))
+        .map_err(|error| SubscriptionPlanError::Encoding(BoundedText::new(error.to_string())))
 }

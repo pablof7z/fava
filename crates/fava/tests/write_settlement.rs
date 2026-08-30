@@ -18,8 +18,8 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    BoundedText, OpenRelaySession, RelaySessionFuture, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use fava_write::{
     EventValue, LocalWriteEvent, PublicationEvidence, ReceiptId, ReceiptOutcome, RevisionId,
@@ -602,7 +602,7 @@ impl Transport for NoopTransport {
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
                 TransportFailure::Disconnected {
-                    detail: BoundedReason::new("manual publisher owns the result"),
+                    detail: BoundedText::new("manual publisher owns the result"),
                 },
             ))
         })

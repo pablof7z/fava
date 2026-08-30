@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use fava_transport::{
-    BoundedReason, HandoffCorrelation, HandoffOutcome, RelayInbound, RelaySessionIdentity,
+    BoundedText, HandoffCorrelation, HandoffOutcome, RelayInbound, RelaySessionIdentity,
     TransportAmbiguity, TransportFailure,
 };
 use futures_util::stream::{SplitSink, SplitStream};
@@ -39,7 +39,7 @@ pub(crate) async fn establish(shared: &SessionShared) -> Result<Socket, Transpor
     match tokio::time::timeout(deadline, connect_async(url)).await {
         Err(_) => Err(TransportFailure::EstablishTimeout { after: deadline }),
         Ok(Err(error)) => Err(TransportFailure::Disconnected {
-            detail: BoundedReason::new(error.to_string()),
+            detail: BoundedText::new(error.to_string()),
         }),
         Ok(Ok((socket, _))) => Ok(socket),
     }
@@ -164,7 +164,7 @@ async fn pump(
             _ = keepalive.tick() => {
                 if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
                     return TransportFailure::Disconnected {
-                        detail: BoundedReason::new("keepalive probe could not be written"),
+                        detail: BoundedText::new("keepalive probe could not be written"),
                     };
                 }
             }
@@ -202,7 +202,7 @@ async fn write_frame(
             None,
         ),
         Ok(Err(error)) => {
-            let detail = BoundedReason::new(error.to_string());
+            let detail = BoundedText::new(error.to_string());
             (
                 HandoffOutcome::Ambiguous {
                     identity,
@@ -221,7 +221,7 @@ async fn write_frame(
                 reason: TransportAmbiguity::WriteTimeout { after: deadline },
             },
             Some(TransportFailure::Disconnected {
-                detail: BoundedReason::new("write deadline expired with bytes in the socket"),
+                detail: BoundedText::new("write deadline expired with bytes in the socket"),
             }),
         ),
     };
@@ -241,16 +241,16 @@ fn admit(
         Some(Ok(Message::Binary(bytes))) => admit_frame(shared, &identity, bytes.to_vec()),
         Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => None,
         Some(Ok(Message::Close(frame))) => Some(TransportFailure::Disconnected {
-            detail: BoundedReason::new(frame.map_or_else(
+            detail: BoundedText::new(frame.map_or_else(
                 || "relay closed the session".to_owned(),
                 |frame| frame.reason.to_string(),
             )),
         }),
         Some(Err(error)) => Some(TransportFailure::Disconnected {
-            detail: BoundedReason::new(error.to_string()),
+            detail: BoundedText::new(error.to_string()),
         }),
         None => Some(TransportFailure::Disconnected {
-            detail: BoundedReason::new("relay ended the stream"),
+            detail: BoundedText::new("relay ended the stream"),
         }),
     }
 }
@@ -263,7 +263,7 @@ fn admit_frame(
     let maximum = shared.bounds.max_frame_bytes.get();
     if frame.len() > maximum {
         return Some(TransportFailure::Disconnected {
-            detail: BoundedReason::new(format!(
+            detail: BoundedText::new(format!(
                 "relay sent {} bytes, exceeding the declared bound {maximum}",
                 frame.len()
             )),
@@ -284,7 +284,7 @@ async fn close_gracefully(shared: &SessionShared, sink: &mut Sink) -> TransportF
     let deadline = shared.deadlines.close;
     if tokio::time::timeout(deadline, sink.close()).await.is_err() {
         return TransportFailure::Disconnected {
-            detail: BoundedReason::new("close deadline expired; session dropped"),
+            detail: BoundedText::new("close deadline expired; session dropped"),
         };
     }
     TransportFailure::SessionClosed

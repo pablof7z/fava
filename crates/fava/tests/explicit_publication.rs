@@ -19,8 +19,8 @@ use fava_relay::RelaySessionKey;
 use fava_signer::{Signer, SignerAvailability, SignerError};
 use fava_signer_local::LocalSigner;
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    BoundedText, OpenRelaySession, RelaySessionFuture, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use fava_write::{Event, Kind, PublicKey, UnsignedEvent};
 use fava_write_store_memory::MemoryWriteStore;
@@ -307,7 +307,7 @@ impl Transport for NoopTransport {
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
                 TransportFailure::Disconnected {
-                    detail: BoundedReason::new("not used by test publisher"),
+                    detail: BoundedText::new("not used by test publisher"),
                 },
             ))
         })

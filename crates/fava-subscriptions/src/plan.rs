@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use fava_relay::RelaySessionKey;
-use fava_transport::BoundedReason;
+use fava_transport::BoundedText;
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
 use thiserror::Error;
@@ -312,7 +312,7 @@ pub enum ShortfallReason {
     /// The planner refuses to express this demand exactly on this relay.
     NotExpressible {
         /// Bounded planner reason.
-        detail: BoundedReason,
+        detail: BoundedText,
     },
 }
 

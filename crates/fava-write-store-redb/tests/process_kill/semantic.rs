@@ -23,8 +23,8 @@ use fava_relay::RelaySessionKey;
 use fava_signer_local::LocalSigner;
 use fava_state::{EventStateMutation, RelayEvent};
 use fava_transport::{
-    BoundedReason, OpenRelaySession, RelaySessionFuture, Transport, TransportError,
-    TransportFailure, TransportShutdownFuture,
+    BoundedText, OpenRelaySession, RelaySessionFuture, Transport, TransportError, TransportFailure,
+    TransportShutdownFuture,
 };
 use fava_write::{Receipt, ReceiptId, SignatureState, WriteIntent, WriteIntentError, WriteRouting};
 use fava_write_store::WriteStore;
@@ -817,7 +817,7 @@ impl Transport for NoopTransport {
         Box::pin(async {
             Err(TransportError::ConnectionRefused(
                 TransportFailure::Disconnected {
-                    detail: BoundedReason::new("publisher does not use transport"),
+                    detail: BoundedText::new("publisher does not use transport"),
                 },
             ))
         })

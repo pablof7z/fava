@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use crate::{BoundedReason, HandoffCorrelation, RelaySessionIdentity};
+use crate::{BoundedText, HandoffCorrelation, RelaySessionIdentity};
 
 /// Correlated result of attempting to hand one exact frame to a relay session.
 ///
@@ -93,7 +93,7 @@ pub enum TransportFailure {
     /// The relay or the network refused or dropped the connection.
     Disconnected {
         /// Bounded verbatim reason (GOALS:1111, RELAY-008).
-        detail: BoundedReason,
+        detail: BoundedText,
     },
     /// Fava is shutting down; no new bytes are admitted.
     ShuttingDown,
@@ -108,7 +108,7 @@ pub enum TransportAmbiguity {
     /// The socket accepted the bytes and then errored before flush confirmation.
     FlushUnconfirmed {
         /// Bounded verbatim reason.
-        detail: BoundedReason,
+        detail: BoundedText,
     },
     /// `TransportDeadlines::write` expired after the bytes entered the socket.
     WriteTimeout {
@@ -118,7 +118,7 @@ pub enum TransportAmbiguity {
     /// The session disconnected while the frame was in flight.
     DisconnectedInFlight {
         /// Bounded verbatim reason.
-        detail: BoundedReason,
+        detail: BoundedText,
     },
 }
 

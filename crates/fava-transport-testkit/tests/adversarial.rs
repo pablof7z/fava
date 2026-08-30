@@ -139,7 +139,7 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
             identity: lease.session().identity(),
             correlation: HandoffCorrelation::new(1),
             reason: TransportAmbiguity::DisconnectedInFlight {
-                detail: fava_transport::BoundedReason::new("socket reset mid-write"),
+                detail: fava_transport::BoundedText::new("socket reset mid-write"),
             },
         }]
     );

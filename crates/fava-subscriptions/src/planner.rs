@@ -1,7 +1,7 @@
 //! The replaceable planner contract and its refusal type.
 
 use fava_relay::RelaySessionKey;
-use fava_transport::BoundedReason;
+use fava_transport::BoundedText;
 use fava_wire::SubscriptionId;
 use thiserror::Error;
 
@@ -111,5 +111,5 @@ pub enum SubscriptionPlanError {
     DuplicateSubscription(SubscriptionId),
     /// Exact Nostr REQ encoding failed before any handoff.
     #[error("REQ encoding failed: {0:?}")]
-    Encoding(BoundedReason),
+    Encoding(BoundedText),
 }

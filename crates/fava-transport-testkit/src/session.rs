@@ -4,10 +4,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fava_transport::{
-    BoundedReason, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
-    RelayInbound, RelayMessageStream, RelaySession, RelaySessionGeneration, RelaySessionIdentity,
-    ReleaseFuture, ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines,
-    TransportFailure,
+    BoundedText, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession, RelayInbound,
+    RelayMessageStream, RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
+    ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
 use nostr::types::Timestamp;
 
@@ -86,7 +85,7 @@ impl FakeSession {
                 identity: identity.clone(),
                 correlation,
                 reason: TransportAmbiguity::DisconnectedInFlight {
-                    detail: BoundedReason::new(detail),
+                    detail: BoundedText::new(detail),
                 },
             });
         }
@@ -100,7 +99,7 @@ impl FakeSession {
         let disconnected = RelayInbound::Disconnected {
             identity: identity.clone(),
             reason: TransportFailure::Disconnected {
-                detail: BoundedReason::new(detail),
+                detail: BoundedText::new(detail),
             },
         };
         Self::fan_out(&state, &disconnected);
@@ -110,7 +109,7 @@ impl FakeSession {
                 identity,
                 attempts: self.reconnect_attempts,
                 reason: TransportFailure::Disconnected {
-                    detail: BoundedReason::new(refusal),
+                    detail: BoundedText::new(refusal),
                 },
             };
             Self::fan_out(&state, &exhausted);
@@ -125,7 +124,7 @@ impl FakeSession {
         let disconnected = RelayInbound::Disconnected {
             identity: previous.clone(),
             reason: TransportFailure::Disconnected {
-                detail: BoundedReason::new("session reconnected"),
+                detail: BoundedText::new("session reconnected"),
             },
         };
         Self::fan_out(&state, &disconnected);

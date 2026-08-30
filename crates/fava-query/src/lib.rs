@@ -11,6 +11,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub use fava_relay::{AuthenticationState, BoundedText};
+
 use fava_relay::RelayAccess;
 use fava_state::{RelayEvent, RelayOccurrences};
 use fava_write::{EventValue, LocalWriteEvent, PublicationEvidence};
@@ -20,10 +22,9 @@ pub use nostr::types::{RelayUrl, Timestamp};
 pub use selection::{FilterSelection, SingleLetterTag};
 
 pub use evidence::{
-    AuthenticationState, BoundedText, DesiredPlanEvidence, QueryEvidence, QueryShortfall,
-    RelayDeadline, RelayQueryEvidence, RelayShortfall, RelaySourceState, RelayWithdrawal,
-    RouteOrigin, SourceEvidence, SourceKind, SourceRetraction, SourceStatus,
-    SourceTerminationCause,
+    DesiredPlanEvidence, QueryEvidence, QueryShortfall, RelayDeadline, RelayQueryEvidence,
+    RelayShortfall, RelaySourceState, RelayWithdrawal, RouteOrigin, SourceEvidence, SourceKind,
+    SourceRetraction, SourceStatus, SourceTerminationCause,
 };
 pub use identity::{
     ObservationId, ObservationIds, OperationGeneration, OperationGenerationExhausted,

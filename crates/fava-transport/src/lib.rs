@@ -15,7 +15,6 @@
 //! value: it enforces the four durations the caller hands it in
 //! [`OpenRelaySession`].
 
-mod bounded;
 mod error;
 mod handoff;
 mod inbound;
@@ -28,8 +27,8 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::time::Duration;
 
-pub use bounded::BoundedReason;
 pub use error::TransportError;
+pub use fava_relay::BoundedText;
 use fava_relay::RelaySessionKey;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use inbound::RelayInbound;
