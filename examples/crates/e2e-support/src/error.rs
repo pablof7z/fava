@@ -92,8 +92,16 @@ pub enum ShellError {
     /// An imported key could not form a local signer.
     #[error("imported account key is not a valid Nostr secret key")]
     InvalidImportedAccount,
-    /// Fava refused an account signer attachment change.
-    #[error("account signer operation failed: {0}")]
+    /// A replacement key does not belong to the named account.
+    #[error("replacement key belongs to {actual}, not account {expected}")]
+    AccountKeyMismatch {
+        /// Public key retained by the alias.
+        expected: String,
+        /// Public key derived from replacement input.
+        actual: String,
+    },
+    /// Fava refused an account or signer lifecycle change.
+    #[error("account operation failed: {0}")]
     AccountSigner(String),
     /// One built-in command has an invalid argument shape.
     #[error("usage: {usage}")]

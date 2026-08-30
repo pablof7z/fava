@@ -1,0 +1,19 @@
+[info]
+relay_url = "ws://127.0.0.1:52370/"
+[database]
+engine = "sqlite"
+in_memory = false
+[network]
+address = "127.0.0.1"
+port = 52370
+ping_interval = 30
+[options]
+reject_future_seconds = 1800
+[limits]
+max_event_bytes = 131072
+max_ws_message_bytes = 131072
+max_ws_frame_bytes = 131072
+broadcast_buffer = 1024
+event_persist_buffer = 1024
+[authorization]
+nip42_auth = false

@@ -7,7 +7,9 @@ use fava_signer_local::LocalSigner;
 use nostr::key::Keys;
 
 use crate::session::validate_alias;
-use crate::{Account, CommandResult, E2eSession, InputMode, ResultValue, ShellError};
+use crate::{
+    Account, CommandResult, E2eSession, InputMode, ResultValue, ShellError, parse_public_key,
+};
 
 impl E2eSession {
     pub(crate) fn account_command<P>(
@@ -20,7 +22,7 @@ impl E2eSession {
     where
         P: FnMut(&str) -> Result<Option<String>, ShellError>,
     {
-        const USAGE: &str = "account <new|import|list|switch|remove> ...";
+        const USAGE: &str = "account <new|import|add-pubkey|list|switch|replace|remove|clear> ...";
         match action {
             "new" => {
                 let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
@@ -37,6 +39,14 @@ impl E2eSession {
                 }
                 self.import_account(&alias, &nsec)
             }
+            "add-pubkey" => {
+                let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
+                let public_key = required_value(arguments, 1, "account-pubkey", USAGE, prompt)?;
+                if arguments.len() > 2 {
+                    return usage(USAGE);
+                }
+                self.add_pubkey_account(&alias, &public_key)
+            }
             "list" if arguments.is_empty() => self.list_accounts(),
             "switch" => {
                 let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
@@ -45,6 +55,14 @@ impl E2eSession {
                 }
                 self.switch_account(&alias)
             }
+            "replace" => {
+                let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
+                let nsec = required_value(arguments, 1, "account-nsec", USAGE, prompt)?;
+                if arguments.len() > 2 {
+                    return usage(USAGE);
+                }
+                self.replace_account(&alias, &nsec)
+            }
             "remove" => {
                 let alias = required_value(arguments, 0, "account-alias", USAGE, prompt)?;
                 if arguments.len() > 1 {
@@ -52,6 +70,7 @@ impl E2eSession {
                 }
                 self.remove_account(&alias)
             }
+            "clear" if arguments.is_empty() => self.clear_account(),
             _ => usage(USAGE),
         }
     }
@@ -115,6 +134,9 @@ impl E2eSession {
         self.fava
             .add_signer(Arc::new(LocalSigner::new(keys)))
             .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.fava
+            .select_account(public_key)
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
         self.accounts
             .insert(alias.to_owned(), Account::new(alias, public_key));
         self.selected_account = Some(alias.to_owned());
@@ -137,12 +159,73 @@ impl E2eSession {
         self.fava
             .add_signer(Arc::new(LocalSigner::new(keys)))
             .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.fava
+            .select_account(public_key)
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
         self.accounts
             .insert(alias.to_owned(), Account::new(alias, public_key));
         self.selected_account = Some(alias.to_owned());
         CommandResult::success(result_kind, format!("{result_kind} and selected {alias}"))
             .with_field("account", alias)
             .and_then(|result| result.with_field("public_key", public_key.to_hex()))
+    }
+
+    fn add_pubkey_account(
+        &mut self,
+        alias: &str,
+        public_key: &str,
+    ) -> Result<CommandResult, ShellError> {
+        self.prepare_account_alias(alias)?;
+        let public_key = parse_public_key(public_key)?;
+        self.fava
+            .add_account(public_key)
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.fava
+            .select_account(public_key)
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.accounts
+            .insert(alias.to_owned(), Account::new(alias, public_key));
+        self.selected_account = Some(alias.to_owned());
+        CommandResult::success(
+            "account-added",
+            format!("account-added and selected {alias}"),
+        )
+        .with_field("account", alias)
+        .and_then(|result| result.with_field("public_key", public_key.to_hex()))
+    }
+
+    fn replace_account(&mut self, alias: &str, nsec: &str) -> Result<CommandResult, ShellError> {
+        let account = self
+            .accounts
+            .get(alias)
+            .ok_or_else(|| ShellError::UnknownAccount {
+                alias: alias.to_owned(),
+            })?;
+        let keys = Keys::parse(nsec).map_err(|_| ShellError::InvalidImportedAccount)?;
+        let actual = keys.public_key();
+        if actual != account.public_key() {
+            return Err(ShellError::AccountKeyMismatch {
+                expected: account.public_key().to_hex(),
+                actual: actual.to_hex(),
+            });
+        }
+        self.fava
+            .replace_signer(Arc::new(LocalSigner::new(keys)))
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        CommandResult::success("account-replaced", format!("replaced signer for {alias}"))
+            .with_field("account", alias)
+            .and_then(|result| result.with_field("public_key", actual.to_hex()))
+    }
+
+    fn clear_account(&mut self) -> Result<CommandResult, ShellError> {
+        self.fava
+            .clear_current_account()
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
+        self.selected_account = None;
+        Ok(CommandResult::success(
+            "account-cleared",
+            "cleared current account",
+        ))
     }
 
     fn prepare_account_alias(&self, alias: &str) -> Result<(), ShellError> {
@@ -168,6 +251,9 @@ impl E2eSession {
             .ok_or_else(|| ShellError::UnknownAccount {
                 alias: alias.to_owned(),
             })?;
+        self.fava
+            .select_account(account.public_key())
+            .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
         self.selected_account = Some(alias.to_owned());
         CommandResult::success("account-selected", format!("selected {alias}"))
             .with_field("account", alias)
@@ -194,7 +280,7 @@ impl E2eSession {
                 alias: alias.to_owned(),
             })?;
         self.fava
-            .remove_signer(account.public_key())
+            .remove_account(account.public_key())
             .map_err(|error| ShellError::AccountSigner(error.to_string()))?;
         self.accounts.remove(alias);
         if self.selected_account.as_deref() == Some(alias) {

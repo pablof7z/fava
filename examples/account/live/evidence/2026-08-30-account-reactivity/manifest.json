@@ -1,0 +1,46 @@
+{
+  "files": {
+    "app/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "app/stdout.log": {
+      "bytes": 4385,
+      "sha256": "4eddc088621296a367facfe9120c1674169f15be00f49d0cd7236c33761f91e0"
+    },
+    "relay-alice.json": {
+      "bytes": 609,
+      "sha256": "c9c27e5254d871802f928e5d56c68ef2abe6c25ec98bc9fad905dd89718e4083"
+    },
+    "relay-bob.json": {
+      "bytes": 605,
+      "sha256": "ef23268395c0acb4f06c7bb58b0763b12989cc7614473047628c7536b65a5b8d"
+    },
+    "relays/ordinary/config.toml": {
+      "bytes": 372,
+      "sha256": "ba8bdeab76561a6b1a627c548bf7f9020f73262c0216210ea02b827146fcec04"
+    },
+    "relays/ordinary/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "relays/ordinary/stdout.log": {
+      "bytes": 3868,
+      "sha256": "c111ed87cbb0404e33f0d3670d7e5a25d4357d61246883485926019bfec61f9c"
+    },
+    "result.json": {
+      "bytes": 632,
+      "sha256": "09752927a9ac12082e11bb6f404675c2022fb2d51661395e457c88012e21e7d7"
+    },
+    "run.jsonl": {
+      "bytes": 4693,
+      "sha256": "2bb2a8297db42368917d06418b9ef1f27a36bfa2ee3581794d7a0b5cfbc904c9"
+    },
+    "teardown.json": {
+      "bytes": 389,
+      "sha256": "7672b63e91faf7fd103de63d92308ceabd1276b8672d4773836c4abd52fe2ffc"
+    }
+  },
+  "format": 1,
+  "scenario": "account-reactivity.txt"
+}

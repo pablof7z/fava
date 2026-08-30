@@ -522,6 +522,7 @@ dependencies = [
  "fava-relay",
  "fava-routing",
  "fava-runtime",
+ "fava-session",
  "fava-state",
  "fava-subscriptions",
  "fava-transport",

@@ -1,0 +1,22 @@
+{"status":"ok","kind":"relay-added","summary":"local -> ws://127.0.0.1:52370","fields":{"alias":"local","relay":"ws://127.0.0.1:52370"}}
+{"status":"ok","kind":"account-imported","summary":"account-imported and selected alice","fields":{"account":"alice","public_key":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"}}
+{"status":"ok","kind":"capture-set","summary":"captured public_key as alice-pub","fields":{"capture":"alice-pub"}}
+{"status":"ok","kind":"query-opened","summary":"opened mine","fields":{"event_count":0,"observation_id":1,"query":"mine","revision":1}}
+{"status":"ok","kind":"published","summary":"publication settled","fields":{"acknowledged":1,"author":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","event_id":"09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3","outcome":"Complete","receipt_id":1,"route_settled":true,"write_id":1}}
+{"status":"ok","kind":"capture-set","summary":"captured event_id as alice-event","fields":{"capture":"alice-event"}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":["79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"],"contents":["alice event"],"event_count":1,"event_ids":["09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3"],"observation_id":1,"query":"mine","revision":9}}
+{"status":"ok","kind":"account-imported","summary":"account-imported and selected bob","fields":{"account":"bob","public_key":"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"}}
+{"status":"ok","kind":"capture-set","summary":"captured public_key as bob-pub","fields":{"capture":"bob-pub"}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":[],"contents":[],"event_count":0,"event_ids":[],"observation_id":1,"query":"mine","revision":10}}
+{"status":"ok","kind":"published","summary":"publication settled","fields":{"acknowledged":1,"author":"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5","event_id":"b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048","outcome":"Complete","receipt_id":2,"route_settled":true,"write_id":2}}
+{"status":"ok","kind":"capture-set","summary":"captured event_id as bob-event","fields":{"capture":"bob-event"}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":["c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"],"contents":["bob event"],"event_count":1,"event_ids":["b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048"],"observation_id":1,"query":"mine","revision":19}}
+{"status":"ok","kind":"account-selected","summary":"selected alice","fields":{"account":"alice","public_key":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":["79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"],"contents":["alice event"],"event_count":1,"event_ids":["09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3"],"observation_id":1,"query":"mine","revision":20}}
+{"status":"ok","kind":"account-selected","summary":"selected bob","fields":{"account":"bob","public_key":"c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":["c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"],"contents":["bob event"],"event_count":1,"event_ids":["b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048"],"observation_id":1,"query":"mine","revision":22}}
+{"status":"ok","kind":"account-cleared","summary":"cleared current account","fields":{}}
+{"status":"ok","kind":"query-snapshot","summary":"snapshot mine","fields":{"authors":[],"contents":[],"event_count":0,"event_ids":[],"observation_id":1,"query":"mine","revision":24}}
+{"status":"ok","kind":"diagnostics","summary":"current Fava ownership facts","fields":{"current_pubkey":"","query_count":1,"query_ids":[1],"relay_count":0,"session_revision":7,"write_count":0}}
+{"status":"ok","kind":"dump","summary":"bounded shell state","fields":{"accounts":["alice","bob"],"captures":["alice-event","alice-pub","bob-event","bob-pub"],"relay_aliases":["local"],"relay_urls":["ws://127.0.0.1:52370"],"selected_account":""}}
+{"status":"ok","kind":"quit","summary":"session closed","fields":{}}

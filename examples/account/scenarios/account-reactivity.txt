@@ -1,0 +1,22 @@
+relay add local {{RELAY}}
+account import alice 0000000000000000000000000000000000000000000000000000000000000001
+capture alice-pub public_key
+query open mine $currentPubkey 1 local
+publish 1 "alice event" local
+capture alice-event event_id
+query wait mine 1
+account import bob 0000000000000000000000000000000000000000000000000000000000000002
+capture bob-pub public_key
+query sync mine
+publish 1 "bob event" local
+capture bob-event event_id
+query wait mine 1
+account switch alice
+query sync mine
+account switch bob
+query sync mine
+account clear
+query sync mine
+diagnostics
+dump
+quit

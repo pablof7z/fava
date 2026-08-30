@@ -227,7 +227,7 @@ impl E2eSession {
                 self.account_command(action, arguments, mode, prompt)
             }
             [command] if command == "account" => Err(ShellError::Usage {
-                usage: "account <new|import|list|switch|remove> ...",
+                usage: "account <new|import|add-pubkey|list|switch|replace|remove|clear> ...",
             }),
             [command, action, arguments @ ..] if command == "relay" => {
                 self.relay_command(action, arguments, prompt)
@@ -257,10 +257,16 @@ impl E2eSession {
     /// Returns [`ShellError::NoSelectedAccount`] before a domain command can
     /// construct an event with an implicit or stale author.
     pub fn selected_account(&self) -> Result<&Account, ShellError> {
-        self.selected_account
+        let account = self
+            .selected_account
             .as_ref()
             .and_then(|alias| self.accounts.get(alias))
-            .ok_or(ShellError::NoSelectedAccount)
+            .ok_or(ShellError::NoSelectedAccount)?;
+        if self.fava.current_account() == Some(account.public_key()) {
+            Ok(account)
+        } else {
+            Err(ShellError::NoSelectedAccount)
+        }
     }
 
     /// Return the selected account alias without requiring one to exist.
