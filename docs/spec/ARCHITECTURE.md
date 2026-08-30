@@ -2506,7 +2506,9 @@ accepted write.
 - re-authentication after reconnect;
 - exact attribution of authentication outcomes to query and publication work.
 
-Authentication identity is explicit in the route/session configuration. It is independent of query filters and event authorship.
+Authentication identity is explicit in the route and session configuration, and independent of query filters and event authorship.
+
+One account selection supplies both. The facade's `with_account` names the account a query or publication runs as: it becomes the relay-session access authority for that work, and the author of a payload that carries none. The two remain distinct values. A payload that already carries its own author keeps it, so an event authored by one key publishes over a session authenticated as another. With no selection and no current account, work runs under public access.
 
 ---
 
