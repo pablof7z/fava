@@ -18,5 +18,6 @@ The ordinary downstream acceptance application lives at [apps/canary](apps/canar
 ## Specifications
 
 The authoritative inputs live in [docs/spec](docs/spec/README.md). Architectural
-concepts and public symbols are defined in
-[docs/internals/vocabulary.toml](docs/internals/vocabulary.toml).
+concepts are defined in [docs/spec/ARCHITECTURE.md](docs/spec/ARCHITECTURE.md).
+Public declarations are approved out of repository by Symbol Gate; its policy and
+trusted keys live in [.symbol-gate](.symbol-gate).
