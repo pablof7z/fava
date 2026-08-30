@@ -178,7 +178,10 @@ impl Session {
         self.lock_state().current_account
     }
 
-    /// Atomically snapshot the current account and its session revision.
+    /// Atomically snapshot the current account and its session-wide revision.
+    ///
+    /// The revision advances for every account, selection, or signer mutation;
+    /// consumers compare the public key when only selection changes matter.
     #[must_use]
     pub fn current_account_snapshot(&self) -> (Option<PublicKey>, u64) {
         let state = self.lock_state();

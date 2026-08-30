@@ -13,10 +13,10 @@
 
 ## 3. Current-account write resolution
 
-- [ ] 3.1 Add facade/publication evidence that a current-account write resolves its author before acceptance, refuses with no current account before creating a write or receipt, and remains attributed after a later switch.
-- [ ] 3.2 Implement the approved current-account publication convenience by lowering to the ordinary accepted-write path; verify no parallel author field, signer path, route path, or receipt lifecycle is introduced.
-- [ ] 3.3 Prove A-accepted/switch-to-B and switch-to-B/B-accepted scenarios with delayed signing and routing; verify exact event author, signer generation, write identity, and receipt evidence.
-- [ ] 3.4 Run full write/publication/facade tests, strict Clippy, formatting, vocabulary, restart where applicable, and deliberate-break gates; independently review, rebase, and merge the focused write slice to `main`.
+- [x] 3.1 Add facade/publication evidence that a current-account write resolves its author before acceptance, refuses with no current account before creating a write or receipt, and remains attributed after a later switch.
+- [x] 3.2 Implement the approved current-account publication convenience by lowering to the ordinary accepted-write path; verify no parallel author field, signer path, route path, or receipt lifecycle is introduced.
+- [x] 3.3 Prove A-accepted/switch-to-B and switch-to-B/B-accepted scenarios with delayed signing and routing; verify exact event author, signer generation, write identity, and receipt evidence.
+- [x] 3.4 Run full write/publication/facade tests, strict Clippy, formatting, vocabulary, restart where applicable, and deliberate-break gates; independently review, rebase, and merge the focused write slice to `main`.
 
 ## 4. Reactive `$currentPubkey` queries
 

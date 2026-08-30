@@ -252,7 +252,12 @@ impl<'a> PublishTo<'a> {
     where
         P: PublishPayload,
     {
-        publish_scoped(self.fava.publication.as_ref(), payload, None, self.routing)
+        publish_scoped(
+            self.fava.publication.as_ref(),
+            payload,
+            self.fava.session.current_account(),
+            self.routing,
+        )
     }
 }
 
@@ -263,8 +268,8 @@ impl<'a> PublishTo<'a> {
 )]
 #[derive(Debug, Error)]
 pub enum PublishError {
-    /// An authorless edit has no selected current account or explicit signer scope.
-    #[error("replaceable edit publication requires an author selection")]
+    /// An authorless payload has no selected current account or explicit author scope.
+    #[error("authorless publication requires a current account selection or explicit author scope")]
     MissingAuthor,
     /// A zero acknowledgement threshold cannot express delivery sufficiency.
     #[error("settlement acknowledgement threshold must be positive")]
@@ -435,11 +440,17 @@ impl PublishPayload for EventEdit {
 pub(crate) fn publish<P>(
     publication: Option<&Publication>,
     payload: P,
+    current_account: Option<PublicKey>,
 ) -> Result<Write, PublishError>
 where
     P: PublishPayload,
 {
-    publish_scoped(publication, payload, None, WriteRouting::Automatic)
+    publish_scoped(
+        publication,
+        payload,
+        current_account,
+        WriteRouting::Automatic,
+    )
 }
 
 pub(crate) fn by(fava: &crate::Fava, author: PublicKey) -> PublishAs<'_> {

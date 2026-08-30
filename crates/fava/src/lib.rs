@@ -169,7 +169,11 @@ impl Fava {
     where
         P: publication::PublishPayload,
     {
-        publication::publish(self.publication.as_ref(), payload)
+        publication::publish(
+            self.publication.as_ref(),
+            payload,
+            self.session.current_account(),
+        )
     }
 
     /// Narrow one edit publication to this exact author.
