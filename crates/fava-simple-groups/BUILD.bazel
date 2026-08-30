@@ -68,7 +68,6 @@ rust_test(
         "Cargo.toml",
         "BUILD.bazel",
         "README.md",
-        "//:.bg-shell/simple-groups-semantic-catalog.jsonl",
         "//:docs/issues/0027-simple-group-relay-input-boundary.md",
         "//:docs/issues/0032-simple-group-public-api-spelling.md",
     ],

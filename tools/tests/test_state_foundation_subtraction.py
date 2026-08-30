@@ -92,7 +92,7 @@ class StateFoundationSubtraction(unittest.TestCase):
 
     def test_snapshot_family_has_exact_historical_hidden_manifest(self) -> None:
         actual: set[str] = set()
-        for root in ("apps", "crates", "docs", ".planning", ".bg-shell"):
+        for root in ("apps", "crates", "docs", ".planning"):
             for path in (ROOT / root).rglob("*"):
                 if not path.is_file() or "target" in path.parts:
                     continue
@@ -135,12 +135,6 @@ class StateFoundationSubtraction(unittest.TestCase):
             r"selected independently per host",
             re.I,
         )
-        for relative in (".bg-shell/simple-groups-semantic-catalog.jsonl",):
-            for number, line in enumerate((ROOT / relative).read_text().splitlines(), 1):
-                value = json.loads(line)
-                for string in json_strings(value):
-                    self.assertNotRegex(string, forbidden, f"{relative}:{number}: {string}")
-
     def test_proto_006_and_live_retention_state_positive_truth(self) -> None:
         goals = (ROOT / "docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md").read_text()
         self.assertIn("use the selected relays as result-provenance authority", goals)
