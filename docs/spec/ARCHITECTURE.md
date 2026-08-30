@@ -2259,11 +2259,14 @@ Committed source changes, route-plan changes, subscription-plan changes, session
 declarative dependency rather than an application-supplied key. `fava-observe`
 subscribes to the selected `Session` before reading its initial atomic account
 snapshot, binds one exact concrete query, and returns one stable application
-`Observation`. A later selection replaces local sources, route work, relay
-demand, and wire subscriptions behind that handle. Each concrete generation
-has distinct observation, demand, plan, operation, and wire identities, so a
-retired completion cannot affect the successor. Public diagnostics remain
-attributed to the stable application observation identity.
+`Observation`. Source open is rechecked against the exact account and session
+revision before activation. A later selection replaces local sources, route
+work, relay demand, and wire subscriptions behind that handle. The stable owner
+holds and synchronously retires its active child; each child has distinct
+observation, demand, plan, operation, and wire identities. Registry activation
+generation-gates snapshot and diagnostic publication, so a retired completion
+cannot affect the successor or expose an internal id. Public query and relay
+diagnostics remain attributed to the stable application observation identity.
 
 No current account binds every dependent axis to a present empty set and opens
 no relay demand. It never removes the filter: Nostr's wire representation treats
@@ -2478,9 +2481,12 @@ monotonic session revision is a coalescing signal for every committed account
 or signer mutation. Publication reloads the signer for its own exact event
 pubkey and acts only when that attachment generation changed.
 
-`current_account_snapshot` reads the optional selection and session revision
-under one session lock. Reactive consumers bind against that single tuple, not
-two independently read session facts.
+`current_account_snapshot` reads the optional selection and the revision of its
+last accepted selection mutation under one session lock. Signer and unrelated
+account mutations still advance the session-wide wake revision but do not
+invalidate that selection tuple. Reactive consumers bind against the tuple and
+linearize concrete-generation activation and delivery through the same session
+lock; they never compare selection validity to unrelated session churn.
 
 The public `Fava` facade delegates account operations and runtime `add_signer`,
 explicit `replace_signer`, and `remove_signer` operations to this owner.

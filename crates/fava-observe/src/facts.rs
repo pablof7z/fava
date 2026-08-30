@@ -163,7 +163,7 @@ impl Engine {
                 .map(|id| {
                     diagnostics::wire_fact(
                         id.clone(),
-                        slot.owners(id),
+                        self.registry.public_ids(slot.owners(id)),
                         slot.settled.get(id).copied().unwrap_or_default(),
                     )
                 })

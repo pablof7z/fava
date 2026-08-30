@@ -8,7 +8,7 @@
 //! evidence is not). Merging is the planner's decision, made later, with every
 //! logical demand still visible to it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Mutex;
 
@@ -32,6 +32,10 @@ struct Assigned {
 /// Everything the owner retains for one installed observation.
 struct Installed {
     cancel: CancellationToken,
+    public: ObservationId,
+    active: bool,
+    active_child: Option<ObservationId>,
+    children: BTreeSet<ObservationId>,
     relays: BTreeMap<RelaySessionKey, Assigned>,
     plan: Option<DesiredPlanEvidence>,
     route_revision: Option<u64>,
@@ -92,10 +96,31 @@ impl Registry {
             .map(|assigned| assigned.demand.filter.clone())
     }
 
-    /// Install one observation and return its identity plus its wake input.
+    /// Install one application-visible observation.
     pub(crate) fn install(&self, cancel: CancellationToken) -> Installation {
+        self.install_for(cancel, None)
+            .expect("a root observation has no parent to disappear")
+    }
+
+    /// Install one concrete generation for an existing public observation.
+    pub(crate) fn install_child(
+        &self,
+        cancel: CancellationToken,
+        public: ObservationId,
+    ) -> Option<Installation> {
+        self.install_for(cancel, Some(public))
+    }
+
+    fn install_for(
+        &self,
+        cancel: CancellationToken,
+        public: Option<ObservationId>,
+    ) -> Option<Installation> {
         let (wake, woken) = watch::channel(0);
         let mut state = self.lock();
+        if public.is_some_and(|id| !state.observations.contains_key(&id)) {
+            return None;
+        }
         state.next = state.next.saturating_add(1);
         let id = ObservationId::new(
             NonZeroU64::new(state.next).expect("the observation counter starts at one"),
@@ -104,6 +129,10 @@ impl Registry {
             id,
             Installed {
                 cancel: cancel.clone(),
+                public: public.unwrap_or(id),
+                active: public.is_none(),
+                active_child: None,
+                children: BTreeSet::new(),
                 relays: BTreeMap::new(),
                 plan: None,
                 route_revision: None,
@@ -113,7 +142,92 @@ impl Registry {
                 tasks: Vec::new(),
             },
         );
-        Installation { id, cancel, woken }
+        if let Some(public) = public {
+            state
+                .observations
+                .get_mut(&public)
+                .expect("the parent was checked before child installation")
+                .children
+                .insert(id);
+        }
+        Some(Installation { id, cancel, woken })
+    }
+
+    /// Make one concrete generation current and synchronously retire its predecessor.
+    pub(crate) fn activate_child(&self, public: ObservationId, child: ObservationId) -> bool {
+        let mut state = self.lock();
+        let child_matches = state
+            .observations
+            .get(&child)
+            .is_some_and(|installed| installed.public == public && !installed.active);
+        let parent_matches = state
+            .observations
+            .get(&public)
+            .is_some_and(|parent| parent.children.contains(&child));
+        if !child_matches || !parent_matches {
+            return false;
+        }
+        let retired = state
+            .observations
+            .get_mut(&public)
+            .expect("the parent was checked above")
+            .active_child
+            .replace(child);
+        state
+            .observations
+            .get_mut(&child)
+            .expect("the child was checked above")
+            .active = true;
+        if let Some(retired) = retired.filter(|retired| *retired != child) {
+            if let Some(parent) = state.observations.get_mut(&public) {
+                parent.children.remove(&retired);
+            }
+            if let Some(installed) = state.observations.remove(&retired) {
+                installed.cancel.cancel();
+                installed.wake.send_replace(u64::MAX);
+                drop(installed.tasks);
+            }
+        }
+        let revision = bump(&mut state.revision);
+        self.demand_changed.send_replace(revision);
+        true
+    }
+
+    /// Execute one publication or delivery while its exact owner remains active.
+    pub(crate) fn with_publication_evidence<R>(
+        &self,
+        public: ObservationId,
+        id: ObservationId,
+        action: impl FnOnce(&ObservationEvidence) -> R,
+    ) -> Option<R> {
+        let state = self.lock();
+        let installed = state.observations.get(&id)?;
+        let publishable = if public == id {
+            installed.active
+        } else {
+            installed.active
+                && installed.public == public
+                && state
+                    .observations
+                    .get(&public)
+                    .is_some_and(|parent| parent.active_child == Some(id))
+        };
+        publishable.then(|| action(&evidence_for(&state, installed)))
+    }
+
+    /// Translate, sort, and deduplicate live identities for public evidence.
+    pub(crate) fn public_ids(
+        &self,
+        values: impl IntoIterator<Item = ObservationId>,
+    ) -> Vec<ObservationId> {
+        let state = self.lock();
+        let mut values: Vec<_> = values
+            .into_iter()
+            .filter_map(|id| state.observations.get(&id).map(|entry| entry.public))
+            .collect();
+        values.sort_unstable();
+        values.dedup();
+        values
     }
 
     /// Replace the relays one observation demands.
@@ -188,9 +302,25 @@ impl Registry {
         let Some(installed) = state.observations.remove(&id) else {
             return;
         };
+        if installed.public != id
+            && let Some(parent) = state.observations.get_mut(&installed.public)
+        {
+            parent.children.remove(&id);
+            if parent.active_child == Some(id) {
+                parent.active_child = None;
+            }
+        }
+        let children = installed.children.clone();
         installed.cancel.cancel();
         installed.wake.send_replace(u64::MAX);
         drop(installed.tasks);
+        for child in children {
+            if let Some(child) = state.observations.remove(&child) {
+                child.cancel.cancel();
+                child.wake.send_replace(u64::MAX);
+                drop(child.tasks);
+            }
+        }
         let revision = bump(&mut state.revision);
         self.demand_changed.send_replace(revision);
     }
@@ -200,6 +330,9 @@ impl Registry {
         let state = self.lock();
         let mut desired: BTreeMap<RelaySessionKey, Vec<RelayDemand>> = BTreeMap::new();
         for installed in state.observations.values() {
+            if !installed.active {
+                continue;
+            }
             for (session, assigned) in &installed.relays {
                 if matches!(assigned.evidence.state, RelaySourceState::Withdrawn { .. }) {
                     continue;
@@ -355,26 +488,7 @@ impl Registry {
         let Some(installed) = state.observations.get(&id) else {
             return ObservationEvidence::default();
         };
-        ObservationEvidence {
-            relays: installed
-                .relays
-                .values()
-                .map(|assigned| assigned.evidence.clone())
-                .collect(),
-            plan: installed.plan.clone(),
-            coalesced: installed.coalesced,
-            live_shortfalls: installed
-                .live
-                .iter()
-                .filter(|(_, live)| live.refused > 0)
-                .map(|(session, live)| QueryShortfall::LiveRetentionLimit {
-                    session: session.clone(),
-                    limit: LIVE_EVENTS_PER_SESSION,
-                    refused: live.refused,
-                })
-                .collect(),
-            route_revision: installed.route_revision,
-        }
+        evidence_for(&state, installed)
     }
 
     /// Every currently installed observation, ascending.
@@ -439,6 +553,39 @@ pub(crate) struct ObservationEvidence {
     pub(crate) route_revision: Option<u64>,
 }
 
+fn evidence_for(state: &State, installed: &Installed) -> ObservationEvidence {
+    let mut relays: Vec<_> = installed
+        .relays
+        .values()
+        .map(|assigned| assigned.evidence.clone())
+        .collect();
+    for relay in &mut relays {
+        relay.shared_with = relay
+            .shared_with
+            .iter()
+            .filter_map(|id| state.observations.get(id).map(|entry| entry.public))
+            .collect();
+        relay.shared_with.sort_unstable();
+        relay.shared_with.dedup();
+    }
+    ObservationEvidence {
+        relays,
+        plan: installed.plan.clone(),
+        coalesced: installed.coalesced,
+        live_shortfalls: installed
+            .live
+            .iter()
+            .filter(|(_, live)| live.refused > 0)
+            .map(|(session, live)| QueryShortfall::LiveRetentionLimit {
+                session: session.clone(),
+                limit: LIVE_EVENTS_PER_SESSION,
+                refused: live.refused,
+            })
+            .collect(),
+        route_revision: installed.route_revision,
+    }
+}
+
 /// A route withdrawal keeps its evidence (QUERY-014); a closing observation
 /// keeps nothing, because the handle that would read it is gone.
 const fn retain_withdrawn(withdrawal: fava_query::RelayWithdrawal) -> bool {
@@ -466,4 +613,119 @@ fn planned_evidence(
 fn bump(revision: &mut u64) -> u64 {
     *revision = revision.saturating_add(1);
     *revision
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+    use std::sync::{Arc, Barrier, mpsc};
+
+    use fava_query::{Query, QueryBranchId, RelayWithdrawal, RouteOrigin};
+    use fava_relay::{RelayAccess, RelaySessionKey};
+    use fava_runtime::{Runtime, RuntimeConfig};
+
+    use super::Registry;
+
+    #[test]
+    fn provisional_children_never_contribute_demand_and_parent_close_removes_all() {
+        let registry = Registry::default();
+        let runtime = runtime();
+        let parent = registry.install(runtime.cancellation_token());
+        let first = registry
+            .install_child(runtime.cancellation_token(), parent.id)
+            .expect("parent exists");
+        let second = registry
+            .install_child(runtime.cancellation_token(), parent.id)
+            .expect("parent exists");
+        assign(&registry, first.id);
+        assign(&registry, second.id);
+
+        assert!(registry.desired().is_empty());
+        assert!(registry.activate_child(parent.id, first.id));
+        assert_eq!(registry.desired().values().flatten().count(), 1);
+
+        registry.withdraw(parent.id);
+        assert!(registry.desired().is_empty());
+        assert!(registry.open_observations().is_empty());
+    }
+
+    #[test]
+    fn close_cannot_cross_an_active_diagnostic_commit() {
+        let registry = Arc::new(Registry::default());
+        let runtime = runtime();
+        let parent = registry.install(runtime.cancellation_token());
+        let child = registry
+            .install_child(runtime.cancellation_token(), parent.id)
+            .expect("parent exists");
+        assert!(registry.activate_child(parent.id, child.id));
+        let entered = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let publisher = {
+            let registry = Arc::clone(&registry);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            std::thread::spawn(move || {
+                registry.with_publication_evidence(parent.id, child.id, |_| {
+                    entered.wait();
+                    release.wait();
+                })
+            })
+        };
+        entered.wait();
+        let (close_done, received) = mpsc::channel();
+        let withdrawal = {
+            let registry = Arc::clone(&registry);
+            std::thread::spawn(move || {
+                registry.withdraw(parent.id);
+                close_done.send(()).expect("close completion reports");
+            })
+        };
+        assert!(
+            received
+                .recv_timeout(std::time::Duration::from_millis(20))
+                .is_err()
+        );
+        release.wait();
+        assert_eq!(publisher.join().expect("publisher completes"), Some(()));
+        withdrawal.join().expect("withdrawal completes");
+        assert!(
+            registry
+                .with_publication_evidence(parent.id, child.id, |_| ())
+                .is_none()
+        );
+    }
+
+    fn assign(registry: &Registry, id: fava_query::ObservationId) {
+        let session = RelaySessionKey {
+            relay: fava_query::RelayUrl::parse("wss://relay.example").expect("relay URL"),
+            access: RelayAccess::Public,
+        };
+        let query = Query::events()
+            .from_relays([session.relay.clone()])
+            .expect("one relay is bounded");
+        registry.assign(
+            id,
+            QueryBranchId::ROOT,
+            [(
+                session,
+                (
+                    fava_subscriptions::demand_for_query(id, QueryBranchId::ROOT, &query),
+                    RouteOrigin::Explicit,
+                ),
+            )]
+            .into_iter()
+            .collect(),
+            None,
+            RelayWithdrawal::ObservationClosed,
+        );
+    }
+
+    fn runtime() -> Runtime {
+        let bound = NonZeroUsize::new(8).expect("nonzero");
+        Runtime::new(RuntimeConfig {
+            default_channel_depth: bound,
+            max_tasks: bound,
+            max_provider_operations: bound,
+        })
+    }
 }

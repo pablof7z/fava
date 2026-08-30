@@ -15,6 +15,10 @@ use nostr::key::{Keys, PublicKey};
 use nostr::types::Timestamp;
 
 #[tokio::test(flavor = "current_thread")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one causal wire transcript keeps REQ, CLOSE, EOSE, stale-event, and public-attribution assertions in order"
+)]
 async fn current_account_switch_replaces_exact_wire_demand() {
     let alice = Keys::generate();
     let bob = Keys::generate();
@@ -67,13 +71,23 @@ async fn current_account_switch_replaces_exact_wire_demand() {
     .await;
     assert_ne!(alice_subscription, bob_subscription);
     assert_eq!(observation.id(), observation_id);
+    let diagnostics = fava.diagnostics();
     assert_eq!(
-        fava.diagnostics()
+        diagnostics
             .queries
             .iter()
             .map(|query| query.observation)
             .collect::<Vec<_>>(),
         vec![observation_id]
+    );
+    assert!(
+        diagnostics
+            .relays
+            .iter()
+            .flat_map(|relay| &relay.subscriptions)
+            .flat_map(|wire| &wire.serves)
+            .all(|owner| *owner == observation_id),
+        "wire diagnostics expose only the stable public observation id"
     );
 
     push(

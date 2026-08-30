@@ -2,8 +2,8 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Barrier, mpsc};
 
 use fava_session::{Session, SessionError};
 use fava_signer::{Signer, SignerAvailability, SignerError};
@@ -210,6 +210,67 @@ fn signer_attachment_adds_an_account_and_removal_leaves_it_retained() {
         .expect("signer detaches without removing account");
     assert_eq!(session.accounts(), vec![alice_key]);
     assert!(session.signer(alice_key).is_none());
+}
+
+#[test]
+fn unrelated_mutations_do_not_change_the_selection_revision() {
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let session = Session::new(std::iter::empty()).expect("empty session");
+    session.add_account(alice).expect("Alice adds");
+    session.select_account(alice).expect("Alice selects");
+    let selected = session.current_account_snapshot();
+
+    session.add_account(bob).expect("Bob adds");
+    session
+        .add_signer(Arc::new(TestSigner(bob)))
+        .expect("Bob signer attaches");
+    session.remove_signer(bob).expect("Bob signer detaches");
+
+    assert_eq!(session.current_account_snapshot(), selected);
+    assert!(session.revision() > selected.1);
+}
+
+#[test]
+fn selected_account_cannot_change_inside_an_exact_owner_operation() {
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let session = Session::new(std::iter::empty()).expect("empty session");
+    session.add_account(alice).expect("Alice adds");
+    session.add_account(bob).expect("Bob adds");
+    session.select_account(alice).expect("Alice selects");
+    let expected = session.current_account_snapshot();
+    let entered = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+    let owner = {
+        let session = session.clone();
+        let entered = Arc::clone(&entered);
+        let release = Arc::clone(&release);
+        std::thread::spawn(move || {
+            session.if_current_account(expected, || {
+                entered.wait();
+                release.wait();
+            })
+        })
+    };
+    entered.wait();
+    let (selected, received) = mpsc::channel();
+    let selector = {
+        let session = session.clone();
+        std::thread::spawn(move || {
+            session.select_account(bob).expect("Bob selects");
+            selected.send(()).expect("selection completion reports");
+        })
+    };
+    assert!(
+        received
+            .recv_timeout(std::time::Duration::from_millis(20))
+            .is_err()
+    );
+    release.wait();
+    assert_eq!(owner.join().expect("owner operation completes"), Some(()));
+    selector.join().expect("selector completes");
+    assert_eq!(session.current_account(), Some(bob));
 }
 
 #[test]

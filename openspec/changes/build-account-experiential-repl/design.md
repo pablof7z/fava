@@ -40,13 +40,13 @@ Alternative: the app reads current key and calls `.by(key)`. Rejected because it
 
 The facade/query surface exposes the current public key as a reactive value accepted by author and tag-value filter axes. Empty selection is an empty set and therefore matches nothing; it never removes or widens the filter. This slice implements only the current-account root and the minimum binding needed by query filters, not general query-derived `ValueSet` algebra.
 
-An observation retains one stable application handle. Session revision changes trigger dependency recompilation inside the query/observation owner, which computes the new concrete query, updates route demand and relay subscriptions, re-evaluates cache/write-store sources, and publishes a new immutable snapshot. The app never closes or reopens it.
+An observation retains one stable application handle. Current-selection revision changes trigger dependency recompilation inside the query/observation owner, which computes the new concrete query, updates route demand and relay subscriptions, re-evaluates cache/write-store sources, and publishes a new immutable snapshot. Unrelated signer or account mutations may wake the owner but do not invalidate the current selection. The app never closes or reopens the observation.
 
 Alternative: have the app subscribe to session changes and rebuild `Query`. Rejected because `ID-002` assigns that work to Fava.
 
 ### Exact revision identity isolates late completions
 
-Each compiled account-dependent query generation carries the session revision and operation generation that produced it. Relay results, route changes, subscription events, and local-source completions apply only to the current exact generation. A switch retires old live demand while preserving cached public events and already accepted writes/receipts.
+Each compiled account-dependent query generation carries the current-selection revision and operation generation that produced it. Relay results, route changes, subscription events, and local-source completions apply only to the current exact generation. Activation and stable delivery linearize against selection mutation; active-owner validation and diagnostic commit are atomic. A switch retires every old or provisional child and its live demand while preserving cached public events and already accepted writes/receipts.
 
 Signer replacement uses existing exact attachment generation. Invocation begun under a retired generation cannot become a current signing completion; writes already accepted for that author remain inspectable and settle according to their own lifecycle.
 
@@ -66,7 +66,7 @@ The app is audited for explicit author threading, session-change listeners, quer
 
 - **Reactive query support reaches several core owners** → Land one vertical current-account slice with exact cross-owner evidence; do not generalize to all reactive values.
 - **Current selection and signer availability are distinct** → Model pubkey-only and signer-backed accounts explicitly; selection can support reads while writes report the existing typed signer outcome.
-- **Rapid switches can expose stale work** → Carry exact session revision plus operation generation through every late-completion boundary and test deliberate delays.
+- **Rapid switches can expose stale work** → Carry exact selection revision plus operation generation through every late-completion boundary and test deliberate delays.
 - **Second-consumer extraction can over-generalize** → Share only identical shell/terminal mechanics; keep account commands and result DTOs local.
 - **Ordinary relays may reorder frames** → Prove current snapshots through generation identity and matching `EOSE`, not arrival timing assumptions.
 

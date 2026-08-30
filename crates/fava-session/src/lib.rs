@@ -28,6 +28,7 @@ struct State {
     accounts: BTreeSet<PublicKey>,
     signers: BTreeMap<PublicKey, Attachment>,
     current_account: Option<PublicKey>,
+    current_account_revision: u64,
     revision: u64,
 }
 
@@ -100,6 +101,7 @@ impl Session {
                     accounts,
                     signers: indexed,
                     current_account: None,
+                    current_account_revision: 0,
                     revision,
                 }),
                 revision: revision_signal,
@@ -151,6 +153,7 @@ impl Session {
         }
         let revision = next_revision(state.revision)?;
         state.current_account = Some(public_key);
+        state.current_account_revision = revision;
         commit_revision(&mut state, &self.inner.revision, revision);
         Ok(())
     }
@@ -168,6 +171,7 @@ impl Session {
         }
         let revision = next_revision(state.revision)?;
         state.current_account = None;
+        state.current_account_revision = revision;
         commit_revision(&mut state, &self.inner.revision, revision);
         Ok(())
     }
@@ -178,14 +182,27 @@ impl Session {
         self.lock_state().current_account
     }
 
-    /// Atomically snapshot the current account and its session-wide revision.
+    /// Atomically snapshot the current account and its selection revision.
     ///
-    /// The revision advances for every account, selection, or signer mutation;
-    /// consumers compare the public key when only selection changes matter.
+    /// Signer and unrelated-account mutations do not advance this revision.
     #[must_use]
     pub fn current_account_snapshot(&self) -> (Option<PublicKey>, u64) {
         let state = self.lock_state();
-        (state.current_account, state.revision)
+        (state.current_account, state.current_account_revision)
+    }
+
+    /// Run one bounded owner operation only while an exact selection is current.
+    ///
+    /// The callback executes under the session lock and must not call another
+    /// session operation. This is the cross-owner linearization point used by
+    /// reactive observation activation and delivery.
+    pub fn if_current_account<R>(
+        &self,
+        expected: (Option<PublicKey>, u64),
+        action: impl FnOnce() -> R,
+    ) -> Option<R> {
+        let state = self.lock_state();
+        ((state.current_account, state.current_account_revision) == expected).then(action)
     }
 
     /// Remove one account, its attached signer, and its current selection.
@@ -204,6 +221,7 @@ impl Session {
         state.signers.remove(&public_key);
         if state.current_account == Some(public_key) {
             state.current_account = None;
+            state.current_account_revision = revision;
         }
         commit_revision(&mut state, &self.inner.revision, revision);
         Ok(())

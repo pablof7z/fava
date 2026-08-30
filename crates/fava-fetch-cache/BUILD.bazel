@@ -1,0 +1,16 @@
+# First-party BUILD for the `fava-fetch-cache` crate.
+
+load("@crates//:defs.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "lib",
+    crate_name = "fava_fetch_cache",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    compile_data = ["Cargo.toml"],
+    visibility = ["//visibility:public"],
+)

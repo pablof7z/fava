@@ -28,6 +28,12 @@ pub enum ObserveError {
     /// Relay demand could not be bound to one exact route plan.
     #[error("relay query refused: {0}")]
     Relay(String),
+    /// A current-account query has no selected session owner to observe.
+    #[error("current-account query requires a configured session")]
+    SessionUnconfigured,
+    /// Account selection changed too often to establish one coherent boundary.
+    #[error("current account did not stabilize while opening query sources")]
+    CurrentAccountUnstable,
     /// The engine is shutting down and admits no new observation.
     #[error("engine is shutting down")]
     EngineClosed,

@@ -59,6 +59,24 @@ async fn live_freshness_through_the_owner_contributes_relay_demand() {
     observation.close();
 }
 
+#[test]
+fn current_account_query_requires_a_session_owner() {
+    let assembly = assemble();
+
+    let error = match assembly
+        .observer
+        .open(Query::events().authors_current_account().cache_only())
+    {
+        Err(error) => error,
+        Ok(observation) => {
+            observation.close();
+            panic!("reactive query silently became permanently empty")
+        }
+    };
+
+    assert!(matches!(error, ObserveError::SessionUnconfigured));
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_cache_only_query_opens_no_relay_work() {
     let assembly = assemble();

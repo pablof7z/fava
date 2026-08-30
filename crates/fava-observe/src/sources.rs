@@ -49,7 +49,7 @@ impl OpenSources {
 /// Everything one observation's projection task needs.
 pub(crate) struct Projection {
     pub(crate) id: ObservationId,
-    pub(crate) diagnostic_id: ObservationId,
+    pub(crate) diagnostic_id: Option<ObservationId>,
     pub(crate) registry: Arc<Registry>,
     pub(crate) diagnostics: Arc<Diagnostics>,
     pub(crate) evaluator: Arc<dyn QueryEvaluator>,
@@ -179,12 +179,14 @@ async fn deliver(
         revision = bumped;
         next.revision = QueryRevision(revision);
         decorate(&registry, id, &mut next.evidence);
-        publish(&facts, &registry, id, diagnostic_id, &next.evidence);
+        if let Some(diagnostic_id) = diagnostic_id {
+            publish(&facts, &registry, id, diagnostic_id, &next.evidence);
+        }
         latest_tx.send_replace(Arc::new(next));
     }
     cache.close();
     writes.close();
-    if diagnostic_id == id {
+    if diagnostic_id == Some(id) {
         facts.forget_query(id);
     }
 }
@@ -228,14 +230,28 @@ pub(crate) fn publish(
     diagnostic_id: ObservationId,
     evidence: &QueryEvidence,
 ) {
-    let owned = registry.evidence(id);
-    facts.query(diagnostics::query_fact(
-        diagnostic_id,
-        owned.route_revision,
-        evidence.plan.as_ref().map(|plan| plan.revision),
-        &evidence.relays,
-        owned.coalesced,
-    ));
+    publish_and(facts, registry, id, diagnostic_id, evidence, || ());
+}
+
+/// Publish diagnostics and run one delivery under the same active-owner gate.
+pub(crate) fn publish_and<R>(
+    facts: &Diagnostics,
+    registry: &Registry,
+    id: ObservationId,
+    diagnostic_id: ObservationId,
+    evidence: &QueryEvidence,
+    action: impl FnOnce() -> R,
+) -> Option<R> {
+    registry.with_publication_evidence(diagnostic_id, id, |owned| {
+        facts.query(diagnostics::query_fact(
+            diagnostic_id,
+            owned.route_revision,
+            evidence.plan.as_ref().map(|plan| plan.revision),
+            &evidence.relays,
+            owned.coalesced,
+        ));
+        action()
+    })
 }
 
 fn report_skipped(

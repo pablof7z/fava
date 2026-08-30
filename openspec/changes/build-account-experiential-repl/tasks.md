@@ -22,8 +22,8 @@
 
 - [x] 4.1 Add query-domain evidence that author and tag-value filters accept the current-account reactive root, empty selection matches nothing, and the declarative query remains inspectable without a concrete app-supplied key.
 - [x] 4.2 Implement the minimum current-account reactive value binding without generalizing to query-derived `ValueSet` algebra; verify literal query behavior remains unchanged.
-- [x] 4.3 Add observation evidence that one stable handle recompiles, re-evaluates cache/write-store sources, reroutes, and updates relay subscriptions when session revision changes; verify the app never closes or reopens the observation.
-- [x] 4.4 Add delayed relay, route, subscription, and local-source completions across A→B→C switches; verify only the exact current session revision and operation generation can update the current snapshot or active demand.
+- [x] 4.3 Add observation evidence that one stable handle recompiles, re-evaluates cache/write-store sources, reroutes, and updates relay subscriptions when current-selection revision changes; verify unrelated session mutations do not reroot it and the app never closes or reopens the observation.
+- [x] 4.4 Add delayed relay, route, subscription, diagnostic, and local-source completions across A→B→C switches and close; verify only the exact current selection and operation generation can update the current snapshot, diagnostics, or active demand.
 - [x] 4.5 Prove removing/clearing current selection retracts account-dependent demand and yields a match-nothing snapshot without deleting cached public events or receipts.
 - [ ] 4.6 Run full query/observe/routing/subscription/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused reactive-query slice to `main`.
 
