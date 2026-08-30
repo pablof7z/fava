@@ -1,15 +1,15 @@
 ## 1. Current-account architecture
 
-- [ ] 1.1 Create one focused architecture issue mapping `ID-001`–`ID-003`, `WRITE-003`, and the partial reactive-query contract to current implementation gaps; verify exact owners and counterexamples for app-owned selection, explicit author threading, and manual query rebuilding.
-- [ ] 1.2 Define the minimum public vocabulary for optional current selection, current-account publication convenience, and `$currentPubkey` query binding; obtain Pablo’s explicit approval before code or `vocabulary.toml` changes.
+- [x] 1.1 Create one focused architecture issue mapping `ID-001`–`ID-003`, `WRITE-003`, and the partial reactive-query contract to current implementation gaps; verify exact owners and counterexamples for app-owned selection, explicit author threading, and manual query rebuilding.
+- [x] 1.2 Define the minimum public vocabulary for optional current selection, current-account publication convenience, and `$currentPubkey` query binding; obtain Pablo’s explicit approval before code or `vocabulary.toml` changes.
 - [ ] 1.3 Add cross-owner BDD scenarios and deliberate breaks for account switching, accepted-author stability, empty selection, automatic observation rerooting, rapid switches, and stale completions; verify each new scenario fails against current `main` for its named reason.
 
 ## 2. Session current-account owner
 
-- [ ] 2.1 Add owner-level tests for signer-backed and pubkey-only accounts, optional current selection, bounded account count, atomic select/clear/remove, and monotonic session revision; verify current implementation lacks the behavior.
-- [ ] 2.2 Implement current-account selection in the session owner without creating a second signer map or application-owned selected key; verify removing the selected account clears it while unrelated cached events, writes, and receipts remain untouched.
-- [ ] 2.3 Add exact-generation tests for signer replacement, removal, cancellation, and pending invocation completion; verify a retired signer generation cannot become current while account identity remains exact.
-- [ ] 2.4 Run full session/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused session slice to `main`.
+- [x] 2.1 Add owner-level tests for signer-backed and pubkey-only accounts, optional current selection, bounded account count, atomic select/clear/remove, and monotonic session revision; verify current implementation lacks the behavior.
+- [x] 2.2 Implement current-account selection in the session owner without creating a second signer map or application-owned selected key; verify removing the selected account clears it while unrelated cached events, writes, and receipts remain untouched.
+- [x] 2.3 Add exact-generation tests for signer replacement, removal, cancellation, and pending invocation completion; verify a retired signer generation cannot become current while account identity remains exact.
+- [x] 2.4 Run full session/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused session slice to `main`.
 
 ## 3. Current-account write resolution
 

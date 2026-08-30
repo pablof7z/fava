@@ -3,7 +3,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use fava_session::{Session, SessionError};
 use fava_signer::{Signer, SignerAvailability, SignerError};
@@ -121,6 +121,147 @@ fn invocation_is_exact_generation_and_returned_future_releases_replacement() {
     );
     assert!(!session.is_current(key, replacement_generation));
     drop(pending);
+}
+
+#[test]
+fn account_set_selection_and_revision_are_atomic_and_bounded() {
+    let alice_key = Keys::generate().public_key();
+    let bob_key = Keys::generate().public_key();
+    let alice = Arc::new(TestSigner(alice_key)) as Arc<dyn Signer>;
+    let session = Session::new([alice]).expect("signer-backed account seeds the session");
+    let initial_revision = session.revision();
+    let mut changes = session.subscribe();
+    let mut all_accounts = vec![alice_key, bob_key];
+    all_accounts.sort();
+
+    assert_eq!(session.accounts(), vec![alice_key]);
+    assert_eq!(session.current_account(), None);
+
+    session
+        .add_account(bob_key)
+        .expect("pubkey-only account adds");
+    assert_eq!(session.accounts(), all_accounts);
+    assert_eq!(session.revision(), initial_revision + 1);
+    assert!(changes.has_changed().expect("account addition signals"));
+    assert_eq!(*changes.borrow_and_update(), session.revision());
+
+    session
+        .select_account(alice_key)
+        .expect("known account selects");
+    assert_eq!(session.current_account(), Some(alice_key));
+    assert_eq!(session.revision(), initial_revision + 2);
+    assert!(changes.has_changed().expect("selection signals"));
+    assert_eq!(*changes.borrow_and_update(), session.revision());
+
+    session
+        .clear_current_account()
+        .expect("selection clears atomically");
+    assert_eq!(session.current_account(), None);
+    assert_eq!(session.revision(), initial_revision + 3);
+    assert!(changes.has_changed().expect("clear signals"));
+    assert_eq!(*changes.borrow_and_update(), session.revision());
+
+    session
+        .select_account(alice_key)
+        .expect("known account reselects");
+    assert_eq!(session.current_account(), Some(alice_key));
+    assert_eq!(session.revision(), initial_revision + 4);
+    assert!(changes.has_changed().expect("reselection signals"));
+    assert_eq!(*changes.borrow_and_update(), session.revision());
+
+    session
+        .remove_account(alice_key)
+        .expect("selected account removes atomically");
+    assert_eq!(session.accounts(), vec![bob_key]);
+    assert_eq!(session.current_account(), None);
+    assert!(session.signer(alice_key).is_none());
+    assert_eq!(session.revision(), initial_revision + 5);
+    assert!(changes.has_changed().expect("removal signals once"));
+    assert_eq!(*changes.borrow_and_update(), session.revision());
+    assert!(!changes.has_changed().expect("one removal has one signal"));
+
+    assert_eq!(
+        session.remove_account(alice_key),
+        Err(SessionError::MissingAccount(alice_key))
+    );
+    assert_eq!(
+        session.select_account(alice_key),
+        Err(SessionError::MissingAccount(alice_key))
+    );
+    assert_eq!(session.revision(), initial_revision + 5);
+    assert!(!changes.has_changed().expect("refusals do not signal"));
+}
+
+#[test]
+fn signer_attachment_adds_an_account_and_removal_leaves_it_retained() {
+    let alice_key = Keys::generate().public_key();
+    let signer = Arc::new(TestSigner(alice_key)) as Arc<dyn Signer>;
+    let session = Session::new(std::iter::empty()).expect("empty session");
+
+    session
+        .add_signer(signer)
+        .expect("signer adds its missing account");
+    assert_eq!(session.accounts(), vec![alice_key]);
+    let attachment_generation = session.signer(alice_key).expect("signer is attached").0;
+    assert_eq!(attachment_generation, session.revision());
+
+    session
+        .remove_signer(alice_key)
+        .expect("signer detaches without removing account");
+    assert_eq!(session.accounts(), vec![alice_key]);
+    assert!(session.signer(alice_key).is_none());
+}
+
+#[test]
+fn current_account_snapshot_never_mixes_a_selection_with_another_revision() {
+    let alice = Keys::generate().public_key();
+    let bob = Keys::generate().public_key();
+    let session = Session::new(std::iter::empty()).expect("empty session");
+    session.add_account(alice).expect("Alice adds");
+    session.add_account(bob).expect("Bob adds");
+    session
+        .select_account(alice)
+        .expect("Alice selects at revision three");
+    let writing = Arc::new(AtomicBool::new(true));
+    let writer_session = session.clone();
+    let writer_active = Arc::clone(&writing);
+    let writer = std::thread::spawn(move || {
+        for _ in 0..10_000 {
+            writer_session.select_account(bob).expect("Bob selects");
+            writer_session.select_account(alice).expect("Alice selects");
+        }
+        writer_active.store(false, Ordering::SeqCst);
+    });
+
+    while writing.load(Ordering::SeqCst) {
+        let (current, revision) = session.current_account_snapshot();
+        let expected = if revision % 2 == 0 { bob } else { alice };
+        assert_eq!(current, Some(expected));
+    }
+    writer.join().expect("selection writer completes");
+}
+
+#[test]
+fn account_capacity_refuses_without_mutating_existing_selection() {
+    let session = Session::new(std::iter::empty()).expect("empty session");
+    let mut keys: Vec<_> = (0..64).map(|_| Keys::generate().public_key()).collect();
+    keys.sort();
+    for key in &keys {
+        session.add_account(*key).expect("bounded account adds");
+    }
+    session
+        .select_account(keys[0])
+        .expect("selected account remains current");
+    let revision = session.revision();
+    let overflow = Keys::generate().public_key();
+
+    assert_eq!(
+        session.add_account(overflow),
+        Err(SessionError::AccountCapacityExceeded { limit: 64 })
+    );
+    assert_eq!(session.accounts(), keys);
+    assert_eq!(session.current_account(), Some(keys[0]));
+    assert_eq!(session.revision(), revision);
 }
 
 struct TestSigner(PublicKey);

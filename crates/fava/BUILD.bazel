@@ -250,6 +250,22 @@ rust_test(
 )
 
 rust_test(
+    name = "current_account",
+    srcs = ["tests/current_account.rs"],
+    crate_name = "current_account",
+    edition = crate_edition(),
+    aliases = aliases(normal_dev = True, proc_macro_dev = True),
+    deps = deduplicated_deps(all_crate_deps(normal = True, normal_dev = True) + [
+        ":lib",
+        "//crates/fava-event-cache-memory:lib",
+        "//crates/fava-query-standard:lib",
+        "//crates/fava-write-store-memory:lib",
+    ], FAVA_TEST_DEPS),
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    compile_data = ["Cargo.toml"],
+)
+
+rust_test(
     name = "automatic_publication",
     srcs = ["tests/automatic_publication.rs"],
     crate_name = "automatic_publication",
