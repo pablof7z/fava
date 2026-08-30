@@ -45,6 +45,7 @@ pub use fava_routing::RoutePlan;
 pub use fava_runtime::{Runtime, RuntimeConfig};
 use fava_session::Session;
 pub use fava_session::SessionError;
+pub use fava_signer::SignerAvailability;
 pub use fava_write::{
     AuthoredEventBuilder, EditApplier, EditApplierSink, Event, EventBuildError, EventBuilder,
     EventEdit, EventValue, Kind, PublicKey, Receipt, ReceiptId, ReceiptOutcome,

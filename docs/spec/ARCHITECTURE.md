@@ -2490,6 +2490,8 @@ lock; they never compare selection validity to unrelated session churn.
 
 The public `Fava` facade delegates account operations and runtime `add_signer`,
 explicit `replace_signer`, and `remove_signer` operations to this owner.
+`signer_status` reads the same exact attachment generation and availability for
+account presentation; it creates no second status or lifecycle.
 Builder-supplied signers seed the same `Session`; they are not copied into
 publication-owned state. These operations mutate the running instance; they do
 not rebuild `Fava`, replace the write store, or change accepted write and

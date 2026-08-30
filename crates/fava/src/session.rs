@@ -72,6 +72,12 @@ impl Fava {
         self.session.revision()
     }
 
+    /// Snapshot one account's exact signer attachment generation and availability.
+    #[must_use]
+    pub fn signer_status(&self, public_key: PublicKey) -> Option<(u64, SignerAvailability)> {
+        self.session.signer(public_key)
+    }
+
     /// Sign one exact unsigned event with its currently attached author signer.
     ///
     /// This is for Nostr protocols that require a signed artifact without a
