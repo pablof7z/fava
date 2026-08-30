@@ -1,7 +1,7 @@
-//! Hash, seal, and exhaustive process-secret scan support for simple-groups evidence.
+//! Hash, seal, and bounded evidence-snapshot support for simple-groups evidence.
 //!
 //! This file stays just above the 500-line soft limit so the bounded immutable snapshot and the
-//! hashes, seals, and secret scans derived only from that snapshot retain one evidence authority.
+//! hashes and seals derived only from that snapshot retain one evidence authority.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use fava::{Kind, Timestamp};
 use nostr::event::{Event, EventBuilder, FinalizeEvent};
 use nostr::key::Keys;
-use nostr::nips::nip19::ToBech32;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -25,64 +24,6 @@ pub(crate) const MAX_EVIDENCE_ENTRIES: usize = 256;
 pub(crate) const MAX_EVIDENCE_FILE_BYTES: u64 = 2_097_152;
 pub(crate) const MAX_EVIDENCE_AGGREGATE_BYTES: u64 = 8_388_608;
 pub(crate) const MAX_MANIFEST_BYTES: u64 = 262_144;
-
-pub(crate) const SECRET_SCAN_CLASSES: [&str; 10] = [
-    "scenario_seed_utf8",
-    "private_secret_raw",
-    "private_secret_hex",
-    "private_secret_upper_hex",
-    "private_secret_nsec_lower",
-    "private_secret_nsec_upper",
-    "private_secret_nip21_lower",
-    "private_secret_nip21_upper_payload",
-    "private_secret_nip21_upper_scheme",
-    "private_secret_nip21_upper",
-];
-
-pub(crate) fn secret_needles(seed: &[u8], keys: &[&Keys]) -> CanaryResult<Vec<Vec<u8>>> {
-    if seed.is_empty() || keys.is_empty() {
-        return Err(CanaryError::new(
-            "simple-groups secret scan inputs were empty",
-        ));
-    }
-    let mut needles = vec![seed.to_vec()];
-    for keys in keys {
-        let secret = keys.secret_key();
-        let hex = secret.to_secret_hex();
-        let nsec = secret.to_bech32().map_err(error)?;
-        let upper = nsec.to_ascii_uppercase();
-        needles.extend([
-            secret.to_secret_bytes().to_vec(),
-            hex.as_bytes().to_vec(),
-            hex.to_ascii_uppercase().into_bytes(),
-            nsec.as_bytes().to_vec(),
-            upper.as_bytes().to_vec(),
-            format!("nostr:{nsec}").into_bytes(),
-            format!("nostr:{upper}").into_bytes(),
-            format!("NOSTR:{nsec}").into_bytes(),
-            format!("NOSTR:{upper}").into_bytes(),
-        ]);
-    }
-    Ok(needles)
-}
-
-pub(crate) fn assert_secrets_absent(root: &Path, needles: &[Vec<u8>]) -> CanaryResult<()> {
-    let snapshot = EvidenceSnapshot::capture(root)?;
-    let files = snapshot.files().map(Path::to_owned).collect::<Vec<_>>();
-    for needle in needles {
-        if needle.is_empty() {
-            return Err(CanaryError::new("simple-groups secret needle was empty"));
-        }
-        for relative in &files {
-            if snapshot.contains(relative, needle)? {
-                return Err(CanaryError::new(
-                    "retained simple-groups evidence contained secret material",
-                ));
-            }
-        }
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 pub(crate) fn artifact_hashes(root: &Path) -> CanaryResult<BTreeMap<String, String>> {

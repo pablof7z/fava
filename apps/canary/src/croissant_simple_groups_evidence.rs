@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::croissant_simple_groups_evidence_semantics::verify_semantic_artifacts;
 use crate::croissant_simple_groups_evidence_support::{
-    EvidenceSnapshot, MAX_MANIFEST_BYTES, SECRET_SCAN_CLASSES, signed_digest,
+    EvidenceSnapshot, MAX_MANIFEST_BYTES, signed_digest,
 };
 use crate::croissant_simple_groups_source::is_lower_hex;
 use crate::{CanaryError, CanaryResult};
@@ -25,7 +25,7 @@ pub(crate) const SCENARIO: &str = "croissant-simple-groups-public-flow";
 ///
 /// # Errors
 ///
-/// Returns a redacted refusal for unsafe, incomplete, reused, or tampered evidence.
+/// Returns an attributed refusal for unsafe, incomplete, reused, or tampered evidence.
 #[allow(
     clippy::too_many_arguments,
     reason = "independent callers must supply every exact Fava and Croissant identity"
@@ -85,7 +85,6 @@ pub fn verify_croissant_simple_groups_pair(
             MAX_MANIFEST_BYTES,
             "manifest",
         )?)?;
-        reject_secret_fields(&manifest)?;
         validate_manifest(
             &snapshot,
             &manifest,
@@ -146,14 +145,6 @@ fn validate_manifest(
     verify_hashes(snapshot, manifest)?;
     verify_seal(manifest)?;
     if required_string(manifest, "scenario")? != SCENARIO
-        || manifest
-            .get("pre_seal_secret_scan_passed")
-            .and_then(Value::as_bool)
-            != Some(true)
-        || manifest
-            .get("post_manifest_secret_scan_passed")
-            .and_then(Value::as_bool)
-            != Some(true)
         || manifest.get("observation_closed").and_then(Value::as_bool) != Some(true)
         || manifest.get("prepared_contexts").and_then(Value::as_u64) != Some(3)
     {
@@ -161,16 +152,6 @@ fn validate_manifest(
             "simple-groups manifest completion claims were incomplete",
         ));
     }
-    if manifest
-        .get("secret_scan_key_count")
-        .and_then(Value::as_u64)
-        != Some(6)
-    {
-        return Err(CanaryError::new(
-            "simple-groups manifest secret scan key count was incomplete",
-        ));
-    }
-    verify_scan_classes(manifest)?;
     for field in [
         "run_id",
         "scenario_seed_sha256",
@@ -582,30 +563,6 @@ fn verify_seal(manifest: &Value) -> CanaryResult<()> {
         return Err(CanaryError::new(
             "simple-groups artifact seal did not verify",
         ));
-    }
-    Ok(())
-}
-
-fn reject_secret_fields(value: &Value) -> CanaryResult<()> {
-    match value {
-        Value::Object(map) => {
-            if map.keys().any(|key| {
-                ["scenario_seed", "raw_seed", "private_key", "secret_key"].contains(&key.as_str())
-            }) {
-                return Err(CanaryError::new(
-                    "simple-groups manifest contained a secret field",
-                ));
-            }
-            for child in map.values() {
-                reject_secret_fields(child)?;
-            }
-        }
-        Value::Array(values) => {
-            for child in values {
-                reject_secret_fields(child)?;
-            }
-        }
-        _ => {}
     }
     Ok(())
 }

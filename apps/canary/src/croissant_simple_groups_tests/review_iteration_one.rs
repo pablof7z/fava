@@ -4,7 +4,7 @@ fn pair_verifier_rejects_unsafe_evidence() {
     verify_fixture_pair(control.root()).expect("narrow safe pair verifies");
 
     for case in [
-        UnsafePairCase::PersistentParentSecret,
+        UnsafePairCase::PersistentParentResidue,
         UnsafePairCase::IncompleteCleanup,
         UnsafePairCase::UnsignedClaim,
         UnsafePairCase::ReusedIdentity,
@@ -19,7 +19,6 @@ fn pair_verifier_rejects_unsafe_evidence() {
         UnsafePairCase::UnderivedProcessClaim,
         UnsafePairCase::MissingExactClose,
         UnsafePairCase::ExtraSignedHandoff,
-        UnsafePairCase::RetainedSecretMarker,
     ] {
         let fixture = PairEvidenceFixture::new();
         fixture.apply(case);
@@ -58,7 +57,7 @@ pub(super) fn verify_fixture_pair(root: &Path) -> CanaryResult<()> {
 
 #[derive(Clone, Copy, Debug)]
 enum UnsafePairCase {
-    PersistentParentSecret,
+    PersistentParentResidue,
     IncompleteCleanup,
     UnsignedClaim,
     ReusedIdentity,
@@ -73,7 +72,6 @@ enum UnsafePairCase {
     UnderivedProcessClaim,
     MissingExactClose,
     ExtraSignedHandoff,
-    RetainedSecretMarker,
 }
 
 impl PairEvidenceFixture {

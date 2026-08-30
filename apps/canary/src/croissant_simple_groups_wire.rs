@@ -151,109 +151,133 @@ fn query_completion(
             "final wire log ended with an unterminated record",
         ));
     }
-    let mut frames = wire
-        .split_inclusive('\n')
-        .filter(|line| line.ends_with('\n'))
-        .map(|line| serde_json::from_str::<Value>(line.trim_end()).map_err(CanaryError::from))
-        .collect::<CanaryResult<Vec<_>>>()?;
-    frames.sort_by_key(|frame| frame.get("sequence").and_then(Value::as_u64));
     let mut sequences = BTreeSet::new();
     let mut queries = BTreeMap::<QueryRole, QueryState>::new();
-
-    for frame in frames {
-        let sequence = required_u64(&frame, "sequence")?;
-        if !sequences.insert(sequence) {
-            return Err(CanaryError::new("wire log repeated a sequence"));
-        }
-        let connection = required_u64(&frame, "connection")?;
-        let direction = required_str(&frame, "direction")?;
-        let frame_type = required_str(&frame, "frame_type")?;
-        if frame_type == "close" && direction == "client_to_relay" {
-            // One connection now carries every query routed to that relay, so
-            // the socket closes once, after the last query withdrew its text
-            // CLOSE.
-            for state in queries
-                .values_mut()
-                .filter(|state| state.connection == connection)
-            {
-                if !state.saw_text_close || state.saw_socket_close {
-                    return Err(CanaryError::new(
-                        "query socket CLOSE was duplicate or preceded text CLOSE",
-                    ));
-                }
-                state.saw_socket_close = true;
-            }
-            continue;
-        }
-        if frame_type != "text" {
-            continue;
-        }
-        let payload = required_str(&frame, "payload")?;
-        let decoded: Value = serde_json::from_str(payload)?;
-        let Some(array) = decoded.as_array() else {
-            return Err(CanaryError::new("wire text frame was not an array"));
-        };
-        match (direction, array.first().and_then(Value::as_str)) {
-            ("client_to_relay", Some("REQ")) => {
-                let (role, subscription) = classify_request(
-                    array,
-                    simple_group_id,
-                    multi_group_id,
-                    bootstrap_event_id,
-                    bootstrap_subscription,
-                )?;
-                // Distinct query roles legitimately share one connection; what
-                // must stay unique is the wire subscription each role owns.
-                if queries
-                    .values()
-                    .any(|state| state.subscription == subscription)
-                    || queries
-                        .insert(
-                            role,
-                            QueryState {
-                                connection,
-                                subscription,
-                                saw_eose: false,
-                                saw_text_close: false,
-                                saw_socket_close: false,
-                            },
-                        )
-                        .is_some()
-                {
-                    return Err(CanaryError::new("wire repeated an exact query role"));
-                }
-            }
-            ("relay_to_client", Some("EOSE")) => {
-                let subscription = exact_terminal_subscription(array, "EOSE")?;
-                let state = exact_query_mut(&mut queries, connection, subscription)?;
-                if state.saw_eose || state.saw_text_close || state.saw_socket_close {
-                    return Err(CanaryError::new("wire EOSE was duplicate or out of order"));
-                }
-                state.saw_eose = true;
-            }
-            ("client_to_relay", Some("CLOSE")) => {
-                let subscription = exact_terminal_subscription(array, "CLOSE")?;
-                let state = exact_query_mut(&mut queries, connection, subscription)?;
-                if !state.saw_eose || state.saw_text_close || state.saw_socket_close {
-                    return Err(CanaryError::new(
-                        "wire CLOSE was duplicate or preceded EOSE",
-                    ));
-                }
-                state.saw_text_close = true;
-            }
-            (_, Some("REQ" | "EOSE" | "CLOSE")) => {
-                return Err(CanaryError::new(
-                    "wire query frame used the wrong direction",
-                ));
-            }
-            _ => {}
-        }
+    for frame in sorted_frames(wire)? {
+        apply_query_frame(
+            &frame,
+            simple_group_id,
+            multi_group_id,
+            bootstrap_event_id,
+            bootstrap_subscription,
+            &mut sequences,
+            &mut queries,
+        )?;
     }
 
     Ok(queries.len() == EXPECTED_QUERY_COUNT
         && queries
             .values()
             .all(|state| state.saw_eose && state.saw_text_close && state.saw_socket_close))
+}
+
+fn sorted_frames(wire: &str) -> CanaryResult<Vec<Value>> {
+    let mut frames = wire
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+        .map(|line| serde_json::from_str::<Value>(line.trim_end()).map_err(CanaryError::from))
+        .collect::<CanaryResult<Vec<_>>>()?;
+    frames.sort_by_key(|frame| frame.get("sequence").and_then(Value::as_u64));
+    Ok(frames)
+}
+
+fn apply_query_frame(
+    frame: &Value,
+    simple_group_id: &str,
+    multi_group_id: &str,
+    bootstrap_event_id: &str,
+    bootstrap_subscription: &str,
+    sequences: &mut BTreeSet<u64>,
+    queries: &mut BTreeMap<QueryRole, QueryState>,
+) -> CanaryResult<()> {
+    let sequence = required_u64(frame, "sequence")?;
+    if !sequences.insert(sequence) {
+        return Err(CanaryError::new("wire log repeated a sequence"));
+    }
+    let connection = required_u64(frame, "connection")?;
+    let direction = required_str(frame, "direction")?;
+    let frame_type = required_str(frame, "frame_type")?;
+    if frame_type == "close" && direction == "client_to_relay" {
+        // One connection now carries every query routed to that relay, so
+        // the socket closes once, after the last query withdrew its text
+        // CLOSE.
+        for state in queries
+            .values_mut()
+            .filter(|state| state.connection == connection)
+        {
+            if !state.saw_text_close || state.saw_socket_close {
+                return Err(CanaryError::new(
+                    "query socket CLOSE was duplicate or preceded text CLOSE",
+                ));
+            }
+            state.saw_socket_close = true;
+        }
+        return Ok(());
+    }
+    if frame_type != "text" {
+        return Ok(());
+    }
+    let payload = required_str(frame, "payload")?;
+    let decoded: Value = serde_json::from_str(payload)?;
+    let Some(array) = decoded.as_array() else {
+        return Err(CanaryError::new("wire text frame was not an array"));
+    };
+    match (direction, array.first().and_then(Value::as_str)) {
+        ("client_to_relay", Some("REQ")) => {
+            let (role, subscription) = classify_request(
+                array,
+                simple_group_id,
+                multi_group_id,
+                bootstrap_event_id,
+                bootstrap_subscription,
+            )?;
+            // Distinct query roles legitimately share one connection; what
+            // must stay unique is the wire subscription each role owns.
+            if queries
+                .values()
+                .any(|state| state.subscription == subscription)
+                || queries
+                    .insert(
+                        role,
+                        QueryState {
+                            connection,
+                            subscription,
+                            saw_eose: false,
+                            saw_text_close: false,
+                            saw_socket_close: false,
+                        },
+                    )
+                    .is_some()
+            {
+                return Err(CanaryError::new("wire repeated an exact query role"));
+            }
+        }
+        ("relay_to_client", Some("EOSE")) => {
+            let subscription = exact_terminal_subscription(array, "EOSE")?;
+            let state = exact_query_mut(queries, connection, subscription)?;
+            if state.saw_eose || state.saw_text_close || state.saw_socket_close {
+                return Err(CanaryError::new("wire EOSE was duplicate or out of order"));
+            }
+            state.saw_eose = true;
+        }
+        ("client_to_relay", Some("CLOSE")) => {
+            let subscription = exact_terminal_subscription(array, "CLOSE")?;
+            let state = exact_query_mut(queries, connection, subscription)?;
+            if !state.saw_eose || state.saw_text_close || state.saw_socket_close {
+                return Err(CanaryError::new(
+                    "wire CLOSE was duplicate or preceded EOSE",
+                ));
+            }
+            state.saw_text_close = true;
+        }
+        (_, Some("REQ" | "EOSE" | "CLOSE")) => {
+            return Err(CanaryError::new(
+                "wire query frame used the wrong direction",
+            ));
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn classify_request(

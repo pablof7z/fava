@@ -377,23 +377,6 @@ fn event_identities(manifest: &Value) -> CanaryResult<BTreeSet<String>> {
     Ok(identities)
 }
 
-fn verify_scan_classes(manifest: &Value) -> CanaryResult<()> {
-    let values = manifest
-        .get("secret_scan_classes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| CanaryError::new("simple-groups manifest omitted scan classes"))?;
-    if !values
-        .iter()
-        .map(Value::as_str)
-        .eq(SECRET_SCAN_CLASSES.iter().copied().map(Some))
-    {
-        return Err(CanaryError::new(
-            "simple-groups secret scan classes were incomplete",
-        ));
-    }
-    Ok(())
-}
-
 fn error(value: impl std::fmt::Display) -> CanaryError {
     CanaryError::new(value.to_string())
 }

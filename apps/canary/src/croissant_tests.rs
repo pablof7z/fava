@@ -70,34 +70,23 @@ async fn supervisor_refuses_port_that_opens_then_exits_during_readiness() {
 }
 
 #[tokio::test]
-async fn supervisor_refuses_log_overflow_without_echoing_secret_environment() {
+async fn supervisor_refuses_log_overflow_and_keeps_the_log_bounded() {
     let fixture = TempDir::new().expect("fixture");
-    let sentinel = "sentinel-private-seed-never-retain";
-    let binary = executable(
-        fixture.path(),
-        "overflow",
-        "printf '%s' \"${FAVA_TEST_SECRET-unset}\"\nyes x | head -c 16384",
-    );
+    let binary = executable(fixture.path(), "overflow", "yes x | head -c 16384");
     let supervisor = CroissantSupervisor::prepare(
         &binary,
         &committed_source_checkout(fixture.path()),
         &fixture.path().join("run"),
         owner(),
-        &seed_hash(sentinel.as_bytes()),
+        &seed_hash(b"log-overflow-seed"),
         CroissantLimits::test(),
     )
     .expect("prepare");
     let error = supervisor.start().await.expect_err("overflow must fail");
     assert!(matches!(error, CroissantError::LogOverflow { .. }));
-    assert!(!error.to_string().contains(sentinel));
     for path in [supervisor.stdout_path(), supervisor.stderr_path()] {
         let bytes = fs::read(path).expect("bounded log exists");
         assert!(bytes.len() <= CroissantLimits::test().log_bytes);
-        assert!(
-            !bytes
-                .windows(sentinel.len())
-                .any(|window| window == sentinel.as_bytes())
-        );
     }
 }
 

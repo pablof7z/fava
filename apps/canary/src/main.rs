@@ -168,60 +168,78 @@ async fn run() -> canary::CanaryResult<()> {
     }
 }
 
+async fn run_dx_flows_scenario(
+    mut arguments: impl Iterator<Item = String>,
+) -> canary::CanaryResult<()> {
+    let mut relay_url = None;
+    let mut seed = String::from("dx-flows");
+    let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
+    while let Some(flag) = arguments.next() {
+        let value = arguments.next().ok_or_else(usage)?;
+        match flag.as_str() {
+            "--relay-url" => relay_url = Some(value),
+            "--seed" => seed = value,
+            "--runs-dir" => runs_directory = PathBuf::from(value),
+            _ => return Err(usage()),
+        }
+    }
+    let run = canary::run_flows_scenario(FlowOptions {
+        relay_url: relay_url.ok_or_else(usage)?,
+        seed,
+        runs_directory,
+    })
+    .await?;
+    println!("passed dx-flows");
+    println!("evidence: {}", run.display());
+    Ok(())
+}
+
+async fn run_croissant_nip02_public_flow_scenario(
+    mut arguments: impl Iterator<Item = String>,
+) -> canary::CanaryResult<()> {
+    let options = smoke_options(&mut arguments, "croissant-nip02")?;
+    let outcome = run_croissant_nip02_scenario(CroissantNip02Options {
+        relay_binary: options.relay_binary,
+        scenario_seed: options.seed,
+        runs_directory: options.runs_directory,
+    })
+    .await?;
+    println!("passed croissant-nip02-public-flow");
+    println!("evidence: {}", outcome.run_directory.display());
+    Ok(())
+}
+
+async fn run_croissant_simple_groups_public_flow_scenario(
+    mut arguments: impl Iterator<Item = String>,
+) -> canary::CanaryResult<()> {
+    let options = simple_groups_options(&mut arguments)?;
+    let run_directory = run_croissant_simple_groups_scenario(
+        options.relay_binary,
+        options.source_checkout,
+        options.fava_build_attestation,
+        options.fava_build_source_manifest,
+        options.scenario_seed,
+        options.runs_directory,
+    )
+    .await?;
+    println!("passed croissant-simple-groups-public-flow");
+    println!("evidence: {}", run_directory.display());
+    Ok(())
+}
+
 async fn run_scenario(mut arguments: impl Iterator<Item = String>) -> canary::CanaryResult<()> {
     let scenario = arguments.next().ok_or_else(usage)?;
     if let Some(entry) = canary::blocked(&scenario) {
         return canary::refuse(entry).map(|()| unreachable!("a blocked scenario always refuses"));
     }
     if scenario == "dx-flows" {
-        let mut relay_url = None;
-        let mut seed = String::from("dx-flows");
-        let mut runs_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runs");
-        while let Some(flag) = arguments.next() {
-            let value = arguments.next().ok_or_else(usage)?;
-            match flag.as_str() {
-                "--relay-url" => relay_url = Some(value),
-                "--seed" => seed = value,
-                "--runs-dir" => runs_directory = PathBuf::from(value),
-                _ => return Err(usage()),
-            }
-        }
-        let run = canary::run_flows_scenario(FlowOptions {
-            relay_url: relay_url.ok_or_else(usage)?,
-            seed,
-            runs_directory,
-        })
-        .await?;
-        println!("passed dx-flows");
-        println!("evidence: {}", run.display());
-        return Ok(());
+        return run_dx_flows_scenario(arguments).await;
     }
     if scenario == "croissant-nip02-public-flow" {
-        let options = smoke_options(&mut arguments, "croissant-nip02")?;
-        let outcome = run_croissant_nip02_scenario(CroissantNip02Options {
-            relay_binary: options.relay_binary,
-            scenario_seed: options.seed,
-            runs_directory: options.runs_directory,
-        })
-        .await?;
-        println!("passed croissant-nip02-public-flow");
-        println!("evidence: {}", outcome.run_directory.display());
-        return Ok(());
+        return run_croissant_nip02_public_flow_scenario(arguments).await;
     }
     if scenario == "croissant-simple-groups-public-flow" {
-        let options = simple_groups_options(&mut arguments)?;
-        let run_directory = run_croissant_simple_groups_scenario(
-            options.relay_binary,
-            options.source_checkout,
-            options.fava_build_attestation,
-            options.fava_build_source_manifest,
-            options.scenario_seed,
-            options.runs_directory,
-        )
-        .await?;
-        println!("passed croissant-simple-groups-public-flow");
-        println!("evidence: {}", run_directory.display());
-        return Ok(());
+        return run_croissant_simple_groups_public_flow_scenario(arguments).await;
     }
     let evidence = match scenario.as_str() {
         "multi-relay-dedup-provenance" | "reconnect-generation" => {

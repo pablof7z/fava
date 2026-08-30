@@ -100,6 +100,29 @@ pub(crate) async fn execute_multi_group_live_flow(
     )?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
+    bootstrap_multi_group_live_groups(&publisher, &author, &relays, &group_ids, now).await?;
+    let (event_id, event_signature) =
+        publish_multi_group_live_event(&publisher, &author, &groups, now).await?;
+    let observed_relays =
+        observe_multi_group_live_event(&observer, &groups, &relays, &event_id, &event_signature)
+            .await?;
+
+    Ok(MultiGroupLiveFacts {
+        group_ids,
+        event_id,
+        event_signature,
+        observed_relays,
+    })
+}
+
+#[cfg(test)]
+async fn bootstrap_multi_group_live_groups(
+    publisher: &Fava,
+    author: &Keys,
+    relays: &[RelayUrl; 2],
+    group_ids: &[String; 2],
+    now: u64,
+) -> CanaryResult<()> {
     for (index, group_id) in group_ids.iter().enumerate() {
         let create = EventBuilder::new(Kind::from_u16(9_007))
             .created_at(Timestamp::from(now + u64::try_from(index).map_err(error)?))
@@ -108,14 +131,23 @@ pub(crate) async fn execute_multi_group_live_flow(
             .by(author.public_key())
             .build()
             .map_err(error)?
-            .finalize(&author)
+            .finalize(author)
             .map_err(error)?;
-        for relay in &relays {
-            let receipt = publish_signed(&publisher, [relay.clone()], create.clone()).await?;
+        for relay in relays {
+            let receipt = publish_signed(publisher, [relay.clone()], create.clone()).await?;
             require_terminal(&receipt, 1)?;
         }
     }
+    Ok(())
+}
 
+#[cfg(test)]
+async fn publish_multi_group_live_event(
+    publisher: &Fava,
+    author: &Keys,
+    groups: &[SimpleGroup; 2],
+    now: u64,
+) -> CanaryResult<(String, String)> {
     let write = publisher
         .by(author.public_key())
         .publish(
@@ -130,13 +162,22 @@ pub(crate) async fn execute_multi_group_live_flow(
         .map_err(error)?;
     let receipt = wait_terminal(&write).await?;
     require_terminal(&receipt, 2)?;
-    let (event_id, event_signature) = match &receipt.current.event {
-        fava::EventValue::Signed(event) => (event.id.to_hex(), event.sig.to_string()),
+    match &receipt.current.event {
+        fava::EventValue::Signed(event) => Ok((event.id.to_hex(), event.sig.to_string())),
         fava::EventValue::Unsigned(_) => {
-            return Err(CanaryError::new("multi-group live event remained unsigned"));
+            Err(CanaryError::new("multi-group live event remained unsigned"))
         }
-    };
+    }
+}
 
+#[cfg(test)]
+async fn observe_multi_group_live_event(
+    observer: &Fava,
+    groups: &[SimpleGroup; 2],
+    relays: &[RelayUrl; 2],
+    event_id: &str,
+    event_signature: &str,
+) -> CanaryResult<[String; 2]> {
     let mut observed_relays = [String::new(), String::new()];
     for (index, group) in groups.iter().enumerate() {
         let mut observation = observer
@@ -153,8 +194,8 @@ pub(crate) async fn execute_multi_group_live_flow(
             )
             .await
             .map_err(error)?;
-        let expected_id = event_id.clone();
-        let expected_signature = event_signature.clone();
+        let expected_id = event_id.to_owned();
+        let expected_signature = event_signature.to_owned();
         let snapshot = wait_observation(&mut observation, |snapshot| {
             snapshot.events.len() == 1
                 && snapshot.events[0].id().to_hex() == expected_id
@@ -176,13 +217,7 @@ pub(crate) async fn execute_multi_group_live_flow(
             .to_string();
         observation.close();
     }
-
-    Ok(MultiGroupLiveFacts {
-        group_ids,
-        event_id,
-        event_signature,
-        observed_relays,
-    })
+    Ok(observed_relays)
 }
 
 pub(crate) async fn execute_public_flow(
@@ -195,10 +230,10 @@ pub(crate) async fn execute_public_flow(
     let proxy_a = WireProxy::start(ready[0].endpoint, &root.join("wire/a.jsonl")).await?;
     let proxy_b = WireProxy::start(ready[1].endpoint, &root.join("wire/b.jsonl")).await?;
     let urls = [proxy_a.url(), proxy_b.url()];
-    let result = tokio::time::timeout(
+    let result = Box::pin(tokio::time::timeout(
         Duration::from_millis(OPERATION_MS),
         execute_with_proxies(root, seed, &urls),
-    )
+    ))
     .await
     .map_err(|_| CanaryError::new("simple-groups public-flow deadline elapsed"));
     let (stop_a, stop_b) = tokio::join!(proxy_a.shutdown(), proxy_b.shutdown());

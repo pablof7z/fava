@@ -292,7 +292,9 @@ fn parse_urls(relays: &[LabRelay]) -> CanaryResult<Vec<RelayUrl>> {
 
 async fn wait_events(observation: &mut Observation, count: usize) -> CanaryResult<()> {
     observation
-        .wait_until(Duration::from_secs(5), |snapshot| snapshot.events.len() >= count)
+        .wait_until(Duration::from_secs(5), |snapshot| {
+            snapshot.events.len() >= count
+        })
         .await
         .map_err(error)?
         .ok_or_else(|| CanaryError::new("routing observation deadline elapsed"))?;

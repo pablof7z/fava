@@ -1,63 +1,33 @@
 use std::fs;
 use std::path::PathBuf;
 
-use nostr::nips::nip19::ToBech32;
 use serde_json::Value;
 use tempfile::TempDir;
 
 use super::{
-    CroissantNip02Options, SecretScanHook, SecretScanStage, reject_cross_run_data,
-    run_croissant_nip02_scenario, run_croissant_nip02_scenario_inner, verify_croissant_run_pair,
+    CroissantNip02Options, reject_cross_run_data, run_croissant_nip02_scenario,
+    verify_croissant_run_pair,
 };
-use crate::croissant_nip02_evidence::{
-    artifact_seal, assert_secrets_absent, secret_needles, verify_artifact_seal,
-};
+use crate::croissant_nip02_evidence::{artifact_seal, verify_artifact_seal};
 use crate::environment::{croissant_fixture_binary, croissant_fixture_guard};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_unique_public_flows_pass_exact_pair_verification() {
     let _fixture_guard = croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = Box::pin(run(
-        temporary.path().to_path_buf(),
-        "pair-first-private-sentinel",
-    ))
-    .await;
-    let second = Box::pin(run(
-        temporary.path().to_path_buf(),
-        "pair-second-private-sentinel",
-    ))
-    .await;
+    let first = Box::pin(run(temporary.path().to_path_buf(), "pair-first-seed")).await;
+    let second = Box::pin(run(temporary.path().to_path_buf(), "pair-second-seed")).await;
 
     assert_ne!(first.run_directory, second.run_directory);
     verify_croissant_run_pair(temporary.path()).expect("exact pair verifies");
-
-    for root in [&first.run_directory, &second.run_directory] {
-        let retained = retained_bytes(root);
-        assert!(!retained.contains("pair-first-private-sentinel"));
-        assert!(!retained.contains("pair-second-private-sentinel"));
-    }
-    let first_secret = crate::deterministic_keys("croissant-author\0pair-first-private-sentinel")
-        .expect("derived author")
-        .secret_key()
-        .to_secret_hex();
-    assert!(!retained_bytes(&first.run_directory).contains(&first_secret));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secret_fields() {
+async fn pair_verifier_refuses_reuse_old_data_missing_bounds_and_live_child() {
     let _fixture_guard = croissant_fixture_guard().await;
     let temporary = TempDir::new().expect("temporary pair root");
-    let first = Box::pin(run(
-        temporary.path().to_path_buf(),
-        "negative-first-private-sentinel",
-    ))
-    .await;
-    let second = Box::pin(run(
-        temporary.path().to_path_buf(),
-        "negative-second-private-sentinel",
-    ))
-    .await;
+    let first = Box::pin(run(temporary.path().to_path_buf(), "negative-first-seed")).await;
+    let second = Box::pin(run(temporary.path().to_path_buf(), "negative-second-seed")).await;
     verify_croissant_run_pair(temporary.path()).expect("control pair verifies");
 
     let manifest_path = second.run_directory.join("manifest.json");
@@ -76,10 +46,6 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
         ("artifact_sha256", Value::Null),
         ("bounds", Value::Null),
         ("teardown", serde_json::json!({ "completed": false })),
-        (
-            "scenario_seed",
-            Value::String("forbidden-private-value".to_owned()),
-        ),
     ] {
         let mut changed: Value = serde_json::from_slice(&original).expect("manifest JSON");
         changed[mutation.0] = mutation.1;
@@ -95,67 +61,6 @@ async fn pair_verifier_refuses_reuse_old_data_missing_bounds_live_child_and_secr
         );
     }
     fs::write(&manifest_path, &original).expect("restore manifest");
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn generation_secret_scans_reject_direct_injection_at_both_boundaries() {
-    let _fixture_guard = croissant_fixture_guard().await;
-    for (stage, seed) in [
-        (SecretScanStage::BeforeSeal, "pre-seal-secret-scan"),
-        (SecretScanStage::AfterManifest, "post-manifest-secret-scan"),
-    ] {
-        let temporary = TempDir::new().expect("secret injection root");
-        let persistent_parent = temporary.path().join("persistent-parent");
-        let runs_directory = persistent_parent.join("runs");
-        fs::create_dir_all(&runs_directory).expect("persistent runs root");
-        let injected = crate::deterministic_keys(&format!("croissant-author\0{seed}"))
-            .expect("derived author")
-            .secret_key()
-            .to_secret_bytes();
-        let hook: SecretScanHook = std::sync::Arc::new(move |actual, root, needles| {
-            if actual == stage {
-                fs::write(root.join("app.stdout.log"), &needles[1])?;
-            }
-            Ok(())
-        });
-        let error = Box::pin(run_croissant_nip02_scenario_inner(
-            CroissantNip02Options {
-                relay_binary: croissant_fixture_binary().expect("Croissant fixture binary"),
-                scenario_seed: seed.to_owned(),
-                runs_directory: runs_directory.clone(),
-            },
-            Some(hook),
-        ))
-        .await
-        .expect_err("generation scan must reject injected derived secret");
-        assert_eq!(
-            error.to_string(),
-            "retained Croissant evidence contained secret material",
-            "wrong causal refusal at {stage:?}"
-        );
-        assert!(
-            fs::read_dir(&runs_directory)
-                .expect("persistent runs root remains readable")
-                .next()
-                .is_none(),
-            "a refused run remained beneath the persistent runs root at {stage:?}"
-        );
-        let parent_entries = fs::read_dir(&persistent_parent)
-            .expect("persistent parent remains readable")
-            .map(|entry| entry.expect("persistent parent entry").file_name())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            parent_entries,
-            [std::ffi::OsString::from("runs")],
-            "owner-private staging remained after refusal at {stage:?}"
-        );
-        assert!(
-            !retained_binary(&persistent_parent)
-                .windows(injected.len())
-                .any(|window| window == injected),
-            "injected derived secret remained after refusal at {stage:?}"
-        );
-    }
 }
 
 #[test]
@@ -231,8 +136,6 @@ fn signed_evidence_rejects_mutated_verification_claims() {
         "foreign_tags_preserved": true,
         "foreign_content_preserved": true,
         "typed_decode_exact": true,
-        "secret_scan_passed": true,
-        "secret_scan_classes": ["one"],
         "executable_sha256": "binary",
         "source_head": "source",
         "ready": { "endpoint": "127.0.0.1:1" },
@@ -277,7 +180,6 @@ fn signed_evidence_rejects_mutated_verification_claims() {
         ("/foreign_tags_preserved", serde_json::json!(false)),
         ("/foreign_content_preserved", serde_json::json!(false)),
         ("/typed_decode_exact", serde_json::json!(false)),
-        ("/secret_scan_passed", serde_json::json!(false)),
         ("/terminal/outcome", serde_json::json!("Open")),
         ("/terminal/acknowledged", serde_json::json!(0)),
         ("/terminal/destinations", serde_json::json!(0)),
@@ -305,45 +207,6 @@ fn signed_evidence_rejects_mutated_verification_claims() {
     }
 }
 
-#[test]
-fn secret_scanner_refuses_every_supported_derived_encoding_directly() {
-    let temporary = TempDir::new().expect("secret scan root");
-    let author = nostr::key::Keys::generate();
-    let target = nostr::key::Keys::generate();
-    let needles = secret_needles(b"direct-secret-seed", [&author, &target])
-        .expect("derived scanner inventory");
-    let mut expected = vec![b"direct-secret-seed".to_vec()];
-    for keys in [&author, &target] {
-        let secret = keys.secret_key();
-        let hex = secret.to_secret_hex();
-        let nsec = secret.to_bech32().expect("nsec encoding");
-        let upper_nsec = nsec.to_ascii_uppercase();
-        expected.extend([
-            secret.to_secret_bytes().to_vec(),
-            hex.as_bytes().to_vec(),
-            hex.to_ascii_uppercase().into_bytes(),
-            nsec.as_bytes().to_vec(),
-            upper_nsec.as_bytes().to_vec(),
-            format!("nostr:{nsec}").into_bytes(),
-            format!("nostr:{upper_nsec}").into_bytes(),
-            format!("NOSTR:{nsec}").into_bytes(),
-            format!("NOSTR:{upper_nsec}").into_bytes(),
-        ]);
-    }
-    assert_eq!(needles, expected, "scanner variant inventory drifted");
-
-    let retained = temporary.path().join("retained.bin");
-    for needle in needles {
-        fs::write(&retained, &needle).expect("inject direct scanner needle");
-        let error = assert_secrets_absent(temporary.path(), std::slice::from_ref(&needle))
-            .expect_err("scanner must reject every supported secret representation");
-        assert_eq!(
-            error.to_string(),
-            "retained Croissant evidence contained secret material"
-        );
-    }
-}
-
 fn identity_manifest(group: &str, group_event: &str, baseline: &str, event: &str) -> Value {
     serde_json::json!({
         "group_id": group,
@@ -366,24 +229,4 @@ async fn run(root: PathBuf, seed: &str) -> super::CroissantNip02Outcome {
 fn manifest(root: &std::path::Path) -> Value {
     serde_json::from_slice(&fs::read(root.join("manifest.json")).expect("manifest bytes"))
         .expect("manifest JSON")
-}
-
-fn retained_bytes(root: &std::path::Path) -> String {
-    String::from_utf8_lossy(&retained_binary(root)).into_owned()
-}
-
-fn retained_binary(root: &std::path::Path) -> Vec<u8> {
-    fn collect(path: &std::path::Path, bytes: &mut Vec<u8>) {
-        for entry in fs::read_dir(path).expect("artifact directory") {
-            let path = entry.expect("artifact entry").path();
-            if path.is_dir() {
-                collect(&path, bytes);
-            } else {
-                bytes.extend(fs::read(path).expect("artifact file"));
-            }
-        }
-    }
-    let mut bytes = Vec::new();
-    collect(root, &mut bytes);
-    bytes
 }

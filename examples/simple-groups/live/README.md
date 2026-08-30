@@ -6,7 +6,10 @@ artifacts, and an independent NIP-01 WebSocket `REQ`/`EOSE` reader. It never
 constructs, signs, routes, or publishes an event. The REPL command files do
 that through its public Fava assembly.
 
-`discover` reports candidates without selecting one or claiming a live proof:
+`discover` reports candidates without selecting one or claiming a live proof.
+Its Croissant candidates are, in order, `SIMPLE_GROUPS_NIP29_RELAY`, `croissant`
+on `PATH`, then `FAVA_CROISSANT_BIN` (falling back to
+`/Users/pablofernandez/Work/croissant/croissant` when that variable is unset):
 
 ```sh
 python3 examples/simple-groups/live/harness.py discover
@@ -24,10 +27,15 @@ it creates any relay data.
 artifacts="$(mktemp -d examples/simple-groups/live/runs/smoke.XXXXXX)"
 rmdir "$artifacts"
 python3 examples/simple-groups/live/harness.py run \
-  --nip29-bin /Users/pablofernandez/Work/croissant/croissant \
+  --nip29-bin "${FAVA_CROISSANT_BIN:-/Users/pablofernandez/Work/croissant/croissant}" \
   --ordinary-bin "$(command -v nostr-rs-relay)" \
   --artifacts "$artifacts"
 ```
+
+`--nip29-bin` is always required and always explicit; `FAVA_CROISSANT_BIN` is
+just the environment variable this README's own examples read to name that
+path without hardcoding it twice. Set it to point `discover` and these
+examples at a different Croissant checkout.
 
 The smoke command file proves exact create and arbitrary-kind content events:
 their IDs and authors come from typed REPL JSONL results, while the harness

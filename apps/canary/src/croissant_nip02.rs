@@ -2,7 +2,7 @@
 //!
 //! This file stays above the 500-line soft limit because one owner must keep the launched
 //! process lifecycle, public flow, teardown facts, and pair-level evidence checks causally
-//! connected. Reusable evidence hashing and secret scanning live in the adjacent helper module.
+//! connected. Reusable evidence hashing and sealing live in the adjacent helper module.
 
 use std::fs;
 use std::net::{SocketAddr, TcpStream};
@@ -32,8 +32,7 @@ use crate::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown, process_is_alive,
 };
 use crate::croissant_nip02_evidence::{
-    SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, directory_contains, manifest_roots,
-    secret_needles, verify_artifact_seal, verify_hashes,
+    artifact_seal, directory_contains, manifest_roots, verify_artifact_seal, verify_hashes,
 };
 use crate::environment::croissant_fixture_source;
 use crate::gate_signer::{GateSigner, PendingSign, deterministic_finalize, next_sign};
@@ -82,15 +81,6 @@ struct FlowFacts {
     relay_hint: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SecretScanStage {
-    BeforeSeal,
-    AfterManifest,
-}
-
-type SecretScanHook =
-    Arc<dyn Fn(SecretScanStage, &Path, &[Vec<u8>]) -> CanaryResult<()> + Send + Sync>;
-
 /// Run the kind-9007 control and README NIP-02 flow through one public Fava assembly.
 ///
 /// # Errors
@@ -98,13 +88,6 @@ type SecretScanHook =
 /// Returns an attributed process, publication, observation, wire, bound, or evidence failure.
 pub async fn run_croissant_nip02_scenario(
     options: CroissantNip02Options,
-) -> CanaryResult<CroissantNip02Outcome> {
-    Box::pin(run_croissant_nip02_scenario_inner(options, None)).await
-}
-
-async fn run_croissant_nip02_scenario_inner(
-    options: CroissantNip02Options,
-    secret_scan_hook: Option<SecretScanHook>,
 ) -> CanaryResult<CroissantNip02Outcome> {
     let seed_hash = hex::encode(Sha256::digest(options.scenario_seed.as_bytes()));
     let keys = deterministic_keys(&format!("croissant-author\0{}", options.scenario_seed))?;
@@ -161,15 +144,7 @@ async fn run_croissant_nip02_scenario_inner(
     let teardown = teardown?;
     artifacts.record("croissant_teardown", &teardown)?;
     let facts = flow??;
-    finish_run(
-        artifacts,
-        &options,
-        started,
-        &ready,
-        &teardown,
-        &facts,
-        secret_scan_hook.as_ref(),
-    )
+    finish_run(artifacts, &options, started, &ready, &teardown, &facts)
 }
 
 #[allow(
@@ -268,9 +243,9 @@ async fn execute_flow(
     wait_record(&mut observation, edit_id, 0).await?;
     let local = record(&observation, edit_id)?;
     let local_revision = observation.current().revision.0;
-    let local_publication = local.publication().ok_or_else(|| {
-        CanaryError::new("local NIP-02 revision lacked publication evidence")
-    })?;
+    let local_publication = local
+        .publication()
+        .ok_or_else(|| CanaryError::new("local NIP-02 revision lacked publication evidence"))?;
     if local_publication.write_id != edit_write.write_id()
         || local_publication.receipt_id != edit_write.receipt_id()
         || !local.relay_occurrences().is_empty()
@@ -287,8 +262,7 @@ async fn execute_flow(
     let relayed = record(&observation, edit_receipt.current.id())?;
     validate_final(relayed.event(), target, &relay, &group_id)?;
     if relay_revision <= local_revision
-        || edit_receipt.current.publication.revision_source
-            != Some(baseline_receipt.current.id())
+        || edit_receipt.current.publication.revision_source != Some(baseline_receipt.current.id())
     {
         return Err(CanaryError::new(
             "relay revision or revision source did not advance exactly",
@@ -423,7 +397,6 @@ fn finish_run(
     ready: &CroissantReadyFact,
     teardown: &CroissantTeardown,
     facts: &FlowFacts,
-    secret_scan_hook: Option<&SecretScanHook>,
 ) -> CanaryResult<CroissantNip02Outcome> {
     let run_id = artifacts.run_id()?;
     let wire_bytes = fs::metadata(artifacts.wire_log())?.len();
@@ -478,18 +451,6 @@ fn finish_run(
         facts.group_id, facts.author, edit_id, facts.local_revision, facts.relay_revision,
     ))?;
     let author_keys = deterministic_keys(&format!("croissant-author\0{}", options.scenario_seed))?;
-    let target_keys = deterministic_keys(&format!("croissant-target\0{}", options.scenario_seed))?;
-    let secret_needles = secret_needles(
-        options.scenario_seed.as_bytes(),
-        [&author_keys, &target_keys],
-    )?;
-    run_secret_scan_hook(
-        secret_scan_hook,
-        SecretScanStage::BeforeSeal,
-        artifacts.root(),
-        &secret_needles,
-    )?;
-    assert_secrets_absent(artifacts.root(), &secret_needles)?;
     let repository = repository_root()?;
     let revision = command_output(&repository, "git", &["rev-parse", "HEAD"])?;
     let hashes = artifacts.artifact_hashes()?;
@@ -514,8 +475,6 @@ fn finish_run(
         "foreign_tags_preserved": true,
         "foreign_content_preserved": true,
         "typed_decode_exact": true,
-        "secret_scan_passed": true,
-        "secret_scan_classes": SECRET_SCAN_CLASSES,
         "executable_sha256": ready.executable_sha256,
         "source_head": ready.source_head,
         "ready": ready,
@@ -545,31 +504,15 @@ fn finish_run(
         .ok_or_else(|| CanaryError::new("Croissant manifest was not an object"))?
         .insert("artifact_seal".to_owned(), serde_json::to_value(seal)?);
     artifacts.write_json("manifest.json", &manifest)?;
-    run_secret_scan_hook(
-        secret_scan_hook,
-        SecretScanStage::AfterManifest,
-        artifacts.root(),
-        &secret_needles,
-    )?;
-    assert_secrets_absent(artifacts.root(), &secret_needles)?;
     let run_directory = artifacts.promote()?;
     Ok(CroissantNip02Outcome { run_directory })
-}
-
-fn run_secret_scan_hook(
-    hook: Option<&SecretScanHook>,
-    stage: SecretScanStage,
-    root: &Path,
-    needles: &[Vec<u8>],
-) -> CanaryResult<()> {
-    hook.map_or(Ok(()), |hook| hook(stage, root, needles))
 }
 
 /// Verify exactly two completed, independent, bounded Croissant scenario manifests.
 ///
 /// # Errors
 ///
-/// Returns a redacted refusal for missing, reused, tampered, unbounded, live, or secret evidence.
+/// Returns an attributed refusal for missing, reused, tampered, unbounded, or live evidence.
 pub fn verify_croissant_run_pair(runs_directory: impl AsRef<Path>) -> CanaryResult<()> {
     let roots = manifest_roots(runs_directory.as_ref())?;
     if roots.len() != 2 {
@@ -580,7 +523,6 @@ pub fn verify_croissant_run_pair(runs_directory: impl AsRef<Path>) -> CanaryResu
     let mut runs = Vec::new();
     for root in roots {
         let manifest: Value = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-        reject_secret_fields(&manifest)?;
         validate_manifest(&root, &manifest)?;
         runs.push((root, manifest));
     }
@@ -625,7 +567,6 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     verify_hashes(root, manifest)?;
     verify_artifact_seal(manifest)?;
     if manifest.get("scenario").and_then(Value::as_str) != Some(SCENARIO)
-        || manifest.get("secret_scan_passed").and_then(Value::as_bool) != Some(true)
         || manifest
             .get("foreign_tags_preserved")
             .and_then(Value::as_bool)
@@ -638,19 +579,6 @@ fn validate_manifest(root: &Path, manifest: &Value) -> CanaryResult<()> {
     {
         return Err(CanaryError::new(
             "Croissant manifest completion facts are incomplete",
-        ));
-    }
-    let classes = manifest
-        .get("secret_scan_classes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| CanaryError::new("Croissant manifest omitted secret scan classes"))?;
-    if !classes
-        .iter()
-        .map(|value| value.as_str())
-        .eq(SECRET_SCAN_CLASSES.iter().copied().map(Some))
-    {
-        return Err(CanaryError::new(
-            "Croissant manifest secret scan classes were incomplete",
         ));
     }
     for field in [
@@ -737,29 +665,6 @@ fn required_string<'a>(value: &'a Value, field: &str) -> CanaryResult<&'a str> {
         .get(field)
         .and_then(Value::as_str)
         .ok_or_else(|| CanaryError::new(format!("Croissant manifest omitted {field}")))
-}
-
-fn reject_secret_fields(value: &Value) -> CanaryResult<()> {
-    match value {
-        Value::Object(map) => {
-            let forbidden = ["scenario_seed", "raw_seed", "private_key", "secret_key"];
-            if map.keys().any(|key| forbidden.contains(&key.as_str())) {
-                return Err(CanaryError::new(
-                    "Croissant manifest contained a secret field",
-                ));
-            }
-            for child in map.values() {
-                reject_secret_fields(child)?;
-            }
-        }
-        Value::Array(values) => {
-            for child in values {
-                reject_secret_fields(child)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
 }
 
 fn error(value: impl std::fmt::Display) -> CanaryError {

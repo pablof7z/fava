@@ -53,6 +53,10 @@ SCENARIOS = LIVE / "scenarios"
 INSPECTION_SECONDS = 10.0
 GROUP_ID_PATTERN = __import__("re").compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
+# Last-resort fallback when neither --nip29-bin nor FAVA_CROISSANT_BIN names a
+# Croissant checkout. See FAVA_CROISSANT_BIN in README.md.
+DEFAULT_CROISSANT_BINARY = "/Users/pablofernandez/Work/croissant/croissant"
+
 
 def json_line(value: dict[str, Any]) -> str:
     """Render deterministic, one-object-per-line evidence."""
@@ -487,7 +491,7 @@ def discover(_: argparse.Namespace) -> int:
         "nip29": [
             os.environ.get("SIMPLE_GROUPS_NIP29_RELAY"),
             shutil.which("croissant"),
-            "/Users/pablofernandez/Work/croissant/croissant",
+            os.environ.get("FAVA_CROISSANT_BIN", DEFAULT_CROISSANT_BINARY),
         ],
         "ordinary": [os.environ.get("SIMPLE_GROUPS_ORDINARY_RELAY"), shutil.which("nostr-rs-relay")],
     }

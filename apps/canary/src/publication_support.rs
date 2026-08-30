@@ -100,7 +100,9 @@ pub(crate) async fn wait_record(
 
 pub(crate) async fn wait_empty(observation: &mut Observation) -> CanaryResult<()> {
     observation
-        .wait_until(Duration::from_secs(5), |snapshot| snapshot.events.is_empty())
+        .wait_until(Duration::from_secs(5), |snapshot| {
+            snapshot.events.is_empty()
+        })
         .await
         .map_err(error)?
         .ok_or_else(|| CanaryError::new("empty observation deadline elapsed"))?;

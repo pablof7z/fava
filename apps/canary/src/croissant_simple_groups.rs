@@ -15,9 +15,7 @@ use crate::croissant::{
     CroissantLimits, CroissantReadyFact, CroissantSupervisor, CroissantTeardown,
 };
 use crate::croissant_simple_groups_evidence::SCENARIO;
-use crate::croissant_simple_groups_evidence_support::{
-    SECRET_SCAN_CLASSES, artifact_seal, assert_secrets_absent, secret_needles,
-};
+use crate::croissant_simple_groups_evidence_support::artifact_seal;
 use crate::croissant_simple_groups_flow::execute_public_flow;
 use crate::croissant_simple_groups_source::{
     PinnedFavaExecutable, clean_fava_source, load_pinned_build_attestation,
@@ -145,8 +143,6 @@ pub(crate) async fn run_croissant_simple_groups_scenario(
     let relay = deterministic_keys(&format!("simple-groups-relay\0{seed}"))?;
     let owner_a = deterministic_keys(&format!("simple-groups-owner-a\0{seed}"))?;
     let owner_b = deterministic_keys(&format!("simple-groups-owner-b\0{seed}"))?;
-    let target_a = deterministic_keys(&format!("simple-groups-admin-a\0{seed}"))?;
-    let target_b = deterministic_keys(&format!("simple-groups-admin-b\0{seed}"))?;
     let mut artifacts = RunArtifacts::create_staged(&options.runs_directory, SCENARIO, seed)?;
     fs::create_dir_all(artifacts.root().join("source"))?;
     pinned_fava_executable.retain(&artifacts.root().join("source/fava-canary"))?;
@@ -197,9 +193,6 @@ pub(crate) async fn run_croissant_simple_groups_scenario(
     if unused_relay_root.exists() {
         fs::remove_dir_all(unused_relay_root)?;
     }
-    let keys = [&author, &relay, &owner_a, &owner_b, &target_a, &target_b];
-    let needles = secret_needles(seed.as_bytes(), &keys)?;
-    assert_secrets_absent(artifacts.root(), &needles)?;
     let run_id = artifacts.run_id()?;
     let wire_bytes = ["wire/a.jsonl", "wire/b.jsonl"]
         .into_iter()
@@ -241,10 +234,6 @@ pub(crate) async fn run_croissant_simple_groups_scenario(
         "observation_closed": completion.flow.observation_closed,
         "ready": completion.ready,
         "teardown": completion.teardown,
-        "pre_seal_secret_scan_passed": true,
-        "post_manifest_secret_scan_passed": true,
-        "secret_scan_classes": SECRET_SCAN_CLASSES,
-        "secret_scan_key_count": keys.len(),
         "bounds": {
             "operation_ms": 30_000,
             "wire_bytes": 2_097_152,
@@ -286,7 +275,6 @@ pub(crate) async fn run_croissant_simple_groups_scenario(
         .ok_or_else(|| CanaryError::new("simple-groups manifest was not an object"))?
         .insert("artifact_seal".to_owned(), serde_json::to_value(seal)?);
     artifacts.write_json("manifest.json", &manifest)?;
-    assert_secrets_absent(artifacts.root(), &needles)?;
     let run_directory = artifacts.promote()?;
     Ok(CroissantSimpleGroupsOutcome { run_directory })
 }

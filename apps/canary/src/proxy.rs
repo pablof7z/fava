@@ -54,13 +54,14 @@ impl WireProxy {
                         let connection_log = Arc::clone(&log);
                         let connection_inject = task_inject.subscribe();
                         connections.spawn(async move {
-                            let result = handle_connection(
+                            let result = Box::pin(handle_connection(
                                 stream,
                                 upstream,
                                 connection,
                                 connection_log,
                                 connection_inject,
-                            ).await;
+                            ))
+                            .await;
                             if let Err(error) = &result {
                                 log_proxy_error(connection, &error);
                             }

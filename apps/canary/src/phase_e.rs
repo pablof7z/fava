@@ -111,8 +111,7 @@ async fn gate4_nip05_negative_cache() -> CanaryResult<String> {
     let fetcher = CountingFetcher::new(404, String::new());
     let ttl = Duration::from_secs(60);
     // First resolve: HTTP fetcher must be called exactly once → NotFound.
-    let result1 =
-        fava_fetch_cache::nip05::resolve("alice@127.0.0.1", &cache, &fetcher, ttl).await;
+    let result1 = fava_fetch_cache::nip05::resolve("alice@127.0.0.1", &cache, &fetcher, ttl).await;
     if !matches!(result1, fava_fetch_cache::nip05::Nip05Result::NotFound) {
         return Err(CanaryError::new(
             "gate4: first resolve must return NotFound for 404 response",
@@ -125,8 +124,7 @@ async fn gate4_nip05_negative_cache() -> CanaryResult<String> {
         )));
     }
     // Second resolve: negative cache must absorb it (no new HTTP call).
-    let result2 =
-        fava_fetch_cache::nip05::resolve("alice@127.0.0.1", &cache, &fetcher, ttl).await;
+    let result2 = fava_fetch_cache::nip05::resolve("alice@127.0.0.1", &cache, &fetcher, ttl).await;
     if !result2.is_negative_cached() {
         return Err(CanaryError::new(
             "gate4: second resolve must return NegativeCached",

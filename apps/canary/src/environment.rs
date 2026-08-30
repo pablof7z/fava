@@ -16,8 +16,10 @@ use std::os::unix::fs::PermissionsExt;
 
 use crate::{CanaryError, CanaryResult};
 
+/// Last-resort fallback when `FAVA_CROISSANT_BIN` is unset.
 #[cfg(test)]
 const CROISSANT_BINARY: &str = "/Users/pablofernandez/Work/croissant/croissant";
+/// Last-resort fallback when `FAVA_CROISSANT_SOURCE` is unset.
 const CROISSANT_SOURCE: &str = "/Users/pablofernandez/Work/croissant";
 
 #[cfg(test)]
@@ -25,7 +27,9 @@ static LIVE_CROISSANT_FIXTURE: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[cfg(test)]
 pub(crate) fn croissant_fixture_binary() -> CanaryResult<PathBuf> {
-    require_executable(Path::new(CROISSANT_BINARY), "Croissant fixture")
+    let binary = std::env::var_os("FAVA_CROISSANT_BIN")
+        .map_or_else(|| PathBuf::from(CROISSANT_BINARY), PathBuf::from);
+    require_executable(&binary, "Croissant fixture")
 }
 
 #[cfg(test)]
@@ -38,8 +42,7 @@ pub(crate) async fn croissant_fixture_guard() -> MutexGuard<'static, ()> {
 
 pub(crate) fn croissant_fixture_source() -> CanaryResult<PathBuf> {
     let source = std::env::var_os("FAVA_CROISSANT_SOURCE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(CROISSANT_SOURCE));
+        .map_or_else(|| PathBuf::from(CROISSANT_SOURCE), PathBuf::from);
     if source.is_dir() && source.join(".git").exists() {
         return Ok(source);
     }
@@ -68,17 +71,20 @@ mod tests {
 
     use std::time::Duration;
 
-    use super::{croissant_fixture_binary, croissant_fixture_guard, croissant_fixture_source};
+    use super::{
+        CROISSANT_BINARY, CROISSANT_SOURCE, croissant_fixture_binary, croissant_fixture_guard,
+        croissant_fixture_source,
+    };
 
     #[test]
     fn current_croissant_fixture_is_resolved_explicitly() {
         assert_eq!(
             croissant_fixture_binary().expect("Croissant fixture binary"),
-            Path::new("/Users/pablofernandez/Work/croissant/croissant")
+            Path::new(CROISSANT_BINARY)
         );
         assert_eq!(
             croissant_fixture_source().expect("Croissant source checkout"),
-            Path::new("/Users/pablofernandez/Work/croissant")
+            Path::new(CROISSANT_SOURCE)
         );
     }
 

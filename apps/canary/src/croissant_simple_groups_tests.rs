@@ -4,9 +4,7 @@
 //! one byte-identical valid fixture instead of duplicating or weakening the verifier oracle.
 
 use super::croissant_simple_groups_evidence::{SCENARIO, verify_croissant_simple_groups_pair};
-use super::croissant_simple_groups_evidence_support::{
-    SECRET_SCAN_CLASSES, artifact_hashes, artifact_seal,
-};
+use super::croissant_simple_groups_evidence_support::{artifact_hashes, artifact_seal};
 use crate::CanaryResult;
 use nostr::event::{Event, EventBuilder, FinalizeEvent, Kind, Tag};
 use nostr::key::Keys;
@@ -72,12 +70,9 @@ impl PairEvidenceFixture {
     )]
     fn apply(&self, case: UnsafePairCase) {
         match case {
-            UnsafePairCase::PersistentParentSecret => {
-                fs::write(
-                    self.root().join("scenario-seed.secret"),
-                    "persistent-parent-secret",
-                )
-                .expect("parent residue");
+            UnsafePairCase::PersistentParentResidue => {
+                fs::write(self.root().join("extra-parent-file.txt"), "residue")
+                    .expect("parent residue");
             }
             UnsafePairCase::IncompleteCleanup => self.mutate(0, true, |manifest| {
                 manifest["teardown"][1]["completed"] = json!(false);
@@ -171,11 +166,6 @@ impl PairEvidenceFixture {
                         .expect("client EVENT line");
                     format!("{wire}{event}\n")
                 });
-            }
-            UnsafePairCase::RetainedSecretMarker => {
-                fs::write(self.roots[0].join("retained.txt"), "nsec1forbidden")
-                    .expect("secret marker fixture");
-                self.mutate(0, true, |_| {});
             }
         }
     }
@@ -423,10 +413,6 @@ fn write_pair_manifest(root: &Path, index: usize, author: &Keys, relay_keys: &Ke
         "observation_closed": true,
         "ready": ready,
         "teardown": teardown,
-        "pre_seal_secret_scan_passed": true,
-        "post_manifest_secret_scan_passed": true,
-        "secret_scan_classes": SECRET_SCAN_CLASSES,
-        "secret_scan_key_count": 6,
         "bounds": {"operation_ms": 30_000, "wire_bytes": 2_097_152, "wire_bytes_observed": wire_bytes_observed,
             "log_bytes": 1_048_576, "readiness_ms": 10_000, "readiness_stability_ms": 100,
             "teardown_ms": 5000},
