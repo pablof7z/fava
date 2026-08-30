@@ -1,0 +1,23 @@
+[package]
+name = "fava-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fava-relay.workspace = true
+fava-runtime.workspace = true
+fava-session.workspace = true
+fava-transport.workspace = true
+fava-wire.workspace = true
+fava-write.workspace = true
+nostr.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+fava-transport-testkit.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
+tokio.workspace = true
+
+[lints]
+workspace = true

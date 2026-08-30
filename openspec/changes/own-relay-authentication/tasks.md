@@ -7,14 +7,14 @@
 
 ## 1. Create the `fava-auth` crate
 
-- [ ] 1.1 Scaffold `crates/fava-auth` with a workspace members entry and a `[workspace.dependencies]` path entry; verify `cargo build --workspace --all-targets --locked` succeeds with the empty crate present
-- [ ] 1.2 Add `Challenge` with an explicit byte bound, refusing empty and over-bound text through a typed error rather than truncating; verify unit tests cover empty, at-bound, and over-bound input
-- [ ] 1.3 Add `AuthenticationDemand` carrying `fava_transport::RelaySessionIdentity` and a `Challenge`, plus `AuthenticationDecision`; verify a test asserts the demand names the exact session key and generation the challenge arrived on
-- [ ] 1.4 Add `auth_event`, building the unsigned kind-22242 response through `fava_write::EventBuilder` with the relay and challenge tags; verify a test asserts kind, both tag rows, and their exact values
-- [ ] 1.5 Add `SessionAuthentication` tracking one `RelaySessionKey` across generations, with `challenged`, `resolved`, `reconnected`, `state`, `authenticated`, and `attempts`, and an explicit attempt bound; verify unit tests cover replacing a challenge, exhausting the bound, and a reconnect clearing an earlier verdict
-- [ ] 1.6 Add the `AuthenticationPolicy` trait with a synchronous `decide`, matching `DeliveryPolicy`, plus a blanket implementation over `Fn(&AuthenticationDemand) -> AuthenticationDecision`; verify a test supplies a bare closure and a stateful type through the same builder method with no adapter between them
-- [ ] 1.7 Add `AuthenticationDecision::Defer`, `AuthenticationDemandId`, and `PendingAuthentication`; verify a test asserts a deferred demand carries a stable identity and the session generation it arrived on
-- [ ] 1.8 Add `crates/fava-auth/tests/architecture.rs` on the `fava-nip02` model, asserting the crate's declared dependencies exactly match its allowed set and that banned owners appear in neither the manifest nor its source; verify the test fails when an extra dependency is added
+- [x] 1.1 Scaffold `crates/fava-auth` with a workspace members entry and a `[workspace.dependencies]` path entry; verify `cargo build --workspace --all-targets --locked` succeeds with the empty crate present
+- [x] 1.2 Add `Challenge` with an explicit byte bound, refusing empty and over-bound text through a typed error rather than truncating; verify unit tests cover empty, at-bound, and over-bound input
+- [x] 1.3 Add `AuthenticationDemand` carrying `fava_transport::RelaySessionIdentity` and a `Challenge`, plus `AuthenticationDecision`; verify a test asserts the demand names the exact session key and generation the challenge arrived on
+- [x] 1.4 Add `auth_event`, building the unsigned kind-22242 response through `fava_write::EventBuilder` with the relay and challenge tags; verify a test asserts kind, both tag rows, and their exact values
+- [x] 1.5 Add `SessionAuthentication` tracking one `RelaySessionKey` across generations, with `challenged`, `resolved`, `reconnected`, `state`, `authenticated`, and `attempts`, and an explicit attempt bound; verify unit tests cover replacing a challenge, exhausting the bound, and a reconnect clearing an earlier verdict
+- [x] 1.6 Add the `AuthenticationPolicy` trait with a synchronous `decide`, matching `DeliveryPolicy`, plus a blanket implementation over `Fn(&AuthenticationDemand) -> AuthenticationDecision`; verify a test supplies a bare closure and a stateful type through the same builder method with no adapter between them
+- [x] 1.7 Add `AuthenticationDecision::Defer`, `AuthenticationDemandId`, and `PendingAuthentication`; verify a test asserts a deferred demand carries a stable identity and the session generation it arrived on
+- [x] 1.8 Add `crates/fava-auth/tests/architecture.rs` on the `fava-nip02` model, asserting the crate's declared dependencies exactly match its allowed set and that banned owners appear in neither the manifest nor its source; verify the test fails when an extra dependency is added
 
 ## 2. Drive the handshake
 

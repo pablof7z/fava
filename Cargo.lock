@@ -334,6 +334,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fava-auth"
+version = "0.1.0"
+dependencies = [
+ "fava-relay",
+ "fava-runtime",
+ "fava-session",
+ "fava-transport",
+ "fava-transport-testkit",
+ "fava-wire",
+ "fava-write",
+ "nostr",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "fava-bookmarks"
 version = "0.1.0"
 dependencies = [
