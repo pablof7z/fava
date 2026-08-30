@@ -18,6 +18,7 @@ dependencies = [
  "nu-ansi-term",
  "reedline",
  "serde_json",
+ "strip-ansi-escapes",
  "tokio",
 ]
 

@@ -1,4 +1,4 @@
-"""Private bounds and cleanup rules for the simple-groups live harness."""
+"""Private bounds and cleanup rules for focused example live harnesses."""
 
 from __future__ import annotations
 

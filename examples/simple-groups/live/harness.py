@@ -19,6 +19,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+SHARED = Path(__file__).resolve().parents[2] / "crates" / "e2e-support" / "live"
+sys.path.insert(0, str(SHARED))
+
 from harness_safety import (
     MAX_ARTIFACT_FILE_BYTES,
     MAX_ASSERTIONS,

@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -13,11 +16,11 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-SHARED = REPO / "examples" / "simple-groups" / "live"
+SHARED = REPO / "examples" / "crates" / "e2e-support" / "live"
 sys.path.insert(0, str(SHARED))
 
 from harness_process import require_stopped, run_app, start_ordinary, wait_ready  # noqa: E402
-from harness_safety import HarnessError  # noqa: E402
+from harness_safety import HarnessError, check_retained_artifacts  # noqa: E402
 from relay_inspection import assert_event, inspect_until_eose  # noqa: E402
 
 
@@ -40,7 +43,7 @@ def main() -> int:
         wait_ready(relay)
         commands = (REPO / "examples/account/scenarios/account-reactivity.txt").read_text(
             encoding="utf-8"
-        ).replace("{{RELAY}}", relay.url)
+        ).replace("ws://127.0.0.1:18080", relay.url)
         lines = [line for line in commands.splitlines() if line and not line.startswith("#")]
         status, stdout_path, stderr_path = run_app(
             [str(args.app.resolve()), "--jsonl"],
@@ -80,6 +83,7 @@ def main() -> int:
             },
         )
         require_reactive_transitions(rows, captured)
+        require_route_attribution(rows)
         (evidence / "run.jsonl").write_text(
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"
         )
@@ -92,11 +96,21 @@ def main() -> int:
         result = {
             "app_stderr": str(stderr_path.relative_to(evidence)),
             "app_stdout": str(stdout_path.relative_to(evidence)),
+            "fixtures": {
+                "app": "account 0.1.0",
+                "app_sha256": sha256(args.app.resolve()),
+                "relay": relay_version(args.relay.resolve()),
+                "relay_sha256": sha256(args.relay.resolve()),
+                "scenario_sha256": sha256(
+                    REPO / "examples/account/scenarios/account-reactivity.txt"
+                ),
+            },
             "assertions": {
                 "accepted_authors_exact": True,
                 "independent_req_eose": True,
                 "one_observation_id": True,
                 "reactive_account_transitions": True,
+                "route_attribution": True,
             },
             "captures": captured,
             "relay": relay.url,
@@ -112,6 +126,46 @@ def main() -> int:
         (evidence / "teardown.json").write_text(
             json.dumps(teardown, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        shutil.rmtree(evidence / "relays/ordinary/data", ignore_errors=True)
+        write_manifest(evidence)
+        check_retained_artifacts(evidence)
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_manifest(evidence: Path) -> None:
+    files: dict[str, dict[str, Any]] = {}
+    for path in sorted(evidence.rglob("*")):
+        if path.is_file() and path.name != "manifest.json":
+            files[str(path.relative_to(evidence))] = {
+                "bytes": path.stat().st_size,
+                "sha256": sha256(path),
+            }
+    (evidence / "manifest.json").write_text(
+        json.dumps(
+            {"files": files, "format": 1, "scenario": "account-reactivity.txt"},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def relay_version(binary: Path) -> str:
+    completed = subprocess.run(
+        [str(binary), "--version"], capture_output=True, text=True, timeout=5, check=False
+    )
+    value = (completed.stdout or completed.stderr).strip()
+    if completed.returncode != 0 or not value or len(value.encode("utf-8")) > 256:
+        raise HarnessError("ordinary relay did not report one bounded version")
+    if value != "nostr-rs-relay 0.8.12":
+        raise HarnessError(
+            f"ordinary relay version must be nostr-rs-relay 0.8.12, got {value!r}"
+        )
+    return value
 
 
 def require_ok_rows(rows: list[dict[str, Any]], expected: int) -> None:
@@ -125,19 +179,32 @@ def require_ok_rows(rows: list[dict[str, Any]], expected: int) -> None:
 def capture_rows(rows: list[dict[str, Any]]) -> dict[str, str]:
     captures: dict[str, str] = {}
     for row in rows:
-        if row.get("kind") in {"account-imported", "published"}:
-            fields = row.get("fields", {})
-            if row["kind"] == "account-imported":
-                alias = fields.get("account")
-                if alias in {"alice", "bob"}:
-                    captures[f"{alias}-pub"] = fields["public_key"]
-            elif "event_id" in fields:
-                content_index = len([key for key in captures if key.endswith("-event")])
-                captures["alice-event" if content_index == 0 else "bob-event"] = fields["event_id"]
+        if row.get("kind") != "capture-set":
+            continue
+        fields = row.get("fields", {})
+        name = fields.get("capture")
+        value = fields.get("value")
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise HarnessError(f"capture row omitted its scalar authority: {row}")
+        if name in captures:
+            raise HarnessError(f"capture {name!r} appeared more than once")
+        captures[name] = value
     required = {"alice-pub", "bob-pub", "alice-event", "bob-event"}
     if set(captures) != required:
         raise HarnessError(f"missing app captures: expected {required}, got {set(captures)}")
     return captures
+
+
+def require_route_attribution(rows: list[dict[str, Any]]) -> None:
+    routes = [row for row in rows if row.get("kind") == "routes"]
+    if len(routes) != 2:
+        raise HarnessError(f"expected active and cleared route rows, got {len(routes)}")
+    active = routes[0]["fields"]
+    cleared = routes[1]["fields"]
+    if not active.get("demand_relays") or set(active.get("demand_observations", [])) != {1}:
+        raise HarnessError(f"active route did not attribute public observation 1: {active}")
+    if cleared.get("demand_relays") or cleared.get("wire_subscriptions"):
+        raise HarnessError(f"cleared selection retained route work: {cleared}")
 
 
 def require_reactive_transitions(rows: list[dict[str, Any]], captured: dict[str, str]) -> None:

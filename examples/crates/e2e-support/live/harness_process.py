@@ -15,7 +15,7 @@ from typing import Any, Callable
 from harness_safety import HarnessError, MAX_COMMAND_BYTES, MAX_LOG_BYTES, read_bounded_text
 from relay_inspection import InspectionError, inspect_until_eose
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 READINESS_SECONDS = 10.0
 TEARDOWN_SECONDS = 5.0
 APP_SECONDS = 60.0

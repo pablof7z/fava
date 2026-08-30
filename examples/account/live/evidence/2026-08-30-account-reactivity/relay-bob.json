@@ -2,17 +2,17 @@
   "events": [
     {
       "content": "bob event",
-      "created_at": 1788108397,
-      "id": "b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048",
+      "created_at": 1788128637,
+      "id": "2108729b68b36bc4d395593ba3b42be37ca9b673e25f0e99df8737da3d8fc581",
       "kind": 1,
       "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
-      "sig": "84a86320b59191eaa64c20d8d87dec612f7d3624b978bd8bb87d97fc0db5057bd79f9df1674be907e3cf87d960b0b52f0825d3501e08088916786a20a356bfcd",
+      "sig": "86b738bf13da696db1bcf2cfa097cdd1eb063c091d1720ee21fd5677981b6723c987bd62b44eb25c29d78a239294496a4ebb44d2645859cbf40c3674f8ea77b6",
       "tags": []
     }
   ],
   "filter": {
     "ids": [
-      "b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048"
+      "2108729b68b36bc4d395593ba3b42be37ca9b673e25f0e99df8737da3d8fc581"
     ]
   },
   "subscription": "account-bob",

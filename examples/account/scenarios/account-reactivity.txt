@@ -1,4 +1,4 @@
-relay add local {{RELAY}}
+relay add local ws://127.0.0.1:18080
 account import alice 0000000000000000000000000000000000000000000000000000000000000001
 capture alice-pub public_key
 query open mine $currentPubkey 1 local
@@ -15,8 +15,10 @@ account switch alice
 query sync mine
 account switch bob
 query sync mine
+routes
 account clear
 query sync mine
+routes
 diagnostics
 dump
 quit

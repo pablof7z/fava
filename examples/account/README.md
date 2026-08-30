@@ -11,11 +11,22 @@ changes.
 cargo run --manifest-path examples/account/Cargo.toml
 ```
 
-Replay ordinary commands as deterministic JSONL:
+Replay ordinary commands as deterministic JSONL. The complete scenario expects
+an ordinary relay at `ws://127.0.0.1:18080`:
 
 ```sh
 cargo run --manifest-path examples/account/Cargo.toml -- \
   --script examples/account/scenarios/account-reactivity.txt --jsonl
+```
+
+Run the same scenario against a disposable relay with independent `REQ`/`EOSE`
+verification:
+
+```sh
+cargo build --manifest-path examples/account/Cargo.toml
+python3 examples/account/live/harness.py \
+  --app examples/account/target/debug/account \
+  --relay ~/.cargo/bin/nostr-rs-relay
 ```
 
 Minimal live flow:
@@ -44,6 +55,15 @@ The account shell delegates account state to `Fava::add_account`,
 `clear_current_account`. Publication calls
 `fava.to(relays)?.publish(EventBuilder::new(kind).content(content))`; it never
 reads or passes the selected author. Query open calls
-`Query::authors_current_account()` once and retains the same `Observation`
-handle across switches. `diagnostics` exposes the atomic current-account/session
-revision plus public query, relay, and write diagnostics.
+`Query::authors_current_account()` once, retains the same `Observation` handle
+across switches, and uses `Observation::synchronize_current_account()` for the
+`query sync` generation barrier. `diagnostics` exposes current selection,
+session/selection revisions, exact signer attachment generations, and public
+query/relay/write ownership. `routes` exposes active route, logical demand, and
+wire subscription attribution. No app-owned
+selection listener, author threading, query rebuilding, route recomputation, or
+stale-generation filtering exists.
+
+Actual terminal captures are
+[`terminal-session.png`](../../docs/issues/0057/terminal-session.png) and
+[`terminal-completion.png`](../../docs/issues/0057/terminal-completion.png).

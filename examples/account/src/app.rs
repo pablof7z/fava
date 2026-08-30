@@ -56,6 +56,7 @@ impl App {
                 self.receipt(action, &arguments)
             }
             [command] if command == "diagnostics" => self.diagnostics(),
+            [command] if command == "routes" => self.routes(),
             [command] if command == "help" => Ok(help()),
             _ => Err(ShellError::UnknownCommand {
                 command: words.join(" "),
@@ -140,21 +141,10 @@ impl App {
                 snapshot_result(name, observation.id().get().get(), &observation.current())
             }
             ("sync", [name]) => {
-                let current = self.fava.current_account();
                 let observation = self.observation_mut(name)?;
-                let snapshot = block_on(observation.wait_until(OPERATION_TIMEOUT, |snapshot| {
-                    current.map_or_else(
-                        || snapshot.events.is_empty(),
-                        |author| {
-                            snapshot
-                                .events
-                                .iter()
-                                .all(|record| record.event().author() == author)
-                        },
-                    )
-                }))
-                .map_err(domain)?
-                .ok_or_else(|| ShellError::Domain(format!("query {name:?} sync timed out")))?;
+                let snapshot = block_on(observation.synchronize_current_account(OPERATION_TIMEOUT))
+                    .map_err(domain)?
+                    .ok_or_else(|| ShellError::Domain(format!("query {name:?} sync timed out")))?;
                 snapshot_result(name, observation.id().get().get(), &snapshot)
             }
             ("wait", [name, count]) => {
@@ -220,16 +210,89 @@ impl App {
             .queries
             .iter()
             .map(|query| ResultValue::from(query.observation.get().get()));
+        let accounts = self.fava.accounts();
+        let account_keys = accounts.iter().map(|key| ResultValue::text(key.to_hex()));
+        let signer_statuses: Vec<_> = accounts
+            .iter()
+            .map(|key| self.fava.signer_status(*key))
+            .collect();
+        let signer_generations = signer_statuses.iter().map(|status| {
+            status.map_or_else(
+                || ResultValue::text(""),
+                |(generation, _)| ResultValue::from(generation),
+            )
+        });
+        let signer_availability = signer_statuses.iter().map(|status| {
+            status.map_or_else(
+                || ResultValue::text("pubkey-only"),
+                |(_, availability)| ResultValue::text(format!("{availability:?}")),
+            )
+        });
         CommandResult::success("diagnostics", "current Fava ownership facts")
             .with_field(
                 "current_pubkey",
                 current.map_or_else(String::new, |key| key.to_hex()),
             )?
-            .with_field("session_revision", revision)?
+            .with_field("selection_revision", revision)?
+            .with_field("session_revision", self.fava.session_revision())?
+            .with_field("account_pubkeys", ResultValue::array(account_keys))?
+            .with_field("signer_generations", ResultValue::array(signer_generations))?
+            .with_field(
+                "signer_availability",
+                ResultValue::array(signer_availability),
+            )?
             .with_field("query_ids", ResultValue::array(query_ids))?
             .with_field("query_count", diagnostics.queries.len())?
             .with_field("relay_count", diagnostics.relays.len())?
             .with_field("write_count", diagnostics.writes.len())
+    }
+
+    fn routes(&self) -> Result<CommandResult, ShellError> {
+        let diagnostics = self.fava.diagnostics();
+        let mut route_observations = Vec::new();
+        let mut route_relays = Vec::new();
+        let mut route_revisions = Vec::new();
+        let mut demand_observations = Vec::new();
+        let mut demand_relays = Vec::new();
+        let mut demand_states = Vec::new();
+        let mut wire_observations = Vec::new();
+        let mut wire_relays = Vec::new();
+        let mut wire_subscriptions = Vec::new();
+        for query in diagnostics.queries {
+            let observation = query.observation.get().get();
+            for session in query.route_relays {
+                route_observations.push(ResultValue::from(observation));
+                route_relays.push(ResultValue::text(session.relay.to_string()));
+                route_revisions.push(
+                    query
+                        .route_revision
+                        .map_or_else(|| ResultValue::text("explicit"), ResultValue::from),
+                );
+            }
+            for demand in query.demand {
+                demand_observations.push(ResultValue::from(observation));
+                demand_relays.push(ResultValue::text(demand.session.relay.to_string()));
+                demand_states.push(ResultValue::text(format!("{:?}", demand.state)));
+            }
+            for wire in query.wire {
+                wire_observations.push(ResultValue::from(observation));
+                wire_relays.push(ResultValue::text(wire.session.relay.to_string()));
+                wire_subscriptions.push(ResultValue::text(wire.subscription.to_string()));
+            }
+        }
+        CommandResult::success("routes", "active public query routing facts")
+            .with_field("route_observations", ResultValue::array(route_observations))?
+            .with_field("route_relays", ResultValue::array(route_relays))?
+            .with_field("route_revisions", ResultValue::array(route_revisions))?
+            .with_field(
+                "demand_observations",
+                ResultValue::array(demand_observations),
+            )?
+            .with_field("demand_relays", ResultValue::array(demand_relays))?
+            .with_field("demand_states", ResultValue::array(demand_states))?
+            .with_field("wire_observations", ResultValue::array(wire_observations))?
+            .with_field("wire_relays", ResultValue::array(wire_relays))?
+            .with_field("wire_subscriptions", ResultValue::array(wire_subscriptions))
     }
 
     fn observation(&self, name: &str) -> Result<&Observation, ShellError> {
@@ -383,6 +446,7 @@ fn help() -> CommandResult {
                     "query open <name> $currentPubkey <kind> <relay>... | snapshot|sync|wait|close",
                     "receipt list|show",
                     "diagnostics",
+                    "routes",
                     "capture <name> <field>",
                     "dump",
                     "quit",

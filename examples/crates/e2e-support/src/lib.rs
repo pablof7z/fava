@@ -6,6 +6,7 @@
 mod account;
 mod error;
 mod limits;
+mod presentation;
 mod result;
 mod session;
 mod shared_commands;
@@ -13,5 +14,6 @@ mod shared_commands;
 pub use account::{Account, parse_public_key};
 pub use error::ShellError;
 pub use limits::Limits;
+pub use presentation::elide;
 pub use result::{CommandResult, OutputFormat, ResultStatus, ResultValue};
 pub use session::{E2eSession, InputMode};

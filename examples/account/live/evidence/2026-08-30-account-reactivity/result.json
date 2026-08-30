@@ -5,13 +5,21 @@
     "accepted_authors_exact": true,
     "independent_req_eose": true,
     "one_observation_id": true,
-    "reactive_account_transitions": true
+    "reactive_account_transitions": true,
+    "route_attribution": true
   },
   "captures": {
-    "alice-event": "09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3",
+    "alice-event": "5f6eda72f92928c6dd15da38f29388611cfa61172ba0813bcb07c0932ef7effb",
     "alice-pub": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-    "bob-event": "b26745d31b6e455985bf3476000f16dcd121d3fb0202b25002e2547f0350c048",
+    "bob-event": "2108729b68b36bc4d395593ba3b42be37ca9b673e25f0e99df8737da3d8fc581",
     "bob-pub": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
   },
-  "relay": "ws://127.0.0.1:52370"
+  "fixtures": {
+    "app": "account 0.1.0",
+    "app_sha256": "541d76ccb9854db203888b1cea358f5a3e5e1178f7ae84ceeb2ce87e1055a846",
+    "relay": "nostr-rs-relay 0.8.12",
+    "relay_sha256": "772530158c5562ccafabd4d93aa2ac3a686b2203cbeec1ce313791b4e1fc28b9",
+    "scenario_sha256": "29dae95ab94dac3121e02215e3b1d108c5ee801d560a3cde249b75951012fc42"
+  },
+  "relay": "ws://127.0.0.1:56652"
 }

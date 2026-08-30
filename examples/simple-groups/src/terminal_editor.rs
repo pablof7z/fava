@@ -1,5 +1,6 @@
 //! Reedline prompt, highlighting, hints, and completion wiring.
 
+use e2e_support::elide;
 use std::borrow::Cow;
 
 use nu_ansi_term::{Color, Style};
@@ -37,7 +38,7 @@ fn prompt_left(account: &str, group: &str, relay: &str, width: usize, theme: The
     if width < 16 {
         return format!(
             "{} ",
-            theme.muted(&abbreviate(
+            theme.muted(&elide(
                 &format!("{account}/{group}/{relay}"),
                 width.saturating_sub(4)
             ))
@@ -49,9 +50,9 @@ fn prompt_left(account: &str, group: &str, relay: &str, width: usize, theme: The
     let variable = width.saturating_sub(10);
     let relay_width = relay.chars().count().min(variable.saturating_sub(2));
     let names_width = variable.saturating_sub(relay_width);
-    let account = abbreviate(account, names_width / 2);
-    let group = abbreviate(group, names_width.saturating_sub(names_width / 2));
-    let relay = abbreviate(relay, relay_width);
+    let account = elide(account, names_width / 2);
+    let group = elide(group, names_width.saturating_sub(names_width / 2));
+    let relay = elide(relay, relay_width);
     format!(
         "{} {} {} {} {} ",
         theme.account(&account),
@@ -60,22 +61,6 @@ fn prompt_left(account: &str, group: &str, relay: &str, width: usize, theme: The
         theme.muted("·"),
         theme.connected(&relay),
     )
-}
-
-fn abbreviate(value: &str, width: usize) -> String {
-    if width == 0 {
-        String::new()
-    } else if value.chars().count() <= width {
-        value.to_owned()
-    } else {
-        format!(
-            "{}…",
-            value
-                .chars()
-                .take(width.saturating_sub(1))
-                .collect::<String>()
-        )
-    }
 }
 
 impl Prompt for ShellPrompt {

@@ -19,7 +19,9 @@ from contextlib import redirect_stdout
 
 
 LIVE = Path(__file__).resolve().parents[1]
+SHARED = LIVE.parents[1] / "crates" / "e2e-support" / "live"
 sys.path.insert(0, str(LIVE))
+sys.path.insert(0, str(SHARED))
 
 from harness import (
     HarnessError,

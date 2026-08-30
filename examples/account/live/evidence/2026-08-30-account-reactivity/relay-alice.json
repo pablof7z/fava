@@ -2,17 +2,17 @@
   "events": [
     {
       "content": "alice event",
-      "created_at": 1788108397,
-      "id": "09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3",
+      "created_at": 1788128637,
+      "id": "5f6eda72f92928c6dd15da38f29388611cfa61172ba0813bcb07c0932ef7effb",
       "kind": 1,
       "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-      "sig": "d3a4c0f695fc15f162ca9a4f77e00c030bb1731c894b0da122a453debb32f074b42352511593ed379b1c13f2b752db7b5e74f09a78c62495c08efe26a003fbe8",
+      "sig": "e0d0dfc7126aa541dc4c9d212f0108f64d196dd662b516dc58eee2113e68d73722d4d4b95e73cbe7a5ff6552ef0119a51433b7fa006bac31e7c7b4dc351b2e12",
       "tags": []
     }
   ],
   "filter": {
     "ids": [
-      "09f6cffd32a5954581ff8732868db152c3b75859844450ae5a5a6bffd7cbeeb3"
+      "5f6eda72f92928c6dd15da38f29388611cfa61172ba0813bcb07c0932ef7effb"
     ]
   },
   "subscription": "account-alice",

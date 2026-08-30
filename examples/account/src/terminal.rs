@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::io::Write;
 use std::time::Duration;
 
-use e2e_support::{CommandResult, Limits, ResultStatus, ShellError};
+use e2e_support::{CommandResult, Limits, ResultStatus, ShellError, elide};
 use nu_ansi_term::{Color, Style};
 use reedline::{
     ColumnarMenu, Completer, Emacs, FileBackedHistory, Hinter, History, KeyCode, KeyModifiers,
@@ -157,7 +157,7 @@ impl AccountPrompt {
         let account = account.unwrap_or("no-account");
         let plain = format!("{account} · {relays}r · {queries}q");
         let available = width.saturating_sub(4);
-        let plain = abbreviate(&plain, available);
+        let plain = elide(&plain, available);
         Self { left: plain, color }
     }
 }
@@ -293,6 +293,7 @@ fn completions(context: &str) -> &'static [&'static str] {
             "query",
             "receipt",
             "diagnostics",
+            "routes",
             "capture",
             "dump",
             "help",
@@ -307,6 +308,7 @@ fn description(value: &str) -> &'static str {
         "publish" => "publish an explicit-kind event as current account",
         "query" => "open or inspect a reactive query",
         "diagnostics" => "show public ownership facts",
+        "routes" => "show active route, demand, and wire ownership",
         _ => "command",
     }
 }
@@ -329,22 +331,6 @@ fn paint(color: bool, style: Style, value: &str) -> String {
         style.paint(value).to_string()
     } else {
         value.to_owned()
-    }
-}
-
-fn abbreviate(value: &str, width: usize) -> String {
-    if value.chars().count() <= width {
-        value.to_owned()
-    } else if width == 0 {
-        String::new()
-    } else {
-        format!(
-            "{}…",
-            value
-                .chars()
-                .take(width.saturating_sub(1))
-                .collect::<String>()
-        )
     }
 }
 

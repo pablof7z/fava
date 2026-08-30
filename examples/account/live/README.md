@@ -12,9 +12,10 @@ python3 examples/account/live/harness.py \
 ```
 
 The harness does not construct, sign, route, or publish action events. It
-asserts exact Alice/Bob authorship, one stable observation id, the transition
-sequence Alice → empty Bob → Bob → Alice → Bob → empty selection, and bounded
-process teardown.
+asserts exact Alice/Bob authorship, one stable observation id, public route and
+demand attribution, the transition sequence Alice → empty Bob → Bob → Alice →
+Bob → empty selection, route withdrawal after clear, and bounded process
+teardown.
 
 Canonical evidence is in
 `evidence/2026-08-30-account-reactivity/`; `manifest.json` records every retained

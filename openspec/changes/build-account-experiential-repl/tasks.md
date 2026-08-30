@@ -30,25 +30,25 @@
 
 ## 5. Focused experiential account app
 
-- [ ] 5.1 Scaffold `examples/account` as a real `e2e-support` consumer with account create/import/add-pubkey/list/select/replace/remove/clear commands, ordinary inline key data, one parser/dispatcher, deterministic replay, typed JSONL, captures, and bounded dump.
-- [ ] 5.2 Add explicit-kind test-event publication through the current-account convenience plus receipt list/show; verify app code never reads the selected key merely to pass an author to Fava.
-- [ ] 5.3 Add one bounded query/observation command using `$currentPubkey`, snapshot/status commands, and account switching while the handle remains open; verify app code has no session-change listener or query reconstruction path.
-- [ ] 5.4 Add routes and diagnostics views that make current selection, session revision, compiled query generation, active relay demand, accepted author, and signer generation attributable without exposing private internals.
-- [ ] 5.5 Compare account and simple-groups presentation code and extract only identical Reedline assembly, rendering/theme, prompt layout, bounded history, completion, and hints into `e2e-support`; verify simple-groups PTY/golden and non-TTY bytes remain unchanged.
-- [ ] 5.6 Implement account-specific contextual prompt, completion, hints, narrow-terminal rendering, `NO_COLOR`, and actual-binary PTY tests without a plugin framework.
-- [ ] 5.7 Audit the complete app for explicit author threading, selection propagation, query rebuilding, observation reopening, subscription mutation, route recomputation, and stale-generation filtering; fix each Fava-owned DX gap or keep the affected workflow incomplete with an executable falsifier.
+- [x] 5.1 Scaffold `examples/account` as a real `e2e-support` consumer with account create/import/add-pubkey/list/select/replace/remove/clear commands, ordinary inline key data, one parser/dispatcher, deterministic replay, typed JSONL, captures, and bounded dump.
+- [x] 5.2 Add explicit-kind test-event publication through the current-account convenience plus receipt list/show; verify app code never reads the selected key merely to pass an author to Fava.
+- [x] 5.3 Add one bounded query/observation command using `$currentPubkey`, snapshot/status commands, and account switching while the handle remains open; verify app code has no session-change listener or query reconstruction path.
+- [x] 5.4 Add routes and diagnostics views that make current selection, session revision, compiled query generation, active relay demand, accepted author, and signer generation attributable without exposing private internals.
+- [x] 5.5 Compare account and simple-groups presentation code and extract only identical Reedline assembly, rendering/theme, prompt layout, bounded history, completion, and hints into `e2e-support`; verify simple-groups PTY/golden and non-TTY bytes remain unchanged.
+- [x] 5.6 Implement account-specific contextual prompt, completion, hints, narrow-terminal rendering, `NO_COLOR`, and actual-binary PTY tests without a plugin framework.
+- [x] 5.7 Audit the complete app for explicit author threading, selection propagation, query rebuilding, observation reopening, subscription mutation, route recomputation, and stale-generation filtering; fix each Fava-owned DX gap or keep the affected workflow incomplete with an executable falsifier.
 
 ## 6. Deterministic and live proof
 
-- [ ] 6.1 Create one ordinary-command scenario that imports A and B, publishes through A, opens one `$currentPubkey` observation, switches to B, publishes through B, clears selection, switches rapidly, captures results, and dumps typed evidence.
-- [ ] 6.2 Add black-box replay tests proving missing values do not consume later commands, private keys remain ordinary data, accepted writes retain authors, the observation handle stays stable, and stale generations never become current.
-- [ ] 6.3 Build a bounded ordinary-relay harness from proven shared mechanics; independently require exact A/B event authors and matching `EOSE` while app evidence proves the reactive observation transitions without harness-created events.
-- [ ] 6.4 Run delayed-completion controls that would fail if A/B query, route, subscription, local-source, or signer completions overwrite C; retain bounded canonical evidence with fixture versions and hashes.
+- [x] 6.1 Create one ordinary-command scenario that imports A and B, publishes through A, opens one `$currentPubkey` observation, switches to B, publishes through B, clears selection, switches rapidly, captures results, and dumps typed evidence.
+- [x] 6.2 Add black-box replay tests proving missing values do not consume later commands, private keys remain ordinary data, accepted writes retain authors, the observation handle stays stable, and stale generations never become current.
+- [x] 6.3 Build a bounded ordinary-relay harness from proven shared mechanics; independently require exact A/B event authors and matching `EOSE` while app evidence proves the reactive observation transitions without harness-created events.
+- [x] 6.4 Run delayed-completion controls that would fail if A/B query, route, subscription, local-source, or signer completions overwrite C; retain bounded canonical evidence with fixture versions and hashes.
 
 ## 7. Documentation and main integration
 
-- [ ] 7.1 Write a consumer-facing README showing the minimal account workflow and the exact public calls for current-account writes and `$currentPubkey` queries; document any unresolved DX gap honestly.
-- [ ] 7.2 Capture actual-binary terminal session and completion screenshots and verify they correspond to the committed UI.
+- [x] 7.1 Write a consumer-facing README showing the minimal account workflow and the exact public calls for current-account writes and `$currentPubkey` queries; document any unresolved DX gap honestly.
+- [x] 7.2 Capture actual-binary terminal session and completion screenshots and verify they correspond to the committed UI.
 - [ ] 7.3 Run full account, shared-support, simple-groups regression, session, write, query, observation, routing, subscription, live harness, strict Clippy, formatting, vocabulary, restart, and diff gates.
 - [ ] 7.4 Obtain independent DX, architecture, code, concurrency, harness, and evidence review; repair every concrete blocker and rerun its falsifier.
 - [ ] 7.5 Rebase reviewed slices onto current `main`, resolve conflicts to current public truth, run integrated validation, and fast-forward `main`; verify the main worktree is clean and contains the current-account owner, write convenience, reactive query support, and experiential app.

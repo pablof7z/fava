@@ -356,9 +356,10 @@ impl E2eSession {
                 maximum: self.limits.capture_bytes(),
             });
         }
-        self.captures.insert(name.to_owned(), value);
+        self.captures.insert(name.to_owned(), value.clone());
         CommandResult::success("capture-set", format!("captured {field} as {name}"))
-            .with_field("capture", name)
+            .with_field("capture", name)?
+            .with_field("value", value)
     }
 
     pub(crate) fn dump(&self) -> Result<CommandResult, ShellError> {

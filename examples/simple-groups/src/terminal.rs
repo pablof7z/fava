@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::time::Duration;
 
-use e2e_support::{CommandResult, Limits, ResultStatus, ResultValue, ShellError};
+use e2e_support::{CommandResult, Limits, ResultStatus, ResultValue, ShellError, elide};
 use nu_ansi_term::{Color, Style};
 use reedline::{
     ColumnarMenu, Emacs, FileBackedHistory, KeyCode, KeyModifiers, MenuBuilder, Reedline,
@@ -153,7 +153,7 @@ impl Terminal {
     ) -> std::io::Result<()> {
         let width = terminal_width();
         let label = if width < 52 {
-            abbreviate(field_label(name), width.saturating_sub(6).max(1))
+            elide(field_label(name), width.saturating_sub(6).max(1))
         } else {
             field_label(name).to_owned()
         };
@@ -416,21 +416,7 @@ fn value_text(value: &ResultValue, width: usize) -> String {
             .collect::<Vec<_>>()
             .join(", "),
     };
-    abbreviate(&value, width)
-}
-
-fn abbreviate(value: &str, width: usize) -> String {
-    if value.chars().count() <= width {
-        value.to_owned()
-    } else {
-        format!(
-            "{}…",
-            value
-                .chars()
-                .take(width.saturating_sub(1))
-                .collect::<String>()
-        )
-    }
+    elide(&value, width)
 }
 
 fn terminal_width() -> usize {
@@ -466,11 +452,11 @@ fn number(value: &ResultValue) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{abbreviate, field_value_width};
+    use super::{elide, field_value_width};
 
     #[test]
     fn narrow_values_are_ellipsized_to_the_available_width() {
-        let rendered = abbreviate("weekend-builders", 8);
+        let rendered = elide("weekend-builders", 8);
         assert_eq!(rendered, "weekend…");
         assert_eq!(rendered.chars().count(), 8);
     }
@@ -478,8 +464,8 @@ mod tests {
     #[test]
     fn narrow_fields_fit_the_terminal_width() {
         let width = 40;
-        let label = abbreviate("destination relays", width - 6);
-        let value = abbreviate("ws://relay.example", field_value_width(&label, width));
+        let label = elide("destination relays", width - 6);
+        let value = elide("ws://relay.example", field_value_width(&label, width));
         assert!(3 + label.chars().count() + 2 + value.chars().count() <= width);
     }
 }
