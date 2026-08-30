@@ -25,7 +25,7 @@
 - [x] 4.3 Add observation evidence that one stable handle recompiles, re-evaluates cache/write-store sources, reroutes, and updates relay subscriptions when current-selection revision changes; verify unrelated session mutations do not reroot it and the app never closes or reopens the observation.
 - [x] 4.4 Add delayed relay, route, subscription, diagnostic, and local-source completions across A→B→C switches and close; verify only the exact current selection and operation generation can update the current snapshot, diagnostics, or active demand.
 - [x] 4.5 Prove removing/clearing current selection retracts account-dependent demand and yields a match-nothing snapshot without deleting cached public events or receipts.
-- [ ] 4.6 Run full query/observe/routing/subscription/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused reactive-query slice to `main`.
+- [x] 4.6 Run full query/observe/routing/subscription/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused reactive-query slice to `main`.
 
 ## 5. Focused experiential account app
 
