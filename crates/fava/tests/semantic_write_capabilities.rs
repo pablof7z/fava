@@ -168,7 +168,7 @@ fn assert_selection_and_capacity_refusals(
         .expect("bounded assembly");
     bounded_store
         .accept_applied(EventValue::Unsigned(
-            EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
+            EventBuilder::new(Kind::TextNote).by(actor).build().unwrap(),
         ))
         .expect("one active write fills capacity");
     assert!(matches!(

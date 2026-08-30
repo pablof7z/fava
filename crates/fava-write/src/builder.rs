@@ -8,19 +8,20 @@ use crate::{MAX_EVENT_BYTES, WriteIntentError, WriteRouting};
 
 const MAX_TAGS: usize = 2_000;
 
-/// Incrementally assembles one complete unsigned Nostr event.
+/// Incrementally assembles one event body without stating who signs it.
 ///
 /// Every field of a Nostr event feeds the same deterministic event id, so
 /// filling fields in through separate, order-dependent mutations is a common
-/// source of subtly wrong ids. `EventBuilder` starts from just an author and
-/// a kind, accepts timestamp, content, and tags through owned builder calls
-/// in any order, and only computes the id and checks the declared tag and
-/// byte bounds once, in [`EventBuilder::build`]. Reach for it when assembling
-/// an event from application-level fields; when every field is already known
-/// up front, such as re-encoding a previously decoded event, construct it
-/// directly with [`EventBuilder::from_parts`] instead. To reopen a finalized
-/// [`UnsignedEvent`], consume it with [`EventBuilder::from`]; that preserves
-/// its body while discarding its derived id and local routing.
+/// source of subtly wrong ids. `EventBuilder` starts from just a kind and
+/// accepts timestamp, content, and tags through owned builder calls in any
+/// order. It has no author and cannot produce an unsigned event or an event
+/// id: call [`EventBuilder::by`] to supply the author and continue shaping
+/// as an [`AuthoredEventBuilder`], which owns [`AuthoredEventBuilder::build`].
+/// When every field including the author is already known up front, such as
+/// re-encoding a previously decoded event, construct the authored form
+/// directly with [`AuthoredEventBuilder::from_parts`] instead. To reopen a
+/// finalized [`UnsignedEvent`], consume it with [`AuthoredEventBuilder::from`];
+/// that preserves its body while discarding its derived id and local routing.
 ///
 /// # Examples
 ///
@@ -31,13 +32,29 @@ const MAX_TAGS: usize = 2_000;
 /// )
 /// .expect("valid hex public key");
 ///
-/// let event = EventBuilder::new(author, Kind::TextNote)
+/// let event = EventBuilder::new(Kind::TextNote)
 ///     .content("gm")
+///     .by(author)
 ///     .build()
 ///     .expect("event stays within declared bounds");
 /// ```
+///
+/// An authorless builder exposes no finalization method, so the absent-author
+/// state is a compile-time refusal rather than a runtime one:
+///
+/// ```compile_fail,E0599
+/// fn authorless_builder_cannot_finalize(kind: fava_write::Kind) {
+///     let _ = fava_write::EventBuilder::new(kind).build();
+/// }
+/// ```
+///
+/// ```compile_fail,E0599
+/// fn authorless_builder_cannot_finalize_into_routing(kind: fava_write::Kind) {
+///     let _ = fava_write::EventBuilder::new(kind).into_event_and_routing();
+/// }
+/// ```
+#[derive(Clone)]
 pub struct EventBuilder {
-    author: PublicKey,
     kind: Kind,
     created_at: Timestamp,
     content: String,
@@ -47,12 +64,116 @@ pub struct EventBuilder {
 }
 
 impl EventBuilder {
-    /// Begin one event body without interpreting its kind.
+    /// Begin one event body without interpreting its kind, and without an author.
     #[must_use]
-    pub fn new(author: PublicKey, kind: Kind) -> Self {
-        Self::from_parts(author, kind, Timestamp::now(), Vec::new(), String::new())
+    pub fn new(kind: Kind) -> Self {
+        Self {
+            kind,
+            created_at: Timestamp::now(),
+            content: String::new(),
+            tags: Vec::new(),
+            routing: WriteRouting::Automatic,
+            raw_routing_inputs: 0,
+        }
     }
 
+    /// Set the exact event timestamp.
+    #[must_use]
+    pub const fn created_at(mut self, created_at: Timestamp) -> Self {
+        self.created_at = created_at;
+        self
+    }
+
+    /// Set opaque event content.
+    #[must_use]
+    pub fn content(mut self, content: impl Into<String>) -> Self {
+        self.content = content.into();
+        self
+    }
+
+    /// Append already-validated Nostr tags in their exact input order.
+    #[must_use]
+    pub fn tags(mut self, tags: impl IntoIterator<Item = Tag>) -> Self {
+        self.tags.extend(tags);
+        self
+    }
+
+    /// Append one already-validated Nostr tag.
+    #[must_use]
+    pub fn tag(self, tag: Tag) -> Self {
+        self.tags([tag])
+    }
+
+    /// Borrow every exact event tag in insertion order.
+    #[must_use]
+    pub fn event_tags(&self) -> &[Tag] {
+        &self.tags
+    }
+
+    /// Add relays to the builder's local explicit publication route.
+    ///
+    /// The route is not serialized or signed. Duplicate relay identities
+    /// collapse in first-occurrence order under the write owner's bound.
+    ///
+    /// # Errors
+    ///
+    /// Returns the owning [`WriteIntentError`] when route accumulation is
+    /// empty, cumulative raw input exceeds 1,024 occurrences, or the normalized
+    /// route exceeds 256 distinct destinations.
+    pub fn to_relays(mut self, relays: impl Into<Vec<RelayUrl>>) -> Result<Self, WriteIntentError> {
+        let relays = relays.into();
+        let raw_routing_inputs = self.raw_routing_inputs.checked_add(relays.len()).ok_or(
+            WriteIntentError::TooManyRawExplicitRelays {
+                actual: usize::MAX,
+                maximum: crate::routing::MAX_RAW_EXPLICIT_RELAYS,
+            },
+        )?;
+        refuse_raw_input(raw_routing_inputs)?;
+        self.routing = self.routing.append(relays)?;
+        self.raw_routing_inputs = raw_routing_inputs;
+        Ok(self)
+    }
+
+    /// Supply the author, yielding an [`AuthoredEventBuilder`] that can be
+    /// finalized.
+    ///
+    /// Every field accumulated so far — kind, timestamp, content, tag order,
+    /// and local publication route — carries over unchanged.
+    #[must_use]
+    pub fn by(self, author: PublicKey) -> AuthoredEventBuilder {
+        AuthoredEventBuilder {
+            author,
+            kind: self.kind,
+            created_at: self.created_at,
+            content: self.content,
+            tags: self.tags,
+            routing: self.routing,
+            raw_routing_inputs: self.raw_routing_inputs,
+        }
+    }
+}
+
+/// Incrementally assembles one complete unsigned Nostr event.
+///
+/// Carries every field [`EventBuilder`] carries, plus the author, and is the
+/// only builder state that can produce a deterministic event id. Reach an
+/// `AuthoredEventBuilder` either by calling [`EventBuilder::by`] on an
+/// authorless builder, or directly via [`AuthoredEventBuilder::from_parts`]
+/// when every field including the author is already known up front, such as
+/// re-encoding a previously decoded event. To reopen a finalized
+/// [`UnsignedEvent`], consume it with [`AuthoredEventBuilder::from`]; that
+/// preserves its body while discarding its derived id and local routing.
+pub struct AuthoredEventBuilder {
+    author: PublicKey,
+    kind: Kind,
+    created_at: Timestamp,
+    content: String,
+    tags: Vec<Tag>,
+    routing: WriteRouting,
+    raw_routing_inputs: usize,
+}
+
+impl AuthoredEventBuilder {
     /// Begin one event from exact raw Nostr parts without interpreting any field.
     ///
     /// # Arguments
@@ -188,12 +309,12 @@ impl EventBuilder {
     }
 }
 
-impl From<UnsignedEvent> for EventBuilder {
+impl From<UnsignedEvent> for AuthoredEventBuilder {
     /// Reopen an unsigned event body for further generic construction.
     ///
     /// This consumes every serialized body field in its original tag order,
     /// starts with automatic routing, and deliberately discards the derived
-    /// id. [`EventBuilder::build`] computes one id from the final body.
+    /// id. [`AuthoredEventBuilder::build`] computes one id from the final body.
     fn from(event: UnsignedEvent) -> Self {
         Self::from_parts(
             event.pubkey,

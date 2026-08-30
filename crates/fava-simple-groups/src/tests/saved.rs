@@ -1,4 +1,4 @@
-use fava_write::{EventValue, Kind, EditApplier, Tag, Timestamp};
+use fava_write::{EditApplier, EventValue, Kind, Tag, Timestamp};
 use nostr::event::{EventBuilder as NostrEventBuilder, FinalizeEvent};
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
@@ -222,12 +222,9 @@ fn applier_supports_only_its_private_edits() {
     assert_eq!(applier.kind(), Kind::from_u16(10_009));
     assert!(applier.supports(&edit));
 
-    let decoded = SavedGroupList::from_event(&EventValue::Unsigned(apply(
-        applier.as_ref(),
-        &edit,
-        None,
-    )))
-    .unwrap();
+    let decoded =
+        SavedGroupList::from_event(&EventValue::Unsigned(apply(applier.as_ref(), &edit, None)))
+            .unwrap();
     assert_eq!(decoded.simple_groups()[0].as_ref().unwrap().id(), "photos");
 }
 

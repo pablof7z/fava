@@ -309,10 +309,11 @@ fn hostile_sources_preserve_the_generic_builder_refusal_before_signature_verific
         Vec::new(),
     );
     escaped.id = EventId::from_byte_array([43; 32]);
-    let expected = fava_write::EventBuilder::new(actor.public_key(), Kind::from_u16(BOOKMARK_KIND))
+    let expected = fava_write::EventBuilder::new(Kind::from_u16(BOOKMARK_KIND))
         .created_at(Timestamp::from(2))
         .content(escaped.content.clone())
         .tag(Tag::event(event_id))
+        .by(actor.public_key())
         .build()
         .expect_err("hostile content exceeds the generic event bound");
     assert_eq!(
@@ -331,11 +332,12 @@ fn hostile_sources_preserve_the_generic_builder_refusal_before_signature_verific
         vec![Tag::parse(nested_values).expect("nonempty hostile tag")],
     );
     nested.id = EventId::from_byte_array([44; 32]);
-    let expected = fava_write::EventBuilder::new(actor.public_key(), Kind::from_u16(BOOKMARK_KIND))
+    let expected = fava_write::EventBuilder::new(Kind::from_u16(BOOKMARK_KIND))
         .created_at(Timestamp::from(2))
         .content(nested.content.clone())
         .tag(nested.tags[0].clone())
         .tag(Tag::event(event_id))
+        .by(actor.public_key())
         .build()
         .expect_err("hostile tag values exceed the generic event bound");
     assert_eq!(

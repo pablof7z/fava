@@ -187,9 +187,10 @@ fn intent() -> WriteIntent {
 }
 
 fn unsigned() -> fava_write::UnsignedEvent {
-    EventBuilder::new(keys().public_key(), Kind::TextNote)
+    EventBuilder::new(Kind::TextNote)
         .created_at(fava_write::Timestamp::from(1_700_000_000_u64))
         .content("durability-boundary")
+        .by(keys().public_key())
         .build()
         .expect("event builds")
 }

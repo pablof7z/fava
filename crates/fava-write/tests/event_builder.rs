@@ -1,8 +1,8 @@
 //! Public raw event builder field, order, identity, and bound proofs.
 
 use fava_write::{
-    EventBuildError, EventBuilder, Kind, Tag, Timestamp, UnsignedEvent, WriteIntentError,
-    WriteRouting,
+    AuthoredEventBuilder, EventBuildError, EventBuilder, Kind, Tag, Timestamp, UnsignedEvent,
+    WriteIntentError, WriteRouting,
 };
 use nostr::key::Keys;
 use nostr::types::RelayUrl;
@@ -27,7 +27,7 @@ fn raw_parts_and_bulk_tags_preserve_every_exact_field_and_order() {
         custom("x-a", "poop"),
         custom("x-unknown", "one"),
     ];
-    let from_parts = EventBuilder::from_parts(
+    let from_parts = AuthoredEventBuilder::from_parts(
         author,
         kind,
         created_at,
@@ -36,10 +36,11 @@ fn raw_parts_and_bulk_tags_preserve_every_exact_field_and_order() {
     )
     .build()
     .expect("raw parts build");
-    let bulk = EventBuilder::new(author, kind)
+    let bulk = EventBuilder::new(kind)
         .created_at(created_at)
         .tags(tags.clone())
         .content("opaque raw content")
+        .by(author)
         .build()
         .expect("bulk tags build");
 
@@ -53,12 +54,42 @@ fn raw_parts_and_bulk_tags_preserve_every_exact_field_and_order() {
 }
 
 #[test]
+fn shaping_before_and_after_by_produces_identical_output() {
+    let keys = keys();
+    let author = keys.public_key();
+    let kind = Kind::Custom(60_008);
+    let created_at = Timestamp::from(321);
+    let first_tag = custom("x-first", "one");
+    let second_tag = custom("x-second", "two");
+
+    let shaped_before = EventBuilder::new(kind)
+        .created_at(created_at)
+        .content("shaped body")
+        .tag(first_tag.clone())
+        .by(author)
+        .tag(second_tag.clone())
+        .build()
+        .expect("shaped-before-by build");
+
+    let shaped_after = EventBuilder::new(kind)
+        .by(author)
+        .created_at(created_at)
+        .content("shaped body")
+        .tag(first_tag)
+        .tag(second_tag)
+        .build()
+        .expect("shaped-after-by build");
+
+    assert_eq!(shaped_before, shaped_after);
+}
+
+#[test]
 fn reopening_an_unsigned_event_preserves_its_body_recomputes_identity_and_resets_routing() {
     let author = keys().public_key();
     let kind = Kind::Custom(60_006);
     let created_at = Timestamp::from(124);
     let original_tags = vec![custom("x-first", "one"), custom("x-second", "two")];
-    let original = EventBuilder::from_parts(
+    let original = AuthoredEventBuilder::from_parts(
         author,
         kind,
         created_at,
@@ -70,7 +101,7 @@ fn reopening_an_unsigned_event_preserves_its_body_recomputes_identity_and_resets
     let original_id = original.id.expect("original id is derived");
     let appended = custom("x-appended", "three");
 
-    let (reopened, routing) = EventBuilder::from(original)
+    let (reopened, routing) = AuthoredEventBuilder::from(original)
         .tag(appended.clone())
         .into_event_and_routing()
         .expect("reopened event builds");
@@ -91,6 +122,31 @@ fn reopening_an_unsigned_event_preserves_its_body_recomputes_identity_and_resets
 }
 
 #[test]
+fn reopening_an_unsigned_event_unmodified_re_derives_the_original_id() {
+    let author = keys().public_key();
+    let kind = Kind::Custom(60_009);
+    let created_at = Timestamp::from(125);
+    let tags = vec![custom("x-first", "one"), custom("x-second", "two")];
+    let original = AuthoredEventBuilder::from_parts(
+        author,
+        kind,
+        created_at,
+        tags.clone(),
+        "opaque raw content".to_owned(),
+    )
+    .build()
+    .expect("original event builds");
+    let original_id = original.id.expect("original id is derived");
+
+    let rebuilt = AuthoredEventBuilder::from(original.clone())
+        .build()
+        .expect("unmodified reopened event builds");
+
+    assert_eq!(rebuilt.id, Some(original_id));
+    assert_eq!(rebuilt, original);
+}
+
+#[test]
 fn reopening_an_unsigned_event_reapplies_final_tag_and_byte_bounds() {
     let author = keys().public_key();
     let tags = (0..2_000)
@@ -106,7 +162,7 @@ fn reopening_an_unsigned_event_reapplies_final_tag_and_byte_bounds() {
     oversized.ensure_id();
 
     assert!(matches!(
-        EventBuilder::from(UnsignedEvent::new(
+        AuthoredEventBuilder::from(UnsignedEvent::new(
             author,
             Timestamp::from(1),
             Kind::Custom(60_007),
@@ -121,7 +177,7 @@ fn reopening_an_unsigned_event_reapplies_final_tag_and_byte_bounds() {
         })
     ));
     assert!(matches!(
-        EventBuilder::from(oversized).build(),
+        AuthoredEventBuilder::from(oversized).build(),
         Err(EventBuildError::TooLarge { .. })
     ));
 }
@@ -132,7 +188,7 @@ fn raw_parts_and_bulk_tags_share_exact_hostile_bounds() {
     let tags = (0..2_001)
         .map(|index| custom("x-hostile", &index.to_string()))
         .collect::<Vec<_>>();
-    let from_parts = EventBuilder::from_parts(
+    let from_parts = AuthoredEventBuilder::from_parts(
         keys.public_key(),
         Kind::Custom(60_002),
         Timestamp::from(1),
@@ -140,8 +196,9 @@ fn raw_parts_and_bulk_tags_share_exact_hostile_bounds() {
         String::new(),
     )
     .build();
-    let bulk = EventBuilder::new(keys.public_key(), Kind::Custom(60_002))
+    let bulk = EventBuilder::new(Kind::Custom(60_002))
         .tags(tags)
+        .by(keys.public_key())
         .build();
     assert!(matches!(
         from_parts,
@@ -158,7 +215,7 @@ fn raw_parts_and_bulk_tags_share_exact_hostile_bounds() {
         })
     ));
 
-    let oversized = EventBuilder::from_parts(
+    let oversized = AuthoredEventBuilder::from_parts(
         keys.public_key(),
         Kind::Custom(60_002),
         Timestamp::from(1),
@@ -225,14 +282,16 @@ fn builder_keeps_neutral_explicit_routing_out_of_the_event_body() {
     let author = keys().public_key();
     let first = relay("first");
     let second = relay("second");
-    let builder = EventBuilder::new(author, Kind::Custom(60_003))
+    let builder = EventBuilder::new(Kind::Custom(60_003))
         .created_at(Timestamp::from(9))
         .content("same body")
+        .by(author)
         .to_relays([first.clone(), second.clone(), first.clone()])
         .expect("route composes");
-    let plain = EventBuilder::new(author, Kind::Custom(60_003))
+    let plain = EventBuilder::new(Kind::Custom(60_003))
         .created_at(Timestamp::from(9))
         .content("same body")
+        .by(author)
         .build()
         .expect("plain event builds");
 
@@ -247,7 +306,7 @@ fn builder_keeps_neutral_explicit_routing_out_of_the_event_body() {
 #[test]
 fn builder_bounds_cumulative_raw_routes_before_normalization() {
     let repeated = relay("builder-raw");
-    let builder = EventBuilder::new(keys().public_key(), Kind::Custom(60_005))
+    let builder = EventBuilder::new(Kind::Custom(60_005))
         .to_relays(vec![repeated.clone(); 512])
         .expect("first finite batch fits")
         .to_relays(vec![repeated; 512])
@@ -262,8 +321,27 @@ fn builder_bounds_cumulative_raw_routes_before_normalization() {
 }
 
 #[test]
+fn builder_bounds_cumulative_raw_routes_across_by() {
+    let repeated = relay("builder-raw-crossing-by");
+    let builder = EventBuilder::new(Kind::Custom(60_010))
+        .to_relays(vec![repeated.clone(); 512])
+        .expect("first finite batch fits")
+        .to_relays(vec![repeated; 512])
+        .expect("cumulative raw bound fits exactly")
+        .by(keys().public_key());
+    assert!(matches!(
+        builder.to_relays([relay("overflow")]),
+        Err(WriteIntentError::TooManyRawExplicitRelays {
+            actual: 1_025,
+            maximum: 1_024,
+        })
+    ));
+}
+
+#[test]
 fn event_only_build_refuses_an_attached_explicit_route() {
-    let builder = EventBuilder::new(keys().public_key(), Kind::Custom(60_004))
+    let builder = EventBuilder::new(Kind::Custom(60_004))
+        .by(keys().public_key())
         .to_relays([relay("attached")])
         .expect("route composes");
 

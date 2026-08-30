@@ -39,8 +39,9 @@ fn reference_hint_and_actual_relay_evidence_are_independent_reasons() {
     .unwrap();
     let router = HintRouter::new("hints");
     router.remember(&record);
-    let reply = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let reply = EventBuilder::new(Kind::TextNote)
         .tag(Tag::parse(["e", &target.id.to_hex(), hinted.as_str(), "reply"]).expect("e tag"))
+        .by(author.public_key())
         .build()
         .unwrap();
 

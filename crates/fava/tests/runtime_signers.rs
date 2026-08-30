@@ -38,8 +38,9 @@ async fn signer_added_after_acceptance_wakes_same_write() {
         .to([relay("alice")])
         .expect("route validates")
         .publish(
-            EventBuilder::new(alice.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("accepted before login")
+                .by(alice.public_key())
                 .build()
                 .expect("unsigned event builds"),
         )
@@ -84,8 +85,9 @@ async fn adding_bob_does_not_wake_alice() {
         .to([relay("alice-blocked")])
         .expect("route validates")
         .publish(
-            EventBuilder::new(alice.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("Alice remains on her exact signer generation")
+                .by(alice.public_key())
                 .build()
                 .expect("unsigned event builds"),
         )
@@ -118,8 +120,9 @@ async fn removed_signer_stale_valid_completion_is_inert_and_readd_wakes() {
         .to([relay("remove-readd")])
         .expect("route validates")
         .publish(
-            EventBuilder::new(alice.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("same custody survives logout and login")
+                .by(alice.public_key())
                 .build()
                 .expect("unsigned event builds"),
         )
@@ -175,8 +178,9 @@ async fn replaced_signer_stale_valid_completion_cannot_install_or_deliver() {
         .to([relay("replace")])
         .expect("route validates")
         .publish(
-            EventBuilder::new(alice.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("only the replacement generation may complete")
+                .by(alice.public_key())
                 .build()
                 .expect("unsigned event builds"),
         )
@@ -250,8 +254,9 @@ where
         .to([relay("pre-invoke-replacement")])
         .unwrap()
         .publish(
-            EventBuilder::new(public_key, Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("replacement wins after snapshot and before invocation")
+                .by(public_key)
                 .build()
                 .unwrap(),
         )
@@ -294,8 +299,9 @@ where
         .to([relay("cancelled-without-successor")])
         .unwrap()
         .publish(
-            EventBuilder::new(alice.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("cancelled authorization remains attributable")
+                .by(alice.public_key())
                 .build()
                 .unwrap(),
         )

@@ -31,8 +31,9 @@ async fn publish_payload_forms_share_one_door_and_unscoped_edit_refuses() {
         [fava_nip02::applier()],
     );
 
-    let unsigned = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let unsigned = EventBuilder::new(Kind::TextNote)
         .content("unsigned")
+        .by(keys.public_key())
         .build()
         .expect("unsigned event builds");
     let signed = NostrEventBuilder::new(Kind::TextNote, "signed")
@@ -60,8 +61,9 @@ async fn publish_returns_after_local_acceptance() {
         [Arc::clone(&signer) as Arc<dyn Signer>],
         std::iter::empty(),
     );
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content("accepted before downstream progress")
+        .by(keys.public_key())
         .build()
         .expect("event builds");
     let event_id = event.id.expect("event is finalized");
@@ -130,9 +132,10 @@ async fn invalid_payload_refuses_without_custody() {
         [Arc::new(LocalSigner::new(keys.clone())) as Arc<dyn Signer>],
         std::iter::empty(),
     );
-    let expired = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let expired = EventBuilder::new(Kind::TextNote)
         .created_at(Timestamp::from(1))
         .tag(nostr::event::Tag::expiration(Timestamp::from(2)))
+        .by(keys.public_key())
         .build()
         .expect("expired event body is structurally valid");
 

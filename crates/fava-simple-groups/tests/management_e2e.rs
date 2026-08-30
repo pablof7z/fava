@@ -32,7 +32,7 @@ use fava_simple_groups::{
     delete_event, delete_group, edit_metadata, invite, join_request, leave_group, put_user,
     remove_user,
 };
-use fava_write::{EventBuilder, EventId, Tag, UnsignedEvent};
+use fava_write::{EventBuilder, EventId, PublicKey, Tag, UnsignedEvent};
 
 // ── Relay harness ─────────────────────────────────────────────────────────────
 
@@ -351,8 +351,9 @@ fn p_tags(event: &Value) -> Vec<Vec<String>> {
         .collect()
 }
 
-fn build_event(builder: EventBuilder) -> UnsignedEvent {
+fn build_event(builder: EventBuilder, author: PublicKey) -> UnsignedEvent {
     builder
+        .by(author)
         .into_event_and_routing()
         .expect("management builder constructs its event")
         .0
@@ -398,8 +399,9 @@ async fn gate1_create_group_accepted() {
     let r = RelayUrl::parse(&relay.url).unwrap();
     let group = SimpleGroup::new("phase-b-cats", vec![r]).unwrap();
 
-    let event = create_group(keys.public_key(), &group)
+    let event = create_group(&group)
         .expect("create_group")
+        .by(keys.public_key())
         .into_event_and_routing()
         .expect("build event")
         .0;
@@ -435,8 +437,9 @@ async fn gate2_put_user_and_39001_observation() {
     let group = SimpleGroup::new("phase-b-gate2", vec![r]).unwrap();
 
     // — create_group (kind 9007) —
-    let cg = create_group(admin_keys.public_key(), &group)
+    let cg = create_group(&group)
         .expect("create_group")
+        .by(admin_keys.public_key())
         .into_event_and_routing()
         .expect("build event")
         .0;
@@ -445,27 +448,24 @@ async fn gate2_put_user_and_39001_observation() {
     assert!(ok, "create_group rejected: {msg}");
 
     // — put_user (kind 9000) —
-    let pu = put_user(
-        admin_keys.public_key(),
-        &group,
-        &[member_keys.public_key()],
-        &["admin"],
-    )
-    .expect("put_user")
-    .into_event_and_routing()
-    .expect("build event")
-    .0;
+    let pu = put_user(&group, &[member_keys.public_key()], &["admin"])
+        .expect("put_user")
+        .by(admin_keys.public_key())
+        .into_event_and_routing()
+        .expect("build event")
+        .0;
     let (ok, msg) = submit(&mut ws, pu, &admin_keys).await;
     eprintln!("[gate2] put_user OK={ok} msg={msg:?}");
     assert!(ok, "put_user rejected: {msg}");
 
     // — publish kind-39001 (simulating NIP-29 relay-maintained admin list) —
     let member_hex = member_keys.public_key().to_hex();
-    let k39001 = EventBuilder::new(admin_keys.public_key(), Kind::from_u16(39_001))
+    let k39001 = EventBuilder::new(Kind::from_u16(39_001))
         .tags([
             Tag::parse(["d", "phase-b-gate2"]).unwrap(),
             Tag::parse(["p", &member_hex, "admin"]).unwrap(),
         ])
+        .by(admin_keys.public_key())
         .build()
         .expect("build kind-39001");
     let (ok, msg) = submit(&mut ws, k39001, &admin_keys).await;
@@ -525,16 +525,12 @@ async fn gate3_wrong_authority_relay_rejects() {
     let r = RelayUrl::parse(&relay.url).unwrap();
     let group = SimpleGroup::new("phase-b-gate3", vec![r]).unwrap();
 
-    let tampered = put_user(
-        rogue_keys.public_key(),
-        &group,
-        &[admin_keys.public_key()],
-        &[],
-    )
-    .expect("put_user")
-    .into_event_and_routing()
-    .expect("build event")
-    .0;
+    let tampered = put_user(&group, &[admin_keys.public_key()], &[])
+        .expect("put_user")
+        .by(rogue_keys.public_key())
+        .into_event_and_routing()
+        .expect("build event")
+        .0;
 
     let (ok, msg) = submit(&mut ws, tampered, &rogue_keys).await;
     eprintln!("[gate3] rogue put_user OK={ok} msg={msg:?}");
@@ -576,20 +572,18 @@ async fn gate4_all_constructors_accepted() {
         .iter()
         .map(|target| vec!["p".to_owned(), target.to_hex(), "member".to_owned()])
         .collect::<Vec<_>>();
-    let invite_event = invite(
-        admin_keys.public_key(),
-        &group,
-        "gate4-required-invite-code",
-    )
-    .unwrap()
-    .into_event_and_routing()
-    .unwrap()
-    .0;
+    let invite_event = invite(&group, "gate4-required-invite-code")
+        .unwrap()
+        .by(admin_keys.public_key())
+        .into_event_and_routing()
+        .unwrap()
+        .0;
     let cases: Vec<(&str, UnsignedEvent, &Keys, Option<Vec<Vec<String>>>)> = vec![
         (
             "create_group",
-            create_group(admin_keys.public_key(), &group)
+            create_group(&group)
                 .unwrap()
+                .by(admin_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -599,7 +593,6 @@ async fn gate4_all_constructors_accepted() {
         (
             "edit_metadata",
             edit_metadata(
-                admin_keys.public_key(),
                 &group,
                 &MetadataEdit {
                     name: Some("Gate4 Cats".to_owned()),
@@ -609,6 +602,7 @@ async fn gate4_all_constructors_accepted() {
                 },
             )
             .unwrap()
+            .by(admin_keys.public_key())
             .into_event_and_routing()
             .unwrap()
             .0,
@@ -618,8 +612,9 @@ async fn gate4_all_constructors_accepted() {
         ("invite", invite_event, &admin_keys, None),
         (
             "join_request",
-            join_request(user_keys.public_key(), &group, None)
+            join_request(&group, None)
                 .unwrap()
+                .by(user_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -628,8 +623,9 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "put_user",
-            put_user(admin_keys.public_key(), &group, &user_targets, &["member"])
+            put_user(&group, &user_targets, &["member"])
                 .unwrap()
+                .by(admin_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -638,8 +634,9 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "remove_user",
-            remove_user(admin_keys.public_key(), &group, &user_targets)
+            remove_user(&group, &user_targets)
                 .unwrap()
+                .by(admin_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -648,8 +645,9 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "delete_event",
-            delete_event(admin_keys.public_key(), &group, &target_id)
+            delete_event(&group, &target_id)
                 .unwrap()
+                .by(admin_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -658,8 +656,9 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "delete_group",
-            delete_group(admin_keys.public_key(), &group)
+            delete_group(&group)
                 .unwrap()
+                .by(admin_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -668,8 +667,9 @@ async fn gate4_all_constructors_accepted() {
         ),
         (
             "leave_group",
-            leave_group(user_keys.public_key(), &group)
+            leave_group(&group)
                 .unwrap()
+                .by(user_keys.public_key())
                 .into_event_and_routing()
                 .unwrap()
                 .0,
@@ -732,7 +732,10 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
 
     let (ok, message) = submit(
         &mut ws,
-        build_event(create_group(admin.public_key(), &group).expect("create group")),
+        build_event(
+            create_group(&group).expect("create group"),
+            admin.public_key(),
+        ),
         &admin,
     )
     .await;
@@ -742,7 +745,6 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
         &mut ws,
         build_event(
             edit_metadata(
-                admin.public_key(),
                 &group,
                 &MetadataEdit {
                     access: Some(GroupAccess::Closed),
@@ -750,6 +752,7 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
                 },
             )
             .expect("close group"),
+            admin.public_key(),
         ),
         &admin,
     )
@@ -766,7 +769,8 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
         &mut ws,
         "put-one",
         build_event(
-            put_user(admin.public_key(), &group, &[one_user], &["member"]).expect("put one"),
+            put_user(&group, &[one_user], &["member"]).expect("put one"),
+            admin.public_key(),
         ),
         &admin,
         vec![vec!["p".to_owned(), one_user.to_hex(), "member".to_owned()]],
@@ -776,7 +780,8 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
         &mut ws,
         "put-many",
         build_event(
-            put_user(admin.public_key(), &group, &many_users, &["member"]).expect("put many"),
+            put_user(&group, &many_users, &["member"]).expect("put many"),
+            admin.public_key(),
         ),
         &admin,
         many_p_tags
@@ -788,7 +793,10 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "remove-one",
-        build_event(remove_user(admin.public_key(), &group, &[one_user]).expect("remove one")),
+        build_event(
+            remove_user(&group, &[one_user]).expect("remove one"),
+            admin.public_key(),
+        ),
         &admin,
         one_p_tag.clone(),
     )
@@ -796,14 +804,19 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
     submit_and_assert_p_tags(
         &mut ws,
         "remove-many",
-        build_event(remove_user(admin.public_key(), &group, &many_users).expect("remove many")),
+        build_event(
+            remove_user(&group, &many_users).expect("remove many"),
+            admin.public_key(),
+        ),
         &admin,
         many_p_tags.clone(),
     )
     .await;
 
-    let invitation =
-        build_event(invite(admin.public_key(), &group, "array-invite-code").expect("build invite"));
+    let invitation = build_event(
+        invite(&group, "array-invite-code").expect("build invite"),
+        admin.public_key(),
+    );
     let (invitation_id, ok, message) = submit_with_id(&mut ws, invitation, &admin).await;
     assert!(ok, "Croissant rejected invite: {message}");
     let stored = readback_one(&mut ws, "invite", &invitation_id).await;
@@ -816,14 +829,14 @@ async fn array_user_management_constructors_preserve_target_cardinality() {
     for (name, event) in [
         (
             "put-user",
-            put_user(admin.public_key(), &group, &[], &["member"]).expect("build empty put"),
+            put_user(&group, &[], &["member"]).expect("build empty put"),
         ),
         (
             "remove-user",
-            remove_user(admin.public_key(), &group, &[]).expect("build empty remove"),
+            remove_user(&group, &[]).expect("build empty remove"),
         ),
     ] {
-        let (ok, message) = submit(&mut ws, build_event(event), &admin).await;
+        let (ok, message) = submit(&mut ws, build_event(event, admin.public_key()), &admin).await;
         assert!(!ok, "Croissant accepted an empty {name} target list");
         assert!(message.contains("missing 'p' tags"), "{name}: {message}");
     }

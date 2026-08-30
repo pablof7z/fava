@@ -9,8 +9,8 @@
 use std::sync::Arc;
 
 use fava_write::{
-    EventBuilder, EventValue, Kind, PublicKey, EventEdit, EditApplier,
-    Tag, Timestamp, UnsignedEvent, WriteIntentError,
+    AuthoredEventBuilder, EditApplier, EventEdit, EventValue, Kind, PublicKey, Tag, Timestamp,
+    UnsignedEvent, WriteIntentError,
 };
 use nostr::types::RelayUrl;
 
@@ -70,9 +70,7 @@ pub fn save_simple_group(
 /// # Errors
 ///
 /// Returns [`WriteIntentError`] when the private edit or neutral edit value is refused.
-pub fn remove_saved_simple_group(
-    group: &SimpleGroup,
-) -> Result<EventEdit, WriteIntentError> {
+pub fn remove_saved_simple_group(group: &SimpleGroup) -> Result<EventEdit, WriteIntentError> {
     edit(
         REMOVE_SIMPLE_GROUP,
         group.id(),
@@ -394,10 +392,15 @@ impl EditApplier for SavedGroupListApplier {
             &relays,
             display_name.as_deref(),
         )?;
-        let event =
-            EventBuilder::from_parts(author, saved_kind(), created_at, tags, content.to_owned())
-                .build()
-                .map_err(WriteIntentError::from)?;
+        let event = AuthoredEventBuilder::from_parts(
+            author,
+            saved_kind(),
+            created_at,
+            tags,
+            content.to_owned(),
+        )
+        .build()
+        .map_err(WriteIntentError::from)?;
         event
             .verify_id()
             .map_err(|error| WriteIntentError::InvalidEvent(error.to_string()))?;

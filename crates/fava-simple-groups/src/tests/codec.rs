@@ -1,4 +1,4 @@
-use fava_write::{Kind, PublicKey, EventEdit, Timestamp, WriteIntentError};
+use fava_write::{EventEdit, Kind, PublicKey, Timestamp, WriteIntentError};
 
 use crate::saved_group_list_applier;
 
@@ -15,8 +15,7 @@ fn text(value: &[u8]) -> Vec<u8> {
 }
 
 fn edit(kind: Kind, identifier: Option<&str>, change: Vec<u8>) -> EventEdit {
-    EventEdit::new(kind, identifier.map(str::to_owned), change)
-        .expect("neutral edit shape")
+    EventEdit::new(kind, identifier.map(str::to_owned), change).expect("neutral edit shape")
 }
 
 fn assert_refusal(edit: &EventEdit, expected: &str) {

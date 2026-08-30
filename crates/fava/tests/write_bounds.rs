@@ -21,8 +21,9 @@ async fn slow_receipt_consumer_gets_explicit_lag_instead_of_silent_loss() {
     let store = MemoryWriteStore::default();
     let mut changes = store.receipt_changes();
     for sequence in 0..257 {
-        let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+        let event = EventBuilder::new(Kind::TextNote)
             .content(format!("receipt change {sequence}"))
+            .by(keys.public_key())
             .build()
             .unwrap();
         store
@@ -39,7 +40,8 @@ async fn slow_receipt_consumer_gets_explicit_lag_instead_of_silent_loss() {
 #[test]
 fn explicit_write_relay_fanout_is_bounded_before_custody() {
     let keys = Keys::generate();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap();
     let relays = (0..257)
@@ -58,8 +60,9 @@ fn explicit_write_relay_fanout_is_bounded_before_custody() {
 fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
     let keys = Keys::generate();
     let relay = RelayUrl::parse("wss://bounded.example").unwrap();
-    let unsigned = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let unsigned = EventBuilder::new(Kind::TextNote)
         .content("accepted body")
+        .by(keys.public_key())
         .build()
         .unwrap();
     let store = MemoryWriteStore::default();
@@ -77,8 +80,9 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
             )
             .is_err()
     );
-    let wrong = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let wrong = EventBuilder::new(Kind::TextNote)
         .content("different body")
+        .by(keys.public_key())
         .build()
         .unwrap()
         .finalize(&keys)
@@ -152,7 +156,8 @@ fn receipt_text_and_signed_body_are_checked_at_the_store_boundary() {
 #[test]
 fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
     let keys = Keys::generate();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap();
     let store = MemoryWriteStore::default();
@@ -208,7 +213,8 @@ fn automatic_route_fanout_is_bounded_before_receipt_mutation() {
 #[test]
 fn automatic_route_shortfall_bound_is_atomic() {
     let keys = Keys::generate();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap();
     let store = MemoryWriteStore::default();
@@ -267,7 +273,8 @@ fn automatic_route_shortfall_bound_is_atomic() {
 #[test]
 fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
     let keys = Keys::generate();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap()
         .finalize(&keys)
@@ -354,7 +361,8 @@ fn withdrawn_in_flight_lane_stays_open_until_its_outcome_is_recorded() {
 #[test]
 fn settled_empty_automatic_route_has_typed_outcome_and_reason() {
     let keys = Keys::generate();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap();
     let request = RouteRequest::Write(EventValue::Unsigned(event.clone()));

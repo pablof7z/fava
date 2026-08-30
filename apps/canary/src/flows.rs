@@ -502,8 +502,9 @@ async fn flow_05_profile_and_contacts(live: &RelayUrl, seed: &str) -> FlowRecord
     let mut detail = json!({});
 
     // Publish a profile, then read it back through an ordinary query.
-    let profile = EventBuilder::new(me.public_key(), Kind::Metadata)
+    let profile = EventBuilder::new(Kind::Metadata)
         .content(format!("{{\"name\":\"fava-flow-{seed}\"}}"))
+        .by(me.public_key())
         .build();
     let profile = match profile {
         Ok(profile) => profile,
@@ -668,8 +669,9 @@ async fn flow_06_automatic_note(live: &RelayUrl, seed: &str) -> FlowRecord {
             return FlowRecord::wall(ID, INTENT, "show-stopper", error.to_string(), json!({}));
         }
     };
-    let note = EventBuilder::new(account.public_key(), Kind::TextNote)
+    let note = EventBuilder::new(Kind::TextNote)
         .content(format!("Fava automatic routing flow {seed}"))
+        .by(account.public_key())
         .build();
     let note = match note {
         Ok(note) => note,
@@ -985,8 +987,9 @@ fn flow_09_cancel_before_delivery(down: &RelayUrl, seed: &str) -> FlowRecord {
             return FlowRecord::wall(ID, INTENT, "show-stopper", error.to_string(), json!({}));
         }
     };
-    let note = EventBuilder::new(account.public_key(), Kind::TextNote)
+    let note = EventBuilder::new(Kind::TextNote)
         .content(format!("Fava cancel flow {seed}"))
+        .by(account.public_key())
         .build();
     let note = match note {
         Ok(note) => note,
@@ -1117,8 +1120,9 @@ pub async fn run_flow_close_child(arguments: Vec<String>) -> CanaryResult<()> {
         .observe(Query::events().kinds([Kind::TextNote]).map_err(error)?)
         .await
         .map_err(error)?;
-    let note = EventBuilder::new(account.public_key(), Kind::TextNote)
+    let note = EventBuilder::new(Kind::TextNote)
         .content("Fava clean-close flow")
+        .by(account.public_key())
         .build()
         .map_err(error)?;
     let write = engine.publish(note).map_err(error)?;
@@ -1133,8 +1137,9 @@ pub async fn run_flow_close_child(arguments: Vec<String>) -> CanaryResult<()> {
 // ---------------------------------------------------------------------------
 
 async fn publish_note(engine: &Fava, author: PublicKey, label: &str) -> CanaryResult<String> {
-    let note = EventBuilder::new(author, Kind::TextNote)
+    let note = EventBuilder::new(Kind::TextNote)
         .content(format!("Fava flow note {label}"))
+        .by(author)
         .build()
         .map_err(error)?;
     publish_and_settle(engine, note).await

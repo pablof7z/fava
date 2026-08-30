@@ -101,10 +101,11 @@ pub(crate) async fn execute_multi_group_live_flow(
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     for (index, group_id) in group_ids.iter().enumerate() {
-        let create = EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
+        let create = EventBuilder::new(Kind::from_u16(9_007))
             .created_at(Timestamp::from(now + u64::try_from(index).map_err(error)?))
             .content("controlled multi-group live bootstrap")
             .tag(tag(&["h", group_id])?)
+            .by(author.public_key())
             .build()
             .map_err(error)?
             .finalize(&author)
@@ -116,8 +117,9 @@ pub(crate) async fn execute_multi_group_live_flow(
     }
 
     let write = publisher
+        .by(author.public_key())
         .publish(
-            EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND))
+            EventBuilder::new(Kind::from_u16(CUSTOM_KIND))
                 .created_at(Timestamp::from(now + 2))
                 .content("one signed event through two live groups")
                 .simple_group(&groups[0])
@@ -242,10 +244,11 @@ async fn execute_with_proxies(
     )?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-    let create = EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
+    let create = EventBuilder::new(Kind::from_u16(9_007))
         .created_at(Timestamp::from(now))
         .content("controlled group bootstrap")
         .tag(tag(&["h", &simple_group_id])?)
+        .by(author.public_key())
         .build()
         .map_err(error)?
         .finalize(&author)
@@ -269,13 +272,14 @@ async fn execute_with_proxies(
     .into_iter()
     .enumerate()
     {
-        let metadata = EventBuilder::new(author.public_key(), Kind::from_u16(9_002))
+        let metadata = EventBuilder::new(Kind::from_u16(9_002))
             .created_at(Timestamp::from(now + 1 + index as u64))
             .tags([
                 tag(&["name", name])?,
                 tag(&["about", about])?,
                 tag(&["h", &simple_group_id])?,
             ])
+            .by(author.public_key())
             .build()
             .map_err(error)?;
         require_terminal(
@@ -287,12 +291,13 @@ async fn execute_with_proxies(
         .into_iter()
         .enumerate()
     {
-        let admin = EventBuilder::new(author.public_key(), Kind::from_u16(9_000))
+        let admin = EventBuilder::new(Kind::from_u16(9_000))
             .created_at(Timestamp::from(now + 3 + index as u64))
             .tags([
                 tag(&["p", &target.to_hex(), "admin"])?,
                 tag(&["h", &simple_group_id])?,
             ])
+            .by(author.public_key())
             .build()
             .map_err(error)?;
         require_terminal(
@@ -411,10 +416,11 @@ async fn execute_with_proxies(
     ];
     let mut multi_group_create_event_ids = [String::new(), String::new()];
     for index in 0..custom_groups.len() {
-        let create = EventBuilder::new(author.public_key(), Kind::from_u16(9_007))
+        let create = EventBuilder::new(Kind::from_u16(9_007))
             .created_at(Timestamp::from(now + 8))
             .content("controlled multi-group bootstrap")
             .tag(tag(&["h", &multi_group_ids[index]])?)
+            .by(author.public_key())
             .build()
             .map_err(error)?
             .finalize(&author)
@@ -425,13 +431,14 @@ async fn execute_with_proxies(
         }
         multi_group_create_event_ids[index] = create.id.to_hex();
     }
-    let custom = EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND))
+    let custom = EventBuilder::new(Kind::from_u16(CUSTOM_KIND))
         .created_at(Timestamp::from(now + 9))
         .content("one arbitrary event across two exact groups")
         .simple_group(&custom_groups[0])
         .map_err(error)?
         .simple_group(&custom_groups[1])
-        .map_err(error)?;
+        .map_err(error)?
+        .by(author.public_key());
     let custom_write = publisher.publish(custom).map_err(error)?;
     let custom_receipt = wait_terminal(&custom_write).await?;
     require_terminal(&custom_receipt, selected_relays)?;
@@ -472,17 +479,17 @@ async fn execute_with_proxies(
 
     let before_preparation = publisher.open_receipts().map_err(error)?.len();
     let drafts = [
-        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+        EventBuilder::new(Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 9))
             .content("missing context"),
-        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+        EventBuilder::new(Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 10))
             .tags([
                 tag(&["h", &simple_group_id])?,
                 tag(&["h", &simple_group_id, "unused"])?,
             ])
             .content("extended context"),
-        EventBuilder::new(author.public_key(), Kind::from_u16(CUSTOM_KIND + 1))
+        EventBuilder::new(Kind::from_u16(CUSTOM_KIND + 1))
             .created_at(Timestamp::from(now + 11))
             .tag(tag(&["h", "other-group"])?)
             .content("foreign context"),
@@ -492,6 +499,7 @@ async fn execute_with_proxies(
         let (event, _) = draft
             .simple_group(&simple_group)
             .map_err(error)?
+            .by(author.public_key())
             .into_event_and_routing()
             .map_err(error)?;
         if event
@@ -655,10 +663,11 @@ fn signed_group_event(
     created: u64,
     content: &str,
 ) -> CanaryResult<Event> {
-    EventBuilder::new(keys.public_key(), Kind::from_u16(9))
+    EventBuilder::new(Kind::from_u16(9))
         .created_at(Timestamp::from(created))
         .content(content)
         .tag(tag(&["h", simple_group.id()])?)
+        .by(keys.public_key())
         .build()
         .map_err(error)?
         .finalize(keys)

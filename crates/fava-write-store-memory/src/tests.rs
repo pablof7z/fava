@@ -14,8 +14,9 @@ fn exhausted_write_identity_refuses_without_state_or_notification() {
     let mut changes = store.receipt_changes();
     let keys = Keys::parse("0101010101010101010101010101010101010101010101010101010101010101")
         .expect("fixed test key");
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content("identity exhaustion")
+        .by(keys.public_key())
         .build()
         .expect("bounded event");
 

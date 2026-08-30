@@ -129,12 +129,13 @@ impl EditApplier for ControlledApplier {
         } else {
             created_at
         };
-        EventBuilder::new(actor, kind)
+        EventBuilder::new(kind)
             .created_at(returned_at)
             .content(content)
             .tags((0..self.tag_count).map(|index| {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
+            .by(actor)
             .build()
             .map_err(WriteIntentError::from)
     }
@@ -310,9 +311,10 @@ async fn timestamp_and_evidence_overflow_preserve_current() {
 
 fn prove_evidence_exhaustion(keys: &Keys) {
     let store = MemoryWriteStore::bounded(NonZeroUsize::new(1).unwrap());
-    let first = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let first = EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(1))
         .content("generation zero")
+        .by(keys.public_key())
         .build()
         .unwrap();
     let accepted = store
@@ -340,9 +342,10 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 expected,
                 expected_source,
                 std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
-                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                EventBuilder::new(Kind::ContactList)
                     .created_at(Timestamp::from(source_time + 1))
                     .content(format!("generation {generation}"))
+                    .by(keys.public_key())
                     .build()
                     .unwrap(),
                 Some(&EventValue::Signed(source.clone())),
@@ -364,9 +367,10 @@ fn prove_evidence_exhaustion(keys: &Keys) {
                 expected,
                 expected_source,
                 std::slice::from_ref(&failure_support::edit(Kind::ContactList)),
-                EventBuilder::new(keys.public_key(), Kind::ContactList)
+                EventBuilder::new(Kind::ContactList)
                     .created_at(Timestamp::from(1_001))
                     .content("overflow generation")
+                    .by(keys.public_key())
                     .build()
                     .unwrap(),
                 Some(&EventValue::Signed(overflow_source.clone())),

@@ -17,7 +17,7 @@ fn relay(url: &str) -> RelayUrl {
 
 #[test]
 fn hostile_tags_stay_local_and_valid_siblings_survive() {
-    let event = EventBuilder::new(author(), Kind::from(10_002_u16))
+    let event = EventBuilder::new(Kind::from(10_002_u16))
         .tag(Tag::parse(["r", "wss://read.example", "read"]).expect("read tag"))
         .tag(Tag::parse(["r"]).expect("short tag"))
         .tag(Tag::parse(["r", "not a relay URL", "write"]).expect("invalid relay tag"))
@@ -29,6 +29,7 @@ fn hostile_tags_stay_local_and_valid_siblings_survive() {
         )
         .tag(Tag::parse(["r", "wss://both.example", "read"]).expect("duplicate tag"))
         .tag(Tag::parse(["p", "unrelated"]).expect("unrelated tag"))
+        .by(author())
         .build()
         .expect("bounded event");
 
@@ -46,8 +47,9 @@ fn hostile_tags_stay_local_and_valid_siblings_survive() {
 
 #[test]
 fn present_empty_marker_is_unknown_not_omitted() {
-    let event = EventBuilder::new(author(), Kind::from(10_002_u16))
+    let event = EventBuilder::new(Kind::from(10_002_u16))
         .tag(Tag::parse(["r", "wss://empty-marker.example", ""]).expect("empty marker tag"))
+        .by(author())
         .build()
         .expect("bounded event");
 
@@ -59,7 +61,7 @@ fn present_empty_marker_is_unknown_not_omitted() {
 
 #[test]
 fn repeated_relay_does_not_consume_distinct_result_bound() {
-    let mut builder = EventBuilder::new(author(), Kind::from(10_002_u16));
+    let mut builder = EventBuilder::new(Kind::from(10_002_u16)).by(author());
     for _ in 0..300 {
         builder =
             builder.tag(Tag::parse(["r", "wss://repeated.example"]).expect("repeated relay tag"));

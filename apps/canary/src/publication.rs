@@ -172,9 +172,10 @@ async fn optimistic(
         )
         .await
         .map_err(error)?;
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .created_at(Timestamp::now())
         .content(format!("Fava M5 optimistic {seed}"))
+        .by(keys.public_key())
         .build()
         .map_err(error)?;
     let event_id = event.id.expect("checked builder installs id");
@@ -309,8 +310,9 @@ async fn cancel(artifacts: &RunArtifacts, seed: &str, relay: &LabRelay) -> Canar
         )
         .await
         .map_err(error)?;
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content(format!("Fava M5 cancel {seed}"))
+        .by(keys.public_key())
         .build()
         .map_err(error)?;
     let event_id = event.id.expect("checked builder installs id");

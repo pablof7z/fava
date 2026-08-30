@@ -167,7 +167,7 @@ fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts
     let notes =
         SimpleGroup::new("notes", vec![shared.clone(), second.clone()]).expect("non-empty group");
     let photos_later = SimpleGroup::new("photos", vec![later.clone()]).expect("same id, new host");
-    let builder = EventBuilder::new(public_key(), Kind::from_u16(42))
+    let builder = EventBuilder::new(Kind::from_u16(42))
         .created_at(Timestamp::from(2))
         .tags([
             tag(&["h"]),
@@ -182,6 +182,7 @@ fn group_composition_preserves_foreign_tags_and_composes_distinct_exact_contexts
         .expect("second group composes")
         .simple_group(&photos_later)
         .expect("same id adds hosts without duplicating its tag")
+        .by(public_key())
         .into_event_and_routing()
         .expect("routed event builds");
 

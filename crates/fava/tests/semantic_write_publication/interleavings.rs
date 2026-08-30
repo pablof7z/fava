@@ -17,9 +17,10 @@ use nostr::key::Keys;
 use super::support::{intent, relay_url};
 
 fn revision(keys: &Keys, created_at: u64, content: &str) -> fava::UnsignedEvent {
-    EventBuilder::new(keys.public_key(), Kind::ContactList)
+    EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
+        .by(keys.public_key())
         .build()
         .expect("revision builds")
 }
@@ -309,9 +310,10 @@ fn active_reservation_excludes_unreserved_memory_admission() {
         )
         .expect("semantic slot reserves");
     let raw = WriteIntent::event(
-        EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
+        EventBuilder::new(Kind::TextNote)
             .created_at(Timestamp::from(1))
             .content("unreserved")
+            .by(raw_keys.public_key())
             .build()
             .unwrap(),
         WriteRouting::Automatic,

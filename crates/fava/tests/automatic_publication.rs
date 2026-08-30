@@ -70,12 +70,13 @@ async fn known_destinations_deliver_immediately() {
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
         .expect("assembly");
-    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .tags(
             recipients
                 .iter()
                 .map(|keys| Tag::parse(["p", &keys.public_key().to_hex()]).expect("p tag")),
         )
+        .by(author.public_key())
         .build()
         .expect("event");
     let preview = fava_routing::preview(
@@ -125,8 +126,9 @@ async fn a_router_refusing_to_open_leaves_the_write_open_with_an_attributed_shor
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
         .expect("assembly");
-    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .tags([Tag::parse(["p", &recipient.public_key().to_hex()]).expect("p tag")])
+        .by(author.public_key())
         .build()
         .expect("event");
 

@@ -402,9 +402,10 @@ fn build(
     tags: Vec<Tag>,
     created_at: Timestamp,
 ) -> Result<UnsignedEvent, WriteIntentError> {
-    let mut builder = EventBuilder::new(author, bookmark_kind())
+    let mut builder = EventBuilder::new(bookmark_kind())
         .created_at(created_at)
-        .content(content);
+        .content(content)
+        .by(author);
     for tag in tags {
         builder = builder.tag(tag);
     }

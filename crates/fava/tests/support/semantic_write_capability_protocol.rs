@@ -374,7 +374,7 @@ fn prove_public_refusals<Add>(
     .unwrap();
     capacity_store
         .accept_applied(EventValue::Unsigned(
-            EventBuilder::new(actor, Kind::TextNote).build().unwrap(),
+            EventBuilder::new(Kind::TextNote).by(actor).build().unwrap(),
         ))
         .unwrap();
     assert!(matches!(

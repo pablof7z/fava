@@ -58,8 +58,9 @@ pub fn relay(url: &str) -> RelaySessionKey {
 
 #[must_use]
 pub fn unsigned_note() -> UnsignedEvent {
-    EventBuilder::new(author(), Kind::TextNote)
+    EventBuilder::new(Kind::TextNote)
         .content("owner-level evidence")
+        .by(author())
         .build()
         .expect("test note builds")
 }

@@ -27,9 +27,10 @@ fn active_reservation_excludes_unreserved_redb_admission() {
         .reserve_active(&edit(), semantic_keys.public_key())
         .expect("semantic slot reserves");
     let raw = WriteIntent::event(
-        EventBuilder::new(raw_keys.public_key(), Kind::TextNote)
+        EventBuilder::new(Kind::TextNote)
             .created_at(Timestamp::from(1))
             .content("unreserved")
+            .by(raw_keys.public_key())
             .build()
             .unwrap(),
         WriteRouting::Automatic,

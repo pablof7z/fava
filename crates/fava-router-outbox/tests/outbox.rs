@@ -31,7 +31,8 @@ fn declares_one_bounded_max_age_kind_10002_query() {
 #[test]
 fn zero_indexers_remains_unresolved() {
     let author = Keys::generate();
-    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(author.public_key())
         .build()
         .unwrap();
     let request = RouteRequest::Write(EventValue::Unsigned(event));

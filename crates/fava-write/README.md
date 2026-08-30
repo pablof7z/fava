@@ -1,18 +1,24 @@
 # fava-write
 
 `EventBuilder` carries generic Nostr fields plus optional bounded local relay
-routing. The route is not serialized or signed. Event-only `build()` refuses
-an attached route; `into_event_and_routing()` is the neutral consuming boundary
-used by the Fava publication door. `EventBuildError` is the checked construction
-boundary for one generic `UnsignedEvent`. Its exhaustive conversion to
-`WriteIntentError` preserves tag cardinality, serialized-byte overflow,
-encoding failure, and route-preservation refusal without assigning publication
-lifecycle meaning. `WriteIntentError` is returned both before custody and by
-appliers applying edits initially or after custody.
-`EventBuilder::from(unsigned)` consumes a finalized unsigned body, preserves
-its author, kind, timestamp, ordered tags, and content, discards its derived
-id, and starts with automatic routing; its final build boundary computes the
-replacement id and reapplies generic bounds.
+routing, and has no author: it cannot produce an unsigned event or an event
+id. Calling `EventBuilder::by(author)` supplies the author and yields an
+`AuthoredEventBuilder`, which carries every accumulated field plus the author
+and owns the finalization boundary. `AuthoredEventBuilder`'s event-only
+`build()` refuses an attached route; `into_event_and_routing()` is the
+neutral consuming boundary used by the Fava publication door.
+`EventBuildError` is the checked construction boundary for one generic
+`UnsignedEvent`. Its exhaustive conversion to `WriteIntentError` preserves
+tag cardinality, serialized-byte overflow, encoding failure, and
+route-preservation refusal without assigning publication lifecycle meaning.
+`WriteIntentError` is returned both before custody and by appliers applying
+edits initially or after custody.
+`AuthoredEventBuilder::from(unsigned)` consumes a finalized unsigned body,
+preserves its author, kind, timestamp, ordered tags, and content, discards
+its derived id, and starts with automatic routing; its final build boundary
+computes the replacement id and reapplies generic bounds. When every field
+including the author is already known up front, `AuthoredEventBuilder::from_parts`
+constructs the authored form directly.
 Current publication erases an applier's typed value to
 `PublicationError::Routing(error.to_string())`; it does not survive that
 boundary. Structured attribution is the separate work tracked by
@@ -39,6 +45,24 @@ Compiler-visible module `fava_write`.
 | **`Tag`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Tag","signature":"pub use fava_write::Tag","evidence":"cargo-public-api@0.52.0: pub use fava_write::Tag"} --> | Compiler-visible public field owned by `fava_write`. |
 | **`Timestamp`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::Timestamp","signature":"pub use fava_write::Timestamp","evidence":"cargo-public-api@0.52.0: pub use fava_write::Timestamp"} --> | Compiler-visible public field owned by `fava_write`. |
 | **`UnsignedEvent`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava_write::UnsignedEvent","signature":"pub use fava_write::UnsignedEvent","evidence":"cargo-public-api@0.52.0: pub use fava_write::UnsignedEvent"} --> | Compiler-visible public field owned by `fava_write`. |
+
+### `AuthoredEventBuilder` (Struct)
+
+Compiler-visible struct `fava_write::AuthoredEventBuilder`.
+<!-- api-item {"kind":"Struct","item":"fava_write::AuthoredEventBuilder","signature":"pub struct fava_write::AuthoredEventBuilder","evidence":"cargo-public-api@0.52.0: pub struct fava_write::AuthoredEventBuilder"} -->
+
+| Item | Purpose |
+| --- | --- |
+| **`build`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::build","signature":"pub fn fava_write::AuthoredEventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`content`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::content","signature":"pub fn fava_write::AuthoredEventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`created_at`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::created_at","signature":"pub const fn fava_write::AuthoredEventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::AuthoredEventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`event_tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::event_tags","signature":"pub fn fava_write::AuthoredEventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`core::convert::From<nostr::event::unsigned::UnsignedEvent>::from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::AuthoredEventBuilder as core::convert::From<nostr::event::unsigned::UnsignedEvent>>::from","signature":"pub fn fava_write::AuthoredEventBuilder::from(nostr::event::unsigned::UnsignedEvent) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::from(nostr::event::unsigned::UnsignedEvent) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`from_parts`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::from_parts","signature":"pub fn fava_write::AuthoredEventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`into_event_and_routing`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::into_event_and_routing","signature":"pub fn fava_write::AuthoredEventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`tag`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::tag","signature":"pub fn fava_write::AuthoredEventBuilder::tag(self, nostr::event::tag::Tag) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::tag(self, nostr::event::tag::Tag) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::tags","signature":"pub fn fava_write::AuthoredEventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
+| **`to_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::AuthoredEventBuilder::to_relays","signature":"pub fn fava_write::AuthoredEventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::AuthoredEventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Compiler-visible method owned by `fava_write::AuthoredEventBuilder`. |
 
 ### `EditApplier` (Trait)
 
@@ -75,14 +99,11 @@ Compiler-visible struct `fava_write::EventBuilder`.
 
 | Item | Purpose |
 | --- | --- |
-| **`build`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::build","signature":"pub fn fava_write::EventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::build(self) -> core::result::Result<nostr::event::unsigned::UnsignedEvent, fava_write::EventBuildError>"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`by`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::by","signature":"pub fn fava_write::EventBuilder::by(self, nostr::key::public_key::PublicKey) -> fava_write::AuthoredEventBuilder","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::by(self, nostr::key::public_key::PublicKey) -> fava_write::AuthoredEventBuilder"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`content`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::content","signature":"pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::content(self, impl core::convert::Into<alloc::string::String>) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`created_at`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::created_at","signature":"pub const fn fava_write::EventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self","evidence":"cargo-public-api@0.52.0: pub const fn fava_write::EventBuilder::created_at(self, nostr::types::time::Timestamp) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`event_tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::event_tags","signature":"pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::event_tags(&self) -> &[nostr::event::tag::Tag]"} --> | Borrows exact event tags in insertion order so protocol extension traits can compose without owning generic construction. |
-| **`core::convert::From<nostr::event::unsigned::UnsignedEvent>::from`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava_write::EventBuilder as core::convert::From<nostr::event::unsigned::UnsignedEvent>>::from","signature":"pub fn fava_write::EventBuilder::from(nostr::event::unsigned::UnsignedEvent) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::from(nostr::event::unsigned::UnsignedEvent) -> Self"} --> | Consumes an unsigned body into a mutable generic builder, resetting its derived id and local routing. |
-| **`from_parts`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::from_parts","signature":"pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::from_parts(nostr::key::public_key::PublicKey, nostr::event::kind::Kind, nostr::types::time::Timestamp, alloc::vec::Vec<nostr::event::tag::Tag>, alloc::string::String) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
-| **`into_event_and_routing`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::into_event_and_routing","signature":"pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::into_event_and_routing(self) -> core::result::Result<(nostr::event::unsigned::UnsignedEvent, fava_write::WriteRouting), fava_write::EventBuildError>"} --> | Consumes the builder into one unsigned event plus its neutral local publication route. |
-| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::new","signature":"pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::new(nostr::key::public_key::PublicKey, nostr::event::kind::Kind) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
+| **`new`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::new","signature":"pub fn fava_write::EventBuilder::new(nostr::event::kind::Kind) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::new(nostr::event::kind::Kind) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`tag`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::tag","signature":"pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::tag(self, nostr::event::tag::Tag) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`tags`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::tags","signature":"pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::tags(self, impl core::iter::traits::collect::IntoIterator<Item = nostr::event::tag::Tag>) -> Self"} --> | Compiler-visible method owned by `fava_write::EventBuilder`. |
 | **`to_relays`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava_write::EventBuilder::to_relays","signature":"pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>","evidence":"cargo-public-api@0.52.0: pub fn fava_write::EventBuilder::to_relays(self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<Self, fava_write::WriteIntentError>"} --> | Accumulates a bounded, first-occurrence explicit relay route without serializing it into the event. |

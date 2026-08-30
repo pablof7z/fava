@@ -88,8 +88,9 @@ impl Signer for ImmediateSigner {
 
 fn signed_note() -> Event {
     let keys = author_keys();
-    EventBuilder::new(keys.public_key(), Kind::TextNote)
+    EventBuilder::new(Kind::TextNote)
         .content("nip42 test")
+        .by(keys.public_key())
         .build()
         .expect("note builds")
         .finalize(&keys)

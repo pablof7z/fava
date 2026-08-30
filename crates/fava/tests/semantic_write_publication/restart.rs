@@ -47,9 +47,10 @@ async fn memory_restart_reconciles_before_immediate_edit_and_late_source_replays
                 fava::WriteRouting::explicit([relay_url()]).unwrap(),
             )
             .unwrap(),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(1))
                 .content("edit")
+                .by(keys.public_key())
                 .build()
                 .unwrap(),
             None,
@@ -116,9 +117,10 @@ async fn memory_restart_reopens_router_if_generation_changes_during_session_open
         .accept_applied_edit(
             WriteIntent::edit_as(edit(1), keys.public_key(), fava::WriteRouting::Automatic)
                 .unwrap(),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(1))
                 .content("edit")
+                .by(keys.public_key())
                 .build()
                 .unwrap(),
             None,
@@ -216,9 +218,10 @@ impl Router for ComposingRouter {
                 panic!("semantic router receives a write request");
             };
             let edit = edit(2);
-            let event = EventBuilder::new(self.author, Kind::ContactList)
+            let event = EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(source.created_at().as_secs() + 1))
                 .content(format!("{}|edit", content(source)))
+                .by(self.author)
                 .build()
                 .unwrap();
             let reservation = self.store.reserve_active(&edit, self.author).unwrap();

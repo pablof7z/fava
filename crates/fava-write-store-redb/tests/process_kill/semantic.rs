@@ -691,9 +691,10 @@ fn edit_intent() -> WriteIntent {
 }
 
 fn revision(created_at: u64, body: &str) -> UnsignedEvent {
-    EventBuilder::new(keys().public_key(), Kind::ContactList)
+    EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(body)
+        .by(keys().public_key())
         .build()
         .expect("semantic revision")
 }
@@ -775,12 +776,13 @@ impl EditApplier for TestApplier {
         } else {
             format!("{source_content}|{change}")
         };
-        let result = EventBuilder::new(author, Kind::ContactList)
+        let result = EventBuilder::new(Kind::ContactList)
             .created_at(created_at)
             .content(content)
             .tags((0..self.tag_count).map(|index| {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
+            .by(author)
             .build()
             .map_err(WriteIntentError::from);
         if let Err(error) = &result {

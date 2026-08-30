@@ -70,9 +70,10 @@ async fn recovery_uses_persisted_author_when_only_bob_signer_is_selected() {
     let accepted = store
         .accept_applied_edit(
             intent(alice.public_key(), Kind::ContactList),
-            EventBuilder::new(alice.public_key(), Kind::ContactList)
+            EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(1))
                 .content("accepted as Alice")
+                .by(alice.public_key())
                 .build()
                 .unwrap(),
             None,

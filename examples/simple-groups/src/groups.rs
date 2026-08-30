@@ -71,8 +71,8 @@ impl App {
         }
         self.reserve_group(&id)?;
         let author = session.selected_account()?.public_key();
-        let builder = create_group(author, &group).map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let builder = create_group(&group).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         let result = Self::publication_result(
             "group-created",
             format!("created and selected {id}"),
@@ -154,9 +154,9 @@ impl App {
     {
         let group = self.selected_group()?.clone();
         let edit = metadata_edit(arguments, prompt)?;
-        let builder = edit_metadata(session.selected_account()?.public_key(), &group, &edit)
-            .map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = edit_metadata(&group, &edit).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         Self::publication_result(
             "group-edited",
             format!("published metadata edit for {}", group.id()),
@@ -181,9 +181,9 @@ impl App {
             return usage(GROUP_INVITE_USAGE);
         }
         let group = self.selected_group()?.clone();
-        let builder = invite(session.selected_account()?.public_key(), &group, &code)
-            .map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = invite(&group, &code).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         Self::publication_result(
             "group-invited",
             format!("published invite for {}", group.id()),
@@ -206,17 +206,14 @@ impl App {
             session.validate_result_value(reason)?;
         }
         let group = self.selected_group()?.clone();
-        let builder = join_request(
-            session.selected_account()?.public_key(),
-            &group,
-            arguments.first().map(String::as_str),
-        )
-        .map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = join_request(&group, arguments.first().map(String::as_str))
+            .map_err(domain_error)?;
         let builder = match arguments.get(1) {
             Some(reason) => builder.content(reason),
             None => builder,
         };
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         Self::publication_result(
             "group-join-requested",
             format!("published join request for {}", group.id()),
@@ -242,14 +239,9 @@ impl App {
                 let public_key = parse_public_key(&public_key)?;
                 let roles = rest.iter().skip(1).map(String::as_str).collect::<Vec<_>>();
                 let group = self.selected_group()?.clone();
-                let builder = put_user(
-                    session.selected_account()?.public_key(),
-                    &group,
-                    &[public_key],
-                    &roles,
-                )
-                .map_err(domain_error)?;
-                let write = self.fava.publish(builder).map_err(domain_error)?;
+                let author = session.selected_account()?.public_key();
+                let builder = put_user(&group, &[public_key], &roles).map_err(domain_error)?;
+                let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
                 Self::publication_result(
                     "group-member-added",
                     format!("published member addition for {}", group.id()),
@@ -267,13 +259,9 @@ impl App {
                 }
                 let public_key = parse_public_key(&public_key)?;
                 let group = self.selected_group()?.clone();
-                let builder = remove_user(
-                    session.selected_account()?.public_key(),
-                    &group,
-                    &[public_key],
-                )
-                .map_err(domain_error)?;
-                let write = self.fava.publish(builder).map_err(domain_error)?;
+                let author = session.selected_account()?.public_key();
+                let builder = remove_user(&group, &[public_key]).map_err(domain_error)?;
+                let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
                 Self::publication_result(
                     "group-member-removed",
                     format!("published member removal for {}", group.id()),
@@ -289,9 +277,9 @@ impl App {
 
     fn leave_command(&self, session: &E2eSession) -> Result<CommandResult, ShellError> {
         let group = self.selected_group()?.clone();
-        let builder =
-            leave_group(session.selected_account()?.public_key(), &group).map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = leave_group(&group).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         Self::publication_result(
             "group-left",
             format!("published leave request for {}", group.id()),
@@ -322,9 +310,9 @@ impl App {
             .ok_or_else(|| ShellError::UnknownCommand {
                 command: format!("unknown simple group {id:?}"),
             })?;
-        let builder =
-            delete_group(session.selected_account()?.public_key(), &group).map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = delete_group(&group).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         let result = Self::publication_result(
             "group-deleted",
             format!("deleted {id}"),

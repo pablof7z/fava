@@ -371,8 +371,9 @@ async fn applier_selection_bounds_refuse_before_custody() {
     );
     bounded_store
         .accept_applied(EventValue::Unsigned(
-            EventBuilder::new(keys.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .created_at(Timestamp::from(1))
+                .by(keys.public_key())
                 .build()
                 .unwrap(),
         ))

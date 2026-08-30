@@ -68,12 +68,13 @@ impl EditApplier for ExactApplier {
         created_at: Timestamp,
     ) -> Result<UnsignedEvent, WriteIntentError> {
         assert!(source.is_none());
-        EventBuilder::new(author, Kind::ContactList)
+        EventBuilder::new(Kind::ContactList)
             .created_at(created_at)
             .content("first value")
             .tags((0..self.tag_count).map(|index| {
                 Tag::parse(["x", &index.to_string()]).expect("ordinary applier tag")
             }))
+            .by(author)
             .build()
             .map_err(WriteIntentError::from)
     }
@@ -131,12 +132,14 @@ fn revision_identity_changes_but_receipt_identity_does_not() {
     let receipt_id = ReceiptId::try_from(11).expect("nonzero receipt identity");
     let first = RevisionId::FIRST;
     let successor = RevisionId::try_from(2).expect("nonzero revision identity");
-    let first_event = EventBuilder::new(actor, Kind::ContactList)
+    let first_event = EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(1))
+        .by(actor)
         .build()
         .expect("first event");
-    let successor_event = EventBuilder::new(actor, Kind::ContactList)
+    let successor_event = EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(2))
+        .by(actor)
         .build()
         .expect("successor event");
     let first_event_id = first_event.id.expect("first id");

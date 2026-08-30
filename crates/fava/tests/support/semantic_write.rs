@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fava::{
-    Event, EventBuilder, EventValue, Fava, FavaBuilder, Kind, RevisionId, PublicKey,
-    Receipt, ReceiptId, RelayUrl, EventEdit, EditApplier, Timestamp,
-    UnsignedEvent, WriteIntentError, WriteRouting,
+    EditApplier, Event, EventBuilder, EventEdit, EventValue, Fava, FavaBuilder, Kind, PublicKey,
+    Receipt, ReceiptId, RelayUrl, RevisionId, Timestamp, UnsignedEvent, WriteIntentError,
+    WriteRouting,
 };
 use fava_delivery_standard::StandardDeliveryPolicy;
 use fava_event_cache_memory::MemoryEventCache;
@@ -63,12 +63,7 @@ pub fn assembly(
     Arc<CountingSigner>,
     Arc<RecordingPublisher>,
 ) {
-    assembly_with_cache(
-        Arc::new(MemoryEventCache::default()),
-        store,
-        keys,
-        appliers,
-    )
+    assembly_with_cache(Arc::new(MemoryEventCache::default()), store, keys, appliers)
 }
 
 pub fn assembly_with_cache(
@@ -217,11 +212,12 @@ impl EditApplier for TestApplier {
             EventValue::Unsigned(event) => event.content.as_str(),
             EventValue::Signed(event) => event.content.as_str(),
         });
-        let mut builder = EventBuilder::new(author, self.kind)
+        let mut builder = EventBuilder::new(self.kind)
             .created_at(created_at)
             .content(
                 source_content.map_or_else(|| "edit".to_owned(), |value| format!("{value}|edit")),
-            );
+            )
+            .by(author);
         if let Some(source) = source {
             for tag in source.tags().iter().cloned() {
                 builder = builder.tag(tag);
@@ -574,11 +570,7 @@ pub fn relay_url() -> RelayUrl {
     RelayUrl::parse("wss://semantic.example").expect("relay url")
 }
 
-pub async fn wait_for_revision(
-    fava: &Fava,
-    receipt_id: ReceiptId,
-    generation: u64,
-) -> Receipt {
+pub async fn wait_for_revision(fava: &Fava, receipt_id: ReceiptId, generation: u64) -> Receipt {
     tokio::time::timeout(Duration::from_secs(1), async {
         let mut changes = fava.receipt_changes();
         loop {
@@ -587,8 +579,7 @@ pub async fn wait_for_revision(
                 .expect("receipt read")
                 .expect("receipt exists");
             if receipt.current.publication.revision_id
-                == RevisionId::try_from(generation)
-                    .expect("nonzero revision identity")
+                == RevisionId::try_from(generation).expect("nonzero revision identity")
             {
                 return receipt;
             }

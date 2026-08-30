@@ -1,6 +1,6 @@
 //! Compile-and-run proof that raw event construction needs only the `fava` dependency.
 
-use fava::{EventBuildError, EventBuilder, Kind, PublicKey, Tag, Timestamp};
+use fava::{AuthoredEventBuilder, EventBuildError, EventBuilder, Kind, PublicKey, Tag, Timestamp};
 
 fn main() {
     let author =
@@ -11,7 +11,7 @@ fn main() {
         Tag::parse(["a", "poop"]).expect("arbitrary value tag"),
         Tag::parse(["x-future", "kept", "verbatim"]).expect("future tag"),
     ];
-    let event = EventBuilder::from_parts(
+    let event = AuthoredEventBuilder::from_parts(
         author,
         Kind::Custom(50_001),
         Timestamp::from(123),
@@ -28,8 +28,9 @@ fn main() {
 
     let excessive_tags =
         (0..=2_000).map(|index| Tag::parse(["x", &index.to_string()]).expect("bounded tag"));
-    match EventBuilder::new(author, Kind::Custom(50_002))
+    match EventBuilder::new(Kind::Custom(50_002))
         .tags(excessive_tags)
+        .by(author)
         .build()
     {
         Err(EventBuildError::TooManyTags {

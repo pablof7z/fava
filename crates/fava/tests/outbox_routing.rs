@@ -128,7 +128,8 @@ fn public_preview_is_local_only() {
 }
 
 fn write_request(author: nostr::key::PublicKey) -> RouteRequest {
-    let event = EventBuilder::new(author, Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(author)
         .build()
         .expect("event");
     RouteRequest::Write(EventValue::Unsigned(event))

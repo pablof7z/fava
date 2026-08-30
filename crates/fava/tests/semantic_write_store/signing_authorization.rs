@@ -16,9 +16,10 @@ fn intent(author: PublicKey, change: u8) -> WriteIntent {
 }
 
 fn event(author: PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
-    EventBuilder::new(author, Kind::ContactList)
+    EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
+        .by(author)
         .build()
         .unwrap()
 }

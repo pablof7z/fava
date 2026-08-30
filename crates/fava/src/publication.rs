@@ -9,8 +9,9 @@ use std::fmt;
 
 use fava_publication::{Publication, PublicationError};
 use fava_write::{
-    Event, EventBuilder, PublicKey, Receipt, ReceiptId, RelayDeliveryOutcome, EventEdit,
-    UnsignedEvent, WriteId, WriteIntent, WriteIntentError, WriteRouting,
+    AuthoredEventBuilder, Event, EventBuilder, PublicKey, Receipt, ReceiptId,
+    RelayDeliveryOutcome, EventEdit, UnsignedEvent, WriteId, WriteIntent, WriteIntentError,
+    WriteRouting,
 };
 use nostr::types::RelayUrl;
 use thiserror::Error;
@@ -106,6 +107,19 @@ impl fmt::Debug for Write {
 ///     let _ = fava.by(author).publish(event);
 /// }
 /// ```
+///
+/// An authored event body has already settled its identity and is likewise
+/// excluded:
+///
+/// ```compile_fail
+/// fn authored_builder_already_has_an_author(
+///     fava: &fava::Fava,
+///     author: fava::PublicKey,
+///     builder: fava::AuthoredEventBuilder,
+/// ) {
+///     let _ = fava.by(author).publish(builder);
+/// }
+/// ```
 #[must_use = "a signer scope is inert until publish is called"]
 pub struct PublishAs<'a> {
     fava: &'a crate::Fava,
@@ -125,15 +139,20 @@ impl PublishAs<'_> {
         Ok(self)
     }
 
-    /// Durably accept one edit with this exact author and routing scope.
+    /// Durably accept one authorless payload with this exact author and
+    /// routing scope.
     ///
     /// # Errors
     ///
-    /// Returns [`PublishError`] when the edit or publication is refused.
-    pub fn publish(self, edit: EventEdit) -> Result<Write, PublishError> {
+    /// Returns [`PublishError`] when the payload or publication is refused.
+    #[allow(private_bounds)]
+    pub fn publish<P>(self, payload: P) -> Result<Write, PublishError>
+    where
+        P: AuthorlessPayload,
+    {
         publish_scoped(
             self.fava.publication.as_ref(),
-            edit,
+            payload,
             Some(self.author),
             self.routing,
         )
@@ -256,6 +275,15 @@ pub(crate) trait PublishPayload {
     ) -> Result<WriteIntent, PublishError>;
 }
 
+/// Payloads that carry no author of their own and so accept one from an
+/// author scope. Implemented only by [`EventBuilder`] and [`EventEdit`] —
+/// this is what excludes [`AuthoredEventBuilder`], [`UnsignedEvent`], and
+/// [`Event`] from [`PublishAs::publish`].
+pub(crate) trait AuthorlessPayload: PublishPayload {}
+
+impl AuthorlessPayload for EventBuilder {}
+impl AuthorlessPayload for EventEdit {}
+
 impl PublishPayload for UnsignedEvent {
     fn into_intent(
         self,
@@ -266,7 +294,44 @@ impl PublishPayload for UnsignedEvent {
     }
 }
 
+/// Merge a builder's own accumulated routing with the publication
+/// expression's facade routing: an explicit route on either side wins over
+/// automatic, and two explicit routes conflict.
+///
+/// Shared by every builder's [`PublishPayload`] impl — the merge rule does
+/// not depend on whether the builder already carries an author.
+fn merge_builder_routing(
+    builder_routing: WriteRouting,
+    facade_routing: WriteRouting,
+) -> Result<WriteRouting, PublishError> {
+    if matches!(&builder_routing, WriteRouting::Explicit(_))
+        && matches!(&facade_routing, WriteRouting::Explicit(_))
+    {
+        return Err(WriteIntentError::ConflictingExplicitRoutes.into());
+    }
+    Ok(match builder_routing {
+        WriteRouting::Automatic => facade_routing,
+        explicit @ WriteRouting::Explicit(_) => explicit,
+    })
+}
+
 impl PublishPayload for EventBuilder {
+    fn into_intent(
+        self,
+        author: Option<PublicKey>,
+        facade_routing: WriteRouting,
+    ) -> Result<WriteIntent, PublishError> {
+        let author = author.ok_or(PublishError::MissingAuthor)?;
+        let (event, builder_routing) = self
+            .by(author)
+            .into_event_and_routing()
+            .map_err(WriteIntentError::from)?;
+        let routing = merge_builder_routing(builder_routing, facade_routing)?;
+        Ok(WriteIntent::event(event, routing)?)
+    }
+}
+
+impl PublishPayload for AuthoredEventBuilder {
     fn into_intent(
         self,
         _author: Option<PublicKey>,
@@ -275,15 +340,7 @@ impl PublishPayload for EventBuilder {
         let (event, builder_routing) = self
             .into_event_and_routing()
             .map_err(WriteIntentError::from)?;
-        if matches!(&builder_routing, WriteRouting::Explicit(_))
-            && matches!(&facade_routing, WriteRouting::Explicit(_))
-        {
-            return Err(WriteIntentError::ConflictingExplicitRoutes.into());
-        }
-        let routing = match builder_routing {
-            WriteRouting::Automatic => facade_routing,
-            explicit @ WriteRouting::Explicit(_) => explicit,
-        };
+        let routing = merge_builder_routing(builder_routing, facade_routing)?;
         Ok(WriteIntent::event(event, routing)?)
     }
 }

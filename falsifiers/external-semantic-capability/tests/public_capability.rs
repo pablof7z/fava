@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Barrier};
 
 use fava::{
-    EventBuilder, EventValue, Kind, RevisionId, Query, ReceiptOutcome, RelayDeliveryOutcome,
+    AuthoredEventBuilder, EventValue, Kind, RevisionId, Query, ReceiptOutcome, RelayDeliveryOutcome,
     Tag, Timestamp,
 };
 use fava_external_semantic_capability_proof::{
@@ -248,7 +248,7 @@ async fn raw_future_event_kind_publishes_unchanged() {
         Tag::parse(["x-a", "poop"]).expect("future value tag"),
         Tag::parse(["x-future", "kept", "verbatim"]).expect("future tag"),
     ];
-    let event = EventBuilder::from_parts(
+    let event = AuthoredEventBuilder::from_parts(
         actor,
         future_kind,
         Timestamp::from(42),

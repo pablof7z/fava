@@ -211,9 +211,10 @@ impl EditApplier for ExternalSetApplier {
             )
         });
         validate_bounds(&content, tag_count, tag_shapes)?;
-        let mut builder = EventBuilder::new(author, KIND)
+        let mut builder = EventBuilder::new(KIND)
             .created_at(created_at)
-            .content(content);
+            .content(content)
+            .by(author);
         if let Some(source) = source {
             for tag in source.tags().iter().cloned() {
                 builder = builder.tag(tag);

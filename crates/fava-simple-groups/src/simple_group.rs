@@ -220,10 +220,11 @@ pub trait SimpleGroupEventBuilder {
     /// let group = SimpleGroup::new("photos", vec![relay])?;
     /// let keys = Keys::generate();
     ///
-    /// let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9))
+    /// let builder = EventBuilder::new(Kind::from_u16(9))
     ///     .created_at(Timestamp::from(1))
     ///     .content("hello")
-    ///     .simple_group(&group)?;
+    ///     .simple_group(&group)?
+    ///     .by(keys.public_key());
     ///
     /// let (event, routing) = builder.into_event_and_routing()?;
     /// let has_h = event.tags.iter().any(|t| {

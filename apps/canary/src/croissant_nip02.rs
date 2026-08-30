@@ -202,8 +202,9 @@ async fn execute_flow(
         .await
         .map_err(error)?;
 
-    let group = EventBuilder::new(keys.public_key(), Kind::from(9007_u16))
+    let group = EventBuilder::new(Kind::from(9007_u16))
         .tag(Tag::parse(["h", &group_id]).map_err(error)?)
+        .by(keys.public_key())
         .build()
         .map_err(error)?;
     let group_write = fava
@@ -226,13 +227,14 @@ async fn execute_flow(
         ));
     }
 
-    let baseline = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let baseline = EventBuilder::new(Kind::ContactList)
         .tags([
             Tag::parse(["h", &group_id]).map_err(error)?,
             Tag::parse(["t", "nostr"]).map_err(error)?,
             Tag::parse(["something-something"]).map_err(error)?,
         ])
         .content(LEGACY_CONTENT)
+        .by(keys.public_key())
         .build()
         .map_err(error)?;
     let baseline_write = fava

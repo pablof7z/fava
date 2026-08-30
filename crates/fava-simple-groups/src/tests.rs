@@ -17,7 +17,8 @@ fn tag(values: &[&str]) -> Tag {
 
 fn value(kind: u16, tags: Vec<Tag>) -> EventValue {
     EventValue::Unsigned(
-        EventBuilder::new(public_key(), Kind::from_u16(kind))
+        EventBuilder::new(Kind::from_u16(kind))
+            .by(public_key())
             .created_at(Timestamp::from(1))
             .tags(tags)
             .build()

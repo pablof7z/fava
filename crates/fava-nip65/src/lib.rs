@@ -122,11 +122,12 @@ mod tests {
         let author =
             PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
                 .expect("generator public key");
-        let event = EventBuilder::new(author, Kind::from(10_002_u16))
+        let event = EventBuilder::new(Kind::from(10_002_u16))
             .created_at(Timestamp::from(7))
             .tag(fava_write::Tag::parse(["r", "wss://read.example", "read"]).expect("read tag"))
             .tag(fava_write::Tag::parse(["r", "wss://write.example", "write"]).expect("write tag"))
             .tag(fava_write::Tag::parse(["r", "wss://both.example"]).expect("both tag"))
+            .by(author)
             .build()
             .expect("event");
         let list = RelayList::from_event(&EventValue::Unsigned(event)).expect("relay list");

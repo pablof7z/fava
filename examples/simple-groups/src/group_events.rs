@@ -71,13 +71,14 @@ impl App {
             session.validate_result_value(content)?;
         }
         let group = self.selected_group()?.clone();
-        let builder = EventBuilder::new(session.selected_account()?.public_key(), kind);
+        let author = session.selected_account()?.public_key();
+        let builder = EventBuilder::new(kind);
         let builder = match content {
             Some(content) => builder.content(content),
             None => builder,
         };
         let builder = builder.simple_group(&group).map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         if expect_rejection {
             Self::expected_rejection_result(
                 "group-event-rejected",
@@ -119,9 +120,9 @@ impl App {
             usage: EVENT_DELETE_USAGE,
         })?;
         let group = self.selected_group()?.clone();
-        let builder = delete_event(session.selected_account()?.public_key(), &group, &event_id)
-            .map_err(domain_error)?;
-        let write = self.fava.publish(builder).map_err(domain_error)?;
+        let author = session.selected_account()?.public_key();
+        let builder = delete_event(&group, &event_id).map_err(domain_error)?;
+        let write = self.fava.by(author).publish(builder).map_err(domain_error)?;
         Self::publication_result(
             "group-event-deleted",
             format!("published event deletion for {}", group.id()),

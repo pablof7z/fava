@@ -55,10 +55,11 @@ fn external_surface_uses_only_approved_functions_and_types() {
     assert_eq!(edit_from_key, edit_from_hex);
     assert!(edit_from_owned_hex.is_ok());
     assert!(edit_with_metadata.is_ok());
-    let event = EventBuilder::new(author, Kind::ContactList)
+    let event = EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(7))
         .tag(Tag::parse(["p", &author.to_hex()]).expect("valid follow row"))
         .tag(Tag::parse(["p"]).expect("short evidence row"))
+        .by(author)
         .build()
         .expect("bounded contact list");
     let list: ContactList =

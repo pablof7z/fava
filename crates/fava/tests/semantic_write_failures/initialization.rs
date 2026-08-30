@@ -37,9 +37,10 @@ async fn recovery_revalidates_generation_and_complete_custody_before_applying() 
     let first = store
         .accept_applied_edit(
             intent(keys.public_key(), 1),
-            EventBuilder::new(keys.public_key(), Kind::ContactList)
+            EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(1))
                 .content("edit")
+                .by(keys.public_key())
                 .build()
                 .unwrap(),
             None,
@@ -73,9 +74,10 @@ async fn recovery_revalidates_generation_and_complete_custody_before_applying() 
     let EventValue::Unsigned(current_event) = current.current.event.clone() else {
         panic!("pre-signature recovery custody remains unsigned");
     };
-    let second_event = EventBuilder::new(keys.public_key(), Kind::ContactList)
+    let second_event = EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(current_event.created_at.as_secs() + 1))
         .content(format!("{}|edit", current_event.content))
+        .by(keys.public_key())
         .build()
         .unwrap();
     let reservation = store.reserve_active(&edit(2), keys.public_key()).unwrap();

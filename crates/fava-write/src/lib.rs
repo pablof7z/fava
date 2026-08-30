@@ -19,7 +19,7 @@ mod relay_session_serde;
 mod routing;
 mod session_set;
 
-pub use builder::{EventBuildError, EventBuilder};
+pub use builder::{AuthoredEventBuilder, EventBuildError, EventBuilder};
 pub use edit::EventEdit;
 pub use edit_application::{RevisionId, EditApplier};
 pub use receipt::{

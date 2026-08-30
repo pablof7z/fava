@@ -526,14 +526,31 @@ pub enum EventValue {
 pub struct EventBuilder { /* private fields */ }
 
 impl EventBuilder {
-    pub fn new(author: PublicKey, kind: Kind) -> Self;
+    pub fn new(kind: Kind) -> Self;
+    pub fn created_at(self, timestamp: Timestamp) -> Self;
+    pub fn content(self, content: EventContent) -> Self;
+    pub fn tag(self, tag: Tag) -> Self;
+    pub fn by(self, author: PublicKey) -> AuthoredEventBuilder;
+}
+
+pub struct AuthoredEventBuilder { /* private fields */ }
+
+impl AuthoredEventBuilder {
+    pub fn from_parts(
+        author: PublicKey,
+        kind: Kind,
+        created_at: Timestamp,
+        tags: Vec<Tag>,
+        content: String,
+    ) -> Self;
     pub fn created_at(self, timestamp: Timestamp) -> Self;
     pub fn content(self, content: EventContent) -> Self;
     pub fn tag(self, tag: Tag) -> Self;
     pub fn build(self) -> Result<UnsignedEvent, EventBuildError>;
+    pub fn into_event_and_routing(self) -> Result<(UnsignedEvent, WriteRouting), EventBuildError>;
 }
 
-impl From<UnsignedEvent> for EventBuilder {
+impl From<UnsignedEvent> for AuthoredEventBuilder {
     fn from(event: UnsignedEvent) -> Self {
         Self::from_parts(
             event.pubkey,
@@ -547,16 +564,22 @@ impl From<UnsignedEvent> for EventBuilder {
 ```
 
 `EventBuilder` understands generic Nostr event fields, validated tags, and a
-bounded neutral local route. The route is not serialized, signed, or available
-to event-id construction. It does not interpret reply, reaction, repost,
-quote, follow, bookmark, group, or other event-kind meaning. Protocol crates
+bounded neutral local route, but has no author: it cannot produce an unsigned
+event or an event id. Calling `EventBuilder::by(author)` supplies the author
+and yields an `AuthoredEventBuilder`, carrying every field accumulated so far
+unchanged, which alone owns finalization. When every field including the
+author is already known up front — such as re-encoding a previously decoded
+event — `AuthoredEventBuilder::from_parts` constructs the authored form
+directly. The route is not serialized, signed, or available to event-id
+construction. Neither builder interprets reply, reaction, repost, quote,
+follow, bookmark, group, or other event-kind meaning. Protocol crates
 calculate those tags and compose the builder rather than constructing another
 signing or publication path. Event-only construction refuses an explicit route;
 the Fava facade alone consumes the event and route together into `WriteIntent`.
-Consuming an `UnsignedEvent` into `EventBuilder` reopens its body for generic
-mutation: it preserves author, kind, timestamp, ordered tags, and content,
-discards the body's derived id, and starts with automatic routing. The final
-builder boundary recomputes the id and reapplies generic bounds.
+Consuming an `UnsignedEvent` into `AuthoredEventBuilder` reopens its body for
+generic mutation: it preserves author, kind, timestamp, ordered tags, and
+content, discards the body's derived id, and starts with automatic routing.
+The final builder boundary recomputes the id and reapplies generic bounds.
 
 ### Write vocabulary
 

@@ -100,7 +100,7 @@ fn invocation_is_exact_generation_and_returned_future_releases_replacement() {
     session
         .replace_signer(Arc::clone(&replacement) as Arc<dyn Signer>)
         .unwrap();
-    let event = EventBuilder::new(key, Kind::TextNote).build().unwrap();
+    let event = EventBuilder::new(Kind::TextNote).by(key).build().unwrap();
     let (_, cancel) = watch::channel(false);
 
     assert!(

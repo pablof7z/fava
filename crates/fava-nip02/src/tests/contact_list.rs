@@ -223,8 +223,9 @@ fn invalid_contact_list_events_are_refused_before_rows() {
         Err(ContactListError::WrongKind(0))
     ));
 
-    let mut missing_id = FavaEventBuilder::new(author.public_key(), Kind::ContactList)
+    let mut missing_id = FavaEventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(2))
+        .by(author.public_key())
         .build()
         .expect("bounded unsigned fixture");
     missing_id.id = None;

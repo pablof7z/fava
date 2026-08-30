@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
-use fava_write::{EventBuildError, EventBuilder, EventValue, Kind, PublicKey, WriteIntentError};
+use fava_write::{
+    AuthoredEventBuilder, EventBuildError, EventValue, Kind, PublicKey, WriteIntentError,
+};
 use nostr::types::RelayUrl;
 
 use crate::bounds;
@@ -318,7 +320,7 @@ fn validate_event(event: &EventValue) -> Result<(), ContactListError> {
 }
 
 fn validate_unsigned_bound(event: &fava_write::UnsignedEvent) -> Result<(), ContactListError> {
-    EventBuilder::from_parts(
+    AuthoredEventBuilder::from_parts(
         event.pubkey,
         event.kind,
         event.created_at,
@@ -340,7 +342,7 @@ fn map_build_error(error: EventBuildError) -> ContactListError {
         }
         EventBuildError::Encoding(reason) => ContactListError::Encoding(reason),
         EventBuildError::ExplicitRoutingAttached => {
-            unreachable!("EventBuilder::from_parts always constructs automatic routing")
+            unreachable!("AuthoredEventBuilder::from_parts always constructs automatic routing")
         }
     }
 }

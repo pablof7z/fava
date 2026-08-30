@@ -164,9 +164,10 @@ impl Router for ComposingRouter {
                 panic!("semantic router receives a write request");
             };
             let next_edit = EventEdit::new(Kind::ContactList, None, vec![9]).unwrap();
-            let event = EventBuilder::new(keys().public_key(), Kind::ContactList)
+            let event = EventBuilder::new(Kind::ContactList)
                 .created_at(Timestamp::from(source.created_at().as_secs() + 1))
                 .content(format!("{}|9", event_content(source)))
+                .by(keys().public_key())
                 .build()
                 .unwrap();
             let reservation = self

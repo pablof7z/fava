@@ -60,11 +60,12 @@ async fn grouped_builder_uses_the_ordinary_observation_and_write_doors() {
         .expect("group query");
     let mut observation = fava.observe(query).await.expect("query opens");
 
-    let builder = EventBuilder::new(keys.public_key(), Kind::from_u16(9_007))
+    let builder = EventBuilder::new(Kind::from_u16(9_007))
         .created_at(Timestamp::from(10))
         .content("local group content")
         .simple_group(&group)
-        .expect("group composes");
+        .expect("group composes")
+        .by(keys.public_key());
     let write = fava.publish(builder).expect("ordinary custody accepts");
     let receipt = write.receipt().expect("receipt");
     let id = receipt.current.id();

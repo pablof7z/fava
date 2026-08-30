@@ -51,8 +51,9 @@ async fn accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo()
         )
         .await
         .expect("query opens");
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content("optimistic")
+        .by(keys.public_key())
         .build()
         .expect("event builds");
     let event_id = event.id.expect("event id");
@@ -185,8 +186,9 @@ async fn pre_handoff_cancel_retracts_query_and_is_idempotent_and_removable() {
         )
         .await
         .expect("query opens");
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content("cancel")
+        .by(keys.public_key())
         .build()
         .unwrap();
     let write = fava
@@ -243,7 +245,8 @@ async fn unsigned_write_without_its_author_signer_remains_inspectable() {
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
         .unwrap();
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(keys.public_key())
         .build()
         .unwrap();
     let write = fava

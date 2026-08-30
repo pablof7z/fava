@@ -47,9 +47,10 @@ pub async fn run_crash_child(arguments: Vec<String>) -> CanaryResult<()> {
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
         .map_err(error)?;
-    let event = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .created_at(Timestamp::now())
         .content(format!("Fava M5 crash recovery {seed}"))
+        .by(keys.public_key())
         .build()
         .map_err(error)?;
     let event_id = event

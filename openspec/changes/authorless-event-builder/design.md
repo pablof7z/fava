@@ -4,7 +4,7 @@ See `proposal.md` — Why. The relevant current state:
 
 `EventBuilder` is one struct with a non-optional `author: PublicKey` field, set by `new(author, kind)` and by `from_parts(author, ..)`. `build()` and `into_event_and_routing()` both funnel through a private `build_event()` that constructs `UnsignedEvent::new(self.author, ..)` and calls `ensure_id()`.
 
-On the publication side, `PublishPayload::into_intent(self, author: Option<PublicKey>, routing)` already threads an optional author to every payload kind. Three of the four impls — `UnsignedEvent`, `EventBuilder`, `Event` — take it as `_author` and discard it; only `ReplaceableEventEdit` reads it, failing with `PublishError::MissingAuthor` when absent. `PublishAs` is the author scope and today accepts only `ReplaceableEventEdit`.
+On the publication side, `PublishPayload::into_intent(self, author: Option<PublicKey>, routing)` already threads an optional author to every payload kind. Three of the four impls — `UnsignedEvent`, `EventBuilder`, `Event` — take it as `_author` and discard it; only `EventEdit` reads it, failing with `PublishError::MissingAuthor` when absent. `PublishAs` is the author scope and today accepts only `EventEdit`.
 
 The mechanism this change needs therefore already exists end to end. What is missing is a builder state that can travel through it.
 
@@ -21,7 +21,7 @@ The mechanism this change needs therefore already exists end to end. What is mis
 
 - Any change to signing, signer attachment, or `Fava::sign`. Signer selection continues to read `event.pubkey` on a finalized unsigned event.
 - Introducing a current-account or ambient-identity concept. `by(author)` stays explicit at every call site.
-- Deciding where the replaceable-event materializers live. That is settled by the separate removal of `fava-builtin-codecs`; this change only requires that whatever hosts them uses the authored construction path.
+- Where the edit appliers live. They are in their protocol crates and stay there; this change only requires they use the authored construction path.
 - Touching the decoded read-side types that carry an `author` field (`SimpleGroupMetadata`, `ContactList`, `RelayList`, and siblings). Those record the author of an observed event and are unrelated.
 
 ## Decisions
@@ -42,15 +42,15 @@ The mechanism this change needs therefore already exists end to end. What is mis
 
 Both already take an exact author, and both exist precisely to reconstruct a specific event whose id must come out matching. Routing them through an authorless intermediate would add a `.by(event.pubkey)` hop that restates what the input already said.
 
-This keeps every current reconstruct call site a one-line change or none at all: `fava-nip02::contact_list::validate_unsigned_bound`, the NIP-02 and bookmark materializers, and the saved-group-list materializer all call `from_parts(..).build()` or reopen an `UnsignedEvent`, and continue to compile unchanged.
+This keeps every current reconstruct call site a one-line change or none at all: `fava-nip02::contact_list::validate_unsigned_bound`, the NIP-02, bookmark, and saved-group-list edit appliers all call `from_parts(..).build()` or reopen an `UnsignedEvent`, and continue to compile unchanged.
 
 `fava-publisher-nip01`'s kind-22242 auth response is the one production `new(author, kind)` call that is genuinely authored — it builds an event it is about to sign with a known key. It becomes `EventBuilder::new(kind).tag(..).tag(..).by(pubkey).build()`.
 
 ### `PublishPayload` gains an impl; `PublishAs` widens
 
-`impl PublishPayload for EventBuilder` (now the authorless type) reads the `author: Option<PublicKey>` argument it currently discards, and returns `PublishError::MissingAuthor` when it is `None` — the same line `ReplaceableEventEdit` already has. `impl PublishPayload for AuthoredEventBuilder` keeps the current body and continues to ignore the argument.
+`impl PublishPayload for EventBuilder` (now the authorless type) reads the `author: Option<PublicKey>` argument it currently discards, and returns `PublishError::MissingAuthor` when it is `None` — the same line `EventEdit` already has. `impl PublishPayload for AuthoredEventBuilder` keeps the current body and continues to ignore the argument.
 
-`PublishAs::publish` changes from taking `ReplaceableEventEdit` to taking a payload bounded by a marker for authorless payloads, implemented by `EventBuilder` and `ReplaceableEventEdit` only. That is what excludes `AuthoredEventBuilder`, `UnsignedEvent`, and `Event` from the author scope, extending the existing exclusion rather than inventing one.
+`PublishAs::publish` changes from taking `EventEdit` to taking a payload bounded by a marker for authorless payloads, implemented by `EventBuilder` and `EventEdit` only. That is what excludes `AuthoredEventBuilder`, `UnsignedEvent`, and `Event` from the author scope, extending the existing exclusion rather than inventing one.
 
 The route-merge logic in the builder's `into_intent` — explicit-vs-explicit conflict, automatic falling back to the facade route — is identical for both builder types and is factored into one function they share.
 
@@ -69,8 +69,6 @@ This is what makes `fava_simple_groups::invite(&group, code)` read the same way 
 - **`AuthoredEventBuilder` is a new public name in `fava-write`'s surface, re-exported by `fava`.** → Accepted. Naming the authored state is the point; hiding it behind the same name as the authorless one is what produced the current confusion.
 
 - **The change touches `fava-write`, `fava`, `fava-simple-groups`, `fava-nip02`, and `fava-publisher-nip01` in one commit.** → The compiler locates every call site, and no behavior is in flight during the change: it is a signature migration with byte-identical output. There is no partial-rollout state to be in.
-
-- **Interaction with the in-flight `fix/private-builtin-materializers` work and the pending removal of `fava-builtin-codecs`.** → The materializers use `from_parts`/`From<UnsignedEvent>`, which keep their signatures, so this change does not conflict with wherever they end up living. Sequencing is free in either order.
 
 ## Migration Plan
 

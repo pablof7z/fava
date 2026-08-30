@@ -30,8 +30,9 @@ async fn registered_author_signs_without_a_publication() {
         .delivery_policy(Arc::new(StandardDeliveryPolicy::default()))
         .build()
         .expect("Fava assembly");
-    let unsigned = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let unsigned = EventBuilder::new(Kind::TextNote)
         .content("signed without a relay write")
+        .by(author.public_key())
         .build()
         .expect("unsigned event builds");
 

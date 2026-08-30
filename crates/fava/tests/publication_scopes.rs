@@ -75,14 +75,168 @@ async fn signer_and_relay_scopes_compose_in_both_orders() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn authorless_builder_composes_with_signer_and_relay_scopes_in_both_orders() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, _, _, second_author) = assembly(Arc::clone(&store), author.clone());
+    let first_route = [relay("authorless-first"), relay("authorless-second")];
+    let second_route = [relay("authorless-second"), relay("authorless-first")];
+
+    let first = fava
+        .by(second_author.public_key())
+        .to(first_route.clone())
+        .expect("explicit route validates")
+        .publish(EventBuilder::new(Kind::TextNote).content("by then to"))
+        .expect("by then to accepts an authorless builder");
+    let second = fava
+        .to(second_route.clone())
+        .expect("explicit route validates")
+        .by(author.public_key())
+        .publish(EventBuilder::new(Kind::TextNote).content("to then by"))
+        .expect("to then by accepts an authorless builder");
+
+    assert_ne!(first.write_id(), second.write_id());
+    for (write, expected_author, expected_route) in [
+        (&first, second_author.public_key(), first_route.to_vec()),
+        (&second, author.public_key(), second_route.to_vec()),
+    ] {
+        let receipt = write.receipt().expect("receipt remains readable");
+        assert_eq!(receipt.current.event.author(), expected_author);
+        assert_eq!(receipt.routing, WriteRouting::Explicit(expected_route));
+    }
+    assert_eq!(store.len().expect("store remains readable"), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn authorless_builder_without_an_author_scope_refuses_with_no_effects() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
+
+    let unscoped = fava.publish(EventBuilder::new(Kind::TextNote).content("no scope at all"));
+    assert!(matches!(unscoped, Err(PublishError::MissingAuthor)));
+    assert_no_effects(&store, &signer, &publisher);
+
+    let relay_scoped_only = fava
+        .to([relay("authorless-refusal")])
+        .expect("route validates")
+        .publish(EventBuilder::new(Kind::TextNote).content("relay scope but no author scope"));
+    assert!(matches!(
+        relay_scoped_only,
+        Err(PublishError::MissingAuthor)
+    ));
+    assert_no_effects(&store, &signer, &publisher);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_cloned_authorless_builder_publishes_under_a_different_author() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, _, _, second_author) = assembly(Arc::clone(&store), author.clone());
+    let builder = EventBuilder::new(Kind::TextNote).content("constructed exactly once");
+
+    let first = fava
+        .by(author.public_key())
+        .publish(builder.clone())
+        .expect("first author accepts the constructed value");
+    let second = fava
+        .by(second_author.public_key())
+        .publish(builder)
+        .expect("second author accepts the same constructed value, unreconstructed");
+
+    assert_ne!(first.write_id(), second.write_id());
+    assert_eq!(
+        first
+            .receipt()
+            .expect("first receipt remains readable")
+            .current
+            .event
+            .author(),
+        author.public_key()
+    );
+    assert_eq!(
+        second
+            .receipt()
+            .expect("second receipt remains readable")
+            .current
+            .event
+            .author(),
+        second_author.public_key()
+    );
+    assert_eq!(store.len().expect("store remains readable"), 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn authorless_builder_route_conflicts_with_narrowed_scope_in_either_order() {
+    let author = Keys::generate();
+    let store = Arc::new(MemoryWriteStore::default());
+    let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
+    let embedded = relay("authorless-conflict-embedded");
+
+    let by_then_to = fava
+        .by(author.public_key())
+        .to([relay("authorless-conflict-facade-a")])
+        .expect("facade route validates")
+        .publish(
+            EventBuilder::new(Kind::TextNote)
+                .content("authorless builder route")
+                .to_relays([embedded.clone()])
+                .expect("embedded route validates"),
+        );
+    assert!(matches!(
+        by_then_to,
+        Err(PublishError::Intent(
+            WriteIntentError::ConflictingExplicitRoutes
+        ))
+    ));
+    assert_no_effects(&store, &signer, &publisher);
+
+    let to_then_by = fava
+        .to([relay("authorless-conflict-facade-b")])
+        .expect("facade route validates")
+        .by(author.public_key())
+        .publish(
+            EventBuilder::new(Kind::TextNote)
+                .content("authorless builder route")
+                .to_relays([embedded.clone()])
+                .expect("embedded route validates"),
+        );
+    assert!(matches!(
+        to_then_by,
+        Err(PublishError::Intent(
+            WriteIntentError::ConflictingExplicitRoutes
+        ))
+    ));
+    assert_no_effects(&store, &signer, &publisher);
+
+    let automatic = fava
+        .by(author.public_key())
+        .publish(
+            EventBuilder::new(Kind::TextNote)
+                .content("authorless builder route")
+                .to_relays([embedded.clone()])
+                .expect("embedded route validates"),
+        )
+        .expect("authorless builder route publishes directly under an author scope alone");
+    assert_eq!(
+        automatic
+            .receipt()
+            .expect("automatic receipt remains readable")
+            .routing,
+        WriteRouting::Explicit(vec![embedded])
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn explicit_route_normalizes_duplicates_without_reordering() {
     let author = Keys::generate();
     let store = Arc::new(MemoryWriteStore::default());
     let (fava, _, _, _) = assembly(Arc::clone(&store), author.clone());
     let first = relay("first-normalized");
     let second = relay("second-normalized");
-    let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
         .content("ordered route")
+        .by(author.public_key())
         .build()
         .expect("event builds");
 
@@ -137,8 +291,9 @@ async fn relay_scope_publishes_unsigned_and_presigned_payloads() {
     let store = Arc::new(MemoryWriteStore::default());
     let (fava, _, _, _) = assembly(Arc::clone(&store), author.clone());
     let destination = relay("payloads");
-    let unsigned = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let unsigned = EventBuilder::new(Kind::TextNote)
         .content("unsigned")
+        .by(author.public_key())
         .build()
         .expect("unsigned event builds");
     let presigned = NostrEventBuilder::new(Kind::TextNote, "presigned")
@@ -163,10 +318,11 @@ async fn builder_automatic_and_explicit_routing_are_exact_and_conflicts_have_no_
     let store = Arc::new(MemoryWriteStore::default());
     let (fava, signer, publisher, _) = assembly(Arc::clone(&store), author.clone());
     let embedded = relay("embedded");
-    let builder = EventBuilder::new(author.public_key(), Kind::TextNote)
+    let builder = EventBuilder::new(Kind::TextNote)
         .content("builder route")
         .to_relays([embedded.clone()])
-        .expect("embedded route validates");
+        .expect("embedded route validates")
+        .by(author.public_key());
 
     let conflict = fava
         .to([relay("facade")])
@@ -182,21 +338,26 @@ async fn builder_automatic_and_explicit_routing_are_exact_and_conflicts_have_no_
 
     let automatic = fava
         .publish(
-            EventBuilder::new(author.public_key(), Kind::TextNote)
-                .content("automatic builder route"),
+            EventBuilder::new(Kind::TextNote)
+                .content("automatic builder route")
+                .by(author.public_key()),
         )
         .expect("plain builder uses automatic routing");
+    let automatic_receipt = automatic.receipt().expect("automatic receipt");
+    assert_eq!(automatic_receipt.routing, WriteRouting::Automatic);
     assert_eq!(
-        automatic.receipt().expect("automatic receipt").routing,
-        WriteRouting::Automatic
+        automatic_receipt.current.event.author(),
+        author.public_key(),
+        "Fava::publish on an AuthoredEventBuilder carries the builder's own author"
     );
 
     let write = fava
         .publish(
-            EventBuilder::new(author.public_key(), Kind::TextNote)
+            EventBuilder::new(Kind::TextNote)
                 .content("builder route")
                 .to_relays([embedded.clone()])
-                .expect("embedded route validates"),
+                .expect("embedded route validates")
+                .by(author.public_key()),
         )
         .expect("builder route publishes directly");
     assert_eq!(
@@ -219,8 +380,9 @@ async fn publication_scopes_are_inert_before_valid_payload() {
         Err(PublishError::Intent(WriteIntentError::EmptyExplicitRelays)) => {}
         Err(error) => panic!("unexpected empty-route refusal: {error}"),
         Ok(scope) => {
-            let event = EventBuilder::new(author.public_key(), Kind::TextNote)
+            let event = EventBuilder::new(Kind::TextNote)
                 .content("must never enter custody")
+                .by(author.public_key())
                 .build()
                 .expect("deliberate-break payload builds");
             assert!(matches!(

@@ -7,11 +7,15 @@ current publication erases it to
 survive that boundary. Structured attribution is owned by
 [issue 0025](../../docs/issues/0025-publication-applier-error-attribution.md).
 
-`fava.publish(builder)` accepts an `EventBuilder` directly. A builder without
-an attached route uses automatic routers; a builder carrying local explicit
+`fava.publish(builder)` accepts an `AuthoredEventBuilder` directly. An
+authorless `EventBuilder` has no author of its own: `fava.publish(builder)`
+and `fava.to(...).publish(builder)` refuse it with `PublishError::MissingAuthor`,
+and it must instead go through `fava.by(author).publish(builder)` (composable
+with `.to(...)` in either order) to supply an author. A builder without an
+attached route uses automatic routers; a builder carrying local explicit
 relay routing lowers its event and route together through the same durable
-publication lifecycle. `fava.to(...).publish(builder)` refuses when the
-builder already carries an explicit route.
+publication lifecycle. A facade route expression refuses when the builder
+already carries a conflicting explicit route.
 
 ## Complete public API inventory
 
@@ -28,6 +32,7 @@ Compiler-visible module `fava`.
 
 | Item | Purpose |
 | --- | --- |
+| **`AuthoredEventBuilder`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava::AuthoredEventBuilder","signature":"pub use fava::AuthoredEventBuilder","evidence":"cargo-public-api@0.52.0: pub use fava::AuthoredEventBuilder"} --> | Compiler-visible public field owned by `fava`. |
 | **`BoundKind`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava::BoundKind","signature":"pub use fava::BoundKind","evidence":"cargo-public-api@0.52.0: pub use fava::BoundKind"} --> | Compiler-visible public field owned by `fava`. |
 | **`DiagnosticsSnapshot`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava::DiagnosticsSnapshot","signature":"pub use fava::DiagnosticsSnapshot","evidence":"cargo-public-api@0.52.0: pub use fava::DiagnosticsSnapshot"} --> | Compiler-visible public field owned by `fava`. |
 | **`DroppedFacts`**<br><sub>Public field</sub><!-- api-item {"kind":"Public field","item":"fava::DroppedFacts","signature":"pub use fava::DroppedFacts","evidence":"cargo-public-api@0.52.0: pub use fava::DroppedFacts"} --> | Compiler-visible public field owned by `fava`. |
@@ -119,7 +124,6 @@ Compiler-visible struct `fava::Fava`.
 | **`cancel_write`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::cancel_write","signature":"pub fn fava::Fava::cancel_write(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_write_store::WriteStoreError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::cancel_write(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_write_store::WriteStoreError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`diagnostics`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::diagnostics","signature":"pub fn fava::Fava::diagnostics(&self) -> fava_diagnostics::DiagnosticsSnapshot","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::diagnostics(&self) -> fava_diagnostics::DiagnosticsSnapshot"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`observe`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::observe","signature":"pub async fn fava::Fava::observe(&self, fava_query::Query) -> core::result::Result<fava_observe::observation::Observation, fava_observe::error::ObserveError>","evidence":"cargo-public-api@0.52.0: pub async fn fava::Fava::observe(&self, fava_query::Query) -> core::result::Result<fava_observe::observation::Observation, fava_observe::error::ObserveError>"} --> | Compiler-visible method owned by `fava::Fava`. |
-| **`fava_query::QuerySource::open`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"<fava::Fava as fava_query::QuerySource>::open","signature":"pub fn fava::Fava::open(&self, &fava_query::Query) -> core::result::Result<fava_query::OpenedQuerySource, fava_query::QuerySourceError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::open(&self, &fava_query::Query) -> core::result::Result<fava_query::OpenedQuerySource, fava_query::QuerySourceError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`open_receipts`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::open_receipts","signature":"pub fn fava::Fava::open_receipts(&self) -> core::result::Result<alloc::vec::Vec<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::open_receipts(&self) -> core::result::Result<alloc::vec::Vec<fava_write::receipt::Receipt>, fava_write_store::WriteStoreError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`preview_routes`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::preview_routes","signature":"pub fn fava::Fava::preview_routes(&self, &fava_query::Query) -> core::result::Result<fava_routing::RoutePlan, fava_observe::error::ObserveError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::preview_routes(&self, &fava_query::Query) -> core::result::Result<fava_routing::RoutePlan, fava_observe::error::ObserveError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`publish`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::publish","signature":"pub fn fava::Fava::publish<P>(&self, P) -> core::result::Result<fava::Write, fava::PublishError> where P: publication::PublishPayload","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::publish<P>(&self, P) -> core::result::Result<fava::Write, fava::PublishError> where P: publication::PublishPayload"} --> | Compiler-visible method owned by `fava::Fava`. |
@@ -128,6 +132,7 @@ Compiler-visible struct `fava::Fava`.
 | **`remove_receipt`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::remove_receipt","signature":"pub fn fava::Fava::remove_receipt(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_publication::PublicationError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::remove_receipt(&self, fava_write::ReceiptId) -> core::result::Result<bool, fava_publication::PublicationError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`remove_signer`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::remove_signer","signature":"pub fn fava::Fava::remove_signer(&self, nostr::key::public_key::PublicKey) -> core::result::Result<(), fava_session::SessionError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::remove_signer(&self, nostr::key::public_key::PublicKey) -> core::result::Result<(), fava_session::SessionError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`replace_signer`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::replace_signer","signature":"pub fn fava::Fava::replace_signer(&self, alloc::sync::Arc<dyn fava_signer::Signer>) -> core::result::Result<(), fava_session::SessionError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::replace_signer(&self, alloc::sync::Arc<dyn fava_signer::Signer>) -> core::result::Result<(), fava_session::SessionError>"} --> | Compiler-visible method owned by `fava::Fava`. |
+| **`sign`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::sign","signature":"pub async fn fava::Fava::sign(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::Event, fava_signer::SignerError>","evidence":"cargo-public-api@0.52.0: pub async fn fava::Fava::sign(&self, nostr::event::unsigned::UnsignedEvent) -> core::result::Result<nostr::event::Event, fava_signer::SignerError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 | **`to`**<br><sub>Method</sub><!-- api-item {"kind":"Method","item":"fava::Fava::to","signature":"pub fn fava::Fava::to(&self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>","evidence":"cargo-public-api@0.52.0: pub fn fava::Fava::to(&self, impl core::convert::Into<alloc::vec::Vec<nostr::types::url::RelayUrl>>) -> core::result::Result<fava::PublishTo<'_>, fava::PublishError>"} --> | Compiler-visible method owned by `fava::Fava`. |
 
 ### `FavaBuilder` (Struct)

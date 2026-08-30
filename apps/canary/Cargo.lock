@@ -396,6 +396,7 @@ name = "fava-event-cache"
 version = "0.1.0"
 dependencies = [
  "fava-query",
+ "fava-relay",
  "fava-state",
  "nostr",
  "thiserror",
@@ -474,6 +475,7 @@ dependencies = [
  "fava-subscriptions",
  "fava-transport",
  "fava-wire",
+ "futures-util",
  "nostr",
  "serde_json",
  "thiserror",
@@ -560,6 +562,7 @@ dependencies = [
 name = "fava-router-app-relays"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-relay",
  "fava-routing",
  "fava-state",
@@ -571,6 +574,7 @@ dependencies = [
 name = "fava-router-fallback-relays"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-relay",
  "fava-routing",
  "fava-state",
@@ -582,6 +586,7 @@ dependencies = [
 name = "fava-router-testkit"
 version = "0.1.0"
 dependencies = [
+ "fava-query",
  "fava-routing",
  "tokio",
 ]

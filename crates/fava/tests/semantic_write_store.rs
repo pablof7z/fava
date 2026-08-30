@@ -27,9 +27,10 @@ fn edit() -> EventEdit {
 }
 
 fn revision(actor: fava_write::PublicKey, created_at: u64, content: &str) -> UnsignedEvent {
-    EventBuilder::new(actor, Kind::ContactList)
+    EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(content)
+        .by(actor)
         .build()
         .expect("valid revision")
 }

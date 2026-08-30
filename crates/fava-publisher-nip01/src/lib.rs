@@ -258,9 +258,10 @@ fn build_auth_event(
         .map_err(|e| fava_write::EventBuildError::Encoding(e.to_string()))?;
     let challenge_tag = Tag::parse(["challenge", challenge])
         .map_err(|e| fava_write::EventBuildError::Encoding(e.to_string()))?;
-    EventBuilder::new(pubkey, Kind::from_u16(22242))
+    EventBuilder::new(Kind::from_u16(22242))
         .tag(relay_tag)
         .tag(challenge_tag)
+        .by(pubkey)
         .build()
 }
 

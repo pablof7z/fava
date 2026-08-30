@@ -57,10 +57,11 @@ fn explicit_builder_route_survives_durable_acceptance_and_reopen() {
         RelayUrl::parse("wss://group-a.example").expect("first relay parses"),
         RelayUrl::parse("wss://group-b.example").expect("second relay parses"),
     ];
-    let (event, routing) = EventBuilder::new(keys.public_key(), Kind::TextNote)
+    let (event, routing) = EventBuilder::new(Kind::TextNote)
         .content("one event for two groups")
         .to_relays(expected_route.clone())
         .expect("builder route validates")
+        .by(keys.public_key())
         .into_event_and_routing()
         .expect("event and route build together");
     let event_id = event.id.expect("built event has deterministic id");
@@ -85,9 +86,10 @@ fn edit() -> EventEdit {
 }
 
 fn revision(actor: fava_write::PublicKey, created_at: u64, body: &str) -> UnsignedEvent {
-    EventBuilder::new(actor, Kind::ContactList)
+    EventBuilder::new(Kind::ContactList)
         .created_at(Timestamp::from(created_at))
         .content(body)
+        .by(actor)
         .build()
         .expect("valid revision")
 }

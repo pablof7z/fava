@@ -16,7 +16,7 @@ Every payload that describes an event without stating who signs it SHALL receive
 #### Scenario: A replaceable edit is published under an author scope
 
 - **WHEN** an application publishes a replaceable event edit through an expression carrying an author scope
-- **THEN** the edit is materialized against that author's prior event, unchanged from current behavior
+- **THEN** the edit is applied to that author's prior event, unchanged from current behavior
 
 #### Scenario: Authorless payloads of both kinds take the same door
 
@@ -86,5 +86,5 @@ A constructor that describes a protocol event for an application to publish SHAL
 
 #### Scenario: Constructors that reconstruct a specific event still take an author
 
-- **WHEN** an internal caller rebuilds a specific existing event, such as materializing a replaceable edit onto a prior event or answering a relay authentication challenge
+- **WHEN** an internal caller rebuilds a specific existing event, such as applying a replaceable edit onto a prior event or answering a relay authentication challenge
 - **THEN** that caller supplies the exact author required for the resulting event id to match, through the authored construction path

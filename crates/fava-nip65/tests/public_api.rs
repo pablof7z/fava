@@ -10,7 +10,8 @@ fn author() -> PublicKey {
 
 #[test]
 fn wrong_kind_reports_named_actual_kind_and_exact_text() {
-    let event = EventBuilder::new(author(), Kind::TextNote)
+    let event = EventBuilder::new(Kind::TextNote)
+        .by(author())
         .build()
         .expect("bounded event");
     let error = RelayList::from_event(&EventValue::Unsigned(event)).expect_err("wrong kind");

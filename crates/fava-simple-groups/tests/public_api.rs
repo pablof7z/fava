@@ -13,8 +13,7 @@ use fava_simple_groups::{
     save_relay, save_simple_group, saved_group_list_applier, saved_group_lists,
 };
 use fava_write::{
-    EventBuilder, EventValue, EventEdit, EditApplier, Tag,
-    WriteIntentError, WriteRouting,
+    EditApplier, EventBuilder, EventEdit, EventValue, Tag, WriteIntentError, WriteRouting,
 };
 
 fn key() -> PublicKey {
@@ -88,9 +87,10 @@ fn constructors_queries_and_builder_composition_compile_at_the_current_surface()
     );
 
     let builder: Result<EventBuilder, WriteIntentError> =
-        EventBuilder::new(key(), Kind::from_u16(42)).simple_group(&group);
+        EventBuilder::new(Kind::from_u16(42)).simple_group(&group);
     let (_, routing) = builder
         .expect("group composes")
+        .by(key())
         .into_event_and_routing()
         .expect("event builds");
     assert_eq!(routing, WriteRouting::Explicit(vec![relay()]));
@@ -122,8 +122,7 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
     let group = SimpleGroup::new("photos", vec![relay()]).expect("valid group");
     let _: Result<EventEdit, WriteIntentError> = save_simple_group(&group, None);
     let _: Result<EventEdit, WriteIntentError> = remove_saved_simple_group(&group);
-    let _: Result<EventEdit, WriteIntentError> =
-        rename_saved_simple_group(&group, "Photos");
+    let _: Result<EventEdit, WriteIntentError> = rename_saved_simple_group(&group, "Photos");
     let _: Result<EventEdit, WriteIntentError> = save_relay(relay());
     let _: Result<EventEdit, WriteIntentError> = remove_saved_relay(relay());
     let _: Arc<dyn EditApplier> = saved_group_list_applier();
@@ -133,7 +132,6 @@ fn simple_group_list_query_and_edit_functions_compile_at_crate_root() {
 fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
     let group = SimpleGroup::new("photos", vec![relay()]).expect("valid group");
     let (repeated, _) = edit_metadata(
-        key(),
         &group,
         &MetadataEdit {
             supported_kinds: Some(vec![Kind::TextNote, Kind::Reaction, Kind::TextNote]),
@@ -141,6 +139,7 @@ fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
         },
     )
     .expect("metadata event builds")
+    .by(key())
     .into_event_and_routing()
     .expect("event and routing build");
     assert_eq!(
@@ -157,7 +156,6 @@ fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
     );
 
     let (empty, _) = edit_metadata(
-        key(),
         &group,
         &MetadataEdit {
             supported_kinds: Some(vec![]),
@@ -165,6 +163,7 @@ fn metadata_edit_preserves_supported_kinds_through_the_public_api() {
         },
     )
     .expect("metadata event builds")
+    .by(key())
     .into_event_and_routing()
     .expect("event and routing build");
     assert_eq!(
