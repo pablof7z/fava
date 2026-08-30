@@ -107,7 +107,7 @@ async fn a_narrow_demand_attaches_to_an_unconstrained_running_request() {
 ///   rise from one per window to one per arrival;
 /// * make the window slide (cancel the pending admission task and re-arm on
 ///   every arrival) — no request reaches the wire while demand keeps arriving.
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn continuous_arrival_never_postpones_the_admission_window() {
     const ARRIVALS: usize = 40;
     const INTERVAL: Duration = Duration::from_millis(4);

@@ -299,10 +299,17 @@ pub fn shared_with(observation: &Observation, relay: &RelayUrl) -> Vec<Observati
 }
 
 /// Await a deterministic condition without advancing wall time past a bound.
+///
+/// Polls on a short `sleep` rather than `yield_now`: a `yield_now` spin never
+/// lets the executor go idle, so under a paused (virtual) clock — as tests
+/// that virtualize time via `#[tokio::test(start_paused = true)]` do — time
+/// would never auto-advance and this would hang instead of timing out. A
+/// sleep-based poll lets the clock advance to whatever the next pending timer
+/// needs, whether that clock is real or virtual.
 pub async fn wait_until(predicate: impl Fn() -> bool) {
     tokio::time::timeout(Duration::from_secs(1), async {
         while !predicate() {
-            tokio::task::yield_now().await;
+            tokio::time::sleep(Duration::from_millis(1)).await;
         }
     })
     .await

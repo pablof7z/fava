@@ -1,0 +1,14 @@
+{
+  "id": "f801d10c929df36899279705590252fdece2c375d14ceda3039a454cf6e6c6b3",
+  "pubkey": "11ab19baef184f08d6bb5dc9d3cb8beba0c2862e3233a074d5784b0d2cefb632",
+  "created_at": 1788072360,
+  "kind": 29999,
+  "tags": [
+    [
+      "symbol",
+      "fava::Fava::builder"
+    ]
+  ],
+  "content": "pub fn builder() -> FavaBuilder",
+  "sig": "bc47f70b5861d3ed657b59c3e3735d185a54a162947f2ecf39870578cc71103475a231b6c58f9eceb80a6b980cf0bab5c8c9b9dd8a659f37310ae3b9c6bb839f"
+}

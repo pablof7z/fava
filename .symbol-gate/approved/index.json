@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "approvals": {
+    "fava::Fava::builder": [
+      "eager-coral-garden.json"
+    ],
     "fava_simple_groups::edit::remove_saved_relay": [
       "quiet-olive-meadow.json"
     ],
