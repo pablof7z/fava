@@ -6,7 +6,7 @@ use fava_query::{ObservationId, Query, QueryRevision, QuerySnapshot};
 use fava_session::Session;
 use tokio::sync::watch;
 
-use crate::observation::Observation;
+use crate::observation::{CurrentAccountDelivery, Observation};
 use crate::sources::publish_and;
 
 use super::Observer;
@@ -36,6 +36,7 @@ pub(super) struct Follow {
     pub(super) current: Option<fava_query::PublicKey>,
     pub(super) current_revision: u64,
     pub(super) latest: watch::Sender<Arc<QuerySnapshot>>,
+    pub(super) synchronized: watch::Sender<CurrentAccountDelivery>,
 }
 
 pub(super) async fn run(follow: Follow) {
@@ -49,6 +50,7 @@ pub(super) async fn run(follow: Follow) {
         mut current,
         mut current_revision,
         latest,
+        synchronized,
     } = follow;
     let mut delivered = 1_u64;
     loop {
@@ -84,7 +86,10 @@ pub(super) async fn run(follow: Follow) {
                             next.id(),
                             parent,
                             &child_current.evidence,
-                            || latest.send_replace(outbound),
+                            || {
+                                latest.send_replace(Arc::clone(&outbound));
+                                synchronized.send_replace(((bound_account, bound_revision), outbound));
+                            },
                         )
                     })
                     .flatten()
@@ -114,7 +119,10 @@ pub(super) async fn run(follow: Follow) {
                             child.id(),
                             parent,
                             &snapshot.evidence,
-                            || latest.send_replace(outbound),
+                            || {
+                                latest.send_replace(Arc::clone(&outbound));
+                                synchronized.send_replace(((current, current_revision), outbound));
+                            },
                         )
                     })
                     .flatten()

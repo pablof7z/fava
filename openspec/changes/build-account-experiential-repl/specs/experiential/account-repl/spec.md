@@ -31,11 +31,15 @@ A write submitted through the current-account convenience API SHALL resolve the 
 - **THEN** Fava returns an immediate typed refusal before accepting work
 
 ### Requirement: `$currentPubkey` is a reactive query input
-A declarative query author or tag filter using `$currentPubkey` SHALL bind to the currently selected public key. The same open observation SHALL automatically recompile, reroute, update relay subscriptions, and produce a new current snapshot when account selection changes. Applications SHALL NOT close, rebuild, or reopen the query.
+A declarative query author or tag filter using `$currentPubkey` SHALL bind to the currently selected public key. The same open observation SHALL automatically recompile, reroute, update relay subscriptions, and produce a new current snapshot when account selection changes. Fava SHALL provide a bounded owner-side synchronization operation that cannot return a snapshot from a prior selection generation. Applications SHALL NOT inspect authors to filter stale work or close, rebuild, or reopen the query.
 
 #### Scenario: Open query follows account switch
 - **WHEN** an observation using `$currentPubkey` is open for account A and the application selects account B
 - **THEN** that observation transitions to B’s dependency graph and current result without a new application observation
+
+#### Scenario: Synchronization waits for the current generation
+- **WHEN** B is selected while B's concrete source opening is delayed and A remains the last delivered snapshot
+- **THEN** bounded synchronization times out or returns B, and never returns A as synchronized truth
 
 #### Scenario: No current account matches nothing
 - **WHEN** the selected account is removed or cleared

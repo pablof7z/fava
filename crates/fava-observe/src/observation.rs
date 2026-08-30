@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use fava_diagnostics::Diagnostics;
-use fava_query::{ObservationId, QueryRevision, QuerySnapshot};
+use fava_query::{ObservationId, PublicKey, QueryRevision, QuerySnapshot};
+use fava_session::Session;
 use tokio::sync::watch;
 
 use crate::error::ObservationClosed;
@@ -20,6 +21,14 @@ pub struct Observation {
     delivered_revision: QueryRevision,
     coalesced: Option<Coalesced>,
     forget_diagnostic: Option<Arc<Diagnostics>>,
+    current_account: Option<CurrentAccountSynchronization>,
+}
+
+pub(crate) type CurrentAccountDelivery = ((Option<PublicKey>, u64), Arc<QuerySnapshot>);
+
+struct CurrentAccountSynchronization {
+    session: Session,
+    delivered: watch::Receiver<CurrentAccountDelivery>,
 }
 
 impl Observation {
@@ -30,6 +39,7 @@ impl Observation {
         cancelled: fava_runtime::CancellationToken,
         coalesced: Option<Coalesced>,
         forget_diagnostic: Option<Arc<Diagnostics>>,
+        current_account: Option<(Session, watch::Receiver<CurrentAccountDelivery>)>,
     ) -> Self {
         Self {
             id,
@@ -39,6 +49,8 @@ impl Observation {
             delivered_revision: QueryRevision(1),
             coalesced,
             forget_diagnostic,
+            current_account: current_account
+                .map(|(session, delivered)| CurrentAccountSynchronization { session, delivered }),
         }
     }
 
@@ -76,6 +88,52 @@ impl Observation {
         );
         self.delivered_revision = latest.revision;
         Ok(latest)
+    }
+
+    /// Wait until this observation has delivered its exact current-account generation.
+    ///
+    /// Literal observations have no reactive account generation and return their
+    /// current snapshot immediately. A timed-out wait leaves the observation open.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ObservationClosed`] when the observation ends before synchronization.
+    pub async fn synchronize_current_account(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<Option<Arc<QuerySnapshot>>, ObservationClosed> {
+        let Some(synchronization) = self.current_account.as_mut() else {
+            return Ok(Some(self.current()));
+        };
+        let cancelled = self.cancelled.clone();
+        let session = synchronization.session.clone();
+        let mut selection_changes = session.subscribe();
+        let delivered = &mut synchronization.delivered;
+        match tokio::time::timeout(timeout, async move {
+            loop {
+                if cancelled.is_cancelled() {
+                    return Err(ObservationClosed);
+                }
+                let expected = session.current_account_snapshot();
+                let (actual, snapshot) = delivered.borrow().clone();
+                if actual == expected && session.if_current_account(expected, || ()).is_some() {
+                    return Ok(snapshot);
+                }
+                tokio::select! {
+                    changed = selection_changes.changed() => {
+                        changed.map_err(|_| ObservationClosed)?;
+                    }
+                    changed = delivered.changed() => {
+                        changed.map_err(|_| ObservationClosed)?;
+                    }
+                }
+            }
+        })
+        .await
+        {
+            Ok(result) => result.map(Some),
+            Err(_) => Ok(None),
+        }
     }
 
     /// Wait, within one caller-supplied bound, for a current snapshot that

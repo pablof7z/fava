@@ -2259,7 +2259,7 @@ Committed source changes, route-plan changes, subscription-plan changes, session
 declarative dependency rather than an application-supplied key. `fava-observe`
 subscribes to the selected `Session` before reading its initial atomic account
 snapshot, binds one exact concrete query, and returns one stable application
-`Observation`. Source open is rechecked against the exact account and session
+`Observation`. Source open is rechecked against the exact account and selection
 revision before activation. A later selection replaces local sources, route
 work, relay demand, and wire subscriptions behind that handle. The stable owner
 holds and synchronously retires its active child; each child has distinct
@@ -2275,7 +2275,7 @@ would incorrectly broaden the query.
 
 ### Delivery model
 
-Application-facing query delivery is a bounded latest-state stream. Intermediate internal states may coalesce; every delivered update is sufficient to derive the exact current result from the last delivered revision. `Observation::wait_until` is a handle operation over that same stream: it checks the installed current snapshot and then awaits later delivery only until its explicit caller-supplied duration. Its predicate runs at most once for each snapshot the call observes. Timeout is `Ok(None)` and leaves the installed observation and its demand unchanged; closure and failure remain the handle's `Err(ObservationClosed)`. A cancelled wait cannot claim a stale completion or alter another wait's delivery revision.
+Application-facing query delivery is a bounded latest-state stream. Intermediate internal states may coalesce; every delivered update is sufficient to derive the exact current result from the last delivered revision. `Observation::wait_until` is a handle operation over that same stream: it checks the installed current snapshot and then awaits later delivery only until its explicit caller-supplied duration. Its predicate runs at most once for each snapshot the call observes. `Observation::synchronize_current_account` is the focused generation barrier for a reactive current-account query: it returns only a snapshot delivered under the exact selection tuple current at its owner-side linearization point. Literal observations return their current snapshot immediately. Both timeout forms are `Ok(None)` and leave the installed observation and its demand unchanged; closure and failure remain the handle's `Err(ObservationClosed)`. A cancelled wait cannot claim a stale completion or alter another wait's delivery revision.
 
 ### Suggested internal modules
 

@@ -90,8 +90,16 @@ async fn rapid_switch_and_old_source_change_preserve_latest_account() {
     fava.select_account(bob.public_key()).expect("Bob selects");
     fava.select_account(carol.public_key())
         .expect("Carol selects last");
-    let carol_snapshot = changed(&mut observation).await;
+    let carol_snapshot = synchronized(&mut observation).await;
     assert_contents(&carol_snapshot, &["carol"]);
+}
+
+async fn synchronized(observation: &mut fava::Observation) -> Arc<fava::QuerySnapshot> {
+    observation
+        .synchronize_current_account(Duration::from_secs(1))
+        .await
+        .expect("observation stays open")
+        .expect("current account synchronizes")
 }
 
 async fn changed(observation: &mut fava::Observation) -> Arc<fava::QuerySnapshot> {

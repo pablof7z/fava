@@ -48,6 +48,37 @@ async fn switch_during_source_open_never_publishes_the_stale_account() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn synchronization_never_returns_the_prior_generation() {
+    let alice = Keys::generate();
+    let bob = Keys::generate();
+    let carol = Keys::generate();
+    let (fava, cache) = assembly(&alice, &bob, &carol);
+    select_accounts(&fava, &alice, &bob, &carol);
+    let mut observation = fava
+        .observe(Query::events().authors_current_account().cache_only())
+        .await
+        .expect("reactive observation opens");
+
+    fava.select_account(bob.public_key()).expect("Bob selects");
+    cache.wait_until_blocked().await;
+    let premature = observation
+        .synchronize_current_account(std::time::Duration::from_millis(20))
+        .await
+        .expect("observation remains open");
+    cache.release();
+    assert!(
+        premature.is_none(),
+        "the prior Alice generation cannot satisfy Bob synchronization"
+    );
+    let bob_snapshot = observation
+        .synchronize_current_account(std::time::Duration::from_secs(1))
+        .await
+        .expect("observation remains open")
+        .expect("Bob generation arrives");
+    assert_eq!(content(&bob_snapshot), vec!["bob"]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn close_during_source_open_synchronously_retires_the_active_generation() {
     let alice = Keys::generate();
     let bob = Keys::generate();

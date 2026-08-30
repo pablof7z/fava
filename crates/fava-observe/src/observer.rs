@@ -202,8 +202,11 @@ impl Observer {
                 }
             };
         let child_current = child.current();
-        let (latest_tx, latest) =
-            tokio::sync::watch::channel(current_account::revision(child_current.as_ref(), 1));
+        let initial = current_account::revision(child_current.as_ref(), 1);
+        let (latest_tx, latest) = tokio::sync::watch::channel(Arc::clone(&initial));
+        let (synchronized_tx, synchronized) =
+            tokio::sync::watch::channel(((current, current_revision), initial));
+        let synchronization_session = session.clone();
         let task = self.runtime.spawn_cancellable(
             TaskName("observe.current-account"),
             installation.cancel.clone(),
@@ -217,6 +220,7 @@ impl Observer {
                 current,
                 current_revision,
                 latest: latest_tx,
+                synchronized: synchronized_tx,
             }),
         );
         let Ok(task) = task else {
@@ -231,6 +235,7 @@ impl Observer {
             installation.cancel,
             self.coalesced.clone(),
             Some(Arc::clone(&self.diagnostics)),
+            Some((synchronization_session, synchronized)),
         ))
     }
 
@@ -400,6 +405,7 @@ impl Observer {
             latest,
             installation.cancel,
             self.coalesced.clone(),
+            None,
             None,
         ))
     }

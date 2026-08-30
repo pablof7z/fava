@@ -26,6 +26,7 @@
 - [x] 4.4 Add delayed relay, route, subscription, diagnostic, and local-source completions across A→B→C switches and close; verify only the exact current selection and operation generation can update the current snapshot, diagnostics, or active demand.
 - [x] 4.5 Prove removing/clearing current selection retracts account-dependent demand and yields a match-nothing snapshot without deleting cached public events or receipts.
 - [x] 4.6 Run full query/observe/routing/subscription/facade tests, strict Clippy, formatting, vocabulary, and deliberate-break gates; independently review, rebase, and merge the focused reactive-query slice to `main`.
+- [ ] 4.7 Add bounded owner-side current-account synchronization after the experiential app proves `Observation::changed` can expose unread prior-generation evidence; verify app code performs no author or generation filtering, independently review, and merge the focused correction.
 
 ## 5. Focused experiential account app
 

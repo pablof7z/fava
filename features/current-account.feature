@@ -29,6 +29,7 @@ Feature: Session-owned current account
     Given one open query depends on $currentPubkey while account A is current
     When account B becomes current
     Then the same observation handle reports B's current result
+    And owner-side synchronization cannot return A while B's generation opens
     And relay demand is recompiled from A to B without application reopening
 
   # fava:rust=fava/current_account_observation#empty_and_rapid_selection_preserve_current_truth
