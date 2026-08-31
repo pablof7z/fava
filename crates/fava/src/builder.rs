@@ -3,6 +3,7 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use fava_auth::{AuthenticationPolicy, Authenticator};
 use fava_delivery::DeliveryPolicy;
 use fava_diagnostics::Diagnostics;
 use fava_event_cache::EventCache;
@@ -37,6 +38,7 @@ pub struct FavaBuilder {
     appliers: Vec<Arc<dyn EditApplier>>,
     publisher: Option<Arc<dyn Publisher>>,
     delivery: Option<Arc<dyn DeliveryPolicy>>,
+    authentication: Option<Arc<dyn AuthenticationPolicy>>,
     diagnostics_capacity: Option<NonZeroUsize>,
 }
 
@@ -45,6 +47,26 @@ impl FavaBuilder {
     #[must_use]
     pub const fn diagnostics_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.diagnostics_capacity = Some(capacity);
+        self
+    }
+
+    /// Decide, for every relay challenge on every session, whether to
+    /// authenticate.
+    ///
+    /// An assembly that selects none authenticates to nothing: a relay that
+    /// challenges is answered by silence rather than silently by default.
+    /// `decide` is synchronous and performs no effects, matching
+    /// [`DeliveryPolicy`], and a bare closure is a policy directly.
+    ///
+    /// # Arguments
+    ///
+    /// * `policy` - the decision this engine applies to every challenge
+    #[must_use]
+    pub fn authentication_policy<T>(mut self, policy: Arc<T>) -> Self
+    where
+        T: AuthenticationPolicy + 'static,
+    {
+        self.authentication = Some(policy);
         self
     }
 
@@ -255,6 +277,8 @@ impl FavaBuilder {
             |capacity| Arc::new(Diagnostics::bounded(capacity)),
         );
         let runtime = self.runtime.unwrap_or_else(default_runtime);
+        let transport_for_auth = self.transport.clone();
+        let runtime_for_auth = runtime.clone();
         let publication_selected = self.publisher.is_some()
             || self.delivery.is_some()
             || !self.signers.is_empty()
@@ -298,12 +322,26 @@ impl FavaBuilder {
         if let Some(planner) = self.subscription_planner {
             observer = observer.with_subscription_planner(planner);
         }
+        // The owner takes its own lease per authenticated session key, so an
+        // unsolicited challenge is seen whether or not a query or publication
+        // is attached. Without a transport there is no session to watch.
+        let authentication = match (self.authentication, transport_for_auth) {
+            (Some(policy), Some(transport)) => Some(Authenticator::new(
+                transport,
+                session.clone(),
+                policy,
+                runtime_for_auth,
+            )),
+            (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
+            (None, _) => None,
+        };
         Ok(Fava {
             observer,
             write_store,
             diagnostics,
             session,
             publication,
+            authentication,
         })
     }
 }
@@ -352,6 +390,9 @@ pub enum BuildError {
     /// Publication selected without a delivery policy.
     #[error("Fava publication assembly requires one delivery policy")]
     MissingDeliveryPolicy,
+    /// An authentication policy was selected without a transport.
+    #[error("Fava authentication assembly requires one transport")]
+    MissingAuthenticationTransport,
     /// Publication selected without a transport.
     #[error("Fava publication assembly requires one transport")]
     MissingPublicationTransport,

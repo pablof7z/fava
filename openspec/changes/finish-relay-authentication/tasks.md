@@ -1,10 +1,10 @@
 ## 1. Stage 1 — an application can build an engine that authenticates
 
-- [ ] 1.1 Add `FavaBuilder::authentication_policy`, taking one policy for the engine and matching how `DeliveryPolicy` is supplied; verify a test supplies a bare closure and a stateful type through the same method with no adapter between them
-- [ ] 1.2 Assemble `fava-auth` into the engine so it takes its own lease per authenticated session key and reads that session's challenges; verify a test builds a `Fava` with a policy and asserts an unsolicited challenge is answered with no query or publication attached
-- [ ] 1.3 Authenticate nothing when no policy was supplied; verify a test builds a `Fava` without one, drives a challenge, and asserts the wire transcript carries no `AUTH` frame
-- [ ] 1.4 Expose `Fava::authentication()` with `pending`, `subscribe`, and `answer`; verify a test defers a challenge, observes it in `pending`, sees the signal fire, answers it, and asserts exactly one `AUTH` frame follows
-- [ ] 1.5 Prove an authenticated query completes end to end — challenge, policy approval, signed response, relay acceptance, results delivered — through one assembled `Fava` via its public API, not direct provider calls
+- [x] 1.1 Add `FavaBuilder::authentication_policy`, taking one policy for the engine and matching how `DeliveryPolicy` is supplied; verify a test supplies a bare closure and a stateful type through the same method with no adapter between them
+- [x] 1.2 Assemble `fava-auth` into the engine so it takes its own lease per authenticated session key and reads that session's challenges; verify a test builds a `Fava` with a policy and asserts an unsolicited challenge is answered with no query or publication attached
+- [x] 1.3 Authenticate nothing when no policy was supplied; verify a test builds a `Fava` without one, drives a challenge, and asserts the wire transcript carries no `AUTH` frame
+- [x] 1.4 Expose `Fava::authentication()` with `pending`, `subscribe`, and `answer`; verify a test defers a challenge, observes it in `pending`, sees the signal fire, answers it, and asserts exactly one `AUTH` frame follows
+- [x] 1.5 Prove an authenticated query completes end to end — challenge, policy approval, signed response, relay acceptance, results delivered — through one assembled `Fava` via its public API, not direct provider calls
 
 ## 2. Stage 2 — the outcome reaches an observation
 

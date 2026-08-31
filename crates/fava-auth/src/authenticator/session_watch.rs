@@ -46,6 +46,33 @@ impl Authenticator {
     /// Returns [`WatchError`] when the session cannot be acquired or the watch
     /// cannot be registered with the runtime.
     pub async fn watch_session(&self, key: RelaySessionKey) -> Result<(), WatchError> {
+        self.watch_session_inner(key).await
+    }
+
+    /// Begin watching one session without waiting for it to be acquired.
+    ///
+    /// Opening a query must return the local view immediately, without waiting
+    /// on any relay establishment (`.planning/REQUIREMENTS.md` LOCAL-08). A
+    /// challenge arrives on the relay's own schedule, so the watch is started
+    /// and not awaited.
+    pub fn watch_session_soon(&self, key: RelaySessionKey) {
+        if Self::account(&key).is_none() {
+            return;
+        }
+        let owner = self.clone();
+        let token = self.cancellation();
+        let _ = self
+            .inner()
+            .runtime
+            .spawn_cancellable(WATCH_TASK, token, async move {
+                // A watch that cannot start is not a reason to fail a query:
+                // the observation still opens, and its evidence reports the
+                // relay demanding authentication.
+                let _ = owner.watch_session(key).await;
+            });
+    }
+
+    async fn watch_session_inner(&self, key: RelaySessionKey) -> Result<(), WatchError> {
         if Self::account(&key).is_none() {
             return Ok(());
         }

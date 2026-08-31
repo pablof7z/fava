@@ -23,6 +23,7 @@ fava-subscriptions.workspace = true
 fava-transport.workspace = true
 fava-write.workspace = true
 fava-write-store.workspace = true
+fava-auth.workspace = true
 fava-delivery.workspace = true
 nostr.workspace = true
 thiserror.workspace = true
