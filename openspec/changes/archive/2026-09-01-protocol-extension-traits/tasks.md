@@ -28,4 +28,4 @@
 - [x] 5.1 Record `docs/issues/0051-built-in-protocol-appliers.md` as resolved by this change, including the spike result — all 16 cells failed, cause is archive extraction not dead-code elimination — so nobody retries the link-time approach.
 - [x] 5.2 Run `cargo test --workspace --no-fail-fast` writing full output to a file, and verify it matches the current baseline with no new failures.
 - [x] 5.3 Build and test the downstream acceptance application, `examples/simple-groups`, and `falsifiers/external-semantic-capability` separately, and verify each matches its own baseline.
-- [ ] 5.4 Re-sign the changed public declarations under Symbol Gate and verify the gate reports no unsigned surface.
+- [ ] 5.4 Re-sign the changed public declarations under Symbol Gate and verify the gate reports no unsigned surface. (Left open deliberately, at the repository owner's instruction. The tool runs; `verify` refuses only because no trusted key is named and the user-local trust store at `~/Library/Application Support/symbol-gate/trusted_keys` is empty. Re-signing needs the owner's key.)
