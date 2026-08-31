@@ -8,8 +8,8 @@
 
 ## 2. Stage 2 — the outcome reaches an observation
 
-- [ ] 2.1 Consume authentication outcomes in `fava-observe` by session identity, keyed the same way connection state already is, and report `RelaySourceState::AuthenticationRequired` from them; verify a grep confirms `fava-observe` decodes no challenge and derives nothing from the wire
-- [ ] 2.2 Drive every `AuthenticationState` variant through a real observation and assert the evidence value for each; verify the test fails when any variant loses its producer
+- [x] 2.1 Consume authentication outcomes in `fava-observe` by session identity, keyed the same way connection state already is, and report `RelaySourceState::AuthenticationRequired` from them; verify a grep confirms `fava-observe` decodes no challenge and derives nothing from the wire
+- [x] 2.2 Drive every `AuthenticationState` variant through a real observation and assert the evidence value for each; verify the test fails when any variant loses its producer
 - [ ] 2.3 Prove one authenticated account's denial leaves another account's observation and public-access work on the same relay running; verify with the `auth_denied_for_one_access_context_leaves_another_running` falsifier named in OWN-07
 - [ ] 2.4 Prove no component outside `fava-auth` retains challenge state or an authentication flag; verify with the `nip42_challenge_state_lives_only_in_fava_auth` falsifier named in OWN-07
 - [ ] 2.5 Release the authentication lease when no authenticated work remains for a relay; verify a test asserts the transport holder count returns to its pre-authentication value after the last authenticated observation and publication end

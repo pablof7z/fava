@@ -253,3 +253,9 @@ impl Authenticator {
         self.inner.runtime.cancellation_token()
     }
 }
+
+impl fava_relay::AuthenticationOutcomes for Authenticator {
+    fn state(&self, key: &RelaySessionKey) -> Option<AuthenticationState> {
+        Self::state(self, key)
+    }
+}

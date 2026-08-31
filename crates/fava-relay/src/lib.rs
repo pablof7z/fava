@@ -95,6 +95,17 @@ pub enum AuthenticationState {
     },
 }
 
+/// What one component determined about authenticating a relay session.
+///
+/// Exactly one owner holds NIP-42 challenge state. Everyone else reads its
+/// conclusion through this contract rather than deriving one of their own from
+/// the wire, so a relay's demand has one source and one answer.
+pub trait AuthenticationOutcomes: Send + Sync {
+    /// How far authentication has got on one relay session, or `None` when the
+    /// owner has nothing to say about it.
+    fn state(&self, key: &RelaySessionKey) -> Option<AuthenticationState>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AuthenticationState, BoundedText};

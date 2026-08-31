@@ -310,6 +310,18 @@ impl FavaBuilder {
         } else {
             None
         };
+        // Build the authentication owner first: the observation owner reads
+        // its conclusions, and a relay's demand must have one source.
+        let authentication = match (self.authentication, transport_for_auth) {
+            (Some(policy), Some(transport)) => Some(Authenticator::new(
+                transport,
+                session.clone(),
+                policy,
+                runtime_for_auth,
+            )),
+            (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
+            (None, _) => None,
+        };
         let mut observer = Observer::new(event_source, write_source, evaluator)
             .with_session(session.clone())
             .with_event_cache(event_cache)
@@ -322,19 +334,9 @@ impl FavaBuilder {
         if let Some(planner) = self.subscription_planner {
             observer = observer.with_subscription_planner(planner);
         }
-        // The owner takes its own lease per authenticated session key, so an
-        // unsolicited challenge is seen whether or not a query or publication
-        // is attached. Without a transport there is no session to watch.
-        let authentication = match (self.authentication, transport_for_auth) {
-            (Some(policy), Some(transport)) => Some(Authenticator::new(
-                transport,
-                session.clone(),
-                policy,
-                runtime_for_auth,
-            )),
-            (Some(_), None) => return Err(BuildError::MissingAuthenticationTransport),
-            (None, _) => None,
-        };
+        if let Some(authentication) = authentication.clone() {
+            observer = observer.with_authentication(Arc::new(authentication));
+        }
         Ok(Fava {
             observer,
             write_store,

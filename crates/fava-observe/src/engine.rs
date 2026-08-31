@@ -58,6 +58,9 @@ pub(crate) struct RelayProviders {
     pub(crate) deadlines: TransportDeadlines,
     pub(crate) bounds: TransportBounds,
     pub(crate) admission_window: Duration,
+    /// What the authentication owner determined about each relay session, when
+    /// one was assembled. This owner reads its conclusion; it derives none.
+    pub(crate) authentication: Option<Arc<dyn fava_relay::AuthenticationOutcomes>>,
 }
 
 /// Bounded sender the provider tasks report completions through.

@@ -294,3 +294,63 @@ async fn a_public_query_authenticates_nothing() {
         "public access is never authenticated"
     );
 }
+
+/// The relay's demand reaches the observation's own evidence, sourced from the
+/// owner that determined it rather than decoded a second time from the wire.
+#[tokio::test(flavor = "current_thread")]
+async fn an_observation_reports_the_relays_demand_from_the_owners_conclusion() {
+    let rig = Rig::build(Some(Always(AuthenticationDecision::Decline)), true);
+    let observation = rig
+        .fava
+        .observe(rig.query())
+        .await
+        .expect("live query opens");
+    settle().await;
+
+    let peer = rig.peer().expect("the session was acquired");
+    peer.push_frame(&challenge_frame("nonce-one"));
+    settle().await;
+
+    // Anything from the relay refreshes this relay's evidence; a closure is the
+    // ordinary way a relay ends a subscription it will not serve.
+    let requests: Vec<String> = peer
+        .delivered_frames()
+        .into_iter()
+        .filter_map(|frame| serde_json::from_slice::<Value>(&frame).ok())
+        .filter(|message| message.get(0).and_then(Value::as_str) == Some("REQ"))
+        .filter_map(|message| {
+            message
+                .get(1)
+                .and_then(Value::as_str)
+                .map(std::borrow::ToOwned::to_owned)
+        })
+        .collect();
+    let subscription = requests.first().expect("a REQ was sent").clone();
+    peer.push_frame(
+        json!([
+            "CLOSED",
+            subscription,
+            "auth-required: we only serve authenticated users"
+        ])
+        .to_string()
+        .as_bytes(),
+    );
+    settle().await;
+
+    let snapshot = observation.current();
+    let state = snapshot
+        .evidence
+        .relay(&rig.key)
+        .map(|occurrence| occurrence.state.clone())
+        .expect("the observation carries evidence for this relay");
+    assert!(
+        matches!(
+            state,
+            fava_query::RelaySourceState::AuthenticationRequired {
+                state: AuthenticationState::Declined,
+                ..
+            }
+        ),
+        "the observation reports what the authentication owner concluded, got {state:?}"
+    );
+}

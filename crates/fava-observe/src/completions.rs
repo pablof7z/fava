@@ -115,6 +115,7 @@ impl Engine {
         if rearm {
             self.arm(relay, generation);
         }
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         false
     }
@@ -154,6 +155,7 @@ impl Engine {
             }
         }
         self.publish_state_for_relay(relay, &failure_state(detail));
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         true
     }
@@ -215,6 +217,7 @@ impl Engine {
                 RelaySourceState::Open { requested_at },
             );
         }
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         false
     }
@@ -240,6 +243,7 @@ impl Engine {
                     };
                 }
                 self.publish_state_for_relay(relay, &RelaySourceState::Disconnected { detail });
+                self.publish_authentication(relay);
                 self.publish_relay_diagnostic(relay);
                 false
             }
@@ -254,6 +258,7 @@ impl Engine {
                     relay,
                     &RelaySourceState::Unreachable { attempts, detail },
                 );
+                self.publish_authentication(relay);
                 self.publish_relay_diagnostic(relay);
                 false
             }
@@ -341,6 +346,7 @@ impl Engine {
             self.arm(relay, next);
         }
         self.publish_state_for_relay(relay, &RelaySourceState::Connecting);
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         false
     }
@@ -436,6 +442,7 @@ impl Engine {
             // (GOALS:1066).
             self.publish_shortfall(relay, id, proves);
         }
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         false
     }
@@ -456,6 +463,7 @@ impl Engine {
                 at,
             },
         );
+        self.publish_authentication(relay);
         self.publish_relay_diagnostic(relay);
         false
     }
