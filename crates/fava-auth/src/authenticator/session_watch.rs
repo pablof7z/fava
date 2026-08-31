@@ -15,6 +15,20 @@ use crate::challenge::Challenge;
 const MAX_INBOUND_FRAMES: usize = 64;
 const SESSION_DEADLINE: Duration = Duration::from_secs(30);
 
+/// How often a watch checks whether it is the last thing holding its session.
+///
+/// Nothing signals that the last observation on a relay ended -- a lease is
+/// released, not announced -- so the watch looks. The cost is one wake per
+/// watched relay per interval, and the alternative is a socket held open for
+/// the life of the process by a watch with nothing left to serve.
+const LAST_HOLDER_CHECK: Duration = Duration::from_millis(250);
+
+/// How many consecutive lone checks end a watch.
+///
+/// One is not enough: a query that named this relay may not have finished
+/// acquiring its own lease yet, and a single sample can land in that window.
+const LONE_CHECKS_BEFORE_RELEASE: u32 = 4;
+
 /// Bounds and deadlines this owner hands the transport for its own lease.
 pub(super) fn open_request(key: &RelaySessionKey) -> OpenRelaySession {
     let frames = |count: usize| NonZeroUsize::new(count).expect("constant is non-zero");
@@ -46,7 +60,9 @@ impl Authenticator {
     /// Returns [`WatchError`] when the session cannot be acquired or the watch
     /// cannot be registered with the runtime.
     pub async fn watch_session(&self, key: RelaySessionKey) -> Result<(), WatchError> {
-        self.watch_session_inner(key).await
+        // A watch asked for directly is a standing watch: it holds its session
+        // until the session itself ends.
+        self.watch_session_inner(key, false).await
     }
 
     /// Begin watching one session without waiting for it to be acquired.
@@ -68,11 +84,17 @@ impl Authenticator {
                 // A watch that cannot start is not a reason to fail a query:
                 // the observation still opens, and its evidence reports the
                 // relay demanding authentication.
-                let _ = owner.watch_session(key).await;
+                // Started because a query named this relay, so it lets go when
+                // that query is gone.
+                let _ = owner.watch_session_inner(key, true).await;
             });
     }
 
-    async fn watch_session_inner(&self, key: RelaySessionKey) -> Result<(), WatchError> {
+    async fn watch_session_inner(
+        &self,
+        key: RelaySessionKey,
+        release_when_alone: bool,
+    ) -> Result<(), WatchError> {
         if Self::account(&key).is_none() {
             return Ok(());
         }
@@ -98,13 +120,39 @@ impl Authenticator {
 
         let owner = self.clone();
         let token = self.cancellation();
+        let transport = Arc::clone(&self.inner().transport);
+        let watched = key.clone();
         let spawned = self
             .inner()
             .runtime
             .spawn_cancellable(WATCH_TASK, token, async move {
+                // This owner's own lease keeps the session alive, so watching
+                // for challenges would hold a socket open forever. A watch
+                // exists because a query named this relay; being the only
+                // holder means that query is gone, and there is nothing left to
+                // serve.
+                //
+                // Counting consecutive lone checks rather than reacting to one
+                // is what makes this reliable in both directions: a query that
+                // has not finished acquiring yet leaves the watch briefly
+                // alone, and one sample can land in that window.
+                let mut alone_for = 0_u32;
                 loop {
                     let asked = challenges.notified();
                     let changed = connection.notified();
+                    if release_when_alone {
+                        match transport.holders(&watched).map(NonZeroUsize::get) {
+                            Some(holders) if holders > 1 => alone_for = 0,
+                            Some(_) => {
+                                alone_for += 1;
+                                if alone_for >= LONE_CHECKS_BEFORE_RELEASE {
+                                    break;
+                                }
+                            }
+                            // The session is gone; there is nothing to release.
+                            None => break,
+                        }
+                    }
                     while let Some(text) = challenges.take() {
                         owner.challenged(&session, &text).await;
                     }
@@ -119,6 +167,7 @@ impl Authenticator {
                     tokio::select! {
                         () = asked => {}
                         () = changed => {}
+                        () = tokio::time::sleep(LAST_HOLDER_CHECK) => {}
                     }
                 }
                 let _ = lease.release().await;

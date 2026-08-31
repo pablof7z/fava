@@ -12,7 +12,7 @@
 - [x] 2.2 Drive every `AuthenticationState` variant through a real observation and assert the evidence value for each; verify the test fails when any variant loses its producer
 - [x] 2.3 Prove one authenticated account's denial leaves another account's observation and public-access work on the same relay running; verify with the `auth_denied_for_one_access_context_leaves_another_running` falsifier named in OWN-07
 - [x] 2.4 Prove no component outside `fava-auth` retains challenge state or an authentication flag; verify with the `nip42_challenge_state_lives_only_in_fava_auth` falsifier named in OWN-07
-- [ ] 2.5 Release the authentication lease when no authenticated work remains for a relay; verify a test asserts the transport holder count returns to its pre-authentication value after the last authenticated observation and publication end
+- [x] 2.5 Release the authentication lease when no authenticated work remains for a relay; verify a test asserts the transport holder count returns to its pre-authentication value after the last authenticated observation and publication end
 
 ## 3. Stage 3 — remove the duplicate handshake
 

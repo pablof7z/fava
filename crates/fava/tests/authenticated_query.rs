@@ -449,3 +449,42 @@ fn requests_of(peer: &FakeRelay) -> Vec<String> {
         })
         .collect()
 }
+
+/// Watching for challenges must not hold a relay session open by itself.
+///
+/// The owner takes its own lease so that an unsolicited challenge is seen with
+/// no query attached. That lease would otherwise keep the socket alive forever,
+/// because a lease is exactly what keeps a session from closing.
+#[tokio::test(flavor = "current_thread")]
+async fn the_watch_releases_its_lease_when_no_authenticated_work_remains() {
+    let rig = Rig::build(Some(Always(AuthenticationDecision::Authenticate)), true);
+    let observation = rig
+        .fava
+        .observe(rig.query())
+        .await
+        .expect("live query opens");
+    settle().await;
+
+    assert!(
+        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
+            .is_some_and(|holders| holders.get() >= 2),
+        "the observation and the watch each hold the session"
+    );
+
+    drop(observation);
+    // The watch checks periodically whether it is the last holder; nothing
+    // announces that the last observation ended.
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        settle().await;
+        if fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none() {
+            break;
+        }
+    }
+
+    assert!(
+        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key).is_none(),
+        "the watch let go once nothing was left to serve, got {:?}",
+        fava_transport::Transport::holders(rig.transport.as_ref(), &rig.key)
+    );
+}
