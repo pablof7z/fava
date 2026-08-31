@@ -22,6 +22,7 @@ members = [
     "crates/fava-ingest",
     "crates/fava-diagnostics",
     "crates/fava-routing",
+    "crates/fava-auth",
     "crates/fava-bookmarks",
     "crates/fava-nip02",
     "crates/fava-simple-groups",
@@ -67,6 +68,7 @@ fava-transport-testkit = { path = "crates/fava-transport-testkit" }
 fava-ingest = { path = "crates/fava-ingest" }
 fava-diagnostics = { path = "crates/fava-diagnostics" }
 fava-routing = { path = "crates/fava-routing" }
+fava-auth = { path = "crates/fava-auth" }
 fava-bookmarks = { path = "crates/fava-bookmarks" }
 fava-nip02 = { path = "crates/fava-nip02" }
 fava-simple-groups = { path = "crates/fava-simple-groups" }

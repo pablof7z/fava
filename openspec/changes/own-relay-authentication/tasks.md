@@ -7,27 +7,27 @@
 
 ## 1. Create the `fava-auth` crate
 
-- [ ] 1.1 Scaffold `crates/fava-auth` with a workspace members entry and a `[workspace.dependencies]` path entry; verify `cargo build --workspace --all-targets --locked` succeeds with the empty crate present
-- [ ] 1.2 Add `Challenge` with an explicit byte bound, refusing empty and over-bound text through a typed error rather than truncating; verify unit tests cover empty, at-bound, and over-bound input
-- [ ] 1.3 Add `AuthenticationDemand` carrying `fava_transport::RelaySessionIdentity` and a `Challenge`, plus `AuthenticationDecision`; verify a test asserts the demand names the exact session key and generation the challenge arrived on
-- [ ] 1.4 Add `auth_event`, building the unsigned kind-22242 response through `fava_write::EventBuilder` with the relay and challenge tags; verify a test asserts kind, both tag rows, and their exact values
-- [ ] 1.5 Add `SessionAuthentication` tracking one `RelaySessionKey` across generations, with `challenged`, `resolved`, `reconnected`, `state`, `authenticated`, and `attempts`, and an explicit attempt bound; verify unit tests cover replacing a challenge, exhausting the bound, and a reconnect clearing an earlier verdict
-- [ ] 1.6 Add the `AuthenticationPolicy` trait with a synchronous `decide`, matching `DeliveryPolicy`, plus a blanket implementation over `Fn(&AuthenticationDemand) -> AuthenticationDecision`; verify a test supplies a bare closure and a stateful type through the same builder method with no adapter between them
-- [ ] 1.7 Add `AuthenticationDecision::Defer`, `AuthenticationDemandId`, and `PendingAuthentication`; verify a test asserts a deferred demand carries a stable identity and the session generation it arrived on
-- [ ] 1.8 Add `crates/fava-auth/tests/architecture.rs` on the `fava-nip02` model, asserting the crate's declared dependencies exactly match its allowed set and that banned owners appear in neither the manifest nor its source; verify the test fails when an extra dependency is added
+- [x] 1.1 Scaffold `crates/fava-auth` with a workspace members entry and a `[workspace.dependencies]` path entry; verify `cargo build --workspace --all-targets --locked` succeeds with the empty crate present
+- [x] 1.2 Add `Challenge` with an explicit byte bound, refusing empty and over-bound text through a typed error rather than truncating; verify unit tests cover empty, at-bound, and over-bound input
+- [x] 1.3 Add `AuthenticationDemand` carrying `fava_transport::RelaySessionIdentity` and a `Challenge`, plus `AuthenticationDecision`; verify a test asserts the demand names the exact session key and generation the challenge arrived on
+- [x] 1.4 Add `auth_event`, building the unsigned kind-22242 response through `fava_write::EventBuilder` with the relay and challenge tags; verify a test asserts kind, both tag rows, and their exact values
+- [x] 1.5 Add `SessionAuthentication` tracking one `RelaySessionKey` across generations, with `challenged`, `resolved`, `reconnected`, `state`, `authenticated`, and `attempts`, and an explicit attempt bound; verify unit tests cover replacing a challenge, exhausting the bound, and a reconnect clearing an earlier verdict
+- [x] 1.6 Add the `AuthenticationPolicy` trait with a synchronous `decide`, matching `DeliveryPolicy`, plus a blanket implementation over `Fn(&AuthenticationDemand) -> AuthenticationDecision`; verify a test supplies a bare closure and a stateful type through the same builder method with no adapter between them
+- [x] 1.7 Add `AuthenticationDecision::Defer`, `AuthenticationDemandId`, and `PendingAuthentication`; verify a test asserts a deferred demand carries a stable identity and the session generation it arrived on
+- [x] 1.8 Add `crates/fava-auth/tests/architecture.rs` on the `fava-nip02` model, asserting the crate's declared dependencies exactly match its allowed set and that banned owners appear in neither the manifest nor its source; verify the test fails when an extra dependency is added
 
 ## 2. Drive the handshake
 
-- [ ] 2.1 Acquire a lease per `RelayAccess::Authenticated` session key and watch its inbound stream for `RelayMessage::Auth`, running the watch under `Runtime::spawn_cancellable`; verify a test with a fake transport observes a challenge delivered to the watcher while no publication is in flight
-- [ ] 2.2 Consult the policy, sign through `Session::invoke_signer` for the key's account, and send `ClientMessage::Auth`, running each await under `Runtime::call_provider` with a Fava-owned deadline; verify a test asserts the wire transcript carries exactly one client `AUTH` frame per approved challenge
-- [ ] 2.3 Classify the relay's reply into `AuthenticationState` variants, reading `auth-required:` and `restricted:` through `nostr::message::MachineReadablePrefix::parse`; verify tests cover acceptance, rejection, acceptance-with-refusal, and a policy decline
-- [ ] 2.4 Report no signing and no `AUTH` frame when the policy declines or no signer is attached; verify a test asserts the transcript contains no `AUTH` frame in both cases
-- [ ] 2.5 Answer a fresh challenge on a new generation after reconnect and discard a verdict arriving from a replaced generation; verify tests cover both
-- [ ] 2.6 Stop answering once the attempt bound is reached for a generation; verify a test drives a relay that re-challenges continuously and asserts signing stops at the bound
+- [x] 2.1 Acquire a lease per `RelayAccess::Authenticated` session key and watch its inbound stream for `RelayMessage::Auth`, running the watch under `Runtime::spawn_cancellable`; verify a test with a fake transport observes a challenge delivered to the watcher while no publication is in flight
+- [x] 2.2 Consult the policy, sign through `Session::invoke_signer` for the key's account, and send `ClientMessage::Auth`, running each await under `Runtime::call_provider` with a Fava-owned deadline; verify a test asserts the wire transcript carries exactly one client `AUTH` frame per approved challenge
+- [x] 2.3 Classify the relay's reply into `AuthenticationState` variants, reading `auth-required:` and `restricted:` through `nostr::message::MachineReadablePrefix::parse`; verify tests cover acceptance, rejection, acceptance-with-refusal, and a policy decline
+- [x] 2.4 Report no signing and no `AUTH` frame when the policy declines or no signer is attached; verify a test asserts the transcript contains no `AUTH` frame in both cases
+- [x] 2.5 Answer a fresh challenge on a new generation after reconnect and discard a verdict arriving from a replaced generation; verify tests cover both
+- [x] 2.6 Stop answering once the attempt bound is reached for a generation; verify a test drives a relay that re-challenges continuously and asserts signing stops at the bound
 - [ ] 2.7 Release the lease when no authenticated work remains for that key; verify a test asserts the transport holder count returns to its pre-authentication value
-- [ ] 2.8 Retain a deferred demand without signing or sending, and expose `Fava::authentication()` with `pending`, `subscribe`, and `answer`; verify a test defers a challenge, observes it in `pending`, sees the signal fire, and asserts no `AUTH` frame was sent
-- [ ] 2.9 Authenticate on an approving answer and decline on a refusing one; verify tests assert exactly one `AUTH` frame in the first case and none in the second
-- [ ] 2.10 Drop a deferred demand when its generation is replaced, signal the change, and make a stale answer resolve nothing; verify tests cover both
+- [x] 2.8 Retain a deferred demand without signing or sending, and expose `Fava::authentication()` with `pending`, `subscribe`, and `answer`; verify a test defers a challenge, observes it in `pending`, sees the signal fire, and asserts no `AUTH` frame was sent
+- [x] 2.9 Authenticate on an approving answer and decline on a refusing one; verify tests assert exactly one `AUTH` frame in the first case and none in the second
+- [x] 2.10 Drop a deferred demand when its generation is replaced, signal the change, and make a stale answer resolve nothing; verify tests cover both
 - [ ] 2.11 Add `FavaBuilder::authentication_policy` and assemble `fava-auth` into the engine; verify a test builds a `Fava` with a policy and asserts a challenge on an authenticated session is answered
 
 ## 3. Reach the read path
