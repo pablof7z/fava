@@ -73,7 +73,7 @@ Fava distinguishes responsibilities even when one physical implementation serves
 - The **query owner** merges query sources and owns observation continuity.
 - The **routing chain** owns the current desired relay plan.
 - The **publication owner** owns one accepted write lifecycle.
-- The **transport** owns relay sessions and byte handoff.
+- The **transport** owns relay sessions, the NIP-01 envelopes Fava sends, and delivery of each relay message to the component that asked for it.
 
 There may be several physical databases, or one physical database exposed through several provider types. There is one authority for each responsibility.
 
@@ -405,7 +405,9 @@ pub fn encoded_len(message: &ClientMessage)
 
 ### Relationship to other crates
 
-`fava-transport` moves bytes and owns sessions. `fava-wire` gives those bytes protocol meaning. `fava-ingest` determines whether a decoded relay event is attributable and valid.
+`fava-wire` is the grammar. `fava-transport` uses it: a relay session builds the envelope for every client message Fava sends, and decodes each inbound frame exactly once before delivering it. `fava-ingest` determines whether a decoded relay event is attributable and valid.
+
+The transport speaks NIP-01 because a Nostr relay speaks nothing else, and because the alternative was every component that shares a connection reimplementing the same demultiplexer -- which is how a publication came to mistake another component's traffic for its own answer. What it knows is bounded to four verbs and one correlation mapping, and `crates/fava-transport/tests/architecture.rs` is what keeps it bounded.
 
 `fava-wire` can therefore be used and tested independently of sockets and retry policy.
 
@@ -1693,7 +1695,7 @@ A custom planner may choose one wire subscription per logical demand. Both imple
 
 ## `fava-transport`
 
-**Responsibility:** own relay sessions and correlated byte handoff.
+**Responsibility:** own relay sessions, the envelopes Fava sends, and delivery of each relay message to the component that asked for it.
 
 ### Contract
 
@@ -1705,20 +1707,52 @@ pub trait Transport: Send + Sync {
     ) -> RelaySessionFuture;
 }
 
-pub trait RelaySession: Send {
+pub trait RelaySession: Send + Sync {
     fn identity(&self) -> RelaySessionIdentity;
 
-    fn send(
-        &self,
-        frame: Bytes,
-        correlation: HandoffCorrelation,
-    ) -> HandoffFuture;
+    // The verbs. A caller supplies protocol values; the session owns the
+    // envelope, and yields the handle for what comes back.
+    fn req(&self, filters: Vec<Filter>) -> Subscription;
+    fn event(&self, signed: Event) -> Acknowledgement;
+    fn auth(&self, signed: Event) -> Acknowledgement;
 
-    fn messages(&self) -> Box<dyn RelayMessageStream>;
+    // Facts about the session that belong to no single request.
+    fn challenges(&self) -> Mailbox<String>;
+    fn connection(&self) -> Mailbox<ConnectionState>;
 
     fn close(&self) -> CloseFuture;
 }
 ```
+
+The session mints each subscription's wire identifier. Whoever holds every
+identifier in use is the one that can guarantee a new one does not collide, and
+that is the session. Identifiers are opaque and fixed-width, inside the 64
+characters NIP-01 obliges every relay to accept, so the exact encoded length of a
+`REQ` is derivable before the identifier exists. The planner still decides which
+subscriptions exist and what each carries; naming one is not owning the plan
+(`.planning/REQUIREMENTS.md` OWN-02). The transport retains a correlation key
+against a delivery channel, valid for one connection, and no filters, demand,
+plan revision, or observation identity.
+
+There is no byte-level `send`. A caller cannot build an envelope, so the four
+verbs are the only way to reach a relay, and adding a fifth is a change to this
+crate rather than an escape hatch anyone can reach for.
+
+Each verb yields a handle that delivers its own narrow type: a subscription sees
+an event, an end of stored events, its closure, exact bounded loss, or its
+connection ending; an acknowledgement settles accepted, rejected, or ended. A
+consumer never writes an arm for a message that cannot reach it, which is what a
+single shared inbound stream forced three crates to do.
+
+Closing a subscription is dropping its handle. Dropping enqueues the `CLOSE`
+without waiting; `close()` sends the same closure and reports its handoff
+outcome. Nothing can stop reading a subscription while the relay is still
+sending it.
+
+`correlation()` is the whole of the transport's protocol knowledge on the way
+in: subscription-correlated messages by subscription id, `OK` by event id,
+`AUTH` to the challenge reader, and everything else to nobody. A message no live
+handle claims is counted, never delivered as another component's work.
 
 ### Owned state
 
@@ -1727,7 +1761,7 @@ pub trait RelaySession: Send {
 - connection and reconnect generation;
 - connection backoff;
 - bounded inbound and outbound byte queues;
-- exact byte-handoff outcomes;
+- exact handoff outcomes for every frame it encodes;
 - session health and transport errors;
 - current and retiring session lifecycle;
 - shutdown and resource joining.
@@ -1753,8 +1787,9 @@ reacquisition after registry removal. Reconnected sessions are new authorities.
 A generation is never saturated, wrapped, or reused within one transport
 instance. Exhaustion is a typed refusal before opening another connection.
 
-`HandoffCorrelation` is instead minted by the caller and echoed unchanged in
-that handoff's outcome. It does not authorize or identify a physical session.
+A caller supplies no correlation token. Every verb is awaited and returns its
+own outcome to its own awaiter, so the await *is* the correlation; a token that
+nothing read was one more thing three crates had to mint and agree about.
 
 ---
 
@@ -1774,7 +1809,7 @@ It owns the ordinary Nostr relay connection lifecycle:
 - transport-level replay hooks for current subscription plans; and
 - deterministic close.
 
-It uses `fava-wire` only for optional framing diagnostics; wire semantics remain owned by `fava-wire` and higher owners.
+It decodes each inbound frame exactly once, in the task that owns the socket, and hands the decoded message to the router in `fava-transport`. Wire *meaning* -- whether an event is attributable, what an EOSE proves, which observation a subscription serves -- remains owned by `fava-wire` and higher owners.
 
 ---
 
@@ -1820,7 +1855,7 @@ A publication outcome is valid only for the exact write, revision generation, ev
 - routing selects the destination;
 - delivery policy decides when an attempt is due;
 - publisher performs the attempt;
-- transport owns the session and byte handoff;
+- transport owns the session, the envelope, and the acknowledgement's delivery;
 - auth owner handles NIP-42 policy;
 - write store commits attempt and receipt facts;
 - publication owner coordinates the lifecycle.
@@ -2943,9 +2978,9 @@ No existing acknowledged lane is resent merely because another destination was a
 ## Receiving a relay event
 
 ```text
-transport receives bytes
+transport receives bytes and decodes them once with fava-wire
         ↓
-fava-wire decodes RelayMessage
+the router delivers the message to the handle owning its wire key
         ↓
 fava-ingest verifies exact session/subscription attribution
         ↓
@@ -3350,7 +3385,7 @@ A physical backend package may support several semantic provider adapters, but e
 | `FetchCache` | opaque partition/key/value operations | cached bytes | generic cache storage only |
 | `Router` | route request, upstream plan, router services | current async route contribution | one routing algorithm and its inputs |
 | `SubscriptionPlanner` | logical demand for one session plus limits | exact wire plan and attribution | grouping/planning calculation |
-| `Transport` | session specs and bytes | connection/handoff/inbound facts | physical relay resource |
+| `Transport` | session specs and protocol values | connection facts, and each relay message delivered to the handle that owns it | physical relay resource |
 | `Publisher` | one signed event and one session | one protocol attempt outcome | attempt protocol |
 | `DeliveryPolicy` | durable lane facts and time | attempt/wait/park/give-up decision | delivery policy |
 | `Signer` | exact unsigned event or crypto request | signed/crypto result | key custody and crypto execution |
@@ -3847,7 +3882,7 @@ Build explicit Swift and Kotlin artifacts from selected profiles. Run the same b
 | `fava-router-fallback-relays` | Contribute fallback relays from upstream coverage policy. |
 | `fava-subscriptions` | Per-relay logical-demand to wire-plan contract. |
 | `fava-subscriptions-standard` | Recommended exact grouping/coalescing planner. |
-| `fava-transport` | Relay-session, byte-handoff, and inbound-byte contracts. |
+| `fava-transport` | Relay-session contracts: the verbs that reach a relay, and the handles that deliver what it says. |
 | `fava-transport-websocket` | Standard WebSocket relay transport. |
 
 ## Publication and identity
