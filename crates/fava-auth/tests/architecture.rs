@@ -66,6 +66,7 @@ fn the_authentication_owner_declares_exactly_its_allowed_dependencies() {
         "fava-write",
         "nostr",
         "thiserror",
+        "tokio",
     ];
     allowed.sort_unstable();
 

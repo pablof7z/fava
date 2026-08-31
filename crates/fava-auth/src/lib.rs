@@ -11,12 +11,14 @@
 //! defer to a person. A deferred challenge signs nothing and parks the work
 //! that needs it until the answer arrives.
 
+mod authenticator;
 mod challenge;
 mod demand;
 mod event;
 mod policy;
 mod state;
 
+pub use authenticator::{AnswerError, AnswerOutcome, Authenticator, WatchError};
 pub use challenge::{Challenge, ChallengeError};
 pub use demand::{AuthenticationDemand, AuthenticationDemandId, PendingAuthentication};
 pub use event::auth_event;
