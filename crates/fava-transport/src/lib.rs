@@ -20,6 +20,8 @@ mod handoff;
 mod inbound;
 mod lease;
 mod request;
+mod routed;
+mod router;
 mod session;
 
 use std::future::Future;
@@ -35,6 +37,12 @@ pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportF
 pub use inbound::RelayInbound;
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
+pub use router::{Mailbox, Router, Unrouted};
+pub use routed::{
+    Acknowledgement, PublishFuture, RelaySessionExt, RoutedAcknowledgement, RoutedSubscription,
+    SubscribeFuture, CloseFuture, Correlation, SessionEnded, Settlement, SettlementFuture,
+    Subscription, SubscriptionFuture, SubscriptionItem, correlation,
+};
 pub use session::{
     HandoffCorrelation, OpenedSubscription, RelayMessageStream, RelaySession,
     RelaySessionGeneration, RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,

@@ -21,6 +21,7 @@ pub(crate) struct FakeSession {
     pub(crate) generations: Arc<AtomicU64>,
     /// Monotonic source of this session's wire subscription identifiers.
     pub(crate) subscriptions: Arc<AtomicU64>,
+    pub(crate) router: fava_transport::Router,
     pub(crate) inner: Mutex<SessionState>,
 }
 
@@ -58,6 +59,7 @@ impl FakeSession {
             dials,
             generations,
             subscriptions,
+            router: fava_transport::Router::default(),
             inner: Mutex::new(SessionState::default()),
         }
     }
@@ -192,6 +194,22 @@ impl Drop for CancelledHandoff<'_> {
 impl RelaySession for FakeSession {
     fn identity(&self) -> RelaySessionIdentity {
         self.identity.read()
+    }
+
+    fn router(&self) -> &fava_transport::Router {
+        &self.router
+    }
+
+    fn inbound_capacity(&self) -> usize {
+        self.bounds.inbound_frames.get()
+    }
+
+    fn enqueue(&self, frame: Vec<u8>) {
+        let mut state = self.state();
+        if state.closed {
+            return;
+        }
+        state.delivered.push(frame);
     }
 
     fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {

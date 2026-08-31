@@ -28,6 +28,7 @@ pub(crate) struct SessionShared {
     pub(crate) generations: Arc<AtomicU64>,
     /// Monotonic source of this session's wire subscription identifiers.
     pub(crate) subscriptions: Arc<AtomicU64>,
+    pub(crate) router: fava_transport::Router,
 }
 
 impl SessionShared {
@@ -50,6 +51,7 @@ impl SessionShared {
             entropy,
             generations,
             subscriptions,
+            router: fava_transport::Router::default(),
         }
     }
 }
@@ -63,6 +65,27 @@ pub(crate) struct WebSocketRelaySession {
 impl RelaySession for WebSocketRelaySession {
     fn identity(&self) -> RelaySessionIdentity {
         self.shared.identity.read()
+    }
+
+    fn router(&self) -> &fava_transport::Router {
+        &self.shared.router
+    }
+
+    fn inbound_capacity(&self) -> usize {
+        self.shared.bounds.inbound_frames.get()
+    }
+
+    fn enqueue(&self, frame: Vec<u8>) {
+        if self.shared.closed.load(Ordering::SeqCst) {
+            return;
+        }
+        let (completion, _settled) = oneshot::channel();
+        // A full queue drops the frame rather than parking a destructor.
+        let _ = self.outbound.try_send(Outbound {
+            frame,
+            correlation: HandoffCorrelation::new(0),
+            completion,
+        });
     }
 
     fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
@@ -147,3 +170,4 @@ impl RelaySession for WebSocketRelaySession {
         })
     }
 }
+

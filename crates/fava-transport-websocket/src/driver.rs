@@ -58,6 +58,14 @@ pub(crate) async fn drive(
         let (sink, source) = socket.split();
         let reason = pump(&shared, &mut outbound, sink, source).await;
         drain_unsent(&mut outbound, &shared, &reason);
+        // Every wire key names state this connection carried. It did not
+        // survive, so every handle ends rather than waiting on a relay that
+        // has forgotten it.
+        shared
+            .router
+            .end_generation(&fava_transport::SessionEnded::Disconnected {
+                detail: BoundedText::new(format!("{reason:?}")),
+            });
         shared.consumers.fan_out(&RelayInbound::Disconnected {
             identity: shared.identity.read(),
             reason: reason.clone(),
@@ -76,6 +84,12 @@ pub(crate) async fn drive(
             }
             Err((attempts, final_reason)) => {
                 shared.closed.store(true, Ordering::SeqCst);
+                shared
+                    .router
+                    .end_generation(&fava_transport::SessionEnded::ReconnectExhausted {
+                        attempts,
+                        detail: BoundedText::new(format!("{final_reason:?}")),
+                    });
                 shared.consumers.fan_out(&RelayInbound::ReconnectExhausted {
                     identity: shared.identity.read(),
                     attempts,
@@ -268,6 +282,13 @@ fn admit_frame(
                 frame.len()
             )),
         });
+    }
+    // Decode exactly once, here, for every handle on this session.
+    match std::str::from_utf8(&frame).ok().and_then(|text| {
+        fava_wire::decode_relay(text).ok()
+    }) {
+        Some(message) => shared.router.deliver(message),
+        None => shared.router.undecodable(),
     }
     shared.consumers.fan_out(&RelayInbound::Frame {
         identity: identity.clone(),

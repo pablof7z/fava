@@ -125,6 +125,23 @@ pub trait RelaySession: Send + Sync {
     /// construction. Implementations produce them with [`subscription_id`].
     fn mint_subscription_id(&self) -> SubscriptionId;
 
+    /// This session's router: which handle owns each live wire key.
+    ///
+    /// The implementation owns the socket and feeds decoded messages in; the
+    /// router decides where each one goes, so every transport shares one
+    /// answer rather than writing its own.
+    fn router(&self) -> &crate::Router;
+
+    /// Bounded queue depth for one handle, from the caller's declared bounds.
+    fn inbound_capacity(&self) -> usize;
+
+    /// Enqueue one already-encoded frame without awaiting its outcome.
+    ///
+    /// This is the non-awaiting half of [`RelaySession::hand_off`], and exists
+    /// because releasing a subscription handle must still tell the relay, and
+    /// `Drop` cannot await.
+    fn enqueue(&self, frame: Vec<u8>);
+
     /// Open one wire subscription carrying `filters`.
     ///
     /// The session names the subscription; the caller supplies only what to

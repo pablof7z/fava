@@ -68,6 +68,7 @@ impl Transport for ScriptedTransport {
                 RelaySessionGeneration::new(previous + 1).expect("issued generation is non-zero");
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
+                router: fava_transport::Router::default(),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,
@@ -133,6 +134,7 @@ impl RelayMessageStream for ScriptedStream {
 }
 
 struct ScriptedSession {
+    router: fava_transport::Router,
     subscriptions: std::sync::atomic::AtomicU64,
     identity: RelaySessionIdentity,
     mailbox: Arc<Mailbox>,
@@ -190,6 +192,21 @@ async fn subscription_of(session: &ScriptedSession) -> SubscriptionId {
 impl RelaySession for ScriptedSession {
     fn identity(&self) -> RelaySessionIdentity {
         self.identity.clone()
+    }
+
+    fn router(&self) -> &fava_transport::Router {
+        &self.router
+    }
+
+    fn inbound_capacity(&self) -> usize {
+        16
+    }
+
+    fn enqueue(&self, frame: Vec<u8>) {
+        self.sent
+            .lock()
+            .expect("session lock")
+            .push(String::from_utf8_lossy(&frame).into_owned());
     }
 
     fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {

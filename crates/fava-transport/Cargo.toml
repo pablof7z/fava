@@ -10,6 +10,7 @@ fava-relay.workspace = true
 fava-state.workspace = true
 fava-wire.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
