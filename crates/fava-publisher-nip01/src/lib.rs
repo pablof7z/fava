@@ -9,13 +9,14 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_relay::RelaySessionKey;
 use fava_session::Session;
 use fava_transport::{
-    HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
+    HandoffOutcome, OpenRelaySession, SessionEnded, Settlement, Transport,
+    TransportBounds,
     TransportDeadlines,
 };
-use fava_wire::{RelayMessage, decode_relay};
 use fava_write::{EventBuilder, Kind, Tag};
 
-const MAX_INBOUND_FRAMES: usize = 64;
+/// Inbound queue depth this publisher asks the transport for.
+const INBOUND_FRAMES: usize = 64;
 
 /// Deadlines and bounds this publisher hands the transport for one attempt.
 /// The attempt's own timeout is the only Fava-owned duration it knows.
@@ -30,7 +31,7 @@ fn open_request(key: &RelaySessionKey, timeout: std::time::Duration) -> OpenRela
             close: timeout,
         },
         bounds: TransportBounds {
-            inbound_frames: frames(MAX_INBOUND_FRAMES),
+            inbound_frames: frames(INBOUND_FRAMES),
             outbound_frames: frames(4),
             max_frame_bytes: frames(1_048_576),
         },
@@ -85,126 +86,91 @@ impl Publisher for Nip42Publisher {
                 }
             };
             let session = Arc::clone(lease.session());
-            let mut inbound = session.messages();
-
-            // Send the initial EVENT.
-            match session.event(attempt.event.clone()).await {
-                HandoffOutcome::NotHandedOff { reason, .. } => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::NotHandedOff {
-                        reason: format!("{reason:?}"),
-                    };
-                }
-                HandoffOutcome::Ambiguous { reason, .. } => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::OutcomeUnknown {
-                        reason: format!("{reason:?}"),
-                    };
-                }
-                HandoffOutcome::HandedOff { .. } => {}
-            }
-
             let relay_url = attempt.session.relay.to_string();
             let pubkey = attempt.event.pubkey;
-            let event_id = attempt.event.id;
             let session_ref = &self.session;
 
+            // Challenges have their own reader, so this attempt watches for one
+            // alongside its own acknowledgement instead of reading everything
+            // the connection carries and guessing which parts are its own.
+            let challenges = fava_transport::RelaySessionExt::challenges(&session);
+
             let result = tokio::time::timeout(attempt.timeout, async {
-                let mut authed = false;
-                for _ in 0..MAX_INBOUND_FRAMES {
-                    let item = inbound
-                        .next_inbound()
+                let mut acknowledged =
+                    match fava_transport::RelaySessionExt::publish(&session, attempt.event.clone())
                         .await
-                        .map_err(|e| format!("session closed: {e}"))?;
-                    let RelayInbound::Frame { frame, .. } = item else {
-                        return Err(format!("relay session ended: {item:?}"));
+                    {
+                        Ok(handle) => handle,
+                        Err(refused) => return Err(format!("{refused:?}")),
                     };
-                    let text = String::from_utf8_lossy(&frame).into_owned();
-                    let message = decode_relay(&text).map_err(|e| e.to_string())?;
-                    match message {
-                        RelayMessage::Ok {
-                            event_id: eid,
-                            status,
-                            message,
-                        } if eid == event_id => {
-                            return Ok(if status {
-                                PublishOutcome::Acknowledged {
-                                    message: message.into_owned(),
-                                }
-                            } else {
-                                PublishOutcome::Rejected {
-                                    message: message.into_owned(),
-                                }
+                let mut authed = false;
+                loop {
+                    let asked = challenges.notified();
+                    if let Some(challenge) = challenges.take() {
+                        if authed {
+                            continue;
+                        }
+                        let Ok(auth_event) = build_auth_event(pubkey, &relay_url, &challenge)
+                        else {
+                            return Ok(PublishOutcome::AuthenticationRequired);
+                        };
+                        let Some((generation, _)) = session_ref.signer(pubkey) else {
+                            return Ok(PublishOutcome::AuthenticationRequired);
+                        };
+                        let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+                        let signed = match session_ref
+                            .invoke_signer(pubkey, generation, auth_event, cancel_rx)
+                        {
+                            Some(fut) => {
+                                let Ok(event) = fut.await else {
+                                    drop(cancel_tx);
+                                    return Ok(PublishOutcome::AuthenticationRequired);
+                                };
+                                event
+                            }
+                            None => return Ok(PublishOutcome::AuthenticationRequired),
+                        };
+                        drop(cancel_tx);
+                        if let Err(refused) =
+                            fava_transport::RelaySessionExt::answer(&session, signed).await
+                        {
+                            return Err(format!("AUTH not handed off: {refused:?}"));
+                        }
+                        // The relay discarded the first copy when it demanded
+                        // authentication, so the event is sent again on its own
+                        // fresh handle.
+                        acknowledged = match fava_transport::RelaySessionExt::publish(
+                            &session,
+                            attempt.event.clone(),
+                        )
+                        .await
+                        {
+                            Ok(handle) => handle,
+                            Err(refused) => return Err(format!("resend: {refused:?}")),
+                        };
+                        authed = true;
+                        continue;
+                    }
+                    tokio::select! {
+                        settlement = acknowledged.settled() => {
+                            return Ok(match settlement {
+                                Settlement::Accepted { message } => PublishOutcome::Acknowledged {
+                                    message: message.as_str().to_owned(),
+                                },
+                                Settlement::Rejected { message } => PublishOutcome::Rejected {
+                                    message: message.as_str().to_owned(),
+                                },
+                                Settlement::Ended(_) => return Err(
+                                    "connection ended before the relay answered".to_owned(),
+                                ),
                             });
                         }
-                        RelayMessage::Auth { challenge } if !authed => {
-                            let challenge = challenge.into_owned();
-                            // Build and sign a kind-22242 auth event.
-                            let Ok(auth_event) = build_auth_event(pubkey, &relay_url, &challenge)
-                            else {
-                                return Ok(PublishOutcome::AuthenticationRequired);
-                            };
-                            let Some((generation, _)) = session_ref.signer(pubkey) else {
-                                return Ok(PublishOutcome::AuthenticationRequired);
-                            };
-                            let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
-                            let signed = match session_ref
-                                .invoke_signer(pubkey, generation, auth_event, cancel_rx)
-                            {
-                                Some(fut) => {
-                                    if let Ok(ev) = fut.await {
-                                        ev
-                                    } else {
-                                        drop(cancel_tx);
-                                        return Ok(PublishOutcome::AuthenticationRequired);
-                                    }
-                                }
-                                None => {
-                                    return Ok(PublishOutcome::AuthenticationRequired);
-                                }
-                            };
-                            drop(cancel_tx);
-                            match session.auth(signed).await {
-                                HandoffOutcome::HandedOff { .. } => {}
-                                HandoffOutcome::NotHandedOff { reason, .. } => {
-                                    return Err(format!("AUTH not handed off: {reason:?}"));
-                                }
-                                HandoffOutcome::Ambiguous { reason, .. } => {
-                                    return Err(format!("AUTH outcome unknown: {reason:?}"));
-                                }
-                            }
-                            match session.event(attempt.event.clone()).await {
-                                HandoffOutcome::HandedOff { .. } => {}
-                                HandoffOutcome::NotHandedOff { reason, .. } => {
-                                    return Err(format!("resend not handed off: {reason:?}"));
-                                }
-                                HandoffOutcome::Ambiguous { reason, .. } => {
-                                    return Err(format!("resend outcome unknown: {reason:?}"));
-                                }
-                            }
-                            authed = true;
-                        }
-                        // Auth OK or any other OK — keep listening for our event's OK.
-                        RelayMessage::Auth { .. }
-                        | RelayMessage::Ok { .. }
-                        | RelayMessage::Event { .. }
-                        | RelayMessage::EndOfStoredEvents(_)
-                        | RelayMessage::Closed { .. }
-                        | RelayMessage::Count { .. }
-                        | RelayMessage::NegMsg { .. }
-                        | RelayMessage::NegErr { .. } => {}
-                        RelayMessage::Notice(msg) => {
-                            return Err(format!("relay NOTICE: {msg}"));
-                        }
+                        () = asked => {}
                     }
                 }
-                Err(format!(
-                    "matching OK absent after {MAX_INBOUND_FRAMES} relay frames"
-                ))
             })
             .await;
 
-            inbound.close();
             let _ = lease.release().await;
             match result {
                 Ok(Ok(outcome)) => outcome,
@@ -256,76 +222,54 @@ impl Publisher for Nip01Publisher {
                 }
             };
             let session = std::sync::Arc::clone(lease.session());
-            let mut inbound = session.messages();
-            match session.event(attempt.event.clone()).await {
-                HandoffOutcome::NotHandedOff { reason, .. } => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::NotHandedOff {
-                        reason: format!("{reason:?}"),
-                    };
-                }
-                HandoffOutcome::Ambiguous { reason, .. } => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::OutcomeUnknown {
-                        reason: format!("{reason:?}"),
-                    };
-                }
-                HandoffOutcome::HandedOff { .. } => {}
-            }
-            let result = tokio::time::timeout(attempt.timeout, async {
-                for _ in 0..MAX_INBOUND_FRAMES {
-                    let item = inbound
-                        .next_inbound()
-                        .await
-                        .map_err(|error| error.to_string())?;
-                    let RelayInbound::Frame { frame, .. } = item else {
-                        return Err(format!("relay session ended: {item:?}"));
-                    };
-                    let frame = String::from_utf8_lossy(&frame).into_owned();
-                    let message = decode_relay(&frame).map_err(|error| error.to_string())?;
-                    match message {
-                        RelayMessage::Ok {
-                            event_id,
-                            status,
-                            message,
-                        } if event_id == attempt.event.id => {
-                            return Ok(if status {
-                                PublishOutcome::Acknowledged {
-                                    message: message.into_owned(),
-                                }
-                            } else {
-                                PublishOutcome::Rejected {
-                                    message: message.into_owned(),
-                                }
-                            });
-                        }
-                        RelayMessage::Auth { .. } => {
-                            return Ok(PublishOutcome::AuthenticationRequired);
-                        }
-                        RelayMessage::Notice(message) => {
-                            return Err(format!("relay NOTICE: {message}"));
-                        }
-                        RelayMessage::Event { .. }
-                        | RelayMessage::Ok { .. }
-                        | RelayMessage::EndOfStoredEvents(_)
-                        | RelayMessage::Closed { .. }
-                        | RelayMessage::Count { .. }
-                        | RelayMessage::NegMsg { .. }
-                        | RelayMessage::NegErr { .. } => {}
+            // The acknowledgement for this event arrives on this event's own
+            // handle. Nothing else on the connection can settle it, so the
+            // attempt is bounded by its own deadline and by session liveness
+            // and by nothing else.
+            let mut acknowledged =
+                match fava_transport::RelaySessionExt::publish(&session, attempt.event.clone())
+                    .await
+                {
+                    Ok(handle) => handle,
+                    Err(HandoffOutcome::NotHandedOff { reason, .. }) => {
+                        let _ = lease.release().await;
+                        return PublishOutcome::NotHandedOff {
+                            reason: format!("{reason:?}"),
+                        };
                     }
-                }
-                Err(format!(
-                    "matching OK absent after {MAX_INBOUND_FRAMES} relay frames"
-                ))
-            })
-            .await;
+                    Err(refused) => {
+                        let _ = lease.release().await;
+                        return PublishOutcome::OutcomeUnknown {
+                            reason: format!("{refused:?}"),
+                        };
+                    }
+                };
+
+            let settled = tokio::time::timeout(attempt.timeout, acknowledged.settled()).await;
             // Release this attempt's hold. The session closes only when the
             // last holder lets go; other observations and publications share it.
-            inbound.close();
             let _ = lease.release().await;
-            match result {
-                Ok(Ok(outcome)) => outcome,
-                Ok(Err(reason)) => PublishOutcome::OutcomeUnknown { reason },
+            match settled {
+                Ok(Settlement::Accepted { message }) => PublishOutcome::Acknowledged {
+                    message: message.as_str().to_owned(),
+                },
+                Ok(Settlement::Rejected { message }) => PublishOutcome::Rejected {
+                    message: message.as_str().to_owned(),
+                },
+                Ok(Settlement::Ended(ended)) => PublishOutcome::OutcomeUnknown {
+                    reason: match ended {
+                        SessionEnded::Disconnected { detail } => {
+                            format!(
+                                "connection ended before the relay answered: {}",
+                                detail.as_str()
+                            )
+                        }
+                        SessionEnded::ReconnectExhausted { attempts, detail } => format!(
+                            "reconnect budget of {attempts} exhausted before the relay answered: {}",
+                            detail.as_str()
+                        ),
+                    },
+                },
                 Err(_) => PublishOutcome::OutcomeUnknown {
                     reason: "publication deadline elapsed after handoff".to_owned(),
                 },

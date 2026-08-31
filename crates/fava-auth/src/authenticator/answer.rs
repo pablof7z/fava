@@ -168,7 +168,7 @@ pub(super) async fn authenticate(
         }
     };
 
-    let acknowledged = match fava_transport::RelaySessionExt::answer(session, signed).await {
+    let mut acknowledged = match fava_transport::RelaySessionExt::answer(session, signed).await {
         Ok(handle) => handle,
         Err(refused) => {
             authenticator.record(

@@ -99,7 +99,11 @@ pub trait Acknowledgement: Send {
     fn event_id(&self) -> EventId;
 
     /// Await the relay's verdict on this event alone.
-    fn settled(self: Box<Self>) -> SettlementFuture;
+    ///
+    /// Takes `&mut self` rather than consuming the handle so a caller can wait
+    /// on it alongside something else -- a publication watching for an
+    /// authentication challenge, say -- without giving it up to do so.
+    fn settled(&mut self) -> SettlementFuture<'_>;
 }
 
 /// What a decoded relay message correlates to, if anything.
@@ -149,7 +153,7 @@ pub enum Correlation {
 pub type SubscriptionFuture<'a> = Pin<Box<dyn Future<Output = SubscriptionItem> + Send + 'a>>;
 
 /// Future yielding one settlement.
-pub type SettlementFuture = Pin<Box<dyn Future<Output = Settlement> + Send>>;
+pub type SettlementFuture<'a> = Pin<Box<dyn Future<Output = Settlement> + Send + 'a>>;
 
 /// Future yielding the handoff outcome of one `CLOSE`.
 pub type CloseFuture = Pin<Box<dyn Future<Output = crate::HandoffOutcome> + Send>>;
@@ -273,7 +277,7 @@ impl Acknowledgement for RoutedAcknowledgement {
         self.event
     }
 
-    fn settled(self: Box<Self>) -> SettlementFuture {
+    fn settled(&mut self) -> SettlementFuture<'_> {
         Box::pin(async move {
             loop {
                 let notified = self.mailbox.notified();
