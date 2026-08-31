@@ -5,9 +5,7 @@ use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::event::Event;
 use nostr::filter::Filter;
 
-use crate::{
-    HandoffFuture, HandoffOutcome, RelayInboundFuture, ReqFuture, ReleaseFuture, TransportFailure,
-};
+use crate::{HandoffFuture, HandoffOutcome, ReqFuture, ReleaseFuture, TransportFailure};
 
 /// Exact width, in bytes, of every wire subscription identifier Fava mints.
 ///
@@ -194,36 +192,10 @@ pub trait RelaySession: Send + Sync {
         })
     }
 
-    /// Obtain an independently-pollable inbound stream for **this consumer**.
-    ///
-    /// Two calls return two streams; every inbound item is delivered to every
-    /// live stream. One consumer cannot remove an item from another's stream.
-    ///
-    /// Authority: ARCH:1578 verbatim signature.
-    fn messages(&self) -> Box<dyn RelayMessageStream>;
-
     /// Close this session's current generation deterministically, regardless of
     /// remaining leases. Callers hold leases; this is the transport's own
     /// escape hatch and is idempotent.
     fn close(&self) -> ReleaseFuture<'_>;
-}
-
-/// One consumer's bounded view of a session's inbound items.
-///
-/// Authority: ARCH:1578 (`Box<dyn RelayMessageStream>`).
-pub trait RelayMessageStream: Send {
-    /// Await the next inbound item for this consumer.
-    ///
-    /// # Errors
-    ///
-    /// [`crate::TransportError`] when the consumer's own view cannot continue.
-    /// Session lifecycle transitions — disconnect, reconnect, exhaustion, and
-    /// bounded loss — arrive as `Ok` [`crate::RelayInbound`] items so they
-    /// carry the identity `ARCH:1610` requires.
-    fn next_inbound(&mut self) -> RelayInboundFuture<'_>;
-
-    /// Detach this consumer. Idempotent; does not affect other consumers.
-    fn close(&mut self);
 }
 
 #[cfg(test)]

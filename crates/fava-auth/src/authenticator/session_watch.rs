@@ -64,7 +64,7 @@ impl Authenticator {
         // the two facts it actually needs: the relay's challenges, and whether
         // its connection was replaced.
         let challenges = fava_transport::RelaySessionExt::challenges(&session);
-        let resets = fava_transport::RelaySessionExt::resets(&session);
+        let connection = fava_transport::RelaySessionExt::connection(&session);
 
         {
             let mut guard = self.lock();
@@ -79,19 +79,21 @@ impl Authenticator {
             .spawn_cancellable(WATCH_TASK, token, async move {
                 loop {
                     let asked = challenges.notified();
-                    let reset = resets.notified();
+                    let changed = connection.notified();
                     while let Some(text) = challenges.take() {
                         owner.challenged(&session, &text).await;
                     }
-                    while let Some(current) = resets.take() {
-                        owner.connection_reset(&current);
+                    while let Some(state) = connection.take() {
+                        if let fava_transport::ConnectionState::Reconnected { identity } = state {
+                            owner.connection_reset(&identity);
+                        }
                     }
-                    if challenges.is_closed() && resets.is_closed() {
+                    if challenges.is_closed() && connection.is_closed() {
                         break;
                     }
                     tokio::select! {
                         () = asked => {}
-                        () = reset => {}
+                        () = changed => {}
                     }
                 }
                 let _ = lease.release().await;

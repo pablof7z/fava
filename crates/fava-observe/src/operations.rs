@@ -17,7 +17,7 @@ use fava_subscriptions::{
     DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan,
 };
 use fava_transport::{
-    HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
+    OpenRelaySession, RelaySession, RelaySessionLease,
     Transport,
 };
 use fava_wire::SubscriptionId;
@@ -119,6 +119,7 @@ pub(crate) fn install_plan(
     session: Arc<dyn RelaySession>,
     plan: SubscriptionPlan,
     write_deadline: Duration,
+    cancel: CancellationToken,
 ) {
     let Installing {
         relay,
@@ -131,27 +132,30 @@ pub(crate) fn install_plan(
         // The session names each subscription as it sends the REQ. A position
         // that stays `None` is one the transport refused.
         let mut opened: Vec<Option<SubscriptionId>> = Vec::with_capacity(plan.open.len());
+        let mut attending: Vec<(SubscriptionId, CancellationToken)> = Vec::new();
         for planned in &plan.open {
-            opened.push(
-                open_subscription(
+            let outcome = open_subscription(
                     &owner,
+                    &reports,
+                    &relay,
                     &session,
                     planned.filters.clone(),
                     generation,
                     write_deadline,
+                    &cancel,
                 )
-                .await,
-            );
-        }
-        let mut closed = BTreeSet::new();
-        for entry in &plan.close {
-            if close_one(&owner, &session, entry.clone(), generation, write_deadline)
-                .await
-                .is_ok()
-            {
-                closed.insert(entry.clone());
+                .await;
+            if let Some((id, token)) = outcome {
+                opened.push(Some(id.clone()));
+                attending.push((id, token));
+            } else {
+                opened.push(None);
             }
         }
+        // Closing is the handle's own act: the owner cancels the task holding
+        // it, and its Drop sends the CLOSE. Sending one here as well would
+        // close the same subscription twice.
+        let closed: BTreeSet<SubscriptionId> = plan.close.iter().cloned().collect();
         reports
             .send(Report::Installed {
                 relay,
@@ -159,6 +163,7 @@ pub(crate) fn install_plan(
                 revision,
                 plan: Box::new(plan),
                 opened,
+                attending,
                 closed,
             })
             .await;
@@ -169,16 +174,13 @@ pub(crate) fn install_plan(
 pub(crate) fn release(
     runtime: &Runtime,
     lease: Box<RelaySessionLease>,
-    closing: Vec<SubscriptionId>,
     generation: OperationGeneration,
-    write_deadline: Duration,
     close_deadline: Duration,
 ) {
     let owner = runtime.clone();
     let _ = runtime.spawn(RELEASE_TASK, async move {
-        for id in closing {
-            let _ = close_one(&owner, lease.session(), id, generation, write_deadline).await;
-        }
+        // Every subscription was closed by its own handle when the slot's token
+        // fired. Closing them again here would close each one twice.
         let _ = owner
             .call_provider(RELEASE, generation, close_deadline, async move {
                 lease.release().await
@@ -187,7 +189,11 @@ pub(crate) fn release(
     });
 }
 
-/// Forward one session's inbound items to the reconciliation owner.
+/// Forward one session's connection state to the reconciliation owner.
+///
+/// This owner reads connection state, not frames. Each subscription's own
+/// traffic arrives on that subscription's handle, so there is nothing here to
+/// attribute and nothing to sift.
 pub(crate) fn listen(
     runtime: &Runtime,
     reports: &Reports,
@@ -197,30 +203,52 @@ pub(crate) fn listen(
     cancel: CancellationToken,
 ) {
     let reports = reports.clone();
-    let mut stream = session.messages();
+    let connection = fava_transport::RelaySessionExt::connection(session);
     let _ = runtime.spawn_cancellable(LISTEN_TASK, cancel, async move {
         loop {
-            match stream.next_inbound().await {
-                Ok(item) => {
-                    reports
-                        .send(Report::Inbound {
-                            relay: relay.clone(),
-                            generation,
-                            item: Box::new(item),
-                        })
-                        .await;
-                }
-                Err(error) => {
-                    reports
-                        .send(Report::Refused {
-                            relay,
-                            generation,
-                            detail: BoundedText::new(error.to_string()),
-                        })
-                        .await;
-                    stream.close();
-                    return;
-                }
+            let changed = connection.notified();
+            while let Some(state) = connection.take() {
+                reports
+                    .send(Report::Connection {
+                        relay: relay.clone(),
+                        generation,
+                        state: Box::new(state),
+                    })
+                    .await;
+            }
+            if connection.is_closed() {
+                return;
+            }
+            changed.await;
+        }
+    });
+}
+
+/// Forward one subscription's own traffic to the reconciliation owner.
+pub(crate) fn attend(
+    runtime: &Runtime,
+    reports: &Reports,
+    relay: RelaySessionKey,
+    generation: OperationGeneration,
+    mut subscription: Box<dyn fava_transport::Subscription>,
+    cancel: CancellationToken,
+) {
+    let reports = reports.clone();
+    let id = subscription.id().clone();
+    let _ = runtime.spawn_cancellable(LISTEN_TASK, cancel, async move {
+        loop {
+            let item = subscription.next().await;
+            let ended = matches!(item, fava_transport::SubscriptionItem::Ended(_));
+            reports
+                .send(Report::Carried {
+                    relay: relay.clone(),
+                    generation,
+                    subscription: id.clone(),
+                    item: Box::new(item),
+                })
+                .await;
+            if ended {
+                return;
             }
         }
     });
@@ -229,57 +257,44 @@ pub(crate) fn listen(
 /// Open one wire subscription through the session's own verb, returning the
 /// identifier the session minted, or `None` when the frame did not reach the
 /// relay. The caller has no say in the name.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "opening one subscription names the runtime, the reports, the relay, the session, the filters, the generation, the deadline, and the token governing its handle"
+)]
 async fn open_subscription(
     runtime: &Runtime,
+    reports: &Reports,
+    relay: &RelaySessionKey,
     session: &Arc<dyn RelaySession>,
     filters: Vec<nostr::filter::Filter>,
     generation: OperationGeneration,
     deadline: Duration,
-) -> Option<SubscriptionId> {
-    let session = Arc::clone(session);
+    cancel: &CancellationToken,
+) -> Option<(SubscriptionId, CancellationToken)> {
+    let opening = Arc::clone(session);
     let outcome = runtime
         .call_provider(HANDOFF, generation, deadline, async move {
-            session.req(filters).await
+            fava_transport::RelaySessionExt::subscribe(&opening, filters).await
         })
         .await;
-    match outcome {
-        ProviderCompletion::Completed { value, .. } => match value.handoff {
-            HandoffOutcome::HandedOff { .. } => Some(value.id),
-            HandoffOutcome::NotHandedOff { .. } | HandoffOutcome::Ambiguous { .. } => None,
-        },
-        _ => None,
-    }
-}
-
-/// Close one wire subscription through the session's own verb.
-async fn close_one(
-    runtime: &Runtime,
-    session: &Arc<dyn RelaySession>,
-    id: SubscriptionId,
-    generation: OperationGeneration,
-    deadline: Duration,
-) -> Result<(), BoundedText> {
-    let session = Arc::clone(session);
-    let outcome = runtime
-        .call_provider(HANDOFF, generation, deadline, async move {
-            session.close_subscription(id).await
-        })
-        .await;
-    match outcome {
-        ProviderCompletion::Completed {
-            value: HandoffOutcome::HandedOff { .. },
-            ..
-        } => Ok(()),
-        ProviderCompletion::Completed {
-            value: HandoffOutcome::NotHandedOff { reason, .. },
-            ..
-        } => Err(BoundedText::new(format!("{reason:?}"))),
-        ProviderCompletion::Completed {
-            value: HandoffOutcome::Ambiguous { reason, .. },
-            ..
-        } => Err(BoundedText::new(format!("{reason:?}"))),
-        other => Err(BoundedText::new(describe(&other))),
-    }
+    let ProviderCompletion::Completed { value: Ok(handle), .. } = outcome else {
+        return None;
+    };
+    let id = handle.id().clone();
+    // Read this subscription's own traffic. Nothing else on the connection can
+    // reach it, so there is nothing to attribute here. Cancelling this token
+    // drops the handle, and dropping the handle sends the relay its CLOSE --
+    // one closure, sent by the thing that owns the subscription.
+    let attending = cancel.child();
+    attend(
+        runtime,
+        reports,
+        relay.clone(),
+        generation,
+        handle,
+        attending.clone(),
+    );
+    Some((id, attending))
 }
 
 const NIP11_TASK: TaskName = TaskName("observe.nip11");

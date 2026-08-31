@@ -38,9 +38,9 @@ async fn malformed_frames_are_silently_discarded_without_crash() {
     let peer = assembly.established(&r);
 
     // Push malformed frames: raw bytes, invalid JSON, truncated JSON.
-    peer.push_frame(b"\xff\xfe not utf8".to_vec());
-    peer.push_frame(b"not json at all".to_vec());
-    peer.push_frame(b"[\"EVE".to_vec());
+    peer.push_frame(b"\xff\xfe not utf8");
+    peer.push_frame(b"not json at all");
+    peer.push_frame(b"[\"EVE");
 
     // Push an EOSE with the correct subscription id to prove the session lives.
     let sub_id = requests(assembly.peer(&r))[0].0.clone();
@@ -98,8 +98,7 @@ async fn off_subscription_event_is_rejected_and_session_continues() {
     // Push raw bytes that look like an EVENT for a nonexistent subscription.
     // This is valid JSON but names a ghost subscription — ingest rejects it.
     peer.push_frame(
-        br#"["EVENT","ghost-subscription-id",{"id":"0000000000000000000000000000000000000000000000000000000000000000","pubkey":"0000000000000000000000000000000000000000000000000000000000000000","created_at":0,"kind":1,"tags":[],"content":"","sig":"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}]"#
-        .to_vec(),
+        br#"["EVENT","ghost-subscription-id",{"id":"0000000000000000000000000000000000000000000000000000000000000000","pubkey":"0000000000000000000000000000000000000000000000000000000000000000","created_at":0,"kind":1,"tags":[],"content":"","sig":"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}]"#,
     );
 
     // The real EOSE should still be processed.

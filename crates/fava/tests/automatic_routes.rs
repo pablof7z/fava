@@ -16,7 +16,7 @@ use fava_router_testkit::DelayedRouter;
 use fava_routing::{CoverageState, RouteContribution, RouteDestination, RouteTarget};
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInboundFuture, RelayMessageStream,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession,
     RelaySession, RelaySessionFuture, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
     ReleaseOutcome, Transport, TransportError, TransportFailure, TransportShutdownFuture,
 };
@@ -109,17 +109,6 @@ struct RecordingSession {
     closed: AtomicBool,
 }
 
-/// The recording fake never delivers inbound items.
-struct SilentStream;
-
-impl RelayMessageStream for SilentStream {
-    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
-        Box::pin(std::future::pending())
-    }
-
-    fn close(&mut self) {}
-}
-
 impl RelaySession for RecordingSession {
     fn identity(&self) -> RelaySessionIdentity {
         self.identity.clone()
@@ -169,10 +158,6 @@ impl RelaySession for RecordingSession {
                 }
             }
         })
-    }
-
-    fn messages(&self) -> Box<dyn RelayMessageStream> {
-        Box::new(SilentStream)
     }
 
     fn close(&self) -> ReleaseFuture<'_> {

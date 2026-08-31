@@ -2,7 +2,7 @@
 
 mod support;
 
-use fava_query::{AuthenticationState, Query, RelaySourceState};
+use fava_query::{Query, RelaySourceState};
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::Transport;
 use fava_wire::RelayMessage;
@@ -82,21 +82,11 @@ async fn exact_access_keys_isolate_event_eose_and_close() -> Result<(), Box<dyn 
             .stored_events_complete()
     );
 
+    // A challenge is not this owner's fact: it belongs to whoever authenticates
+    // the session, and reaches it on the session's own challenge reader. Neither
+    // observation changes.
     push(&public_peer, &RelayMessage::auth("public challenge"));
-    wait_until(|| {
-        matches!(
-            public
-                .current()
-                .evidence
-                .relay(&public_key)
-                .map(|item| &item.state),
-            Some(RelaySourceState::AuthenticationRequired {
-                state: AuthenticationState::ChallengeReceived,
-                ..
-            })
-        )
-    })
-    .await;
+    settle().await;
     assert!(matches!(
         private
             .current()

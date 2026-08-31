@@ -5,12 +5,11 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use fava_transport::{
-    BoundedText, HandoffCorrelation, HandoffOutcome, RelayInbound, RelaySessionIdentity,
+    BoundedText, HandoffCorrelation, HandoffOutcome,
     TransportAmbiguity, TransportFailure,
 };
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use nostr::types::Timestamp;
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
@@ -66,10 +65,11 @@ pub(crate) async fn drive(
             .end_generation(&fava_transport::SessionEnded::Disconnected {
                 detail: BoundedText::new(format!("{reason:?}")),
             });
-        shared.consumers.fan_out(&RelayInbound::Disconnected {
-            identity: shared.identity.read(),
-            reason: reason.clone(),
-        });
+        shared
+            .router
+            .connection_changed(&fava_transport::ConnectionState::Disconnected {
+                detail: BoundedText::new(format!("{reason:?}")),
+            });
         if shared.closed.load(Ordering::SeqCst) {
             break;
         }
@@ -77,11 +77,12 @@ pub(crate) async fn drive(
             Ok((next, generation)) => {
                 socket = next;
                 backoff.reset();
-                let (previous, identity) = shared.identity.advance(generation);
-                shared.router.reconnected(&identity);
+                let (_previous, identity) = shared.identity.advance(generation);
                 shared
-                    .consumers
-                    .fan_out(&RelayInbound::Reconnected { previous, identity });
+                    .router
+                    .connection_changed(&fava_transport::ConnectionState::Reconnected {
+                        identity: identity.clone(),
+                    });
             }
             Err((attempts, final_reason)) => {
                 shared.closed.store(true, Ordering::SeqCst);
@@ -91,18 +92,18 @@ pub(crate) async fn drive(
                         attempts,
                         detail: BoundedText::new(format!("{final_reason:?}")),
                     });
-                shared.consumers.fan_out(&RelayInbound::ReconnectExhausted {
-                    identity: shared.identity.read(),
-                    attempts,
-                    reason: final_reason,
-                });
+                shared
+                    .router
+                    .connection_changed(&fava_transport::ConnectionState::Unreachable {
+                        attempts,
+                        detail: BoundedText::new(format!("{final_reason:?}")),
+                    });
                 break;
             }
         }
     }
     shared.closed.store(true, Ordering::SeqCst);
     shared.router.close();
-    shared.consumers.detach_all();
     shared.close_finished.notify_waiters();
 }
 
@@ -251,10 +252,9 @@ fn admit(
     shared: &SessionShared,
     message: Option<Result<Message, tokio_tungstenite::tungstenite::Error>>,
 ) -> Option<TransportFailure> {
-    let identity = shared.identity.read();
     match message {
-        Some(Ok(Message::Text(text))) => admit_frame(shared, &identity, text.as_bytes().to_vec()),
-        Some(Ok(Message::Binary(bytes))) => admit_frame(shared, &identity, bytes.to_vec()),
+        Some(Ok(Message::Text(text))) => admit_frame(shared, text.as_bytes()),
+        Some(Ok(Message::Binary(bytes))) => admit_frame(shared, &bytes),
         Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_))) => None,
         Some(Ok(Message::Close(frame))) => Some(TransportFailure::Disconnected {
             detail: BoundedText::new(frame.map_or_else(
@@ -271,11 +271,7 @@ fn admit(
     }
 }
 
-fn admit_frame(
-    shared: &SessionShared,
-    identity: &RelaySessionIdentity,
-    frame: Vec<u8>,
-) -> Option<TransportFailure> {
+fn admit_frame(shared: &SessionShared, frame: &[u8]) -> Option<TransportFailure> {
     let maximum = shared.bounds.max_frame_bytes.get();
     if frame.len() > maximum {
         return Some(TransportFailure::Disconnected {
@@ -286,17 +282,12 @@ fn admit_frame(
         });
     }
     // Decode exactly once, here, for every handle on this session.
-    match std::str::from_utf8(&frame).ok().and_then(|text| {
+    match std::str::from_utf8(frame).ok().and_then(|text| {
         fava_wire::decode_relay(text).ok()
     }) {
         Some(message) => shared.router.deliver(message),
         None => shared.router.undecodable(),
     }
-    shared.consumers.fan_out(&RelayInbound::Frame {
-        identity: identity.clone(),
-        frame,
-        received_at: Timestamp::now(),
-    });
     None
 }
 

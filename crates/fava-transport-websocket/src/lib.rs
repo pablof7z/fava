@@ -7,7 +7,7 @@
 
 mod backoff;
 mod driver;
-mod fanout;
+mod identity;
 mod session;
 
 use std::collections::BTreeMap;

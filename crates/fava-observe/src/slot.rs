@@ -24,6 +24,9 @@ pub(crate) struct Slot {
     pub(crate) constraints: RelayReadConstraints,
     /// Exactly what the transport accepted on the current generation.
     pub(crate) installed: InstalledSubscriptions,
+    /// The task holding each installed subscription's handle. Cancelling one
+    /// drops its handle, and dropping a handle closes the subscription.
+    pub(crate) attending: BTreeMap<SubscriptionId, CancellationToken>,
     /// What an EOSE on each installed wire subscription actually proves.
     pub(crate) completeness: BTreeMap<SubscriptionId, EoseCompleteness>,
     /// Wire subscriptions the relay has sent EOSE for on this generation.
@@ -49,6 +52,7 @@ impl Slot {
             session: None,
             constraints: RelayReadConstraints::unknown(),
             installed: InstalledSubscriptions::empty(),
+            attending: BTreeMap::new(),
             completeness: BTreeMap::new(),
             settled: BTreeMap::new(),
             revision: None,
@@ -71,6 +75,8 @@ impl Slot {
     ) -> OperationGeneration {
         self.cancel.cancel();
         self.cancel = root.child();
+        // The connection is gone, so every handle it carried is already over.
+        self.attending.clear();
         self.installed = InstalledSubscriptions::empty();
         self.completeness.clear();
         self.settled.clear();

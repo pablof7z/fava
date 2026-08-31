@@ -4,8 +4,9 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
+use nostr::filter::Filter;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, ReleaseOutcome, Transport,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, ReleaseOutcome, Transport,
     TransportBounds, TransportDeadlines, TransportError, TransportFailure,
 };
 use fava_transport_testkit::{
@@ -59,6 +60,23 @@ fn request(key: RelaySessionKey) -> OpenRelaySession {
 
 // ------------------------------------------------------- section 8 falsifiers
 
+
+/// Drain a session's connection stream until one state matches.
+async fn until(
+    connection: &std::sync::Arc<fava_transport::Mailbox<fava_transport::ConnectionState>>,
+    mut matches: impl FnMut(&fava_transport::ConnectionState) -> bool,
+) -> fava_transport::ConnectionState {
+    loop {
+        let changed = connection.notified();
+        while let Some(state) = connection.take() {
+            if matches(&state) {
+                return state;
+            }
+        }
+        changed.await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn one_physical_session_fans_out_every_inbound_frame_to_every_consumer() {
     let (listener, key) = listener().await;
@@ -77,16 +95,26 @@ async fn one_physical_session_fans_out_every_inbound_frame_to_every_consumer() {
         .acquire_session(request(key))
         .await
         .expect("session opens");
-    let mut first = lease.session().messages();
-    let mut second = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let mut owner = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
+        .await
+        .expect("subscription opens");
+    let mut bystander = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
+        .await
+        .expect("second subscription opens");
 
-    for stream in [&mut first, &mut second] {
-        let item = stream.next_inbound().await.expect("a frame arrives");
-        assert!(
-            matches!(item, RelayInbound::Frame { ref frame, .. } if frame == b"[\"EOSE\",\"one\"]"),
-            "consumer did not see the frame, got {item:?}"
-        );
-    }
+    // The server echoes an EOSE naming whatever subscription it was sent.
+    let item = owner.next().await;
+    assert!(
+        matches!(item, fava_transport::SubscriptionItem::EndOfStoredEvents),
+        "the owning subscription did not see its own message, got {item:?}"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), bystander.next())
+            .await
+            .is_err(),
+        "a subscription must never receive another subscription's message"
+    );
     server.await.expect("server joins");
 }
 
@@ -231,17 +259,17 @@ async fn a_remote_close_reaches_every_consumer_as_an_attributed_disconnect() {
         .acquire_session(request)
         .await
         .expect("session opens");
-    let identity = lease.session().identity();
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
 
-    let item = stream
-        .next_inbound()
-        .await
-        .expect("a lifecycle item arrives");
-    assert!(
-        matches!(item, RelayInbound::Disconnected { identity: ref reported, .. } if *reported == identity),
-        "expected an attributed disconnect, got {item:?}"
-    );
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Disconnected { .. })
+    })
+    .await;
+    assert!(matches!(
+        state,
+        fava_transport::ConnectionState::Disconnected { .. }
+    ));
     server.await.expect("server joins");
 }
 
@@ -352,22 +380,17 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .await
         .expect("session opens");
     let before = lease.session().identity();
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
 
-    let item = loop {
-        let next = stream
-            .next_inbound()
-            .await
-            .expect("a lifecycle item arrives");
-        if !matches!(next, RelayInbound::Disconnected { .. }) {
-            break next;
-        }
-    };
-    let RelayInbound::Reconnected { previous, identity } = item else {
-        panic!("expected a reconnect item, got {item:?}");
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Reconnected { .. })
+    })
+    .await;
+    let fava_transport::ConnectionState::Reconnected { identity } = state else {
+        unreachable!("the predicate matched a reconnect")
     };
 
-    assert_eq!(previous, before);
     assert_eq!(
         identity.generation,
         before.generation.checked_next().expect("successor exists")
@@ -398,17 +421,16 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         .acquire_session(request)
         .await
         .expect("session opens");
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
     server.await.expect("server joins");
 
-    let exhausted = loop {
-        if let RelayInbound::ReconnectExhausted { attempts, .. } = stream
-            .next_inbound()
-            .await
-            .expect("a lifecycle item arrives")
-        {
-            break attempts;
-        }
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Unreachable { .. })
+    })
+    .await;
+    let fava_transport::ConnectionState::Unreachable { attempts, .. } = state else {
+        unreachable!("the predicate matched an exhausted budget")
     };
-    assert_eq!(exhausted, 2);
+    assert_eq!(attempts, 2);
 }

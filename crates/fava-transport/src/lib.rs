@@ -17,7 +17,6 @@
 
 mod error;
 mod handoff;
-mod inbound;
 mod lease;
 mod request;
 mod routed;
@@ -34,17 +33,16 @@ pub use fava_relay::BoundedText;
 pub use fava_wire::SubscriptionId;
 use fava_relay::RelaySessionKey;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
-pub use inbound::RelayInbound;
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
 pub use router::{Mailbox, Router, Unrouted};
 pub use routed::{
-    Acknowledgement, PublishFuture, RelaySessionExt, RoutedAcknowledgement, RoutedSubscription,
+    Acknowledgement, ConnectionState, PublishFuture, RelaySessionExt, RoutedAcknowledgement, RoutedSubscription,
     SubscribeFuture, CloseFuture, Correlation, SessionEnded, Settlement, SettlementFuture,
     Subscription, SubscriptionFuture, SubscriptionItem, correlation,
 };
 pub use session::{
-    HandoffCorrelation, OpenedSubscription, RelayMessageStream, RelaySession,
+    HandoffCorrelation, OpenedSubscription, RelaySession,
     RelaySessionGeneration, RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,
 };
 
@@ -61,10 +59,6 @@ pub type ReqFuture<'a> = Pin<Box<dyn Future<Output = OpenedSubscription> + Send 
 /// Future yielding the outcome of releasing one lease.
 pub type ReleaseFuture<'a> =
     Pin<Box<dyn Future<Output = Result<ReleaseOutcome, TransportError>> + Send + 'a>>;
-
-/// Future yielding one inbound item for one consumer.
-pub type RelayInboundFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<RelayInbound, TransportError>> + Send + 'a>>;
 
 /// Future yielding transport-wide shutdown completion.
 pub type TransportShutdownFuture<'a> =

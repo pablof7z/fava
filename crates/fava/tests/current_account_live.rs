@@ -257,7 +257,7 @@ fn peer_messages(peer: &FakeRelay) -> Vec<ClientMessage<'static>> {
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(serde_json::to_vec(message).expect("relay frame encodes"));
+    peer.push_frame(&serde_json::to_vec(message).expect("relay frame encodes"));
 }
 
 fn content(event: &EventValue) -> &str {

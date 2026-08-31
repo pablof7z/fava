@@ -1,6 +1,6 @@
 //! Multi-relay provenance and reconnect-generation evidence through the public facade.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -13,8 +13,7 @@ use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::RelaySessionKey;
 use fava_subscriptions_no_grouping::planner;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, RelayInboundFuture,
-    RelayMessageStream, RelaySession, RelaySessionFuture, RelaySessionGeneration,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionFuture, RelaySessionGeneration,
     RelaySessionIdentity, ReleaseFuture, ReleaseOutcome, Transport, TransportError,
     TransportFailure, TransportShutdownFuture,
 };
@@ -69,12 +68,12 @@ impl Transport for ScriptedTransport {
             let relay = request.key.relay.clone();
             let session = Arc::new(ScriptedSession {
                 router: fava_transport::Router::default(),
+                closed: AtomicBool::new(false),
                 subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,
                     generation,
                 },
-                mailbox: Arc::new(Mailbox::default()),
                 sent: Mutex::new(Vec::new()),
             });
             self.sessions
@@ -97,63 +96,22 @@ impl Transport for ScriptedTransport {
     }
 }
 
-#[derive(Default)]
-struct Mailbox {
-    inbound: Mutex<VecDeque<Result<RelayInbound, TransportError>>>,
-    changed: Notify,
-    closed: AtomicBool,
-}
-
-struct ScriptedStream {
-    mailbox: Arc<Mailbox>,
-    identity: RelaySessionIdentity,
-}
-
-impl RelayMessageStream for ScriptedStream {
-    fn next_inbound(&mut self) -> RelayInboundFuture<'_> {
-        Box::pin(async move {
-            loop {
-                if let Some(item) = self
-                    .mailbox
-                    .inbound
-                    .lock()
-                    .expect("session lock")
-                    .pop_front()
-                {
-                    return item;
-                }
-                if self.mailbox.closed.load(Ordering::SeqCst) {
-                    return Err(TransportError::Closed(self.identity.clone()));
-                }
-                self.mailbox.changed.notified().await;
-            }
-        })
-    }
-
-    fn close(&mut self) {}
-}
-
 struct ScriptedSession {
     router: fava_transport::Router,
+    closed: AtomicBool,
     subscriptions: std::sync::atomic::AtomicU64,
     identity: RelaySessionIdentity,
-    mailbox: Arc<Mailbox>,
     sent: Mutex<Vec<String>>,
 }
 
 impl ScriptedSession {
     fn receive(&self, message: &RelayMessage<'_>) {
+        // Route it, exactly as a real session does.
         let frame = serde_json::to_string(message).expect("message encodes");
-        self.mailbox
-            .inbound
-            .lock()
-            .expect("session lock")
-            .push_back(Ok(RelayInbound::Frame {
-                identity: self.identity.clone(),
-                frame: frame.into_bytes(),
-                received_at: nostr::types::Timestamp::now(),
-            }));
-        self.mailbox.changed.notify_one();
+        match fava_wire::decode_relay(&frame) {
+            Ok(owned) => self.router.deliver(owned),
+            Err(_) => self.router.undecodable(),
+        }
     }
 
     fn subscription(&self) -> SubscriptionId {
@@ -221,7 +179,7 @@ impl RelaySession for ScriptedSession {
         correlation: HandoffCorrelation,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = HandoffOutcome> + Send + '_>> {
         Box::pin(async move {
-            if self.mailbox.closed.load(Ordering::SeqCst) {
+            if self.closed.load(Ordering::SeqCst) {
                 return HandoffOutcome::NotHandedOff {
                     identity: self.identity.clone(),
                     correlation,
@@ -239,17 +197,10 @@ impl RelaySession for ScriptedSession {
         })
     }
 
-    fn messages(&self) -> Box<dyn RelayMessageStream> {
-        Box::new(ScriptedStream {
-            mailbox: Arc::clone(&self.mailbox),
-            identity: self.identity.clone(),
-        })
-    }
-
     fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
-            self.mailbox.closed.store(true, Ordering::SeqCst);
-            self.mailbox.changed.notify_waiters();
+            self.closed.store(true, Ordering::SeqCst);
+            self.router.close();
             Ok(ReleaseOutcome::Closed)
         })
     }
@@ -338,7 +289,7 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let peer = transport.relay(&key).expect("session established");
     wait_until(|| !requests_of(&peer).is_empty()).await;
     let subscription = requests_of(&peer)[0].clone();
-    peer.push_frame(encoded(&RelayMessage::eose(subscription.clone())));
+    peer.push_frame(&encoded(&RelayMessage::eose(subscription.clone())));
     wait_until(|| settled(&observation, &key)).await;
     let settled_generation = evidence_of(&observation, &key).generation;
 
@@ -366,7 +317,7 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     let event = EventBuilder::new(Kind::TextNote, "current generation")
         .finalize(&Keys::generate())
         .expect("event signs");
-    peer.push_frame(encoded(&RelayMessage::event(
+    peer.push_frame(&encoded(&RelayMessage::event(
         subscription.clone(),
         event.clone(),
     )));
@@ -377,7 +328,7 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
         "a frame naming the retired request is refused, not admitted"
     );
 
-    peer.push_frame(encoded(&RelayMessage::event(
+    peer.push_frame(&encoded(&RelayMessage::event(
         replacement.clone(),
         event.clone(),
     )));
@@ -385,7 +336,7 @@ async fn reconnect_uses_fresh_identity_and_rejects_old_subscription_frames() {
     assert_eq!(latest.events[0].id(), event.id);
     assert_eq!(cache.len().expect("cache readable"), 1);
 
-    peer.push_frame(encoded(&RelayMessage::eose(replacement)));
+    peer.push_frame(&encoded(&RelayMessage::eose(replacement)));
     wait_until(|| settled(&observation, &key)).await;
     observation.close();
 }

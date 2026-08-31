@@ -298,7 +298,7 @@ impl FakeRelay {
     /// # Panics
     ///
     /// If a previous test thread panicked while holding the session lock.
-    pub fn push_frame(&self, frame: Vec<u8>) {
+    pub fn push_frame(&self, frame: &[u8]) {
         self.session.push_frame(frame);
     }
 

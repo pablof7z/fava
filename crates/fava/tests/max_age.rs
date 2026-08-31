@@ -221,11 +221,9 @@ fn withdrawals(peer: &FakeRelay) -> Vec<SubscriptionId> {
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(
-        serde_json::to_string(message)
+    peer.push_frame(serde_json::to_string(message)
             .expect("relay message")
-            .into_bytes(),
-    );
+            .as_bytes());
 }
 
 fn stored_complete(observation: &fava::Observation, relay: &RelayUrl) -> bool {

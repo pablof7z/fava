@@ -10,7 +10,7 @@ use support::{Rig, auth_frames, challenge_frame, ok_frame};
 async fn a_challenge_is_answered_with_no_publication_in_flight() {
     let rig = Rig::approving().await;
 
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     assert_eq!(
@@ -25,9 +25,9 @@ async fn a_challenge_is_answered_with_no_publication_in_flight() {
 async fn one_approved_challenge_sends_exactly_one_auth_frame() {
     let rig = Rig::approving().await;
 
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     assert_eq!(
@@ -40,11 +40,11 @@ async fn one_approved_challenge_sends_exactly_one_auth_frame() {
 #[tokio::test]
 async fn an_accepted_response_authenticates_the_session() {
     let rig = Rig::approving().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     let id = rig.last_auth_event_id();
-    rig.relay().push_frame(ok_frame(&id, true, ""));
+    rig.relay().push_frame(&ok_frame(&id, true, ""));
     rig.settle().await;
 
     assert_eq!(rig.state(), Some(AuthenticationState::Accepted));
@@ -54,12 +54,12 @@ async fn an_accepted_response_authenticates_the_session() {
 #[tokio::test]
 async fn a_restricted_reply_is_not_a_rejection() {
     let rig = Rig::approving().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     let id = rig.last_auth_event_id();
     rig.relay()
-        .push_frame(ok_frame(&id, false, "restricted: not a member"));
+        .push_frame(&ok_frame(&id, false, "restricted: not a member"));
     rig.settle().await;
 
     let Some(AuthenticationState::AcceptedButStillRefused { message }) = rig.state() else {
@@ -72,12 +72,12 @@ async fn a_restricted_reply_is_not_a_rejection() {
 #[tokio::test]
 async fn a_rejected_response_keeps_the_relays_own_text() {
     let rig = Rig::approving().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     let id = rig.last_auth_event_id();
     rig.relay()
-        .push_frame(ok_frame(&id, false, "error: bad signature"));
+        .push_frame(&ok_frame(&id, false, "error: bad signature"));
     rig.settle().await;
 
     let Some(AuthenticationState::Rejected { message }) = rig.state() else {
@@ -90,7 +90,7 @@ async fn a_rejected_response_keeps_the_relays_own_text() {
 async fn a_declining_policy_signs_nothing() {
     let rig = Rig::declining().await;
 
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     assert!(
@@ -104,7 +104,7 @@ async fn a_declining_policy_signs_nothing() {
 async fn no_attached_signer_fails_without_sending() {
     let rig = Rig::approving_without_signer().await;
 
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     assert!(auth_frames(&rig.relay()).is_empty());
@@ -118,7 +118,7 @@ async fn no_attached_signer_fails_without_sending() {
 async fn an_oversized_challenge_is_refused_without_signing() {
     let rig = Rig::approving().await;
 
-    rig.relay().push_frame(challenge_frame(
+    rig.relay().push_frame(&challenge_frame(
         &"x".repeat(fava_auth::Challenge::MAX_BYTES + 1),
     ));
     rig.settle().await;
@@ -135,7 +135,7 @@ async fn an_endless_re_challenge_stops_at_the_bound() {
     let rig = Rig::approving().await;
 
     for _ in 0..(SessionAuthentication::MAX_ATTEMPTS + 4) {
-        rig.relay().push_frame(challenge_frame("nonce"));
+        rig.relay().push_frame(&challenge_frame("nonce"));
         rig.settle().await;
     }
 
@@ -155,7 +155,7 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
     let rig = Rig::deferring().await;
     let changed = rig.authenticator().subscribe();
 
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     assert!(
@@ -187,7 +187,7 @@ async fn a_deferred_challenge_waits_for_a_person_then_authenticates() {
 #[tokio::test]
 async fn a_person_may_refuse_a_deferred_challenge() {
     let rig = Rig::deferring().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     let pending = rig.authenticator().pending();
@@ -205,7 +205,7 @@ async fn a_person_may_refuse_a_deferred_challenge() {
 #[tokio::test]
 async fn a_reconnect_drops_an_outstanding_demand_and_a_stale_answer_does_nothing() {
     let rig = Rig::deferring().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
 
     let pending = rig.authenticator().pending();
@@ -234,10 +234,10 @@ async fn a_reconnect_drops_an_outstanding_demand_and_a_stale_answer_does_nothing
 #[tokio::test]
 async fn a_reconnected_session_begins_unauthenticated() {
     let rig = Rig::approving().await;
-    rig.relay().push_frame(challenge_frame("nonce-1"));
+    rig.relay().push_frame(&challenge_frame("nonce-1"));
     rig.settle().await;
     let id = rig.last_auth_event_id();
-    rig.relay().push_frame(ok_frame(&id, true, ""));
+    rig.relay().push_frame(&ok_frame(&id, true, ""));
     rig.settle().await;
     assert!(rig.authenticator().authenticated(rig.key()));
 

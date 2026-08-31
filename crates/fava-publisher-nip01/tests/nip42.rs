@@ -153,24 +153,24 @@ async fn nip42_auth_handshake_completes_and_event_is_acknowledged() {
     // Relay side: demand AUTH.
     let challenge = "test-challenge-string";
     peer.push_frame(
-        serde_json::to_vec(&RelayMessage::Auth {
+        &serde_json::to_vec(&RelayMessage::Auth {
             challenge: std::borrow::Cow::Borrowed(challenge),
         })
         .expect("AUTH encodes"),
-    );
+        );
 
     // Give the publisher time to sign and resend EVENT.
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Relay side: acknowledge the (re)sent EVENT.
     peer.push_frame(
-        serde_json::to_vec(&RelayMessage::Ok {
+        &serde_json::to_vec(&RelayMessage::Ok {
             event_id,
             status: true,
             message: std::borrow::Cow::Borrowed(""),
         })
         .expect("OK encodes"),
-    );
+        );
 
     let outcome = publish_fut.await.expect("publisher task completed");
 
@@ -227,11 +227,11 @@ async fn nip42_without_signer_returns_authentication_required() {
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     peer.push_frame(
-        serde_json::to_vec(&RelayMessage::Auth {
+        &serde_json::to_vec(&RelayMessage::Auth {
             challenge: std::borrow::Cow::Borrowed("challenge"),
         })
         .expect("AUTH encodes"),
-    );
+        );
 
     let outcome = publish_fut.await.expect("publisher task completed");
     assert_eq!(

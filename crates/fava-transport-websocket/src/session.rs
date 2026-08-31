@@ -5,14 +5,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use fava_transport::{
-    HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession, RelayMessageStream,
+    HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
     RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture, ReleaseOutcome,
     TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
 use tokio::sync::{Notify, mpsc, oneshot};
 
 use crate::driver::Outbound;
-use crate::fanout::{Consumers, LiveIdentity, WebSocketMessageStream};
+use crate::identity::LiveIdentity;
 
 /// State shared between a session handle and the task driving its socket.
 pub(crate) struct SessionShared {
@@ -20,7 +20,6 @@ pub(crate) struct SessionShared {
     pub(crate) bounds: TransportBounds,
     pub(crate) deadlines: TransportDeadlines,
     pub(crate) reconnect_attempts: Option<NonZeroUsize>,
-    pub(crate) consumers: Consumers,
     pub(crate) closed: AtomicBool,
     pub(crate) close_requested: Notify,
     pub(crate) close_finished: Notify,
@@ -44,7 +43,6 @@ impl SessionShared {
             bounds: request.bounds,
             deadlines: request.deadlines,
             reconnect_attempts: request.reconnect_attempts,
-            consumers: Consumers::default(),
             closed: AtomicBool::new(false),
             close_requested: Notify::new(),
             close_finished: Notify::new(),
@@ -143,21 +141,11 @@ impl RelaySession for WebSocketRelaySession {
         })
     }
 
-    fn messages(&self) -> Box<dyn RelayMessageStream> {
-        Box::new(WebSocketMessageStream {
-            consumer: self
-                .shared
-                .consumers
-                .register(self.shared.bounds.inbound_frames.get()),
-            identity: Arc::clone(&self.shared.identity),
-        })
-    }
-
     fn close(&self) -> ReleaseFuture<'_> {
         Box::pin(async move {
             let finished = self.shared.close_finished.notified();
             if self.shared.closed.swap(true, Ordering::SeqCst) {
-                self.shared.consumers.detach_all();
+                self.shared.router.close();
                 return Ok(ReleaseOutcome::Closed);
             }
             // The driver owns the handshake and its deadline. Fava reports the
@@ -165,7 +153,7 @@ impl RelaySession for WebSocketRelaySession {
             self.shared.close_requested.notify_one();
             let _ =
                 tokio::time::timeout(self.shared.deadlines.close.saturating_mul(2), finished).await;
-            self.shared.consumers.detach_all();
+            self.shared.router.close();
             Ok(ReleaseOutcome::Closed)
         })
     }

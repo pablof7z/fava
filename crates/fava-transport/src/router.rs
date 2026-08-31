@@ -11,8 +11,10 @@ use std::sync::{Arc, Mutex};
 
 use fava_wire::{RelayMessage, SubscriptionId};
 
-use crate::{BoundedText, RelaySessionIdentity};
-use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
+use crate::BoundedText;
+use crate::routed::{
+    ConnectionState, Correlation, SessionEnded, Settlement, SubscriptionItem, correlation,
+};
 use nostr::event::EventId;
 use tokio::sync::Notify;
 
@@ -130,7 +132,7 @@ pub struct Router {
     /// Readers of connection resets. A lease holder that owns no wire key still
     /// needs to know its connection was replaced, so this is not attached to
     /// any handle.
-    resets: Mutex<Vec<Arc<Mailbox<RelaySessionIdentity>>>>,
+    connection: Mutex<Vec<Arc<Mailbox<ConnectionState>>>>,
     /// Traffic that reached no handle.
     pub unrouted: Unrouted,
 }
@@ -214,9 +216,9 @@ impl Router {
     /// # Panics
     ///
     /// If a prior holder of this session's router lock panicked.
-    pub fn read_resets(&self, capacity: usize) -> Arc<Mailbox<RelaySessionIdentity>> {
+    pub fn read_connection(&self, capacity: usize) -> Arc<Mailbox<ConnectionState>> {
         let mailbox = Arc::new(Mailbox::new(capacity));
-        self.resets
+        self.connection
             .lock()
             .expect("router is not poisoned")
             .push(Arc::clone(&mailbox));
@@ -228,16 +230,16 @@ impl Router {
     /// # Panics
     ///
     /// If a prior holder of this session's router lock panicked.
-    pub fn reconnected(&self, identity: &RelaySessionIdentity) {
+    pub fn connection_changed(&self, state: &ConnectionState) {
         let readers: Vec<_> = self
-            .resets
+            .connection
             .lock()
             .expect("router is not poisoned")
             .iter()
             .map(Arc::clone)
             .collect();
         for mailbox in readers {
-            mailbox.offer(identity.clone());
+            mailbox.offer(state.clone());
         }
     }
 
@@ -369,7 +371,12 @@ impl Router {
         {
             mailbox.close();
         }
-        for mailbox in self.resets.lock().expect("router is not poisoned").drain(..) {
+        for mailbox in self
+            .connection
+            .lock()
+            .expect("router is not poisoned")
+            .drain(..)
+        {
             mailbox.close();
         }
     }

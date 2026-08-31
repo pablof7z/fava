@@ -20,7 +20,6 @@ mod diagnostics;
 mod engine;
 mod error;
 mod facts;
-mod ingest;
 mod observation;
 mod observer;
 mod operations;

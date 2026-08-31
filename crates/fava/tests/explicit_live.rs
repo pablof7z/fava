@@ -8,7 +8,7 @@ use fava::{Fava, Query};
 use fava_event_cache::EventCache;
 use fava_event_cache_memory::MemoryEventCache;
 use fava_query::{
-    AuthenticationState, ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin,
+    ObservationId, QuerySnapshot, RelaySourceState, RouteOrigin,
 };
 use fava_query_standard::StandardQueryEvaluator;
 use fava_relay::{RelayAccess, RelaySessionKey};
@@ -390,19 +390,18 @@ async fn silence_eose_auth_closed_and_disconnect_are_distinct_facts() {
     .await;
     assert!(complete.stored_events_complete());
 
+    // A challenge is not this owner's fact. It belongs to whoever authenticates
+    // the session, and reaches it on the session's own challenge reader; the
+    // observation owner no longer decodes one and never reports it.
     push(&peer, &RelayMessage::auth("challenge"));
-    let challenged = await_state(&mut observation, &key, |state| {
-        matches!(state, RelaySourceState::AuthenticationRequired { .. })
-    })
-    .await;
-    assert!(matches!(
-        challenged.state,
-        RelaySourceState::AuthenticationRequired {
-            state: AuthenticationState::ChallengeReceived,
-            ..
-        }
-    ));
-    assert!(!challenged.stored_events_complete());
+    settle().await;
+    assert!(
+        matches!(
+            relay_occurrence(&observation.current(), &key).state,
+            RelaySourceState::StoredEventsComplete { .. }
+        ),
+        "an unsolicited challenge changes nothing this owner observes"
+    );
 
     push(
         &peer,
@@ -492,11 +491,9 @@ fn established(transport: &FakeTransport, key: &RelaySessionKey) -> FakeRelay {
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(
-        serde_json::to_string(message)
+    peer.push_frame(serde_json::to_string(message)
             .expect("message encodes")
-            .into_bytes(),
-    );
+            .as_bytes());
 }
 
 fn client_messages(peer: Option<FakeRelay>) -> Vec<ClientMessage<'static>> {

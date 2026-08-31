@@ -4,13 +4,12 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fava_transport::{
-    BoundedText, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession, RelayInbound,
-    RelayMessageStream, RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
+    BoundedText, HandoffCorrelation, HandoffFuture, HandoffOutcome, OpenRelaySession,
+    RelaySession, RelaySessionGeneration, RelaySessionIdentity, ReleaseFuture,
     ReleaseOutcome, TransportAmbiguity, TransportBounds, TransportDeadlines, TransportFailure,
 };
-use nostr::types::Timestamp;
 
-use crate::stream::{ConsumerState, FakeMessageStream, LiveIdentity};
+use crate::stream::LiveIdentity;
 
 pub(crate) struct FakeSession {
     pub(crate) identity: Arc<LiveIdentity>,
@@ -36,7 +35,6 @@ pub(crate) struct SessionState {
     pub(crate) refuse_reconnect: Option<String>,
     pub(crate) completions: Vec<HandoffOutcome>,
     pub(crate) cancelled: Vec<HandoffCorrelation>,
-    pub(crate) consumers: Vec<Arc<ConsumerState>>,
 }
 
 impl FakeSession {
@@ -68,19 +66,10 @@ impl FakeSession {
         self.inner.lock().expect("fake session is not poisoned")
     }
 
-    pub(crate) fn fan_out(state: &SessionState, item: &RelayInbound) {
-        for consumer in &state.consumers {
-            consumer.offer(item.clone());
-        }
-    }
-
     pub(crate) fn mark_closed(&self) {
         self.router.close();
         let mut state = self.state();
         state.closed = true;
-        for consumer in &state.consumers {
-            consumer.detach();
-        }
     }
 
     /// Convert every frame still inside the socket into an ambiguous
@@ -103,24 +92,26 @@ impl FakeSession {
         let identity = self.identity.read();
         let mut state = self.state();
         Self::strand_in_flight(&mut state, &identity, detail);
-        let disconnected = RelayInbound::Disconnected {
-            identity: identity.clone(),
-            reason: TransportFailure::Disconnected {
-                detail: BoundedText::new(detail),
-            },
-        };
-        Self::fan_out(&state, &disconnected);
-
-        if let Some(refusal) = state.refuse_reconnect.clone() {
-            let exhausted = RelayInbound::ReconnectExhausted {
-                identity,
-                attempts: self.reconnect_attempts,
-                reason: TransportFailure::Disconnected {
-                    detail: BoundedText::new(refusal),
-                },
-            };
-            Self::fan_out(&state, &exhausted);
+        let refusal = state.refuse_reconnect.clone();
+        if refusal.is_some() {
             state.closed = true;
+        }
+        drop(state);
+
+        self.router
+            .end_generation(&fava_transport::SessionEnded::Disconnected {
+                detail: BoundedText::new(detail),
+            });
+        self.router
+            .connection_changed(&fava_transport::ConnectionState::Disconnected {
+                detail: BoundedText::new(detail),
+            });
+        if let Some(refusal) = refusal {
+            self.router
+                .connection_changed(&fava_transport::ConnectionState::Unreachable {
+                    attempts: self.reconnect_attempts,
+                    detail: BoundedText::new(refusal),
+                });
         }
     }
 
@@ -128,13 +119,6 @@ impl FakeSession {
         let previous = self.identity.read();
         let mut state = self.state();
         Self::strand_in_flight(&mut state, &previous, "session reconnected");
-        let disconnected = RelayInbound::Disconnected {
-            identity: previous.clone(),
-            reason: TransportFailure::Disconnected {
-                detail: BoundedText::new("session reconnected"),
-            },
-        };
-        Self::fan_out(&state, &disconnected);
 
         let next = self
             .generations
@@ -144,50 +128,44 @@ impl FakeSession {
             .ok()
             .and_then(|previous| RelaySessionGeneration::new(previous + 1));
         let Some(next) = next else {
-            let exhausted = RelayInbound::ReconnectExhausted {
-                identity: previous,
-                attempts: 0,
-                reason: TransportFailure::GenerationExhausted,
-            };
-            Self::fan_out(&state, &exhausted);
             state.closed = true;
+            drop(state);
+            self.router
+                .end_generation(&fava_transport::SessionEnded::ReconnectExhausted {
+                    attempts: 0,
+                    detail: BoundedText::new("generations exhausted"),
+                });
+            self.router
+                .connection_changed(&fava_transport::ConnectionState::Unreachable {
+                    attempts: 0,
+                    detail: BoundedText::new("generations exhausted"),
+                });
             return;
         };
+        drop(state);
         self.identity.generation.store(next.get(), Ordering::SeqCst);
         self.dials.fetch_add(1, Ordering::SeqCst);
         self.router
             .end_generation(&fava_transport::SessionEnded::Disconnected {
                 detail: BoundedText::new("session reconnected"),
             });
-        self.router.reconnected(&self.identity.read());
-        let reconnected = RelayInbound::Reconnected {
-            previous,
-            identity: self.identity.read(),
-        };
-        Self::fan_out(&state, &reconnected);
+        self.router
+            .connection_changed(&fava_transport::ConnectionState::Reconnected {
+                identity: self.identity.read(),
+            });
     }
 
-    pub(crate) fn push_frame(&self, frame: Vec<u8>) {
+    pub(crate) fn push_frame(&self, frame: &[u8]) {
         // Decode once and route, exactly as the real driver does: a fake that
         // only fed the legacy path would let a consumer pass here and fail
         // against a relay.
-        match std::str::from_utf8(&frame)
+        match std::str::from_utf8(frame)
             .ok()
             .and_then(|text| fava_wire::decode_relay(text).ok())
         {
             Some(message) => self.router.deliver(message),
             None => self.router.undecodable(),
         }
-        let identity = self.identity.read();
-        let state = self.state();
-        Self::fan_out(
-            &state,
-            &RelayInbound::Frame {
-                identity,
-                frame,
-                received_at: Timestamp::now(),
-            },
-        );
     }
 }
 
@@ -288,16 +266,6 @@ impl RelaySession for FakeSession {
                 identity,
                 correlation,
             }
-        })
-    }
-
-    fn messages(&self) -> Box<dyn RelayMessageStream> {
-        let consumer = Arc::new(ConsumerState::new(self.bounds.inbound_frames.get()));
-        self.state().consumers.push(Arc::clone(&consumer));
-        Box::new(FakeMessageStream {
-            consumer,
-            identity: Arc::clone(&self.identity),
-            idle: self.deadlines.idle,
         })
     }
 

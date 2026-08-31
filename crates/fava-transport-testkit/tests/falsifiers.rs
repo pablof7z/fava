@@ -4,8 +4,9 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
+use nostr::filter::Filter;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, Transport, TransportBounds,
     TransportDeadlines, TransportFailure,
 };
 use fava_transport_testkit::FakeTransport;
@@ -41,27 +42,34 @@ fn request() -> OpenRelaySession {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn one_physical_session_fans_out_every_inbound_frame_to_every_consumer() {
+async fn one_relay_message_reaches_only_the_subscription_that_owns_it() {
     let transport = FakeTransport::new();
     let lease = transport
         .acquire_session(request())
         .await
-        .expect("acquires");
-    let mut first = lease.session().messages();
-    let mut second = lease.session().messages();
-
-    transport
-        .relay(&key())
-        .expect("relay is registered")
-        .push_frame(b"[\"EOSE\",\"one\"]".to_vec());
-
-    let one = first.next_inbound().await.expect("first consumer receives");
-    let two = second
-        .next_inbound()
+        .expect("session opens");
+    let session = std::sync::Arc::clone(lease.session());
+    let mut owner = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
         .await
-        .expect("second consumer receives");
-    assert!(matches!(one, RelayInbound::Frame { ref frame, .. } if frame == b"[\"EOSE\",\"one\"]"));
-    assert!(matches!(two, RelayInbound::Frame { ref frame, .. } if frame == b"[\"EOSE\",\"one\"]"));
+        .expect("subscription opens");
+    let mut bystander = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
+        .await
+        .expect("second subscription opens");
+
+    let relay = transport.relay(&key()).expect("peer");
+    relay.push_frame(format!("[\"EOSE\",\"{}\"]", owner.id().as_str()).as_bytes());
+
+    assert!(matches!(
+        owner.next().await,
+        fava_transport::SubscriptionItem::EndOfStoredEvents
+    ));
+    // The bystander asked for something else, so nothing reaches it.
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), bystander.next())
+            .await
+            .is_err(),
+        "a subscription must never receive another subscription's message"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -119,31 +127,36 @@ async fn exhausted_initial_generation_refuses_before_a_dial() {
 #[tokio::test(flavor = "current_thread")]
 async fn exhausted_reconnect_generation_is_terminal_without_a_dial() {
     let transport = FakeTransport::new();
-    transport.leave_one_generation();
     let lease = transport
         .acquire_session(request())
         .await
-        .expect("last generation acquires");
-    let identity = lease.session().identity();
-    let mut stream = lease.session().messages();
-    let relay = transport.relay(&key()).expect("relay is registered");
+        .expect("session opens");
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
+    let dials = transport.dials(&key());
 
-    relay.reconnect();
+    transport.exhaust_generations();
+    transport.relay(&key()).expect("peer").reconnect();
 
-    assert!(matches!(
-        stream.next_inbound().await.expect("disconnect item"),
-        RelayInbound::Disconnected { identity: item, .. } if item == identity
-    ));
-    assert!(matches!(
-        stream.next_inbound().await.expect("exhaustion item"),
-        RelayInbound::ReconnectExhausted {
-            identity: item,
-            attempts: 0,
-            reason: TransportFailure::GenerationExhausted,
-        } if item == identity
-    ));
-    assert_eq!(transport.dials(&key()), 1);
-    assert_eq!(lease.session().identity(), identity);
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        while let Some(state) = connection.take() {
+            seen.push(state);
+        }
+        if seen
+            .iter()
+            .any(|state| matches!(state, fava_transport::ConnectionState::Unreachable { .. }))
+        {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert!(
+        seen.iter()
+            .any(|state| matches!(state, fava_transport::ConnectionState::Unreachable { .. })),
+        "an exhausted reconnect budget is reported, not retried: {seen:?}"
+    );
+    assert_eq!(transport.dials(&key()), dials, "no dial was attempted");
 }
 
 #[tokio::test(flavor = "current_thread")]

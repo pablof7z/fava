@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, ReleaseOutcome, Transport,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, ReleaseOutcome, Transport,
     TransportAmbiguity, TransportBounds, TransportDeadlines, TransportError, TransportFailure,
 };
 use fava_transport_testkit::FakeTransport;
@@ -84,35 +84,47 @@ async fn pending_establishment_that_completes_is_not_a_refusal() {
 
 // -------------------------------------------------- 2. mid-operation failure
 
+
+/// Drain a session's connection stream until one state matches, yielding between
+/// polls so the fake's own tasks can run.
+async fn until(
+    connection: &std::sync::Arc<fava_transport::Mailbox<fava_transport::ConnectionState>>,
+    mut matches: impl FnMut(&fava_transport::ConnectionState) -> bool,
+) -> fava_transport::ConnectionState {
+    for _ in 0..64 {
+        while let Some(state) = connection.take() {
+            if matches(&state) {
+                return state;
+            }
+        }
+        tokio::task::yield_now().await;
+    }
+    panic!("the expected connection state never arrived");
+}
+
 #[tokio::test(flavor = "current_thread")]
-async fn mid_operation_failure_reaches_every_consumer_as_an_attributed_disconnect() {
+async fn mid_operation_failure_reaches_every_reader_as_an_attributed_disconnect() {
     let transport = FakeTransport::new();
     let lease = transport
         .acquire_session(request())
         .await
         .expect("acquires");
-    let identity = lease.session().identity();
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
         .relay(&key())
         .expect("relay is registered")
         .fail_now("relay closed the connection");
 
-    let item = stream
-        .next_inbound()
-        .await
-        .expect("a lifecycle item arrives");
-    match item {
-        RelayInbound::Disconnected {
-            identity: reported,
-            reason: TransportFailure::Disconnected { detail },
-        } => {
-            assert_eq!(reported, identity);
-            assert_eq!(detail.as_str(), "relay closed the connection");
-        }
-        other => panic!("expected an attributed disconnect, got {other:?}"),
-    }
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Disconnected { .. })
+    })
+    .await;
+    let fava_transport::ConnectionState::Disconnected { detail } = state else {
+        unreachable!("the predicate matched a disconnect")
+    };
+    assert_eq!(detail.as_str(), "relay closed the connection");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -178,27 +190,22 @@ async fn a_reconnect_mints_a_new_generation_under_the_same_lease() {
         .await
         .expect("acquires");
     let before = lease.session().identity();
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
 
     transport
         .relay(&key())
         .expect("relay is registered")
         .reconnect();
 
-    let item = loop {
-        let next = stream
-            .next_inbound()
-            .await
-            .expect("a lifecycle item arrives");
-        if !matches!(next, RelayInbound::Disconnected { .. }) {
-            break next;
-        }
-    };
-    let RelayInbound::Reconnected { previous, identity } = item else {
-        panic!("expected a reconnect item, got {item:?}");
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Reconnected { .. })
+    })
+    .await;
+    let fava_transport::ConnectionState::Reconnected { identity } = state else {
+        unreachable!("the predicate matched a reconnect")
     };
 
-    assert_eq!(previous, before);
     assert_eq!(identity.key, before.key);
     assert_eq!(
         identity.generation,
@@ -243,57 +250,57 @@ async fn reconnect_exhaustion_is_an_item_not_a_silent_stop() {
         .acquire_session(request())
         .await
         .expect("acquires");
-    let mut stream = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let connection = fava_transport::RelaySessionExt::connection(&session);
+
     let relay = transport.relay(&key()).expect("relay is registered");
     relay.refuse_reconnects("relay refuses");
 
     relay.fail_now("relay dropped us");
 
-    let exhausted = loop {
-        if let RelayInbound::ReconnectExhausted {
-            attempts, reason, ..
-        } = stream
-            .next_inbound()
-            .await
-            .expect("a lifecycle item arrives")
-        {
-            break (attempts, reason);
-        }
+    let state = until(&connection, |state| {
+        matches!(state, fava_transport::ConnectionState::Unreachable { .. })
+    })
+    .await;
+    let fava_transport::ConnectionState::Unreachable { attempts, .. } = state else {
+        unreachable!("the predicate matched an exhausted budget")
     };
-    assert_eq!(exhausted.0, 2);
-    assert!(matches!(exhausted.1, TransportFailure::Disconnected { .. }));
+    assert_eq!(attempts, 2);
 }
 
 // -------------------------------------------------- 5. slow peer backpressure
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_slow_consumer_loses_bounded_inbound_items_and_is_told_exactly() {
+async fn a_slow_subscription_loses_bounded_items_and_is_told_exactly() {
     let transport = FakeTransport::new();
     let lease = transport
         .acquire_session(request())
         .await
         .expect("acquires");
-    let mut fast = lease.session().messages();
-    let slow = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let mut subscription =
+        fava_transport::RelaySessionExt::subscribe(&session, vec![nostr::filter::Filter::new()])
+            .await
+            .expect("subscription opens");
     let relay = transport.relay(&key()).expect("relay is registered");
 
-    for index in 0..6_u8 {
-        relay.push_frame(vec![index]);
+    // The queue is bounded at 4 frames; six arrive with nothing draining them.
+    for _ in 0..6 {
+        relay.push_frame(format!("[\"EOSE\",\"{}\"]", subscription.id().as_str()).as_bytes());
     }
 
-    drop(slow);
     let mut seen = Vec::new();
-    for _ in 0..3 {
-        seen.push(fast.next_inbound().await.expect("items arrive"));
+    for _ in 0..6 {
+        seen.push(subscription.next().await);
     }
     let lost = seen
         .iter()
         .find_map(|item| match item {
-            RelayInbound::Lost { dropped, .. } => Some(*dropped),
+            fava_transport::SubscriptionItem::Lost { dropped } => Some(*dropped),
             _ => None,
         })
-        .expect("the bounded consumer is told its exact loss");
-    assert_eq!(lost, 4);
+        .expect("the overflow is reported exactly, not silently dropped");
+    assert_eq!(lost, 2, "six offered, four buffered, two lost");
 }
 
 #[tokio::test(flavor = "current_thread")]

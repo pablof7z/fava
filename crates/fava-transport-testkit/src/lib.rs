@@ -11,19 +11,67 @@ mod stream;
 use std::num::NonZeroUsize;
 
 pub use fake::{FakeRelay, FakeTransport, detached_lease};
+use fava_wire::SubscriptionId;
+use nostr::event::Kind;
+use nostr::filter::Filter;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportFailure,
+    HandoffCorrelation, HandoffOutcome, OpenRelaySession, SubscriptionItem, Transport,
+    TransportFailure,
 };
 
-/// Require that one physical session fans every inbound frame out to every
-/// consumer, rather than letting consumers steal each other's frames.
+/// Require that a relay message reaches the handle that owns its wire key, and
+/// no other.
 ///
-/// The caller pushes `frame` at the relay after `arrange` returns.
+/// The caller pushes `frame` at the relay after `arrange` returns; `frame` must
+/// be an `EVENT` naming the subscription the returned handle holds.
 ///
 /// # Errors
 ///
-/// Returns a precise mismatch when either consumer misses the frame.
-pub async fn require_inbound_fan_out<T, F>(
+/// Returns a precise mismatch when the owning handle misses the message, or
+/// when a second subscription receives it.
+pub async fn require_routed_delivery<T, F>(
+    transport: &T,
+    request: OpenRelaySession,
+    arrange: F,
+) -> Result<(), String>
+where
+    T: Transport,
+    F: FnOnce(&SubscriptionId),
+{
+    let lease = transport
+        .acquire_session(request)
+        .await
+        .map_err(|error| format!("session did not open: {error}"))?;
+    let session = std::sync::Arc::clone(lease.session());
+    let mut owner = fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
+        .await
+        .map_err(|refused| format!("subscription did not open: {refused:?}"))?;
+    let mut bystander =
+        fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new().kind(Kind::from_u16(1))])
+            .await
+            .map_err(|refused| format!("second subscription did not open: {refused:?}"))?;
+    arrange(owner.id());
+
+    match owner.next().await {
+        SubscriptionItem::Event(_) => {}
+        other => return Err(format!("the owning subscription received {other:?}")),
+    }
+    // The bystander must still be waiting: nothing addressed to another
+    // subscription may reach it.
+    match tokio::time::timeout(std::time::Duration::from_millis(50), bystander.next()).await {
+        Err(_) => Ok(()),
+        Ok(item) => Err(format!("an unrelated subscription received {item:?}")),
+    }
+}
+
+/// Require that a message no live handle claims reaches no handle at all.
+///
+/// The caller pushes an unroutable frame after `arrange` returns.
+///
+/// # Errors
+///
+/// Returns a precise mismatch when a live handle receives it.
+pub async fn require_unclaimed_reaches_no_handle<T, F>(
     transport: &T,
     request: OpenRelaySession,
     arrange: F,
@@ -36,21 +84,22 @@ where
         .acquire_session(request)
         .await
         .map_err(|error| format!("session did not open: {error}"))?;
-    let mut first = lease.session().messages();
-    let mut second = lease.session().messages();
+    let session = std::sync::Arc::clone(lease.session());
+    let mut subscription =
+        fava_transport::RelaySessionExt::subscribe(&session, vec![Filter::new()])
+            .await
+            .map_err(|refused| format!("subscription did not open: {refused:?}"))?;
     arrange();
 
-    for (position, stream) in [&mut first, &mut second].into_iter().enumerate() {
-        match stream.next_inbound().await {
-            Ok(RelayInbound::Frame { .. }) => {}
-            other => {
-                return Err(format!(
-                    "consumer {position} did not receive the frame, got {other:?}"
-                ));
-            }
-        }
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(50),
+        subscription.next(),
+    )
+    .await
+    {
+        Err(_) => Ok(()),
+        Ok(item) => Err(format!("an unclaimed message reached a subscription: {item:?}")),
     }
-    Ok(())
 }
 
 /// Require that acquiring a live session reuses it instead of dialing again.

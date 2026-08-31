@@ -34,6 +34,33 @@ pub enum SessionEnded {
     },
 }
 
+/// A change in the state of one session's connection.
+///
+/// Any lease holder can read these, whether or not it holds a subscription or
+/// an outstanding acknowledgement: what a component proved to the relay, and
+/// what it parked awaiting an answer, belong to the connection that carried
+/// them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ConnectionState {
+    /// The connection dropped. A reconnect may follow.
+    Disconnected {
+        /// Exact scoped reason.
+        detail: BoundedText,
+    },
+    /// A new connection is live. Every holder MUST replay its demand.
+    Reconnected {
+        /// The connection now current.
+        identity: crate::RelaySessionIdentity,
+    },
+    /// The reconnect budget is spent; no further connection will appear.
+    Unreachable {
+        /// Number of attempts actually made.
+        attempts: usize,
+        /// Exact reason of the final attempt.
+        detail: BoundedText,
+    },
+}
+
 /// One item delivered to one live subscription.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SubscriptionItem {
@@ -319,14 +346,11 @@ pub trait RelaySessionExt {
     /// Answer one NIP-42 challenge and await the relay's verdict on it alone.
     fn answer(&self, event: nostr::event::Event) -> PublishFuture<'_>;
 
-    /// Read this session's connection resets.
+    /// Read this session's connection state changes.
     ///
-    /// A lease holder that owns no subscription and no outstanding
-    /// acknowledgement still needs to know its connection was replaced: what it
-    /// proved to the relay, and anything it parked awaiting an answer, belonged
-    /// to the connection that died. So this is a fact about the session, not a
-    /// footnote on some other stream.
-    fn resets(&self) -> std::sync::Arc<crate::Mailbox<crate::RelaySessionIdentity>>;
+    /// This is a fact about the session, not a footnote on some other stream:
+    /// a lease holder that owns no wire key still needs it.
+    fn connection(&self) -> std::sync::Arc<crate::Mailbox<ConnectionState>>;
 
     /// Read the relay's authentication challenges.
     ///
@@ -412,7 +436,7 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
         self.router().read_challenges(self.inbound_capacity())
     }
 
-    fn resets(&self) -> std::sync::Arc<crate::Mailbox<crate::RelaySessionIdentity>> {
-        self.router().read_resets(self.inbound_capacity())
+    fn connection(&self) -> std::sync::Arc<crate::Mailbox<ConnectionState>> {
+        self.router().read_connection(self.inbound_capacity())
     }
 }

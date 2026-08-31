@@ -257,7 +257,7 @@ fn event(keys: &Keys, content: &str) -> Event {
 }
 
 fn push(peer: &FakeRelay, message: &RelayMessage<'_>) {
-    peer.push_frame(serde_json::to_vec(message).expect("relay message encodes"));
+    peer.push_frame(&serde_json::to_vec(message).expect("relay message encodes"));
 }
 
 fn request(peer: &FakeRelay) -> Option<SubscriptionId> {

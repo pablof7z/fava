@@ -38,7 +38,7 @@ use fava_subscriptions::{
     filter_covers, validate_plan,
 };
 use fava_transport::{
-    OpenRelaySession, RelayInbound, RelaySession, RelaySessionLease, Transport, TransportBounds,
+    OpenRelaySession, RelaySession, RelaySessionLease, Transport, TransportBounds,
     TransportDeadlines,
 };
 use fava_wire::SubscriptionId;
@@ -94,16 +94,27 @@ pub(crate) enum Report {
         revision: fava_subscriptions::PlanRevision,
         plan: Box<SubscriptionPlan>,
         opened: Vec<Option<SubscriptionId>>,
+        /// The token governing each opened subscription's handle. Cancelling it
+        /// drops the handle, which sends the relay its CLOSE.
+        attending: Vec<(SubscriptionId, CancellationToken)>,
         closed: BTreeSet<SubscriptionId>,
     },
     Flush {
         relay: RelaySessionKey,
         generation: OperationGeneration,
     },
-    Inbound {
+    /// One session's connection state changed.
+    Connection {
         relay: RelaySessionKey,
         generation: OperationGeneration,
-        item: Box<RelayInbound>,
+        state: Box<fava_transport::ConnectionState>,
+    },
+    /// One installed subscription carried something of its own.
+    Carried {
+        relay: RelaySessionKey,
+        generation: OperationGeneration,
+        subscription: SubscriptionId,
+        item: Box<fava_transport::SubscriptionItem>,
     },
     /// NIP-11 relay-information document fetched for one relay.
     Constraints {
@@ -488,6 +499,7 @@ impl Engine {
             Arc::clone(session),
             planned.clone(),
             self.providers.deadlines.write,
+            slot.cancel.clone(),
         );
         self.publish_relay_diagnostic(relay);
     }

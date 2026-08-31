@@ -90,14 +90,14 @@ async fn reopening_drained_demand_on_a_retained_socket_uses_fresh_identity() {
     let peer = transport
         .relay(&key)
         .expect("the session is still registered");
-    peer.push_frame(encoded(&RelayMessage::eose(retired)));
+    peer.push_frame(&encoded(&RelayMessage::eose(retired)));
     settle().await;
     assert!(
         !settled(&second, &key),
         "a late EOSE naming the retired request must not settle the reopened one"
     );
 
-    peer.push_frame(encoded(&RelayMessage::eose(replacement)));
+    peer.push_frame(&encoded(&RelayMessage::eose(replacement)));
     wait_until(|| settled(&second, &key)).await;
 
     second.close();
