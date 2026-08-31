@@ -788,6 +788,7 @@ dependencies = [
  "fava-relay",
  "fava-state",
  "fava-transport",
+ "fava-wire",
  "nostr",
  "tokio",
 ]
