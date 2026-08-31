@@ -23,6 +23,7 @@ pub use session_watch::WatchError;
 
 /// Task name for one session's authentication watch.
 pub(crate) const WATCH_TASK: TaskName = TaskName("auth.watch");
+pub(crate) const VERDICT_TASK: TaskName = TaskName("auth.verdict");
 
 /// Owns every NIP-42 challenge lifecycle in one engine.
 ///
@@ -47,7 +48,6 @@ pub(crate) struct Inner {
 pub(crate) struct State {
     pub(crate) sessions: BTreeMap<RelaySessionKey, SessionAuthentication>,
     pub(crate) deferred: BTreeMap<AuthenticationDemandId, AuthenticationDemand>,
-    pub(crate) awaiting_ok: BTreeMap<RelaySessionKey, fava_write::EventId>,
     next_id: u64,
     revision: u64,
 }

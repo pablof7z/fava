@@ -75,6 +75,7 @@ impl FakeSession {
     }
 
     pub(crate) fn mark_closed(&self) {
+        self.router.close();
         let mut state = self.state();
         state.closed = true;
         for consumer in &state.consumers {
@@ -154,6 +155,11 @@ impl FakeSession {
         };
         self.identity.generation.store(next.get(), Ordering::SeqCst);
         self.dials.fetch_add(1, Ordering::SeqCst);
+        self.router
+            .end_generation(&fava_transport::SessionEnded::Disconnected {
+                detail: BoundedText::new("session reconnected"),
+            });
+        self.router.reconnected(&self.identity.read());
         let reconnected = RelayInbound::Reconnected {
             previous,
             identity: self.identity.read(),
@@ -162,6 +168,16 @@ impl FakeSession {
     }
 
     pub(crate) fn push_frame(&self, frame: Vec<u8>) {
+        // Decode once and route, exactly as the real driver does: a fake that
+        // only fed the legacy path would let a consumer pass here and fail
+        // against a relay.
+        match std::str::from_utf8(&frame)
+            .ok()
+            .and_then(|text| fava_wire::decode_relay(text).ok())
+        {
+            Some(message) => self.router.deliver(message),
+            None => self.router.undecodable(),
+        }
         let identity = self.identity.read();
         let state = self.state();
         Self::fan_out(

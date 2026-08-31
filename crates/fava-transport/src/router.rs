@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use fava_wire::{RelayMessage, SubscriptionId};
 
-use crate::BoundedText;
+use crate::{BoundedText, RelaySessionIdentity};
 use crate::routed::{Correlation, SessionEnded, Settlement, SubscriptionItem, correlation};
 use nostr::event::EventId;
 use tokio::sync::Notify;
@@ -120,7 +120,17 @@ pub struct Router {
     /// An acknowledgement fans out: two callers publishing one event both want
     /// the relay's single verdict.
     acknowledgements: Mutex<BTreeMap<EventId, Vec<Arc<Mailbox<Settlement>>>>>,
-    challenges: Mutex<Vec<Arc<Mailbox<BoundedText>>>>,
+    /// Readers of the relay's authentication challenges.
+    ///
+    /// The text is carried verbatim, not bounded: the one component that reads
+    /// challenges refuses an oversized one rather than truncating it, and a
+    /// bound applied here would silently defeat that. The frame it arrived in
+    /// is already bounded by `max_frame_bytes`, so this cannot grow unbounded.
+    challenges: Mutex<Vec<Arc<Mailbox<String>>>>,
+    /// Readers of connection resets. A lease holder that owns no wire key still
+    /// needs to know its connection was replaced, so this is not attached to
+    /// any handle.
+    resets: Mutex<Vec<Arc<Mailbox<RelaySessionIdentity>>>>,
     /// Traffic that reached no handle.
     pub unrouted: Unrouted,
 }
@@ -196,7 +206,47 @@ impl Router {
     /// # Panics
     ///
     /// If a prior holder of this session's router lock panicked.
-    pub fn read_challenges(&self, capacity: usize) -> Arc<Mailbox<BoundedText>> {
+    /// Read this session's connection resets.
+    ///
+    /// Every reader is told which connection is now current. Readers survive a
+    /// reset, because the fact they are waiting for is the reset itself.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
+    pub fn read_resets(&self, capacity: usize) -> Arc<Mailbox<RelaySessionIdentity>> {
+        let mailbox = Arc::new(Mailbox::new(capacity));
+        self.resets
+            .lock()
+            .expect("router is not poisoned")
+            .push(Arc::clone(&mailbox));
+        mailbox
+    }
+
+    /// Tell every reset reader which connection is now current.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
+    pub fn reconnected(&self, identity: &RelaySessionIdentity) {
+        let readers: Vec<_> = self
+            .resets
+            .lock()
+            .expect("router is not poisoned")
+            .iter()
+            .map(Arc::clone)
+            .collect();
+        for mailbox in readers {
+            mailbox.offer(identity.clone());
+        }
+    }
+
+    /// Read the relay's authentication challenges on this session.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
+    pub fn read_challenges(&self, capacity: usize) -> Arc<Mailbox<String>> {
         let mailbox = Arc::new(Mailbox::new(capacity));
         self.challenges
             .lock()
@@ -253,7 +303,7 @@ impl Router {
                     return;
                 }
                 for mailbox in readers {
-                    mailbox.offer(BoundedText::new(challenge.as_ref()));
+                    mailbox.offer(challenge.as_ref().to_owned());
                 }
             }
             Correlation::Unclaimed => {
@@ -297,6 +347,30 @@ impl Router {
                 mailbox.offer(Settlement::Ended(ended.clone()));
                 mailbox.close();
             }
+        }
+    }
+
+    /// Close every reader on this session, including the ones that survive a
+    /// reset. A session that is gone has no further facts to report, and a
+    /// reader left open never learns to stop waiting.
+    ///
+    /// # Panics
+    ///
+    /// If a prior holder of this session's router lock panicked.
+    pub fn close(&self) {
+        self.end_generation(&SessionEnded::Disconnected {
+            detail: BoundedText::new("session closed"),
+        });
+        for mailbox in self
+            .challenges
+            .lock()
+            .expect("router is not poisoned")
+            .drain(..)
+        {
+            mailbox.close();
+        }
+        for mailbox in self.resets.lock().expect("router is not poisoned").drain(..) {
+            mailbox.close();
         }
     }
 

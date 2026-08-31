@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use fava_relay::{AuthenticationState, BoundedText};
-use fava_transport::{HandoffOutcome, RelaySession};
+use fava_transport::RelaySession;
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -168,30 +168,46 @@ pub(super) async fn authenticate(
         }
     };
 
-    let event_id = signed.id;
-    match session.auth(signed).await {
-        HandoffOutcome::HandedOff { .. } => {
-            authenticator
-                .lock()
-                .awaiting_ok
-                .insert(identity.key.clone(), event_id);
-            authenticator.record(identity, AuthenticationState::Attempted);
-        }
-        HandoffOutcome::NotHandedOff { reason, .. } => {
+    let acknowledged = match fava_transport::RelaySessionExt::answer(session, signed).await {
+        Ok(handle) => handle,
+        Err(refused) => {
             authenticator.record(
                 identity,
                 AuthenticationState::Failed {
-                    reason: BoundedText::new(format!("{reason:?}")),
+                    reason: BoundedText::new(format!("{refused:?}")),
                 },
             );
+            return;
         }
-        HandoffOutcome::Ambiguous { reason, .. } => {
-            authenticator.record(
-                identity,
-                AuthenticationState::Failed {
-                    reason: BoundedText::new(format!("{reason:?}")),
-                },
-            );
-        }
-    }
+    };
+    authenticator.record(identity, AuthenticationState::Attempted);
+
+    // Await the verdict off to the side. Answering a challenge must not block
+    // the watch that reads them: a relay may challenge again before it answers,
+    // and a relay that never answers must not wedge the owner.
+    let owner = authenticator.clone();
+    let identity = identity.clone();
+    let token = authenticator.cancellation();
+    let _ = authenticator
+        .inner()
+        .runtime
+        .spawn_cancellable(crate::authenticator::VERDICT_TASK, token, async move {
+            let state = match acknowledged.settled().await {
+                fava_transport::Settlement::Accepted { .. } => AuthenticationState::Accepted,
+                fava_transport::Settlement::Rejected { message } => {
+                    if matches!(
+                        nostr::message::MachineReadablePrefix::parse(message.as_str()),
+                        Some(nostr::message::MachineReadablePrefix::Restricted)
+                    ) {
+                        AuthenticationState::AcceptedButStillRefused { message }
+                    } else {
+                        AuthenticationState::Rejected { message }
+                    }
+                }
+                // The connection that carried the proof is gone, so the proof
+                // is void. The next connection challenges again.
+                fava_transport::Settlement::Ended(_) => return,
+            };
+            owner.record(&identity, state);
+        });
 }

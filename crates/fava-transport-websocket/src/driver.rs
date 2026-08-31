@@ -78,6 +78,7 @@ pub(crate) async fn drive(
                 socket = next;
                 backoff.reset();
                 let (previous, identity) = shared.identity.advance(generation);
+                shared.router.reconnected(&identity);
                 shared
                     .consumers
                     .fan_out(&RelayInbound::Reconnected { previous, identity });
@@ -100,6 +101,7 @@ pub(crate) async fn drive(
         }
     }
     shared.closed.store(true, Ordering::SeqCst);
+    shared.router.close();
     shared.consumers.detach_all();
     shared.close_finished.notify_waiters();
 }

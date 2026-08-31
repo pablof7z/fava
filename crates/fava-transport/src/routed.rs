@@ -315,11 +315,20 @@ pub trait RelaySessionExt {
     /// Answer one NIP-42 challenge and await the relay's verdict on it alone.
     fn answer(&self, event: nostr::event::Event) -> PublishFuture<'_>;
 
+    /// Read this session's connection resets.
+    ///
+    /// A lease holder that owns no subscription and no outstanding
+    /// acknowledgement still needs to know its connection was replaced: what it
+    /// proved to the relay, and anything it parked awaiting an answer, belonged
+    /// to the connection that died. So this is a fact about the session, not a
+    /// footnote on some other stream.
+    fn resets(&self) -> std::sync::Arc<crate::Mailbox<crate::RelaySessionIdentity>>;
+
     /// Read the relay's authentication challenges.
     ///
     /// A challenge is correlated to nothing a component sent, and exactly one
     /// component owns it, so it has its own reader rather than a claim.
-    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<BoundedText>>;
+    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<String>>;
 }
 
 /// Outcome of opening one subscription: the handle, or why no frame left.
@@ -395,7 +404,11 @@ impl RelaySessionExt for std::sync::Arc<dyn crate::RelaySession> {
         })
     }
 
-    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<BoundedText>> {
+    fn challenges(&self) -> std::sync::Arc<crate::Mailbox<String>> {
         self.router().read_challenges(self.inbound_capacity())
+    }
+
+    fn resets(&self) -> std::sync::Arc<crate::Mailbox<crate::RelaySessionIdentity>> {
+        self.router().read_resets(self.inbound_capacity())
     }
 }

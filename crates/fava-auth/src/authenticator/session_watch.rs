@@ -6,9 +6,8 @@ use std::time::Duration;
 
 use fava_relay::{AuthenticationState, BoundedText, RelaySessionKey};
 use fava_transport::{
-    OpenRelaySession, RelayInbound, RelaySession, TransportBounds, TransportDeadlines,
+    OpenRelaySession, RelaySession, TransportBounds, TransportDeadlines,
 };
-use fava_wire::{RelayMessage, decode_relay};
 
 use thiserror::Error;
 
@@ -61,7 +60,11 @@ impl Authenticator {
             .map_err(WatchError::Acquire)?;
         let identity = lease.acquired_identity().clone();
         let session = Arc::clone(lease.session());
-        let mut inbound = session.messages();
+        // This owner holds no subscription and publishes nothing, so it reads
+        // the two facts it actually needs: the relay's challenges, and whether
+        // its connection was replaced.
+        let challenges = fava_transport::RelaySessionExt::challenges(&session);
+        let resets = fava_transport::RelaySessionExt::resets(&session);
 
         {
             let mut guard = self.lock();
@@ -74,9 +77,21 @@ impl Authenticator {
             .inner()
             .runtime
             .spawn_cancellable(WATCH_TASK, token, async move {
-                while let Ok(item) = inbound.next_inbound().await {
-                    if owner.admit(&item, &session).await.is_break() {
+                loop {
+                    let asked = challenges.notified();
+                    let reset = resets.notified();
+                    while let Some(text) = challenges.take() {
+                        owner.challenged(&session, &text).await;
+                    }
+                    while let Some(current) = resets.take() {
+                        owner.connection_reset(&current);
+                    }
+                    if challenges.is_closed() && resets.is_closed() {
                         break;
+                    }
+                    tokio::select! {
+                        () = asked => {}
+                        () = reset => {}
                     }
                 }
                 let _ = lease.release().await;
@@ -85,96 +100,35 @@ impl Authenticator {
         spawned.map(|_| ()).map_err(WatchError::Register)
     }
 
-    /// Handle one inbound item. Breaking ends the watch.
-    async fn admit(
-        &self,
-        item: &RelayInbound,
-        session: &Arc<dyn RelaySession>,
-    ) -> std::ops::ControlFlow<()> {
-        match item {
-            RelayInbound::Frame {
-                identity, frame, ..
-            } => {
-                let Ok(text) = std::str::from_utf8(frame) else {
-                    return std::ops::ControlFlow::Continue(());
-                };
-                let Ok(message) = decode_relay(text) else {
-                    return std::ops::ControlFlow::Continue(());
-                };
-                match message {
-                    RelayMessage::Auth { challenge } => match Challenge::new(challenge.as_ref()) {
-                        Ok(challenge) => {
-                            self.resolve(identity.clone(), challenge, session).await;
-                        }
-                        Err(error) => {
-                            self.record(
-                                identity,
-                                AuthenticationState::Failed {
-                                    reason: BoundedText::new(error.to_string()),
-                                },
-                            );
-                        }
+    /// One challenge the relay sent on this session's current connection.
+    async fn challenged(&self, session: &Arc<dyn RelaySession>, text: &str) {
+        let identity = session.identity();
+        match Challenge::new(text) {
+            Ok(challenge) => {
+                let _ = self.resolve(identity, challenge, session).await;
+            }
+            Err(error) => {
+                self.record(
+                    &identity,
+                    AuthenticationState::Failed {
+                        reason: BoundedText::new(error.to_string()),
                     },
-                    RelayMessage::Ok {
-                        event_id,
-                        status,
-                        message,
-                    } => self.verdict(identity, &event_id, status, message.as_ref()),
-                    _ => {}
-                }
-                std::ops::ControlFlow::Continue(())
-            }
-            RelayInbound::Reconnected { identity, .. } => {
-                let signal = {
-                    let mut guard = self.lock();
-                    guard.entry(&identity.key).reconnected(identity.generation);
-                    guard.awaiting_ok.remove(&identity.key);
-                    guard.drop_deferred_before(&identity.key, identity.generation)
-                };
-                if signal {
-                    self.signal();
-                }
-                std::ops::ControlFlow::Continue(())
-            }
-            RelayInbound::ReconnectExhausted { .. } => std::ops::ControlFlow::Break(()),
-            RelayInbound::Disconnected { .. } | RelayInbound::Lost { .. } => {
-                std::ops::ControlFlow::Continue(())
+                );
             }
         }
     }
 
-    /// Classify the relay's `OK` for a challenge response we sent.
-    fn verdict(
-        &self,
-        identity: &fava_transport::RelaySessionIdentity,
-        event_id: &fava_write::EventId,
-        status: bool,
-        message: &str,
-    ) {
-        let ours = {
-            let guard = self.lock();
-            guard.awaiting_ok.get(&identity.key) == Some(event_id)
+    /// The connection was replaced. Everything proved to the relay, and every
+    /// question parked awaiting a person, belonged to the connection that died.
+    fn connection_reset(&self, current: &fava_transport::RelaySessionIdentity) {
+        let signal = {
+            let mut guard = self.lock();
+            guard.entry(&current.key).reconnected(current.generation);
+            guard.drop_deferred_before(&current.key, current.generation)
         };
-        if !ours {
-            return;
+        if signal {
+            self.signal();
         }
-        self.lock().awaiting_ok.remove(&identity.key);
-
-        let state = if status {
-            AuthenticationState::Accepted
-        } else if matches!(
-            nostr::message::MachineReadablePrefix::parse(message),
-            Some(nostr::message::MachineReadablePrefix::Restricted)
-        ) {
-            AuthenticationState::AcceptedButStillRefused {
-                message: BoundedText::new(message),
-            }
-        } else {
-            AuthenticationState::Rejected {
-                message: BoundedText::new(message),
-            }
-        };
-        self.record(identity, state);
     }
 }
 

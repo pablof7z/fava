@@ -9,6 +9,7 @@ nostr.workspace = true
 fava-relay.workspace = true
 fava-state.workspace = true
 fava-transport.workspace = true
+fava-wire.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 
 [dev-dependencies]
