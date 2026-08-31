@@ -2,7 +2,6 @@ Feature: Multi-relay reactivity and bounded observation
 
   # fava:id=QUERY-MULTI-001
   # fava:status=built
-  # fava:evidence=canary:multi-relay-dedup-provenance
   # fava:evidence=rust:fava::duplicate_event_merges_only_actual_serving_relays
   # fava:falsifier=Credit every relay named by the Query; the third non-serving relay makes this scenario fail.
   @acceptance @real-relay
@@ -15,7 +14,6 @@ Feature: Multi-relay reactivity and bounded observation
 
   # fava:id=QUERY-RECONNECT-001
   # fava:status=built
-  # fava:evidence=canary:reconnect-generation
   # fava:evidence=rust:fava::reconnect_uses_fresh_identity_and_rejects_old_subscription_frames
   # fava:falsifier=Accept an EVENT using any known filter instead of the current subscription attribution; the injected old-subscription event enters the cache and this scenario fails.
   @acceptance @real-relay
@@ -29,7 +27,6 @@ Feature: Multi-relay reactivity and bounded observation
 
   # fava:id=OBSERVATION-BOUNDS-001
   # fava:status=built
-  # fava:evidence=canary:slow-consumer-latest-state
   # fava:evidence=rust:fava::cancelled_pulls_and_large_burst_deliver_one_exact_latest_state
   # fava:falsifier=Replace the watch boundary with an unbounded update queue; retained work grows with the burst and this scenario fails its bounded-delivery contract.
   @acceptance

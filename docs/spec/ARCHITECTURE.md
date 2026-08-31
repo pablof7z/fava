@@ -3902,7 +3902,7 @@ fava-publisher-testkit
 fava-signer-testkit
 ```
 
-The relay-lab role — real third-party relay process fixtures, wire evidence, and reconstructable run artifacts — is owned by the external `apps/canary` application, not a workspace crate. The canary is the independent relay-lab; no `fava-relay-lab` crate is created.
+The relay-lab role — real third-party relay process fixtures, wire evidence, and reconstructable run artifacts — is owned by an external downstream application, not a workspace crate; no `fava-relay-lab` crate is created.
 
 Each conformance kit is versioned with its contract and can be used by external provider crates.
 

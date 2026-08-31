@@ -59,24 +59,27 @@ verification document said so.
 ## Validated Baseline
 
 M0 was the independent-witness milestone. Its five claims are **all unchecked as of 2026-08-23**: the
-evidence audit established that `apps/canary/runs/` is line 3 of `.gitignore`, holds zero tracked
-bundles, and that `apps/canary/README.md:3-5` declares the canary must not depend on Fava internal
-crates while it links nine of them and uses them to *be* the client engine.
+evidence audit established that the downstream acceptance application's `runs/` directory was line 3
+of `.gitignore`, held zero tracked bundles, and that the application's own README declared it must
+not depend on Fava internal crates while it linked nine of them and used them to *be* the client
+engine. That application has since been removed from the repository entirely (2026-08-31); M0 remains
+unchecked and there is now no independent-witness application to re-establish it.
 
-- [ ] **M0-01**: An ordinary canary can publish and query a genuinely signed event through real WebSocket frames against a third-party relay process.
+- [ ] **M0-01**: An ordinary downstream acceptance application can publish and query a genuinely signed event through real WebSocket frames against a third-party relay process.
   *Reset: the run bundle proving it is git-ignored and absent from disk; the claim is unreconstructable from a fresh checkout.*
-- [ ] **M0-02**: The canary can hard-kill and restart the relay against the same data directory and independently prove the event remains queryable.
+- [ ] **M0-02**: The acceptance application can hard-kill and restart the relay against the same data directory and independently prove the event remains queryable.
   *Reset: same — no retained evidence, and no automated process has ever executed the scenario.*
 - [ ] **M0-03**: Every M0 assertion is reconstructable from bounded process, wire, manifest, report, and JSONL evidence under one run identity.
-  *Reset: falsified directly — listing the canary run directory returns only `phase-07.1.1-pair.*`; every M0-M6 bundle is absent.*
+  *Reset: falsified directly — listing the acceptance application's run directory returned only `phase-07.1.1-pair.*`; every M0-M6 bundle was absent.*
 - [ ] **M0-04**: Enabled evidence scenarios fail on unavailable prerequisites or scenario errors and never silently skip.
-  *Reset: 18 canary scenarios are marked `built` but are CLI-only and unreachable from the workspace test runner; nothing runs them.*
-- [ ] **M0-05**: The canary proves M0 without depending on Fava implementation crates.
-  *Reset: falsified — the canary links nine Fava internal crates and hard-codes `result_equivalence: true` into its retained manifest.*
+  *Reset: 18 scenarios were marked `built` but were CLI-only and unreachable from the workspace test runner; nothing ran them.*
+- [ ] **M0-05**: The acceptance application proves M0 without depending on Fava implementation crates.
+  *Reset: falsified — the application linked nine Fava internal crates and hard-coded `result_equivalence: true` into its retained manifest.*
 
 M0 is a prerequisite baseline, not an active roadmap phase. Its requirements are unchecked, not
-deleted: re-establishing an independent witness is a precondition for any later verdict, because
-Fava cannot be its own witness for wire, process, relay, storage, or native facts.
+deleted: re-establishing an independent witness — currently absent from the repository — is a
+precondition for any later verdict, because Fava cannot be its own witness for wire, process, relay,
+storage, or native facts.
 
 ---
 
@@ -180,7 +183,7 @@ owner moving is a test failure, not a review opinion.**
   **Falsifier (named):** `only_fava_ingest_commits_relay_derived_cache_mutations` plus `cache_refuses_fabricated_relay_evidence`. *Fails today: `.planning/codebase/CONCERNS.md:44` records that the event-cache mutation contract exposes an admission bypass through which a consuming application or provider can create query-visible signed state with fabricated relay evidence - a defect that six passed verdicts graded as `LOCAL-02 SATISFIED`.*
   **Phase:** 2.
 - [ ] **OWN-07** *(ledger row: NIP-42 challenge lifecycle - `ARCHITECTURE.md:2924`)*: `fava-auth` **exclusively** owns the NIP-42 challenge lifecycle, per access context and per session generation. Authentication identity is a distinct value from event author, current account, query authors, signer selection, and routing, even where one `with_account` selection supplies several of them; a payload carrying its own author keeps it. Denial for one access context terminates only its exact operation and blocks no other account.
-  **Falsifier (named):** `nip42_challenge_state_lives_only_in_fava_auth` plus `auth_denied_for_one_access_context_leaves_another_running`. *Fails today: `fava-auth` does not exist, HARD-01 names no owner, and the only NIP-42 reference in the repository is `apps/canary/src/relay.rs:223 nip42_auth = false` - a scenario that is green because nothing happens.*
+  **Falsifier (named):** `nip42_challenge_state_lives_only_in_fava_auth` plus `auth_denied_for_one_access_context_leaves_another_running`. *Fails today: `fava-auth` does not exist, HARD-01 names no owner, and the only NIP-42 reference in the repository was in the downstream acceptance application (`nip42_auth = false`) - a scenario that was green because nothing happened.*
   **Phase:** 8.
 - [ ] **OWN-08** *(the ledger itself - `ARCHITECTURE.md:2936`: "Adding mutable state requires naming its owner and consumers")*: **Every row** of `ARCHITECTURE.md` Part IX names exactly one owner that **exists as a crate**, and has exactly one owning requirement in this file. An executable ownership audit (`ARCHITECTURE.md` Part XII **Falsifier N**) runs at **every milestone gate**, not only at Phase 10.
   **Falsifier (named):**
@@ -264,10 +267,10 @@ Registered 2026-08-23. Phase 07.1 shipped nine requirements it called `R1`-`R9`.
 in no registry**: `.planning/ROADMAP.md:243` listed them, `07.1-VERIFICATION.md:11` graded all nine
 `VERIFIED`, and they appeared nowhere in this file. Nine requirements were delivered, verified, and
 closed entirely outside the requirement corpus. They are hereby resolved by registration under real
-IDs, and they are **unchecked**: the sole external witness for all nine verdicts,
-`apps/canary/runs/phase-07.1-pair.9EyxBY`, does not exist on disk, its parent path is ignored by
-version control, and the pair was produced by the phase's own Plan 12 rather than replayed by the
-verifier. The identifiers `R1`-`R9` are void and must not be used again.
+IDs, and they are **unchecked**: the sole external witness for all nine verdicts — a run bundle in
+the downstream acceptance application's `runs/` directory — does not exist on disk, its parent path
+is ignored by version control, and the pair was produced by the phase's own Plan 12 rather than
+replayed by the verifier. The identifiers `R1`-`R9` are void and must not be used again.
 
 - [ ] **NIP02-01** *(was R1)*: One universal synchronous publication door accepts every sealed payload form and returns the application `Write`; acceptance validates, reserves, applies, applies the initial route, and durably commits before any asynchronous publication starts.
 - [ ] **NIP02-02** *(was R2)*: Typed signer and relay scopes are borrowed, must-use, and inert until publish; both composition orders work, selections are frozen at publish, and an invalid or abandoned scope has no effect.
@@ -286,7 +289,7 @@ Phase 07.1.1's verdict is revoked. It has **no `VERIFICATION.md` at all** - ever
 phase has one. Its only requirement-level verdict is `07.1.1-VALIDATION.md`, which the executing
 plan (`07.1.1-12-SUMMARY.md`) lists among its own modified files: the plan wrote its own pass marks.
 Its `COVERAGE.md` is one sentence claiming "no external API integration" for a phase whose GROUP-12
-requires a controlled two-relay public canary. **Eighty-four changes landed after the completion
+requires a controlled two-relay public acceptance run. **Eighty-four changes landed after the completion
 mark**, including behavioral fixes to GROUP-04, GROUP-07, GROUP-08, and GROUP-10, with no
 re-verification. `HANDOFF.json:9` still records the phase as `paused`, with "Execute, review, verify,
 and complete Phase 07.1.1" listed `not_started`.
@@ -302,7 +305,7 @@ and complete Phase 07.1.1" listed `not_started`.
 - [ ] **GROUP-09**: NIP-29 records, pins, saved groups, and saved relays have typed bounded parsers/projections so applications do not decode raw protocol tags.
 - [ ] **GROUP-10**: Saved/admin/member discovery returns ordinary `Query` or `ValueSet` expressions; kind-10009 saved-list changes use the ordinary semantic-edit lifecycle.
 - [ ] **GROUP-11**: `fava-simple-groups` owns no observation, store, signer, router session, publisher, delivery, retry, receipt, runtime, or transport lifecycle, and universal owners contain no NIP-29 behavior switch.
-- [ ] **GROUP-12**: Pure tests and a controlled two-relay public canary prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
+- [ ] **GROUP-12**: Pure tests and a controlled two-relay public acceptance run prove bounds, fork visibility, exact provenance, arbitrary-kind publication, cancellation, close, and one exact handoff per selected host.
 
 ### Runtime Signer Lifecycle
 
@@ -389,7 +392,7 @@ Every v1 requirement is complete only when:
 5. A public Fava capstone proves any additional facade, process, relay, persistence, or platform boundary.
 6. Independent wire, process, relay, storage, or native evidence exists wherever Fava cannot be its own witness, and that evidence is **tracked in the repository**, not written to an ignored path.
 7. Failure, cancellation, late completion, teardown, diagnostics, and resource bounds are exact and attributable.
-8. Contract, provider-conformance, profile, canary, and ownership documentation is current.
+8. Contract, provider-conformance, profile, acceptance, and ownership documentation is current.
 9. The complete scoped validation set passes **in continuous integration**, and the implementation is committed.
 10. *(added 2026-08-23)* The requirement's text predates the implementation it grades, it carries a `Spec basis` row in the traceability matrix below, and no clause of that spec requirement is dropped or loosened in the mapped wording.
 11. *(added 2026-08-23)* The proof does not consume a fact supplied by its own fixture, and it can distinguish a correct implementation from the current one.
@@ -397,7 +400,8 @@ Every v1 requirement is complete only when:
 Gate 10 exists because the previous corpus failed it for all 66 M1-M6 requirements. Gate 11 exists
 because 39 of the 131 spec requirements have evidence that cannot tell a correct implementation from
 the shipped one. Gate 9's "in continuous integration" clause exists because CI runs
-`tools/check_vocabulary.py` and nothing else - no build, no test, no clippy, no falsifier, no canary.
+`tools/check_vocabulary.py` and nothing else - no build, no test, no clippy, no falsifier, no
+acceptance run.
 Three hundred and six tests pass in this repository and no automated process has ever run them.
 Every green result in its history is a result somebody chose to run, on a machine they chose, at a
 moment they chose, and then described in a document.
@@ -686,7 +690,7 @@ marked complete.
 
 | ID | Reset reason |
 |---|---|
-| M0-01 … M0-05 | Every cited external bundle is written to an ignored path and is absent from disk; the canary that was to be the independent witness links nine Fava internal crates and hard-codes its own equivalence verdict into the manifest it retains. |
+| M0-01 … M0-05 | Every cited external bundle is written to an ignored path and is absent from disk; the acceptance application that was to be the independent witness linked nine Fava internal crates and hard-coded its own equivalence verdict into the manifest it retained. It has since been removed from the repository entirely. |
 
 ### Phantom requirements resolved
 

@@ -1,12 +1,10 @@
 # id: LAB-REAL-RELAY-001
 # requirement: M0 evidence prerequisite
-# status: built
-# evidence:
-#   - apps/canary/src/lib.rs
-#   - apps/canary/src/wire.rs
-#   - apps/canary/src/proxy.rs
+# status: needs re-proof — evidence lived entirely in the downstream acceptance
+#   application, which was removed from the repository on 2026-08-31
+# evidence: none currently in-repo; requires a real third-party relay process
+#   fixture (previously provided by the removed downstream acceptance application)
 # falsifier: restart generation two with a fresh data directory; the post-restart query reaches EOSE without the event and the scenario fails
-# canary: lab-real-relay-smoke
 
 Feature: Relay behavior is witnessed independently of Fava
 
@@ -14,7 +12,7 @@ Feature: Relay behavior is witnessed independently of Fava
 
     Scenario: A signed event remains queryable after relay process death
       Given a fresh third-party relay process with isolated durable storage
-      When the canary publishes a genuinely signed event through a transparent proxy
+      When the fixture publishes a genuinely signed event through a transparent proxy
       Then the relay acknowledges that exact event
       And an exact query returns the event followed by EOSE
       When the relay is hard-killed and restarted with the same storage

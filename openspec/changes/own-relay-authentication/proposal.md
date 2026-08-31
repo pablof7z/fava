@@ -25,7 +25,7 @@ Writes are no better. `fava-routing::RouteRequest::access()` hardcodes `RelayAcc
 - Bound the relay challenge. It arrives as `nostr::message::RelayMessage::Auth { challenge: Cow<'a, str> }` with no length limit; `fava-auth` accepts it through a `Challenge` type that refuses rather than truncates.
 - Bound re-authentication. Mid-connection re-challenge is permitted by the spec and observed in deployment, so attempts per session generation are capped.
 - Re-authenticate after reconnect. A reconnect mints a new transport generation with no memory of a prior `AUTH`, and nothing re-authenticates today.
-- Delete `Nip42Publisher` once `apps/canary` proves the handshake against `communities-relay` through `fava-auth`. That canary assertion is the only real-relay NIP-42 evidence in the repository and must not lapse.
+- Delete `Nip42Publisher` once the NIP-42 handshake is proven against a real relay (`communities-relay`) through `fava-auth`. That real-relay assertion is the only real-relay NIP-42 evidence in the repository and must not lapse. It previously lived in the downstream acceptance application, which was removed from the repository on 2026-08-31 before the proof was migrated (task 6.1 below was never completed); there is currently no in-repo mechanism to produce this evidence, and `Nip42Publisher` must not be deleted until a replacement one exists.
 - Hold a publication attempt whose session has a deferred demand instead of recording `AuthenticationDenied` at `crates/fava-publication/src/delivery.rs:196`. A write must not fail while its dialog is still open.
 - Rename the four `schema_v4_*` write-store tests. They mutate rows in the current schema and assert reconstruction refuses them; the prefix wrongly suggests they test an old schema version.
 
@@ -52,7 +52,7 @@ Moved public API: `AuthenticationState` and `BoundedText` now live in `fava-rela
 
 Changed persisted format: redb write-store schema 5. Stores written by earlier builds refuse to open.
 
-Removed: `Nip42Publisher` and its `build_auth_event`, after the canary proof moves.
+Removed: `Nip42Publisher` and its `build_auth_event`, after the real-relay proof moves to `fava-auth`.
 
 `fava-observe` stops decoding `RelayMessage::Auth` and reports authentication state from the owner's outcomes, gaining every reachable state without learning the protocol.
 

@@ -55,7 +55,7 @@
     },
     {
       "branch": "worktree-agent-adeb07cd770edf371",
-      "work": "canary teardown, remove every workaround",
+      "work": "downstream acceptance application teardown, remove every workaround",
       "merged": false
     }
   ],

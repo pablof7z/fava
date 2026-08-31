@@ -2,7 +2,6 @@ Feature: Explicit one-relay live query
 
   # fava:id=QUERY-LIVE-001
   # fava:status=built
-  # fava:evidence=canary:explicit-read-eose
   # fava:evidence=rust:fava::explicit_live_query_attributes_event_eose_and_exact_cancellation
   # fava:falsifier=Treat silence or a local timeout as EOSE; the diagnostics and proxy no longer agree and this scenario fails.
   @acceptance @real-relay
@@ -15,7 +14,6 @@ Feature: Explicit one-relay live query
 
   # fava:id=QUERY-LIVE-002
   # fava:status=built
-  # fava:evidence=canary:explicit-read-live-after-eose
   # fava:falsifier=Terminate relay demand at EOSE; the later matching event never reaches the open Query and this scenario fails.
   @acceptance @real-relay
   Scenario: A matching live event arrives after EOSE
@@ -25,7 +23,6 @@ Feature: Explicit one-relay live query
 
   # fava:id=QUERY-LIVE-003
   # fava:status=built
-  # fava:evidence=canary:explicit-read-cancel
   # fava:evidence=rust:fava::explicit_live_query_attributes_event_eose_and_exact_cancellation
   # fava:falsifier=Drop the cancellation branch before sending CLOSE; the proxy never witnesses exact withdrawal and this scenario fails.
   @acceptance @real-relay
@@ -39,8 +36,7 @@ Feature: Explicit one-relay live query
   # fava:id=INGEST-001
   # fava:status=built
   # fava:evidence=rust:fava-ingest::forged_wrong_subscription_and_off_filter_events_never_enter_the_cache
-  # fava:evidence=canary:explicit-read-eose
-  # fava:falsifier=Bypass event verification throughout relay admission; the hostile witness makes the forged event visible and the canary fails.
+  # fava:falsifier=Bypass event verification throughout relay admission; the hostile witness makes the forged event visible and the scenario fails.
   @acceptance
   Scenario: Only attributed verified matching relay events enter query state
     Given a relay sends a forged, off-filter, or wrong-subscription EVENT

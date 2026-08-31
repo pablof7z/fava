@@ -9,8 +9,8 @@ These documents are the authoritative inputs for the clean-room rewrite:
 5. `partial-spec-api-semantics.md` refines the Rust reactive-query surface and relay-source semantics where it does not conflict with the complete authorities.
 
 They were imported from the documents supplied by Pablo on 2026-08-20.
-Implementation status belongs in focused issues, the canary registry, and
-feature evidence, not in these source documents.
+Implementation status belongs in focused issues and feature evidence, not in
+these source documents.
 
 Architectural concepts, public Rust symbols, and crate names used by these
 documents are defined where they are implemented. Symbol Gate signs the public

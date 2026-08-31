@@ -13,8 +13,6 @@ delivers immediately to known relays while discovery remains unresolved,
 records exact per-relay receipts, supports pre-handoff cancellation, and
 resumes accepted work after process death.
 
-The ordinary downstream acceptance application lives at [apps/canary](apps/canary).
-
 ## Specifications
 
 The authoritative inputs live in [docs/spec](docs/spec/README.md). Architectural

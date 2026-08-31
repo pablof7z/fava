@@ -14,7 +14,7 @@ Fava uses both TDD and BDD, but they serve different purposes:
 - **BDD preserves durable product meaning.** It records the app-visible distinctions that must survive rewrites.
 - **TDD drives implementation.** It starts with a failing executable proof at the smallest owner responsible for the behavior, then implements the smallest change that makes it pass.
 
-A feature file is not automatically an executable test. A test is not automatically a product specification. The canary is not the first or only proof. Each artifact has one job.
+A feature file is not automatically an executable test. A test is not automatically a product specification. The downstream acceptance application is not the first or only proof. Each artifact has one job.
 
 ## 2. One home for each kind of truth
 
@@ -25,7 +25,7 @@ A feature file is not automatically an executable test. A test is not automatica
 | Why responsibilities and crates are split | `ARCHITECTURE.md` |
 | What work remains | GitHub issues |
 | Proof that behavior works | executable tests at the owning layer |
-| Proof that an ordinary app can use it | Rust canary and platform capstones |
+| Proof that an ordinary app can use it | Rust acceptance application and platform capstones |
 
 Do not copy the same rule into several places. Link instead.
 
@@ -111,7 +111,7 @@ The mutation may be a local patch, a test-only seam owned by the responsible cra
 
 ### 3.7 Add the public capstone only when it proves something additional
 
-Add or enable a public-API/system/canary scenario when the behavior crosses boundaries or makes a promise to ordinary applications.
+Add or enable a public-API/system/acceptance scenario when the behavior crosses boundaries or makes a promise to ordinary applications.
 
 The capstone proves that the pieces compose. It does not replace owner, property, model, crash, or protocol tests.
 
@@ -124,7 +124,7 @@ proves ordered exact `h` tags while preserving its concrete `EventBuilder`; and
 the Fava publication door proves route selection and dual-route refusal before
 signing or custody. A restart proof must retain the exact accepted route.
 
-A controlled relay canary is additionally required: publish one signed event
+A controlled relay acceptance run is additionally required: publish one signed event
 with two exact group contexts through the selected route union, query each
 context independently, and record the same event id and signature with actual
 serving-relay evidence. A relay acknowledgement alone never proves independent
@@ -177,7 +177,6 @@ Recommended header:
 # evidence:
 #   - crates/fava-routing/tests/partial_progress.rs
 #   - crates/fava/tests/automatic_route_expansion.rs
-# canary: async-route-expansion
 
 Feature: Automatic routing can make progress before all knowledge settles
 
@@ -200,7 +199,7 @@ Allowed statuses:
 - **built** — named executable evidence exists and has been run;
 - **known-violation** — current behavior contradicts the specification; link the owning issue.
 
-A runner is optional. The feature remains the readable behavior memory; executable evidence may live in owner tests, model tests, public API tests, the deterministic relay lab, or the canary.
+A runner is optional. The feature remains the readable behavior memory; executable evidence may live in owner tests, model tests, public API tests, the deterministic relay lab, or a downstream acceptance application.
 
 ## 6. Scenario-writing rules
 
@@ -267,7 +266,7 @@ Put proof in the smallest stable component responsible for it.
 | Scripted relay | malformed frames, exact wire races, stale responses, auth timing, limits |
 | Public Rust API | complete deterministic query/write promise through the supported facade |
 | Real local relay lab | interoperability, real sockets/processes, relay persistence, NIP-42/NIP-11 behavior |
-| Rust canary | ordinary app usability, complete flows, restart/crash/resource behavior |
+| Rust acceptance application | ordinary app usability, complete flows, restart/crash/resource behavior |
 | Native capstone | SDK cancellation, process lifecycle, packaging, parity |
 | Public-relay mode | reconnaissance only; never the sole correctness oracle |
 
@@ -415,7 +414,7 @@ A trait with one implementation is not evidence of substitutability.
 2. Add the smallest failing owner/property/model test.
 3. Implement the vertical slice.
 4. Add provider conformance where a contract is introduced.
-5. Add or enable the milestone canary scenario.
+5. Add or enable the milestone acceptance scenario.
 6. Perform the named mutation.
 
 ### 12.3 Refactor with no intended behavior change
@@ -452,7 +451,7 @@ A milestone exits only when:
 - behavior text is accurate;
 - focused evidence passes;
 - the named mutation fails the evidence;
-- the canary scenario passes where one is required;
+- the acceptance scenario passes where one is required;
 - unimplemented specified behavior remains explicitly marked and issue-owned; and
 - no unexecuted scenario appears built.
 
@@ -512,7 +511,7 @@ Reject these:
 - several copies of the same test at different layers;
 - a line/count/grep gate presented as behavioral proof;
 - a conformance trait stabilized before a second implementation challenges it;
-- a canary helper that conceals an awkward or missing public Fava API; and
+- an acceptance-application helper that conceals an awkward or missing public Fava API; and
 - a green test that was never shown to fail when its protection was removed.
 
 ## 16. Minimal evidence record for a PR

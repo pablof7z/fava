@@ -7,18 +7,6 @@ name: Architecture
 #
 # Not covered here, and deliberately named rather than silently omitted:
 #
-#   * The canary SCENARIO corpus (`apps/canary/scenarios.json`: 28 enabled
-#     scenarios plus one reconnaissance scenario). Every one of them starts a
-#     real third-party relay process and fails closed when the prerequisite is
-#     missing — they never skip. `lab-real-relay-smoke` and the M1-M7 scenarios
-#     need the pinned `nostr-rs-relay` 0.8.12 executable; the two
-#     `croissant-*-public-flow` scenarios additionally need a local Croissant
-#     source checkout and a sealed, attested Fava build produced by
-#     `launch-croissant-simple-groups`. `public-relay-recon` reaches a public
-#     relay over the network. None of that is reproducible on a hosted runner,
-#     so scenario evidence stays a local, operator-run gate. What CI does run is
-#     the canary's own Rust test corpus and `canary list`, which proves the
-#     scenario registry parses and the binary builds.
 #   * `bazel test //...`, `--config=clippy`, and `--config=fmt-check`. `.bazelrc`
 #     calls Bazel the authoritative build; it is not yet wired into CI and needs
 #     a runner cache strategy first.
@@ -82,8 +70,6 @@ jobs:
       # Cargo.toml `[workspace.lints]`.
       - name: Clippy workspace
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Clippy canary
-        run: cargo clippy --manifest-path apps/canary/Cargo.toml --all-targets --locked -- -D warnings
       # Both falsifier lock files are current and both are checked with
       # `--locked`, so dependency drift in a standalone falsifier workspace is a
       # CI failure rather than a silent re-resolve. Do not drop `--locked` to get
@@ -112,30 +98,6 @@ jobs:
         run: cargo test --manifest-path falsifiers/external-null-cache/Cargo.toml --all-targets --locked
       - name: External semantic-capability proof
         run: cargo test --manifest-path falsifiers/external-semantic-capability/Cargo.toml --all-targets --locked
-
-  canary:
-    name: Canary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.90.0"
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - uses: Swatinem/rust-cache@v2
-      # The canary is a separate workspace, so `cargo test --workspace` above
-      # never reaches it. Its own Rust corpus runs headless.
-      - name: Test canary
-        run: cargo test --manifest-path apps/canary/Cargo.toml --all-targets --locked
-      - name: Test canary tooling
-        run: python3 -m unittest discover --start-directory apps/canary/tools --pattern "test_*.py"
-      # Proves the scenario registry parses and the executable builds. Running a
-      # scenario needs a real relay process; see the note at the top of this
-      # file.
-      - name: List canary scenarios
-        run: cargo run --quiet --manifest-path apps/canary/Cargo.toml --locked -- list
 
   symbol-gate:
     name: Symbol Gate

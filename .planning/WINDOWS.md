@@ -27,7 +27,7 @@ last_updated: 2026-08-22T13:04:27.770Z
 | 10 | 07.1.1 | deviation | crates/fava-simple-groups/src/records.rs |  | Exposed bound-first source validation privately for lossless saved-list revision | open |  | 2026-08-22T11:51:14.417Z |  |
 | 11 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Split root-exact facade evidence to remain below the 800-line hard limit | open |  | 2026-08-22T11:51:14.508Z |  |
 | 12 | 07.1.1 | deviation | crates/fava/tests/simple_groups/saved.rs |  | Used distinct author coordinates for concurrent edit isolation evidence | open |  | 2026-08-22T11:51:14.603Z |  |
-| 13 | 07.1.1 | unrun-verify | apps/canary/src/artifacts.rs | 241 | Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md | open |  | 2026-08-22T13:04:27.770Z |  |
+| 13 | 07.1.1 | unrun-verify | (removed) downstream acceptance application `src/artifacts.rs` | 241 | Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md. The referenced file was deleted with the downstream acceptance application on 2026-08-31; this window needs a human decision on whether it is now moot. | open |  | 2026-08-22T13:04:27.770Z |  |
 
 ````json
 [
@@ -179,9 +179,9 @@ last_updated: 2026-08-22T13:04:27.770Z
     "id": 13,
     "kind": "unrun-verify",
     "phase": "07.1.1",
-    "file": "apps/canary/src/artifacts.rs",
+    "file": "(removed) downstream acceptance application src/artifacts.rs",
     "line": 241,
-    "description": "Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md",
+    "description": "Plan 11 exact all-target strict Clippy is blocked by eight pre-existing warnings outside Plan 11 ownership; exact files and lints are in phase deferred-items.md. The referenced file was deleted with the downstream acceptance application on 2026-08-31; this window needs a human decision on whether it is now moot.",
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T13:04:27.770Z",

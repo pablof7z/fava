@@ -145,7 +145,7 @@ Attempts per generation are capped. Mid-connection re-challenge is permitted by 
 
 ## Risks / Trade-offs
 
-**The canary loses its only real-relay NIP-42 proof if `Nip42Publisher` is deleted first** → `apps/canary/src/phase_f.rs` asserts the `AUTH` challenge and kind-22242 response against `communities-relay`. The canary moves to `fava-auth` and passes before the publisher is removed, not after.
+**The only real-relay NIP-42 proof is lost if `Nip42Publisher` is deleted before a replacement exists** → the assertion of the `AUTH` challenge and kind-22242 response against `communities-relay` used to live in the downstream acceptance application's `src/phase_f.rs`; that application was removed from the repository on 2026-08-31 before the proof was migrated to `fava-auth`. A replacement real-relay proof must exist, move to `fava-auth`, and pass before the publisher is removed, not after.
 
 **A long-lived lease per authenticated relay holds a socket open** → the lease is released when no authenticated work remains for that key, and the session registry already refcounts holders.
 
@@ -161,7 +161,7 @@ Attempts per generation are capped. Mid-connection re-challenge is permitted by 
 
 No data migration. Schema 5 refuses a schema 4 store with an exact reason; the file is deleted.
 
-Ordering matters in one place: the canary proof moves to `fava-auth` and passes before `Nip42Publisher` is deleted.
+Ordering matters in one place: the real-relay proof moves to `fava-auth` and passes before `Nip42Publisher` is deleted.
 
 ## Open Questions
 

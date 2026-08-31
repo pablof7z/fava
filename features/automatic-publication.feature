@@ -2,7 +2,6 @@ Feature: Automatic write routing makes partial progress
 
   # fava:id=WRITE-AUTOMATIC-001
   # fava:status=built
-  # fava:evidence=canary:async-recipient-routing
   # fava:evidence=rust:fava::known_destinations_deliver_now_and_later_route_uses_same_receipt
   # fava:falsifier=Wait for every unresolved recipient before starting a lane; the first handoffs cannot precede the final relay-list publication.
   @acceptance @real-relay
@@ -30,7 +29,6 @@ Feature: Automatic write routing makes partial progress
 
   # fava:id=ROUTER-HINT-001
   # fava:status=built
-  # fava:evidence=canary:hint-routing
   # fava:evidence=rust:fava_router_hints::reference_hint_and_actual_relay_evidence_are_independent_reasons
   # fava:falsifier=Require outbox knowledge for referenced events; the justified target relay disappears from the plan.
   @acceptance @real-relay
@@ -42,7 +40,6 @@ Feature: Automatic write routing makes partial progress
 
   # fava:id=ROUTER-PREVIEW-001
   # fava:status=built
-  # fava:evidence=canary:route-preview-parity
   # fava:evidence=rust:fava::known_destinations_deliver_now_and_later_route_uses_same_receipt
   # fava:falsifier=Open live router acquisition during preview; a receipt, REQ, signer call, or EVENT appears before publish.
   @acceptance @real-relay
@@ -55,7 +52,6 @@ Feature: Automatic write routing makes partial progress
 
   # fava:id=ROUTER-PROFILE-001
   # fava:status=built
-  # fava:evidence=canary:app-relay-versus-fallback-profile
   # fava:falsifier=Move app-relay or fallback choice into core; the same assembly selection can no longer produce two plans.
   @acceptance @real-relay
   Scenario: Applications independently choose app-relay and fallback policies

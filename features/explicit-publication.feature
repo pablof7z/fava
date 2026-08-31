@@ -2,7 +2,6 @@ Feature: Durable explicit-route publication
 
   # fava:id=WRITE-EXPLICIT-001
   # fava:status=built
-  # fava:evidence=canary:explicit-publish-optimistic
   # fava:evidence=rust:fava::accepted_unsigned_event_is_visible_before_ok_and_cache_waits_for_echo
   # fava:falsifier=Insert the unsigned event into EventCache at acceptance; the cache-separation assertion fails before any relay echo.
   @acceptance @real-relay
@@ -15,7 +14,6 @@ Feature: Durable explicit-route publication
 
   # fava:id=WRITE-EXPLICIT-002
   # fava:status=built
-  # fava:evidence=canary:mixed-relay-outcomes
   # fava:evidence=rust:fava::mixed_relay_results_remain_exact_under_one_terminal_receipt
   # fava:falsifier=Collapse acknowledged, rejected, and definite pre-handoff failure into one success flag; exact outcome assertions fail.
   @acceptance @real-relay
@@ -27,7 +25,6 @@ Feature: Durable explicit-route publication
 
   # fava:id=WRITE-CANCEL-001
   # fava:status=built
-  # fava:evidence=canary:cancel-pre-handoff
   # fava:evidence=rust:fava::pre_handoff_cancel_retracts_query_and_is_idempotent_and_removable
   # fava:falsifier=Allow signing to continue into transport after cancellation; the wire records an EVENT and the scenario fails.
   @acceptance @real-relay

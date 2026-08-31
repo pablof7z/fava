@@ -2,7 +2,6 @@ Feature: Ordered asynchronous routing
 
   # fava:id=ROUTING-ASYNC-001
   # fava:status=built
-  # fava:evidence=canary:async-route-partial-read
   # fava:evidence=rust:fava::immediate_route_starts_before_delayed_router_and_preview_opens_nothing
   # fava:falsifier=Await a later contribution before using the immediate plan; Query open exceeds its deadline before the delayed router changes.
   @acceptance @real-relay
@@ -18,7 +17,6 @@ Feature: Ordered asynchronous routing
 
   # fava:id=ROUTING-EXPLICIT-001
   # fava:status=built
-  # fava:evidence=canary:explicit-route-bypass
   # fava:evidence=rust:fava::explicit_query_bypasses_every_automatic_router
   # fava:falsifier=Open the configured router chain for an explicit Query; router open counts and diagnostics become nonzero.
   @acceptance @real-relay
@@ -30,7 +28,6 @@ Feature: Ordered asynchronous routing
 
   # fava:id=ROUTING-FALLBACK-001
   # fava:status=built
-  # fava:evidence=canary:fallback-reacts
   # fava:evidence=rust:fava::fallback_retracts_when_upstream_coverage_arrives_without_restarting_other_relays
   # fava:falsifier=Freeze fallback at its initial contribution; its relay never receives CLOSE after upstream coverage becomes adequate.
   @acceptance @real-relay

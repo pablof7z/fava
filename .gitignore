@@ -1,6 +1,5 @@
 /target
 **/target
-apps/canary/runs/
 .DS_Store
 *.swp
 

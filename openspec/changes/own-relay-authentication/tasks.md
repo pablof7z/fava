@@ -45,7 +45,7 @@
 - [ ] 4.3 Remove `Query::with_relay_access` from the public surface and update every caller to select through `with_account`; verify a grep finds no remaining public use and the observe tests pass
 - [ ] 4.4 Delete `AuthorlessPayload` and let `with_account(...).publish(...)` accept an authored payload; verify a test publishes an event authored by one account under a selection naming another and asserts the event's author and the session's account differ as expected
 - [ ] 4.5 Refuse before acceptance when an authorless payload has no author to resolve; verify a test asserts an immediate typed refusal with no current account and no selection
-- [ ] 4.6 Update every call site of the removed verb across crates, tests, examples, and `apps/canary`; verify `cargo build --workspace --all-targets --locked` and the canary manifest build both succeed
+- [ ] 4.6 Update every call site of the removed verb across crates, tests, and examples; verify `cargo build --workspace --all-targets --locked` succeeds
 
 ## 5. Make the selected account durable
 
@@ -60,7 +60,7 @@
 
 ## 6. Retire `Nip42Publisher`
 
-- [ ] 6.1 Move the `apps/canary` phase-F gate onto `fava-auth`, keeping its assertions on the `AUTH` challenge and kind-22242 response wire frames against `communities-relay`; verify the gate passes against the real relay before anything is deleted
+- [ ] 6.1 Establish a real-relay proof owned by `fava-auth`, asserting the `AUTH` challenge and kind-22242 response wire frames against `communities-relay` — the phase-F gate that used to carry this assertion lived in the downstream acceptance application, which was removed from the repository on 2026-08-31 before this migration happened, so this proof currently has no home anywhere in the repository and needs a new harness; verify the gate passes against the real relay before anything is deleted
 - [ ] 6.2 Delete `Nip42Publisher` and its `build_auth_event` from `fava-publisher-nip01`, and update its crate doc line which still claims a NIP-42 variant; verify `cargo build --workspace --all-targets --locked` succeeds and no reference remains
 - [ ] 6.3 Confirm `Nip01Publisher` still reports `PublishOutcome::AuthenticationRequired` for a relay that returns `auth-required:` in an ordinary `OK`; verify the existing publisher test still passes
 - [ ] 6.4 Hold a publication attempt whose session has a deferred demand instead of recording `AuthenticationDenied` at `crates/fava-publication/src/delivery.rs:196`, waking it on the answer through the path a parked write already uses; verify a test asserts the receipt stays open while the demand is outstanding and completes after approval, alongside the existing WRITE-008 parked-write proof
@@ -68,7 +68,7 @@
 
 ## 7. Close the gates
 
-- [ ] 7.1 Run the full configured validation set — `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, `cargo test --workspace --doc --locked`, both external falsifiers, and the canary suite — and verify every one passes
+- [ ] 7.1 Run the full configured validation set — `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`, `cargo test --workspace --doc --locked`, both external falsifiers, and the real-relay NIP-42 proof from 6.1 — and verify every one passes
 - [ ] 7.2 Review every file this change touches against the 500-line soft and 800-line hard limits, splitting on real ownership boundaries; verify no touched file exceeds the hard limit
 - [ ] 7.3 Confirm the coherence findings hold: one lifecycle enum, one bounded-text type, one verb selecting an account, one component decoding authentication, and no `RelayAccess` duplicated as a second author; verify each with a grep or test named in the task that introduced it
 - [ ] 7.4 Sign the changed and added public declarations through Symbol Gate; verify `symbol-gate verify` accepts the result

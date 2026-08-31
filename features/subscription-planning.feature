@@ -2,7 +2,6 @@ Feature: Subscription planning preserves query meaning
 
   # fava:id=SUBSCRIPTION-GROUPING-001
   # fava:status=built
-  # fava:evidence=canary:subscription-grouping-equivalence
   # fava:evidence=rust:fava-subscriptions-standard::compatible_author_filters_group_with_exact_logical_attribution
   # fava:falsifier=Discard wire-to-logical attribution after grouping; logical query results cannot be reconstructed exactly.
   @acceptance @real-relay

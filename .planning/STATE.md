@@ -169,7 +169,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1]: Application harnesses publish through by and to and consume Write; embedded providers import WriteIntent only from fava-write.
 - [Phase 07.1]: Facade publication exposes payload scopes and returned Write, while neutral WriteIntent and AcceptedWrite stay in their provider contract crates.
 - [Phase 07.1]: WriteRouting remains facade-visible because Receipt::routing returns it; all other old intent and wait compatibility doors are removed.
-- [Phase 07.1]: Canary application flows publish payloads through publish, by, and to; only preview/store/provider boundaries construct neutral WriteIntent values.
+- [Phase 07.1]: Downstream acceptance application flows publish payloads through publish, by, and to; only preview/store/provider boundaries construct neutral WriteIntent values.
 - [Phase 07.1]: Recovered durable obligations without their original Write handle reattach through subscribe-before-read receipt facts and an exact ReceiptId.
 - [Phase 07.1]: Applications publish payloads through optional inert by/to scopes and receive Write after synchronous durable acceptance; neutral WriteIntent and AcceptedWrite remain internal owner vocabulary.
 - [Phase 07.1]: ContactList accounts for every p row; NIP-02 edit revision owns foreign tag and content preservation.
@@ -206,7 +206,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Current planning decisio
 - [Phase 07.1.1]: Two controlled Croissant children remain individually owned and both cleanup results are captured before failure propagation.
 - [Phase 07.1.1]: Public multi-relay group behavior retains relay-local record authority while ordinary Fava owners handle observation and publication.
 - [Phase 07.1.1]: Only twice-scanned complete author-sealed evidence is atomically promoted; pair verification requires exactly two runs and four distinct children.
-- [Phase 07.1.1]: Controlled canary evidence is durably retained at the exact owner-private path named by 07.1.1-12-PAIR-ROOT.txt and remains excluded from Git by the canary evidence policy.
+- [Phase 07.1.1]: Controlled acceptance-run evidence is durably retained at the exact owner-private path named by 07.1.1-12-PAIR-ROOT.txt and remains excluded from Git by the acceptance-run evidence policy.
 - [Phase 07.2]: Session is the sole mutable signer attachment owner; publication retains only per-write signer operations.
 - [Phase 07.2]: Runtime add, explicit replace, and remove use one exact signer per pubkey with a fixed 64-entry bound and atomic typed refusal.
 - [Phase 07.2]: Session revisions are coalescible wake signals only; publication reloads its exact event pubkey and admits completions by current attachment generation.

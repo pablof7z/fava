@@ -1219,7 +1219,6 @@ fn expected_manifest() -> BTreeSet<FunctionId> {
         ("crates/fava-write-store-redb/src/semantic.rs", "install_semantic", Some("RedbWriteStore"), "fninstall_semantic(&self,write_id:WriteId,receipt_id:ReceiptId,expected:RevisionId,expected_source:Option<EventId>,applied_edits:&[EventEdit],event:UnsignedEvent,source:Option<&EventValue>,initial_route:Option<&RoutePlan>,)->Result<Receipt,WriteStoreError>"),
         ("crates/fava-write-store-redb/src/semantic_acceptance.rs", "validate_revision", None, "fnvalidate_revision(edit:&EventEdit,author:PublicKey,event:&UnsignedEvent,source:Option<&EventValue>,routing:&WriteRouting,)->Result<Option<(EventId,Timestamp)>,WriteStoreError>"),
         ("crates/fava-write-store-redb/src/validation.rs", "validate_semantic", None, "fnvalidate_semantic(receipt:&Receipt,(edits,author,current_source,failed_source,successor):&SemanticCustody,)->Result<(),WriteStoreError>"),
-        ("apps/canary/src/croissant_simple_groups_evidence_semantics/value_support.rs", "select_current", None, "fnselect_current(current:&mutOption<Event>,candidate:Event)"),
     ]
     .into_iter()
     .map(|(path, name, owner, signature)| FunctionId {
@@ -1291,15 +1290,6 @@ fn expected_non_winner_ordering_manifest() -> BTreeMap<FunctionId, BTreeSet<Stri
 )]
 fn expected_controlled_sink_manifest() -> BTreeMap<FunctionId, BTreeSet<String>> {
     [
-        (
-            (
-                "apps/canary/src/croissant_simple_groups_evidence_semantics/value_support.rs",
-                "select_current",
-                None,
-                "fnselect_current(current:&mutOption<Event>,candidate:Event)",
-            ),
-            &[r"replace:then:*current=Some(candidate)"][..],
-        ),
         (
             (
                 "crates/fava-publication/src/edit_application.rs",

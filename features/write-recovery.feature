@@ -2,7 +2,6 @@ Feature: Accepted publication obligations survive process death
 
   # fava:id=WRITE-RECOVERY-001
   # fava:status=built
-  # fava:evidence=canary:crash-after-acceptance
   # fava:evidence=rust:fava-write-store-redb::every_m5_commit_and_effect_boundary_survives_sigkill_exactly
   # fava:falsifier=Return acceptance without committing its receipt; SIGKILL leaves no reattachable obligation and recovery fails.
   @acceptance @real-relay @process-kill

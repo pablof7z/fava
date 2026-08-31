@@ -222,7 +222,7 @@ Plans:
 - [x] 07.1-07-PLAN.md — Migrate primary facade publication regressions
 - [x] 07.1-08-PLAN.md — Migrate store, lifecycle, signer, and fault harnesses
 - [x] 07.1-09-PLAN.md — Remove the old facade compatibility surface and prove independent consumption
-- [x] 07.1-10-PLAN.md — Migrate the existing downstream canary corpus
+- [x] 07.1-10-PLAN.md — Migrate the existing downstream acceptance-application corpus
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -230,7 +230,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [x] 07.1-12-PLAN.md — Run the controlled Croissant canary twice and close all phase gates
+- [x] 07.1-12-PLAN.md — Run the controlled Croissant acceptance run twice and close all phase gates
 
 ### Phase 07.1.1: Multi-Relay Simple Groups (INSERTED)
 
@@ -293,7 +293,7 @@ Plans:
   2. Every authoritative requirement ID in `docs/spec/FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md` maps to a `.planning/REQUIREMENTS.md` entry that preserves its full conjunction, and a mechanical check fails when a mapped requirement weakens or splits its authority.
   3. Every row of the ownership ledger in `docs/spec/ARCHITECTURE.md` is represented as a verifiable requirement with a named falsifier, so an owner moving is a test failure rather than a review opinion.
   4. The nine unapproved lifecycle owners named in the audit, `fava::OpenedRelay` included, are recorded as violations scheduled for deletion; none is approved into `vocabulary.toml` to make the gate pass.
-  5. CI runs the workspace test suite, clippy, the falsifier corpus, and the canary on every change. Today `.github/workflows/architecture.yml` runs two Python steps and nothing else: no `cargo test` has ever run automatically in this repository, which is why 306 green tests coexisted with a systemic ownership inversion for six milestones.
+  5. CI runs the workspace test suite, clippy, the falsifier corpus, and a downstream acceptance corpus on every change — the acceptance application that previously supplied that corpus has been removed from the repository and needs a replacement. Today `.github/workflows/architecture.yml` runs two Python steps and nothing else: no `cargo test` has ever run automatically in this repository, which is why 306 green tests coexisted with a systemic ownership inversion for six milestones.
   6. The `Red:` / `Mutation:` evidence record required by `FAVA_TDD_BDD_TESTING_GUIDE.md` §16 is enforced mechanically. It is currently present in zero of 510 commits, and 36 of 41 named deliberate breaks have never been executed.
 
 **Plans:** Not yet planned - run `/gsd-plan-phase 07.3`.

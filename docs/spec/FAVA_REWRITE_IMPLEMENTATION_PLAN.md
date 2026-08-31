@@ -4,13 +4,13 @@
 **Behavioral authority:** `FULL_FAVA_REWRITE_SPEC_GOALS_AND_OBJECTIVES.md`
 **Architectural authority:** `ARCHITECTURE.md`
 **Testing authority:** `FAVA_TDD_BDD_TESTING_GUIDE.md`
-**Companion acceptance application:** `apps/canary/`
+**Companion acceptance application:** none currently in the repository (the prior one was removed 2026-08-31; see §8)
 
 ## 1. Purpose
 
 This plan turns the Fava rewrite specification and target architecture into a sequence of complete vertical milestones.
 
-The plan is not organized as "first create every trait, then fill in implementations." Each milestone must produce a usable end-to-end behavior through the public `fava` facade, add the canary scenario that proves it, and leave behind the narrowest contracts justified by at least one real implementation.
+The plan is not organized as "first create every trait, then fill in implementations." Each milestone must produce a usable end-to-end behavior through the public `fava` facade, add the acceptance scenario that proves it, and leave behind the narrowest contracts justified by at least one real implementation.
 
 The rewrite is complete only when ordinary applications can:
 
@@ -36,11 +36,11 @@ A contract is provisional until:
 
 Do not create a broad provider framework in advance of those proofs.
 
-### 2.2 Behavior-first TDD, canary-backed acceptance
+### 2.2 Behavior-first TDD, acceptance-application-backed acceptance
 
-Every contract slice starts with an accurate behavior statement and a failing executable proof at the smallest responsible owner. Every milestone also has an end-to-end canary scenario. The canary scenario should land before or with the implementation and must fail causally while the owned mechanism is disabled. The canary is the public composition capstone, not a substitute for owner, property, model, crash, or protocol tests.
+Every contract slice starts with an accurate behavior statement and a failing executable proof at the smallest responsible owner. Every milestone also has an end-to-end acceptance scenario. The acceptance scenario should land before or with the implementation and must fail causally while the owned mechanism is disabled. The acceptance application is the public composition capstone, not a substitute for owner, property, model, crash, or protocol tests.
 
-The canary is an ordinary downstream Rust application. It may use:
+The acceptance application is an ordinary downstream Rust application. It may use:
 
 - the public `fava` facade;
 - selected public protocol crates;
@@ -79,7 +79,7 @@ command
   -> correlated completion fact
 ```
 
-The canary must include a crash boundary around every newly introduced durable transition.
+The acceptance application must include a crash boundary around every newly introduced durable transition.
 
 ### 2.5 Partial progress is a first-class outcome
 
@@ -95,7 +95,7 @@ Performance work may alter representation and algorithms. It must not blur owner
 - a phase attribution;
 - a behavior oracle;
 - a measured regression budget; and
-- a canary or benchmark mutation that detects a false optimization.
+- an acceptance-application or benchmark mutation that detects a false optimization.
 
 ### 2.7 TDD and BDD discipline
 
@@ -106,7 +106,7 @@ Performance work may alter representation and algorithms. It must not blur owner
 3. implement the smallest complete owner change;
 4. refactor while green;
 5. disable the protection and confirm the evidence fails; and
-6. add a public/canary capstone only when it proves additional cross-boundary behavior.
+6. add a public/acceptance-application capstone only when it proves additional cross-boundary behavior.
 
 Feature files preserve durable product meaning; they are not an exhaustive test inventory or a mandatory runner.
 
@@ -166,7 +166,7 @@ The milestones advance six parallel workstreams.
 ### F. Product qualification
 
 - provider conformance kits
-- Rust canary
+- Rust acceptance application
 - relay lab
 - public-relay reconnaissance
 - FFI inventory
@@ -177,7 +177,7 @@ The milestones advance six parallel workstreams.
 
 ## 4. Milestone summary
 
-| Milestone | Product result | Primary canary gate |
+| Milestone | Product result | Primary acceptance gate |
 |---|---|---|
 | M0 | Evidence foundation and real-relay lab | A real signed event survives publish, query, relay kill, and relay restart through independent wire tooling. |
 | M1 | Coherent local query state from independent sources | Event-cache and write-store contributions merge into one current event view without cache pollution. |
@@ -219,7 +219,7 @@ M7 depends on M1, M5, and enough of M6 to obtain source state and route writes.
 M7.1.1 depends on M3, M5 through M7, and the completed literal tag-value query slice; it completes before M8.
 ```
 
-The graph is a sequencing aid, not permission to maintain parallel half-built architectures. A milestone may begin preparatory pure-value work earlier, but its product claim does not exist until its canary gate passes.
+The graph is a sequencing aid, not permission to maintain parallel half-built architectures. A milestone may begin preparatory pure-value work earlier, but its product claim does not exist until its acceptance gate passes.
 
 # 6. Milestones in detail
 
@@ -231,7 +231,7 @@ Create the independent evidence system used by every later milestone before Fava
 
 ### Deliverables
 
-- `apps/canary` Rust workspace/binary scaffold.
+- A downstream Rust acceptance-application workspace/binary scaffold. (The prior implementation was removed from the repository 2026-08-31 and not yet rebuilt.)
 - Scenario registry with requirement IDs and milestone ownership.
 - Deterministic run IDs and disposable test identities.
 - JSONL evidence stream plus human-readable report.
@@ -248,7 +248,7 @@ Create the independent evidence system used by every later milestone before Fava
 - Public-relay reconnaissance mode requiring explicit relay URLs.
 - Run manifest recording:
   - Fava revision when available;
-  - canary revision;
+  - acceptance-application revision;
   - selected profile;
   - relay implementation/version/command;
   - platform/toolchain;
@@ -263,7 +263,7 @@ At least one relay must be a real third-party implementation running as a separa
 
 A separate-process scriptable adversarial relay is allowed for exact protocol faults that a third-party relay cannot be configured to produce. It is a fixture, not the sole system-under-test relay.
 
-### Canary scenario
+### Acceptance scenario
 
 `lab-real-relay-smoke`
 
@@ -284,7 +284,7 @@ A separate-process scriptable adversarial relay is allowed for exact protocol fa
 - External relay failure is a failure, never a skipped success.
 - The event survives a real relay process kill/restart.
 - The evidence directory is sufficient to reconstruct every assertion.
-- The canary itself has no dependency on Fava internal crates.
+- The acceptance application itself has no dependency on Fava internal crates.
 
 ### Falsifier
 
@@ -322,7 +322,7 @@ Prove the central local-state model before networking: live query state is the d
 - Equivalent query descriptions have stable identity.
 - Current-state delivery is bounded and can coalesce intermediate states.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `local-source-merge`
 
@@ -348,7 +348,7 @@ Prove the central local-state model before networking: live query state is the d
 
 - No relay, transport, or runtime networking dependency exists in these crates.
 - The same semantic corpus runs against memory cache and memory write store.
-- The canary uses only the public facade for local queries and writes.
+- The acceptance application uses only the public facade for local queries and writes.
 - Event-cache source data and write-store source data can be inspected through public event records without exposing storage internals.
 
 ### Falsifier
@@ -387,7 +387,7 @@ Establish the complete read path against a real relay before automatic routing o
 - Cancellation sends/causes exact withdrawal and wakes pending pulls.
 - Query close is idempotent.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `explicit-read-eose`
 
@@ -413,12 +413,12 @@ Establish the complete read path against a real relay before automatic routing o
 
 - One real relay path works without any automatic router.
 - Fava's public diagnostics and the independent proxy agree on relay/session/subscription identity.
-- No Fava internal types appear in the canary.
+- No Fava internal types appear in the acceptance application.
 - The transport conformance kit includes handoff success, refusal, disconnect, and close.
 
 ### Falsifier
 
-Bypass signature verification in the admission path and inject a forged event. The canary must fail because the forged event becomes visible.
+Bypass signature verification in the admission path and inject a forged event. The acceptance application must fail because the forged event becomes visible.
 
 ---
 
@@ -448,7 +448,7 @@ Prove that Fava's live query model remains correct as several relays, local sour
 - Causal streams such as receipt facts are not conflated as current-state snapshots.
 - Repeated cancel/retry of `next` does not build an update backlog.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `multi-relay-dedup-provenance`
 
@@ -516,7 +516,7 @@ Introduce automatic read routing as an ordered chain of independently selectable
 - Planner grouping may change wire shape but not query meaning, evidence, access isolation, or cancellation.
 - Relay limits produce exact shortfall rather than silent dropped demand.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `async-route-partial-read`
 
@@ -597,7 +597,7 @@ Build one complete durable publication path before automatic write routing: acce
 - Receipt removal is separate and only applies under the declared retention/lifecycle rules.
 - A hard process kill after acceptance recovers one obligation and the same receipt.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `explicit-publish-optimistic`
 
@@ -624,7 +624,7 @@ Build one complete durable publication path before automatic write routing: acce
 `crash-after-acceptance`
 
 - Call `publish(payload)` and receive `Write`.
-- Supervisor SIGKILLs the canary child before delivery.
+- Supervisor SIGKILLs the acceptance-application child before delivery.
 - Restart against the same write store.
 - Same receipt and event revision reappear; delivery resumes without app resubmission.
 
@@ -632,7 +632,7 @@ Build one complete durable publication path before automatic write routing: acce
 
 - The standard write-store profile has process-kill tests at every commit/effect boundary.
 - `fava-publication` owns the write lifecycle but not router, signer, publisher, transport, or delivery policy state.
-- The canary sees no internal attempt/lane types.
+- The acceptance application sees no internal attempt/lane types.
 - A memory write store remains usable for deterministic lower tests but is not presented as the standard durable profile.
 
 ### Falsifier
@@ -671,7 +671,7 @@ Compose real routing policies for reads and writes, with immediate partial deliv
 - Automatic routes are re-evaluated while work remains open.
 - Route preview and real routing use one derivation.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `async-recipient-routing`
 
@@ -710,7 +710,7 @@ Compose real routing policies for reads and writes, with immediate partial deliv
 
 ### Falsifier
 
-Wait for all recipients to settle before sending to known destinations. The canary must detect delayed first handoff.
+Wait for all recipients to settle before sending to known destinations. The acceptance application must detect delayed first handoff.
 
 ---
 
@@ -754,7 +754,7 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 - A second protocol crate proves the edit contract is not secretly NIP-02-shaped.
 - Adding protocol crate N+1 edits only its crate and selected assembly/artifact metadata.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `replaceable-edit-first-value`
 
@@ -777,14 +777,14 @@ Prove that protocol crates own event-kind meaning while reusing one write lifecy
 
 `protocol-crate-n-plus-one`
 
-- Add the second protocol crate to canary assembly.
+- Add the second protocol crate to acceptance-application assembly.
 - Core crates and the `fava` facade require no changes to their owned behavior.
 
 ### Exit gates
 
 - `fava` has no switch over NIP-02 or the second protocol crate.
 - Protocol-crate dependency direction excludes runtime, transport, store implementation, and standard routers.
-- The canary depends on each protocol crate explicitly, making the selected product visible in Cargo metadata.
+- The acceptance application depends on each protocol crate explicitly, making the selected product visible in Cargo metadata.
 
 ### Falsifier
 
@@ -810,7 +810,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 - ordinary query combinators over literal tag-value filters
 - kind-10009 replaceable-edit applier
 - compiler-derived complete README public catalog
-- controlled two-relay canary flow
+- controlled two-relay acceptance-application flow
 
 ### Required behavior
 
@@ -851,7 +851,7 @@ kind-10009 list without creating a second query/publication lifecycle.
   delivery, retry, receipt, runtime, transport, verification, generic bound,
   projection, disagreement, management, or discovery policy.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `simple-group-one-host`
 
@@ -909,7 +909,7 @@ kind-10009 list without creating a second query/publication lifecycle.
 
 Drop a semantic sibling after one malformed entry, reorder interleaved pins, add
 a private state-query limit, or route publication to one selected relay. The
-crate and multi-relay canary must fail on exact decode, query, or wire evidence.
+crate and multi-relay acceptance run must fail on exact decode, query, or wire evidence.
 
 ---
 
@@ -944,7 +944,7 @@ Harden all network and provider boundaries under deterministic real-process and 
 - All externally influenced queues/sets have bounds or explicit backpressure/refusal.
 - Provider panic, block, late result, malformed result, or ignored cancellation cannot block unrelated progress or shutdown.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `nip42-write-and-reconnect`
 
@@ -1033,7 +1033,7 @@ Make provider/profile guarantees explicit and prove the distinction between disp
 - Each provider owns its private persisted schema/version/migration.
 - Destructive reset clears exactly the selected profile's cache/write/session/service state according to its contract.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `persistent-cache-restart`
 
@@ -1113,7 +1113,7 @@ These may live in a separate `examples/providers` workspace or an external fixtu
 - Dependency-negative tests prove forbidden edges.
 - Change-amplification metrics remain narrow.
 
-### Canary scenarios
+### Acceptance scenarios
 
 `provider-matrix`
 
@@ -1185,9 +1185,9 @@ Ship selected, ordinary external artifacts and prove behavioral equivalence acro
 - Public operation inventory is structural, not heuristic word matching.
 - Native products selected with `fava-simple-groups` preserve multi-host SimpleGroup construction, per-host record disagreement, kind-blind exact-host publication, and ordinary query/write lifecycles.
 
-### Canary relationship
+### Acceptance-application relationship
 
-The Rust canary is the reference application for behavior. Native capstones reproduce selected scenario scripts through their public SDK idioms; they do not call the Rust canary internally.
+The Rust acceptance application is the reference application for behavior. Native capstones reproduce selected scenario scripts through their public SDK idioms; they do not call the Rust acceptance application internally.
 
 Required parity subset:
 
@@ -1212,7 +1212,7 @@ Required parity subset:
 
 ## 7.1 Public diagnostics are part of each milestone
 
-Do not postpone diagnostics until the end. Every new owner must expose enough bounded facts for the canary to explain its real work without private inspection.
+Do not postpone diagnostics until the end. Every new owner must expose enough bounded facts for the acceptance application to explain its real work without private inspection.
 
 Minimum diagnostic dimensions:
 
@@ -1240,7 +1240,7 @@ Each behavior should be proven at its narrowest owner and at selected applicatio
 | Owner integration | state transitions across store/runtime boundaries |
 | Scripted relay | hostile frames, exact races, malformed protocol behavior |
 | Real relay lab | interoperability, persistence, real sockets/processes, NIP-42/NIP-11 where supported |
-| Rust canary | public facade, ordinary app flow, process/restart/resource behavior |
+| Rust acceptance application | public facade, ordinary app flow, process/restart/resource behavior |
 | Public-relay mode | reconnaissance and unexpected ecosystem behavior, not deterministic pass/fail |
 | Native capstones | SDK/parity/platform process behavior |
 
@@ -1290,17 +1290,17 @@ Each merged contract slice updates:
 - its contract crate documentation;
 - provider conformance documentation;
 - selected profile guarantees;
-- canary scenario roster;
+- acceptance scenario roster;
 - architecture ownership ledger if ownership changed; and
 - specification only when product behavior changes.
 
 Implementation status and benchmark numbers do not belong in the normative specification.
 
-# 8. Canary application design
+# 8. Acceptance application design
 
 ## 8.1 Purpose
 
-The canary is one small real Rust application whose job is to keep Fava honest as a product.
+The acceptance application is one small real Rust application whose job is to keep Fava honest as a product. (Status: the prior implementation was removed from the repository on 2026-08-31; the design below is retained as the specification for its replacement.)
 
 It answers:
 
@@ -1310,7 +1310,7 @@ It is not a generic framework or internal debugger.
 
 ## 8.2 Application shape
 
-The canary should be a small social client with enough ordinary product behavior to cross Fava's boundaries:
+The acceptance application should be a small social client with enough ordinary product behavior to cross Fava's boundaries:
 
 - multiple disposable accounts;
 - profiles;
@@ -1365,7 +1365,7 @@ The same application profile can be pointed at explicit public relays.
 
 - read-only by default;
 - public writes require an explicit allow flag and relay allowlist;
-- uses disposable keys and clearly marked canary content;
+- uses disposable keys and clearly marked test content;
 - external failure is reported as evidence;
 - no deterministic scenario is considered passed merely because public infrastructure was unavailable.
 
@@ -1416,7 +1416,7 @@ A scenario has one of these states:
 
 An enabled scenario may never silently skip.
 
-# 9. Canary scenario roster
+# 9. Acceptance scenario roster
 
 | ID | Milestone | Primary requirements |
 |---|---:|---|
@@ -1467,7 +1467,7 @@ An enabled scenario may never silently skip.
 The rewrite is release-candidate-ready when:
 
 1. M0–M10 deterministic Rust gates pass against the declared standard profile.
-2. All enabled canary scenarios produce complete evidence bundles.
+2. All enabled acceptance scenarios produce complete evidence bundles.
 3. At least two real third-party relay implementations pass the core interoperability subset.
 4. The adversarial relay corpus proves hostile-input isolation.
 5. Provider conformance kits include at least one non-standard implementation for every claimed replaceable seam.
