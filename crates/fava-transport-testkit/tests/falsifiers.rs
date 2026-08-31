@@ -162,7 +162,7 @@ async fn stalled_relay_yields_bounded_refusal_not_an_unbounded_park() {
     for attempt in 0..8_u64 {
         let outcome = lease
             .session()
-            .send(
+            .hand_off(
                 b"[\"REQ\",\"a\",{}]".to_vec(),
                 HandoffCorrelation::new(attempt),
             )
@@ -193,7 +193,7 @@ async fn handoff_completion_names_its_own_session_generation() {
 
     let outcome = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(7))
+        .hand_off(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(7))
         .await;
 
     assert_eq!(outcome.identity(), &expected);

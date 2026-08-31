@@ -326,20 +326,9 @@ fn access_context_partitions_above_the_merge_predicate() {
 
     assert_eq!(public_plan.relay, public);
     assert_eq!(authenticated_plan.relay, authenticated);
-    assert_eq!(
-        public_plan
-            .attribution
-            .serves(&public_plan.open[0].id)
-            .len(),
-        1
-    );
-    assert_eq!(
-        authenticated_plan
-            .attribution
-            .serves(&authenticated_plan.open[0].id)
-            .len(),
-        1
-    );
+    // A planned subscription is its own attribution; nothing is retained here.
+    assert_eq!(public_plan.open[0].serves.len(), 1);
+    assert_eq!(authenticated_plan.open[0].serves.len(), 1);
 }
 
 #[test]

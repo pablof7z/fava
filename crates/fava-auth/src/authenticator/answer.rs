@@ -3,8 +3,7 @@
 use std::sync::Arc;
 
 use fava_relay::{AuthenticationState, BoundedText};
-use fava_transport::{HandoffCorrelation, HandoffOutcome, RelaySession};
-use fava_wire::{ClientMessage, encode_client};
+use fava_transport::{HandoffOutcome, RelaySession};
 use thiserror::Error;
 use tokio::sync::watch;
 
@@ -170,21 +169,7 @@ pub(super) async fn authenticate(
     };
 
     let event_id = signed.id;
-    let frame = match encode_client(&ClientMessage::auth(signed)) {
-        Ok(frame) => frame.into_bytes(),
-        Err(error) => {
-            authenticator.record(
-                identity,
-                AuthenticationState::Failed {
-                    reason: BoundedText::new(error.to_string()),
-                },
-            );
-            return;
-        }
-    };
-
-    let correlation = HandoffCorrelation::new(identity.generation.get());
-    match session.send(frame, correlation).await {
+    match session.auth(signed).await {
         HandoffOutcome::HandedOff { .. } => {
             authenticator
                 .lock()

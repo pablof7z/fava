@@ -38,6 +38,7 @@ struct FakeState {
     gate: Notify,
     shutting_down: AtomicBool,
     generations: Arc<AtomicU64>,
+    subscriptions: Arc<AtomicU64>,
 }
 
 struct Entry {
@@ -231,6 +232,7 @@ impl FakeState {
             counter,
             generation,
             Arc::clone(&self.generations),
+            Arc::clone(&self.subscriptions),
         ));
         let identity = session.identity();
         self.entries

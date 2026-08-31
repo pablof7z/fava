@@ -14,13 +14,13 @@ use fava_query::{BoundedText, OperationGeneration};
 use fava_relay::RelaySessionKey;
 use fava_runtime::{CancellationToken, OperationName, ProviderCompletion, Runtime, TaskName};
 use fava_subscriptions::{
-    DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan, WithdrawalReason,
+    DeclaredLimit, PlanRevision, RelayReadConstraints, SubscriptionPlan,
 };
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
+    HandoffOutcome, OpenRelaySession, RelaySession, RelaySessionLease,
     Transport,
 };
-use fava_wire::{ClientMessage, SubscriptionId, encode_client};
+use fava_wire::SubscriptionId;
 
 use crate::engine::{Report, Reports};
 
@@ -128,55 +128,28 @@ pub(crate) fn install_plan(
     let reports = reports.clone();
     let owner = runtime.clone();
     let _ = runtime.spawn(OPEN_TASK, async move {
-        let mut opened = BTreeSet::new();
-        let mut correlations = 1_u64..;
+        // The session names each subscription as it sends the REQ. A position
+        // that stays `None` is one the transport refused.
+        let mut opened: Vec<Option<SubscriptionId>> = Vec::with_capacity(plan.open.len());
         for planned in &plan.open {
-            let message = ClientMessage::Req {
-                subscription_id: std::borrow::Cow::Owned(planned.id.clone()),
-                filters: planned
-                    .filters
-                    .iter()
-                    .cloned()
-                    .map(std::borrow::Cow::Owned)
-                    .collect(),
-            };
-            let correlation = correlations.next().expect("u64 range is unbounded");
-            if hand_off(
-                &owner,
-                &session,
-                &message,
-                generation,
-                correlation,
-                write_deadline,
-            )
-            .await
-            .is_ok()
-            {
-                opened.insert(planned.id.clone());
-            }
+            opened.push(
+                open_subscription(
+                    &owner,
+                    &session,
+                    planned.filters.clone(),
+                    generation,
+                    write_deadline,
+                )
+                .await,
+            );
         }
         let mut closed = BTreeSet::new();
         for entry in &plan.close {
-            if let WithdrawalReason::Regrouped { into } = &entry.reason
-                && !opened.contains(into)
+            if close_one(&owner, &session, entry.clone(), generation, write_deadline)
+                .await
+                .is_ok()
             {
-                // The successor never opened. Keep the predecessor live.
-                continue;
-            }
-            let correlation = correlations.next().expect("u64 range is unbounded");
-            let message = ClientMessage::close(entry.id.clone());
-            if hand_off(
-                &owner,
-                &session,
-                &message,
-                generation,
-                correlation,
-                write_deadline,
-            )
-            .await
-            .is_ok()
-            {
-                closed.insert(entry.id.clone());
+                closed.insert(entry.clone());
             }
         }
         reports
@@ -203,19 +176,8 @@ pub(crate) fn release(
 ) {
     let owner = runtime.clone();
     let _ = runtime.spawn(RELEASE_TASK, async move {
-        for (index, id) in closing.into_iter().enumerate() {
-            let correlation =
-                u64::try_from(index).expect("a Vec cannot contain more than u64::MAX entries") + 1;
-            let message = ClientMessage::close(id);
-            let _ = hand_off(
-                &owner,
-                lease.session(),
-                &message,
-                generation,
-                correlation,
-                write_deadline,
-            )
-            .await;
+        for id in closing {
+            let _ = close_one(&owner, lease.session(), id, generation, write_deadline).await;
         }
         let _ = owner
             .call_provider(RELEASE, generation, close_deadline, async move {
@@ -264,23 +226,43 @@ pub(crate) fn listen(
     });
 }
 
-async fn hand_off(
+/// Open one wire subscription through the session's own verb, returning the
+/// identifier the session minted, or `None` when the frame did not reach the
+/// relay. The caller has no say in the name.
+async fn open_subscription(
     runtime: &Runtime,
     session: &Arc<dyn RelaySession>,
-    message: &ClientMessage<'_>,
+    filters: Vec<nostr::filter::Filter>,
     generation: OperationGeneration,
-    correlation: u64,
     deadline: Duration,
-) -> Result<(), BoundedText> {
-    let frame = encode_client(message)
-        .map_err(|error| BoundedText::new(error.to_string()))?
-        .into_bytes();
+) -> Option<SubscriptionId> {
     let session = Arc::clone(session);
     let outcome = runtime
         .call_provider(HANDOFF, generation, deadline, async move {
-            session
-                .send(frame, HandoffCorrelation::new(correlation))
-                .await
+            session.req(filters).await
+        })
+        .await;
+    match outcome {
+        ProviderCompletion::Completed { value, .. } => match value.handoff {
+            HandoffOutcome::HandedOff { .. } => Some(value.id),
+            HandoffOutcome::NotHandedOff { .. } | HandoffOutcome::Ambiguous { .. } => None,
+        },
+        _ => None,
+    }
+}
+
+/// Close one wire subscription through the session's own verb.
+async fn close_one(
+    runtime: &Runtime,
+    session: &Arc<dyn RelaySession>,
+    id: SubscriptionId,
+    generation: OperationGeneration,
+    deadline: Duration,
+) -> Result<(), BoundedText> {
+    let session = Arc::clone(session);
+    let outcome = runtime
+        .call_provider(HANDOFF, generation, deadline, async move {
+            session.close_subscription(id).await
         })
         .await;
     match outcome {

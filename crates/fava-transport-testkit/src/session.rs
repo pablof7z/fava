@@ -19,6 +19,8 @@ pub(crate) struct FakeSession {
     pub(crate) reconnect_attempts: usize,
     pub(crate) dials: Arc<AtomicUsize>,
     pub(crate) generations: Arc<AtomicU64>,
+    /// Monotonic source of this session's wire subscription identifiers.
+    pub(crate) subscriptions: Arc<AtomicU64>,
     pub(crate) inner: Mutex<SessionState>,
 }
 
@@ -42,6 +44,7 @@ impl FakeSession {
         dials: Arc<AtomicUsize>,
         generation: RelaySessionGeneration,
         generations: Arc<AtomicU64>,
+        subscriptions: Arc<AtomicU64>,
     ) -> Self {
         dials.fetch_add(1, Ordering::SeqCst);
         Self {
@@ -54,6 +57,7 @@ impl FakeSession {
             reconnect_attempts: request.reconnect_attempts.map_or(0, std::num::NonZero::get),
             dials,
             generations,
+            subscriptions,
             inner: Mutex::new(SessionState::default()),
         }
     }
@@ -190,7 +194,11 @@ impl RelaySession for FakeSession {
         self.identity.read()
     }
 
-    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
+    fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
+        fava_transport::subscription_id(self.subscriptions.fetch_add(1, Ordering::SeqCst))
+    }
+
+    fn hand_off(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
         Box::pin(async move {
             let identity = self.identity.read();
             let refuse = |reason| HandoffOutcome::NotHandedOff {

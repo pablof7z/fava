@@ -83,8 +83,12 @@ pub fn assert_planners_agree(
         );
     }
 
-    for id in grouped_plan.attribution.ids() {
-        let settled = settled_by_eose_on(&grouped_plan, id);
+    for settled in grouped_plan
+        .attribution
+        .ids()
+        .map(|id| settled_by_eose_on(&grouped_plan, id))
+        .chain(grouped_plan.open.iter().map(|planned| planned.serves.clone()))
+    {
         for demand in settled {
             assert!(
                 wanted.contains_key(&demand),
@@ -101,8 +105,8 @@ pub fn assert_planners_agree(
     );
 
     DifferentialReport {
-        grouped_wire: grouped_plan.attribution.len(),
-        ungrouped_wire: ungrouped_plan.attribution.len(),
+        grouped_wire: grouped_plan.installed_count(),
+        ungrouped_wire: ungrouped_plan.installed_count(),
         shortfall: grouped_short,
     }
 }
@@ -133,7 +137,11 @@ pub fn assert_withdrawal_agrees(
 
     for planner in [grouping, ungrouped] {
         let first = assert_conformant(planner, scenario);
-        let installed = crate::scenario::apply_plan(&scenario.installed, &first);
+        let installed = crate::scenario::apply_plan(
+            &scenario.installed,
+            &first,
+            &crate::scenario::all_opened(&first),
+        );
         let next = scenario.clone().demanding(surviving.to_vec()).continuing(
             installed.clone(),
             PlanRevisionIssuer::new()
@@ -161,9 +169,9 @@ pub fn assert_withdrawal_agrees(
         }
         for closed in &replan.close {
             let still_needed = installed
-                .get(&closed.id)
+                .get(closed)
                 .is_some_and(|entry| entry.serves.iter().any(|demand| alive.contains(demand)))
-                && replan.retain.contains(&closed.id);
+                && replan.retain.contains(closed);
             assert!(
                 !still_needed,
                 "{}: replan closes a subscription it also retains",
@@ -184,19 +192,28 @@ pub fn delivered_to(
     wanted: &BTreeMap<DemandId, Filter>,
     event: &Event,
 ) -> BTreeSet<DemandId> {
+    // A subscription carries demand whether it is retained — which attribution
+    // covers — or newly planned, which is its own attribution until the session
+    // names it.
+    let carried = plan
+        .attribution
+        .ids()
+        .filter_map(|id| plan.attribution.get(id))
+        .map(|entry| (&entry.filters, &entry.serves))
+        .chain(
+            plan.open
+                .iter()
+                .map(|planned| (&planned.filters, &planned.serves)),
+        );
     let mut reached = BTreeSet::new();
-    for id in plan.attribution.ids() {
-        let Some(entry) = plan.attribution.get(id) else {
-            continue;
-        };
-        if !entry
-            .filters
+    for (filters, serves) in carried {
+        if !filters
             .iter()
             .any(|filter| filter.match_event(event, MatchEventOptions::new()))
         {
             continue;
         }
-        for demand in &entry.serves {
+        for demand in serves {
             if wanted
                 .get(demand)
                 .is_some_and(|filter| filter.match_event(event, MatchEventOptions::new()))
@@ -219,6 +236,11 @@ fn every_settled(plan: &SubscriptionPlan) -> BTreeSet<DemandId> {
     plan.attribution
         .ids()
         .flat_map(|id| plan.attribution.serves(id).iter().copied())
+        .chain(
+            plan.open
+                .iter()
+                .flat_map(|planned| planned.serves.iter().copied()),
+        )
         .collect()
 }
 

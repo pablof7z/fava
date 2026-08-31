@@ -9,10 +9,10 @@ use fava_publisher::{PublishAttempt, PublishOutcome, Publisher};
 use fava_relay::RelaySessionKey;
 use fava_session::Session;
 use fava_transport::{
-    HandoffCorrelation, HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
+    HandoffOutcome, OpenRelaySession, RelayInbound, Transport, TransportBounds,
     TransportDeadlines,
 };
-use fava_wire::{ClientMessage, RelayMessage, decode_relay, encode_client};
+use fava_wire::{RelayMessage, decode_relay};
 use fava_write::{EventBuilder, Kind, Tag};
 
 const MAX_INBOUND_FRAMES: usize = 64;
@@ -87,25 +87,8 @@ impl Publisher for Nip42Publisher {
             let session = Arc::clone(lease.session());
             let mut inbound = session.messages();
 
-            // Encode the EVENT frame once; we may need to resend it after AUTH.
-            let event_frame = match encode_client(&ClientMessage::event(attempt.event.clone())) {
-                Ok(frame) => frame.into_bytes(),
-                Err(error) => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::NotHandedOff {
-                        reason: error.to_string(),
-                    };
-                }
-            };
-
             // Send the initial EVENT.
-            match session
-                .send(
-                    event_frame.clone(),
-                    HandoffCorrelation::new(u64::from(attempt.number)),
-                )
-                .await
-            {
+            match session.event(attempt.event.clone()).await {
                 HandoffOutcome::NotHandedOff { reason, .. } => {
                     let _ = lease.release().await;
                     return PublishOutcome::NotHandedOff {
@@ -181,34 +164,22 @@ impl Publisher for Nip42Publisher {
                                 }
                             };
                             drop(cancel_tx);
-                            let auth_frame = match encode_client(&ClientMessage::auth(signed)) {
-                                Ok(f) => f.into_bytes(),
-                                Err(e) => return Err(format!("AUTH encode: {e}")),
-                            };
-                            // Send AUTH response.
-                            let auth_correlation =
-                                HandoffCorrelation::new(u64::from(attempt.number) | (1 << 32));
-                            match session.send(auth_frame, auth_correlation).await {
-                                HandoffOutcome::NotHandedOff { reason, .. } => {
-                                    return Err(format!("AUTH send failed: {reason:?}"));
-                                }
-                                HandoffOutcome::HandedOff { .. }
-                                | HandoffOutcome::Ambiguous { .. } => {}
-                            }
-                            // Resend the original EVENT after authenticating.
-                            let resend_correlation =
-                                HandoffCorrelation::new(u64::from(attempt.number) | (2 << 32));
-                            match session.send(event_frame.clone(), resend_correlation).await {
+                            match session.auth(signed).await {
                                 HandoffOutcome::HandedOff { .. } => {}
                                 HandoffOutcome::NotHandedOff { reason, .. } => {
-                                    return Ok(PublishOutcome::NotHandedOff {
-                                        reason: format!("{reason:?}"),
-                                    });
+                                    return Err(format!("AUTH not handed off: {reason:?}"));
                                 }
                                 HandoffOutcome::Ambiguous { reason, .. } => {
-                                    return Ok(PublishOutcome::OutcomeUnknown {
-                                        reason: format!("{reason:?}"),
-                                    });
+                                    return Err(format!("AUTH outcome unknown: {reason:?}"));
+                                }
+                            }
+                            match session.event(attempt.event.clone()).await {
+                                HandoffOutcome::HandedOff { .. } => {}
+                                HandoffOutcome::NotHandedOff { reason, .. } => {
+                                    return Err(format!("resend not handed off: {reason:?}"));
+                                }
+                                HandoffOutcome::Ambiguous { reason, .. } => {
+                                    return Err(format!("resend outcome unknown: {reason:?}"));
                                 }
                             }
                             authed = true;
@@ -286,22 +257,7 @@ impl Publisher for Nip01Publisher {
             };
             let session = std::sync::Arc::clone(lease.session());
             let mut inbound = session.messages();
-            let frame = match encode_client(&ClientMessage::event(attempt.event.clone())) {
-                Ok(frame) => frame,
-                Err(error) => {
-                    let _ = lease.release().await;
-                    return PublishOutcome::NotHandedOff {
-                        reason: error.to_string(),
-                    };
-                }
-            };
-            match session
-                .send(
-                    frame.into_bytes(),
-                    HandoffCorrelation::new(u64::from(attempt.number)),
-                )
-                .await
-            {
+            match session.event(attempt.event.clone()).await {
                 HandoffOutcome::NotHandedOff { reason, .. } => {
                     let _ = lease.release().await;
                     return PublishOutcome::NotHandedOff {

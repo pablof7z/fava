@@ -14,24 +14,10 @@
 //! nothing the relay advertises feeds the id, so a NIP-11 refetch can never
 //! move an id that is already live.
 
-use fava_subscriptions::{PlanRevision, SubscriptionPlanError};
-use fava_transport::BoundedText;
+use fava_subscriptions::SubscriptionPlanError;
+use fava_transport::{BoundedText, SUBSCRIPTION_ID_BYTES};
 use fava_wire::{ClientMessage, SubscriptionId, encode_client};
 use nostr::filter::Filter;
-
-/// Namespace prefix every Fava-minted wire id carries.
-const PREFIX: &str = "fava";
-
-/// Mint the wire id for one newly-opened subscription.
-///
-/// `revision` is the owner's monotonic plan revision and `ordinal` is the
-/// candidate's position in the plan's canonical order, so the pair is unique
-/// within a plan and never repeats across plans of one session. Nothing else
-/// contributes: not the filter, not the relay's advertisement.
-#[must_use]
-pub(crate) fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
-    SubscriptionId::new(format!("{PREFIX}-{revision}-{ordinal}"))
-}
 
 /// Exact encoded byte length of the REQ this content produces.
 ///
@@ -39,12 +25,14 @@ pub(crate) fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
 ///
 /// [`SubscriptionPlanError::Encoding`] when the exact NIP-01 value cannot be
 /// serialized at all.
-pub(crate) fn encoded_bytes(
-    id: &SubscriptionId,
-    filters: &[Filter],
-) -> Result<usize, SubscriptionPlanError> {
+pub(crate) fn encoded_bytes(filters: &[Filter]) -> Result<usize, SubscriptionPlanError> {
+    // The session has not named this subscription yet, and does not need to
+    // have: every identifier it mints is exactly `SUBSCRIPTION_ID_BYTES` wide,
+    // so a placeholder of that width encodes to the same length as the real
+    // frame will.
+    let placeholder = SubscriptionId::new("x".repeat(SUBSCRIPTION_ID_BYTES));
     let message = ClientMessage::Req {
-        subscription_id: std::borrow::Cow::Owned(id.clone()),
+        subscription_id: std::borrow::Cow::Owned(placeholder),
         filters: filters
             .iter()
             .map(|filter| std::borrow::Cow::Owned(filter.clone()))

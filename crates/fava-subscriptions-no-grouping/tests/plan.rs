@@ -7,7 +7,7 @@ use fava_relay::{RelayAccess, RelaySessionKey};
 use fava_subscriptions::{
     DeclaredLimit, DemandId, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer, RelayDemand,
     RelayReadConstraints, ShortfallReason, SubscriptionPlanError, SubscriptionPlanner,
-    WithdrawalReason, validate_plan,
+    validate_plan,
 };
 use fava_subscriptions_no_grouping::planner;
 use nostr::filter::Filter;
@@ -74,16 +74,16 @@ fn each_logical_demand_becomes_one_exact_req_with_attribution() {
 
     assert_eq!(plan.relay, relay());
     assert_eq!(plan.open.len(), 2);
-    assert_eq!(plan.attribution.len(), 2);
-    for planned in &plan.open {
-        assert_eq!(planned.serves.len(), 1, "never more than one demand");
-        let attributed = plan.attribution.get(&planned.id).expect("attributed");
-        assert_eq!(attributed.filters, planned.filters);
-    }
+    // Nothing is retained, so nothing carries a wire id to attribute: a planned
+    // subscription is its own attribution.
+    assert_eq!(plan.attribution.len(), 0);
     let served: Vec<_> = plan
-        .attribution
-        .ids()
-        .flat_map(|id| plan.attribution.serves(id).iter().copied())
+        .open
+        .iter()
+        .flat_map(|planned| {
+            assert_eq!(planned.serves.len(), 1, "never more than one demand");
+            planned.serves.iter().copied()
+        })
         .collect();
     assert!(served.contains(&demand_id(1)));
     assert!(served.contains(&demand_id(2)));
@@ -100,9 +100,9 @@ fn an_unchanged_demand_is_retained_across_replans() {
         revision(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
-        first.open.iter().map(|planned| {
+        first.open.iter().enumerate().map(|(position, planned)| {
             (
-                planned.id.clone(),
+                fava_subscriptions::subscription_id(position as u64),
                 fava_subscriptions::InstalledSubscription {
                     filters: planned.filters.clone(),
                     serves: planned.serves.clone(),
@@ -132,9 +132,9 @@ fn withdrawn_demand_closes_its_own_subscription() {
         revision(1),
     );
     let installed = fava_subscriptions::InstalledSubscriptions::from_entries(
-        first.open.iter().map(|planned| {
+        first.open.iter().enumerate().map(|(position, planned)| {
             (
-                planned.id.clone(),
+                fava_subscriptions::subscription_id(position as u64),
                 fava_subscriptions::InstalledSubscription {
                     filters: planned.filters.clone(),
                     serves: planned.serves.clone(),
@@ -151,12 +151,6 @@ fn withdrawn_demand_closes_its_own_subscription() {
     );
 
     assert_eq!(second.close.len(), 1);
-    assert_eq!(
-        second.close[0].reason,
-        WithdrawalReason::DemandWithdrawn {
-            released: [demand_id(1)].into_iter().collect()
-        }
-    );
 }
 
 #[test]

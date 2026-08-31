@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use fava_relay::RelaySessionKey;
+use fava_wire::SubscriptionId;
 use fava_subscriptions::{
     DemandId, InstalledSubscription, InstalledSubscriptions, PlanRevision, PlanRevisionIssuer,
     RelayDemand, RelayReadConstraints, SubscriptionPlan, SubscriptionPlanner, validate_plan,
@@ -139,12 +140,23 @@ fn plan_once(
 ///
 /// This is how a caller turns one plan into the baseline for the next replan,
 /// which is what makes retention and withdrawal observable across revisions.
+/// Names for every subscription in `plan.open`, as a session that accepted all
+/// of them would have minted.
+#[must_use]
+pub fn all_opened(plan: &SubscriptionPlan) -> Vec<Option<SubscriptionId>> {
+    (0..plan.open.len())
+        .map(|position| Some(fava_subscriptions::subscription_id(position as u64)))
+        .collect()
+}
+
+/// Reduce a plan against a baseline, given the names the session minted.
 #[must_use]
 pub fn apply_plan(
     baseline: &InstalledSubscriptions,
     plan: &SubscriptionPlan,
+    opened: &[Option<SubscriptionId>],
 ) -> InstalledSubscriptions {
-    let closed: BTreeSet<_> = plan.close.iter().map(|entry| &entry.id).collect();
+    let closed: BTreeSet<_> = plan.close.iter().collect();
     let mut entries = Vec::new();
     for id in baseline.ids() {
         if closed.contains(id) {
@@ -161,9 +173,14 @@ pub fn apply_plan(
             },
         ));
     }
-    for planned in &plan.open {
+    for (position, planned) in plan.open.iter().enumerate() {
+        // The session named each subscription when it sent the REQ; a position
+        // with no name is one the transport refused.
+        let Some(Some(id)) = opened.get(position) else {
+            continue;
+        };
         entries.push((
-            planned.id.clone(),
+            id.clone(),
             InstalledSubscription {
                 filters: planned.filters.clone(),
                 serves: planned.serves.clone(),
@@ -194,7 +211,7 @@ pub fn assert_running_subscriptions_are_immutable(
     arriving: &[RelayDemand],
 ) -> SubscriptionPlan {
     let first = assert_conformant(planner, scenario);
-    let installed = apply_plan(&scenario.installed, &first);
+    let installed = apply_plan(&scenario.installed, &first, &all_opened(&first));
     assert!(
         !installed.is_empty(),
         "{}: nothing was installed, so immutability is not being tested",
@@ -211,7 +228,7 @@ pub fn assert_running_subscriptions_are_immutable(
 
     for id in installed.ids() {
         assert!(
-            !replan.close.iter().any(|withdrawn| &withdrawn.id == id),
+            !replan.close.iter().any(|withdrawn| withdrawn == id),
             "{}: arriving demand closed running subscription {id}",
             scenario.name
         );
@@ -250,7 +267,7 @@ pub fn assert_partial_withdrawal_leaves_the_wire_alone(
     surviving: &[RelayDemand],
 ) -> SubscriptionPlan {
     let first = assert_conformant(planner, scenario);
-    let installed = apply_plan(&scenario.installed, &first);
+    let installed = apply_plan(&scenario.installed, &first, &all_opened(&first));
     let alive: BTreeSet<DemandId> = surviving.iter().map(RelayDemand::id).collect();
 
     let next = scenario
@@ -265,7 +282,7 @@ pub fn assert_partial_withdrawal_leaves_the_wire_alone(
             continue;
         }
         assert!(
-            !replan.close.iter().any(|withdrawn| &withdrawn.id == id),
+            !replan.close.iter().any(|withdrawn| withdrawn == id),
             "{}: withdrawal closed {id}, which another owner still holds",
             scenario.name
         );

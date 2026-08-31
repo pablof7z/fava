@@ -7,10 +7,10 @@ use std::collections::BTreeSet;
 
 use fava_subscriptions::{
     EoseCompleteness, InstalledSubscriptions, RelayReadConstraints, ShortfallReason,
-    WithdrawalReason,
 };
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
 use fava_subscriptions_testkit::{
+    all_opened,
     PlannerScenario, apply_plan, assert_conformant,
     assert_partial_withdrawal_leaves_the_wire_alone, assert_running_subscriptions_are_immutable,
 };
@@ -39,10 +39,10 @@ fn new_demand_never_reopens_an_installed_subscription() {
     let bob = Keys::generate().public_key();
     let held = demand(1, Filter::new().author(alice));
     let first = PlannerScenario::fresh("running author query", relay(), vec![held.clone()]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
     let live: Vec<_> = installed.ids().cloned().collect();
     assert_eq!(live.len(), 1);
 
@@ -82,7 +82,7 @@ fn withdrawing_one_member_leaves_the_survivors_subscription_untouched() {
     let first = PlannerScenario::fresh("grouped pair", relay(), both.clone());
     let grouped = assert_conformant(&planner(), &first);
     assert_eq!(grouped.open.len(), 1, "the pair shares one request");
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &grouped);
+    let installed = apply_plan(&InstalledSubscriptions::empty(), &grouped, &all_opened(&grouped));
     let live: Vec<_> = installed.ids().cloned().collect();
 
     let second = first
@@ -155,10 +155,10 @@ fn withdrawing_demand_never_disturbs_a_surviving_subscription() {
 fn the_last_owner_leaving_closes_the_subscription() {
     let held = demand(1, Filter::new().search("solitary"));
     let first = PlannerScenario::fresh("single owner", relay(), vec![held]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
 
     let second = first
         .clone()
@@ -167,12 +167,6 @@ fn the_last_owner_leaving_closes_the_subscription() {
     let plan = assert_conformant(&planner(), &second);
 
     assert_eq!(plan.close.len(), 1);
-    assert_eq!(
-        plan.close[0].reason,
-        WithdrawalReason::DemandWithdrawn {
-            released: [demand_id(1)].into_iter().collect()
-        }
-    );
 }
 
 /// C3: demand a running broader subscription already covers opens nothing. The
@@ -182,10 +176,10 @@ fn the_last_owner_leaving_closes_the_subscription() {
 fn demand_covered_by_a_live_broader_subscription_opens_no_req() {
     let broad = demand(1, Filter::new().kind(Kind::from_u16(1)));
     let first = PlannerScenario::fresh("broad running query", relay(), vec![broad.clone()]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
     let live: Vec<_> = installed.ids().cloned().collect();
 
     let narrow = demand(
@@ -212,10 +206,10 @@ fn demand_covered_by_a_live_broader_subscription_opens_no_req() {
 fn a_limited_subscription_never_absorbs_a_later_owner() {
     let limited = demand(1, Filter::new().kind(Kind::from_u16(1)).limit(10));
     let first = PlannerScenario::fresh("running limited query", relay(), vec![limited.clone()]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
 
     let narrow = demand(
         2,
@@ -243,8 +237,7 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
     let filter = Filter::new().search("comes and goes");
     let first = PlannerScenario::fresh("open", relay(), vec![demand(1, filter.clone())]);
     let opened = assert_conformant(&planner(), &first);
-    let original = opened.open[0].id.clone();
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened);
+    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened, &all_opened(&opened));
 
     let closing = first
         .clone()
@@ -252,7 +245,7 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
         .continuing(installed.clone(), revision(2));
     let closed = assert_conformant(&planner(), &closing);
     assert_eq!(closed.close.len(), 1);
-    let empty = apply_plan(&installed, &closed);
+    let empty = apply_plan(&installed, &closed, &all_opened(&closed));
     assert!(empty.is_empty());
 
     let reopening = first
@@ -261,11 +254,10 @@ fn a_reopened_filter_never_reuses_the_closed_subscription_id() {
         .continuing(empty, revision(3));
     let reopened = assert_conformant(&planner(), &reopening);
 
+    // The planner no longer names anything, so it cannot reuse an identity.
+    // That guarantee now belongs to the session's monotonic counter and is
+    // proved in `fava-transport`.
     assert_eq!(reopened.open.len(), 1);
-    assert_ne!(
-        reopened.open[0].id, original,
-        "a reopened request must not wear the closed request's identity"
-    );
 }
 
 /// C10: what the relay advertises must never move an identity that is already
@@ -280,8 +272,7 @@ fn a_changed_declared_id_length_does_not_move_installed_subscription_ids() {
             ..RelayReadConstraints::unknown()
         });
     let opened = assert_conformant(&planner(), &first);
-    let original = opened.open[0].id.clone();
-    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened);
+    let installed = apply_plan(&InstalledSubscriptions::empty(), &opened, &all_opened(&opened));
 
     let second = first
         .clone()
@@ -292,7 +283,7 @@ fn a_changed_declared_id_length_does_not_move_installed_subscription_ids() {
         .continuing(installed, revision(2));
     let plan = assert_conformant(&planner(), &second);
 
-    assert_eq!(plan.retain, vec![original]);
+    assert_eq!(plan.retain, vec![fava_subscriptions::subscription_id(0)]);
     assert!(plan.open.is_empty());
     assert!(plan.close.is_empty());
 }
@@ -312,7 +303,7 @@ fn two_demands_with_identical_filters_and_different_bounds_share_one_subscriptio
     let plan = assert_conformant(&planner(), &scenario);
 
     assert_eq!(plan.open.len(), 1);
-    assert_eq!(plan.attribution.serves(&plan.open[0].id).len(), 2);
+    assert_eq!(plan.open[0].serves.len(), 2);
 }
 
 /// C14: the planner is the only component that sees both the filter it sent and
@@ -322,13 +313,7 @@ fn a_limited_request_records_that_its_eose_proves_nothing() {
     let asked = vec![demand(1, Filter::new().search("bounded").limit(5))];
     let scenario = PlannerScenario::fresh("limited request", relay(), asked);
     let plan = assert_conformant(&planner(), &scenario);
-    assert_eq!(
-        plan.attribution
-            .get(&plan.open[0].id)
-            .expect("attributed")
-            .completeness,
-        EoseCompleteness::LimitedRequest
-    );
+    assert_eq!(plan.open[0].completeness, EoseCompleteness::LimitedRequest);
 
     let declared_default = PlannerScenario::fresh(
         "relay default limit",
@@ -340,13 +325,7 @@ fn a_limited_request_records_that_its_eose_proves_nothing() {
         ..RelayReadConstraints::unknown()
     });
     let plan = assert_conformant(&planner(), &declared_default);
-    assert_eq!(
-        plan.attribution
-            .get(&plan.open[0].id)
-            .expect("attributed")
-            .completeness,
-        EoseCompleteness::RelayDefaultLimit
-    );
+    assert_eq!(plan.open[0].completeness, EoseCompleteness::RelayDefaultLimit);
 }
 
 /// The residual budget is what a plan may spend. A relay that lowers its
@@ -357,10 +336,10 @@ fn a_lowered_ceiling_spends_no_residual_and_closes_nothing() {
         .map(|index| demand(index, Filter::new().search(format!("distinct-{index}"))))
         .collect();
     let first = PlannerScenario::fresh("three running", relay(), asked.clone());
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
     assert_eq!(installed.len(), 3);
 
     let mut later = asked;

@@ -11,7 +11,7 @@ use fava_relay::RelaySessionKey;
 use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     PlannedSubscription, RelayReadConstraints, SubscriptionAttribution, SubscriptionPlan,
-    SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription,
+    SubscriptionShortfall,
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
@@ -20,21 +20,22 @@ use nostr::filter::Filter;
 pub(crate) fn assemble(
     relay: &RelaySessionKey,
     revision: PlanRevision,
-    opened: Vec<(SubscriptionId, AttributedSubscription)>,
+    opened: Vec<AttributedSubscription>,
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
     owners: &BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
     shortfalls: Vec<SubscriptionShortfall>,
 ) -> SubscriptionPlan {
-    let mut attribution = Vec::with_capacity(opened.len() + owners.len());
+    // Attribution covers only what already carries a wire id: the retained
+    // set. A planned subscription is its own attribution.
+    let mut attribution = Vec::with_capacity(owners.len());
     let mut open = Vec::with_capacity(opened.len());
-    for (id, attributed) in opened {
+    for attributed in opened {
         open.push(PlannedSubscription {
-            id: id.clone(),
-            filters: attributed.filters.clone(),
-            serves: attributed.serves.clone(),
+            filters: attributed.filters,
+            serves: attributed.serves,
+            completeness: attributed.completeness,
         });
-        attribution.push((id, attributed));
     }
 
     let mut retain = Vec::with_capacity(owners.len());
@@ -52,7 +53,7 @@ pub(crate) fn assemble(
         ));
         retain.push(id.clone());
     }
-    open.sort_by(|left, right| left.id.cmp(&right.id));
+    open.sort_by(|left, right| left.filters.cmp(&right.filters));
     retain.sort();
 
     SubscriptionPlan {
@@ -60,7 +61,7 @@ pub(crate) fn assemble(
         revision,
         open,
         retain,
-        close: withdrawals(installed, owners, &shortfalls),
+        close: withdrawals(installed, owners),
         attribution: SubscriptionAttribution::from_entries(attribution),
         shortfalls,
     }
@@ -90,28 +91,10 @@ fn completeness(filters: &[Filter], constraints: &RelayReadConstraints) -> EoseC
 fn withdrawals(
     installed: &InstalledSubscriptions,
     owners: &BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
-    shortfalls: &[SubscriptionShortfall],
-) -> Vec<WithdrawnSubscription> {
-    let lost: BTreeSet<DemandId> = shortfalls.iter().map(|entry| entry.demand).collect();
-    let mut close = Vec::new();
-    for id in installed.ids() {
-        if owners.contains_key(id) {
-            continue;
-        }
-        let Some(entry) = installed.get(id) else {
-            continue;
-        };
-        let reason = if entry.serves.iter().any(|demand| lost.contains(demand)) {
-            WithdrawalReason::ConstraintChanged
-        } else {
-            WithdrawalReason::DemandWithdrawn {
-                released: entry.serves.clone(),
-            }
-        };
-        close.push(WithdrawnSubscription {
-            id: id.clone(),
-            reason,
-        });
-    }
-    close
+) -> Vec<SubscriptionId> {
+    installed
+        .ids()
+        .filter(|id| !owners.contains_key(*id))
+        .cloned()
+        .collect()
 }

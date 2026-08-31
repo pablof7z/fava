@@ -127,7 +127,7 @@ async fn a_frame_in_flight_when_the_session_fails_is_ambiguous_not_lost() {
 
     let outcome = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(1))
+        .hand_off(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(1))
         .await;
     assert!(matches!(outcome, HandoffOutcome::HandedOff { .. }));
 
@@ -160,7 +160,7 @@ async fn cancelling_a_handoff_mid_operation_leaves_no_half_frame() {
 
     let send = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(9));
+        .hand_off(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(9));
     let cancelled = tokio::time::timeout(Duration::from_millis(10), send).await;
 
     assert!(cancelled.is_err(), "the handoff must still be in flight");
@@ -220,7 +220,7 @@ async fn a_stale_generation_completion_is_attributable_to_the_generation_that_ma
     relay.stall_writer();
     let _ = lease
         .session()
-        .send(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(3))
+        .hand_off(b"[\"REQ\",\"a\",{}]".to_vec(), HandoffCorrelation::new(3))
         .await;
 
     relay.reconnect();
@@ -310,7 +310,7 @@ async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
     for attempt in 0..2_u64 {
         let _ = first
             .session()
-            .send(vec![b'a'], HandoffCorrelation::new(attempt))
+            .hand_off(vec![b'a'], HandoffCorrelation::new(attempt))
             .await;
     }
 
@@ -318,7 +318,7 @@ async fn a_slow_peer_never_parks_an_unrelated_sender_on_the_same_session() {
         Duration::from_millis(200),
         second
             .session()
-            .send(vec![b'b'], HandoffCorrelation::new(99)),
+            .hand_off(vec![b'b'], HandoffCorrelation::new(99)),
     )
     .await
     .expect("the second holder is refused, never parked");
@@ -371,7 +371,7 @@ async fn shutdown_closes_every_registered_session() {
     assert!(matches!(
         lease
             .session()
-            .send(vec![b'a'], HandoffCorrelation::new(1))
+            .hand_off(vec![b'a'], HandoffCorrelation::new(1))
             .await,
         HandoffOutcome::NotHandedOff {
             reason: TransportFailure::SessionClosed,

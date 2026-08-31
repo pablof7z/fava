@@ -19,7 +19,7 @@ use fava_subscriptions::{
     AttributedSubscription, DemandId, EoseCompleteness, InstalledSubscriptions, PlanRevision,
     PlannedSubscription, RelayDemand, RelayReadConstraints, ShortfallReason,
     SubscriptionAttribution, SubscriptionPlan, SubscriptionPlanError, SubscriptionPlanner,
-    SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription,
+    SubscriptionShortfall,
 };
 use fava_wire::SubscriptionId;
 use nostr::filter::Filter;
@@ -63,7 +63,6 @@ impl SubscriptionPlanner for OnePerDemand {
             constraints,
             installed,
             owners.len(),
-            revision,
             &mut shortfalls,
         );
 
@@ -87,15 +86,6 @@ pub const fn planner() -> impl SubscriptionPlanner {
 
 /// Wire identity for one newly-opened subscription.
 ///
-/// Minted from the owner's monotonic revision and this subscription's ordinal,
-/// never from the filter: a derived identity comes back when the same filter is
-/// re-demanded, and a late EOSE for the closed request would settle the new one
-/// (GOALS:426, QUERY-010). Nothing the relay advertises feeds it either, so a
-/// NIP-11 refetch cannot move an established id.
-fn mint(revision: PlanRevision, ordinal: usize) -> SubscriptionId {
-    SubscriptionId::new(format!("fava-{revision}-{ordinal}"))
-}
-
 /// Set aside demand whose own `limit` exceeds a *declared* filter limit.
 fn admit_filter_limits(
     demand: &[RelayDemand],
@@ -177,7 +167,6 @@ fn admit_pending(
     constraints: &RelayReadConstraints,
     installed: &InstalledSubscriptions,
     running: usize,
-    revision: PlanRevision,
     shortfalls: &mut Vec<SubscriptionShortfall>,
 ) -> Vec<PlannedSubscription> {
     let residual = constraints
@@ -185,10 +174,6 @@ fn admit_pending(
         .get()
         .map(NonZeroUsize::get)
         .map(|maximum| (maximum.saturating_sub(running), maximum));
-    let declared_id = constraints
-        .max_subscription_id_chars
-        .get()
-        .map(NonZeroUsize::get);
     let declared_bytes = constraints.max_message_bytes.get().map(NonZeroUsize::get);
 
     let required = running + pending.len();
@@ -220,17 +205,7 @@ fn admit_pending(
         if running_filters.contains(&filters) {
             continue;
         }
-        let id = mint(revision, carried.len());
-        if declared_id.is_some_and(|maximum| id.as_str().chars().count() > maximum) {
-            shortfalls.push(SubscriptionShortfall {
-                demand: item.id(),
-                reason: ShortfallReason::SubscriptionIdTooLong {
-                    maximum: declared_id.unwrap_or(0),
-                },
-            });
-            continue;
-        }
-        let bytes = encoded_bytes(&id, &item.filter);
+        let bytes = encoded_bytes(&item.filter);
         if let Some(maximum) = declared_bytes
             && bytes > maximum
         {
@@ -242,7 +217,7 @@ fn admit_pending(
         }
         running_filters.push(filters.clone());
         carried.push(PlannedSubscription {
-            id,
+            completeness: completeness(&filters, constraints),
             filters,
             serves: [item.id()].into_iter().collect(),
         });
@@ -251,8 +226,11 @@ fn admit_pending(
 }
 
 /// Exact encoded byte length of the REQ this demand produces.
-fn encoded_bytes(id: &SubscriptionId, filter: &Filter) -> usize {
-    fava_wire::encode_client(&fava_wire::ClientMessage::req(id.clone(), filter.clone()))
+fn encoded_bytes(filter: &Filter) -> usize {
+    // Every identifier the session mints is exactly `SUBSCRIPTION_ID_BYTES`
+    // wide, so a placeholder of that width measures the real frame.
+    let placeholder = SubscriptionId::new("x".repeat(fava_subscriptions::SUBSCRIPTION_ID_BYTES));
+    fava_wire::encode_client(&fava_wire::ClientMessage::req(placeholder, filter.clone()))
         .map_or(usize::MAX, |frame| frame.len())
 }
 
@@ -266,17 +244,8 @@ fn assemble(
     owners: &BTreeMap<SubscriptionId, BTreeSet<DemandId>>,
     shortfalls: Vec<SubscriptionShortfall>,
 ) -> SubscriptionPlan {
-    let mut attribution = Vec::with_capacity(open.len() + owners.len());
-    for planned in &open {
-        attribution.push((
-            planned.id.clone(),
-            AttributedSubscription {
-                filters: planned.filters.clone(),
-                serves: planned.serves.clone(),
-                completeness: completeness(&planned.filters, constraints),
-            },
-        ));
-    }
+    // Attribution covers only what already carries a wire id.
+    let mut attribution = Vec::with_capacity(owners.len());
     let mut retain = Vec::with_capacity(owners.len());
     for (id, serves) in owners {
         let Some(entry) = installed.get(id) else {
@@ -294,27 +263,11 @@ fn assemble(
     }
     retain.sort();
 
-    let lost: BTreeSet<DemandId> = shortfalls.iter().map(|entry| entry.demand).collect();
-    let mut close = Vec::new();
-    for id in installed.ids() {
-        if owners.contains_key(id) {
-            continue;
-        }
-        let Some(entry) = installed.get(id) else {
-            continue;
-        };
-        let reason = if entry.serves.iter().any(|demand| lost.contains(demand)) {
-            WithdrawalReason::ConstraintChanged
-        } else {
-            WithdrawalReason::DemandWithdrawn {
-                released: entry.serves.clone(),
-            }
-        };
-        close.push(WithdrawnSubscription {
-            id: id.clone(),
-            reason,
-        });
-    }
+    let close: Vec<SubscriptionId> = installed
+        .ids()
+        .filter(|id| !owners.contains_key(*id))
+        .cloned()
+        .collect();
 
     SubscriptionPlan {
         relay: relay.clone(),

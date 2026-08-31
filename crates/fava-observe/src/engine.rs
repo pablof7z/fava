@@ -93,7 +93,7 @@ pub(crate) enum Report {
         generation: OperationGeneration,
         revision: fava_subscriptions::PlanRevision,
         plan: Box<SubscriptionPlan>,
-        opened: BTreeSet<SubscriptionId>,
+        opened: Vec<Option<SubscriptionId>>,
         closed: BTreeSet<SubscriptionId>,
     },
     Flush {
@@ -469,7 +469,7 @@ impl Engine {
             }
         }
         if planned.is_noop() {
-            self.record_installed(relay, planned, &BTreeSet::new(), &BTreeSet::new());
+            self.record_installed(relay, planned, &[], &BTreeSet::new());
             self.publish_plan(relay, demand, Some(planned));
             self.publish_relay_diagnostic(relay);
             return;
@@ -503,7 +503,7 @@ impl Engine {
         &mut self,
         relay: &RelaySessionKey,
         planned: &SubscriptionPlan,
-        opened: &BTreeSet<SubscriptionId>,
+        opened: &[Option<SubscriptionId>],
         closed: &BTreeSet<SubscriptionId>,
     ) {
         let Some(slot) = self.slots.get_mut(relay) else {

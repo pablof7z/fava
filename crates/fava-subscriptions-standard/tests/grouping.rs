@@ -6,10 +6,11 @@ use std::collections::BTreeSet;
 
 use fava_subscriptions::{
     DeclaredLimit, InstalledSubscriptions, RelayReadConstraints, ShortfallReason,
-    SubscriptionPlanError, SubscriptionPlanner, WithdrawalReason,
+    SubscriptionPlanError, SubscriptionPlanner,
 };
 use fava_subscriptions_standard::StandardSubscriptionPlanner;
-use fava_subscriptions_testkit::{PlannerScenario, apply_plan, assert_conformant};
+use fava_subscriptions_testkit::{
+    all_opened,PlannerScenario, apply_plan, assert_conformant};
 use nostr::filter::{Filter, SingleLetterTag};
 use nostr::key::Keys;
 use support::{
@@ -39,15 +40,15 @@ fn three_hundred_compatible_tag_queries_share_one_wire_request() {
     let plan = assert_conformant(&planner(), &scenario);
 
     assert_eq!(plan.open.len(), 1, "compatible tag demand shares one REQ");
-    assert_eq!(plan.attribution.len(), 1);
-    let id = plan.open[0].id.clone();
+    // Nothing is retained, so nothing carries a wire id to attribute.
+    assert_eq!(plan.attribution.len(), 0);
     assert_eq!(
-        plan.attribution.serves(&id).len(),
+        plan.open[0].serves.len(),
         300,
         "one EOSE settles every logical query it served"
     );
     for index in 1..=300 {
-        assert!(plan.attribution.serves(&id).contains(&demand_id(index)));
+        assert!(plan.open[0].serves.contains(&demand_id(index)));
     }
     assert!(plan.shortfalls.is_empty());
 }
@@ -89,10 +90,10 @@ fn replanning_retains_unchanged_wire_subscriptions() {
     let key = SingleLetterTag::from_char('t').expect("tag key");
     let stable = demand(1, Filter::new().custom_tag(key, "stable"));
     let first = PlannerScenario::fresh("first revision", relay(), vec![stable.clone()]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
     assert_eq!(installed.len(), 1);
 
     let arriving = demand(2, Filter::new().search("something else entirely"));
@@ -106,7 +107,10 @@ fn replanning_retains_unchanged_wire_subscriptions() {
     assert_eq!(plan.open.len(), 1, "only the new demand opens a REQ");
     assert_eq!(plan.retain.len(), 1, "the unchanged REQ is left alone");
     assert!(plan.close.is_empty());
-    assert_eq!(plan.attribution.len(), 2);
+    // Attribution covers the retained subscription only; the newly planned one
+    // is its own attribution.
+    assert_eq!(plan.attribution.len(), 1);
+    assert_eq!(plan.installed_count(), 2);
 }
 
 /// A second observation joining an already-installed grouped subscription
@@ -115,10 +119,10 @@ fn replanning_retains_unchanged_wire_subscriptions() {
 fn joining_demand_reuses_the_installed_subscription_without_a_frame() {
     let filter = Filter::new().search("identical");
     let first = PlannerScenario::fresh("first holder", relay(), vec![demand(1, filter.clone())]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
 
     let second = first
         .clone()
@@ -137,10 +141,10 @@ fn joining_demand_reuses_the_installed_subscription_without_a_frame() {
 fn withdrawal_only_plan_is_conformant() {
     let asked = demand(1, Filter::new().search("leaving"));
     let first = PlannerScenario::fresh("holder present", relay(), vec![asked]);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
 
     let second = first
         .clone()
@@ -151,12 +155,6 @@ fn withdrawal_only_plan_is_conformant() {
     assert!(plan.open.is_empty());
     assert!(plan.retain.is_empty());
     assert_eq!(plan.close.len(), 1);
-    assert_eq!(
-        plan.close[0].reason,
-        WithdrawalReason::DemandWithdrawn {
-            released: [demand_id(1)].into_iter().collect()
-        }
-    );
 }
 
 /// Refcounted withdrawal: one of two holders leaving keeps the wire open.
@@ -165,10 +163,10 @@ fn one_of_two_holders_leaving_keeps_the_subscription_open() {
     let filter = Filter::new().search("shared");
     let both = vec![demand(1, filter.clone()), demand(2, filter.clone())];
     let first = PlannerScenario::fresh("two holders", relay(), both);
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
 
     let second = first
         .clone()
@@ -239,10 +237,10 @@ fn a_declared_ceiling_keeps_installed_subscriptions_first() {
         .collect();
     let first = PlannerScenario::fresh("before the ceiling", relay(), early.clone())
         .declaring(declaring_subscriptions(2));
-    let installed = apply_plan(
-        &InstalledSubscriptions::empty(),
-        &assert_conformant(&planner(), &first),
-    );
+    let installed = {
+        let plan = assert_conformant(&planner(), &first);
+        apply_plan(&InstalledSubscriptions::empty(), &plan, &all_opened(&plan))
+    };
     let live: BTreeSet<_> = installed.ids().cloned().collect();
 
     let mut later = early;
@@ -372,34 +370,11 @@ fn a_declared_message_bound_splits_rather_than_truncates() {
     assert!(plan.open.len() > 1, "the merged REQ is split");
     assert!(plan.shortfalls.is_empty(), "splitting carries every demand");
     let served: BTreeSet<_> = plan
-        .attribution
-        .ids()
-        .flat_map(|id| plan.attribution.serves(id).iter().copied())
+        .open
+        .iter()
+        .flat_map(|planned| planned.serves.iter().copied())
         .collect();
     assert_eq!(served.len(), asked.len());
-}
-
-/// RELAY-004: identifiers are never silently collided under a declared
-/// id-length bound.
-#[test]
-fn a_declared_id_length_is_honored_or_reported() {
-    let asked: Vec<_> = (1..=4)
-        .map(|index| demand(index, Filter::new().search(format!("distinct-{index}"))))
-        .collect();
-    let constraints = RelayReadConstraints {
-        max_subscription_id_chars: declared(1),
-        ..RelayReadConstraints::unknown()
-    };
-    let scenario =
-        PlannerScenario::fresh("declared id length", relay(), asked).declaring(constraints);
-
-    let plan = assert_conformant(&planner(), &scenario);
-
-    for id in plan.installed_after() {
-        assert_eq!(id.as_str().chars().count(), 1);
-    }
-    let ids: BTreeSet<_> = plan.installed_after().cloned().collect();
-    assert_eq!(ids.len(), plan.installed_after().count(), "no collision");
 }
 
 /// `Err` is reserved for input the planner cannot process at all.

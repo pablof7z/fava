@@ -160,7 +160,7 @@ impl Engine {
         generation: OperationGeneration,
         revision: fava_subscriptions::PlanRevision,
         plan: &fava_subscriptions::SubscriptionPlan,
-        opened: &std::collections::BTreeSet<fava_wire::SubscriptionId>,
+        opened: &[Option<fava_wire::SubscriptionId>],
         closed: &std::collections::BTreeSet<fava_wire::SubscriptionId>,
     ) -> bool {
         {

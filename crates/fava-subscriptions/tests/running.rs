@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
     InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
-    SubscriptionAttribution, SubscriptionPlan, WithdrawalReason, WithdrawnSubscription,
+    SubscriptionAttribution, SubscriptionPlan,
     filter_covers, validate_plan,
 };
 use fava_wire::SubscriptionId;
@@ -65,31 +65,19 @@ fn a_running_subscription_may_not_be_closed_while_it_is_still_wanted() {
     let live = wire("live");
     let installed = running(&live, vec![held.filter.clone()], &[1]);
 
-    let successor = wire("fava-2-0");
     let merged = Filter::new().authors([alice, Keys::generate().public_key()]);
     let plan = SubscriptionPlan {
         relay: relay(),
         revision: revision(2),
         open: vec![PlannedSubscription {
-            id: successor.clone(),
-            filters: vec![merged.clone()],
+            filters: vec![merged],
             serves: [demand_id(1), demand_id(2)].into_iter().collect(),
+            completeness: EoseCompleteness::Proven,
         }],
         retain: Vec::new(),
-        close: vec![WithdrawnSubscription {
-            id: live.clone(),
-            reason: WithdrawalReason::Regrouped {
-                into: successor.clone(),
-            },
-        }],
-        attribution: SubscriptionAttribution::from_entries([(
-            successor,
-            AttributedSubscription {
-                filters: vec![merged],
-                serves: [demand_id(1), demand_id(2)].into_iter().collect(),
-                completeness: EoseCompleteness::Proven,
-            },
-        )]),
+        close: vec![live.clone()],
+        // Nothing is retained, so nothing carries a wire id to attribute.
+        attribution: SubscriptionAttribution::default(),
         shortfalls: Vec::new(),
     };
 
@@ -132,14 +120,13 @@ fn opening_a_second_subscription_for_running_filters_is_refused() {
     let held = demand(1, filter.clone());
     let joining = demand(2, filter.clone());
 
-    let duplicate = wire("fava-2-0");
     let plan = SubscriptionPlan {
         relay: relay(),
         revision: revision(2),
         open: vec![PlannedSubscription {
-            id: duplicate.clone(),
             filters: vec![filter.clone()],
             serves: [demand_id(2)].into_iter().collect(),
+            completeness: EoseCompleteness::Proven,
         }],
         retain: vec![live.clone()],
         close: Vec::new(),
@@ -152,14 +139,6 @@ fn opening_a_second_subscription_for_running_filters_is_refused() {
                     completeness: EoseCompleteness::Proven,
                 },
             ),
-            (
-                duplicate.clone(),
-                AttributedSubscription {
-                    filters: vec![filter],
-                    serves: [demand_id(2)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
         ]),
         shortfalls: Vec::new(),
     };
@@ -168,39 +147,7 @@ fn opening_a_second_subscription_for_running_filters_is_refused() {
         validate_plan(&relay(), &[held, joining], &unknown(), &installed, &plan),
         Err(PlanConformanceError::DuplicateFilters {
             first: live,
-            second: duplicate,
-        })
-    );
-}
-
-/// C5c: a withdrawal that names a successor must name one the plan installs.
-/// The executor withholds the CLOSE until that successor is accepted, so a
-/// successor that never arrives strands the CLOSE forever.
-#[test]
-fn a_withdrawal_naming_an_absent_successor_is_refused() {
-    let live = wire("live");
-    let installed = running(&live, vec![Filter::new().kind(Kind::from_u16(1))], &[1]);
-    let absent = wire("never-opened");
-    let plan = SubscriptionPlan {
-        relay: relay(),
-        revision: revision(2),
-        open: Vec::new(),
-        retain: Vec::new(),
-        close: vec![WithdrawnSubscription {
-            id: live.clone(),
-            reason: WithdrawalReason::Regrouped {
-                into: absent.clone(),
-            },
-        }],
-        attribution: SubscriptionAttribution::default(),
-        shortfalls: Vec::new(),
-    };
-
-    assert_eq!(
-        validate_plan(&relay(), &[], &unknown(), &installed, &plan),
-        Err(PlanConformanceError::UnknownSuccessor {
-            id: live,
-            successor: absent,
+            second: 0,
         })
     );
 }
@@ -284,14 +231,13 @@ fn opening_past_the_residual_budget_is_refused() {
         max_subscriptions: DeclaredLimit::Declared(NonZeroUsize::new(1).expect("non-zero")),
         ..RelayReadConstraints::unknown()
     };
-    let opened = wire("fava-2-0");
     let plan = SubscriptionPlan {
         relay: relay(),
         revision: revision(2),
         open: vec![PlannedSubscription {
-            id: opened.clone(),
             filters: vec![beta.clone()],
             serves: [demand_id(2)].into_iter().collect(),
+            completeness: EoseCompleteness::Proven,
         }],
         retain: vec![live.clone()],
         close: Vec::new(),
@@ -301,14 +247,6 @@ fn opening_past_the_residual_budget_is_refused() {
                 AttributedSubscription {
                     filters: vec![alpha.clone()],
                     serves: [demand_id(1)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
-            (
-                opened,
-                AttributedSubscription {
-                    filters: vec![beta.clone()],
-                    serves: [demand_id(2)].into_iter().collect(),
                     completeness: EoseCompleteness::Proven,
                 },
             ),

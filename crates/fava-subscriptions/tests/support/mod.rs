@@ -5,8 +5,7 @@ use std::num::NonZeroU64;
 
 use fava_query::{ObservationId, QueryBounds, QueryBranchId};
 use fava_relay::{RelayAccess, RelaySessionKey};
-use fava_subscriptions::{
-    AttributedSubscription, DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer,
+use fava_subscriptions::{ DemandId, EoseCompleteness, PlanRevision, PlanRevisionIssuer,
     PlannedSubscription, RelayDemand, SubscriptionAttribution, SubscriptionPlan,
 };
 use fava_wire::SubscriptionId;
@@ -72,7 +71,7 @@ pub fn wire(name: &str) -> SubscriptionId {
     reason = "shared fixture; not every test file uses every helper"
 )]
 pub fn opening(
-    id: &SubscriptionId,
+    _id: &SubscriptionId,
     filters: Vec<Filter>,
     serves: BTreeSet<DemandId>,
 ) -> SubscriptionPlan {
@@ -80,20 +79,14 @@ pub fn opening(
         relay: relay(),
         revision: revision(1),
         open: vec![PlannedSubscription {
-            id: id.clone(),
-            filters: filters.clone(),
-            serves: serves.clone(),
+            filters,
+            serves,
+            completeness: EoseCompleteness::Proven,
         }],
         retain: Vec::new(),
         close: Vec::new(),
-        attribution: SubscriptionAttribution::from_entries([(
-            id.clone(),
-            AttributedSubscription {
-                filters,
-                serves,
-                completeness: EoseCompleteness::Proven,
-            },
-        )]),
+        // Nothing is retained, so nothing carries a wire id to attribute.
+        attribution: SubscriptionAttribution::default(),
         shortfalls: Vec::new(),
     }
 }

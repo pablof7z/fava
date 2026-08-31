@@ -139,40 +139,16 @@ mod plan_revision_tests {
 /// Authority: ARCH:1500 (`wire: Vec<PlannedSubscription>`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlannedSubscription {
-    /// Wire id the planner allocated. Never a logical id.
-    pub id: SubscriptionId,
     /// Filters for this REQ. A NIP-01 REQ may carry several.
+    ///
+    /// The planner does not name the subscription. The session mints the wire
+    /// id when it sends the REQ and reports it back, so a planned subscription
+    /// is its own attribution until then.
     pub filters: Vec<Filter>,
     /// Logical demand this subscription serves.
     pub serves: BTreeSet<DemandId>,
-}
-
-/// One wire subscription the plan wants closed, with its reason.
-///
-/// Authority: ARCH:1513 "withdrawal identity".
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WithdrawnSubscription {
-    /// Wire id to CLOSE.
-    pub id: SubscriptionId,
-    /// Why this wire subscription lost its last logical holder.
-    pub reason: WithdrawalReason,
-}
-
-/// Why a wire subscription is being withdrawn.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum WithdrawalReason {
-    /// Every `DemandId` it served has left the demand set.
-    DemandWithdrawn {
-        /// Demand that was still attributed to it at withdrawal.
-        released: BTreeSet<DemandId>,
-    },
-    /// Its demand is now served by a different wire subscription.
-    Regrouped {
-        /// Wire subscription that now serves the demand.
-        into: SubscriptionId,
-    },
-    /// It no longer fits the relay's declared constraints.
-    ConstraintChanged,
+    /// Whether an EOSE on this subscription proves its stored window complete.
+    pub completeness: EoseCompleteness,
 }
 
 /// Attribution from every wire subscription back to the logical demand it serves.
@@ -303,12 +279,6 @@ pub enum ShortfallReason {
         /// Declared maximum.
         maximum: usize,
     },
-    /// No wire id short enough to satisfy the declared id-length limit could be
-    /// allocated without collision.
-    SubscriptionIdTooLong {
-        /// Declared maximum characters.
-        maximum: usize,
-    },
     /// The planner refuses to express this demand exactly on this relay.
     NotExpressible {
         /// Bounded planner reason.
@@ -333,9 +303,10 @@ pub struct SubscriptionPlan {
     /// No frame is emitted for these.
     pub retain: Vec<SubscriptionId>,
     /// Installed wire subscriptions to CLOSE now.
-    pub close: Vec<WithdrawnSubscription>,
-    /// Complete attribution for the plan's *resulting* installed set, i.e.
-    /// `open` plus `retain`.
+    pub close: Vec<SubscriptionId>,
+    /// Attribution for the subscriptions that already carry a wire id, i.e.
+    /// `retain`. Each entry of `open` is its own attribution and has no id
+    /// until the session mints one.
     pub attribution: SubscriptionAttribution,
     /// Demand this plan does not carry.
     pub shortfalls: Vec<SubscriptionShortfall>,
@@ -348,11 +319,17 @@ impl SubscriptionPlan {
         self.open.is_empty() && self.close.is_empty()
     }
 
-    /// Wire ids the plan expects to be installed after execution.
-    pub fn installed_after(&self) -> impl Iterator<Item = &SubscriptionId> {
-        self.open
-            .iter()
-            .map(|planned| &planned.id)
-            .chain(self.retain.iter())
+    /// Wire ids that already exist and survive this plan.
+    ///
+    /// Newly opened subscriptions are absent: they have no wire id until the
+    /// session mints one when it sends the REQ.
+    pub fn retained_after(&self) -> impl Iterator<Item = &SubscriptionId> {
+        self.retain.iter()
+    }
+
+    /// How many subscriptions are installed once this plan executes in full.
+    #[must_use]
+    pub fn installed_count(&self) -> usize {
+        self.open.len() + self.retain.len()
     }
 }

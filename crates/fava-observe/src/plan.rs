@@ -19,7 +19,7 @@ use fava_wire::SubscriptionId;
 pub(crate) fn accepted(
     baseline: &InstalledSubscriptions,
     plan: &SubscriptionPlan,
-    opened: &BTreeSet<SubscriptionId>,
+    opened: &[Option<SubscriptionId>],
     closed: &BTreeSet<SubscriptionId>,
 ) -> InstalledSubscriptions {
     let mut entries = Vec::new();
@@ -43,12 +43,14 @@ pub(crate) fn accepted(
             },
         ));
     }
-    for candidate in &plan.open {
-        if !opened.contains(&candidate.id) {
+    for (position, candidate) in plan.open.iter().enumerate() {
+        // The session named each subscription when it sent the REQ; a position
+        // with no name is one the transport refused.
+        let Some(Some(id)) = opened.get(position) else {
             continue;
-        }
+        };
         entries.push((
-            candidate.id.clone(),
+            id.clone(),
             InstalledSubscription {
                 filters: candidate.filters.clone(),
                 serves: candidate.serves.clone(),
@@ -120,8 +122,7 @@ mod tests {
                 revision(1),
             )
             .expect("the planner accepts the cohort");
-        let accepted_ids: BTreeSet<SubscriptionId> =
-            opening.open.iter().map(|entry| entry.id.clone()).collect();
+        let accepted_ids = fava_subscriptions_testkit::all_opened(&opening);
         let installed = accepted(
             &InstalledSubscriptions::empty(),
             &opening,
@@ -131,7 +132,11 @@ mod tests {
 
         assert_eq!(
             ids(&installed),
-            ids(&apply_plan(&InstalledSubscriptions::empty(), &opening))
+            ids(&apply_plan(
+                &InstalledSubscriptions::empty(),
+                &opening,
+                &accepted_ids,
+            ))
         );
 
         let second = vec![
@@ -141,14 +146,12 @@ mod tests {
         let growing = planner
             .plan(&relay(), &second, &constraints, &installed, revision(2))
             .expect("the planner accepts the second cohort");
-        let opened: BTreeSet<SubscriptionId> =
-            growing.open.iter().map(|entry| entry.id.clone()).collect();
-        let closed: BTreeSet<SubscriptionId> =
-            growing.close.iter().map(|entry| entry.id.clone()).collect();
+        let opened = fava_subscriptions_testkit::all_opened(&growing);
+        let closed: BTreeSet<SubscriptionId> = growing.close.iter().cloned().collect();
 
         assert_eq!(
             ids(&accepted(&installed, &growing, &opened, &closed)),
-            ids(&apply_plan(&installed, &growing))
+            ids(&apply_plan(&installed, &growing, &opened))
         );
     }
 
@@ -170,10 +173,12 @@ mod tests {
             )
             .expect("the planner accepts the cohort");
 
+        // Every position refused: the session named nothing.
+        let refused: Vec<Option<SubscriptionId>> = vec![None; opening.open.len()];
         let installed = accepted(
             &InstalledSubscriptions::empty(),
             &opening,
-            &BTreeSet::new(),
+            &refused,
             &BTreeSet::new(),
         );
 

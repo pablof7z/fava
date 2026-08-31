@@ -34,11 +34,11 @@ use fava_query::Query;
 pub use fava_query::{ObservationId, OperationGeneration, QueryBounds, QueryBranchId};
 pub use installed::{InstalledSubscription, InstalledSubscriptions};
 use nostr::filter::Filter;
+pub use fava_transport::{SUBSCRIPTION_ID_BYTES, subscription_id};
 pub use plan::{
     AttributedSubscription, EoseCompleteness, PlanRevision, PlanRevisionExhausted,
     PlanRevisionIssuer, PlannedSubscription, ShortfallReason, SubscriptionAttribution,
-    SubscriptionPlan, SubscriptionShortfall, WithdrawalReason, WithdrawnSubscription,
-};
+    SubscriptionPlan, SubscriptionShortfall, };
 pub use planner::{SubscriptionPlanError, SubscriptionPlanner};
 
 /// Convert one public Query into the exact NIP-01 relay demand of one

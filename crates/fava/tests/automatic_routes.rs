@@ -74,6 +74,7 @@ impl Transport for RecordingTransport {
                 })
                 .map_err(|_| TransportError::GenerationExhausted)?;
             let session = Arc::new(RecordingSession {
+                subscriptions: std::sync::atomic::AtomicU64::new(0),
                 identity: RelaySessionIdentity {
                     key: request.key,
                     generation: RelaySessionGeneration::new(previous + 1)
@@ -100,6 +101,7 @@ impl Transport for RecordingTransport {
 }
 
 struct RecordingSession {
+    subscriptions: std::sync::atomic::AtomicU64,
     identity: RelaySessionIdentity,
     sent: Mutex<Vec<String>>,
     closed: AtomicBool,
@@ -121,7 +123,13 @@ impl RelaySession for RecordingSession {
         self.identity.clone()
     }
 
-    fn send(
+    fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
+        fava_transport::subscription_id(
+            self.subscriptions.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        )
+    }
+
+    fn hand_off(
         &self,
         frame: Vec<u8>,
         correlation: HandoffCorrelation,

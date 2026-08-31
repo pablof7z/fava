@@ -775,6 +775,7 @@ version = "0.1.0"
 dependencies = [
  "fava-relay",
  "fava-state",
+ "fava-wire",
  "nostr",
  "thiserror",
 ]

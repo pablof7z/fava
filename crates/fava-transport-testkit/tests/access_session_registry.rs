@@ -84,14 +84,14 @@ async fn same_correlation_completions_remain_scoped_to_exact_key_and_generation(
     assert!(matches!(
         public_lease
             .session()
-            .send(b"public".to_vec(), correlation)
+            .hand_off(b"public".to_vec(), correlation)
             .await,
         HandoffOutcome::HandedOff { .. }
     ));
     assert!(matches!(
         private_lease
             .session()
-            .send(b"private".to_vec(), correlation)
+            .hand_off(b"private".to_vec(), correlation)
             .await,
         HandoffOutcome::HandedOff { .. }
     ));

@@ -8,6 +8,7 @@ rust-version.workspace = true
 nostr.workspace = true
 fava-relay.workspace = true
 fava-state.workspace = true
+fava-wire.workspace = true
 thiserror.workspace = true
 
 [lints]

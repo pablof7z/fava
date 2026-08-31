@@ -26,6 +26,8 @@ pub(crate) struct SessionShared {
     pub(crate) close_finished: Notify,
     pub(crate) entropy: u64,
     pub(crate) generations: Arc<AtomicU64>,
+    /// Monotonic source of this session's wire subscription identifiers.
+    pub(crate) subscriptions: Arc<AtomicU64>,
 }
 
 impl SessionShared {
@@ -34,6 +36,7 @@ impl SessionShared {
         entropy: u64,
         generation: RelaySessionGeneration,
         generations: Arc<AtomicU64>,
+        subscriptions: Arc<AtomicU64>,
     ) -> Self {
         Self {
             identity: Arc::new(LiveIdentity::new(request.key.clone(), generation)),
@@ -46,6 +49,7 @@ impl SessionShared {
             close_finished: Notify::new(),
             entropy,
             generations,
+            subscriptions,
         }
     }
 }
@@ -61,7 +65,11 @@ impl RelaySession for WebSocketRelaySession {
         self.shared.identity.read()
     }
 
-    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
+    fn mint_subscription_id(&self) -> fava_transport::SubscriptionId {
+        fava_transport::subscription_id(self.shared.subscriptions.fetch_add(1, Ordering::SeqCst))
+    }
+
+    fn hand_off(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_> {
         Box::pin(async move {
             let identity = self.shared.identity.read();
             let refuse = |reason| HandoffOutcome::NotHandedOff {

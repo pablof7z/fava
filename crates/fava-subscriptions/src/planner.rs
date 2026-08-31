@@ -2,7 +2,6 @@
 
 use fava_relay::RelaySessionKey;
 use fava_transport::BoundedText;
-use fava_wire::SubscriptionId;
 use thiserror::Error;
 
 use crate::constraints::RelayReadConstraints;
@@ -49,13 +48,11 @@ use crate::plan::{PlanRevision, SubscriptionPlan};
 ///   request would then settle the new one.
 /// * **Truthful baseline.** `installed` is exactly what the transport accepted
 ///   on the current session generation, and is empty on a fresh generation.
-/// * **Open before close.** A [`crate::WithdrawnSubscription`] whose reason is
-///   [`crate::WithdrawalReason::Regrouped`] names its successor. The executor
-///   sends that successor's REQ first and withholds the CLOSE until the
-///   successor is locally accepted; if the successor is refused, the
-///   predecessor stays live and no CLOSE is sent. An in-place re-REQ under an
-///   existing id is never correct: the following EOSE names only the shared
-///   id and cannot say which filter generation it completed.
+/// * **Open before close.** The executor sends every planned REQ before any
+///   CLOSE, and withholds a CLOSE while demand the subscription served is still
+///   waiting on a REQ that was refused. An in-place re-REQ under an existing id
+///   is never correct: the following EOSE names only the shared id and cannot
+///   say which filter generation it completed.
 ///
 /// # The admission cohort
 ///
@@ -106,9 +103,6 @@ pub enum SubscriptionPlanError {
     /// Two demands in one call carry the same `DemandId`.
     #[error("duplicate logical demand: observation {:?} branch {:?}", .0.owner, .0.branch)]
     DuplicateDemand(DemandId),
-    /// The planner allocated the same wire id twice within one plan.
-    #[error("duplicate wire subscription id: {0}")]
-    DuplicateSubscription(SubscriptionId),
     /// Exact Nostr REQ encoding failed before any handoff.
     #[error("REQ encoding failed: {0:?}")]
     Encoding(BoundedText),

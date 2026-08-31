@@ -200,7 +200,7 @@ fn a_declared_ceiling_is_reported_by_both_planners() {
     assert_eq!(grouped.revision, scenario.revision);
     assert_eq!(ungrouped.revision, scenario.revision);
     for plan in [&grouped, &ungrouped] {
-        assert_eq!(plan.installed_after().count(), 2);
+        assert_eq!(plan.installed_count(), 2);
     }
 }
 

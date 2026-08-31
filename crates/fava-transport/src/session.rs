@@ -1,8 +1,41 @@
 //! One live connection generation and its per-consumer inbound streams.
 
 use fava_relay::RelaySessionKey;
+use fava_wire::{ClientMessage, SubscriptionId, encode_client};
+use nostr::event::Event;
+use nostr::filter::Filter;
 
-use crate::{HandoffFuture, RelayInboundFuture, ReleaseFuture};
+use crate::{
+    HandoffFuture, HandoffOutcome, RelayInboundFuture, ReqFuture, ReleaseFuture, TransportFailure,
+};
+
+/// Exact width, in bytes, of every wire subscription identifier Fava mints.
+///
+/// A namespace prefix and a zero-padded counter, and nothing else: the width is
+/// fixed so the encoded length of a `REQ` is derivable before the identifier
+/// exists, and it sits well inside the 64 characters NIP-01 obliges every relay
+/// to accept, so a Fava identifier is never too long for a conforming relay.
+pub const SUBSCRIPTION_ID_BYTES: usize = 21;
+
+/// One wire subscription the session opened, and the outcome of its `REQ`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenedSubscription {
+    /// Identifier the session minted and put on the wire.
+    pub id: SubscriptionId,
+    /// Outcome of handing the `REQ` frame to the relay.
+    pub handoff: HandoffOutcome,
+}
+
+/// Mint one fixed-width, opaque wire subscription identifier from a counter.
+///
+/// Exposed so every `RelaySession` implementation produces the same shape, and
+/// so `SUBSCRIPTION_ID_BYTES` has exactly one producer to agree with.
+#[must_use]
+pub fn subscription_id(counter: u64) -> SubscriptionId {
+    let id = format!("fava-{counter:016x}");
+    debug_assert_eq!(id.len(), SUBSCRIPTION_ID_BYTES);
+    SubscriptionId::new(id)
+}
 
 /// Exact authority of one live connection generation.
 ///
@@ -75,11 +108,74 @@ pub trait RelaySession: Send + Sync {
     /// Current identity. The generation changes under the holder on reconnect.
     fn identity(&self) -> RelaySessionIdentity;
 
-    /// Attempt to hand off one complete frame, correlated.
+    /// Hand one complete, already-encoded frame to the relay.
+    ///
+    /// This is the implementer's obligation, not a caller's tool: every way to
+    /// reach a relay is a verb below, and the verbs own the envelope so that
+    /// NIP-01 is written in exactly one place. Nothing outside a `Transport`
+    /// implementation calls this.
     ///
     /// MUST NOT park indefinitely: the outbound queue is bounded and
     /// `deadlines.write` applies. A full queue is `NotHandedOff`, never a wait.
-    fn send(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_>;
+    fn hand_off(&self, frame: Vec<u8>, correlation: HandoffCorrelation) -> HandoffFuture<'_>;
+
+    /// Mint the next wire subscription identifier for this session.
+    ///
+    /// Identifiers are unique among the subscriptions live on one session by
+    /// construction. Implementations produce them with [`subscription_id`].
+    fn mint_subscription_id(&self) -> SubscriptionId;
+
+    /// Open one wire subscription carrying `filters`.
+    ///
+    /// The session names the subscription; the caller supplies only what to
+    /// match. The returned identifier is the one the frame carried.
+    fn req(&self, filters: Vec<Filter>) -> ReqFuture<'_> {
+        Box::pin(async move {
+            let id = self.mint_subscription_id();
+            let message = ClientMessage::Req {
+                subscription_id: std::borrow::Cow::Owned(id.clone()),
+                filters: filters.into_iter().map(std::borrow::Cow::Owned).collect(),
+            };
+            let handoff = self.encoded(&message).await;
+            OpenedSubscription { id, handoff }
+        })
+    }
+
+    /// Close one wire subscription this session opened.
+    fn close_subscription(&self, id: SubscriptionId) -> HandoffFuture<'_> {
+        Box::pin(async move { self.encoded(&ClientMessage::close(id)).await })
+    }
+
+    /// Publish one signed event.
+    fn event(&self, event: Event) -> HandoffFuture<'_> {
+        Box::pin(async move { self.encoded(&ClientMessage::event(event)).await })
+    }
+
+    /// Answer one NIP-42 challenge with a signed authentication event.
+    fn auth(&self, event: Event) -> HandoffFuture<'_> {
+        Box::pin(async move { self.encoded(&ClientMessage::auth(event)).await })
+    }
+
+    /// Encode one client message and hand it off. Implementers do not override
+    /// this: it is the single place a Fava client message becomes bytes.
+    #[doc(hidden)]
+    fn encoded<'a>(&'a self, message: &'a ClientMessage<'a>) -> HandoffFuture<'a> {
+        Box::pin(async move {
+            match encode_client(message) {
+                Ok(frame) => {
+                    self.hand_off(frame.into_bytes(), HandoffCorrelation::new(0))
+                        .await
+                }
+                Err(error) => HandoffOutcome::NotHandedOff {
+                    identity: self.identity(),
+                    correlation: HandoffCorrelation::new(0),
+                    reason: TransportFailure::Disconnected {
+                        detail: crate::BoundedText::new(format!("REQ encoding failed: {error}")),
+                    },
+                },
+            }
+        })
+    }
 
     /// Obtain an independently-pollable inbound stream for **this consumer**.
     ///

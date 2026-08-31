@@ -29,14 +29,15 @@ use std::time::Duration;
 
 pub use error::TransportError;
 pub use fava_relay::BoundedText;
+pub use fava_wire::SubscriptionId;
 use fava_relay::RelaySessionKey;
 pub use handoff::{HandoffOutcome, ReleaseOutcome, TransportAmbiguity, TransportFailure};
 pub use inbound::RelayInbound;
 pub use lease::{LeaseRelease, RelaySessionLease};
 pub use request::{OpenRelaySession, TransportBounds, TransportDeadlines};
 pub use session::{
-    HandoffCorrelation, RelayMessageStream, RelaySession, RelaySessionGeneration,
-    RelaySessionIdentity,
+    HandoffCorrelation, OpenedSubscription, RelayMessageStream, RelaySession,
+    RelaySessionGeneration, RelaySessionIdentity, SUBSCRIPTION_ID_BYTES, subscription_id,
 };
 
 /// Future yielding an acquired lease on the current session for one key.
@@ -45,6 +46,9 @@ pub type RelaySessionFuture<'a> =
 
 /// Future yielding one correlated byte-handoff outcome.
 pub type HandoffFuture<'a> = Pin<Box<dyn Future<Output = HandoffOutcome> + Send + 'a>>;
+
+/// Future yielding one opened wire subscription and its `REQ` outcome.
+pub type ReqFuture<'a> = Pin<Box<dyn Future<Output = OpenedSubscription> + Send + 'a>>;
 
 /// Future yielding the outcome of releasing one lease.
 pub type ReleaseFuture<'a> =

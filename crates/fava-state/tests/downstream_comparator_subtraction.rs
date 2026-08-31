@@ -1260,10 +1260,6 @@ fn expected_non_winner_ordering_manifest() -> BTreeMap<FunctionId, BTreeSet<Stri
             &["created_at<=source.created_at()"][..],
         ),
         (
-            ("crates/fava-subscriptions-standard/src/diff.rs", "assemble", None, "fnassemble(relay:&RelaySessionKey,revision:PlanRevision,opened:Vec<(SubscriptionId,AttributedSubscription)>,constraints:&RelayReadConstraints,installed:&InstalledSubscriptions,owners:&BTreeMap<SubscriptionId,BTreeSet<DemandId>>,shortfalls:Vec<SubscriptionShortfall>,)->SubscriptionPlan"),
-            &["left.id.cmp(&right.id)"][..],
-        ),
-        (
             ("crates/fava-subscriptions-standard/src/grouping.rs", "canonical_order", None, "fncanonical_order(demand:&[RelayDemand])->Vec<RelayDemand>"),
             &["left.1.id().cmp(&right.1.id())"][..],
         ),

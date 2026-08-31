@@ -39,6 +39,10 @@ struct Registry {
     shutting_down: AtomicBool,
     entropy: AtomicU64,
     generations: Arc<AtomicU64>,
+    /// Transport-wide source of wire subscription identifiers. Never reset by a
+    /// reconnect or a re-acquired session, so a reopened request can never wear
+    /// a closed request's identity (GOALS:426, QUERY-010).
+    subscriptions: Arc<AtomicU64>,
 }
 
 /// One live relay session and how many leases are still outstanding on it.
@@ -99,6 +103,7 @@ impl Transport for WebSocketTransport {
                 entropy,
                 generation,
                 Arc::clone(&self.registry.generations),
+                Arc::clone(&self.registry.subscriptions),
             ));
             let socket = establish(&shared)
                 .await

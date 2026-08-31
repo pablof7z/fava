@@ -65,24 +65,17 @@ impl SubscriptionPlanner for StandardSubscriptionPlanner {
 
         let (mut attached, pending) = attach::admit(&admissible, installed);
         let grouped = grouping::group(&pending, constraints);
-        let candidates = fit_message_bound(
-            grouped,
-            constraints,
-            revision,
-            pending.len(),
-            &mut shortfalls,
-        )?;
+        let candidates = fit_message_bound(grouped, constraints, &mut shortfalls)?;
         let candidates = fold_identical_filters(candidates);
         let candidates = fold_into_running(candidates, installed, &mut attached);
 
         let owners = attach::surviving_owners(&admissible, installed, &attached);
         let candidates = fit_residual_count(candidates, constraints, owners.len(), &mut shortfalls);
-        let opened = mint_identities(candidates, constraints, revision, &mut shortfalls);
 
         Ok(diff::assemble(
             relay,
             revision,
-            opened,
+            candidates,
             constraints,
             installed,
             &owners,
@@ -138,11 +131,8 @@ fn admit_filter_limits(
 fn fit_message_bound(
     grouped: Vec<(Filter, Vec<RelayDemand>)>,
     constraints: &RelayReadConstraints,
-    revision: PlanRevision,
-    pending: usize,
     shortfalls: &mut Vec<SubscriptionShortfall>,
 ) -> Result<Vec<AttributedSubscription>, SubscriptionPlanError> {
-    let probe = wire::mint(revision, pending);
     let mut queue: VecDeque<(Filter, Vec<RelayDemand>)> = grouped.into();
     let mut carried = Vec::new();
     while let Some((filter, members)) = queue.pop_front() {
@@ -150,7 +140,7 @@ fn fit_message_bound(
             continue;
         }
         let filters = vec![filter];
-        let bytes = wire::encoded_bytes(&probe, &filters)?;
+        let bytes = wire::encoded_bytes(&filters)?;
         let declared = constraints.max_message_bytes.get().map(NonZeroUsize::get);
         if declared.is_none_or(|maximum| bytes <= maximum) {
             carried.push(AttributedSubscription {
@@ -257,37 +247,6 @@ fn fit_residual_count(
     candidates
 }
 
-/// Give every carried candidate a freshly minted wire identity.
-///
-/// A declared id-length bound is an admission check, never a truncation: an id
-/// too long for the relay is typed shortfall, because a truncated id collides.
-fn mint_identities(
-    candidates: Vec<AttributedSubscription>,
-    constraints: &RelayReadConstraints,
-    revision: PlanRevision,
-    shortfalls: &mut Vec<SubscriptionShortfall>,
-) -> Vec<(SubscriptionId, AttributedSubscription)> {
-    let declared = constraints
-        .max_subscription_id_chars
-        .get()
-        .map(NonZeroUsize::get);
-    let mut opened = Vec::with_capacity(candidates.len());
-    for (ordinal, candidate) in candidates.into_iter().enumerate() {
-        let id = wire::mint(revision, ordinal);
-        if declared.is_some_and(|maximum| id.as_str().chars().count() > maximum) {
-            let maximum = declared.unwrap_or(0);
-            for demand in candidate.serves {
-                shortfalls.push(SubscriptionShortfall {
-                    demand,
-                    reason: ShortfallReason::SubscriptionIdTooLong { maximum },
-                });
-            }
-            continue;
-        }
-        opened.push((id, candidate));
-    }
-    opened
-}
 
 /// What an EOSE on one candidate would actually prove.
 ///

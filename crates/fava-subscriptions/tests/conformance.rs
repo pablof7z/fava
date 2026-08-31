@@ -15,7 +15,7 @@ use fava_subscriptions::{
     AttributedSubscription, DeclaredLimit, EoseCompleteness, InstalledSubscription,
     InstalledSubscriptions, PlanConformanceError, PlannedSubscription, RelayReadConstraints,
     ShortfallReason, SubscriptionAttribution, SubscriptionPlan, SubscriptionShortfall,
-    WithdrawalReason, WithdrawnSubscription, validate_plan,
+    validate_plan,
 };
 use nostr::event::Kind;
 use nostr::filter::Filter;
@@ -65,12 +65,7 @@ fn withdrawal_only_plan_is_conformant() {
         revision: revision(2),
         open: Vec::new(),
         retain: Vec::new(),
-        close: vec![WithdrawnSubscription {
-            id,
-            reason: WithdrawalReason::DemandWithdrawn {
-                released: [demand_id(1)].into_iter().collect(),
-            },
-        }],
+        close: vec![id],
         attribution: SubscriptionAttribution::default(),
         shortfalls: Vec::new(),
     };
@@ -78,7 +73,7 @@ fn withdrawal_only_plan_is_conformant() {
     validate_plan(&relay(), &[], &unknown(), &installed, &plan)
         .expect("closing everything for empty demand is the correct plan");
     assert!(!plan.is_noop());
-    assert_eq!(plan.installed_after().count(), 0);
+    assert_eq!(plan.installed_count(), 0);
 }
 
 /// A plan that carries some demand and reports the rest is `Ok`, not `Err`.
@@ -132,50 +127,37 @@ fn a_plan_scoped_to_another_relay_is_refused() {
 fn one_wire_id_cannot_appear_in_two_diff_buckets() {
     let asked = demand(1, Filter::new().kind(Kind::from_u16(1)));
     let id = wire("both");
+    // The installed subscription serves nothing, so CR-1 has nothing to protect
+    // and the bucket rule is what refuses the plan.
     let installed = InstalledSubscriptions::from_entries([(
         id.clone(),
         InstalledSubscription {
             filters: vec![asked.filter.clone()],
-            serves: [demand_id(1)].into_iter().collect(),
+            serves: BTreeSet::new(),
         },
     )]);
-    let mut plan = opening(
-        &id,
-        vec![asked.filter.clone()],
-        [demand_id(1)].into_iter().collect(),
-    );
-    plan.close.push(WithdrawnSubscription {
-        id: id.clone(),
-        reason: WithdrawalReason::ConstraintChanged,
-    });
+    // `open` carries no identity to collide with, so the only way one wire id
+    // can appear twice is to be both retained and closed.
+    let plan = SubscriptionPlan {
+        relay: relay(),
+        revision: revision(1),
+        open: Vec::new(),
+        retain: vec![id.clone()],
+        close: vec![id.clone()],
+        attribution: SubscriptionAttribution::from_entries([(
+            id.clone(),
+            AttributedSubscription {
+                filters: vec![asked.filter.clone()],
+                serves: BTreeSet::new(),
+                completeness: EoseCompleteness::Proven,
+            },
+        )]),
+        shortfalls: Vec::new(),
+    };
 
     assert_eq!(
-        validate_plan(&relay(), &[asked], &unknown(), &installed, &plan),
+        validate_plan(&relay(), &[], &unknown(), &installed, &plan),
         Err(PlanConformanceError::OverlappingBuckets(id))
-    );
-}
-
-/// C3: reopening a live wire id would collide two subscriptions on one relay.
-#[test]
-fn reopening_an_installed_wire_id_is_refused() {
-    let asked = demand(1, Filter::new().kind(Kind::from_u16(1)));
-    let id = wire("live");
-    let installed = InstalledSubscriptions::from_entries([(
-        id.clone(),
-        InstalledSubscription {
-            filters: vec![asked.filter.clone()],
-            serves: [demand_id(1)].into_iter().collect(),
-        },
-    )]);
-    let plan = opening(
-        &id,
-        vec![asked.filter.clone()],
-        [demand_id(1)].into_iter().collect(),
-    );
-
-    assert_eq!(
-        validate_plan(&relay(), &[asked], &unknown(), &installed, &plan),
-        Err(PlanConformanceError::ReopenedInstalled(id))
     );
 }
 
@@ -221,34 +203,7 @@ fn a_planned_subscription_without_a_filter_is_refused() {
 
     assert_eq!(
         validate_plan(&relay(), &[asked], &unknown(), &nothing(), &plan),
-        Err(PlanConformanceError::EmptyFilters(id))
-    );
-}
-
-/// C7: old rule 8 only compared the first filter. Ingest authorizes an event
-/// against the whole vector, so the whole vector must match.
-#[test]
-fn attribution_that_drops_a_filter_is_refused() {
-    let first = demand(1, Filter::new().kind(Kind::from_u16(1)));
-    let second = demand(2, Filter::new().kind(Kind::from_u16(7)));
-    let id = wire("truncated");
-    let mut plan = opening(
-        &id,
-        vec![first.filter.clone(), second.filter.clone()],
-        [demand_id(1), demand_id(2)].into_iter().collect(),
-    );
-    plan.attribution = SubscriptionAttribution::from_entries([(
-        id.clone(),
-        AttributedSubscription {
-            filters: vec![first.filter.clone()],
-            serves: [demand_id(1), demand_id(2)].into_iter().collect(),
-            completeness: EoseCompleteness::Proven,
-        },
-    )]);
-
-    assert_eq!(
-        validate_plan(&relay(), &[first, second], &unknown(), &nothing(), &plan),
-        Err(PlanConformanceError::FilterAttributionMismatch(id))
+        Err(PlanConformanceError::EmptyFilters(0))
     );
 }
 
@@ -298,36 +253,20 @@ fn exceeding_a_declared_subscription_count_is_refused() {
         revision: revision(1),
         open: vec![
             PlannedSubscription {
-                id: wire("one"),
                 filters: vec![first.filter.clone()],
                 serves: [demand_id(1)].into_iter().collect(),
+                completeness: EoseCompleteness::Proven,
             },
             PlannedSubscription {
-                id: wire("two"),
                 filters: vec![second.filter.clone()],
                 serves: [demand_id(2)].into_iter().collect(),
+                completeness: EoseCompleteness::Proven,
             },
         ],
         retain: Vec::new(),
         close: Vec::new(),
-        attribution: SubscriptionAttribution::from_entries([
-            (
-                wire("one"),
-                AttributedSubscription {
-                    filters: vec![first.filter.clone()],
-                    serves: [demand_id(1)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
-            (
-                wire("two"),
-                AttributedSubscription {
-                    filters: vec![second.filter.clone()],
-                    serves: [demand_id(2)].into_iter().collect(),
-                    completeness: EoseCompleteness::Proven,
-                },
-            ),
-        ]),
+        // Nothing is retained, so nothing carries a wire id to attribute.
+        attribution: SubscriptionAttribution::default(),
         shortfalls: Vec::new(),
     };
     let constraints = RelayReadConstraints {
@@ -344,27 +283,6 @@ fn exceeding_a_declared_subscription_count_is_refused() {
     );
 }
 
-/// C11: a declared subscription-id length is honored.
-#[test]
-fn exceeding_a_declared_subscription_id_length_is_refused() {
-    let asked = demand(1, Filter::new().kind(Kind::from_u16(1)));
-    let id = wire("far-too-long-for-this-relay");
-    let plan = opening(
-        &id,
-        vec![asked.filter.clone()],
-        [demand_id(1)].into_iter().collect(),
-    );
-    let constraints = RelayReadConstraints {
-        max_subscription_id_chars: DeclaredLimit::Declared(NonZeroUsize::new(8).expect("non-zero")),
-        ..RelayReadConstraints::unknown()
-    };
-
-    assert_eq!(
-        validate_plan(&relay(), &[asked], &constraints, &nothing(), &plan),
-        Err(PlanConformanceError::DeclaredIdLengthExceeded { id, maximum: 8 })
-    );
-}
-
 /// An unknown limit constrains nothing: absence is never an invented default.
 #[test]
 fn unknown_declared_limits_constrain_nothing() {
@@ -372,23 +290,12 @@ fn unknown_declared_limits_constrain_nothing() {
         .map(|index| demand(u64::from(index), Filter::new().kind(Kind::from_u16(index))))
         .collect();
     let mut open = Vec::new();
-    let mut attribution = Vec::new();
     for item in &asked {
-        let id = wire(&format!("wire-{}", item.owner.get()));
-        let serves: BTreeSet<_> = [item.id()].into_iter().collect();
         open.push(PlannedSubscription {
-            id: id.clone(),
             filters: vec![item.filter.clone()],
-            serves: serves.clone(),
+            serves: [item.id()].into_iter().collect(),
+            completeness: EoseCompleteness::Proven,
         });
-        attribution.push((
-            id,
-            AttributedSubscription {
-                filters: vec![item.filter.clone()],
-                serves,
-                completeness: EoseCompleteness::Proven,
-            },
-        ));
     }
     let plan = SubscriptionPlan {
         relay: relay(),
@@ -396,7 +303,8 @@ fn unknown_declared_limits_constrain_nothing() {
         open,
         retain: Vec::new(),
         close: Vec::new(),
-        attribution: SubscriptionAttribution::from_entries(attribution),
+        // Nothing is retained, so nothing carries a wire id to attribute.
+        attribution: SubscriptionAttribution::default(),
         shortfalls: Vec::new(),
     };
 
@@ -405,51 +313,24 @@ fn unknown_declared_limits_constrain_nothing() {
         .expect("200 subscriptions are conformant when the relay declared nothing");
 }
 
-/// C5b: attribution `serves` and the planned subscription's own `serves`
-/// describe one fact. Ingest reads the attribution and settlement reads the
-/// plan, so a plan whose two answers disagree makes them contradict.
-#[test]
-fn attribution_that_contradicts_its_planned_subscription_is_refused() {
-    let first = demand(1, Filter::new().kind(Kind::from_u16(1)));
-    let second = demand(2, Filter::new().kind(Kind::from_u16(1)));
-    let id = wire("contradictory");
-    let mut plan = opening(
-        &id,
-        vec![first.filter.clone()],
-        [demand_id(1), demand_id(2)].into_iter().collect(),
-    );
-    plan.open[0].serves = [demand_id(1)].into_iter().collect();
-
-    assert_eq!(
-        validate_plan(&relay(), &[first, second], &unknown(), &nothing(), &plan),
-        Err(PlanConformanceError::ServedDemandDisagrees(id))
-    );
-}
-
 /// Every conformance rule reaches a distinct, non-empty typed message.
 #[test]
 fn every_conformance_refusal_is_typed_not_a_string() {
     let mut refusals: VecDeque<PlanConformanceError> = VecDeque::new();
     refusals.push_back(PlanConformanceError::WrongRelay);
     refusals.push_back(PlanConformanceError::OverlappingBuckets(wire("a")));
-    refusals.push_back(PlanConformanceError::ReopenedInstalled(wire("a")));
     refusals.push_back(PlanConformanceError::UnknownInstalled(wire("a")));
     refusals.push_back(PlanConformanceError::AttributionMismatch);
-    refusals.push_back(PlanConformanceError::EmptyFilters(wire("a")));
-    refusals.push_back(PlanConformanceError::FilterAttributionMismatch(wire("a")));
+    refusals.push_back(PlanConformanceError::EmptyFilters(0));
     refusals.push_back(PlanConformanceError::DemandUnaccounted(demand_id(1)));
     refusals.push_back(PlanConformanceError::DemandInvented(demand_id(1)));
     refusals.push_back(PlanConformanceError::DeclaredSubscriptionsExceeded {
         installed: 2,
         maximum: 1,
     });
-    refusals.push_back(PlanConformanceError::DeclaredIdLengthExceeded {
-        id: wire("a"),
-        maximum: 1,
-    });
 
     let rendered: BTreeSet<String> = refusals.iter().map(ToString::to_string).collect();
-    assert_eq!(rendered.len(), 11);
+    assert_eq!(rendered.len(), refusals.len());
     assert!(rendered.iter().all(|text| !text.is_empty()));
     assert_ne!(observation(1), observation(2));
 }

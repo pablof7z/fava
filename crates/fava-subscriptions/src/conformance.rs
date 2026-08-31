@@ -1,7 +1,7 @@
 //! Executable conformance rules that define semantic equivalence for any
 //! planner, standard or competing.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use fava_relay::RelaySessionKey;
 use fava_wire::SubscriptionId;
@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::constraints::RelayReadConstraints;
 use crate::demand::{DemandId, RelayDemand};
 use crate::installed::InstalledSubscriptions;
-use crate::plan::{SubscriptionPlan, WithdrawalReason};
+use crate::plan::SubscriptionPlan;
 
 /// Conformance rules that define semantic equivalence for any planner.
 ///
@@ -57,7 +57,7 @@ fn check_running_subscriptions(
 ) -> Result<(), PlanConformanceError> {
     let requested: BTreeSet<DemandId> = demand.iter().map(RelayDemand::id).collect();
     for withdrawn in &plan.close {
-        let Some(entry) = installed.get(&withdrawn.id) else {
+        let Some(entry) = installed.get(withdrawn) else {
             continue;
         };
         if let Some(retained) = entry
@@ -66,7 +66,7 @@ fn check_running_subscriptions(
             .find(|served| requested.contains(served))
         {
             return Err(PlanConformanceError::RunningSubscriptionWithdrawn {
-                id: withdrawn.id.clone(),
+                id: withdrawn.clone(),
                 still_wanted: *retained,
             });
         }
@@ -91,17 +91,21 @@ fn check_distinct_filters(
             seen.push((id, &entry.filters));
         }
     }
-    for planned in &plan.open {
+    let mut planned_filters: Vec<&[Filter]> = Vec::new();
+    for (position, planned) in plan.open.iter().enumerate() {
         if let Some((first, _)) = seen
             .iter()
             .find(|(_, filters)| *filters == planned.filters.as_slice())
         {
             return Err(PlanConformanceError::DuplicateFilters {
                 first: (*first).clone(),
-                second: planned.id.clone(),
+                second: position,
             });
         }
-        seen.push((&planned.id, &planned.filters));
+        if planned_filters.contains(&planned.filters.as_slice()) {
+            return Err(PlanConformanceError::DuplicatePlannedFilters(position));
+        }
+        planned_filters.push(&planned.filters);
     }
     Ok(())
 }
@@ -118,44 +122,34 @@ fn check_relay(
     }
 }
 
-/// C2, C3, C4: the diff is internally consistent against the baseline.
+/// C4: `retain` and `close` name installed subscriptions, and name them once.
 ///
-/// Returns the wire ids the plan expects to be installed after execution.
+/// `open` carries no identity to collide with: the session mints each wire id
+/// when it sends the REQ, so a plan cannot reopen an installed subscription or
+/// name one twice.
+///
+/// Returns the wire ids the plan expects to still be installed after execution.
 fn check_buckets(
     installed: &InstalledSubscriptions,
     plan: &SubscriptionPlan,
 ) -> Result<BTreeSet<SubscriptionId>, PlanConformanceError> {
     let mut seen: BTreeSet<SubscriptionId> = BTreeSet::new();
-    for id in plan
-        .open
-        .iter()
-        .map(|planned| &planned.id)
-        .chain(plan.retain.iter())
-        .chain(plan.close.iter().map(|withdrawn| &withdrawn.id))
-    {
+    for id in plan.retain.iter().chain(plan.close.iter()) {
         if !seen.insert(id.clone()) {
             return Err(PlanConformanceError::OverlappingBuckets(id.clone()));
         }
-    }
-    for planned in &plan.open {
-        if installed.get(&planned.id).is_some() {
-            return Err(PlanConformanceError::ReopenedInstalled(planned.id.clone()));
-        }
-    }
-    for id in plan
-        .retain
-        .iter()
-        .chain(plan.close.iter().map(|withdrawn| &withdrawn.id))
-    {
         if installed.get(id).is_none() {
             return Err(PlanConformanceError::UnknownInstalled(id.clone()));
         }
     }
-    Ok(plan.installed_after().cloned().collect())
+    Ok(plan.retain.iter().cloned().collect())
 }
 
-/// C5: attribution describes exactly the resulting installed set, including
-/// which logical demand each wire subscription serves.
+/// C5: attribution describes exactly the subscriptions that carry a wire id.
+///
+/// That is the retained set. Each entry of `open` is its own attribution and
+/// has no id until the session mints one, so there is no second record of what
+/// it serves and nothing for the two to disagree about.
 fn check_attribution_keys(
     resulting: &BTreeSet<SubscriptionId>,
     plan: &SubscriptionPlan,
@@ -164,60 +158,28 @@ fn check_attribution_keys(
     if &attributed != resulting {
         return Err(PlanConformanceError::AttributionMismatch);
     }
-    for planned in &plan.open {
-        let Some(entry) = plan.attribution.get(&planned.id) else {
-            return Err(PlanConformanceError::AttributionMismatch);
-        };
-        // C5b: the two records of what one subscription serves are one fact.
-        // Ingest reads the attribution and settlement reads the plan; a plan
-        // whose own two answers disagree makes them contradict.
-        if entry.serves != planned.serves {
-            return Err(PlanConformanceError::ServedDemandDisagrees(
-                planned.id.clone(),
-            ));
-        }
-    }
-    // C5c: a withdrawal that names a successor must name one this plan
-    // actually produces. The executor withholds the CLOSE until that successor
-    // is accepted, so a successor that never arrives strands the CLOSE.
-    for withdrawn in &plan.close {
-        if let WithdrawalReason::Regrouped { into } = &withdrawn.reason
-            && !resulting.contains(into)
-        {
-            return Err(PlanConformanceError::UnknownSuccessor {
-                id: withdrawn.id.clone(),
-                successor: into.clone(),
-            });
-        }
-    }
     Ok(())
 }
 
-/// C6, C7: every planned REQ carries a filter and attribution repeats it exactly.
+/// C6: every planned REQ carries a filter, and retained attribution repeats
+/// the filters actually installed.
 fn check_filters(
     installed: &InstalledSubscriptions,
     plan: &SubscriptionPlan,
 ) -> Result<(), PlanConformanceError> {
-    for planned in &plan.open {
+    for (position, planned) in plan.open.iter().enumerate() {
         if planned.filters.is_empty() {
-            return Err(PlanConformanceError::EmptyFilters(planned.id.clone()));
+            return Err(PlanConformanceError::EmptyFilters(position));
         }
-    }
-    let mut expected: BTreeMap<&SubscriptionId, &[Filter]> = BTreeMap::new();
-    for planned in &plan.open {
-        expected.insert(&planned.id, &planned.filters);
     }
     for id in &plan.retain {
         let Some(entry) = installed.get(id) else {
             return Err(PlanConformanceError::UnknownInstalled(id.clone()));
         };
-        expected.insert(id, &entry.filters);
-    }
-    for (id, filters) in expected {
-        let Some(entry) = plan.attribution.get(id) else {
+        let Some(attributed) = plan.attribution.get(id) else {
             return Err(PlanConformanceError::AttributionMismatch);
         };
-        if entry.filters.as_slice() != filters {
+        if attributed.filters != entry.filters {
             return Err(PlanConformanceError::FilterAttributionMismatch(id.clone()));
         }
     }
@@ -232,13 +194,19 @@ fn check_demand(
     let requested: BTreeSet<DemandId> = demand.iter().map(RelayDemand::id).collect();
     let mut accounted: BTreeSet<DemandId> =
         plan.shortfalls.iter().map(|entry| entry.demand).collect();
-    for id in plan.attribution.ids() {
-        for served in plan.attribution.serves(id) {
-            if !requested.contains(served) {
-                return Err(PlanConformanceError::DemandInvented(*served));
-            }
-            accounted.insert(*served);
+    // Demand is served either by a subscription that already carries a wire id
+    // — the retained set, which attribution covers — or by one this plan opens,
+    // which is its own attribution until the session names it.
+    for served in plan
+        .attribution
+        .ids()
+        .flat_map(|id| plan.attribution.serves(id).iter())
+        .chain(plan.open.iter().flat_map(|planned| planned.serves.iter()))
+    {
+        if !requested.contains(served) {
+            return Err(PlanConformanceError::DemandInvented(*served));
         }
+        accounted.insert(*served);
     }
     for id in &requested {
         if !accounted.contains(id) {
@@ -253,12 +221,16 @@ fn check_demand(
     Ok(())
 }
 
-/// C10, C11: the resulting installed set honors every *declared* limit.
+/// C10: the resulting installed set honors the declared subscription limit.
+///
+/// There is no declared-identifier-length rule: the session mints fixed-width
+/// identifiers inside the 64 characters NIP-01 obliges every relay to accept,
+/// so a Fava identifier is never too long for a conforming relay.
 fn check_declared_limits(
     constraints: &RelayReadConstraints,
     plan: &SubscriptionPlan,
 ) -> Result<(), PlanConformanceError> {
-    let resulting = plan.installed_after().count();
+    let resulting = plan.installed_count();
     // The budget a plan may spend is the *residual*: the declared maximum less
     // what is already running and still wanted. A relay that lowers its
     // advertisement below the count already live does not authorize closing a
@@ -273,16 +245,6 @@ fn check_declared_limits(
             });
         }
     }
-    if let Some(maximum) = constraints.max_subscription_id_chars.get() {
-        for id in plan.installed_after() {
-            if id.as_str().chars().count() > maximum.get() {
-                return Err(PlanConformanceError::DeclaredIdLengthExceeded {
-                    id: id.clone(),
-                    maximum: maximum.get(),
-                });
-            }
-        }
-    }
     Ok(())
 }
 
@@ -295,9 +257,6 @@ pub enum PlanConformanceError {
     /// C2: `open`, `retain`, and `close` are not pairwise disjoint.
     #[error("wire subscription {0} appears in more than one diff bucket")]
     OverlappingBuckets(SubscriptionId),
-    /// C3: `open` names an id that is already installed.
-    #[error("plan opens already-installed subscription {0}")]
-    ReopenedInstalled(SubscriptionId),
     /// C4: `retain` or `close` names an id that is not installed.
     #[error("plan references subscription {0} that is not installed")]
     UnknownInstalled(SubscriptionId),
@@ -306,8 +265,8 @@ pub enum PlanConformanceError {
     #[error("attribution does not describe the resulting installed set")]
     AttributionMismatch,
     /// C6: a `PlannedSubscription` carries no filters.
-    #[error("planned subscription {0} carries no filter")]
-    EmptyFilters(SubscriptionId),
+    #[error("planned subscription at position {0} carries no filter")]
+    EmptyFilters(usize),
     /// C7: attribution filters for a wire id differ from its planned filters.
     #[error("attribution filters for {0} do not match the planned REQ")]
     FilterAttributionMismatch(SubscriptionId),
@@ -322,14 +281,6 @@ pub enum PlanConformanceError {
     DeclaredSubscriptionsExceeded {
         /// Count after execution.
         installed: usize,
-        /// Declared maximum.
-        maximum: usize,
-    },
-    /// C11: a wire id is longer than a *declared* id-length maximum.
-    #[error("subscription id {id} exceeds the declared length {maximum}")]
-    DeclaredIdLengthExceeded {
-        /// Offending id.
-        id: SubscriptionId,
         /// Declared maximum.
         maximum: usize,
     },
@@ -357,9 +308,12 @@ pub enum PlanConformanceError {
     /// filters.
     #[error("subscriptions {first} and {second} carry byte-identical filters")]
     DuplicateFilters {
-        /// Wire id that already carries these filters.
+        /// Installed or retained wire id that already carries them.
         first: SubscriptionId,
-        /// Wire id that duplicates them.
-        second: SubscriptionId,
+        /// Position in `open` that duplicates them.
+        second: usize,
     },
+    /// CR-2: two entries of `open` carry byte-identical filters.
+    #[error("two planned subscriptions carry identical filters; second at position {0}")]
+    DuplicatePlannedFilters(usize),
 }
